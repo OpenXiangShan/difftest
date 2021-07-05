@@ -14,10 +14,14 @@
 #***************************************************************************************
 
 SIM_TOP   = SimTop
-DESIGN_DIR = ../workspace1
+DESIGN_DIR = ..
 CONFIG ?= DefaultConfig
 BUILD_DIR = $(DESIGN_DIR)/build
 SIM_TOP_V = $(BUILD_DIR)/$(SIM_TOP).v
+
+# generate SimTop.v
+$(SIM_TOP_V):
+	$(MAKE) -C $(DESIGN_DIR) ./build/$(SIM_TOP).v
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
@@ -63,16 +67,7 @@ release-lock:
 	ssh -tt $(REMOTE) 'rm -f $(LOCK)'
 
 clean: vcs-clean
-	rm -rf ./build
+	rm -rf $(BUILD_DIR)
 
-init:
-	git submodule update --init
-
-bump:
-	git submodule foreach "git fetch origin&&git checkout master&&git reset --hard origin/master"
-
-bsp:
-	mill -i mill.bsp.BSP/install
-
-.PHONY: verilog sim-verilog emu clean help init bump bsp $(REF_SO)
+.PHONY: sim-verilog emu clean$(REF_SO)
 
