@@ -33,74 +33,7 @@ val chisel = Agg(
   ivy"edu.berkeley.cs::chisel3:3.4.3"
 )
 
-object `api-config-chipsalliance` extends CommonModule {
-  override def millSourcePath = super.millSourcePath / "design" / "craft"
-}
-
-object hardfloat extends SbtModule with CommonModule {
-  override def millSourcePath = os.pwd / "berkeley-hardfloat"
-  override def ivyDeps = super.ivyDeps() ++ chisel
-}
-
-object `rocket-chip` extends SbtModule with CommonModule {
-
-  override def ivyDeps = super.ivyDeps() ++ Agg(
-    ivy"${scalaOrganization()}:scala-reflect:${scalaVersion()}",
-    ivy"org.json4s::json4s-jackson:3.6.1"
-  ) ++ chisel
-
-  object macros extends SbtModule with CommonModule
-
-  override def moduleDeps = super.moduleDeps ++ Seq(
-    `api-config-chipsalliance`, macros, hardfloat
-  )
-
-}
-
-object `block-inclusivecache-sifive` extends CommonModule {
-  override def ivyDeps = super.ivyDeps() ++ chisel
-
-  override def millSourcePath = super.millSourcePath / 'design / 'craft / 'inclusivecache
-
-  override def moduleDeps = super.moduleDeps ++ Seq(`rocket-chip`)
-}
-
-object chiseltest extends CommonModule with SbtModule {
-  override def ivyDeps = super.ivyDeps() ++ Agg(
-    ivy"edu.berkeley.cs::treadle:1.3.0",
-    ivy"org.scalatest::scalatest:3.2.0",
-    ivy"com.lihaoyi::utest:0.7.4"
-  ) ++ chisel
-  object test extends Tests {
-    def ivyDeps = Agg(ivy"org.scalacheck::scalacheck:1.14.3")
-    def testFrameworks = Seq("org.scalatest.tools.Framework")
-  }
-}
-
-
-object XiangShan extends CommonModule with SbtModule {
+object difftest extends SbtModule with CommonModule {
   override def millSourcePath = millOuterCtx.millSourcePath
-
-  override def forkArgs = Seq("-Xmx64G")
-
   override def ivyDeps = super.ivyDeps() ++ chisel
-  override def moduleDeps = super.moduleDeps ++ Seq(
-    `rocket-chip`,
-    `block-inclusivecache-sifive`,
-    chiseltest
-  )
-
-  object test extends Tests {
-
-    override def forkArgs = Seq("-Xmx64G")
-
-    override def ivyDeps = super.ivyDeps() ++ Agg(
-      ivy"org.scalatest::scalatest:3.2.0"
-    )
-
-    def testFrameworks = Seq(
-      "org.scalatest.tools.Framework"
-    )
-  }
-
 }
