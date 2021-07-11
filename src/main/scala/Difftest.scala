@@ -173,6 +173,33 @@ class DifftestPtwEvent extends BlackBox {
   val io = IO(new DiffPtwEventIO)
 }
 
+// Difftest emulator top
+
+// XiangShan log / perf ctrl, should be inited in SimTop IO
+// If not needed, just ingore these signals
+class PerfInfoIO extends Bundle {
+  val clean = Input(Bool())
+  val dump = Input(Bool())
+}
+
+class LogCtrlIO extends Bundle {
+  val log_begin, log_end = Input(UInt(64.W))
+  val log_level = Input(UInt(64.W)) // a cpp uint
+}
+
+// UART IO, if needed, should be inited in SimTop IO
+// If not needed, just hardwire all output to 0
+class UARTIO extends Bundle {
+  val out = new Bundle {
+    val valid = Output(Bool())
+    val ch = Output(UInt(8.W))
+  }
+  val in = new Bundle {
+    val valid = Output(Bool())
+    val ch = Input(UInt(8.W))
+  }
+}
+
 package object difftest {
   
 }

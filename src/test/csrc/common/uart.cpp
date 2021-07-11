@@ -61,6 +61,21 @@ uint8_t uart_getc() {
   return ch;
 }
 
+extern "C" void uart_getc_legacy(uint8_t *ch) {
+  static uint32_t lasttime = 0;
+  uint32_t now = uptime();
+
+  *ch = -1;
+  if (now - lasttime > 60 * 1000) {
+    // 1 minute
+    eprintf(ANSI_COLOR_RED "now = %ds\n" ANSI_COLOR_RESET, now / 1000);
+    lasttime = now;
+  }
+  if (now > 4 * 3600 * 1000) { // 4 hours
+    *ch = uart_dequeue();
+  }
+}
+
 static void preset_input() {
   char rtthread_cmd[128] = "memtrace\n";
   char init_cmd[128] = "2" // choose PAL

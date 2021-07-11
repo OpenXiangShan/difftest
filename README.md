@@ -21,11 +21,13 @@ make emu
 
 # API
 
-* DifftestArchEvent
-* DifftestInstrCommit
-* DifftestTrapEvent
-* DifftestCSRState
-* DifftestArchIntRegState
+Difftest functions:
+
+* DifftestArchEvent (essential)
+* DifftestInstrCommit (essential)
+* DifftestTrapEvent (essential)
+* DifftestCSRState (essential)
+* DifftestArchIntRegState (essential)
 * DifftestArchFpRegState
 * DifftestSbufferEvent
 * DifftestStoreEvent
@@ -33,4 +35,10 @@ make emu
 * DifftestAtomicEvent
 * DifftestPtwEvent
 
-To use difftest, include all these modules in your design.
+Simulation top:
+
+* LogCtrlIO
+* PerfInfoIO
+* UARTIO
+
+To use `difftest`, include all these modules in your design.
