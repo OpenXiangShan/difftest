@@ -11,11 +11,11 @@ Difftest (差分测试) co-sim framework
 4. Assign `SIM_TOP`, `DESIGN_DIR` for `difftest/Makefile`
 5. `cd difftest` and `make emu`, then start simulating & debugging!
 
-TLDR:
+To use difftest in XiangShan project:
 ```sh
 cd XiangShan
 make init
-cd difftest
+# cd difftest
 make emu
 ```
 
@@ -42,3 +42,9 @@ Simulation top:
 * UARTIO
 
 To use `difftest`, include all these modules in your design.
+
+# Further reference
+
+* [Example: difftest in XiangShan project (Chinese) ](./doc/example.md)
+* [Detailed usage (Chinese)](./doc/usage.md)
+* [SMP-Difftest 支持多处理器的差分测试方法](https://github.com/OpenXiangShan/XiangShan-doc/blob/main/slides/20210624-RVWC-SMP-Difftest%20%E6%94%AF%E6%8C%81%E5%A4%9A%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%B7%AE%E5%88%86%E6%B5%8B%E8%AF%95%E6%96%B9%E6%B3%95.pdf)
