@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include "ram.h"
 
 typedef uint64_t paddr_t;
 typedef uint64_t word_t;
@@ -38,8 +39,7 @@ typedef uint64_t word_t;
 #define panic(...) Assert(0, __VA_ARGS__)
 
 #define PMEM_BASE 0x80000000
-#define PMEM_SIZE (8 * 1024 * 1024 * 1024UL)
-// #define PMEM_SIZE (256 * 1024 * 1024UL) 
+#define PMEM_SIZE EMU_RAM_SIZE
 
 extern uint8_t* pmem;
 
