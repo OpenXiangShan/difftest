@@ -59,7 +59,7 @@ DifftestArchEvent <--> RegNext(指令提交处中断/例外)
 DifftestTrapEvent <--> RegNext(指令提交处trap信号)
 ```
 
-最后, 我们实例化一些没有用到的端口, 将所有信号置为低电平, 来让顶层能正确通过编译:
+最后, 没有用到的非必需信号无需处理:
 
 ```scala
 DifftestInstrCommit <--> RegNext(指令提交)
@@ -67,11 +67,11 @@ DifftestArchIntRegState <--> 体系结构整数寄存器堆读结果
 DifftestCSRState <--> RegNext(CSR读结果)
 DifftestArchEvent <--> RegNext(指令提交处中断/例外)
 DifftestTrapEvent <--> RegNext(指令提交处trap信号)
-DifftestArchFpRegState := DontCare
-DifftestSbufferEvent := DontCare
-DifftestStoreEvent := DontCare
-DifftestLoadEvent := DontCare
-DifftestAtomicEvent := DontCare
+// DifftestArchFpRegState := DontCare
+// DifftestSbufferEvent := DontCare
+// DifftestStoreEvent := DontCare
+// DifftestLoadEvent := DontCare
+// DifftestAtomicEvent := DontCare
 ```
 
 这样, 我们就完成了 difftest 框架与 RTL 设计的整合. 
