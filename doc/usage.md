@@ -1,9 +1,62 @@
-Difftest API 的使用
+Difftest 使用指南
 ===============
 
-传递给 difftest 的各组信号需要按时钟周期对齐, 即: 一些传递给 difftest 的信号需要使用`RegNext`来暂存一拍. 本文将解释这一操作的目的, 并介绍如何在其他设计中正确设计时序逻辑来将调试信号传递给 difftest.
+本仓库提供了一个基于 verilator 进行 difftest 的仿真顶层.
 
-典型的`RegNext`操作如下所示: 
+本文档将介绍如何将 difftest 框架接入到一个使用 Chisel 设计的处理器项目中. 对于使用 verilog 的设计, 接入 difftest 框架的整体操作是类似的.
+
+# 将 difftest 放入工程
+
+如下图所示建立目录:
+
+```
+.
+├── build
+│   └── SimTop.v // 处理器 verilog 源代码
+├── difftest // difftest 仓库, 可以作为 submodule 引入
+└── ......
+```
+
+其中, SimTop.v 是处理器的 verilog 源代码. 这份源代码可由 Chisel 生成, 也可以是直接使用 verilog 编写的. 后续编译的结果会放在 `build` 这个目录下.
+
+仿真顶层模块名称设置为 SimTop.
+
+# 在设计中将关键信号传递给 difftest 框架
+
+## 信号传递的接口设计
+
+这一版本的 difftest 采用 DPI-C 来将仿真中的信号传递到 difftest 框架中. 在仿真程序执行的过程中会调用 DPI-C 函数, 将 difftest 感兴趣的信号写入到对应的结构体中. 
+
+### 使用 Chisel 的设计
+
+在使用 Chisel 的设计中, 我们可以使用 blackbox 来调用 DPI-C 函数. difftest 框架已经将相关的操作进行了封装, 在代码中`import difftest._`, 之后就可以直接实例化 difftest 的各个 module. 例如:
+
+```scala
+import difftest._
+// ......
+
+class WBU {
+  if (!env.FPGAPlatform) { // 只有在仿真时才需要 difftest 的 module
+    val difftest = Module(new DifftestArchEvent)
+    difftest.io.clock := clock
+    // ......
+  }
+}
+```
+
+这些 blackbox 定义在 `difftest/src/main/scala/Difftest.scala` 中.
+
+### 使用 Verilog 的设计
+
+与 Chisel 的用法相似. Verilog 用户不需要上述的这些封装操作, 可以直接调用 DPI-C 函数. 
+
+这些函数定义在 `difftest/src/test/vsrc/common/difftest.v` 中.
+
+## 传递信号给 difftest 的核心原则
+
+传递信号给 difftest 的核心原则只有一个, **在指令提交的时刻其产生的影响恰好生效**. 
+
+为了满足**在指令提交的时刻其产生的影响恰好生效**的原则, 一些传递给 difftest 的信号需要被延迟一拍. 下面的代码展示了如何使用 Chisel 将这些信号延迟一拍传递. 
 
 ```scala
   if (!env.FPGAPlatform) {
@@ -16,15 +69,11 @@ Difftest API 的使用
   }
 ```
 
-# 传递信号给 difftest 的核心原则
+下面的例子将更详细地解释这一原则.
 
-传递信号给 difftest 的核心原则只有一个, **在指令提交的时刻其产生的影响恰好生效**. 
+## 示例
 
-# 示例
-
-我们用几个例子来解释这一原则:
-
-## 简单的顺序单发射处理器`NutShell` 
+### 简单的顺序单发射处理器`NutShell` 
 
   NutShell的代码和文档可以在这里取得 : https://github.com/OSCPU/NutShell, https://oscpu.github.io/NutShell-doc/
 
@@ -76,7 +125,7 @@ DifftestTrapEvent <--> RegNext(指令提交处trap信号)
 
 这样, 我们就完成了 difftest 框架与 RTL 设计的整合. 
 
-## 乱序多发射处理器`香山`
+### 乱序多发射处理器`香山`
 
 相比顺序单发射处理器, 乱序处理器的行为更加复杂, 但是 difftest 的整体思想依然不变. 这里以乱序多发射处理器香山为例来展开介绍:
 
@@ -130,4 +179,61 @@ DifftestSbufferEvent <--> 对应模块
 DifftestStoreEvent <--> 对应模块
 DifftestLoadEvent <--> 对应模块
 DifftestAtomicEvent <--> 对应模块
+```
+
+# 配置仿真顶层
+
+在开始配置仿真顶层之前, 请再次确认用于仿真的 verilog 文件名能和 difftest 中 Makefile 中的对应上.
+
+仿真框架的顶层默认连接了一些 IO 端口, 它们的定义在  `difftest/src/main/scala/Difftest.scala` 中. 在仿真过程中可以根据 `LogCtrlIO`, `PerfInfoIO` 传入的信号, 控制 debug 信息的输出以及性能计数器的表现. 这部分的控制需要 RTL 代码作者自行实现, 顶层只给出控制信号. `UARTIO` 用于 uart 输入输出的处理.
+
+请注意: 这些端口必须出现在仿真顶层中, 但是 RTL 代码可以选择忽略这些信号.
+
+Chisel 仿真顶层实现参考, 注意 `clock` 和 `reset` 会由 Chisel 自动生成:
+
+```scala
+// SimTop.scala
+import difftest._
+// ......
+class SimTop extends Module {
+  val io = IO(new Bundle(){
+    val logCtrl = new LogCtrlIO
+    val perfInfo = new PerfInfoIO
+    val uart = new UARTIO
+    // .......
+  })
+  // ......
+}
+```
+
+Verilog 仿真顶层实现参考:
+
+```v
+module SimTop(
+  input         clock,
+  input         reset,
+  input  [63:0] io_logCtrl_log_begin,
+  input  [63:0] io_logCtrl_log_end,
+  input  [63:0] io_logCtrl_log_level,
+  input         io_perfInfo_clean,
+  input         io_perfInfo_dump,
+  output        io_uart_out_valid,
+  output [7:0]  io_uart_out_ch,
+  output        io_uart_in_valid,
+  input  [7:0]  io_uart_in_ch
+  // ......
+);
+```
+
+# 使用 difftest 进行协同仿真
+
+在完成上述所有工作之后, 我们就完成了协同仿真框架的接入.
+
+在 difftest 目录下, 执行 `make emu` 来使用 verilator 生成 C++ 仿真程序. 仿真程序生成之后, 可以执行 `./build/emu --help` 来查看仿真程序的运行参数.
+
+例如:
+
+```bash
+make emu
+./build/emu -b 0 -e 0 -i ./ready-to-run/coremark-2-iteration.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
 ```

@@ -4,6 +4,10 @@
 
 这里包含一些来自香山项目的代码片段, 用来解释如何修改 RTL代码以使之支持 difftest: 
 
+> Tips: 可以在香山项目中使用全局查找来找到这些代码出现的位置
+
+  香山的代码和文档可以在这里取得: https://github.com/OpenXiangShan/XiangShan
+
 ## 需要添加到 RTL 代码对应位置
 
 ```scala
@@ -157,8 +161,6 @@ import difftest._
     difftest.io.atomicFuop := fuop_reg
     difftest.io.atomicOut  := resp_data_wire
   }
-
-  // TODO: PTW
 ```
 
 ## 需要添加到仿真顶层
@@ -173,7 +175,6 @@ class SimTop extends Module {
     val perfInfo = new PerfInfoIO
     val uart = new UARTIO
     // .......
-    // val memAXI = if(useDRAMSim) l_soc.memory.cloneType else null
   })
   // ......
 }
