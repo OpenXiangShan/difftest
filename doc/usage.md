@@ -19,7 +19,7 @@ Difftest 使用指南
 
 其中, SimTop.v 是处理器的 verilog 源代码. 这份源代码可由 Chisel 生成, 也可以是直接使用 verilog 编写的. 后续编译的结果会放在 `build` 这个目录下.
 
-仿真顶层模块名称设置为 SimTop.
+仿真顶层模块名称设置为 `SimTop`.
 
 # 在设计中将关键信号传递给 difftest 框架
 
@@ -180,6 +180,10 @@ DifftestStoreEvent <--> 对应模块
 DifftestLoadEvent <--> 对应模块
 DifftestAtomicEvent <--> 对应模块
 ```
+
+# 配置内存
+
+`RAMHelper` 模块位于 `difftest/src/test/vsrc/common/ram.v`. 在设计中需要使用这一模块来作为仿真内存. 可以参考 NutShell 中 `AXI4RAM` 的处理方式.
 
 # 配置仿真顶层
 
