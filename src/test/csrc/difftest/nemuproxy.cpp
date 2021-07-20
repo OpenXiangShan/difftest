@@ -20,6 +20,14 @@
 uint8_t* goldenMem;
 const char *difftest_ref_so = NULL;
 
+#define check_and_assert(func)                                \
+  do {                                                        \
+    if (!func) {                                              \
+      printf("ERROR: nemuproxy func " #func " not found\n");  \
+      assert(func);                                           \
+    }                                                         \
+  } while (0);
+
 NemuProxy::NemuProxy(int coreid) {
   if (difftest_ref_so == NULL) {
     printf("--diff is not given, "
@@ -84,8 +92,8 @@ NemuProxy::NemuProxy(int coreid) {
   auto nemu_misc_put_gmaddr = (void (*)(void*))dlsym(handle, "misc_put_gmaddr");
 
   if (EMU_CORES > 1) {
-    assert(nemu_difftest_set_mhartid);
-    assert(nemu_misc_put_gmaddr);
+    check_and_assert(nemu_difftest_set_mhartid);
+    check_and_assert(nemu_misc_put_gmaddr);
   }
 
   if (nemu_difftest_set_mhartid) {
@@ -96,7 +104,7 @@ NemuProxy::NemuProxy(int coreid) {
   }
 
   auto nemu_init = (void (*)(void))dlsym(handle, "difftest_init");
-  assert(nemu_init);
+  check_and_assert(nemu_init);
 
   nemu_init();
 }
