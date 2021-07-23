@@ -28,6 +28,12 @@
 
 #define DIFFTEST_STORE_COMMIT
 
+enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
+enum { REF_TO_DUT, DUT_TO_REF };
+enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
+// DIFFTEST_TO_DUT ~ REF_TO_DUT ~ REF_TO_DIFFTEST
+// DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
+#define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
 
 
 // Difftest structures

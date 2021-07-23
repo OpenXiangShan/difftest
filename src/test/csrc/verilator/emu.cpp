@@ -578,7 +578,7 @@ void Emulator::snapshot_save(const char *filename) {
   stream.unbuf_write(&nemu_this_pc, sizeof(nemu_this_pc));
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  ref_difftest_memcpy_from_ref(buf, 0x80000000, size, 0);
+  ref_difftest_memcpy(buf, 0x80000000, size, 0, DIFFTEST_TO_DUT);
   stream.unbuf_write(buf, size);
   munmap(buf, size);
 
@@ -620,7 +620,7 @@ void Emulator::snapshot_load(const char *filename) {
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   stream.read(buf, size);
-  ref_difftest_memcpy_from_dut(0x80000000, buf, size, 0);
+  ref_difftest_memcpy(0x80000000, buf, size, 0, DIFFTEST_TO_REF);
   munmap(buf, size);
 
   struct SyncState sync_mastate;

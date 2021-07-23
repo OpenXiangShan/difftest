@@ -125,7 +125,7 @@ int Difftest::step() {
     return 0;
   }
 
-  proxy->get_regs(ref_regs_ptr);
+  proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
 
   if (num_commit > 0) {
     state->record_group(dut.commit[0].pc, num_commit);
@@ -159,11 +159,11 @@ void Difftest::do_exception() {
   state->record_abnormal_inst(dut.event.exceptionPC, dut.commit[0].inst, RET_EXC, dut.event.exception);
   if (dut.event.exception == 12 || dut.event.exception == 13 || dut.event.exception == 15) {
     // printf("exception cause: %d\n", dut.event.exception);
-    struct DisambiguationState ds;
-    ds.exceptionNo = dut.event.exception;
-    ds.mtval = dut.csr.mtval;
-    ds.stval = dut.csr.stval;
-    proxy->disambiguate_exec(&ds);
+    struct ExecutionGuide guide;
+    guide.exceptionNo = dut.event.exception;
+    guide.mtval = dut.csr.mtval;
+    guide.stval = dut.csr.stval;
+    proxy->guided_exec(&guide);
   } else {
     proxy->exec(1);
   }
@@ -182,37 +182,28 @@ void Difftest::do_instr_commit(int i) {
     struct SyncState sync;
     sync.lrscValid = 0;
     sync.lrscAddr = 0;
-    proxy->set_mastatus((uint64_t*)&sync); // sync lr/sc microarchitectural regs
+    proxy->uarchstatus_cpy((uint64_t*)&sync, DUT_TO_REF); // sync lr/sc microarchitectural regs
   }
 
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
   if (dut.commit[i].skip) {
-    proxy->get_regs(ref_regs_ptr);
+    proxy->regcpy(ref_regs_ptr, REF_TO_DIFFTEST);
     ref.csr.this_pc += dut.commit[i].isRVC ? 2 : 4;
     if (dut.commit[i].wen && dut.commit[i].wdest != 0) {
       // TODO: FPR
       ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
     }
-    proxy->set_regs(ref_regs_ptr);
+    proxy->regcpy(ref_regs_ptr, DIFFTEST_TO_REF);
     return;
   }
 
   // single step exec
   proxy->exec(1);
-  // IPF, LPF, SPF
-  // if (dut.event.exception == 12 || dut.event.exception == 13 || dut.event.exception == 15) {
-  // printf("exception cause: %ld\n", dut.event.exception);
-  // struct DisambiguationState ds;
-  // ds.exceptionNo = dut.event.exception;
-  // ds.mtval = dut.csr.mtval;
-  // ds.stval = dut.csr.stval;
-  // proxy->disambiguate_exec(&ds);
-  // }
 
   // Handle load instruction carefully for SMP
   if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
-    proxy->get_regs(ref_regs_ptr);
+    proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
     if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != dut.commit[i].wdata) {
       // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
       // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, dut.commit[i].wdata, dut.commit[i].pc);
@@ -247,23 +238,23 @@ void Difftest::do_instr_commit(int i) {
       }
       // printf("---    golden: 0x%lx  original: 0x%lx\n", golden, ref_regs_ptr[dut.commit[i].wdest]);
       if (golden == dut.commit[i].wdata) {
-        proxy->memcpy_from_dut(dut.load[i].paddr, &golden, len);
+        proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
         if (dut.commit[i].wdest != 0) {
           ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
-          proxy->set_regs(ref_regs_ptr);
+          proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
         }
       } else if (dut.load[i].fuType == 0xF) {  //  atomic instr carefully handled
-        proxy->memcpy_from_dut(dut.load[i].paddr, &golden, len);
+        proxy->memcpy(dut.load[i].paddr, &golden, len, DIFFTEST_TO_REF);
         if (dut.commit[i].wdest != 0) {
           ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
-          proxy->set_regs(ref_regs_ptr);
+          proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
         }
       } else {
         // goldenmem check failed as well, raise error
         printf("---  SMP difftest mismatch!\n");
         printf("---  Trying to probe local data of another core\n");
         uint64_t buf;
-        difftest[(EMU_CORES-1) - this->id]->proxy->memcpy_from_ref(&buf, dut.load[i].paddr, len);
+        difftest[(EMU_CORES-1) - this->id]->proxy->memcpy(dut.load[i].paddr, &buf, len, DIFFTEST_TO_DUT);
         printf("---    content: %lx\n", buf);
       }
     }
@@ -278,8 +269,8 @@ void Difftest::do_first_instr_commit() {
     has_commit = 1;
     nemu_this_pc = dut.csr.this_pc;
 
-    proxy->memcpy_from_dut(0x80000000, get_img_start(), get_img_size());
-    proxy->set_regs(dut_regs_ptr);
+    proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
 
     printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
   }
