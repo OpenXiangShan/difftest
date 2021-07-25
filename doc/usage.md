@@ -239,5 +239,5 @@ module SimTop(
 
 ```bash
 make emu
-./build/emu -b 0 -e 0 -i ./ready-to-run/coremark-2-iteration.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
+./build/emu -b 0 -e 0 -i ./ready-to-run/coremark-2-iteration.bin
 ```
