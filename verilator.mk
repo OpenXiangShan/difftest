@@ -118,6 +118,7 @@ build_emu_local: $(EMU_MK)
 	$(TIME_CMD) $(MAKE) VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
 $(LOCK_BIN): ./scripts/utils/lock-emu.c
+	mkdir -p $(@D)
 	gcc $^ -o $@
 
 $(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS) $(REF_SO) $(LOCK_BIN)
