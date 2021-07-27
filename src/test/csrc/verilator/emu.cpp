@@ -236,13 +236,13 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   init_device();
   if (args.enable_diff) {
     init_goldenmem();
+    init_nemuproxy();
   }
-  init_nemuproxy();
 
   uint32_t lasttime_poll = 0;
   uint32_t lasttime_snapshot = 0;
-  uint64_t core_max_instr[EMU_CORES];
-  for (int i = 0; i < EMU_CORES; i++) {
+  uint64_t core_max_instr[NUM_CORES];
+  for (int i = 0; i < NUM_CORES; i++) {
     core_max_instr[i] = max_instr;
   }
 
@@ -294,7 +294,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       break;
     }
     // instruction limitation
-    for (int i = 0; i < EMU_CORES; i++) {
+    for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       if (trap->instrCnt >= core_max_instr[i]) {
         trapCode = STATE_LIMIT_EXCEEDED;
@@ -315,7 +315,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       break;
     }
 
-    for (int i = 0; i < EMU_CORES; i++) {
+    for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       if (trap->instrCnt >= args.warmup_instr) {
         printf("Warmup finished. The performance counters will be dumped and then reset.\n");
@@ -467,7 +467,7 @@ void Emulator::trigger_stat_dump() {
 }
 
 void Emulator::display_trapinfo() {
-  for (int i = 0; i < EMU_CORES; i++) {
+  for (int i = 0; i < NUM_CORES; i++) {
     printf("Core %d: ", i);
     auto trap = difftest[i]->get_trap_event();
     uint64_t pc = trap->pc;
@@ -542,14 +542,6 @@ void ForkShareMemory::shwait() {
       break;
     }
     else {
-        else {  
-    else {
-        else {  
-    else {
-      sleep(WAIT_INTERVAL);
-            sleep(WAIT_INTERVAL);  
-      sleep(WAIT_INTERVAL);
-            sleep(WAIT_INTERVAL);  
       sleep(WAIT_INTERVAL);
     }
   }

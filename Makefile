@@ -13,9 +13,10 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-SIM_TOP   = SimTop
-DESIGN_DIR = ..
-CONFIG ?= DefaultConfig
+SIM_TOP    ?= SimTop
+DESIGN_DIR ?= ..
+NUM_CORES  ?= 1
+
 BUILD_DIR = $(DESIGN_DIR)/build
 SIM_TOP_V = $(BUILD_DIR)/$(SIM_TOP).v
 
@@ -62,9 +63,6 @@ $(REF_SO):
 	$(MAKE) -C $(NEMU_HOME) ISA=riscv64 SHARE=1
 
 SEED ?= $(shell shuf -i 1-10000 -n 1)
-
-VME_SOURCE ?= $(shell pwd)/build/$(TOP).v
-VME_MODULES ?=
 
 release-lock:
 	ssh -tt $(REMOTE) 'rm -f $(LOCK)'

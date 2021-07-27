@@ -81,7 +81,7 @@ NemuProxy::NemuProxy(int coreid) {
   auto nemu_difftest_set_mhartid = (void (*)(int))dlsym(handle, "difftest_set_mhartid");
   auto nemu_misc_put_gmaddr = (void (*)(void*))dlsym(handle, "misc_put_gmaddr");
 
-  if (EMU_CORES > 1) {
+  if (NUM_CORES > 1) {
     check_and_assert(nemu_difftest_set_mhartid);
     check_and_assert(nemu_misc_put_gmaddr);
   }

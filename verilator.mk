@@ -136,7 +136,7 @@ endif
 # log will only be printed when (B<=GTimer<=E) && (L < loglevel)
 # use 'emu -h' to see more details
 B ?= 0
-E ?= -1
+E ?= 0
 
 ifndef NOOP_HOME
 $(error NOOP_HOME is not set)

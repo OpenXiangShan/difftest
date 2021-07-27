@@ -23,8 +23,8 @@ VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 
-VCS_SEARCH_DIR = $(abspath ./build)
-VCS_BUILD_DIR  = $(abspath ./build/simv-compile)
+VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
+VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
 
 VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
 # randomize all undefined signals (instead of using X)
