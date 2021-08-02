@@ -203,60 +203,62 @@ void Difftest::do_instr_commit(int i) {
   proxy->exec(1);
 
   // Handle load instruction carefully for SMP
-  if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
-    proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
-    if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != dut.commit[i].wdata) {
-      // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
-      // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, dut.commit[i].wdata, dut.commit[i].pc);
-      uint64_t golden;
-      int len = 0;
-      if (dut.load[i].fuType == 0xC) {
-        switch (dut.load[i].opType) {
-          case 0: len = 1; break;
-          case 1: len = 2; break;
-          case 2: len = 4; break;
-          case 3: len = 8; break;
-          case 4: len = 1; break;
-          case 5: len = 2; break;
-          case 6: len = 4; break;
-          default:
-            printf("Unknown fuOpType: 0x%x\n", dut.load[i].opType);
+  if (NUM_CORES > 1) { 
+    if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
+      proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
+      if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != dut.commit[i].wdata) {
+        // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
+        // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, dut.commit[i].wdata, dut.commit[i].pc);
+        uint64_t golden;
+        int len = 0;
+        if (dut.load[i].fuType == 0xC) {
+          switch (dut.load[i].opType) {
+            case 0: len = 1; break;
+            case 1: len = 2; break;
+            case 2: len = 4; break;
+            case 3: len = 8; break;
+            case 4: len = 1; break;
+            case 5: len = 2; break;
+            case 6: len = 4; break;
+            default:
+              printf("Unknown fuOpType: 0x%x\n", dut.load[i].opType);
+          }
+        } else {  // dut.load[i].fuType == 0xF
+          if (dut.load[i].opType % 2 == 0) {
+            len = 4;
+          } else {  // dut.load[i].opType % 2 == 1
+            len = 8;
+          }
         }
-      } else {  // dut.load[i].fuType == 0xF
-        if (dut.load[i].opType % 2 == 0) {
-          len = 4;
-        } else {  // dut.load[i].opType % 2 == 1
-          len = 8;
+        read_goldenmem(dut.load[i].paddr, &golden, len);
+        if (dut.load[i].fuType == 0xC) {
+          switch (dut.load[i].opType) {
+            case 0: golden = (int64_t)(int8_t)golden; break;
+            case 1: golden = (int64_t)(int16_t)golden; break;
+            case 2: golden = (int64_t)(int32_t)golden; break;
+          }
         }
-      }
-      read_goldenmem(dut.load[i].paddr, &golden, len);
-      if (dut.load[i].fuType == 0xC) {
-        switch (dut.load[i].opType) {
-          case 0: golden = (int64_t)(int8_t)golden; break;
-          case 1: golden = (int64_t)(int16_t)golden; break;
-          case 2: golden = (int64_t)(int32_t)golden; break;
+        // printf("---    golden: 0x%lx  original: 0x%lx\n", golden, ref_regs_ptr[dut.commit[i].wdest]);
+        if (golden == dut.commit[i].wdata) {
+          proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
+          if (dut.commit[i].wdest != 0) {
+            ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
+            proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
+          }
+        } else if (dut.load[i].fuType == 0xF) {  //  atomic instr carefully handled
+          proxy->memcpy(dut.load[i].paddr, &golden, len, DIFFTEST_TO_REF);
+          if (dut.commit[i].wdest != 0) {
+            ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
+            proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
+          }
+        } else {
+          // goldenmem check failed as well, raise error
+          printf("---  SMP difftest mismatch!\n");
+          printf("---  Trying to probe local data of another core\n");
+          uint64_t buf;
+          difftest[(NUM_CORES-1) - this->id]->proxy->memcpy(dut.load[i].paddr, &buf, len, DIFFTEST_TO_DUT);
+          printf("---    content: %lx\n", buf);
         }
-      }
-      // printf("---    golden: 0x%lx  original: 0x%lx\n", golden, ref_regs_ptr[dut.commit[i].wdest]);
-      if (golden == dut.commit[i].wdata) {
-        proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
-        if (dut.commit[i].wdest != 0) {
-          ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
-          proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
-        }
-      } else if (dut.load[i].fuType == 0xF) {  //  atomic instr carefully handled
-        proxy->memcpy(dut.load[i].paddr, &golden, len, DIFFTEST_TO_REF);
-        if (dut.commit[i].wdest != 0) {
-          ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
-          proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
-        }
-      } else {
-        // goldenmem check failed as well, raise error
-        printf("---  SMP difftest mismatch!\n");
-        printf("---  Trying to probe local data of another core\n");
-        uint64_t buf;
-        difftest[(NUM_CORES-1) - this->id]->proxy->memcpy(dut.load[i].paddr, &buf, len, DIFFTEST_TO_DUT);
-        printf("---    content: %lx\n", buf);
       }
     }
   }
