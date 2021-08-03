@@ -258,27 +258,11 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   pid_t pid =-1;
   pid_t originPID = getpid();
   int status = -1;
-  int slotCnt = 1;
+  int slotCnt = 0;
   int waitProcess = 0;
   uint32_t timer = 0;
   std::list<pid_t> pidSlot = {};
   enable_waveform = false;
-
-  //first process as a control process
-  if ((pid = fork()) < 0) {
-    perror("First fork failed..\n");
-    FAIT_EXIT;
-  } else if (pid > 0) {  //parent process
-    printf("[%d] Control process first fork...child: %d\n ", getpid(), pid);
-    prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
-    forkshm.shwait();
-    printf("[%d] Simulation finished, Control process exit..", getpid());
-    return cycles;
-  } else {
-    forkshm.info->exitNum++;
-    forkshm.info->flag = true;
-    pidSlot.insert(pidSlot.begin(), getpid());
-  }
 #endif
 
 #if VM_COVERAGE == 1
@@ -370,27 +354,26 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         pidSlot.pop_back();
         kill(temp, SIGKILL);
         slotCnt--;
-        forkshm.info->exitNum--;
       }
       // fork-wait
       if ((pid = fork()) < 0) {
         eprintf("[%d]Error: could not fork process!\n",getpid());
         return -1;
-      } else if (pid != 0) {       // father fork and wait.
+      } else if (pid != 0) {      
+        slotCnt++;
+        pidSlot.insert(pidSlot.begin(), pid);
+      } else {        //child insert its pid
         waitProcess = 1;
-        wait(&status);
-        enable_waveform = forkshm.info->resInfo != STATE_GOODTRAP;
+        forkshm.shwait();
+        dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
+        enable_waveform = true;
         if (enable_waveform) {
           Verilated::traceEverOn(true);	// Verilator must compute traced signals
           tfp = new VerilatedVcdC;
           dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
           time_t now = time(NULL);
-          tfp->open(waveform_filename(now));	// Open the dump file
+          tfp->open(pid_wavename(getpid(), now));	// Open the dump file
         }
-      } else {        //child insert its pid
-        slotCnt++;
-        forkshm.info->exitNum++;
-        pidSlot.insert(pidSlot.begin(), getpid());
       }
     }
 #endif
@@ -405,10 +388,17 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
 
 #ifdef EN_FORKWAIT
-  if(!waitProcess) display_trapinfo();
-  else printf("[%d] checkpoint process: dump wave complete, exit.\n",getpid());
-  forkshm.info->exitNum--;
-  forkshm.info->resInfo = trapCode;
+  if(waitProcess) {
+    printf("[%d] checkpoint process: dump wave complete, exit.\n",getpid());
+    return cycles;
+  }
+  else{
+    forkshm.info->flag = true;
+    forkshm.info->notgood = true;
+    waitpid(pidSlot.back(),&status,0);
+    display_trapinfo();
+    return cycles;
+  }
 #endif
 
   display_trapinfo();
@@ -440,6 +430,18 @@ inline char* Emulator::waveform_filename(time_t t) {
   static char buf[1024];
   char *p = timestamp_filename(t, buf);
   strcpy(p, ".vcd");
+  printf("dump wave to %s...\n", buf);
+  return buf;
+}
+
+inline char* Emulator::pid_wavename(pid_t pid, time_t t) {
+  static char buf[1024];
+  char buf_time[64];
+  strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
+  char *noop_home = getenv("NOOP_HOME");
+  assert(noop_home != NULL);
+  int len = snprintf(buf, 1024, "%s/build/%s_%d", noop_home, buf_time, pid);
+  strcpy(buf + len, ".vcd");
   printf("dump wave to %s...\n", buf);
   return buf;
 }
@@ -525,9 +527,8 @@ ForkShareMemory::ForkShareMemory() {
     FAIT_EXIT
   }
 
-  info->exitNum   = 0;
-  info->flag      = false;
-  info->resInfo   = -1;           //STATE_RUNNING
+  info->flag     = false;
+  info->notgood  = false;           //STATE_RUNNING
 }
 
 ForkShareMemory::~ForkShareMemory() {
@@ -539,8 +540,9 @@ ForkShareMemory::~ForkShareMemory() {
 
 void ForkShareMemory::shwait() {
   while (true) {
-    if (info->exitNum == 0 && info->flag) {
-      break;
+    if (info->flag ) {
+      if(info->notgood) break;
+      else exit(0);
     }
     else {
       sleep(WAIT_INTERVAL);

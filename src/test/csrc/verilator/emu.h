@@ -28,17 +28,17 @@
 #include <sys/prctl.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <verilated_threads.h>
 
-#define FORK_INTERVAL 10 // unit: second
-#define SLOT_SIZE 3
+#define FORK_INTERVAL 2 // unit: second
+#define SLOT_SIZE 2
 #define FAIT_EXIT    exit(EXIT_FAILURE);
-#define WAIT_INTERVAL 1
+#define WAIT_INTERVAL 5
 #define SNAPSHOT_INTERVAL 60 // unit: second
 
 typedef struct shinfo{
-  int exitNum;
-  int resInfo;
   bool flag;
+  bool notgood;
 } shinfo;
 
 class ForkShareMemory{
@@ -123,6 +123,7 @@ private:
   void snapshot_save(const char *filename);
   void snapshot_load(const char *filename);
   inline char* waveform_filename(time_t t);
+  inline char* pid_wavename(pid_t pid, time_t t);
 #if VM_COVERAGE == 1
   inline void save_coverage(time_t t);
 #endif
