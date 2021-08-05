@@ -265,15 +265,13 @@ void Difftest::do_instr_commit(int i) {
 }
 
 void Difftest::do_first_instr_commit() {
-  if (!has_commit && dut.commit[0].valid) {
+  if (!has_commit && dut.commit[0].valid && dut.commit[0].pc == 0x80000000) {
     printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
     has_commit = 1;
     nemu_this_pc = dut.csr.this_pc;
 
-    if (dut.commit[0].pc == 0x80000000) {
-      proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
-      proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
-    }
+    proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
   }
 }
 
