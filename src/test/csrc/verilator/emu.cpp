@@ -274,6 +274,11 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     // cycle limitation
+    if(waitProcess && cycles != 0 && cycles == forkshm.info->endCycles){
+      trapCode = STATE_ABORT;
+      break;    
+    }
+
     if (!max_cycle) {
       trapCode = STATE_LIMIT_EXCEEDED;
       break;
@@ -299,7 +304,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     if (trapCode != STATE_RUNNING) {
       break;
     }
-
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       if (trap->instrCnt >= args.warmup_instr) {
@@ -320,7 +324,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     dut_ptr->io_perfInfo_clean = 0;
     dut_ptr->io_perfInfo_dump = 0;
 
-    if (args.enable_diff) {
+    if (args.enable_diff && !waitProcess) {
       trapCode = difftest_state();
       if (trapCode != STATE_RUNNING) break;
       if (difftest_step()) {
@@ -364,6 +368,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         pidSlot.insert(pidSlot.begin(), pid);
       } else {        //child insert its pid
         waitProcess = 1;
+        uint64_t startCycle = cycles;
         forkshm.shwait();
         dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
         enable_waveform = true;
@@ -372,7 +377,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           tfp = new VerilatedVcdC;
           dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
           time_t now = time(NULL);
-          tfp->open(pid_wavename(getpid(), now));	// Open the dump file
+          tfp->open(cycle_wavefile(startCycle, now));	// Open the dump file
         }
       }
     }
@@ -395,6 +400,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   else{
     forkshm.info->flag = true;
     forkshm.info->notgood = true;
+    forkshm.info->endCycles = cycles;
     waitpid(pidSlot.back(),&status,0);
     display_trapinfo();
     return cycles;
@@ -434,13 +440,13 @@ inline char* Emulator::waveform_filename(time_t t) {
   return buf;
 }
 
-inline char* Emulator::pid_wavename(pid_t pid, time_t t) {
+inline char* Emulator::cycle_wavefile(uint64_t cycles, time_t t) {
   static char buf[1024];
   char buf_time[64];
   strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
   char *noop_home = getenv("NOOP_HOME");
   assert(noop_home != NULL);
-  int len = snprintf(buf, 1024, "%s/build/%s_%d", noop_home, buf_time, pid);
+  int len = snprintf(buf, 1024, "%s/build/%s_%ld", noop_home, buf_time, cycles);
   strcpy(buf + len, ".vcd");
   printf("dump wave to %s...\n", buf);
   return buf;
@@ -527,8 +533,9 @@ ForkShareMemory::ForkShareMemory() {
     FAIT_EXIT
   }
 
-  info->flag     = false;
-  info->notgood  = false;           //STATE_RUNNING
+  info->flag      = false;
+  info->notgood   = false;           //STATE_RUNNING
+  info->endCycles = 0;
 }
 
 ForkShareMemory::~ForkShareMemory() {

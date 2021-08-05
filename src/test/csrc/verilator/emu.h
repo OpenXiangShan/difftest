@@ -39,6 +39,7 @@
 typedef struct shinfo{
   bool flag;
   bool notgood;
+  uint64_t endCycles;
 } shinfo;
 
 class ForkShareMemory{
@@ -123,7 +124,7 @@ private:
   void snapshot_save(const char *filename);
   void snapshot_load(const char *filename);
   inline char* waveform_filename(time_t t);
-  inline char* pid_wavename(pid_t pid, time_t t);
+  inline char* cycle_wavefile(uint64_t cycles, time_t t);
 #if VM_COVERAGE == 1
   inline void save_coverage(time_t t);
 #endif
