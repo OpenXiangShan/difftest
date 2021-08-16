@@ -26,6 +26,7 @@ jobs:
             git clone https://github.com/OpenXiangShan/xs-env
             cd $GITHUB_WORKSPACE/../xs-env
             sudo -s ./setup.sh
+            source ./env.sh
             sudo rm -r $GITHUB_WORKSPACE/../xs-env/NutShell/difftest
             sudo rm -r $GITHUB_WORKSPACE/../xs-env/XiangShan/difftest
             sudo cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/NutShell
@@ -34,7 +35,6 @@ jobs:
       - name: Difftest NutShell
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
-            source ./env.sh
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
       
