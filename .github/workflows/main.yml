@@ -25,17 +25,21 @@ jobs:
             cd $GITHUB_WORKSPACE/..
             git clone https://github.com/OpenXiangShan/xs-env
             cd $GITHUB_WORKSPACE/../xs-env
-            sudo -s ./setup.sh
-            sudo rm -r $GITHUB_WORKSPACE/../xs-env/NutShell/difftest
-            sudo rm -r $GITHUB_WORKSPACE/../xs-env/XiangShan/difftest
-            sudo cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/NutShell
-            sudo cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/XiangShan
+            sudo -s ./setup-tools.sh
+            source ./setup.sh
+            rm -r $GITHUB_WORKSPACE/../xs-env/NutShell/difftest
+            rm -r $GITHUB_WORKSPACE/../xs-env/XiangShan/difftest
+            cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/NutShell
+            cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/XiangShan
             
       - name: Difftest NutShell
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
       
 # Github hosted CI does not support XiangShan
