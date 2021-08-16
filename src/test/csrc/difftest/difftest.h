@@ -23,11 +23,6 @@
 #define DIFF_PROXY NemuProxy
 
 #define DIFFTEST_CORE_NUMBER  NUM_CORES
-#define DIFFTEST_COMMIT_WIDTH 6
-#define DIFFTEST_STORE_WIDTH  2
-#define DIFFTEST_LOAD_WIDTH   2
-
-#define DIFFTEST_STORE_COMMIT
 
 enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 enum { REF_TO_DUT, DUT_TO_REF };
@@ -153,7 +148,7 @@ enum retire_inst_type {
 
 class DiffState {
 public:
-  DiffState(int history_length = 32);
+  DiffState();
   void record_group(uint64_t pc, uint64_t count) {
     retire_group_pc_queue [retire_group_pointer] = pc;
     retire_group_cnt_queue[retire_group_pointer] = count;
@@ -178,9 +173,6 @@ public:
   void display(int coreid);
 
 private:
-  const static size_t DEBUG_GROUP_TRACE_SIZE = 16;
-  const static size_t DEBUG_INST_TRACE_SIZE = 16;
-
   int retire_group_pointer = 0;
   uint64_t retire_group_pc_queue[DEBUG_GROUP_TRACE_SIZE] = {0};
   uint32_t retire_group_cnt_queue[DEBUG_GROUP_TRACE_SIZE] = {0};
