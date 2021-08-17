@@ -1,6 +1,5 @@
 /***************************************************************************************
 * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * XiangShan is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -102,7 +101,7 @@ bool axi_check_wdata_fire(const axi_channel &axi) {
   }
   return false;
 }
-#include <iostream>
+
 void axi_get_wdata(const axi_channel &axi, void *dest, const void *src, size_t n) {
   if (axi.w.strb == 0xff) {
     memcpy(dest, axi.w.data, n);
