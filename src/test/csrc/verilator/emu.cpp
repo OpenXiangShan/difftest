@@ -397,14 +397,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     printf("[%d] checkpoint process: dump wave complete, exit.\n",getpid());
     return cycles;
   }
-  else{
+  else if(trapCode != STATE_GOODTRAP){
     forkshm.info->flag = true;
     forkshm.info->notgood = true;
     forkshm.info->endCycles = cycles;
     waitpid(pidSlot.back(),&status,0);
     display_trapinfo();
     return cycles;
-  }
+  } 
 #endif
 
   display_trapinfo();

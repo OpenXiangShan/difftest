@@ -30,7 +30,7 @@
 #include <unistd.h>
 #include <verilated_threads.h>
 
-#define FORK_INTERVAL 2 // unit: second
+#define FORK_INTERVAL 3 // unit: second
 #define SLOT_SIZE 2
 #define FAIT_EXIT    exit(EXIT_FAILURE);
 #define WAIT_INTERVAL 5
@@ -130,7 +130,7 @@ private:
 #endif
 
 public:
-  Emulator(int argc, const char *argv[]);
+Emulator(int argc, const char *argv[]);
   ~Emulator();
   uint64_t execute(uint64_t max_cycle, uint64_t max_instr);
   uint64_t get_cycles() const { return cycles; }
