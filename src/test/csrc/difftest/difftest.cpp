@@ -94,7 +94,7 @@ int Difftest::step() {
   if (do_store_check()) {
     return 1;
   }
-  if (do_golden_memory_update()) {
+  if (NUM_CORES > 1 && do_golden_memory_update()) {
     return 1;
   }
 
@@ -266,16 +266,12 @@ void Difftest::do_instr_commit(int i) {
 
 void Difftest::do_first_instr_commit() {
   if (!has_commit && dut.commit[0].valid && dut.commit[0].pc == 0x80000000) {
-  // when dut commits the first instruction, its state should be copied to ref,
-  // because dut is probably randomly initialized.
-  // int first_instr_commit = dut_ptr->io_difftest_commit && dut_ptr->io_difftest_thisPC == 0x80000000u;
+    printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
     has_commit = 1;
     nemu_this_pc = dut.csr.this_pc;
 
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
-
-    printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
   }
 }
 

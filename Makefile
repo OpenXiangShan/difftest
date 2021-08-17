@@ -61,7 +61,7 @@ $(error NEMU_HOME is not set)
 endif
 REF_SO := $(NEMU_HOME)/build/riscv64-nemu-interpreter-so
 $(REF_SO):
-	$(MAKE) -C $(NEMU_HOME) defconfig riscv64-xs-ref_defconfig
+	$(MAKE) -C $(NEMU_HOME) riscv64-xs-ref_defconfig
 	$(MAKE) -C $(NEMU_HOME)
 
 SEED ?= $(shell shuf -i 1-10000 -n 1)
