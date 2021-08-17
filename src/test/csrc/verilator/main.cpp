@@ -1,5 +1,6 @@
 /***************************************************************************************
 * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * XiangShan is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -17,8 +18,10 @@
 #include <locale.h>
 #include <csignal>
 #include "emu.h"
+#include "remote_bitbang.h"
 
 static char mybuf[BUFSIZ];
+extern remote_bitbang_t * jtag;
 
 // junk, link for verilator
 std::function<double()> get_sc_time_stamp = []() -> double { return 0; };
@@ -26,6 +29,8 @@ double sc_time_stamp() { return get_sc_time_stamp(); }
 
 int main(int argc, const char** argv) {
   printf("Emu compiled at %s, %s\n", __DATE__, __TIME__);
+
+  jtag = new remote_bitbang_t(23334);
 
   setbuf(stderr, mybuf);
 

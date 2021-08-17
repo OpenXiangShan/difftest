@@ -1,5 +1,6 @@
 /***************************************************************************************
 * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * XiangShan is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -21,13 +22,19 @@
 #include "nemuproxy.h"
 #define DIFF_PROXY NemuProxy
 
-#define DIFFTEST_CORE_NUMBER  EMU_CORES
+#define DIFFTEST_CORE_NUMBER  NUM_CORES
 #define DIFFTEST_COMMIT_WIDTH 6
 #define DIFFTEST_STORE_WIDTH  2
-#define DIFFTEST_LOAD_WIDTH   6
+#define DIFFTEST_LOAD_WIDTH   2
 
 #define DIFFTEST_STORE_COMMIT
 
+enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
+enum { REF_TO_DUT, DUT_TO_REF };
+enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
+// DIFFTEST_TO_DUT ~ REF_TO_DUT ~ REF_TO_DIFFTEST
+// DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
+#define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
 
 
 // Difftest structures

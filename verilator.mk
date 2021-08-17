@@ -1,5 +1,6 @@
 #***************************************************************************************
 # Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
 # XiangShan is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -15,10 +16,10 @@
 
 EMU_TOP      = SimTop
 
-EMU_CSRC_DIR = $(abspath ./src/test/csrc/verilator)
+EMU_CSRC_DIR = $(abspath ./src/test/csrc)
 EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIFFTEST_CXXFILES)
 EMU_CXXFLAGS += -std=c++11 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR)
-EMU_CXXFLAGS += -DVERILATOR -Wno-maybe-uninitialized
+EMU_CXXFLAGS += -DVERILATOR -Wno-maybe-uninitialized  -DNUM_CORES=$(NUM_CORES)
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz
 
 EMU_VFILES    = $(SIM_VSRC)
@@ -118,6 +119,7 @@ build_emu_local: $(EMU_MK)
 	$(TIME_CMD) $(MAKE) VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
 $(LOCK_BIN): ./scripts/utils/lock-emu.c
+	mkdir -p $(@D)
 	gcc $^ -o $@
 
 $(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS) $(REF_SO) $(LOCK_BIN)
@@ -135,7 +137,7 @@ endif
 # log will only be printed when (B<=GTimer<=E) && (L < loglevel)
 # use 'emu -h' to see more details
 B ?= 0
-E ?= -1
+E ?= 0
 
 ifndef NOOP_HOME
 $(error NOOP_HOME is not set)

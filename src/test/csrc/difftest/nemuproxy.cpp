@@ -1,5 +1,6 @@
 /***************************************************************************************
 * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * XiangShan is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -20,6 +21,14 @@
 uint8_t* goldenMem;
 const char *difftest_ref_so = NULL;
 
+#define check_and_assert(func)                                \
+  do {                                                        \
+    if (!func) {                                              \
+      printf("ERROR: %s\n", dlerror());  \
+      assert(func);                                           \
+    }                                                         \
+  } while (0);
+
 NemuProxy::NemuProxy(int coreid) {
   if (difftest_ref_so == NULL) {
     printf("--diff is not given, "
@@ -39,53 +48,43 @@ NemuProxy::NemuProxy(int coreid) {
   printf("Using %s for difftest\n", difftest_ref_so);
 
   void *handle = dlmopen(LM_ID_NEWLM, difftest_ref_so, RTLD_LAZY | RTLD_DEEPBIND);
-  assert(handle);
+  if(!handle){
+    printf("%s\n", dlerror());
+    assert(0);
+  }
 
-  memcpy_from_dut = (void (*)(paddr_t, void *, size_t))dlsym(handle, "difftest_memcpy_from_dut");
-  assert(memcpy_from_dut);
+  this->memcpy = (void (*)(paddr_t, void *, size_t, bool))dlsym(handle, "difftest_memcpy");
+  check_and_assert(this->memcpy);
 
-  memcpy_from_ref = (void (*)(void *, paddr_t, size_t))dlsym(handle, "difftest_memcpy_from_ref");
-  assert(memcpy_from_ref);
+  regcpy = (void (*)(void *, bool))dlsym(handle, "difftest_regcpy");
+  check_and_assert(regcpy);
 
-  get_regs = (void (*)(void *))dlsym(handle, "difftest_getregs");
-  assert(get_regs);
+  csrcpy = (void (*)(void *, bool))dlsym(handle, "difftest_csrcpy");
+  check_and_assert(csrcpy);
 
-  set_regs = (void (*)(const void *))dlsym(handle, "difftest_setregs");
-  assert(set_regs);
-
-  get_mastatus = (void (*)(void *))dlsym(handle, "difftest_get_mastatus");
-  assert(get_mastatus);
-
-  set_mastatus = (void (*)(const void *))dlsym(handle, "difftest_set_mastatus");
-  assert(set_mastatus);
-
-  get_csr = (void (*)(void *))dlsym(handle, "difftest_get_csr");
-  assert(get_csr);
-
-  set_csr = (void (*)(const void *))dlsym(handle, "difftest_set_csr");
-  assert(set_csr);
-
-  disambiguate_exec = (vaddr_t (*)(void *))dlsym(handle, "disambiguate_exec");
-  assert(disambiguate_exec);
-
-  store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(handle, "difftest_store_commit");
-  assert(store_commit);
+  uarchstatus_cpy = (void (*)(void *, bool))dlsym(handle, "difftest_uarchstatus_cpy");
+  check_and_assert(uarchstatus_cpy);
 
   exec = (void (*)(uint64_t))dlsym(handle, "difftest_exec");
-  assert(exec);
+  check_and_assert(exec);
+
+  guided_exec = (vaddr_t (*)(void *))dlsym(handle, "difftest_guided_exec");
+  check_and_assert(guided_exec);
+
+  store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(handle, "difftest_store_commit");
+  check_and_assert(store_commit);
 
   raise_intr = (void (*)(uint64_t))dlsym(handle, "difftest_raise_intr");
-  assert(raise_intr);
+  check_and_assert(raise_intr);
 
   isa_reg_display = (void (*)(void))dlsym(handle, "isa_reg_display");
-  assert(isa_reg_display);
-
+  check_and_assert(isa_reg_display);
   auto nemu_difftest_set_mhartid = (void (*)(int))dlsym(handle, "difftest_set_mhartid");
   auto nemu_misc_put_gmaddr = (void (*)(void*))dlsym(handle, "misc_put_gmaddr");
 
-  if (EMU_CORES > 1) {
-    assert(nemu_difftest_set_mhartid);
-    assert(nemu_misc_put_gmaddr);
+  if (NUM_CORES > 1) {
+    check_and_assert(nemu_difftest_set_mhartid);
+    check_and_assert(nemu_misc_put_gmaddr);
   }
 
   if (nemu_difftest_set_mhartid) {
@@ -96,7 +95,7 @@ NemuProxy::NemuProxy(int coreid) {
   }
 
   auto nemu_init = (void (*)(void))dlsym(handle, "difftest_init");
-  assert(nemu_init);
+  check_and_assert(nemu_init);
 
   nemu_init();
 }

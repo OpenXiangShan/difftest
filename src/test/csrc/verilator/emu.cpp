@@ -1,5 +1,6 @@
 /***************************************************************************************
 * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * XiangShan is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -128,6 +129,13 @@ Emulator::Emulator(int argc, const char *argv[]):
   // init ram
   init_ram(args.image);
 
+  difftest_init();
+  init_device();
+  if (args.enable_diff) {
+    init_goldenmem();
+    init_nemuproxy();
+  }
+
 #if VM_TRACE == 1
 #ifndef EN_FORKWAIT
   enable_waveform = args.enable_waveform;
@@ -151,7 +159,8 @@ Emulator::Emulator(int argc, const char *argv[]):
   if (args.snapshot_path != NULL) {
     printf("loading from snapshot `%s`...\n", args.snapshot_path);
     snapshot_load(args.snapshot_path);
-    printf("model cycleCnt = %" PRIu64 "\n", dut_ptr->io_trap_cycleCnt);
+    auto cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
+    printf("model cycleCnt = %" PRIu64 "\n", cycleCnt);
   }
 #endif
 
@@ -214,7 +223,7 @@ inline void Emulator::single_cycle() {
     uint64_t cycle = trap->cycleCnt;
     uint64_t begin = dut_ptr->io_logCtrl_log_begin;
     uint64_t end   = dut_ptr->io_logCtrl_log_end;
-    bool in_range = (begin <= cycle) && (cycle <= end);
+    bool in_range  = (begin <= cycle) && (cycle <= end);
     if (in_range) { tfp->dump(cycle); }
   }
 #endif
@@ -227,35 +236,22 @@ inline void Emulator::single_cycle() {
     extern uint8_t uart_getc();
     dut_ptr->io_uart_in_ch = uart_getc();
   }
-  cycles ++;
+
+  cycles++;
 }
 
 uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
-  difftest_init();
-  init_device();
-  if (args.enable_diff) {
-    init_goldenmem();
-    init_nemuproxy();
-  }
-
+  uint32_t t = uptime();
   uint32_t lasttime_poll = 0;
   uint32_t lasttime_snapshot = 0;
-  // const int stuck_limit = 5000;
-  // const int firstCommit_limit = 10000;
-  uint64_t core_max_instr[EMU_CORES];
-  for (int i = 0; i < EMU_CORES; i++) {
+  uint64_t core_max_instr[NUM_CORES];
+  for (int i = 0; i < NUM_CORES; i++) {
     core_max_instr[i] = max_instr;
   }
 
-  uint32_t t = uptime();
-  if (t - lasttime_poll > 100) {
-    poll_event();
-    lasttime_poll = t;
-  }
-
 #ifdef EN_FORKWAIT
-  printf("[INFO]enable fork wait..\n");
+  printf("[INFO] enable fork wait..\n");
   pid_t pid =-1;
   pid_t originPID = getpid();
   int status = -1;
@@ -266,19 +262,19 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   enable_waveform = false;
 
   //first process as a control process
-  if((pid = fork()) < 0 ){
+  if ((pid = fork()) < 0) {
     perror("First fork failed..\n");
     FAIT_EXIT;
-  } else if(pid > 0) {  //parent process
-    printf("[%d] Control process first fork...child: %d\n ",getpid(),pid);
+  } else if (pid > 0) {  //parent process
+    printf("[%d] Control process first fork...child: %d\n ", getpid(), pid);
     prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
     forkshm.shwait();
-    printf("[%d] Emulationg finished, Control process exit..",getpid());
+    printf("[%d] Simulation finished, Control process exit..", getpid());
     return cycles;
   } else {
     forkshm.info->exitNum++;
     forkshm.info->flag = true;
-    pidSlot.insert(pidSlot.begin(),  getpid());
+    pidSlot.insert(pidSlot.begin(), getpid());
   }
 #endif
 
@@ -288,14 +284,22 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   // we distinguish multiple dat files by emu start time
   time_t coverage_start_time = time(NULL);
 #endif
+
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
+    t = uptime();
+
+    if (t - lasttime_poll > 100) {
+      poll_event();
+      lasttime_poll = t;
+    }
+
     // cycle limitation
     if (!max_cycle) {
       trapCode = STATE_LIMIT_EXCEEDED;
       break;
     }
     // instruction limitation
-    for (int i = 0; i < EMU_CORES; i++) {
+    for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       if (trap->instrCnt >= core_max_instr[i]) {
         trapCode = STATE_LIMIT_EXCEEDED;
@@ -316,7 +320,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       break;
     }
 
-    for (int i = 0; i < EMU_CORES; i++) {
+    for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       if (trap->instrCnt >= args.warmup_instr) {
         printf("Warmup finished. The performance counters will be dumped and then reset.\n");
@@ -348,7 +352,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #ifdef VM_SAVABLE
     static int snapshot_count = 0;
     if (args.enable_snapshot && trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
-      // save snapshot every 60s
       time_t now = time(NULL);
       snapshot_save(snapshot_filename(now));
       lasttime_snapshot = t;
@@ -361,14 +364,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     }
 #endif
 
-#ifdef EN_FORKWAIT  
+#ifdef EN_FORKWAIT
     timer = uptime();
     if (timer - lasttime_snapshot > 1000 * FORK_INTERVAL && !waitProcess) {   // time out need to fork
       lasttime_snapshot = timer;
       if (slotCnt == SLOT_SIZE) {     // kill first wait process
         pid_t temp = pidSlot.back();
         pidSlot.pop_back();
-        kill(temp, SIGKILL); 
+        kill(temp, SIGKILL);
         slotCnt--;
         forkshm.info->exitNum--;
       }
@@ -390,9 +393,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       } else {        //child insert its pid
         slotCnt++;
         forkshm.info->exitNum++;
-        pidSlot.insert(pidSlot.begin(),  getpid());
+        pidSlot.insert(pidSlot.begin(), getpid());
       }
-    } 
+    }
 #endif
 }
 
@@ -468,7 +471,7 @@ void Emulator::trigger_stat_dump() {
 }
 
 void Emulator::display_trapinfo() {
-  for (int i = 0; i < EMU_CORES; i++) {
+  for (int i = 0; i < NUM_CORES; i++) {
     printf("Core %d: ", i);
     auto trap = difftest[i]->get_trap_event();
     uint64_t pc = trap->pc;
@@ -508,21 +511,21 @@ void Emulator::display_trapinfo() {
 
 #ifdef EN_FORKWAIT
 ForkShareMemory::ForkShareMemory() {
-  if((key_n = ftok(".",'s')<0)) {
-      perror("Fail to ftok\n");
-      FAIT_EXIT
+  if ((key_n = ftok(".", 's') < 0)) {
+    perror("Fail to ftok\n");
+    FAIT_EXIT
   }
-  printf("key num:%d\n",key_n);
+  printf("key num:%d\n", key_n);
 
-  if((shm_id = shmget(key_n,1024,0666|IPC_CREAT))==-1) {
-      perror("shmget failed...\n");
-      FAIT_EXIT
+  if ((shm_id = shmget(key_n, 1024, 0666 | IPC_CREAT))==-1) {
+    perror("shmget failed...\n");
+    FAIT_EXIT
   }
-  printf("share memory id:%d\n",shm_id);
+  printf("share memory id:%d\n", shm_id);
 
-  if((info = (shinfo*)(shmat(shm_id, NULL, 0))) == NULL ) {
-      perror("shmat failed...\n");
-      FAIT_EXIT
+  if ((info = (shinfo*)(shmat(shm_id, NULL, 0))) == NULL ) {
+    perror("shmat failed...\n");
+    FAIT_EXIT
   }
 
   info->exitNum   = 0;
@@ -531,23 +534,31 @@ ForkShareMemory::ForkShareMemory() {
 }
 
 ForkShareMemory::~ForkShareMemory() {
-  if(shmdt(info) == -1 ){
+  if (shmdt(info) == -1) {
     perror("detach error\n");
   }
-  shmctl(shm_id, IPC_RMID, NULL) ;
+  shmctl(shm_id, IPC_RMID, NULL);
 }
 
-void ForkShareMemory::shwait(){
-    while(true){
-        if(info->exitNum == 0 && info->flag){ break;  } 
-        else {  
-            sleep(WAIT_INTERVAL);  
-        }
+void ForkShareMemory::shwait() {
+  while (true) {
+    if (info->exitNum == 0 && info->flag) {
+      break;
     }
+    else {
+      sleep(WAIT_INTERVAL);
+    }
+  }
 }
 #endif
 
 #ifdef VM_SAVABLE
+
+// currently only support single core snapshot
+#if NUM_CORES != 1
+  #error "unsupported multicore"
+#endif
+
 void Emulator::snapshot_save(const char *filename) {
   static int last_slot = 0;
   VerilatedSaveMem &stream = snapshot_slot[last_slot];
@@ -561,24 +572,27 @@ void Emulator::snapshot_save(const char *filename) {
   stream.unbuf_write(&size, sizeof(size));
   stream.unbuf_write(get_ram_start(), size);
 
+  auto diff = difftest[0];
+  uint64_t cycleCnt = diff->get_trap_event()->cycleCnt;
+  stream.unbuf_write(&cycleCnt, sizeof(cycleCnt));
+
+  auto proxy = diff->proxy;
+
   uint64_t ref_r[DIFFTEST_NR_REG];
-  ref_difftest_getregs(&ref_r, 0);
+  proxy->regcpy(&ref_r, REF_TO_DUT);
   stream.unbuf_write(ref_r, sizeof(ref_r));
 
-  uint64_t nemu_this_pc = get_nemu_this_pc(0);
-  stream.unbuf_write(&nemu_this_pc, sizeof(nemu_this_pc));
-
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  ref_difftest_memcpy_from_ref(buf, 0x80000000, size, 0);
+  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_DUT);
   stream.unbuf_write(buf, size);
   munmap(buf, size);
 
   struct SyncState sync_mastate;
-  ref_difftest_get_mastatus(&sync_mastate, 0);
+  proxy->uarchstatus_cpy(&sync_mastate, REF_TO_DUT);
   stream.unbuf_write(&sync_mastate, sizeof(struct SyncState));
 
   uint64_t csr_buf[4096];
-  ref_difftest_get_csr(csr_buf, 0);
+  proxy->csrcpy(csr_buf, REF_TO_DIFFTEST);
   stream.unbuf_write(&csr_buf, sizeof(csr_buf));
 
   long sdcard_offset;
@@ -601,30 +615,35 @@ void Emulator::snapshot_load(const char *filename) {
   assert(size == get_ram_size());
   stream.read(get_ram_start(), size);
 
+  auto diff = difftest[0];
+  uint64_t *cycleCnt = &(diff->get_trap_event()->cycleCnt);
+  stream.read(cycleCnt, sizeof(*cycleCnt));
+
+  auto proxy = diff->proxy;
+
   uint64_t ref_r[DIFFTEST_NR_REG];
   stream.read(ref_r, sizeof(ref_r));
-  ref_difftest_setregs(&ref_r, 0);
-
-  uint64_t nemu_this_pc;
-  stream.read(&nemu_this_pc, sizeof(nemu_this_pc));
-  set_nemu_this_pc(nemu_this_pc, 0);
+  proxy->regcpy(&ref_r, DUT_TO_REF);
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   stream.read(buf, size);
-  ref_difftest_memcpy_from_dut(0x80000000, buf, size, 0);
+  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_REF);
   munmap(buf, size);
 
   struct SyncState sync_mastate;
   stream.read(&sync_mastate, sizeof(struct SyncState));
-  ref_difftest_set_mastatus(&sync_mastate, 0);
+  proxy->uarchstatus_cpy(&sync_mastate, DUT_TO_REF);
 
   uint64_t csr_buf[4096];
   stream.read(&csr_buf, sizeof(csr_buf));
-  ref_difftest_set_csr(csr_buf, 0);
+  proxy->csrcpy(csr_buf, DIFFTEST_TO_REF);
 
   long sdcard_offset = 0;
   stream.read(&sdcard_offset, sizeof(sdcard_offset));
   if(fp)
     fseek(fp, sdcard_offset, SEEK_SET);
+
+  // No one uses snapshot when !has_commit, isn't it?
+  has_commit = 1;
 }
 #endif

@@ -1,5 +1,6 @@
 /***************************************************************************************
 * Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * XiangShan is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -110,10 +111,7 @@ private:
 
   // emu control variable
   uint64_t cycles;
-  // int hascommit[NumCore];
   int trapCode;
-  // uint64_t max_instr[EMU_CORES];
-  // uint64_t max_cycle[EMU_CORES];
 
   inline void reset_ncycles(size_t cycles);
   inline void single_cycle();

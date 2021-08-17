@@ -1,5 +1,6 @@
 #***************************************************************************************
 # Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
 # XiangShan is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -23,8 +24,8 @@ VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 
-VCS_SEARCH_DIR = $(abspath ./build)
-VCS_BUILD_DIR  = $(abspath ./build/simv-compile)
+VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
+VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
 
 VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
 # randomize all undefined signals (instead of using X)
@@ -44,6 +45,5 @@ $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 
 vcs-clean:
-	cd $(DESIGN_DIR)
 	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)
 

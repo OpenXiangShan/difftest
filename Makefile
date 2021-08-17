@@ -1,5 +1,6 @@
 #***************************************************************************************
 # Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
 # XiangShan is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -13,9 +14,10 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-SIM_TOP   = SimTop
-DESIGN_DIR = ..
-CONFIG ?= DefaultConfig
+SIM_TOP    ?= SimTop
+DESIGN_DIR ?= ..
+NUM_CORES  ?= 1
+
 BUILD_DIR = $(DESIGN_DIR)/build
 SIM_TOP_V = $(BUILD_DIR)/$(SIM_TOP).v
 
@@ -59,12 +61,10 @@ $(error NEMU_HOME is not set)
 endif
 REF_SO := $(NEMU_HOME)/build/riscv64-nemu-interpreter-so
 $(REF_SO):
-	$(MAKE) -C $(NEMU_HOME) ISA=riscv64 SHARE=1
+	$(MAKE) -C $(NEMU_HOME) riscv64-xs-ref_defconfig
+	$(MAKE) -C $(NEMU_HOME)
 
 SEED ?= $(shell shuf -i 1-10000 -n 1)
-
-VME_SOURCE ?= $(shell pwd)/build/$(TOP).v
-VME_MODULES ?=
 
 release-lock:
 	ssh -tt $(REMOTE) 'rm -f $(LOCK)'
