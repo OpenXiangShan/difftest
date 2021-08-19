@@ -382,7 +382,9 @@ void dramsim3_helper_rising(const axi_channel &axi) {
     }
     dramsim3_meta *meta = static_cast<dramsim3_meta *>(wait_req_w->meta);
     void *data_start = meta->data + meta->offset * meta->size / sizeof(uint64_t);
-    axi_get_wdata(axi, data_start, meta->size);
+    uint64_t waddr = axi.aw.addr % EMU_RAM_SIZE;
+    const void *src_addr = ram + (waddr + meta->offset * meta->size) / sizeof(uint64_t);
+    axi_get_wdata(axi, data_start, src_addr, meta->size);
     meta->offset++;
     // printf("accept a new write data\n");
   }

@@ -103,10 +103,22 @@ bool axi_check_wdata_fire(const axi_channel &axi) {
   return false;
 }
 
-void axi_get_wdata(const axi_channel &axi, void *dest, size_t n) {
-  memcpy(dest, axi.w.data, n);
-}
+void axi_get_wdata(const axi_channel &axi, void *dest, const void *src, size_t n) {
+  if (axi.w.strb == 0xff) {
+    memcpy(dest, axi.w.data, n);
+  }
+  else {
+    assert(n <= 8);       // The current STRB supports no more than 8 bytes of data
 
+    const uint8_t *src_p = (const uint8_t *)src;
+    uint8_t *dest_p = (uint8_t *)dest;
+    uint8_t *data_p = (uint8_t *)axi.w.data;
+    
+    for (size_t i = 0; i < n; i++, src_p++, dest_p++, data_p++) {
+      *dest_p = (axi.w.strb & (1 << i)) ? *data_p : *src_p;
+    }
+  }
+}
 
 // b channel: (1) put response; (2) check response fire
 void axi_put_wack(axi_channel &axi, uint8_t id) {
