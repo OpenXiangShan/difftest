@@ -28,6 +28,9 @@
 #include "zlib.h"
 #include "compress.h"
 #include <list>
+#include "remote_bitbang.h"
+
+extern remote_bitbang_t * jtag;
 
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
@@ -46,6 +49,7 @@ static inline void print_help(const char *file) {
   printf("      --dump-wave            dump waveform when log is enabled\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
+  printf("      --enable-jtag          enable remote bitbang server\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -61,6 +65,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "force-dump-result", 0, NULL,  0  },
     { "diff",              1, NULL,  0  },
     { "no-diff",           0, NULL,  0  },
+    { "enable-jtag",       0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -85,6 +90,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 3: args.force_dump_result = true; continue;
           case 4: difftest_ref_so = optarg; continue;
           case 5: args.enable_diff = false; continue;
+          case 6: args.enable_jtag = true; continue;
         }
         // fall through
       default:
@@ -123,6 +129,10 @@ Emulator::Emulator(int argc, const char *argv[]):
   Verilated::randReset(2);
   assert_init();
 
+  // init remote-bitbang
+  if (args.enable_jtag) { 
+    jtag = new remote_bitbang_t(23334);
+  }
   // init core
   reset_ncycles(10);
 
