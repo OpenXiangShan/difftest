@@ -82,6 +82,8 @@ struct EmuArgs {
     enable_snapshot = true;
     force_dump_result = false;
     enable_diff = true;
+    enable_fork = false;
+    enable_jtag = false;
   }
 };
 
