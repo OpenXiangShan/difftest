@@ -30,12 +30,6 @@
 #include <unistd.h>
 #include <verilated_threads.h>
 
-#define FORK_INTERVAL 1 // unit: second
-#define SLOT_SIZE 2
-#define FAIT_EXIT    exit(EXIT_FAILURE);
-#define WAIT_INTERVAL 5
-#define SNAPSHOT_INTERVAL 60 // unit: second
-
 typedef struct shinfo{
   bool flag;
   bool notgood;
@@ -71,6 +65,7 @@ struct EmuArgs {
   bool force_dump_result;
   bool enable_diff;
   bool enable_fork;
+  bool enable_jtag;
 
   EmuArgs() {
     seed = 0;

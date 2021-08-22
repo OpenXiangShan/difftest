@@ -28,6 +28,9 @@
 #include "zlib.h"
 #include "compress.h"
 #include <list>
+#include "remote_bitbang.h"
+
+extern remote_bitbang_t * jtag;
 
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
@@ -47,6 +50,7 @@ static inline void print_help(const char *file) {
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
+  printf("      --enable-jtag          enable remote bitbang server\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -63,6 +67,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "diff",              1, NULL,  0  },
     { "no-diff",           0, NULL,  0  },
     { "enable-fork",       0, NULL,  0  },
+    { "enable-jtag",       0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -88,6 +93,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 4: difftest_ref_so = optarg; continue;
           case 5: args.enable_diff = false; continue;
           case 6: args.enable_fork = true; continue;
+          case 7: args.enable_jtag = true; continue;
         }
         // fall through
       default:
@@ -126,6 +132,10 @@ Emulator::Emulator(int argc, const char *argv[]):
   Verilated::randReset(2);
   assert_init();
 
+  // init remote-bitbang
+  if (args.enable_jtag) { 
+    jtag = new remote_bitbang_t(23334);
+  }
   // init core
   reset_ncycles(10);
 
@@ -251,17 +261,17 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   if(args.enable_fork){
 #ifndef EMU_THREAD
       printf("[ERROR] please enable --threads option in verilator...(You may forget EMU_THREADS when compiling.)\n");
-      exit(-1);
+      FAIT_EXIT
 #endif
 
 #ifndef VM_TRACE
       printf("[ERROR] please enable --trace option in verilator...(You may forget EMU_TRACE when compiling.)\n");
-      exit(-1);
+      FAIT_EXIT
 #endif
 
 #if EMU_THREAD <= 1
       printf("[ERROR] please use more than 1 threads in EMU_THREADS option\n");
-      exit(-1);
+      FAIT_EXIT
 #endif 
     printf("[INFO] enable fork debugging...\n");
   }
@@ -377,7 +387,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         } else if (pid != 0) {      
           slotCnt++;
           pidSlot.insert(pidSlot.begin(), pid);
-          printf("fork a child :%d, cnt :%d\n",pid,slotCnt);
         } else {     
           waitProcess = 1;
           uint64_t startCycle = cycles;

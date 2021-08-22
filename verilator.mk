@@ -14,6 +14,8 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
+include config/verilator.mk
+
 EMU_TOP      = SimTop
 
 EMU_CSRC_DIR = $(abspath ./src/test/csrc)

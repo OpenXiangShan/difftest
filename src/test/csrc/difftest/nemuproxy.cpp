@@ -18,7 +18,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 
-uint8_t* goldenMem;
+uint8_t* goldenMem = NULL;
 const char *difftest_ref_so = NULL;
 
 #define check_and_assert(func)                                \
@@ -79,18 +79,17 @@ NemuProxy::NemuProxy(int coreid) {
 
   isa_reg_display = (void (*)(void))dlsym(handle, "isa_reg_display");
   check_and_assert(isa_reg_display);
-  auto nemu_difftest_set_mhartid = (void (*)(int))dlsym(handle, "difftest_set_mhartid");
-  auto nemu_misc_put_gmaddr = (void (*)(void*))dlsym(handle, "misc_put_gmaddr");
 
+  auto nemu_difftest_set_mhartid = (void (*)(int))dlsym(handle, "difftest_set_mhartid");
   if (NUM_CORES > 1) {
     check_and_assert(nemu_difftest_set_mhartid);
-    check_and_assert(nemu_misc_put_gmaddr);
-  }
-
-  if (nemu_difftest_set_mhartid) {
     nemu_difftest_set_mhartid(coreid);
   }
-  if (nemu_misc_put_gmaddr) {
+
+  auto nemu_misc_put_gmaddr = (void (*)(void*))dlsym(handle, "difftest_put_gmaddr");
+  if (NUM_CORES > 1) {
+    check_and_assert(nemu_misc_put_gmaddr);
+    assert(goldenMem);
     nemu_misc_put_gmaddr(goldenMem);
   }
 
