@@ -14,32 +14,33 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __RAM_H
-#define __RAM_H
+#ifndef __CONFIG_H
+#define __CONFIG_H
 
-#include "common.h"
-
-#ifndef EMU_RAM_SIZE
-#define EMU_RAM_SIZE (256 * 1024 * 1024UL)
+#ifndef NUM_CORES
+#define NUM_CORES 1
 #endif
 
-void init_ram(const char *img);
-void ram_finish();
-void* get_ram_start();
-long get_ram_size();
+// emulated memory size (Byte)
+// #define EMU_RAM_SIZE (256 * 1024 * 1024UL) // 256 MB
+#define EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
 
-void* get_img_start();
-long get_img_size();
+// first valid instruction's address, difftest starts from this instruction
+#define FIRST_INST_ADDRESS 0x80000000
 
-uint64_t pmem_read(uint64_t raddr);
-void pmem_write(uint64_t waddr, uint64_t wdata);
+// sdcard image to be used in simulation
+// #define SDCARD_IMAGE "/home/xyn/workloads/debian/riscv-debian.img"
 
-#ifdef WITH_DRAMSIM3
-#include "axi4.h"
+// max commit width
+#define DIFFTEST_COMMIT_WIDTH 6
 
-void dramsim3_finish();
-void dramsim3_helper_rising(const struct axi_channel &axi);
-void dramsim3_helper_falling(struct axi_channel &axi);
-#endif
+// max store width
+#define DIFFTEST_STORE_WIDTH 2
+
+// commit inst history length 
+#define DEBUG_INST_TRACE_SIZE 16
+
+// commit inst group history length 
+#define DEBUG_GROUP_TRACE_SIZE 16
 
 #endif

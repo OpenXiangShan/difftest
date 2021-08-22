@@ -19,6 +19,10 @@
 #include "ram.h"
 #include "spikedasm.h"
 
+#ifndef FIRST_INST_ADDRESS
+#define FIRST_INST_ADDRESS 0x80000000
+#endif
+
 static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "$0",  "ra",  "sp",   "gp",   "tp",  "t0",  "t1",   "t2",
   "s0",  "s1",  "a0",   "a1",   "a2",  "a3",  "a4",   "a5",
@@ -266,7 +270,7 @@ void Difftest::do_instr_commit(int i) {
 }
 
 void Difftest::do_first_instr_commit() {
-  if (!has_commit && dut.commit[0].valid && dut.commit[0].pc == 0x80000000) {
+  if (!has_commit && dut.commit[0].valid && dut.commit[0].pc == FIRST_INST_ADDRESS) {
     printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
     has_commit = 1;
     nemu_this_pc = dut.csr.this_pc;
@@ -425,7 +429,7 @@ void Difftest::clear_step() {
   for (int i = 0; i < DIFFTEST_STORE_WIDTH; i++) {
     dut.store[i].valid = 0;
   }
-  for (int i = 0; i < DIFFTEST_LOAD_WIDTH; i++) {
+  for (int i = 0; i < DIFFTEST_COMMIT_WIDTH; i++) {
     dut.load[i].valid = 0;
   }
   dut.atomic.resp = 0;
@@ -481,6 +485,6 @@ void DiffState::display(int coreid) {
   fflush(stdout);
 }
 
-DiffState::DiffState(int history_length) {
+DiffState::DiffState() {
 
 }
