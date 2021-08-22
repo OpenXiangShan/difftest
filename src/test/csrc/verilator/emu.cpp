@@ -654,6 +654,6 @@ void Emulator::snapshot_load(const char *filename) {
     fseek(fp, sdcard_offset, SEEK_SET);
 
   // No one uses snapshot when !has_commit, isn't it?
-  has_commit = 1;
+  diff->has_commit = 1;
 }
 #endif

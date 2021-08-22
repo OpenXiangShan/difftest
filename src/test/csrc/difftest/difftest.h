@@ -194,6 +194,7 @@ public:
   Difftest(int coreid);
   DIFF_PROXY *proxy = NULL;
   uint32_t num_commit = 0; // # of commits if made progress
+  bool has_commit = false;
   // Trigger a difftest checking procdure
   int step();
   void update_nemuproxy(int);
@@ -249,7 +250,6 @@ private:
   uint64_t *dut_regs_ptr = (uint64_t*)&dut.regs;
 
   bool progress = false;
-  bool has_commit = false;
   uint64_t ticks = 0;
   uint64_t last_commit = 0;
 
