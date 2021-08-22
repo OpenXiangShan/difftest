@@ -30,7 +30,7 @@
 #include <unistd.h>
 #include <verilated_threads.h>
 
-#define FORK_INTERVAL 3 // unit: second
+#define FORK_INTERVAL 1 // unit: second
 #define SLOT_SIZE 2
 #define FAIT_EXIT    exit(EXIT_FAILURE);
 #define WAIT_INTERVAL 5
@@ -70,6 +70,7 @@ struct EmuArgs {
   bool enable_snapshot;
   bool force_dump_result;
   bool enable_diff;
+  bool enable_fork;
 
   EmuArgs() {
     seed = 0;
@@ -97,9 +98,7 @@ private:
   VerilatedSaveMem snapshot_slot[2];
 #endif
   EmuArgs args;
-#ifdef EN_FORKWAIT
   ForkShareMemory forkshm;
-#endif
 
   enum {
     STATE_GOODTRAP = 0,

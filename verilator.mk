@@ -41,6 +41,7 @@ endif
 EMU_THREADS  ?= 0
 ifneq ($(EMU_THREADS),0)
 VEXTRA_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
+EMU_CXXFLAGS += -DEMU_THREAD=$(EMU_THREADS)
 endif
 
 # Verilator savable
@@ -48,13 +49,6 @@ EMU_SNAPSHOT ?=
 ifeq ($(EMU_SNAPSHOT),1)
 VEXTRA_FLAGS += --savable
 EMU_CXXFLAGS += -DVM_SAVABLE
-endif
-
-# Fork-wait 
-EMU_FORKWAIT ?= 
-ifeq ($(EMU_FORKWAIT),1)
-EMU_CXXFLAGS += -DEN_FORKWAIT
-EMU_CXXFLAGS += -DEMU_THREAD=$(EMU_THREADS)
 endif
 
 # Verilator coverage

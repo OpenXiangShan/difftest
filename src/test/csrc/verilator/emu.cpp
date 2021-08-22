@@ -44,6 +44,7 @@ static inline void print_help(const char *file) {
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
   printf("      --dump-wave            dump waveform when log is enabled\n");
+  printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("  -h, --help                 print program help info\n");
@@ -61,6 +62,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "force-dump-result", 0, NULL,  0  },
     { "diff",              1, NULL,  0  },
     { "no-diff",           0, NULL,  0  },
+    { "enable-fork",       0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -85,6 +87,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 3: args.force_dump_result = true; continue;
           case 4: difftest_ref_so = optarg; continue;
           case 5: args.enable_diff = false; continue;
+          case 6: args.enable_fork = true; continue;
         }
         // fall through
       default:
@@ -129,38 +132,22 @@ Emulator::Emulator(int argc, const char *argv[]):
   // init ram
   init_ram(args.image);
 
-  difftest_init();
-  init_device();
-  if (args.enable_diff) {
-    init_goldenmem();
-    init_nemuproxy();
-  }
-
 #if VM_TRACE == 1
-#ifndef EN_FORKWAIT
-  enable_waveform = args.enable_waveform;
-  if (enable_waveform) {
+  enable_waveform = args.enable_waveform && !args.enable_fork;
+  if (enable_waveform ) {
     Verilated::traceEverOn(true);	// Verilator must compute traced signals
     tfp = new VerilatedVcdC;
     dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
     time_t now = time(NULL);
     tfp->open(waveform_filename(now));	// Open the dump file
   }
-#else
-  // VM_TRACE =1 && EN_FORKWAIT
-  enable_waveform = false;
-#endif
-#else
-  // VM_TRACE =0
-  enable_waveform = false;
 #endif
 
 #ifdef VM_SAVABLE
   if (args.snapshot_path != NULL) {
     printf("loading from snapshot `%s`...\n", args.snapshot_path);
     snapshot_load(args.snapshot_path);
-    auto cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
-    printf("model cycleCnt = %" PRIu64 "\n", cycleCnt);
+    printf("model cycleCnt = %" PRIu64 "\n", dut_ptr->io_trap_cycleCnt);
   }
 #endif
 
@@ -236,13 +223,18 @@ inline void Emulator::single_cycle() {
     extern uint8_t uart_getc();
     dut_ptr->io_uart_in_ch = uart_getc();
   }
-
-  cycles++;
+  cycles ++;
 }
 
 uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
-  uint32_t t = uptime();
+  difftest_init();
+  init_device();
+  if (args.enable_diff) {
+    init_goldenmem();
+    init_nemuproxy();
+  }
+
   uint32_t lasttime_poll = 0;
   uint32_t lasttime_snapshot = 0;
   uint64_t core_max_instr[NUM_CORES];
@@ -250,8 +242,30 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     core_max_instr[i] = max_instr;
   }
 
-#ifdef EN_FORKWAIT
-  printf("[INFO] enable fork wait..\n");
+  uint32_t t = uptime();
+  if (t - lasttime_poll > 100) {
+    poll_event();
+    lasttime_poll = t;
+  }
+
+  if(args.enable_fork){
+#ifndef EMU_THREAD
+      printf("[ERROR] please enable --threads option in verilator...(You may forget EMU_THREADS when compiling.)\n");
+      exit(-1);
+#endif
+
+#ifndef VM_TRACE
+      printf("[ERROR] please enable --trace option in verilator...(You may forget EMU_TRACE when compiling.)\n");
+      exit(-1);
+#endif
+
+#if EMU_THREAD <= 1
+      printf("[ERROR] please use more than 1 threads in EMU_THREADS option\n");
+      exit(-1);
+#endif 
+    printf("[INFO] enable fork debugging...\n");
+  }
+
   pid_t pid =-1;
   pid_t originPID = getpid();
   int status = -1;
@@ -259,8 +273,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   int waitProcess = 0;
   uint32_t timer = 0;
   std::list<pid_t> pidSlot = {};
-  enable_waveform = false;
-#endif
 
 #if VM_COVERAGE == 1
   // we dump coverage into files at the end
@@ -270,13 +282,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
-    t = uptime();
-
-    if (t - lasttime_poll > 100) {
-      poll_event();
-      lasttime_poll = t;
-    }
-
     // cycle limitation
     if(waitProcess && cycles != 0 && cycles == forkshm.info->endCycles){
       trapCode = STATE_ABORT;
@@ -340,6 +345,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #ifdef VM_SAVABLE
     static int snapshot_count = 0;
     if (args.enable_snapshot && trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
+      // save snapshot every 60s
       time_t now = time(NULL);
       snapshot_save(snapshot_filename(now));
       lasttime_snapshot = t;
@@ -352,39 +358,44 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     }
 #endif
 
-#ifdef EN_FORKWAIT
-    timer = uptime();
-    if (timer - lasttime_snapshot > 1000 * FORK_INTERVAL && !waitProcess) {   // time out need to fork
-      lasttime_snapshot = timer;
-      if (slotCnt == SLOT_SIZE) {     // kill first wait process
-        pid_t temp = pidSlot.back();
-        pidSlot.pop_back();
-        kill(temp, SIGKILL);
-        slotCnt--;
-      }
-      // fork-wait
-      if ((pid = fork()) < 0) {
-        eprintf("[%d]Error: could not fork process!\n",getpid());
-        return -1;
-      } else if (pid != 0) {      
-        slotCnt++;
-        pidSlot.insert(pidSlot.begin(), pid);
-      } else {        //child insert its pid
-        waitProcess = 1;
-        uint64_t startCycle = cycles;
-        forkshm.shwait();
-        dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
-        enable_waveform = true;
-        if (enable_waveform) {
-          Verilated::traceEverOn(true);	// Verilator must compute traced signals
+    if(args.enable_fork){
+      timer = uptime();
+      //check if it's time to fork a checkpoint process
+      if (timer - lasttime_snapshot > 1000 * FORK_INTERVAL && !waitProcess) {   // time out need to fork
+        lasttime_snapshot = timer;
+        //kill the oldest blocked checkpoint process
+        if (slotCnt == SLOT_SIZE) {   
+          pid_t temp = pidSlot.back();
+          pidSlot.pop_back();
+          kill(temp, SIGKILL);
+          slotCnt--;
+        }
+        //fork a new checkpoint process and block it 
+        if ((pid = fork()) < 0) {
+          eprintf("[%d]Error: could not fork process!\n",getpid());
+          return -1;
+        } else if (pid != 0) {      
+          slotCnt++;
+          pidSlot.insert(pidSlot.begin(), pid);
+          printf("fork a child :%d, cnt :%d\n",pid,slotCnt);
+        } else {     
+          waitProcess = 1;
+          uint64_t startCycle = cycles;
+          forkshm.shwait();
+          //checkpoint process wakes up 
+          dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
+          //start wave dumping
+          enable_waveform = true;
+          Verilated::traceEverOn(true);	
           tfp = new VerilatedVcdC;
-          dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
+          dut_ptr->trace(tfp, 99);
           time_t now = time(NULL);
-          tfp->open(cycle_wavefile(startCycle, now));	// Open the dump file
+          tfp->open(cycle_wavefile(startCycle, now));	
         }
       }
     }
-#endif
+
+
 }
 
 #if VM_TRACE == 1
@@ -395,20 +406,20 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   save_coverage(coverage_start_time);
 #endif
 
-#ifdef EN_FORKWAIT
-  if(waitProcess) {
-    printf("[%d] checkpoint process: dump wave complete, exit.\n",getpid());
-    return cycles;
+  if(args.enable_fork){
+    if(waitProcess) {
+      printf("[%d] checkpoint process: dump wave complete, exit...\n",getpid());
+      return cycles;
+    }
+    else if(trapCode != STATE_GOODTRAP){
+      forkshm.info->flag = true;
+      forkshm.info->notgood = true;
+      forkshm.info->endCycles = cycles;
+      waitpid(pidSlot.back(),&status,0);
+      display_trapinfo();
+      return cycles;
+    } 
   }
-  else if(trapCode != STATE_GOODTRAP){
-    forkshm.info->flag = true;
-    forkshm.info->notgood = true;
-    forkshm.info->endCycles = cycles;
-    waitpid(pidSlot.back(),&status,0);
-    display_trapinfo();
-    return cycles;
-  } 
-#endif
 
   display_trapinfo();
 
@@ -517,7 +528,6 @@ void Emulator::display_trapinfo() {
   }
 }
 
-#ifdef EN_FORKWAIT
 ForkShareMemory::ForkShareMemory() {
   if ((key_n = ftok(".", 's') < 0)) {
     perror("Fail to ftok\n");
@@ -559,15 +569,8 @@ void ForkShareMemory::shwait() {
     }
   }
 }
-#endif
 
 #ifdef VM_SAVABLE
-
-// currently only support single core snapshot
-#if NUM_CORES != 1
-  #error "unsupported multicore"
-#endif
-
 void Emulator::snapshot_save(const char *filename) {
   static int last_slot = 0;
   VerilatedSaveMem &stream = snapshot_slot[last_slot];
@@ -581,27 +584,24 @@ void Emulator::snapshot_save(const char *filename) {
   stream.unbuf_write(&size, sizeof(size));
   stream.unbuf_write(get_ram_start(), size);
 
-  auto diff = difftest[0];
-  uint64_t cycleCnt = diff->get_trap_event()->cycleCnt;
-  stream.unbuf_write(&cycleCnt, sizeof(cycleCnt));
-
-  auto proxy = diff->proxy;
-
   uint64_t ref_r[DIFFTEST_NR_REG];
-  proxy->regcpy(&ref_r, REF_TO_DUT);
+  ref_difftest_getregs(&ref_r, 0);
   stream.unbuf_write(ref_r, sizeof(ref_r));
 
+  uint64_t nemu_this_pc = get_nemu_this_pc(0);
+  stream.unbuf_write(&nemu_this_pc, sizeof(nemu_this_pc));
+
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_DUT);
+  ref_difftest_memcpy(buf, 0x80000000, size, 0, DIFFTEST_TO_DUT);
   stream.unbuf_write(buf, size);
   munmap(buf, size);
 
   struct SyncState sync_mastate;
-  proxy->uarchstatus_cpy(&sync_mastate, REF_TO_DUT);
+  ref_difftest_get_mastatus(&sync_mastate, 0);
   stream.unbuf_write(&sync_mastate, sizeof(struct SyncState));
 
   uint64_t csr_buf[4096];
-  proxy->csrcpy(csr_buf, REF_TO_DIFFTEST);
+  ref_difftest_get_csr(csr_buf, 0);
   stream.unbuf_write(&csr_buf, sizeof(csr_buf));
 
   long sdcard_offset;
@@ -624,35 +624,30 @@ void Emulator::snapshot_load(const char *filename) {
   assert(size == get_ram_size());
   stream.read(get_ram_start(), size);
 
-  auto diff = difftest[0];
-  uint64_t *cycleCnt = &(diff->get_trap_event()->cycleCnt);
-  stream.read(cycleCnt, sizeof(*cycleCnt));
-
-  auto proxy = diff->proxy;
-
   uint64_t ref_r[DIFFTEST_NR_REG];
   stream.read(ref_r, sizeof(ref_r));
-  proxy->regcpy(&ref_r, DUT_TO_REF);
+  ref_difftest_setregs(&ref_r, 0);
+
+  uint64_t nemu_this_pc;
+  stream.read(&nemu_this_pc, sizeof(nemu_this_pc));
+  set_nemu_this_pc(nemu_this_pc, 0);
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   stream.read(buf, size);
-  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_REF);
+  ref_difftest_memcpy(0x80000000, buf, size, 0, DIFFTEST_TO_REF);
   munmap(buf, size);
 
   struct SyncState sync_mastate;
   stream.read(&sync_mastate, sizeof(struct SyncState));
-  proxy->uarchstatus_cpy(&sync_mastate, DUT_TO_REF);
+  ref_difftest_set_mastatus(&sync_mastate, 0);
 
   uint64_t csr_buf[4096];
   stream.read(&csr_buf, sizeof(csr_buf));
-  proxy->csrcpy(csr_buf, DIFFTEST_TO_REF);
+  ref_difftest_set_csr(csr_buf, 0);
 
   long sdcard_offset = 0;
   stream.read(&sdcard_offset, sizeof(sdcard_offset));
   if(fp)
     fseek(fp, sdcard_offset, SEEK_SET);
-
-  // No one uses snapshot when !has_commit, isn't it?
-  has_commit = 1;
 }
 #endif
