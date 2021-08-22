@@ -428,7 +428,7 @@ void Difftest::clear_step() {
   for (int i = 0; i < DIFFTEST_STORE_WIDTH; i++) {
     dut.store[i].valid = 0;
   }
-  for (int i = 0; i < DIFFTEST_LOAD_WIDTH; i++) {
+  for (int i = 0; i < DIFFTEST_COMMIT_WIDTH; i++) {
     dut.load[i].valid = 0;
   }
   dut.atomic.resp = 0;

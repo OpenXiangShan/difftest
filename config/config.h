@@ -37,9 +37,6 @@
 // max store width
 #define DIFFTEST_STORE_WIDTH 2
 
-// max load width
-#define DIFFTEST_LOAD_WIDTH 2
-
 // commit inst history length 
 #define DEBUG_INST_TRACE_SIZE 16
 

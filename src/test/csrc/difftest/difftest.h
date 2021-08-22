@@ -135,7 +135,7 @@ typedef struct {
   arch_csr_state_t csr;
   sbuffer_state_t  sbuffer;
   store_event_t    store[DIFFTEST_STORE_WIDTH];
-  load_event_t     load[DIFFTEST_LOAD_WIDTH];
+  load_event_t     load[DIFFTEST_COMMIT_WIDTH];
   atomic_event_t   atomic;
   ptw_event_t      ptw;
 } difftest_core_state_t;
