@@ -69,6 +69,7 @@ struct EmuArgs {
   bool enable_snapshot;
   bool force_dump_result;
   bool enable_diff;
+  bool enable_jtag;
 
   EmuArgs() {
     seed = 0;
