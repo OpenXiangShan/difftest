@@ -28,8 +28,9 @@
 #include <sys/prctl.h>
 #include <stdlib.h>
 #include <unistd.h>
+#ifdef EMU_THREAD
 #include <verilated_threads.h>
-
+#endif 
 typedef struct shinfo{
   bool flag;
   bool notgood;

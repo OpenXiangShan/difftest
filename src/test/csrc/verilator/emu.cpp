@@ -391,15 +391,19 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           waitProcess = 1;
           uint64_t startCycle = cycles;
           forkshm.shwait();
-          //checkpoint process wakes up 
+          //checkpoint process wakes up
+#ifdef EMU_THREAD 
           dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
+#endif
           //start wave dumping
           enable_waveform = true;
+#if VM_TRACE == 1
           Verilated::traceEverOn(true);	
           tfp = new VerilatedVcdC;
           dut_ptr->trace(tfp, 99);
           time_t now = time(NULL);
           tfp->open(cycle_wavefile(startCycle, now));	
+#endif
         }
       }
     }
