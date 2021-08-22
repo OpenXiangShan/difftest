@@ -23,10 +23,7 @@
 #include <cstdint>
 #include <cassert>
 #include <pthread.h>
-
-#ifndef NUM_CORES
-#define NUM_CORES 1
-#endif
+#include "../../../../config/config.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
