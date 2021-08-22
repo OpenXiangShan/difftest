@@ -17,6 +17,7 @@
 #include "difftest.h"
 #include "goldenmem.h"
 #include "ram.h"
+#include "spikedasm.h"
 
 static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "$0",  "ra",  "sp",   "gp",   "tp",  "t0",  "t1",   "t2",
@@ -441,32 +442,41 @@ void Difftest::display() {
 }
 
 void DiffState::display(int coreid) {
+  int spike_invalid = test_spike();
+
   printf("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
   for (int j = 0; j < DEBUG_GROUP_TRACE_SIZE; j++) {
     printf("commit group [%x]: pc %010lx cmtcnt %d %s\n",
         j, retire_group_pc_queue[j], retire_group_cnt_queue[j],
         (j==((retire_group_pointer-1)%DEBUG_INST_TRACE_SIZE))?"<--":"");
   }
+
   printf("\n============== Commit Instr Trace ==============\n");
   for (int j = 0; j < DEBUG_INST_TRACE_SIZE; j++) {
     switch(retire_inst_type_queue[j]){
       case RET_NORMAL:
-        printf("commit inst [%x]: pc %010lx inst %08x wen %x dst %08x data %016lx %s\n",
+        printf("commit inst [%x]: pc %010lx inst %08x wen %x dst %08x data %016lx ",
             j, retire_inst_pc_queue[j], retire_inst_inst_queue[j], retire_inst_wen_queue[j]!=0, retire_inst_wdst_queue[j],
-            retire_inst_wdata_queue[j],
-            (j==((retire_inst_pointer-1)%DEBUG_INST_TRACE_SIZE))?"<--":"");
+            retire_inst_wdata_queue[j]);
         break;
       case RET_EXC:
-        printf("exception   [%x]: pc %010lx inst %08x cause %016lx %s\n",
-            j, retire_inst_pc_queue[j], retire_inst_inst_queue[j], retire_inst_wdata_queue[j],
-            (j==((retire_inst_pointer-1)%DEBUG_INST_TRACE_SIZE))?"<--":"");
+        printf("exception   [%x]: pc %010lx inst %08x cause %016lx ",
+            j, retire_inst_pc_queue[j], retire_inst_inst_queue[j], retire_inst_wdata_queue[j]);
         break;
       case RET_INT:
-        printf("interrupt   [%x]: pc %010lx inst %08x cause %016lx %s\n",
-            j, retire_inst_pc_queue[j], retire_inst_inst_queue[j], retire_inst_wdata_queue[j],
-            (j==((retire_inst_pointer-1)%DEBUG_INST_TRACE_SIZE))?"<--":"");
+        printf("interrupt   [%x]: pc %010lx inst %08x cause %016lx ",
+            j, retire_inst_pc_queue[j], retire_inst_inst_queue[j], retire_inst_wdata_queue[j]);
         break;
     }
+    if(!spike_invalid){
+      char inst_str[32];
+      char dasm_result[64] = {0};
+      sprintf(inst_str, "%08x", retire_inst_inst_queue[j]);
+      spike_dasm(dasm_result, inst_str);
+      printf("%s ", dasm_result);
+    }
+    printf("%s\n", (j==((retire_inst_pointer-1)%DEBUG_INST_TRACE_SIZE))?"<--":"");
+
   }
   fflush(stdout);
 }
