@@ -662,5 +662,8 @@ void Emulator::snapshot_load(const char *filename) {
   stream.read(&sdcard_offset, sizeof(sdcard_offset));
   if(fp)
     fseek(fp, sdcard_offset, SEEK_SET);
+
+  // No one uses snapshot when !has_commit, isn't it?
+  diff->has_commit = 1;
 }
 #endif
