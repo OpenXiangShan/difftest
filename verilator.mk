@@ -43,6 +43,7 @@ endif
 EMU_THREADS  ?= 0
 ifneq ($(EMU_THREADS),0)
 VEXTRA_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
+EMU_CXXFLAGS += -DEMU_THREAD=$(EMU_THREADS)
 endif
 
 # Verilator savable
@@ -50,12 +51,6 @@ EMU_SNAPSHOT ?=
 ifeq ($(EMU_SNAPSHOT),1)
 VEXTRA_FLAGS += --savable
 EMU_CXXFLAGS += -DVM_SAVABLE
-endif
-
-# Fork-wait 
-EMU_FORKWAIT ?= 
-ifeq ($(EMU_FORKWAIT),1)
-EMU_CXXFLAGS += -DEN_FORKWAIT
 endif
 
 # Verilator coverage
@@ -109,6 +104,7 @@ $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
 		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS)
+	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g' 
 
 LOCK = /var/emu/emu.lock
 LOCK_BIN = $(abspath $(BUILD_DIR)/lock-emu)

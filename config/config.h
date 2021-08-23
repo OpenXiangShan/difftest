@@ -43,4 +43,19 @@
 // commit inst group history length 
 #define DEBUG_GROUP_TRACE_SIZE 16
 
+// time to fork a new checkpoint process
+#define FORK_INTERVAL 1 // unit: second
+
+// max number of checkpoint process at a time 
+#define SLOT_SIZE 2
+
+// exit when error when fork 
+#define FAIT_EXIT    exit(EXIT_FAILURE);
+
+// process sleep time  
+#define WAIT_INTERVAL 5
+
+//time to save a snapshot
+#define SNAPSHOT_INTERVAL 60 // unit: second
+
 #endif
