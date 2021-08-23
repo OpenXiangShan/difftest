@@ -47,7 +47,7 @@
 #define FORK_INTERVAL 1 // unit: second
 
 // max number of checkpoint process at a time 
-#define SLOT_SIZE 1
+#define SLOT_SIZE 2
 
 // exit when error when fork 
 #define FAIT_EXIT    exit(EXIT_FAILURE);
