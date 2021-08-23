@@ -42,15 +42,15 @@ jobs:
             make emu
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
 
-      - name: Difftest with Fork-Wait Snapshot
-        run: |
-            cd $GITHUB_WORKSPACE/../xs-env
-            source ./env.sh
-            cd $GITHUB_WORKSPACE/../xs-env/NutShell
-            source ./env.sh
-            make clean
-            make emu EMU_THREADS=2
-            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --enable-fork
+      # - name: Difftest with Fork-Wait Snapshot
+      #   run: |
+      #       cd $GITHUB_WORKSPACE/../xs-env
+      #       source ./env.sh
+      #       cd $GITHUB_WORKSPACE/../xs-env/NutShell
+      #       source ./env.sh
+      #       make clean
+      #       make emu EMU_THREADS=2
+      #       ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --enable-fork
 
       - name: Difftest with Snapshot
         run: |
