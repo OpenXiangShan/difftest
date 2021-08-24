@@ -207,14 +207,6 @@ inline void Emulator::single_cycle() {
   dut_ptr->clock = 1;
   dut_ptr->eval();
 
-#ifdef WITH_DRAMSIM3
-  axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
-  dramsim3_helper_falling(axi);
-  axi_set_dut_ptr(dut_ptr, axi);
-#endif
-
 #if VM_TRACE == 1
   if (enable_waveform) {
     auto trap = difftest[0]->get_trap_event();
@@ -224,6 +216,14 @@ inline void Emulator::single_cycle() {
     bool in_range  = (begin <= cycle) && (cycle <= end);
     if (in_range) { tfp->dump(cycle); }
   }
+#endif
+
+#ifdef WITH_DRAMSIM3
+  axi_copy_from_dut_ptr(dut_ptr, axi);
+  axi.aw.addr -= 0x80000000UL;
+  axi.ar.addr -= 0x80000000UL;
+  dramsim3_helper_falling(axi);
+  axi_set_dut_ptr(dut_ptr, axi);
 #endif
 
   if (dut_ptr->io_uart_out_valid) {
