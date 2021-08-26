@@ -60,7 +60,7 @@
   input [31:0] intrNO,
   input [31:0] cause,
   input [63:0] exceptionPC,
-  input [31:0] exceptionInst,
+  input [31:0] exceptionInst
 );
   `DIFFTEST_MOD_DPIC_CALL_BEGIN(ArchEvent) (
     coreid, intrNO, cause, exceptionPC, exceptionInst
