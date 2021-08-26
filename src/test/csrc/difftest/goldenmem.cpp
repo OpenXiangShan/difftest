@@ -18,8 +18,11 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <time.h>
+#include "common.h"
 #include "compress.h"
 #include "nemuproxy.h"
+
+// #define DIFFTEST_STORE_COMMIT
 
 uint8_t *pmem;
 

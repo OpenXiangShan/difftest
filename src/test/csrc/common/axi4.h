@@ -220,7 +220,7 @@ bool axi_check_waddr_fire(const axi_channel &axi);
 
 // w channel: (1) accept wdata; (2) get wdata; (3) check wdata fire
 void axi_accept_wdata(axi_channel &axi);
-void axi_get_wdata(const axi_channel &axi, void *dest, size_t n);
+void axi_get_wdata(const axi_channel &axi, void *dest, const void *src, size_t n);
 bool axi_check_wdata_fire(const axi_channel &axi);
 
 // b channel: (1) put response; (2) check response fire

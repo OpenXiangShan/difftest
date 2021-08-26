@@ -1,0 +1,84 @@
+name: CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  test-difftest:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Prepare environment
+        run: |
+            cd $GITHUB_WORKSPACE/..
+            git clone https://github.com/OpenXiangShan/xs-env
+            cd $GITHUB_WORKSPACE/../xs-env
+            sudo -s ./setup-tools.sh
+            source ./setup.sh
+            rm -r $GITHUB_WORKSPACE/../xs-env/NutShell/difftest
+            rm -r $GITHUB_WORKSPACE/../xs-env/XiangShan/difftest
+            cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/NutShell
+            cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/XiangShan
+            
+      - name: Basic Difftest (NutShell)
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
+
+      # - name: Difftest with Fork-Wait Snapshot
+      #   run: |
+      #       cd $GITHUB_WORKSPACE/../xs-env
+      #       source ./env.sh
+      #       cd $GITHUB_WORKSPACE/../xs-env/NutShell
+      #       source ./env.sh
+      #       make clean
+      #       make emu EMU_THREADS=2
+      #       ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --enable-fork
+
+      - name: Difftest with Snapshot
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu EMU_SNAPSHOT=1
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
+
+      - name: Difftest with Trace
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu EMU_TRACE=1
+            ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave
+
+# Github hosted CI does not support XiangShan
+
+#       - name: Difftest XiangShan
+#         run: |
+#             cd $GITHUB_WORKSPACE/../xs-env
+#             source ./env.sh
+#             cd $GITHUB_WORKSPACE/../xs-env/XiangShan
+#             make emu CONFIG=MinimalConfig
+#             ./build/emu -b 0 -e 0 -i ./ready-to-run/linux.bin
+           
