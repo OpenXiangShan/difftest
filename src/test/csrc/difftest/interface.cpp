@@ -43,6 +43,7 @@ INTERFACE_ARCH_EVENT {
   packet->interrupt = intrNo;
   packet->exception = cause;
   packet->exceptionPC = exceptionPC;
+  packet->exceptionInst = exceptionInst;
 }
 
 INTERFACE_INSTR_COMMIT {

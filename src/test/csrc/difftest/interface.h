@@ -59,7 +59,8 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_INT  intrNo,                \
     DPIC_ARG_INT  cause,                 \
-    DPIC_ARG_LONG exceptionPC            \
+    DPIC_ARG_LONG exceptionPC,           \
+    DPIC_ARG_INT  exceptionInst          \
   )
 
 // v_difftest_InstrCommit
