@@ -48,6 +48,7 @@ typedef struct {
   uint32_t interrupt = 0;
   uint32_t exception = 0;
   uint64_t exceptionPC = 0;
+  uint32_t exceptionInst = 0;
 } arch_event_t;
 
 typedef struct {
@@ -154,12 +155,13 @@ public:
     retire_group_cnt_queue[retire_group_pointer] = count;
     retire_group_pointer = (retire_group_pointer + 1) % DEBUG_GROUP_TRACE_SIZE;
   };
-  void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data) {
+  void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip) {
     retire_inst_pc_queue   [retire_inst_pointer] = pc;
     retire_inst_inst_queue [retire_inst_pointer] = inst;
     retire_inst_wen_queue  [retire_inst_pointer] = en;
     retire_inst_wdst_queue [retire_inst_pointer] = dest;
     retire_inst_wdata_queue[retire_inst_pointer] = data;
+    retire_inst_skip_queue[retire_inst_pointer] = skip;
     retire_inst_type_queue[retire_inst_pointer] = RET_NORMAL;
     retire_inst_pointer = (retire_inst_pointer + 1) % DEBUG_INST_TRACE_SIZE;
   };
@@ -184,6 +186,7 @@ private:
   uint32_t retire_inst_wdst_queue[DEBUG_INST_TRACE_SIZE] = {0};
   uint64_t retire_inst_wdata_queue[DEBUG_INST_TRACE_SIZE] = {0};
   uint32_t retire_inst_type_queue[DEBUG_INST_TRACE_SIZE] = {0};
+  bool retire_inst_skip_queue[DEBUG_INST_TRACE_SIZE] = {0};
 };
 
 class Difftest {
