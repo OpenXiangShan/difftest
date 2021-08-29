@@ -48,6 +48,7 @@ typedef struct {
   uint32_t interrupt = 0;
   uint32_t exception = 0;
   uint64_t exceptionPC = 0;
+  uint32_t exceptionInst = 0;
 } arch_event_t;
 
 typedef struct {
