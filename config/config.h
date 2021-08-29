@@ -38,7 +38,7 @@
 #define DIFFTEST_STORE_WIDTH 2
 
 // commit inst history length 
-#define DEBUG_INST_TRACE_SIZE 16
+#define DEBUG_INST_TRACE_SIZE 32
 
 // commit inst group history length 
 #define DEBUG_GROUP_TRACE_SIZE 16
