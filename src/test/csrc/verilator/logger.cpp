@@ -20,6 +20,7 @@ void init_logger() {
     }
     char* sql =  "CREATE TABLE LOG("  \
                  "ID                INTEGER     PRIMARY KEY AUTOINCREMENT," \
+                 "NAME              TEXT    NOT NULL," \
                  "CHANNEL           INT     NOT NULL," \
                  "OPCODE            INT     NOT NULL," \
                  "PARAM             INT     NOT NULL," \
@@ -66,16 +67,16 @@ extern "C" void log_write_helper(
     uint64_t data_1,
     uint64_t data_2,
     uint64_t data_3,
-    uint64_t stamp
+    uint64_t stamp,
+    char*  prefix
 ) {
     // insert to log db
-    // printf("channel:[%d] address:[%lx]\n", channel, address);
     char sql[256];
-    sprintf(sql, "INSERT INTO LOG(CHANNEL,OPCODE,PARAM,SOURCE,SINK,ADDRESS,DATA_0,DATA_1,DATA_2,DATA_3,STAMP) VALUES(%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%ld,%ld);",
-        channel, opcode, param, source, sink, address,
+    sprintf(sql,
+        "INSERT INTO LOG(NAME,CHANNEL,OPCODE,PARAM,SOURCE,SINK,ADDRESS,DATA_0,DATA_1,DATA_2,DATA_3,STAMP) VALUES('%s',%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%ld,%ld);",
+        prefix, channel, opcode, param, source, sink, address,
         data_0, data_1, data_2, data_3, stamp
     );
-    // printf("s=%s\n", sql);
 
     rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
     if(rc != SQLITE_OK) {
