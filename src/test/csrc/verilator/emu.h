@@ -116,6 +116,7 @@ private:
   void trigger_stat_dump();
   void display_trapinfo();
   inline char* timestamp_filename(time_t t, char *buf);
+  inline char* logdb_filename(time_t t);
   inline char* snapshot_filename(time_t t);
   inline char* coverage_filename(time_t t);
   void snapshot_save(const char *filename);

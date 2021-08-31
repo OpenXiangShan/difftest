@@ -25,6 +25,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include "ram.h"
+#include "logger.h"
 #include "zlib.h"
 #include "compress.h"
 #include <list>
@@ -141,6 +142,8 @@ Emulator::Emulator(int argc, const char *argv[]):
 
   // init ram
   init_ram(args.image);
+  // init logger
+  init_logger();
 
 #if VM_TRACE == 1
   enable_waveform = args.enable_waveform && !args.enable_fork;
@@ -179,6 +182,8 @@ Emulator::~Emulator() {
     printf("Please remove unused snapshots manually\n");
   }
 #endif
+  time_t now = time(NULL);
+  save_db(logdb_filename(now));
 }
 
 inline void Emulator::reset_ncycles(size_t cycles) {
@@ -459,6 +464,12 @@ inline char* Emulator::snapshot_filename(time_t t) {
 }
 #endif
 
+inline char* Emulator::logdb_filename(time_t t) {
+  static char buf[1024];
+  char *p = timestamp_filename(t, buf);
+  strcpy(p, ".db");
+  return buf;
+}
 
 inline char* Emulator::waveform_filename(time_t t) {
   static char buf[1024];
