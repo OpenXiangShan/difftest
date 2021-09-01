@@ -47,6 +47,7 @@ static inline void print_help(const char *file) {
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
   printf("      --dump-wave            dump waveform when log is enabled\n");
+  printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
@@ -68,6 +69,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "no-diff",           0, NULL,  0  },
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
+    { "wave-path",         1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -94,6 +96,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 5: args.enable_diff = false; continue;
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
+          case 8: args.wave_path = optarg; continue;
         }
         // fall through
       default:
@@ -148,8 +151,13 @@ Emulator::Emulator(int argc, const char *argv[]):
     Verilated::traceEverOn(true);	// Verilator must compute traced signals
     tfp = new VerilatedVcdC;
     dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
-    time_t now = time(NULL);
-    tfp->open(waveform_filename(now));	// Open the dump file
+    if (args.wave_path != NULL) {
+      tfp->open(args.wave_path);
+    }
+    else {
+      time_t now = time(NULL);
+      tfp->open(waveform_filename(now));	// Open the dump file
+    }
   }
 #endif
 

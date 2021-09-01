@@ -450,7 +450,7 @@ void DiffState::display(int coreid) {
 
   printf("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
   for (int j = 0; j < DEBUG_GROUP_TRACE_SIZE; j++) {
-    printf("commit group [%02x]: pc %010lx cmtcnt %d %s\n",
+    printf("commit group [%02d]: pc %010lx cmtcnt %d %s\n",
         j, retire_group_pc_queue[j], retire_group_cnt_queue[j],
         (j==((retire_group_pointer-1)%DEBUG_INST_TRACE_SIZE))?"<--":"");
   }
@@ -459,17 +459,17 @@ void DiffState::display(int coreid) {
   for (int j = 0; j < DEBUG_INST_TRACE_SIZE; j++) {
     switch(retire_inst_type_queue[j]){
       case RET_NORMAL:
-        printf("commit inst [%02x]: pc %010lx inst %08x wen %x dst %08x data %016lx %s ",
+        printf("commit inst [%02d]: pc %010lx inst %08x wen %x dst %08x data %016lx %s ",
             j, retire_inst_pc_queue[j], retire_inst_inst_queue[j], retire_inst_wen_queue[j]!=0, retire_inst_wdst_queue[j],
             retire_inst_wdata_queue[j],
             retire_inst_skip_queue[j]?"(skip)":"");
         break;
       case RET_EXC:
-        printf("exception   [%x]: pc %010lx inst %08x cause %016lx ",
+        printf("exception   [%02d]: pc %010lx inst %08x cause %016lx ",
             j, retire_inst_pc_queue[j], retire_inst_inst_queue[j], retire_inst_wdata_queue[j]);
         break;
       case RET_INT:
-        printf("interrupt   [%x]: pc %010lx inst %08x cause %016lx ",
+        printf("interrupt   [%02d]: pc %010lx inst %08x cause %016lx ",
             j, retire_inst_pc_queue[j], retire_inst_inst_queue[j], retire_inst_wdata_queue[j]);
         break;
     }
