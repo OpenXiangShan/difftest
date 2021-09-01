@@ -55,7 +55,19 @@
 // process sleep time  
 #define WAIT_INTERVAL 5
 
-//time to save a snapshot
+// time to save a snapshot
 #define SNAPSHOT_INTERVAL 60 // unit: second
+
+// whether to check memory coherence during refilling
+#define DEBUG_REFILL
+
+// whether to maintain goldenmen
+#if NUM_CORES>1
+    #define DEBUG_GOLDENMEM
+#endif
+
+#ifdef DEBUG_REFILL
+    #define DEBUG_GOLDENMEM
+#endif
 
 #endif

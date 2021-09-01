@@ -59,6 +59,9 @@ struct EmuArgs {
   uint64_t warmup_instr;
   uint64_t stat_cycles;
   uint64_t log_begin, log_end;
+#ifdef DEBUG_REFILL
+  uint64_t track_instr;
+#endif
   const char *image;
   const char *snapshot_path;
   bool enable_waveform;
@@ -76,6 +79,7 @@ struct EmuArgs {
     stat_cycles = -1;
     log_begin = 1;
     log_end = -1;
+    track_instr = 0;
     snapshot_path = NULL;
     image = NULL;
     enable_waveform = false;

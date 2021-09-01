@@ -44,6 +44,9 @@ static inline void print_help(const char *file) {
   printf("  -i, --image=FILE           run with this image file\n");
   printf("  -b, --log-begin=NUM        display log from NUM th cycle\n");
   printf("  -e, --log-end=NUM          stop display log at NUM th cycle\n");
+#ifdef DEBUG_REFILL
+  printf("  -T, --track-instr=ADDR     track refill action concerning ADDR\n");
+#endif
   printf("      --force-dump-result    force dump performance counter result in the end\n");
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
@@ -72,6 +75,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
+#ifdef DEBUG_REFILL
+    { "track-instr",       1, NULL, 'T' },
+#endif
     { "warmup-instr",      1, NULL, 'W' },
     { "stat-cycles",       1, NULL, 'D' },
     { "image",             1, NULL, 'i' },
@@ -83,7 +89,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:I:W:hi:m:b:e:", long_options, &long_index)) != -1) {
+          "-s:C:I:T:W:hi:m:b:e:", long_options, &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -108,6 +114,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         break;
       case 'C': args.max_cycles = atoll(optarg);  break;
       case 'I': args.max_instr = atoll(optarg);  break;
+#ifdef DEBUG_REFILL
+      case 'T': args.track_instr = atoll(optarg);  break;
+#endif
       case 'W': args.warmup_instr = atoll(optarg);  break;
       case 'D': args.stat_cycles = atoll(optarg);  break;
       case 'i': args.image = optarg; break;
@@ -250,6 +259,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     init_goldenmem();
     init_nemuproxy();
   }
+
+#ifdef DEBUG_REFILL
+  difftest[0]->save_track_instr(args.track_instr);
+#endif
 
   uint32_t lasttime_poll = 0;
   uint32_t lasttime_snapshot = 0;
