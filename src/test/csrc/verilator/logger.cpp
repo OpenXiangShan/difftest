@@ -18,7 +18,7 @@ void init_logger() {
     } else {
         printf("Open database successfully\n");
     }
-    char* sql =  "CREATE TABLE LOG("  \
+    char* sql =  "CREATE TABLE TL_LOG("  \
                  "ID                INTEGER     PRIMARY KEY AUTOINCREMENT," \
                  "NAME              TEXT    NOT NULL," \
                  "CHANNEL           INT     NOT NULL," \
@@ -37,7 +37,24 @@ void init_logger() {
         printf("SQL error: %s\n", zErrMsg);
         exit(0);
     } else {
-        printf("LOG table created successfully!\n");
+        printf("TL_LOG table created successfully!\n");
+    }
+
+    sql =  "CREATE TABLE DIR_LOG("  \
+           "ID                INTEGER     PRIMARY KEY AUTOINCREMENT," \
+           "NAME              TEXT    NOT NULL," \
+           "TAG               INT     NOT NULL," \
+           "IDX               INT     NOT NULL," \
+           "DIR               INT     NOT NULL," \
+           "WAY               INT     NOT NULL," \
+           "TYPEID            INT     NOT NULL," \
+           "STAMP             INT     NOT NULL);";
+    rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
+    if(rc != SQLITE_OK) {
+        printf("SQL error: %s\n", zErrMsg);
+        exit(0);
+    } else {
+        printf("DIR_LOG table created successfully!\n");
     }
 }
 
@@ -56,7 +73,7 @@ void save_db(const char *zFilename) {
     sqlite3_close(disk_db);
 }
 
-extern "C" void log_write_helper(
+extern "C" void tl_log_write_helper(
     uint8_t channel,
     uint8_t opcode,
     uint8_t param,
@@ -73,9 +90,32 @@ extern "C" void log_write_helper(
     // insert to log db
     char sql[256];
     sprintf(sql,
-        "INSERT INTO LOG(NAME,CHANNEL,OPCODE,PARAM,SOURCE,SINK,ADDRESS,DATA_0,DATA_1,DATA_2,DATA_3,STAMP) VALUES('%s',%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%ld,%ld);",
+        "INSERT INTO TL_LOG(NAME,CHANNEL,OPCODE,PARAM,SOURCE,SINK,ADDRESS,DATA_0,DATA_1,DATA_2,DATA_3,STAMP) VALUES('%s',%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%ld,%ld);",
         prefix, channel, opcode, param, source, sink, address,
         data_0, data_1, data_2, data_3, stamp
+    );
+
+    rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
+    if(rc != SQLITE_OK) {
+        printf("SQL error: %s\n", zErrMsg);
+        exit(0);
+    };
+}
+
+extern "C" void dir_log_write_helper(
+    uint64_t tag,
+    uint64_t set_idx,
+    uint64_t dir,
+    uint64_t stamp,
+    uint8_t way,
+    uint8_t typeId,
+    char* prefix
+) {
+    char sql[256];
+
+    sprintf(sql,
+        "INSERT INTO DIR_LOG(NAME,TAG,IDX,DIR,WAY,TYPEID,STAMP) VALUES('%s',%ld,%ld,%ld,%d,%d,%ld);",
+        prefix, tag, set_idx, dir, way, typeId, stamp
     );
 
     rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
