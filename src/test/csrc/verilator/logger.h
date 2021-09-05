@@ -4,6 +4,6 @@
 #include "common.h"
 #include <sqlite3.h>
 
-void init_logger();
+void init_logger(bool enable);
 void save_db(const char *zFilename);
 #endif

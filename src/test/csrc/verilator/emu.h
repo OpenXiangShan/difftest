@@ -70,6 +70,7 @@ struct EmuArgs {
   bool enable_diff;
   bool enable_fork;
   bool enable_jtag;
+  bool dump_tl;
 
   EmuArgs() {
     seed = 0;
@@ -88,6 +89,7 @@ struct EmuArgs {
     enable_diff = true;
     enable_fork = false;
     enable_jtag = false;
+    dump_tl = false;
   }
 };
 

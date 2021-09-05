@@ -1,5 +1,6 @@
 #include "logger.h"
 
+bool dump_tl;
 sqlite3 *mem_db;
 sqlite3 *disk_db;
 sqlite3_backup *pBackup;
@@ -10,7 +11,9 @@ static int callback(void *NotUsed, int argc, char **argv, char **azColName){
    return 0;
 }
 
-void init_logger() {
+void init_logger(bool dump) {
+    dump_tl = dump;
+    if(!dump) return;
     rc = sqlite3_open(":memory:", &mem_db);
     if(rc) {
         printf("Can't open database: %s\n", sqlite3_errmsg(mem_db));
@@ -87,6 +90,7 @@ extern "C" void tl_log_write_helper(
     uint64_t stamp,
     char*  prefix
 ) {
+    if(!dump_tl) return;
     // insert to log db
     char sql[256];
     sprintf(sql,
@@ -111,8 +115,8 @@ extern "C" void dir_log_write_helper(
     uint8_t typeId,
     char* prefix
 ) {
+    if(!dump_tl) return;
     char sql[256];
-
     sprintf(sql,
         "INSERT INTO DIR_LOG(NAME,TAG,IDX,DIR,WAY,TYPEID,STAMP) VALUES('%s',%ld,%ld,%ld,%d,%d,%ld);",
         prefix, tag, set_idx, dir, way, typeId, stamp
