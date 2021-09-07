@@ -58,6 +58,7 @@ typedef struct {
   uint8_t  skip;
   uint8_t  isRVC;
   uint8_t  scFailed;
+  uint8_t  fused;
   uint8_t  wen;
   uint8_t  wdest;
   uint64_t wdata;

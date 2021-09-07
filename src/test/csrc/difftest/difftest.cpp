@@ -112,7 +112,7 @@ int Difftest::step() {
   if (dut.event.interrupt) {
     dut.csr.this_pc = dut.event.exceptionPC;
     do_interrupt();
-  } else if(dut.event.exception) { 
+  } else if(dut.event.exception) {
     // We ignored instrAddrMisaligned exception (0) for better debug interface
     // XiangShan should always support RVC, so instrAddrMisaligned will never happen
     // TODO: update NEMU, for now, NEMU will update pc when exception happen
@@ -120,10 +120,15 @@ int Difftest::step() {
     do_exception();
   } else {
     // TODO: is this else necessary?
-    while (num_commit < DIFFTEST_COMMIT_WIDTH && dut.commit[num_commit].valid) {
-      do_instr_commit(num_commit);
-      dut.commit[num_commit].valid = 0;
+    for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut.commit[i].valid; i++) {
+      do_instr_commit(i);
+      dut.commit[i].valid = 0;
+
       num_commit++;
+      // TODO: let do_instr_commit return number of instructions in this uop
+      if (dut.commit[i].fused) {
+        num_commit++;
+      }
     }
   }
 
@@ -151,7 +156,7 @@ int Difftest::step() {
     }
     return 1;
   }
- 
+
   return 0;
 }
 
@@ -206,9 +211,13 @@ void Difftest::do_instr_commit(int i) {
 
   // single step exec
   proxy->exec(1);
+  // when there's a fused instruction, let proxy execute one more instruction.
+  if (dut.commit[i].fused) {
+    proxy->exec(1);
+  }
 
   // Handle load instruction carefully for SMP
-  if (NUM_CORES > 1) { 
+  if (NUM_CORES > 1) {
     if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
       proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
       if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != dut.commit[i].wdata) {

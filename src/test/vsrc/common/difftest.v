@@ -74,6 +74,7 @@ endmodule
   `DPIC_ARG_BIT  valid,
   `DPIC_ARG_LONG pc,
   `DPIC_ARG_INT  instr,
+  `DPIC_ARG_BYTE special,
   `DPIC_ARG_BIT  skip,
   `DPIC_ARG_BIT  isRVC,
   `DPIC_ARG_BIT  scFailed,
@@ -88,6 +89,7 @@ endmodule
   input        valid,
   input [63:0] pc,
   input [31:0] instr,
+  input [ 7:0] special,
   input        skip,
   input        isRVC,
   input        scFailed,
@@ -97,7 +99,7 @@ endmodule
 );
   `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, InstrCommit) (
     coreid, index,
-    valid, pc, instr, skip, isRVC, scFailed, wen, wdest, wdata
+    valid, pc, instr, special, skip, isRVC, scFailed, wen, wdest, wdata
   ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(InstrCommit)
 endmodule
 
