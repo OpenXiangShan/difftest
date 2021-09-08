@@ -70,4 +70,10 @@
     #define DEBUG_GOLDENMEM
 #endif
 
+/*******************************************************
+*    dump all tilelink trace to a database
+*    uncomment the follwing line to enable this feature
+*******************************************************/
+//#define DEBUG_TILELINK
+
 #endif
