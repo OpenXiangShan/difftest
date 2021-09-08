@@ -116,7 +116,7 @@ EMU_COMPILE_FILTER =
 build_emu_local: $(EMU_MK)
 	@echo "\n[g++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) $(MAKE) CXX=clang VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	$(TIME_CMD) $(MAKE) CXX=clang++ LINK=clang++  VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
 $(LOCK_BIN): ./scripts/utils/lock-emu.c
 	mkdir -p $(@D)
