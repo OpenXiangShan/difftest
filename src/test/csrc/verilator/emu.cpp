@@ -56,6 +56,7 @@ static inline void print_help(const char *file) {
 #ifdef DEBUG_TILELINK
   printf("      --dump-tl              dump tilelink transactions\n");
 #endif
+  printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
@@ -80,6 +81,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
+    { "wave-path",         1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -111,7 +113,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 7: args.enable_jtag = true; continue;
 #ifdef DEBUG_TILELINK
           case 8: args.dump_tl = true; continue;
+          case 9: args.wave_path = optarg; continue;
 #endif
+          case 8: args.wave_path = optarg; continue;
         }
         // fall through
       default:
@@ -173,8 +177,13 @@ Emulator::Emulator(int argc, const char *argv[]):
     Verilated::traceEverOn(true);	// Verilator must compute traced signals
     tfp = new VerilatedVcdC;
     dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
-    time_t now = time(NULL);
-    tfp->open(waveform_filename(now));	// Open the dump file
+    if (args.wave_path != NULL) {
+      tfp->open(args.wave_path);
+    }
+    else {
+      time_t now = time(NULL);
+      tfp->open(waveform_filename(now));	// Open the dump file
+    }
   }
 #endif
 
