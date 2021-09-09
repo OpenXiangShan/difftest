@@ -322,7 +322,7 @@ int Difftest::do_store_check() {
 int Difftest::do_refill_check() {
   static uint64_t last_valid_addr = 0;
   char buf[512];
-
+  dut.refill.addr = dut.refill.addr - dut.refill.addr % 64;
   if (dut.refill.valid == 1 && dut.refill.addr != last_valid_addr) {
     last_valid_addr = dut.refill.addr;
     for (int i = 0; i < 8; i++) {
