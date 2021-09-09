@@ -132,6 +132,12 @@ class DiffPtwEventIO extends DifftestBundle {
   val ptwData = Input(Vec(4, UInt(64.W)))
 }
 
+class DiffRefillEventIO extends DifftestBundle {
+  val valid = Input(Bool())
+  val addr  = Input(UInt(64.W))
+  val data  = Input(Vec(8, UInt(64.W)))
+}
+
 class DifftestArchEvent extends BlackBox {
   val io = IO(new DiffArchEventIO)
 }
@@ -174,6 +180,10 @@ class DifftestAtomicEvent extends BlackBox {
 
 class DifftestPtwEvent extends BlackBox {
   val io = IO(new DiffPtwEventIO)
+}
+
+class DifftestRefillEvent extends BlackBox {
+  val io = IO(new DiffRefillEventIO)
 }
 
 // Difftest emulator top

@@ -24,6 +24,9 @@
 #include <getopt.h>
 #include <signal.h>
 #include <unistd.h>
+#ifdef  DEBUG_TILELINK
+#include "logger.h"
+#endif
 #include "ram.h"
 #include "zlib.h"
 #include "compress.h"
@@ -43,10 +46,16 @@ static inline void print_help(const char *file) {
   printf("  -i, --image=FILE           run with this image file\n");
   printf("  -b, --log-begin=NUM        display log from NUM th cycle\n");
   printf("  -e, --log-end=NUM          stop display log at NUM th cycle\n");
+#ifdef DEBUG_REFILL
+  printf("  -T, --track-instr=ADDR     track refill action concerning ADDR\n");
+#endif
   printf("      --force-dump-result    force dump performance counter result in the end\n");
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
   printf("      --dump-wave            dump waveform when log is enabled\n");
+#ifdef DEBUG_TILELINK
+  printf("      --dump-tl              dump tilelink transactions\n");
+#endif
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
@@ -69,10 +78,16 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "no-diff",           0, NULL,  0  },
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
+#ifdef DEBUG_TILELINK
+    { "dump-tl",           0, NULL,  0  },
+#endif
     { "wave-path",         1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
+#ifdef DEBUG_REFILL
+    { "track-instr",       1, NULL, 'T' },
+#endif
     { "warmup-instr",      1, NULL, 'W' },
     { "stat-cycles",       1, NULL, 'D' },
     { "image",             1, NULL, 'i' },
@@ -84,7 +99,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:I:W:hi:m:b:e:", long_options, &long_index)) != -1) {
+          "-s:C:I:T:W:hi:m:b:e:", long_options, &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -96,6 +111,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 5: args.enable_diff = false; continue;
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
+#ifdef DEBUG_TILELINK
+          case 8: args.dump_tl = true; continue;
+          case 9: args.wave_path = optarg; continue;
+#endif
           case 8: args.wave_path = optarg; continue;
         }
         // fall through
@@ -110,6 +129,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         break;
       case 'C': args.max_cycles = atoll(optarg);  break;
       case 'I': args.max_instr = atoll(optarg);  break;
+#ifdef DEBUG_REFILL
+      case 'T': args.track_instr = atoll(optarg);  break;
+#endif
       case 'W': args.warmup_instr = atoll(optarg);  break;
       case 'D': args.stat_cycles = atoll(optarg);  break;
       case 'i': args.image = optarg; break;
@@ -144,6 +166,10 @@ Emulator::Emulator(int argc, const char *argv[]):
 
   // init ram
   init_ram(args.image);
+#ifdef DEBUG_TILELINK
+  // init logger
+  init_logger(args.dump_tl);
+#endif
 
 #if VM_TRACE == 1
   enable_waveform = args.enable_waveform && !args.enable_fork;
@@ -185,6 +211,13 @@ Emulator::~Emulator() {
     snapshot_slot[0].save();
     snapshot_slot[1].save();
     printf("Please remove unused snapshots manually\n");
+  }
+#endif
+
+#ifdef DEBUG_TILELINK
+  if(args.dump_tl){
+    time_t now = time(NULL);
+    save_db(logdb_filename(now));
   }
 #endif
 }
@@ -253,6 +286,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     init_goldenmem();
     init_nemuproxy();
   }
+
+#ifdef DEBUG_REFILL
+  difftest[0]->save_track_instr(args.track_instr);
+#endif
 
   uint32_t lasttime_poll = 0;
   uint32_t lasttime_snapshot = 0;
@@ -467,6 +504,12 @@ inline char* Emulator::snapshot_filename(time_t t) {
 }
 #endif
 
+inline char* Emulator::logdb_filename(time_t t) {
+  static char buf[1024];
+  char *p = timestamp_filename(t, buf);
+  strcpy(p, ".db");
+  return buf;
+}
 
 inline char* Emulator::waveform_filename(time_t t) {
   static char buf[1024];
@@ -674,6 +717,7 @@ void Emulator::snapshot_load(const char *filename) {
 
   long sdcard_offset = 0;
   stream.read(&sdcard_offset, sizeof(sdcard_offset));
+
   if(fp)
     fseek(fp, sdcard_offset, SEEK_SET);
 

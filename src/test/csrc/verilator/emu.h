@@ -59,6 +59,9 @@ struct EmuArgs {
   uint64_t warmup_instr;
   uint64_t stat_cycles;
   uint64_t log_begin, log_end;
+#ifdef DEBUG_REFILL
+  uint64_t track_instr;
+#endif
   const char *image;
   const char *snapshot_path;
   const char *wave_path;
@@ -68,6 +71,7 @@ struct EmuArgs {
   bool enable_diff;
   bool enable_fork;
   bool enable_jtag;
+  bool dump_tl;
 
   EmuArgs() {
     seed = 0;
@@ -77,6 +81,7 @@ struct EmuArgs {
     stat_cycles = -1;
     log_begin = 1;
     log_end = -1;
+    track_instr = 0;
     snapshot_path = NULL;
     wave_path = NULL;
     image = NULL;
@@ -86,6 +91,7 @@ struct EmuArgs {
     enable_diff = true;
     enable_fork = false;
     enable_jtag = false;
+    dump_tl = false;
   }
 };
 
@@ -118,6 +124,7 @@ private:
   void trigger_stat_dump();
   void display_trapinfo();
   inline char* timestamp_filename(time_t t, char *buf);
+  inline char* logdb_filename(time_t t);
   inline char* snapshot_filename(time_t t);
   inline char* coverage_filename(time_t t);
   void snapshot_save(const char *filename);
