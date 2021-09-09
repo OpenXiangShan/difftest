@@ -310,6 +310,22 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG data_3                 \
   )
 
+// v_difftest_RefillEvent
+#define INTERFACE_REFILL_EVENT           \
+  DIFFTEST_DPIC_FUNC_DECL(RefillEvent) ( \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_LONG addr,                  \
+    DPIC_ARG_LONG data_0,                \
+    DPIC_ARG_LONG data_1,                \
+    DPIC_ARG_LONG data_2,                \
+    DPIC_ARG_LONG data_3,                \
+    DPIC_ARG_LONG data_4,                \
+    DPIC_ARG_LONG data_5,                \
+    DPIC_ARG_LONG data_6,                \
+    DPIC_ARG_LONG data_7                 \
+  )
+
 INTERFACE_ARCH_EVENT;
 INTERFACE_INSTR_COMMIT;
 INTERFACE_TRAP_EVENT;
@@ -321,5 +337,6 @@ INTERFACE_STORE_EVENT;
 INTERFACE_LOAD_EVENT;
 INTERFACE_ATOMIC_EVENT;
 INTERFACE_PTW_EVENT;
+INTERFACE_REFILL_EVENT;
 
 #endif

@@ -23,7 +23,7 @@ EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIF
 EMU_CXXFLAGS += -std=c++11 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR)
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
 EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
-EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz
+EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
 
 EMU_VFILES    = $(SIM_VSRC)
 
@@ -116,7 +116,7 @@ EMU_COMPILE_FILTER =
 build_emu_local: $(EMU_MK)
 	@echo "\n[g++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) $(MAKE) CXX=clang VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	$(TIME_CMD) $(MAKE) CXX=clang++ LINK=clang++  VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
 $(LOCK_BIN): ./scripts/utils/lock-emu.c
 	mkdir -p $(@D)

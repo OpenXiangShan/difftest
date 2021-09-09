@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cassert>
+#include <cerrno>
 #include <pthread.h>
 #include "../../../../config/config.h"
 

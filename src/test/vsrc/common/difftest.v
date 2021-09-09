@@ -592,3 +592,36 @@ endmodule
     coreid, ptwResp, ptwAddr, ptwData_0, ptwData_1, ptwData_2, ptwData_3
   ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(PtwEvent)
 endmodule
+
+// DifftestRefillEvent
+`DIFFTEST_DPIC_FUNC_DECL(RefillEvent) (
+  `DPIC_ARG_BYTE coreid,
+  `DPIC_ARG_BIT  valid,
+  `DPIC_ARG_LONG addr,
+  `DPIC_ARG_LONG data_0,
+  `DPIC_ARG_LONG data_1,
+  `DPIC_ARG_LONG data_2,
+  `DPIC_ARG_LONG data_3,
+  `DPIC_ARG_LONG data_4,
+  `DPIC_ARG_LONG data_5,
+  `DPIC_ARG_LONG data_6,
+  `DPIC_ARG_LONG data_7
+);
+`DIFFTEST_MOD_DECL(RefillEvent)(
+  input        clock,
+  input [ 7:0] coreid,
+  input        valid,
+  input [63:0] addr,
+  input [63:0] data_0,
+  input [63:0] data_1,
+  input [63:0] data_2,
+  input [63:0] data_3,
+  input [63:0] data_4,
+  input [63:0] data_5,
+  input [63:0] data_6,
+  input [63:0] data_7
+);
+  `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RefillEvent) (
+    coreid, valid, addr, data_0, data_1, data_2, data_3, data_4, data_5, data_6, data_7
+  ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RefillEvent)
+endmodule

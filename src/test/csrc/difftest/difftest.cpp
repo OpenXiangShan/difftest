@@ -99,13 +99,22 @@ int Difftest::step() {
   if (do_store_check()) {
     return 1;
   }
-  if (NUM_CORES > 1 && do_golden_memory_update()) {
+
+#ifdef DEBUG_GOLDENMEM
+  if (do_golden_memory_update()) {
     return 1;
   }
+#endif
 
   if (!has_commit) {
     return 0;
   }
+
+#ifdef DEBUG_REFILL
+  if (do_refill_check()) {
+    return 1;
+  }
+#endif
 
   num_commit = 0; // reset num_commit this cycle to 0
   // interrupt has the highest priority
@@ -310,6 +319,33 @@ int Difftest::do_store_check() {
   return 0;
 }
 
+int Difftest::do_refill_check() {
+  static uint64_t last_valid_addr = 0;
+  char buf[512];
+
+  if (dut.refill.valid == 1 && dut.refill.addr != last_valid_addr) {
+    last_valid_addr = dut.refill.addr;
+    for (int i = 0; i < 8; i++) {
+      read_goldenmem(dut.refill.addr + i*8, &buf, 8);
+      if (dut.refill.data[i] != *((uint64_t*)buf)) {
+        printf("Refill test failed!\n");
+        printf("addr: %lx\nGold: ", dut.refill.addr);
+        for (int j = 0; j < 8; j++) {
+          read_goldenmem(dut.refill.addr + j*8, &buf, 8);
+          printf("%016lx", *((uint64_t*)buf));
+        }
+        printf("\nCore: ");
+        for (int j = 0; j < 8; j++) {
+          printf("%016lx", dut.refill.data[j]);
+        }
+        printf("\n"); 
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
 inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, uint64_t atomicMask, uint8_t atomicFuop, uint64_t atomicOut) {
   // We need to do atmoic operations here so as to update goldenMem
   if (!(atomicMask == 0xf || atomicMask == 0xf0 || atomicMask == 0xff)) {
@@ -385,15 +421,41 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, u
   return 0;
 }
 
+void dumpGoldenMem(char* banner, uint64_t addr, uint64_t time) {
+#ifdef DEBUG_REFILL
+  char buf[512];
+  if (addr == 0) {
+    return;
+  }
+  printf("============== %s =============== time = %ld\ndata: ", banner, time);
+    for (int i = 0; i < 8; i++) {
+      read_goldenmem(addr + i*8, &buf, 8);
+      printf("%016lx", *((uint64_t*)buf));
+    }
+    printf("\n");
+#endif
+}
+
 int Difftest::do_golden_memory_update() {
   // Update Golden Memory info
+
+  if (ticks == 100) {
+    dumpGoldenMem("Init", track_instr, ticks);    
+  }
+
   if (dut.sbuffer.resp) {
     dut.sbuffer.resp = 0;
     update_goldenmem(dut.sbuffer.addr, dut.sbuffer.data, dut.sbuffer.mask, 64);
+    if (dut.sbuffer.addr == track_instr) {
+      dumpGoldenMem("Store", track_instr, ticks);
+    }
   }
   if (dut.atomic.resp) {
     dut.atomic.resp = 0;
     int ret = handle_atomic(id, dut.atomic.addr, dut.atomic.data, dut.atomic.mask, dut.atomic.fuop, dut.atomic.out);
+    if (dut.atomic.addr == track_instr) {
+      dumpGoldenMem("Atmoic", track_instr, ticks);
+    }
     if (ret) return ret;
   }
   return 0;

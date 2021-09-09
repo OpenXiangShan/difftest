@@ -33,10 +33,12 @@
 #define FIRST_INST_ADDRESS 0x80000000
 
 // sdcard image to be used in simulation
+// uncomment the follwing line to enable this feature
 // #define SDCARD_IMAGE "/home/xyn/workloads/debian/riscv-debian.img"
 
 // Use sdl to show screen
 // Note: It does not work well with clang, to use that, switch to gcc
+// uncomment the follwing line to enable this feature
 // #define SHOW_SCREEN
 
 // -----------------------------------------------------------------------
@@ -71,7 +73,31 @@
 // process sleep time  
 #define WAIT_INTERVAL 5
 
-//time to save a snapshot
+// time to save a snapshot
 #define SNAPSHOT_INTERVAL 60 // unit: second
+
+// -----------------------------------------------------------------------
+// Memory difftest config
+// -----------------------------------------------------------------------
+
+// whether to check memory coherence during refilling
+#define DEBUG_REFILL
+
+// dump all tilelink trace to a database
+// uncomment the follwing line to enable this feature
+//#define DEBUG_TILELINK
+
+// -----------------------------------------------------------------------
+// Do not touch
+// -----------------------------------------------------------------------
+
+// whether to maintain goldenmem
+#if NUM_CORES>1
+    #define DEBUG_GOLDENMEM
+#endif
+
+#ifdef DEBUG_REFILL
+    #define DEBUG_GOLDENMEM
+#endif
 
 #endif

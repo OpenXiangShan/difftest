@@ -130,6 +130,12 @@ typedef struct {
 } ptw_event_t;
 
 typedef struct {
+  uint8_t  valid = 0;
+  uint64_t addr;
+  uint64_t data[8];
+} refill_event_t;
+
+typedef struct {
   trap_event_t     trap;
   arch_event_t     event;
   instr_commit_t   commit[DIFFTEST_COMMIT_WIDTH];
@@ -140,6 +146,7 @@ typedef struct {
   load_event_t     load[DIFFTEST_COMMIT_WIDTH];
   atomic_event_t   atomic;
   ptw_event_t      ptw;
+  refill_event_t   refill;
 } difftest_core_state_t;
 
 enum retire_inst_type {
@@ -242,6 +249,14 @@ public:
   inline ptw_event_t *get_ptw_event() {
     return &(dut.ptw);
   }
+  inline refill_event_t *get_refill_event() {
+    return &(dut.refill);
+  }
+#ifdef DEBUG_REFILL
+  void save_track_instr(uint64_t instr) {
+    track_instr = instr;
+  }
+#endif
 
 private:
   const uint64_t firstCommit_limit = 5000;
@@ -259,6 +274,9 @@ private:
 
   uint64_t nemu_this_pc;
   DiffState *state = NULL;
+#ifdef DEBUG_REFILL
+  uint64_t track_instr = 0;
+#endif
 
   int check_timeout();
   void do_first_instr_commit();
@@ -266,6 +284,7 @@ private:
   void do_exception();
   void do_instr_commit(int index);
   int do_store_check();
+  int do_refill_check();
   int do_golden_memory_update();
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }
