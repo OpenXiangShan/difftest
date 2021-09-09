@@ -56,6 +56,7 @@ INTERFACE_INSTR_COMMIT {
     packet->skip     = skip;
     packet->isRVC    = isRVC;
     packet->scFailed = scFailed;
+    packet->fused    = special;
     packet->wen      = wen;
     packet->wdest    = wdest;
     packet->wdata    = wdata;

@@ -51,6 +51,7 @@ class DiffInstrCommitIO extends DifftestBundle with DifftestWithIndex {
   val valid    = Input(Bool())
   val pc       = Input(UInt(64.W))
   val instr    = Input(UInt(32.W))
+  val special  = Input(UInt(8.W))
   val skip     = Input(Bool())
   val isRVC    = Input(Bool())
   val scFailed = Input(Bool())
