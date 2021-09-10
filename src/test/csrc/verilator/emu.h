@@ -81,7 +81,9 @@ struct EmuArgs {
     stat_cycles = -1;
     log_begin = 1;
     log_end = -1;
+#ifdef DEBUG_REFILL
     track_instr = 0;
+#endif
     snapshot_path = NULL;
     wave_path = NULL;
     image = NULL;

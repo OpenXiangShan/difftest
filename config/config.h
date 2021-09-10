@@ -81,7 +81,7 @@
 // -----------------------------------------------------------------------
 
 // whether to check memory coherence during refilling
-#define DEBUG_REFILL
+// #define DEBUG_REFILL
 
 // dump all tilelink trace to a database
 // uncomment the follwing line to enable this feature

@@ -436,6 +436,7 @@ void dumpGoldenMem(char* banner, uint64_t addr, uint64_t time) {
 #endif
 }
 
+#ifdef DEBUG_GOLDENMEM
 int Difftest::do_golden_memory_update() {
   // Update Golden Memory info
 
@@ -460,6 +461,7 @@ int Difftest::do_golden_memory_update() {
   }
   return 0;
 }
+#endif
 
 int Difftest::check_timeout() {
   // check whether there're any commits since the simulation starts
