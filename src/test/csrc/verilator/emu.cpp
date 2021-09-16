@@ -78,10 +78,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "no-diff",           0, NULL,  0  },
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
+    { "wave-path",         1, NULL,  0  },
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
-    { "wave-path",         1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
