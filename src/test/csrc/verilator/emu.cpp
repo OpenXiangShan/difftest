@@ -111,11 +111,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 5: args.enable_diff = false; continue;
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
-#ifdef DEBUG_TILELINK
-          case 8: args.dump_tl = true; continue;
-          case 9: args.wave_path = optarg; continue;
-#endif
           case 8: args.wave_path = optarg; continue;
+#ifdef DEBUG_TILELINK
+          case 9: args.dump_tl = true; continue;
+#endif
         }
         // fall through
       default:
