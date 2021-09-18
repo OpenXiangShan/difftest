@@ -22,6 +22,7 @@
 #define __DT_INTERFACE_H__
 
 #include "difftest.h"
+#include "runahead.h"
 
 // #ifdef __cplusplus
 // extern "C" {
@@ -326,6 +327,16 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG data_7                 \
   )
 
+// v_difftest_RunaheadEvent
+#define INTERFACE_RUNAHEAD_EVENT           \
+  DIFFTEST_DPIC_FUNC_DECL(RunaheadEvent) ( \
+    DPIC_ARG_BYTE coreid,                  \
+    DPIC_ARG_BYTE index,                   \
+    DPIC_ARG_BIT  valid,                   \
+    DPIC_ARG_BIT  branch,                  \
+    DPIC_ARG_LONG pc                       \
+  )
+
 INTERFACE_ARCH_EVENT;
 INTERFACE_INSTR_COMMIT;
 INTERFACE_TRAP_EVENT;
@@ -338,5 +349,6 @@ INTERFACE_LOAD_EVENT;
 INTERFACE_ATOMIC_EVENT;
 INTERFACE_PTW_EVENT;
 INTERFACE_REFILL_EVENT;
+INTERFACE_RUNAHEAD_EVENT;
 
 #endif

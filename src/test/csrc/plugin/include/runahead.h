@@ -25,16 +25,20 @@
 class Runahead: public Difftest {
 public:
   Runahead(int coreid);
-  int ref_runahead();
-  int ref_runahead_pc_guided(uint64_t jump_target_pc);
   pid_t free_checkpoint();
   void recover_checkpoint(int checkpoint_id);
   void restart();
   void update_debug_info(void* dest_buffer);
   void run_first_instr();
   int step();
-
   bool checkpoint_num_exceed_limit();
+  int do_instr_runahead();
+  pid_t do_instr_runahead_pc_guided(uint64_t jump_target_pc);
+
+  void do_first_instr_runahead();
+
+  difftest_core_state_t *dut_ptr;
+  difftest_core_state_t *ref_ptr;
 
 private:
 #define RUN_AHEAD_CHECKPOINT_SIZE 64

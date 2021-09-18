@@ -139,6 +139,12 @@ class DiffRefillEventIO extends DifftestBundle {
   val data  = Input(Vec(8, UInt(64.W)))
 }
 
+class DiffRunaheadEventIO extends DifftestBundle {
+  val valid  = Input(Bool())
+  val branch = Input(Bool())
+  val pc     = Input(UInt(64.W))
+}
+
 class DifftestArchEvent extends BlackBox {
   val io = IO(new DiffArchEventIO)
 }
@@ -185,6 +191,10 @@ class DifftestPtwEvent extends BlackBox {
 
 class DifftestRefillEvent extends BlackBox {
   val io = IO(new DiffRefillEventIO)
+}
+
+class DifftestRunaheadEvent extends BlackBox {
+  val io = IO(new DiffRunaheadEventIO)
 }
 
 // Difftest emulator top

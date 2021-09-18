@@ -34,22 +34,24 @@ bool Runahead::checkpoint_num_exceed_limit() {
 // If current inst is a jump, set up a checkpoint for recovering, 
 // then set jump target to jump_target_pc
 //
-// Return checkpoint id
+// Return checkpoint pid
 // Return -1 if no checkpoint is needed (inst is not jump)
 // Will raise error if the number of checkpoints exceeds limit
-int Runahead::ref_runahead_pc_guided(uint64_t jump_target_pc){
+pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
   assert(has_commit);
   // check if checkpoint list is full
   if(checkpoint_num_exceed_limit()){
-    printf("run ahead checkpoint num exceeds limit");
+    printf("ERROR: Checkpoint list is full, you may forget to free resolved checkpoints\n");
+    assert(0);
   }
-
+  CP
+  assert(0);
   // if not, fork to create a new checkpoint
   pid_t pid = fork();
   if(pid > 0){ // current process
 
   }
-  return 0;
+  return pid;
 }
 
 // Note: How to skip inst?
@@ -59,10 +61,13 @@ int Runahead::ref_runahead_pc_guided(uint64_t jump_target_pc){
 // Just normally run a inst
 // 
 // No checkpoint will be allocated
-int Runahead::ref_runahead(){
+int Runahead::do_instr_runahead(){
+  CP
   if(!has_commit){
-    run_first_instr();
+    CP
+    do_first_instr_runahead();
   } else {
+    CP
     proxy->exec(1);
   }
   return 0;
@@ -104,7 +109,7 @@ void Runahead::update_debug_info(void* dest_buffer) {
 
 }
 
-void Runahead::run_first_instr() {
+void Runahead::do_first_instr_runahead() {
   printf("Waiting for the first valid inst...\n");
   // if (!has_commit && dut.runahead[0].valid && dut.runahead[0].pc == FIRST_INST_ADDRESS) {
   if (!has_commit) {
@@ -118,7 +123,33 @@ void Runahead::run_first_instr() {
 }
 
 int Runahead::step() { // override step() method
-  printf("astrop\n");
+  printf("Runahead::step() pc %lx\n", dut_ptr->runahead[0].pc);
+  static bool branch_reported;
+  static uint64_t debug_branch_pc;
+  if (dut_ptr->event.interrupt) {
+    assert(0); //TODO
+    do_interrupt();
+  } else if(dut_ptr->event.exception) {
+    // We ignored instrAddrMisaligned exception (0) for better debug interface
+    // XiangShan should always support RVC, so instrAddrMisaligned will never happen
+    assert(0); //TODO
+    do_exception();
+  } else {
+    for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH && dut_ptr->runahead[i].valid; i++) {
+      // check if branch is reported by previous inst
+      if(branch_reported) {
+        do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
+        branch_reported = false;
+      }
+      if(dut_ptr->runahead[i].branch) { // TODO: add branch flag in hardware
+        branch_reported = true;
+        debug_branch_pc = dut_ptr->runahead[i].pc;
+      } else {
+        do_instr_runahead();
+      }
+      dut_ptr->runahead[i].valid = 0;
+    }
+  }
   return 0;
 }
 
@@ -128,10 +159,13 @@ int Runahead::step() { // override step() method
 
 int runahead_init() {
   runahead = new Runahead*[NUM_CORES];
+  assert(difftest);
   for (int i = 0; i < NUM_CORES; i++) {
     runahead[i] = new Runahead(i);
-  }
-  for (int i = 0; i < NUM_CORES; i++) {
+    // runahead uses difftest_core_state_t dut in Difftest
+    // to be refactored later
+    runahead[i]->dut_ptr = difftest[i]->get_dut(); 
+    runahead[i]->ref_ptr = runahead[i]->get_ref(); 
     runahead[i]->update_nemuproxy(i);
   }
   printf("Simulator run ahead of commit enabled.");

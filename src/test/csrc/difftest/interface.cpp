@@ -298,3 +298,13 @@ INTERFACE_REFILL_EVENT {
     packet->data[7] = data_7;
   }
 }
+
+INTERFACE_RUNAHEAD_EVENT {
+  if (runahead == NULL) return;
+  auto packet = difftest[coreid]->get_runahead_event(index);
+  packet->valid = valid;
+  if (packet->valid) {
+    packet->branch = branch;
+    packet->pc = pc;
+  }
+}

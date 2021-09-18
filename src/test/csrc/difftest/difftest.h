@@ -139,7 +139,6 @@ typedef struct {
   uint8_t  valid = 0;
   uint8_t  branch = 0;
   uint64_t pc;
-  uint64_t target_pc; // TODO: not needed
 } run_ahead_event_t;
 
 typedef struct {
@@ -259,6 +258,15 @@ public:
   }
   inline refill_event_t *get_refill_event() {
     return &(dut.refill);
+  }
+  inline run_ahead_event_t *get_runahead_event(uint8_t index) {
+    return &(dut.runahead[index]);
+  }
+  difftest_core_state_t *get_dut() {
+    return &dut;
+  }
+  difftest_core_state_t *get_ref() {
+    return &ref;
   }
 #ifdef DEBUG_REFILL
   void save_track_instr(uint64_t instr) {

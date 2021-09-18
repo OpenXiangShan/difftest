@@ -625,3 +625,22 @@ endmodule
     coreid, valid, addr, data_0, data_1, data_2, data_3, data_4, data_5, data_6, data_7
   ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RefillEvent)
 endmodule
+
+// DifftestRunaheadEvent
+`DIFFTEST_DPIC_FUNC_DECL(RunaheadEvent) (
+  `DPIC_ARG_BYTE coreid,
+  `DPIC_ARG_BIT  valid,
+  `DPIC_ARG_BIT  branch,
+  `DPIC_ARG_LONG pc
+);
+`DIFFTEST_MOD_DECL(RunaheadEvent)(
+  input        clock,
+  input [ 7:0] coreid,
+  input        valid,
+  input        branch,
+  input [63:0] pc
+);
+  `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RunaheadEvent) (
+    coreid, valid, branch, pc
+  ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadEvent)
+endmodule
