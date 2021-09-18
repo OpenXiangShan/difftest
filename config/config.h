@@ -87,6 +87,15 @@
 // uncomment the follwing line to enable this feature
 //#define DEBUG_TILELINK
 
+
+// -----------------------------------------------------------------------
+// Simulator run ahead config
+// -----------------------------------------------------------------------
+
+// Let a fork of simulator run ahead of commit for perf analysis
+// max run ahead width
+#define DIFFTEST_RUNAHEAD_WIDTH 6
+
 // -----------------------------------------------------------------------
 // Do not touch
 // -----------------------------------------------------------------------
@@ -99,5 +108,7 @@
 #ifdef DEBUG_REFILL
     #define DEBUG_GOLDENMEM
 #endif
+
+#define RUNAHEAD_UNIT_TEST
 
 #endif

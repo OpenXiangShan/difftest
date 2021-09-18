@@ -45,9 +45,14 @@ struct SyncState {
 };
 
 struct ExecutionGuide {
-  uint64_t exceptionNo;
+  // force raise exception
+  bool force_raise_exception;
+  uint64_t exception_num;
   uint64_t mtval;
   uint64_t stval;
+  // force set jump target
+  bool force_set_jump_target;
+  uint64_t jump_target;
 };
 
 void ref_misc_put_gmaddr(uint8_t* ptr);

@@ -21,6 +21,7 @@
 #include "nemuproxy.h"
 #include "goldenmem.h"
 #include "device.h"
+#include "runahead.h"
 #include <getopt.h>
 #include <signal.h>
 #include <unistd.h>
@@ -56,6 +57,7 @@ static inline void print_help(const char *file) {
 #ifdef DEBUG_TILELINK
   printf("      --dump-tl              dump tilelink transactions\n");
 #endif
+  printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
@@ -79,6 +81,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
     { "wave-path",         1, NULL,  0  },
+    { "run-ahead",         0, NULL,  0  },
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
@@ -112,8 +115,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
           case 8: args.wave_path = optarg; continue;
+          case 9: args.enable_runahead = true; continue;
 #ifdef DEBUG_TILELINK
-          case 9: args.dump_tl = true; continue;
+          case 10: args.dump_tl = true; continue;
 #endif
         }
         // fall through
@@ -137,6 +141,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'b': args.log_begin = atoll(optarg);  break;
       case 'e': args.log_end = atoll(optarg); break;
     }
+  }
+
+  if(args.image == NULL) {
+    print_help(argv[0]);
+    printf("Hint: --image=IMAGE_FILE must be given\n");
+    exit(0);
   }
 
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
@@ -285,6 +295,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     init_goldenmem();
     init_nemuproxy();
   }
+  if(args.enable_runahead){
+    runahead_init();
+  }
 
 #ifdef DEBUG_REFILL
   difftest[0]->save_track_instr(args.track_instr);
@@ -322,7 +335,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   }
 
   pid_t pid =-1;
-  pid_t originPID = getpid();
+  // pid_t originPID = getpid();
   int status = -1;
   int slotCnt = 0;
   int waitProcess = 0;
@@ -397,6 +410,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       }
     }
 
+    if(args.enable_runahead) {
+      runahead_step();
+    }
+
 #ifdef VM_SAVABLE
     static int snapshot_count = 0;
     if (args.enable_snapshot && trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
@@ -434,7 +451,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           pidSlot.insert(pidSlot.begin(), pid);
         } else {     
           waitProcess = 1;
+#if VM_TRACE == 1
           uint64_t startCycle = cycles;
+#endif
           forkshm.shwait();
           //checkpoint process wakes up
 #ifdef EMU_THREAD 

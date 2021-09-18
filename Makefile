@@ -51,6 +51,8 @@ SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 
+PLUGIN_CHEAD_DIR = $(abspath ./src/test/csrc/plugin/include)
+
 SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
 
 include verilator.mk
