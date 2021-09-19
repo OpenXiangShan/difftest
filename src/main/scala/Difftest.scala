@@ -139,7 +139,7 @@ class DiffRefillEventIO extends DifftestBundle {
   val data  = Input(Vec(8, UInt(64.W)))
 }
 
-class DiffRunaheadEventIO extends DifftestBundle {
+class DiffRunaheadEventIO extends DifftestBundle with DifftestWithIndex {
   val valid  = Input(Bool())
   val branch = Input(Bool())
   val pc     = Input(UInt(64.W))

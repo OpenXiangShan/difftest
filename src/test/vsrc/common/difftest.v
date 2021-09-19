@@ -629,6 +629,7 @@ endmodule
 // DifftestRunaheadEvent
 `DIFFTEST_DPIC_FUNC_DECL(RunaheadEvent) (
   `DPIC_ARG_BYTE coreid,
+  `DPIC_ARG_BYTE index,
   `DPIC_ARG_BIT  valid,
   `DPIC_ARG_BIT  branch,
   `DPIC_ARG_LONG pc
@@ -636,11 +637,12 @@ endmodule
 `DIFFTEST_MOD_DECL(RunaheadEvent)(
   input        clock,
   input [ 7:0] coreid,
+  input [ 7:0] index,
   input        valid,
   input        branch,
   input [63:0] pc
 );
   `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RunaheadEvent) (
-    coreid, valid, branch, pc
+    coreid, index, valid, branch, pc
   ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadEvent)
 endmodule

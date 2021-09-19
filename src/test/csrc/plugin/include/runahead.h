@@ -39,6 +39,9 @@ public:
 
   difftest_core_state_t *dut_ptr;
   difftest_core_state_t *ref_ptr;
+  // Note: dut & ref does not contain valid value in runahead
+  // use dut_ptr & ref_ptr instead.
+  // To be refactored later. 
 
 private:
 #define RUN_AHEAD_CHECKPOINT_SIZE 64

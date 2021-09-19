@@ -44,13 +44,23 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
     printf("ERROR: Checkpoint list is full, you may forget to free resolved checkpoints\n");
     assert(0);
   }
-  CP
-  assert(0);
   // if not, fork to create a new checkpoint
   pid_t pid = fork();
   if(pid > 0){ // current process
-
+    // I am your father
+    checkpoints.push(pid);
+    struct ExecutionGuide guide;
+    guide.force_raise_exception = false;
+    guide.force_set_jump_target = true;
+    guide.jump_target = jump_target_pc;
+    printf("force jump to %lx\n", jump_target_pc);
+    proxy->guided_exec(&guide);
+  } else {
+    // sleep until it is wakeuped
+    printf("I sleep\n");
+    sleep(999);//TODO
   }
+
   return pid;
 }
 
@@ -62,14 +72,10 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
 // 
 // No checkpoint will be allocated
 int Runahead::do_instr_runahead(){
-  CP
   if(!has_commit){
-    CP
     do_first_instr_runahead();
-  } else {
-    CP
-    proxy->exec(1);
   }
+  proxy->exec(1);
   return 0;
 }
 
@@ -110,20 +116,20 @@ void Runahead::update_debug_info(void* dest_buffer) {
 }
 
 void Runahead::do_first_instr_runahead() {
-  printf("Waiting for the first valid inst...\n");
-  // if (!has_commit && dut.runahead[0].valid && dut.runahead[0].pc == FIRST_INST_ADDRESS) {
-  if (!has_commit) {
+  if (!has_commit && dut_ptr->runahead[0].valid && dut_ptr->runahead[0].pc == FIRST_INST_ADDRESS) {
     printf("The first instruction of core %d start to run ahead.\n", id);
     has_commit = 1;
-    nemu_this_pc = dut.runahead[0].pc;
+    // nemu_this_pc = dut_ptr->runahead[0].pc;
 
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
-    proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
+    // Manually setup simulator init regs,
+    // for at this time, the first has not been initialied
+    dut_ptr->csr.this_pc = FIRST_INST_ADDRESS; 
+    proxy->regcpy(&dut_ptr->regs, DIFFTEST_TO_REF);
   }
 }
 
 int Runahead::step() { // override step() method
-  printf("Runahead::step() pc %lx\n", dut_ptr->runahead[0].pc);
   static bool branch_reported;
   static uint64_t debug_branch_pc;
   if (dut_ptr->event.interrupt) {
@@ -136,6 +142,7 @@ int Runahead::step() { // override step() method
     do_exception();
   } else {
     for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH && dut_ptr->runahead[i].valid; i++) {
+      printf("Runahead::step() pc %lx branch(reported by DUT) %x\n", dut_ptr->runahead[i].pc, dut_ptr->runahead[i].branch);
       // check if branch is reported by previous inst
       if(branch_reported) {
         do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
@@ -168,7 +175,7 @@ int runahead_init() {
     runahead[i]->ref_ptr = runahead[i]->get_ref(); 
     runahead[i]->update_nemuproxy(i);
   }
-  printf("Simulator run ahead of commit enabled.");
+  printf("Simulator run ahead of commit enabled.\n");
   return 0;
 }
 

@@ -81,7 +81,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
     { "wave-path",         1, NULL,  0  },
-    { "run-ahead",         0, NULL,  0  },
+    { "sim-run-ahead",     0, NULL,  0  },
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
