@@ -60,7 +60,7 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
     printf("I sleep\n");
     sleep(999);//TODO
   }
-
+  printf("fork result %d\n", pid);
   return pid;
 }
 
@@ -141,8 +141,29 @@ int Runahead::step() { // override step() method
     assert(0); //TODO
     do_exception();
   } else {
+    for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut_ptr->runahead_commit[i].valid; i++) {
+      dut_ptr->runahead_commit[i].valid = false;
+      printf("Run ahead: jump inst %lx commited, free oldest checkpoint\n", 
+        dut_ptr->runahead_commit[i].pc
+      );
+    }
+    if(dut_ptr->runahead_redirect.valid) {
+      dut_ptr->runahead_redirect.valid = false;
+      printf("Run ahead: pc %lx redirect to %lx, recover cpid %lx\n",
+        dut_ptr->runahead_redirect.pc,
+        dut_ptr->runahead_redirect.target_pc,
+        dut_ptr->runahead_redirect.checkpoint_id
+      );
+      // TODO: recover nemu
+      printf("Run ahead: ignore run ahead req generated in current cycle\n");
+      return 0; // ignore run ahead req generated in current cycle
+    }
     for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH && dut_ptr->runahead[i].valid; i++) {
-      printf("Runahead::step() pc %lx branch(reported by DUT) %x\n", dut_ptr->runahead[i].pc, dut_ptr->runahead[i].branch);
+      printf("Run ahead: pc %lx branch(reported by DUT) %x cpid %lx\n", 
+        dut_ptr->runahead[i].pc, 
+        dut_ptr->runahead[i].branch,
+        dut_ptr->runahead[i].checkpoint_id 
+      );
       // check if branch is reported by previous inst
       if(branch_reported) {
         do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
@@ -151,6 +172,7 @@ int Runahead::step() { // override step() method
       if(dut_ptr->runahead[i].branch) { // TODO: add branch flag in hardware
         branch_reported = true;
         debug_branch_pc = dut_ptr->runahead[i].pc;
+        // setup checkpoint here
       } else {
         do_instr_runahead();
       }

@@ -305,6 +305,27 @@ INTERFACE_RUNAHEAD_EVENT {
   packet->valid = valid;
   if (packet->valid) {
     packet->branch = branch;
+    packet->checkpoint_id = checkpoint_id; // a unique branch id
     packet->pc = pc;
+  }
+}
+
+INTERFACE_RUNAHEAD_COMMIT_EVENT {
+  if (runahead == NULL) return;
+  auto packet = difftest[coreid]->get_runahead_commit_event(index);
+  packet->valid = valid;
+  if (packet->valid) {
+    packet->pc = pc; // for debug only
+  }
+}
+
+INTERFACE_RUNAHEAD_REDIRECT_EVENT {
+  if (runahead == NULL) return;
+  auto packet = difftest[coreid]->get_runahead_redirect_event();
+  packet->valid = valid;
+  if (packet->valid) {
+    packet->pc = pc;
+    packet->target_pc = target_pc;
+    packet->checkpoint_id = checkpoint_id;
   }
 }

@@ -334,7 +334,28 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE index,                   \
     DPIC_ARG_BIT  valid,                   \
     DPIC_ARG_BIT  branch,                  \
-    DPIC_ARG_LONG pc                       \
+    DPIC_ARG_LONG pc,                      \
+    DPIC_ARG_LONG checkpoint_id            \
+  )
+
+// v_difftest_RunaheadCommitEvent 
+#define INTERFACE_RUNAHEAD_COMMIT_EVENT          \
+  DIFFTEST_DPIC_FUNC_DECL(RunaheadCommitEvent) ( \
+    DPIC_ARG_BYTE coreid,                        \
+    DPIC_ARG_BYTE index,                         \
+    DPIC_ARG_BIT  valid,                         \
+    DPIC_ARG_LONG pc                             \
+  )
+
+// v_difftest_RunaheadRedirectEvent
+#define INTERFACE_RUNAHEAD_REDIRECT_EVENT          \
+  DIFFTEST_DPIC_FUNC_DECL(RunaheadRedirectEvent) ( \
+    DPIC_ARG_BYTE coreid,                          \
+    DPIC_ARG_BYTE index,                           \
+    DPIC_ARG_BIT  valid,                           \
+    DPIC_ARG_LONG pc,                              \
+    DPIC_ARG_LONG target_pc,                       \
+    DPIC_ARG_LONG checkpoint_id                    \
   )
 
 INTERFACE_ARCH_EVENT;
@@ -350,5 +371,7 @@ INTERFACE_ATOMIC_EVENT;
 INTERFACE_PTW_EVENT;
 INTERFACE_REFILL_EVENT;
 INTERFACE_RUNAHEAD_EVENT;
+INTERFACE_RUNAHEAD_COMMIT_EVENT;
+INTERFACE_RUNAHEAD_REDIRECT_EVENT;
 
 #endif

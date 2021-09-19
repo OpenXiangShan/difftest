@@ -632,7 +632,8 @@ endmodule
   `DPIC_ARG_BYTE index,
   `DPIC_ARG_BIT  valid,
   `DPIC_ARG_BIT  branch,
-  `DPIC_ARG_LONG pc
+  `DPIC_ARG_LONG pc,
+  `DPIC_ARG_LONG checkpoint_id
 );
 `DIFFTEST_MOD_DECL(RunaheadEvent)(
   input        clock,
@@ -640,9 +641,50 @@ endmodule
   input [ 7:0] index,
   input        valid,
   input        branch,
-  input [63:0] pc
+  input [63:0] pc,
+  input [63:0] checkpoint_id
 );
   `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RunaheadEvent) (
-    coreid, index, valid, branch, pc
+    coreid, index, valid, branch, pc, checkpoint_id
   ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadEvent)
+endmodule
+
+// DifftestRunaheadCommitEvent
+`DIFFTEST_DPIC_FUNC_DECL(RunaheadCommitEvent) (
+  `DPIC_ARG_BYTE coreid,
+  `DPIC_ARG_BYTE index,
+  `DPIC_ARG_BIT  valid,
+  `DPIC_ARG_LONG pc
+);
+`DIFFTEST_MOD_DECL(RunaheadCommitEvent)(
+  input        clock,
+  input [ 7:0] coreid,
+  input [ 7:0] index,
+  input        valid,
+  input [63:0] pc
+);
+  `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RunaheadCommitEvent) (
+    coreid, index, valid, pc
+  ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadCommitEvent)
+endmodule
+
+// DifftestRunaheadRedirectEvent
+`DIFFTEST_DPIC_FUNC_DECL(RunaheadRedirectEvent) (
+  `DPIC_ARG_BYTE coreid,
+  `DPIC_ARG_BIT  valid,
+  `DPIC_ARG_LONG pc,
+  `DPIC_ARG_LONG target_pc,
+  `DPIC_ARG_LONG checkpoint_id
+);
+`DIFFTEST_MOD_DECL(RunaheadRedirectEvent)(
+  input        clock,
+  input [ 7:0] coreid,
+  input        valid,
+  input [63:0] pc,
+  input [63:0] target_pc,
+  input [63:0] checkpoint_id
+);
+  `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RunaheadRedirectEvent) (
+    coreid, valid, pc, target_pc, checkpoint_id
+  ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadRedirectEvent)
 endmodule
