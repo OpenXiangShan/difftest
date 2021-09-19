@@ -32,6 +32,7 @@ public:
   int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask);
   void (*exec)(uint64_t n);
   vaddr_t (*guided_exec)(void *disambiguate_para);
+  vaddr_t (*update_config)(void *config);
   void (*raise_intr)(uint64_t no);
   void (*isa_reg_display)();
 
@@ -54,6 +55,10 @@ struct ExecutionGuide {
   bool force_set_jump_target;
   uint64_t jump_target;
 };
+
+typedef struct DynamicConfig {
+  bool ignore_illegal_mem_access;
+} DynamicSimulatorConfig;
 
 void ref_misc_put_gmaddr(uint8_t* ptr);
 

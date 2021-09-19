@@ -126,6 +126,9 @@ void Runahead::do_first_instr_runahead() {
     // for at this time, the first has not been initialied
     dut_ptr->csr.this_pc = FIRST_INST_ADDRESS; 
     proxy->regcpy(&dut_ptr->regs, DIFFTEST_TO_REF);
+    DynamicSimulatorConfig nemu_config;
+    nemu_config.ignore_illegal_mem_access = true;
+    proxy->update_config(&nemu_config);
   }
 }
 

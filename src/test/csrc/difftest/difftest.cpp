@@ -298,6 +298,9 @@ void Difftest::do_first_instr_commit() {
 
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
+    DynamicSimulatorConfig nemu_config;
+    nemu_config.ignore_illegal_mem_access = false;
+    proxy->update_config(&nemu_config);
   }
 }
 
