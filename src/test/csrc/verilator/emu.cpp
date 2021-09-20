@@ -317,6 +317,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   }
 
   if(args.enable_fork){
+    // Currently, runahead does not work well with fork based snapshot
+    assert(!args.enable_runahead);
 #ifndef EMU_THREAD
       printf("[ERROR] please enable --threads option in verilator...(You may forget EMU_THREADS when compiling.)\n");
       FAIT_EXIT

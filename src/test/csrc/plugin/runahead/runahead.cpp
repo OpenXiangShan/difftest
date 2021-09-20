@@ -17,14 +17,61 @@
 #include <vector>
 #include "runahead.h"
 
+#define assert_no_error(func) if((func) == -1) { \
+  printf("%s\n", std::strerror(errno)); \
+  assert(0); \
+}
+
 // ---------------------------------------------------
-// Run ahead worker process
+// Run ahead master process
 // ---------------------------------------------------
 
 Runahead **runahead = NULL;
+int runahead_req_msgq_id = 0;
+int runahead_resp_msgq_id = 0;
+bool runahead_is_slave = false;
 
 Runahead::Runahead(int coreid): Difftest(coreid) {
   
+}
+
+int runahead_init() {
+  runahead = new Runahead*[NUM_CORES];
+  assert(difftest);
+  for (int i = 0; i < NUM_CORES; i++) {
+    runahead[i] = new Runahead(i);
+    // runahead uses difftest_core_state_t dut in Difftest
+    // to be refactored later
+    runahead[i]->dut_ptr = difftest[i]->get_dut(); 
+    runahead[i]->ref_ptr = runahead[i]->get_ref(); 
+    runahead[i]->update_nemuproxy(i);
+  }
+  auto emu_name = ".";
+  printf("Allocate msgq for %s\n", emu_name);
+  key_t req_msgq_key = ftok(emu_name, 'a');
+  runahead_req_msgq_id = msgget(req_msgq_key, IPC_CREAT);
+  key_t resp_msgq_key = ftok(emu_name,'b');
+  runahead_resp_msgq_id = msgget(resp_msgq_key , IPC_CREAT);
+  if((runahead_req_msgq_id <= 0) || (runahead_resp_msgq_id <= 0)){
+    printf("%s\n", std::strerror(errno));
+    printf("Failed to create run ahead message queue.\n");
+    assert(0);
+  }
+  printf("Simulator run ahead of commit enabled.\n");
+  return 0;
+}
+
+// Runahead exec a step
+//
+// Should be called for every cycle emulated by Emulator
+int runahead_step() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    int ret = runahead[i]->step();
+    if (ret) {
+      return ret;
+    }
+  }
+  return 0;
 }
 
 bool Runahead::checkpoint_num_exceed_limit() {
@@ -41,25 +88,11 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
   assert(has_commit);
   // check if checkpoint list is full
   if(checkpoint_num_exceed_limit()){
-    printf("ERROR: Checkpoint list is full, you may forget to free resolved checkpoints\n");
+    printf("Checkpoint list is full, you may forget to free resolved checkpoints\n");
     assert(0);
   }
   // if not, fork to create a new checkpoint
-  pid_t pid = fork();
-  if(pid > 0){ // current process
-    // I am your father
-    checkpoints.push(pid);
-    struct ExecutionGuide guide;
-    guide.force_raise_exception = false;
-    guide.force_set_jump_target = true;
-    guide.jump_target = jump_target_pc;
-    printf("force jump to %lx\n", jump_target_pc);
-    proxy->guided_exec(&guide);
-  } else {
-    // sleep until it is wakeuped
-    printf("I sleep\n");
-    sleep(999);//TODO
-  }
+  pid_t pid = request_slave_runahead_pc_guided(jump_target_pc);
   printf("fork result %d\n", pid);
   return pid;
 }
@@ -70,39 +103,43 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
 
 // Just normally run a inst
 // 
-// No checkpoint will be allocated
+// No checkpoint will be allocated.
+// If it is the first valid inst to be runahead, some init work will be done
+// in do_first_instr_runahead().
 int Runahead::do_instr_runahead(){
   if(!has_commit){
     do_first_instr_runahead();
   }
-  proxy->exec(1);
+  request_slave_runahead();
   return 0;
 }
 
 // Free the oldest checkpoint
 // 
-// Should be called when a branch is solved or that inst is committed 
-// Note that all checkpoints should be freed after that inst commits 
+// Should be called when a branch is solved or that inst is committed.
+// Note that all checkpoints should be freed after that inst commits.
 pid_t Runahead::free_checkpoint() {
   assert(checkpoints.size() > 0);
-  pid_t to_be_freed_pid = checkpoints.front();
-  checkpoints.pop();
-  // TODO
+  pid_t to_be_freed_pid = checkpoints.front().pid;
+  kill(to_be_freed_pid, SIGKILL);
+  checkpoints.pop_front();
   return to_be_freed_pid;
 }
-// resolve_branch(int checkpoint_pid)
 
 // Recover execuation state from checkpoint
-void Runahead::recover_checkpoint(int checkpoint_pid) {
-  // pop queue until we gey the same id
+void Runahead::recover_checkpoint(uint64_t checkpoint_id) {
+  debug_print_checkpoint_list();
+  // pop queue until we get the same id
   while(checkpoints.size() > 0) {
-    pid_t to_be_checked_pid = checkpoints.back();
-    if(to_be_checked_pid == checkpoint_pid) {
-      // wake up
-      // stop it self
-      return;
+    pid_t to_be_checked_cpid = checkpoints.back().checkpoint_id;
+    kill(checkpoints.back().pid, SIGKILL);
+    checkpoints.pop_back();
+    if(to_be_checked_cpid == checkpoint_id) {
+      printf("Recover to checkpoint %lx.\n", checkpoint_id);
+      return; // we have got the right checkpoint
     }
   }
+  printf("Failed to recover runahead checkpoint.\n");
   assert(0); // failed to recover checkpoint
 }
 
@@ -129,6 +166,7 @@ void Runahead::do_first_instr_runahead() {
     DynamicSimulatorConfig nemu_config;
     nemu_config.ignore_illegal_mem_access = true;
     proxy->update_config(&nemu_config);
+    init_runahead_slave();
   }
 }
 
@@ -149,6 +187,7 @@ int Runahead::step() { // override step() method
       printf("Run ahead: jump inst %lx commited, free oldest checkpoint\n", 
         dut_ptr->runahead_commit[i].pc
       );
+      free_checkpoint();
     }
     if(dut_ptr->runahead_redirect.valid) {
       dut_ptr->runahead_redirect.valid = false;
@@ -157,7 +196,9 @@ int Runahead::step() { // override step() method
         dut_ptr->runahead_redirect.target_pc,
         dut_ptr->runahead_redirect.checkpoint_id
       );
-      // TODO: recover nemu
+      printf("Trying to recover checkpoint %lx\n", dut_ptr->runahead_redirect.checkpoint_id);
+      recover_checkpoint(dut_ptr->runahead_redirect.checkpoint_id);
+      branch_reported = false;
       printf("Run ahead: ignore run ahead req generated in current cycle\n");
       return 0; // ignore run ahead req generated in current cycle
     }
@@ -169,7 +210,12 @@ int Runahead::step() { // override step() method
       );
       // check if branch is reported by previous inst
       if(branch_reported) {
-        do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
+        pid_t pid = do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
+        RunaheadCheckpoint checkpoint;
+        checkpoint.pid = pid;
+        checkpoint.checkpoint_id = dut_ptr->runahead[i].checkpoint_id;
+        checkpoint.pc = dut_ptr->runahead[i].pc;
+        checkpoints.push_back(checkpoint);
         branch_reported = false;
       }
       if(dut_ptr->runahead[i].branch) { // TODO: add branch flag in hardware
@@ -185,39 +231,123 @@ int Runahead::step() { // override step() method
   return 0;
 }
 
-// ---------------------------------------------------
-// Run ahead control process
-// ---------------------------------------------------
-
-int runahead_init() {
-  runahead = new Runahead*[NUM_CORES];
-  assert(difftest);
-  for (int i = 0; i < NUM_CORES; i++) {
-    runahead[i] = new Runahead(i);
-    // runahead uses difftest_core_state_t dut in Difftest
-    // to be refactored later
-    runahead[i]->dut_ptr = difftest[i]->get_dut(); 
-    runahead[i]->ref_ptr = runahead[i]->get_ref(); 
-    runahead[i]->update_nemuproxy(i);
-  }
-  printf("Simulator run ahead of commit enabled.\n");
+pid_t Runahead::request_slave_runahead() {
+  RunaheadRequest request;
+  request.message_type = RUNAHEAD_MSG_REQ_RUN;
+  assert_no_error(msgsnd(runahead_req_msgq_id, &request, sizeof(RunaheadRequest) - sizeof(long int), 0));
   return 0;
 }
 
-int runahead_step() {
-  for (int i = 0; i < NUM_CORES; i++) {
-    int ret = runahead[i]->step();
-    if (ret) {
-      return ret;
+// Request slave to run a inst with assigned jump target pc
+//
+// Return checkpoint pid. Checkpoint is generated before inst exec.
+pid_t Runahead::request_slave_runahead_pc_guided(uint64_t target_pc) {
+  RunaheadRequest request;
+  request.message_type = RUNAHEAD_MSG_REQ_GUIDED_EXEC;
+  request.target_pc = target_pc;
+  assert_no_error(msgsnd(runahead_req_msgq_id, &request, sizeof(RunaheadRequest) - sizeof(long int), 0));
+  RunaheadResponsePid resp;
+  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_GUIDED_EXEC, 0));
+  assert(resp.pid > 0);
+  return resp.pid;
+}
+
+void Runahead::debug_print_checkpoint_list() {
+  for(auto i:checkpoints){
+    printf("checkpoint: checkpoint_id %lx pc %lx pid %x\n",
+      i.checkpoint_id,
+      i.pc,
+      i.pid
+    );
+  }
+}
+
+// ---------------------------------------------------
+// Run ahead slave process
+// ---------------------------------------------------
+
+// Slave process listens to msg queue, exec simulator according to instructions in msgq
+void Runahead::runahead_slave() {
+  printf("runahead_slave inited\n");
+  RunaheadRequest request;
+  while(1){
+    assert_no_error(msgrcv(runahead_req_msgq_id, &request, sizeof(request) - sizeof(long int), 0, 0));
+    printf("Received msg type: %ld\n", request.message_type);
+    switch(request.message_type) {
+      case RUNAHEAD_MSG_REQ_RUN:
+        proxy->exec(1);
+        printf("Run ahead: proxy->exec(1)\n");
+        break;
+      case RUNAHEAD_MSG_REQ_GUIDED_EXEC:
+        if(fork_runahead_slave() == 0) { // father process wait here
+          // child process continue to run
+          CP
+          struct ExecutionGuide guide;
+          guide.force_raise_exception = false;
+          guide.force_set_jump_target = true;
+          guide.jump_target = request.target_pc;
+          printf("force jump to %lx\n", request.target_pc);
+          proxy->guided_exec(&guide);
+          printf("Run ahead: proxy->guided_exec(&guide)\n");
+        }
+        break;
+      case RUNAHEAD_MSG_REQ_QUERY:
+        printf("Query runahead result");
+        break;
+      default:
+        printf("Runahead slave received invalid runahead req\n");
+        assert(0);
     }
+  };
+  assert(0);
+}
+
+// Create the first slave process for simulator runahead
+//
+// Return pid if succeed
+pid_t Runahead::init_runahead_slave() {
+  // run ahead simulator needs its own addr space
+  // slave will be initialized after first run ahead request is sent 
+  pid_t pid = fork();
+  if(pid < 0){
+    printf("Failed to create the first runahead slave\n");
+    assert(0);
+  }
+  if(pid == 0){
+    runahead_slave();
+  } else {
+    RunaheadCheckpoint checkpoint;
+    checkpoint.pid = pid;
+    checkpoint.checkpoint_id = -1;
+    checkpoint.pc = FIRST_INST_ADDRESS;
+    checkpoints.push_back(checkpoint);
   }
   return 0;
 }
 
-int init_runahead_worker(){
-    // run ahead simulator needs its own addr space
-    // init simulator
-    // TODO
-    // wait for singals
-    return 0;
+// Create run ahead slave process to establish a new checkpoint
+//
+// Return pid if succeed
+pid_t Runahead::fork_runahead_slave() {
+  // run ahead simulator needs its own addr space
+  // slave will be initialized after first run ahead request is sent 
+  pid_t pid = fork();
+  if(pid < 0){
+    printf("Failed to fork runahead slave\n");
+    assert(0);
+  }
+  if(pid == 0){
+    return 0; 
+    // I am the newest checkpoint
+  } else {
+    // Wait until checkpoint is recovered or checkpoint is freed
+    int status = -1;
+    // Send new pid to master
+    RunaheadResponsePid resp;
+    resp.message_type = RUNAHEAD_MSG_RESP_GUIDED_EXEC;
+    resp.pid = pid;
+    assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
+    waitpid(pid, &status, 0);
+    return pid;
+  }
 }

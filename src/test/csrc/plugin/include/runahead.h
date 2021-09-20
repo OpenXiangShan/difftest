@@ -21,12 +21,38 @@
 #include "common.h"
 #include "difftest.h"
 #include "ram.h"
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+typedef struct RunaheadCheckpoint {
+  pid_t pid;
+  uint64_t checkpoint_id;
+  uint64_t pc;
+} RunaheadCheckpoint;
+
+typedef struct RunaheadRequest {
+  long int message_type;
+  uint64_t target_pc;
+} RunaheadRequest;
+
+typedef struct RunaheadResponsePid {
+  long int message_type;
+  pid_t pid;
+} RunaheadResponsePid;
+
+typedef struct RunaheadResponseQuery {
+  long int message_type;
+  // TODO
+} RunaheadResponseQuery;
 
 class Runahead: public Difftest {
 public:
   Runahead(int coreid);
   pid_t free_checkpoint();
-  void recover_checkpoint(int checkpoint_id);
+  void recover_checkpoint(uint64_t checkpoint_id);
   void restart();
   void update_debug_info(void* dest_buffer);
   void run_first_instr();
@@ -34,6 +60,12 @@ public:
   bool checkpoint_num_exceed_limit();
   int do_instr_runahead();
   pid_t do_instr_runahead_pc_guided(uint64_t jump_target_pc);
+  pid_t init_runahead_slave();
+  pid_t fork_runahead_slave();
+  void runahead_slave();
+  pid_t request_slave_runahead();
+  pid_t request_slave_runahead_pc_guided(uint64_t target_pc);
+  void debug_print_checkpoint_list();
 
   void do_first_instr_runahead();
 
@@ -45,12 +77,25 @@ public:
 
 private:
 #define RUN_AHEAD_CHECKPOINT_SIZE 64
-  std::queue<pid_t> checkpoints;
+  std::deque<RunaheadCheckpoint> checkpoints;
 };
 
 extern Runahead** runahead;
-int init_runahead_worker();
+int init_runahead_slave();
 int runahead_init();
 int runahead_step();
+
+enum {
+  RUNAHEAD_MSG_REQ_ALL,
+  RUNAHEAD_MSG_REQ_RUN,
+  RUNAHEAD_MSG_REQ_GUIDED_EXEC,
+  RUNAHEAD_MSG_REQ_QUERY
+};
+
+enum {
+  RUNAHEAD_MSG_RESP_ALL,
+  RUNAHEAD_MSG_RESP_GUIDED_EXEC,
+  RUNAHEAD_MSG_RESP_QUERY,
+};
 
 #endif
