@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cerrno>
 #include <pthread.h>
+#include <unistd.h>
 #include "../../../../config/config.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -52,5 +53,24 @@ typedef uint64_t rtlreg_t;
 typedef uint64_t paddr_t;
 typedef uint64_t vaddr_t;
 typedef uint16_t ioaddr_t;
+
+#define Assert(cond, ...) \
+  do { \
+    if (!(cond)) { \
+      fflush(stdout); \
+      fprintf(stderr, "\33[1;31m"); \
+      fprintf(stderr, __VA_ARGS__); \
+      fprintf(stderr, "\33[0m\n"); \
+      assert(cond); \
+    } \
+  } while (0)
+
+#define panic(...) Assert(0, __VA_ARGS__)
+
+#define fprint_with_pid(stream, ...) \
+  do { \
+    fprintf(stream, "(%d) ", getpid()); \
+    fprintf(stream, __VA_ARGS__); \
+  }while(0)
 
 #endif // __COMMON_H

@@ -100,4 +100,9 @@ enum {
   RUNAHEAD_MSG_RESP_QUERY,
 };
 
+#define runahead_debug(...) \
+  do { \
+    fprint_with_pid(stdout, __VA_ARGS__); \
+  }while(0)
+
 #endif

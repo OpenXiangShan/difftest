@@ -18,7 +18,7 @@
 #include "runahead.h"
 
 #define assert_no_error(func) if((func) == -1) { \
-  printf("%s\n", std::strerror(errno)); \
+  runahead_debug("%s\n", std::strerror(errno)); \
   assert(0); \
 }
 
@@ -53,17 +53,17 @@ int runahead_init() {
     runahead[i]->ref_ptr = runahead[i]->get_ref(); 
     runahead[i]->update_nemuproxy(i);
   }
-  printf("Allocate msgq for %s\n", emu_path);
+  runahead_debug("Allocate msgq for %s\n", emu_path);
   key_t req_msgq_key = ftok(emu_path, 'a');
   runahead_req_msgq_id = msgget(req_msgq_key, IPC_CREAT | 0600);
   key_t resp_msgq_key = ftok(emu_path,'b');
   runahead_resp_msgq_id = msgget(resp_msgq_key , IPC_CREAT | 0600);
   if((runahead_req_msgq_id <= 0) || (runahead_resp_msgq_id <= 0)){
-    printf("%s\n", std::strerror(errno));
-    printf("Failed to create run ahead message queue.\n");
+    runahead_debug("%s\n", std::strerror(errno));
+    runahead_debug("Failed to create run ahead message queue.\n");
     assert(0);
   }
-  printf("Simulator run ahead of commit enabled.\n");
+  runahead_debug("Simulator run ahead of commit enabled.\n");
   return 0;
 }
 
@@ -94,12 +94,12 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
   assert(has_commit);
   // check if checkpoint list is full
   if(checkpoint_num_exceed_limit()){
-    printf("Checkpoint list is full, you may forget to free resolved checkpoints\n");
+    runahead_debug("Checkpoint list is full, you may forget to free resolved checkpoints\n");
     assert(0);
   }
   // if not, fork to create a new checkpoint
   pid_t pid = request_slave_runahead_pc_guided(jump_target_pc);
-  printf("fork result %d\n", pid);
+  runahead_debug("fork result %d\n", pid);
   return pid;
 }
 
@@ -143,14 +143,14 @@ void Runahead::recover_checkpoint(uint64_t checkpoint_id) {
   while(checkpoints.size() > 0) {
     pid_t to_be_checked_cpid = checkpoints.back().checkpoint_id;
     kill(checkpoints.back().pid, SIGTERM);
-    printf("kill %x\n", checkpoints.back().pid);
+    runahead_debug("kill %x\n", checkpoints.back().pid);
     checkpoints.pop_back();
     if(to_be_checked_cpid == checkpoint_id) {
-      printf("Recover to checkpoint %lx.\n", checkpoint_id);
+      runahead_debug("Recover to checkpoint %lx.\n", checkpoint_id);
       return; // we have got the right checkpoint
     }
   }
-  printf("Failed to recover runahead checkpoint.\n");
+  runahead_debug("Failed to recover runahead checkpoint.\n");
   assert(0); // failed to recover checkpoint
 }
 
@@ -165,7 +165,7 @@ void Runahead::update_debug_info(void* dest_buffer) {
 
 void Runahead::do_first_instr_runahead() {
   if (!has_commit && dut_ptr->runahead[0].valid && dut_ptr->runahead[0].pc == FIRST_INST_ADDRESS) {
-    printf("The first instruction of core %d start to run ahead.\n", id);
+    runahead_debug("The first instruction of core %d start to run ahead.\n", id);
     has_commit = 1;
     // nemu_this_pc = dut_ptr->runahead[0].pc;
 
@@ -196,26 +196,26 @@ int Runahead::step() { // override step() method
   } else {
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut_ptr->runahead_commit[i].valid; i++) {
       dut_ptr->runahead_commit[i].valid = false;
-      printf("Run ahead: jump inst %lx commited, free oldest checkpoint\n", 
+      runahead_debug("Run ahead: jump inst %lx commited, free oldest checkpoint\n", 
         dut_ptr->runahead_commit[i].pc
       );
       free_checkpoint();
     }
     if(dut_ptr->runahead_redirect.valid) {
       dut_ptr->runahead_redirect.valid = false;
-      printf("Run ahead: pc %lx redirect to %lx, recover cpid %lx\n",
+      runahead_debug("Run ahead: pc %lx redirect to %lx, recover cpid %lx\n",
         dut_ptr->runahead_redirect.pc,
         dut_ptr->runahead_redirect.target_pc,
         dut_ptr->runahead_redirect.checkpoint_id
       );
-      printf("Trying to recover checkpoint %lx\n", dut_ptr->runahead_redirect.checkpoint_id);
+      runahead_debug("Trying to recover checkpoint %lx\n", dut_ptr->runahead_redirect.checkpoint_id);
       recover_checkpoint(dut_ptr->runahead_redirect.checkpoint_id);
       branch_reported = false;
-      printf("Run ahead: ignore run ahead req generated in current cycle\n");
+      runahead_debug("Run ahead: ignore run ahead req generated in current cycle\n");
       return 0; // ignore run ahead req generated in current cycle
     }
     for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH && dut_ptr->runahead[i].valid; i++) {
-      printf("Run ahead: pc %lx branch(reported by DUT) %x cpid %lx\n", 
+      runahead_debug("Run ahead: pc %lx branch(reported by DUT) %x cpid %lx\n", 
         dut_ptr->runahead[i].pc, 
         dut_ptr->runahead[i].branch,
         dut_ptr->runahead[i].checkpoint_id 
@@ -229,7 +229,7 @@ int Runahead::step() { // override step() method
         checkpoint.checkpoint_id = branch_checkpoint_id;
         checkpoint.pc = branch_pc;
         checkpoints.push_back(checkpoint);
-        printf("New checkpoint: pid %x cpid %lx pc %lx\n", 
+        runahead_debug("New checkpoint: pid %x cpid %lx pc %lx\n", 
           checkpoint.pid,
           checkpoint.checkpoint_id,
           checkpoint.pc
@@ -278,7 +278,7 @@ pid_t Runahead::request_slave_runahead_pc_guided(uint64_t target_pc) {
 
 void Runahead::debug_print_checkpoint_list() {
   for(auto i:checkpoints){
-    printf("checkpoint: checkpoint_id %lx pc %lx pid %x\n",
+    runahead_debug("checkpoint: checkpoint_id %lx pc %lx pid %x\n",
       i.checkpoint_id,
       i.pc,
       i.pid
@@ -293,18 +293,18 @@ void Runahead::debug_print_checkpoint_list() {
 
 // Slave process listens to msg queue, exec simulator according to instructions in msgq
 void Runahead::runahead_slave() {
-  printf("runahead_slave inited\n");
+  runahead_debug("runahead_slave inited\n");
   RunaheadRequest request;
   RunaheadResponsePid resp;
   resp.message_type = RUNAHEAD_MSG_RESP_EXEC;
   resp.pid = 0;
   while(1){
     assert_no_error(msgrcv(runahead_req_msgq_id, &request, sizeof(request) - sizeof(long int), 0, 0));
-    printf("Received msg type: %ld\n", request.message_type);
+    runahead_debug("Received msg type: %ld\n", request.message_type);
     switch(request.message_type) {
       case RUNAHEAD_MSG_REQ_EXEC:
         proxy->exec(1);
-        printf("Run ahead: proxy->exec(1)\n");
+        runahead_debug("Run ahead: proxy->exec(1)\n");
         assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
         break;
       case RUNAHEAD_MSG_REQ_GUIDED_EXEC:
@@ -314,17 +314,17 @@ void Runahead::runahead_slave() {
           guide.force_raise_exception = false;
           guide.force_set_jump_target = true;
           guide.jump_target = request.target_pc;
-          printf("force jump to %lx\n", request.target_pc);
+          runahead_debug("force jump to %lx\n", request.target_pc);
           proxy->guided_exec(&guide);
-          printf("Run ahead: proxy->guided_exec(&guide)\n");
+          runahead_debug("Run ahead: proxy->guided_exec(&guide)\n");
           assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
         }
         break;
       case RUNAHEAD_MSG_REQ_QUERY:
-        printf("Query runahead result");
+        runahead_debug("Query runahead result");
         break;
       default:
-        printf("Runahead slave received invalid runahead req\n");
+        runahead_debug("Runahead slave received invalid runahead req\n");
         assert(0);
     }
   };
@@ -339,7 +339,7 @@ pid_t Runahead::init_runahead_slave() {
   // slave will be initialized after first run ahead request is sent 
   pid_t pid = fork();
   if(pid < 0){
-    printf("Failed to create the first runahead slave\n");
+    runahead_debug("Failed to create the first runahead slave\n");
     assert(0);
   }
   if(pid == 0){
@@ -362,7 +362,7 @@ pid_t Runahead::fork_runahead_slave() {
   // slave will be initialized after first run ahead request is sent 
   pid_t pid = fork();
   if(pid < 0){
-    printf("Failed to fork runahead slave\n");
+    runahead_debug("Failed to fork runahead slave\n");
     assert(0);
   }
   if(pid == 0){
@@ -376,9 +376,9 @@ pid_t Runahead::fork_runahead_slave() {
     resp.message_type = RUNAHEAD_MSG_RESP_FORK;
     resp.pid = pid;
     assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
-    printf("%x wait for %x\n", getpid(), pid);
+    runahead_debug("%x wait for %x\n", getpid(), pid);
     waitpid(pid, &status, 0);
-    printf("pid %x wakeup\n", getpid());
+    runahead_debug("pid %x wakeup\n", getpid());
     return pid;
   }
 }
