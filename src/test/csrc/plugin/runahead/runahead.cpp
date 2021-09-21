@@ -17,11 +17,6 @@
 #include <vector>
 #include "runahead.h"
 
-#define assert_no_error(func) if((func) == -1) { \
-  runahead_debug("%s\n", std::strerror(errno)); \
-  assert(0); \
-}
-
 // ---------------------------------------------------
 // Run ahead master process
 // ---------------------------------------------------

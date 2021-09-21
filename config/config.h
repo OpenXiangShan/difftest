@@ -33,12 +33,12 @@
 #define FIRST_INST_ADDRESS 0x80000000
 
 // sdcard image to be used in simulation
-// uncomment the follwing line to enable this feature
+// uncomment the following line to enable this feature
 // #define SDCARD_IMAGE "/home/xyn/workloads/debian/riscv-debian.img"
 
 // Use sdl to show screen
 // Note: It does not work well with clang, to use that, switch to gcc
-// uncomment the follwing line to enable this feature
+// uncomment the following line to enable this feature
 // #define SHOW_SCREEN
 
 // -----------------------------------------------------------------------
@@ -84,7 +84,7 @@
 // #define DEBUG_REFILL
 
 // dump all tilelink trace to a database
-// uncomment the follwing line to enable this feature
+// uncomment the following line to enable this feature
 //#define DEBUG_TILELINK
 
 
@@ -95,6 +95,10 @@
 // Let a fork of simulator run ahead of commit for perf analysis
 // max run ahead width
 #define DIFFTEST_RUNAHEAD_WIDTH 6
+
+// print simulator runahead debug info
+// uncomment the following line to enable this feature
+// #define RUNAHEAD_DEBUG
 
 // -----------------------------------------------------------------------
 // Do not touch

@@ -100,9 +100,18 @@ enum {
   RUNAHEAD_MSG_RESP_QUERY,
 };
 
+#ifdef RUNAHEAD_DEBUG
 #define runahead_debug(...) \
   do { \
     fprint_with_pid(stdout, __VA_ARGS__); \
   }while(0)
+#else
+#define runahead_debug(...)
+#endif
+
+#define assert_no_error(func) if((func) == -1) { \
+  fprintf(stderr, "%s\n", std::strerror(errno)); \
+  assert(0); \
+}
 
 #endif
