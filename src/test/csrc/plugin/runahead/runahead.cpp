@@ -128,8 +128,9 @@ pid_t Runahead::free_checkpoint() {
   static int num_checkpoint_to_be_freed = 0;
   num_checkpoint_to_be_freed ++;
   debug_print_checkpoint_list();
-  while(checkpoints.size() > 1){ // there should always be at least 1 active slave
+  while(num_checkpoint_to_be_freed && checkpoints.size() > 1){ // there should always be at least 1 active slave
     pid_t to_be_freed_pid = checkpoints.front().pid;
+    runahead_debug("Free checkpoint %lx\n", checkpoints.front().checkpoint_id);
     kill(to_be_freed_pid, SIGTERM);
     checkpoints.pop_front();
   }
@@ -139,11 +140,12 @@ pid_t Runahead::free_checkpoint() {
 // Recover execuation state from checkpoint
 void Runahead::recover_checkpoint(uint64_t checkpoint_id) {
   debug_print_checkpoint_list();
+  assert(checkpoints.size() > 1); // Must maintain at least 1 active slave
   // pop queue until we get the same id
   while(checkpoints.size() > 0) {
     pid_t to_be_checked_cpid = checkpoints.back().checkpoint_id;
     kill(checkpoints.back().pid, SIGTERM);
-    runahead_debug("kill %x\n", checkpoints.back().pid);
+    runahead_debug("kill %d\n", checkpoints.back().pid);
     checkpoints.pop_back();
     if(to_be_checked_cpid == checkpoint_id) {
       runahead_debug("Recover to checkpoint %lx.\n", checkpoint_id);
@@ -210,9 +212,13 @@ int Runahead::step() { // override step() method
       );
       runahead_debug("Trying to recover checkpoint %lx\n", dut_ptr->runahead_redirect.checkpoint_id);
       recover_checkpoint(dut_ptr->runahead_redirect.checkpoint_id);
-      branch_reported = false;
+      branch_reported = true; // next run ahead request will report new target pc
       runahead_debug("Run ahead: ignore run ahead req generated in current cycle\n");
-      return 0; // ignore run ahead req generated in current cycle
+      for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH; i++) {
+      // ignore run ahead req generated in current cycle
+        dut_ptr->runahead[i].valid = false;
+      }
+      return 0; 
     }
     for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH && dut_ptr->runahead[i].valid; i++) {
       runahead_debug("Run ahead: pc %lx branch(reported by DUT) %x cpid %lx\n", 
@@ -229,7 +235,7 @@ int Runahead::step() { // override step() method
         checkpoint.checkpoint_id = branch_checkpoint_id;
         checkpoint.pc = branch_pc;
         checkpoints.push_back(checkpoint);
-        runahead_debug("New checkpoint: pid %x cpid %lx pc %lx\n", 
+        runahead_debug("New checkpoint: pid %d cpid %lx pc %lx\n", 
           checkpoint.pid,
           checkpoint.checkpoint_id,
           checkpoint.pc
@@ -278,7 +284,7 @@ pid_t Runahead::request_slave_runahead_pc_guided(uint64_t target_pc) {
 
 void Runahead::debug_print_checkpoint_list() {
   for(auto i:checkpoints){
-    runahead_debug("checkpoint: checkpoint_id %lx pc %lx pid %x\n",
+    runahead_debug("checkpoint: checkpoint_id %lx pc %lx pid %d\n",
       i.checkpoint_id,
       i.pc,
       i.pid
@@ -376,9 +382,9 @@ pid_t Runahead::fork_runahead_slave() {
     resp.message_type = RUNAHEAD_MSG_RESP_FORK;
     resp.pid = pid;
     assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
-    runahead_debug("%x wait for %x\n", getpid(), pid);
+    runahead_debug("%d wait for %d\n", getpid(), pid);
     waitpid(pid, &status, 0);
-    runahead_debug("pid %x wakeup\n", getpid());
+    runahead_debug("pid %d wakeup\n", getpid());
     return pid;
   }
 }
