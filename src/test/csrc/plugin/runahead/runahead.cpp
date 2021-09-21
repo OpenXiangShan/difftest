@@ -126,13 +126,14 @@ int Runahead::do_instr_runahead(){
 // Note that all checkpoints should be freed after that inst commits.
 pid_t Runahead::free_checkpoint() {
   static int num_checkpoint_to_be_freed = 0;
-  num_checkpoint_to_be_freed ++;
+  num_checkpoint_to_be_freed++;
   debug_print_checkpoint_list();
   while(num_checkpoint_to_be_freed && checkpoints.size() > 1){ // there should always be at least 1 active slave
     pid_t to_be_freed_pid = checkpoints.front().pid;
     runahead_debug("Free checkpoint %lx\n", checkpoints.front().checkpoint_id);
     kill(to_be_freed_pid, SIGTERM);
     checkpoints.pop_front();
+    num_checkpoint_to_be_freed--;
   }
   return 0;
 }
