@@ -86,7 +86,6 @@ void Difftest::update_nemuproxy(int coreid) {
 }
 
 int Difftest::step() {
-  return 0; // disable diff to debug run ahead
   progress = false;
   ticks++;
 
