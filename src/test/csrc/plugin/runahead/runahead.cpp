@@ -197,13 +197,6 @@ int Runahead::step() { // override step() method
     assert(0); //TODO
     do_exception();
   } else {
-    for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut_ptr->runahead_commit[i].valid; i++) {
-      dut_ptr->runahead_commit[i].valid = false;
-      runahead_debug("Run ahead: jump inst %lx commited, free oldest checkpoint\n", 
-        dut_ptr->runahead_commit[i].pc
-      );
-      free_checkpoint();
-    }
     if(dut_ptr->runahead_redirect.valid) {
       dut_ptr->runahead_redirect.valid = false;
       runahead_debug("Run ahead: pc %lx redirect to %lx, recover cpid %lx\n",
@@ -211,8 +204,13 @@ int Runahead::step() { // override step() method
         dut_ptr->runahead_redirect.target_pc,
         dut_ptr->runahead_redirect.checkpoint_id
       );
-      runahead_debug("Trying to recover checkpoint %lx\n", dut_ptr->runahead_redirect.checkpoint_id);
-      recover_checkpoint(dut_ptr->runahead_redirect.checkpoint_id);
+      // no need to recover checkpoint if checkpoint has not been established
+      if(branch_reported && branch_checkpoint_id == dut_ptr->runahead_redirect.checkpoint_id){
+        runahead_debug("Trying to recover checkpoint %lx, which has not been established yet\n", dut_ptr->runahead_redirect.checkpoint_id);
+      } else {
+        runahead_debug("Trying to recover checkpoint %lx\n", dut_ptr->runahead_redirect.checkpoint_id);
+        recover_checkpoint(dut_ptr->runahead_redirect.checkpoint_id);
+      }
       branch_reported = true; // next run ahead request will report new target pc
       runahead_debug("Run ahead: ignore run ahead req generated in current cycle\n");
       for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH; i++) {
@@ -220,6 +218,13 @@ int Runahead::step() { // override step() method
         dut_ptr->runahead[i].valid = false;
       }
       return 0; 
+    }
+    for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut_ptr->runahead_commit[i].valid; i++) {
+      dut_ptr->runahead_commit[i].valid = false;
+      runahead_debug("Run ahead: jump inst %lx commited, free oldest checkpoint\n", 
+        dut_ptr->runahead_commit[i].pc
+      );
+      free_checkpoint();
     }
     for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH && dut_ptr->runahead[i].valid; i++) {
       runahead_debug("Run ahead: pc %lx branch(reported by DUT) %x cpid %lx\n", 
