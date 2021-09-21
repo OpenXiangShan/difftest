@@ -35,6 +35,13 @@ Runahead::Runahead(int coreid): Difftest(coreid) {
   
 }
 
+void Runahead::remove_all_checkpoints(){
+  while(checkpoints.size()){
+    kill(checkpoints.front().pid, SIGTERM);
+    checkpoints.pop_front();
+  }
+}
+
 int runahead_init() {
   runahead = new Runahead*[NUM_CORES];
   assert(difftest);
@@ -46,12 +53,11 @@ int runahead_init() {
     runahead[i]->ref_ptr = runahead[i]->get_ref(); 
     runahead[i]->update_nemuproxy(i);
   }
-  auto emu_name = ".";
-  printf("Allocate msgq for %s\n", emu_name);
-  key_t req_msgq_key = ftok(emu_name, 'a');
-  runahead_req_msgq_id = msgget(req_msgq_key, IPC_CREAT);
-  key_t resp_msgq_key = ftok(emu_name,'b');
-  runahead_resp_msgq_id = msgget(resp_msgq_key , IPC_CREAT);
+  printf("Allocate msgq for %s\n", emu_path);
+  key_t req_msgq_key = ftok(emu_path, 'a');
+  runahead_req_msgq_id = msgget(req_msgq_key, IPC_CREAT | 0600);
+  key_t resp_msgq_key = ftok(emu_path,'b');
+  runahead_resp_msgq_id = msgget(resp_msgq_key , IPC_CREAT | 0600);
   if((runahead_req_msgq_id <= 0) || (runahead_resp_msgq_id <= 0)){
     printf("%s\n", std::strerror(errno));
     printf("Failed to create run ahead message queue.\n");
@@ -119,11 +125,15 @@ int Runahead::do_instr_runahead(){
 // Should be called when a branch is solved or that inst is committed.
 // Note that all checkpoints should be freed after that inst commits.
 pid_t Runahead::free_checkpoint() {
-  assert(checkpoints.size() > 0);
-  pid_t to_be_freed_pid = checkpoints.front().pid;
-  kill(to_be_freed_pid, SIGKILL);
-  checkpoints.pop_front();
-  return to_be_freed_pid;
+  static int num_checkpoint_to_be_freed = 0;
+  num_checkpoint_to_be_freed ++;
+  debug_print_checkpoint_list();
+  while(checkpoints.size() > 1){ // there should always be at least 1 active slave
+    pid_t to_be_freed_pid = checkpoints.front().pid;
+    kill(to_be_freed_pid, SIGTERM);
+    checkpoints.pop_front();
+  }
+  return 0;
 }
 
 // Recover execuation state from checkpoint
@@ -132,7 +142,8 @@ void Runahead::recover_checkpoint(uint64_t checkpoint_id) {
   // pop queue until we get the same id
   while(checkpoints.size() > 0) {
     pid_t to_be_checked_cpid = checkpoints.back().checkpoint_id;
-    kill(checkpoints.back().pid, SIGKILL);
+    kill(checkpoints.back().pid, SIGTERM);
+    printf("kill %x\n", checkpoints.back().pid);
     checkpoints.pop_back();
     if(to_be_checked_cpid == checkpoint_id) {
       printf("Recover to checkpoint %lx.\n", checkpoint_id);
@@ -172,7 +183,8 @@ void Runahead::do_first_instr_runahead() {
 
 int Runahead::step() { // override step() method
   static bool branch_reported;
-  static uint64_t debug_branch_pc;
+  static uint64_t branch_checkpoint_id;
+  static uint64_t branch_pc;
   if (dut_ptr->event.interrupt) {
     assert(0); //TODO
     do_interrupt();
@@ -211,16 +223,23 @@ int Runahead::step() { // override step() method
       // check if branch is reported by previous inst
       if(branch_reported) {
         pid_t pid = do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
+        // register new checkpoint
         RunaheadCheckpoint checkpoint;
         checkpoint.pid = pid;
-        checkpoint.checkpoint_id = dut_ptr->runahead[i].checkpoint_id;
-        checkpoint.pc = dut_ptr->runahead[i].pc;
+        checkpoint.checkpoint_id = branch_checkpoint_id;
+        checkpoint.pc = branch_pc;
         checkpoints.push_back(checkpoint);
+        printf("New checkpoint: pid %x cpid %lx pc %lx\n", 
+          checkpoint.pid,
+          checkpoint.checkpoint_id,
+          checkpoint.pc
+        );
         branch_reported = false;
       }
       if(dut_ptr->runahead[i].branch) { // TODO: add branch flag in hardware
         branch_reported = true;
-        debug_branch_pc = dut_ptr->runahead[i].pc;
+        branch_checkpoint_id = dut_ptr->runahead[i].checkpoint_id;
+        branch_pc = dut_ptr->runahead[i].pc;
         // setup checkpoint here
       } else {
         do_instr_runahead();
@@ -233,8 +252,11 @@ int Runahead::step() { // override step() method
 
 pid_t Runahead::request_slave_runahead() {
   RunaheadRequest request;
-  request.message_type = RUNAHEAD_MSG_REQ_RUN;
+  RunaheadResponsePid resp;
+  request.message_type = RUNAHEAD_MSG_REQ_EXEC;
   assert_no_error(msgsnd(runahead_req_msgq_id, &request, sizeof(RunaheadRequest) - sizeof(long int), 0));
+  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_EXEC, 0));
+  assert(resp.pid == 0);
   return 0;
 }
 
@@ -246,10 +268,12 @@ pid_t Runahead::request_slave_runahead_pc_guided(uint64_t target_pc) {
   request.message_type = RUNAHEAD_MSG_REQ_GUIDED_EXEC;
   request.target_pc = target_pc;
   assert_no_error(msgsnd(runahead_req_msgq_id, &request, sizeof(RunaheadRequest) - sizeof(long int), 0));
-  RunaheadResponsePid resp;
-  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_GUIDED_EXEC, 0));
-  assert(resp.pid > 0);
-  return resp.pid;
+  RunaheadResponsePid resp_exec;
+  RunaheadResponsePid resp_fork;
+  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp_exec, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_EXEC, 0));
+  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp_fork, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_FORK, 0));
+  assert(resp_fork.pid > 0); // fork succeed
+  return resp_fork.pid;
 }
 
 void Runahead::debug_print_checkpoint_list() {
@@ -260,6 +284,7 @@ void Runahead::debug_print_checkpoint_list() {
       i.pid
     );
   }
+  fflush(stdout);
 }
 
 // ---------------------------------------------------
@@ -270,18 +295,21 @@ void Runahead::debug_print_checkpoint_list() {
 void Runahead::runahead_slave() {
   printf("runahead_slave inited\n");
   RunaheadRequest request;
+  RunaheadResponsePid resp;
+  resp.message_type = RUNAHEAD_MSG_RESP_EXEC;
+  resp.pid = 0;
   while(1){
     assert_no_error(msgrcv(runahead_req_msgq_id, &request, sizeof(request) - sizeof(long int), 0, 0));
     printf("Received msg type: %ld\n", request.message_type);
     switch(request.message_type) {
-      case RUNAHEAD_MSG_REQ_RUN:
+      case RUNAHEAD_MSG_REQ_EXEC:
         proxy->exec(1);
         printf("Run ahead: proxy->exec(1)\n");
+        assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
         break;
       case RUNAHEAD_MSG_REQ_GUIDED_EXEC:
         if(fork_runahead_slave() == 0) { // father process wait here
           // child process continue to run
-          CP
           struct ExecutionGuide guide;
           guide.force_raise_exception = false;
           guide.force_set_jump_target = true;
@@ -289,6 +317,7 @@ void Runahead::runahead_slave() {
           printf("force jump to %lx\n", request.target_pc);
           proxy->guided_exec(&guide);
           printf("Run ahead: proxy->guided_exec(&guide)\n");
+          assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
         }
         break;
       case RUNAHEAD_MSG_REQ_QUERY:
@@ -344,10 +373,12 @@ pid_t Runahead::fork_runahead_slave() {
     int status = -1;
     // Send new pid to master
     RunaheadResponsePid resp;
-    resp.message_type = RUNAHEAD_MSG_RESP_GUIDED_EXEC;
+    resp.message_type = RUNAHEAD_MSG_RESP_FORK;
     resp.pid = pid;
     assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
+    printf("%x wait for %x\n", getpid(), pid);
     waitpid(pid, &status, 0);
+    printf("pid %x wakeup\n", getpid());
     return pid;
   }
 }

@@ -45,7 +45,7 @@ NemuProxy::NemuProxy(int coreid) {
     difftest_ref_so = buf;
   }
 
-  printf("Using %s for difftest\n", difftest_ref_so);
+  printf("NemuProxy using %s\n", difftest_ref_so);
 
   void *handle = dlmopen(LM_ID_NEWLM, difftest_ref_so, RTLD_LAZY | RTLD_DEEPBIND);
   if(!handle){

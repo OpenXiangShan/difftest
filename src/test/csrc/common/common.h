@@ -41,7 +41,7 @@
 #endif
 
 extern int assert_count;
-extern char* emu_path;
+extern const char* emu_path;
 void assert_init();
 void assert_finish();
 

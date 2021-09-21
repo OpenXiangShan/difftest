@@ -20,6 +20,7 @@
 int assert_count = 0;
 static pthread_mutex_t assert_mutex;
 int signal_num = 0;
+const char* emu_path = NULL;
 
 void assert_init() {
   pthread_mutex_init(&assert_mutex, 0);
