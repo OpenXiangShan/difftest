@@ -67,10 +67,17 @@ typedef uint16_t ioaddr_t;
 
 #define panic(...) Assert(0, __VA_ARGS__)
 
-#define fprint_with_pid(stream, ...) \
+#define fprintf_with_pid(stream, ...) \
   do { \
     fprintf(stream, "(%d) ", getpid()); \
     fprintf(stream, __VA_ARGS__); \
   }while(0)
+
+#define printf_with_pid(...) \
+  do { \
+    fprintf_with_pid(stdout, __VA_ARGS__); \
+  }while(0)
+
+#define TODO() panic("please implement me")
 
 #endif // __COMMON_H

@@ -79,6 +79,22 @@ bool Runahead::checkpoint_num_exceed_limit() {
   return checkpoints.size() >= RUN_AHEAD_CHECKPOINT_SIZE;
 }
 
+// Just normally run a inst
+// 
+// No checkpoint will be allocated.
+// If it is the first valid inst to be runahead, some init work will be done
+// in do_first_instr_runahead().
+int Runahead::do_instr_runahead(){
+  if(!has_commit){
+    do_first_instr_runahead();
+  }
+  request_slave_runahead();
+#ifdef QUERY_MEM_ACCESS
+  do_query_mem_access();
+#endif
+  return 0;
+}
+
 // If current inst is a jump, set up a checkpoint for recovering, 
 // then set jump target to jump_target_pc
 //
@@ -95,25 +111,15 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
   // if not, fork to create a new checkpoint
   pid_t pid = request_slave_runahead_pc_guided(jump_target_pc);
   runahead_debug("fork result %d\n", pid);
+#ifdef QUERY_MEM_ACCESS
+  do_query_mem_access();
+#endif
   return pid;
 }
 
 // Note: How to skip inst?
 // * MMIO -> detect by ref
 // * External int, time int, etc. -> should not influence run ahead
-
-// Just normally run a inst
-// 
-// No checkpoint will be allocated.
-// If it is the first valid inst to be runahead, some init work will be done
-// in do_first_instr_runahead().
-int Runahead::do_instr_runahead(){
-  if(!has_commit){
-    do_first_instr_runahead();
-  }
-  request_slave_runahead();
-  return 0;
-}
 
 // Free the oldest checkpoint
 // 
@@ -257,6 +263,7 @@ int Runahead::step() { // override step() method
   return 0;
 }
 
+// Request slave to run a single inst
 pid_t Runahead::request_slave_runahead() {
   RunaheadRequest request;
   RunaheadResponsePid resp;
@@ -283,6 +290,17 @@ pid_t Runahead::request_slave_runahead_pc_guided(uint64_t target_pc) {
   return resp_fork.pid;
 }
 
+// Request slave to run a single inst
+void Runahead::request_slave_refquery(void* resp_target, int type) {
+  RunaheadRequest request;
+  request.message_type = RUNAHEAD_MSG_REQ_QUERY;
+  request.query_type = type;
+  assert_no_error(msgsnd(runahead_req_msgq_id, &request, sizeof(RunaheadRequest) - sizeof(long int), 0));
+  assert_no_error(msgrcv(runahead_resp_msgq_id, resp_target, sizeof(RunaheadResponseQuery) - sizeof(long int), RUNAHEAD_MSG_RESP_QUERY, 0));
+  return;
+}
+
+// Print all valid items in checkpoint_list (oldest first) 
 void Runahead::debug_print_checkpoint_list() {
   for(auto i:checkpoints){
     runahead_debug("checkpoint: checkpoint_id %lx pc %lx pid %d\n",
@@ -294,6 +312,19 @@ void Runahead::debug_print_checkpoint_list() {
   fflush(stdout);
 }
 
+#ifdef QUERY_MEM_ACCESS
+void Runahead::do_query_mem_access() {
+  RunaheadResponseQuery query_resp;
+  request_slave_refquery(&query_resp, REF_QUERY_MEM_EVENT);
+  runahead_debug("Query result: mem access %x isload %x vaddr %x\n",
+    query_resp.result.mem_access_info.mem_access,
+    query_resp.result.mem_access_info.mem_access_is_load,
+    query_resp.result.mem_access_info.mem_access_vaddr
+  );
+  return;
+}
+#endif
+
 // ---------------------------------------------------
 // Run ahead slave process
 // ---------------------------------------------------
@@ -303,8 +334,10 @@ void Runahead::runahead_slave() {
   runahead_debug("runahead_slave inited\n");
   RunaheadRequest request;
   RunaheadResponsePid resp;
+  RunaheadResponseQuery resp_query;
   resp.message_type = RUNAHEAD_MSG_RESP_EXEC;
   resp.pid = 0;
+  resp_query.message_type = RUNAHEAD_MSG_RESP_QUERY;
   while(1){
     assert_no_error(msgrcv(runahead_req_msgq_id, &request, sizeof(request) - sizeof(long int), 0, 0));
     runahead_debug("Received msg type: %ld\n", request.message_type);
@@ -328,7 +361,9 @@ void Runahead::runahead_slave() {
         }
         break;
       case RUNAHEAD_MSG_REQ_QUERY:
-        runahead_debug("Query runahead result");
+        runahead_debug("Query runahead result, type %x\n", request.query_type);
+        proxy->query(&resp_query.result, request.query_type);
+        assert_no_error(msgsnd(runahead_resp_msgq_id, &resp_query, sizeof(RunaheadResponseQuery) - sizeof(long int), 0));
         break;
       default:
         runahead_debug("Runahead slave received invalid runahead req\n");

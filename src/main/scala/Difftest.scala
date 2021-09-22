@@ -153,8 +153,8 @@ class DiffRunaheadCommitEventIO extends DifftestBundle with DifftestWithIndex {
 
 class DiffRunaheadRedirectEventIO extends DifftestBundle {
   val valid         = Input(Bool())
-  val pc            = Input(UInt(64.W))
-  val target_pc     = Input(UInt(64.W))
+  val pc            = Input(UInt(64.W)) // for debug only
+  val target_pc     = Input(UInt(64.W)) // for debug only
   val checkpoint_id = Input(UInt(64.W))
 }
 

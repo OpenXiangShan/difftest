@@ -35,6 +35,7 @@ public:
   vaddr_t (*update_config)(void *config);
   void (*raise_intr)(uint64_t no);
   void (*isa_reg_display)();
+  void (*query)(void *result_buffer, uint64_t type);
 
   NemuProxy(int coreid);
 private:

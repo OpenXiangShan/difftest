@@ -83,6 +83,9 @@ NemuProxy::NemuProxy(int coreid) {
   isa_reg_display = (void (*)(void))dlsym(handle, "isa_reg_display");
   check_and_assert(isa_reg_display);
 
+  query = (void (*)(void*, uint64_t))dlsym(handle, "difftest_query_ref");
+  check_and_assert(query);
+
   auto nemu_difftest_set_mhartid = (void (*)(int))dlsym(handle, "difftest_set_mhartid");
   if (NUM_CORES > 1) {
     check_and_assert(nemu_difftest_set_mhartid);
