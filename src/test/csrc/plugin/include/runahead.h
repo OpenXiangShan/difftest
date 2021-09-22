@@ -100,7 +100,8 @@ public:
   // To be refactored later. 
 
 #ifdef QUERY_MEM_ACCESS
-  void do_query_mem_access();
+  void do_query_mem_access(RunaheadResponseQuery* result_buffer);
+  int memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result);
 #endif
 
 #ifdef TRACE_INFLIGHT_MEM_INST

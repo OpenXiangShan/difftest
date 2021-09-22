@@ -688,3 +688,28 @@ endmodule
     coreid, valid, pc, target_pc, checkpoint_id
   ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadRedirectEvent)
 endmodule
+
+
+// DifftestRunaheadMemdepPred
+`DIFFTEST_DPIC_FUNC_DECL(RunaheadMemdepPred) (
+  `DPIC_ARG_BYTE coreid,
+  `DPIC_ARG_BYTE index,
+  `DPIC_ARG_BIT  valid,
+  `DPIC_ARG_BIT  is_load,
+  `DPIC_ARG_BIT  need_wait,
+  `DPIC_ARG_LONG pc
+);
+`DIFFTEST_MOD_DECL(RunaheadMemdepPred)(
+  input        clock,
+  input [ 7:0] coreid,
+  input [ 7:0] index,
+  input        valid,
+  input        is_load,
+  input        need_wait,
+  input [63:0] pc
+);
+  `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RunaheadMemdepPred) (
+    coreid, index, valid, is_load, need_wait, pc
+  ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadMemdepPred)
+endmodule
+

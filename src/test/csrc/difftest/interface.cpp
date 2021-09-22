@@ -329,3 +329,14 @@ INTERFACE_RUNAHEAD_REDIRECT_EVENT {
     packet->checkpoint_id = checkpoint_id;
   }
 }
+
+INTERFACE_RUNAHEAD_MEMDEP_PRED {
+  if (runahead == NULL) return;
+  auto packet = difftest[coreid]->get_runahead_memdep_pred(index);
+  packet->valid = valid;
+  if (packet->valid) {
+    packet->is_load = is_load;
+    packet->need_wait = need_wait;
+    packet->pc = pc;
+  }
+}

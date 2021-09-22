@@ -156,6 +156,13 @@ typedef struct {
 } run_ahead_redirect_event_t;
 
 typedef struct {
+  uint8_t  valid = 0;
+  uint8_t  is_load;
+  uint8_t  need_wait;
+  uint64_t pc;
+} run_ahead_memdep_pred_t;
+
+typedef struct {
   trap_event_t      trap;
   arch_event_t      event;
   instr_commit_t    commit[DIFFTEST_COMMIT_WIDTH];
@@ -170,6 +177,7 @@ typedef struct {
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_redirect_event_t runahead_redirect;
+  run_ahead_memdep_pred_t runahead_memdep_pred[DIFFTEST_RUNAHEAD_WIDTH];
 } difftest_core_state_t;
 
 enum retire_inst_type {
@@ -283,6 +291,9 @@ public:
   }
   inline run_ahead_redirect_event_t *get_runahead_redirect_event() {
     return &(dut.runahead_redirect);
+  }
+  inline run_ahead_memdep_pred_t *get_runahead_memdep_pred(uint8_t index) {
+    return &(dut.runahead_memdep_pred[index]);
   }
   difftest_core_state_t *get_dut() {
     return &dut;

@@ -118,9 +118,6 @@ int Runahead::do_instr_runahead(){
     do_first_instr_runahead();
   }
   request_slave_runahead();
-#ifdef QUERY_MEM_ACCESS
-  do_query_mem_access();
-#endif
   return 0;
 }
 
@@ -140,9 +137,6 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
   // if not, fork to create a new checkpoint
   pid_t pid = request_slave_runahead_pc_guided(jump_target_pc);
   runahead_debug("fork result %d\n", pid);
-#ifdef QUERY_MEM_ACCESS
-  do_query_mem_access();
-#endif
   return pid;
 }
 
@@ -233,6 +227,27 @@ void Runahead::do_first_instr_runahead() {
   }
 }
 
+#ifdef QUERY_MEM_ACCESS
+int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
+  auto mem_access_info = &ref_mem_query_result->result.mem_access_info;
+  if(dut_ptr->runahead_memdep_pred[i].valid){
+    dut_ptr->runahead_memdep_pred[i].valid = false;
+    if(dut_ptr->runahead_memdep_pred[i].is_load){
+      assert(mem_access_info->mem_access_is_load);
+      bool golden_need_wait = memdep_watcher->query_load_store_dep(
+        mem_access_info->pc,
+        mem_access_info->mem_access_vaddr
+      );
+      memdep_watcher->update_pred_matrix(
+        dut_ptr->runahead_memdep_pred[i].need_wait,
+        golden_need_wait
+      );
+    }
+  }
+  return 0;
+}
+#endif
+
 int Runahead::step() { // override step() method
   static bool branch_reported;
   static uint64_t branch_checkpoint_id;
@@ -270,6 +285,7 @@ int Runahead::step() { // override step() method
     }
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut_ptr->runahead_commit[i].valid; i++) {
       dut_ptr->runahead_commit[i].valid = false;
+      dut_ptr->runahead_memdep_pred[i].valid = false;
       runahead_debug("Run ahead: jump inst %lx commited, free oldest checkpoint\n", 
         dut_ptr->runahead_commit[i].pc
       );
@@ -284,6 +300,7 @@ int Runahead::step() { // override step() method
       // check if branch is reported by previous inst
       if(branch_reported) {
         pid_t pid = do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
+        // no need to call do_query_mem_access(), as runahead_pc_guided is branch inst 
         // register new checkpoint
         register_checkpoint(pid, branch_checkpoint_id, branch_pc);
         runahead_debug("New checkpoint: pid %d cpid %lx pc %lx\n", 
@@ -300,6 +317,11 @@ int Runahead::step() { // override step() method
         // setup checkpoint here
       } else {
         do_instr_runahead();
+#ifdef QUERY_MEM_ACCESS
+        RunaheadResponseQuery ref_mem_access;
+        do_query_mem_access(&ref_mem_access);
+        memdep_check(i, &ref_mem_access);
+#endif
       }
       dut_ptr->runahead[i].valid = 0;
     }
@@ -357,10 +379,9 @@ void Runahead::debug_print_checkpoint_list() {
 }
 
 #ifdef QUERY_MEM_ACCESS
-void Runahead::do_query_mem_access() {
-  RunaheadResponseQuery query_resp;
-  auto mem_access_info = &query_resp.result.mem_access_info;
-  request_slave_refquery(&query_resp, REF_QUERY_MEM_EVENT);
+void Runahead::do_query_mem_access(RunaheadResponseQuery* result_buffer) {
+  auto mem_access_info = &result_buffer->result.mem_access_info;
+  request_slave_refquery(result_buffer, REF_QUERY_MEM_EVENT);
   runahead_debug("Query result: pc %lx mem access %x isload %x vaddr %x\n",
     mem_access_info->pc,
     mem_access_info->mem_access,
@@ -370,7 +391,7 @@ void Runahead::do_query_mem_access() {
   if(mem_access_info->mem_access){
     if(mem_access_info->mem_access_is_load){
       memdep_watcher->watch_load(mem_access_info->pc, mem_access_info->mem_access_vaddr);
-      memdep_watcher->query_load_store_dep(mem_access_info->pc, mem_access_info->mem_access_vaddr);
+      // memdep_watcher->query_load_store_dep(mem_access_info->pc, mem_access_info->mem_access_vaddr);
     } else {
       memdep_watcher->watch_store(mem_access_info->pc, mem_access_info->mem_access_vaddr);
     }

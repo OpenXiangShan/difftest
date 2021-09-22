@@ -158,6 +158,13 @@ class DiffRunaheadRedirectEventIO extends DifftestBundle {
   val checkpoint_id = Input(UInt(64.W))
 }
 
+class DiffRunaheadMemdepPredIO extends DifftestBundle with DifftestWithIndex {
+  val valid         = Input(Bool())
+  val is_load       = Input(Bool())
+  val need_wait     = Input(Bool())
+  val pc            = Input(UInt(64.W)) // for debug only
+}
+
 class DifftestArchEvent extends BlackBox {
   val io = IO(new DiffArchEventIO)
 }
@@ -216,6 +223,10 @@ class DifftestRunaheadCommitEvent extends BlackBox {
 
 class DifftestRunaheadRedirectEvent extends BlackBox {
   val io = IO(new DiffRunaheadRedirectEventIO)
+}
+
+class DifftestRunaheadMemdepPred extends BlackBox {
+  val io = IO(new DiffRunaheadMemdepPredIO)
 }
 
 // Difftest emulator top
