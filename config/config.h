@@ -103,6 +103,16 @@
 // mem dependency check config
 #define MEMDEP_WINDOW_SIZE 64
 
+// upper bound of runahead checkpoints
+// will be ignored if AUTO_RUNAHEAD_CHECKPOINT_GC is defined
+#define RUN_AHEAD_CHECKPOINT_SIZE 64
+
+// automatically free the oldest checkpoint for runahead
+// so that we do not need to implement RunaheadCommitEvent in RTL design
+// uncomment the following line to enable this feature
+#define AUTO_RUNAHEAD_CHECKPOINT_GC
+#define AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD 64
+
 // -----------------------------------------------------------------------
 // Do not touch
 // -----------------------------------------------------------------------

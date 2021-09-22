@@ -32,16 +32,20 @@ Runahead::Runahead(int coreid): Difftest(coreid) {
 
 void Runahead::remove_all_checkpoints(){
   while(checkpoints.size()){
-    kill(checkpoints.back().pid, SIGTERM);
+    runahead_debug("Cleaning checkpoints, try to kill %d\n", checkpoints.back().pid);
+    kill(checkpoints.back().pid, SIGKILL);
     checkpoints.pop_back();
+    runahead_debug("Cleaning checkpoints, %d remaining\n", checkpoints.size());
   }
 }
 
 void Runahead::remove_msg_queues(){
   if(runahead_req_msgq_id){
+    runahead_debug("Try to remove runahead_req_msgq %d\n", runahead_req_msgq_id);
     msgctl(runahead_req_msgq_id,IPC_RMID,NULL);
   }
   if(runahead_resp_msgq_id){
+    runahead_debug("Try to remove runahead_resp_msgq %d\n", runahead_resp_msgq_id);
     msgctl(runahead_resp_msgq_id,IPC_RMID,NULL);
   }
 }
@@ -76,6 +80,12 @@ int runahead_cleanup(){
     runahead[i]->remove_all_checkpoints();
     runahead[i]->remove_msg_queues();
   }
+  return 0;
+}
+
+Runahead::~Runahead(){
+  remove_all_checkpoints();
+  remove_msg_queues();
 }
 
 // Runahead exec a step
@@ -92,6 +102,9 @@ int runahead_step() {
 }
 
 bool Runahead::checkpoint_num_exceed_limit() {
+#ifdef AUTO_RUNAHEAD_CHECKPOINT_GC
+  return false;
+#endif
   return checkpoints.size() >= RUN_AHEAD_CHECKPOINT_SIZE;
 }
 
@@ -137,6 +150,25 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
 // * MMIO -> detect by ref
 // * External int, time int, etc. -> should not influence run ahead
 
+// Register a new checkpoint
+//
+// Note that this function will only add a checkpoint record to checkpoints deque
+// fork() and wait() affair should be done before calling this function
+void Runahead::register_checkpoint(pid_t pid, uint64_t branch_checkpoint_id, uint64_t branch_pc) {
+  // register new checkpoint
+  RunaheadCheckpoint checkpoint;
+  checkpoint.pid = pid;
+  checkpoint.checkpoint_id = branch_checkpoint_id;
+  checkpoint.pc = branch_pc;
+  checkpoints.push_back(checkpoint);
+  // lazy checkpoint gc
+#ifdef AUTO_RUNAHEAD_CHECKPOINT_GC
+  if(checkpoints.size() > AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD) {
+    free_checkpoint();
+  }
+#endif
+}
+
 // Free the oldest checkpoint
 // 
 // Should be called when a branch is solved or that inst is committed.
@@ -144,11 +176,11 @@ pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
 pid_t Runahead::free_checkpoint() {
   static int num_checkpoint_to_be_freed = 0;
   num_checkpoint_to_be_freed++;
-  debug_print_checkpoint_list();
+  // debug_print_checkpoint_list();
   while(num_checkpoint_to_be_freed && checkpoints.size() > 1){ // there should always be at least 1 active slave
     pid_t to_be_freed_pid = checkpoints.front().pid;
     runahead_debug("Free checkpoint %lx\n", checkpoints.front().checkpoint_id);
-    kill(to_be_freed_pid, SIGTERM);
+    kill(to_be_freed_pid, SIGKILL);
     checkpoints.pop_front();
     num_checkpoint_to_be_freed--;
   }
@@ -162,7 +194,7 @@ void Runahead::recover_checkpoint(uint64_t checkpoint_id) {
   // pop queue until we get the same id
   while(checkpoints.size() > 0) {
     pid_t to_be_checked_cpid = checkpoints.back().checkpoint_id;
-    kill(checkpoints.back().pid, SIGTERM);
+    kill(checkpoints.back().pid, SIGKILL);
     runahead_debug("kill %d\n", checkpoints.back().pid);
     checkpoints.pop_back();
     if(to_be_checked_cpid == checkpoint_id) {
@@ -253,15 +285,11 @@ int Runahead::step() { // override step() method
       if(branch_reported) {
         pid_t pid = do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
         // register new checkpoint
-        RunaheadCheckpoint checkpoint;
-        checkpoint.pid = pid;
-        checkpoint.checkpoint_id = branch_checkpoint_id;
-        checkpoint.pc = branch_pc;
-        checkpoints.push_back(checkpoint);
+        register_checkpoint(pid, branch_checkpoint_id, branch_pc);
         runahead_debug("New checkpoint: pid %d cpid %lx pc %lx\n", 
-          checkpoint.pid,
-          checkpoint.checkpoint_id,
-          checkpoint.pc
+          pid,
+          branch_checkpoint_id,
+          branch_pc
         );
         branch_reported = false;
       }
@@ -413,11 +441,7 @@ pid_t Runahead::init_runahead_slave() {
   if(pid == 0){
     runahead_slave();
   } else {
-    RunaheadCheckpoint checkpoint;
-    checkpoint.pid = pid;
-    checkpoint.checkpoint_id = -1;
-    checkpoint.pc = FIRST_INST_ADDRESS;
-    checkpoints.push_back(checkpoint);
+    register_checkpoint(pid, -1, FIRST_INST_ADDRESS);
   }
   return 0;
 }

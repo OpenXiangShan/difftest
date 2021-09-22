@@ -72,6 +72,8 @@ class Runahead: public Difftest {
 public:
   // Runahead framework
   Runahead(int coreid);
+  ~Runahead();
+  void register_checkpoint(pid_t pid, uint64_t branch_checkpoint_id, uint64_t branch_pc);
   pid_t free_checkpoint();
   void recover_checkpoint(uint64_t checkpoint_id);
   void restart();
@@ -106,7 +108,6 @@ public:
 #endif
 
 private:
-#define RUN_AHEAD_CHECKPOINT_SIZE 64
   std::deque<RunaheadCheckpoint> checkpoints;
 };
 

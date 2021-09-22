@@ -469,7 +469,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           tfp = new VerilatedVcdC;
           dut_ptr->trace(tfp, 99);
           time_t now = time(NULL);
-          tfp->open(cycle_wavefile(startCycle, now));	
+          tfp->open(cycle_wavefile(startCycle, now));
 #endif
         }
       }
@@ -484,9 +484,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   save_coverage(coverage_start_time);
 #endif
 
-  // if(args.enable_runahead){
-  //   runahead_cleanup(); // remove all checkpoints
-  // }
+  if(args.enable_runahead){
+    runahead_cleanup(); // remove all checkpoints
+  }
 
   if(args.enable_fork){
     if(waitProcess) {
