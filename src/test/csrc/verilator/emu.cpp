@@ -18,6 +18,7 @@
 #include "device.h"
 #include "sdcard.h"
 #include "difftest.h"
+#include "runahead.h"
 #include "nemuproxy.h"
 #include "goldenmem.h"
 #include "device.h"
@@ -473,10 +474,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         }
       }
     }
-
-
-}
-
+  }
+  // Simulation ends here, do clean up & display jobs
 #if VM_TRACE == 1
   if (enable_waveform) tfp->close();
 #endif
@@ -484,6 +483,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #if VM_COVERAGE == 1
   save_coverage(coverage_start_time);
 #endif
+
+  if(args.enable_runahead){
+    runahead_cleanup(); // remove all checkpoints
+  }
 
   if(args.enable_fork){
     if(waitProcess) {

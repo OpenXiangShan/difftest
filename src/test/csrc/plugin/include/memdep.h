@@ -35,8 +35,8 @@ class MemdepWatchWindow {
     void watch_load(uint64_t pc, uint64_t vaddr);
     void watch_store(uint64_t pc, uint64_t vaddr);
     bool query_load_store_dep(uint64_t load_pc, uint64_t load_vaddr);
-    inline void update_pred_matrix(bool dut_result, bool ref_result);
-    inline void print_pred_matrix();
+    void update_pred_matrix(bool dut_result, bool ref_result);
+    void print_pred_matrix();
   private:
     std::deque<MemInstInfo> store_inflight;
     std::deque<MemInstInfo> load_inflight;

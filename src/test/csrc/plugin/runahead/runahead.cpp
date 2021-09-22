@@ -37,6 +37,15 @@ void Runahead::remove_all_checkpoints(){
   }
 }
 
+void Runahead::remove_msg_queues(){
+  if(runahead_req_msgq_id){
+    msgctl(runahead_req_msgq_id,IPC_RMID,NULL);
+  }
+  if(runahead_resp_msgq_id){
+    msgctl(runahead_resp_msgq_id,IPC_RMID,NULL);
+  }
+}
+
 int runahead_init() {
   runahead = new Runahead*[NUM_CORES];
   assert(difftest);
@@ -60,6 +69,14 @@ int runahead_init() {
   }
   runahead_debug("Simulator run ahead of commit enabled.\n");
   return 0;
+}
+
+int runahead_cleanup(){
+  // runahead[0]->memdep_watcher->print_pred_matrix();
+  // for (int i = 0; i < NUM_CORES; i++) {
+  //   runahead[i]->remove_msg_queues();
+  //   runahead[i]->remove_all_checkpoints();
+  // }
 }
 
 // Runahead exec a step

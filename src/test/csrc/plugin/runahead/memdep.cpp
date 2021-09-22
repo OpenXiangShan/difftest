@@ -75,11 +75,11 @@ bool MemdepWatchWindow::query_load_store_dep(uint64_t load_pc, uint64_t load_vad
   return has_dependency;
 }
 
-inline void MemdepWatchWindow::update_pred_matrix(bool dut_result, bool ref_result){
+void MemdepWatchWindow::update_pred_matrix(bool dut_result, bool ref_result){
   pred_matrix[(int)dut_result][(int)ref_result] ++;
 }
 
-inline void MemdepWatchWindow::print_pred_matrix(){
+void MemdepWatchWindow::print_pred_matrix(){
   printf("-------------- Memdep Watcher Result ----------------\n");
   printf("DUT ndep REF ndep %ld\n", pred_matrix[0][0]);
   printf("DUT  dep REF ndep %ld\n", pred_matrix[0][1]);

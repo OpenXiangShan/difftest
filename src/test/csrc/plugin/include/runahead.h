@@ -87,6 +87,7 @@ public:
   pid_t request_slave_runahead_pc_guided(uint64_t target_pc);
   void debug_print_checkpoint_list();
   void remove_all_checkpoints();
+  void remove_msg_queues();
   void do_first_instr_runahead();
   void request_slave_refquery(void* target, int type);
 
@@ -113,6 +114,7 @@ extern Runahead** runahead;
 int init_runahead_slave();
 int runahead_init();
 int runahead_step();
+int runahead_cleanup();
 
 enum {
   RUNAHEAD_MSG_REQ_ALL,
@@ -147,5 +149,6 @@ enum {
 typedef enum RefQueryType {
   REF_QUERY_MEM_EVENT
 } RefQueryType;
+
 
 #endif
