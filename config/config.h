@@ -100,6 +100,9 @@
 // uncomment the following line to enable this feature
 // #define RUNAHEAD_DEBUG
 
+// mem dependency check config
+#define MEMDEP_WINDOW_SIZE 64
+
 // -----------------------------------------------------------------------
 // Do not touch
 // -----------------------------------------------------------------------

@@ -20,6 +20,7 @@
 #include <queue>
 #include "common.h"
 #include "difftest.h"
+#include "memdep.h"
 #include "ram.h"
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -97,6 +98,10 @@ public:
 
 #ifdef QUERY_MEM_ACCESS
   void do_query_mem_access();
+#endif
+
+#ifdef TRACE_INFLIGHT_MEM_INST
+  MemdepWatchWindow* memdep_watcher = new MemdepWatchWindow;
 #endif
 
 private:

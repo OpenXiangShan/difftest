@@ -14,8 +14,8 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include <vector>
 #include "runahead.h"
+#include "memdep.h"
 
 // ---------------------------------------------------
 // Run ahead master process
@@ -315,12 +315,22 @@ void Runahead::debug_print_checkpoint_list() {
 #ifdef QUERY_MEM_ACCESS
 void Runahead::do_query_mem_access() {
   RunaheadResponseQuery query_resp;
+  auto mem_access_info = &query_resp.result.mem_access_info;
   request_slave_refquery(&query_resp, REF_QUERY_MEM_EVENT);
-  runahead_debug("Query result: mem access %x isload %x vaddr %x\n",
-    query_resp.result.mem_access_info.mem_access,
-    query_resp.result.mem_access_info.mem_access_is_load,
-    query_resp.result.mem_access_info.mem_access_vaddr
+  runahead_debug("Query result: pc %lx mem access %x isload %x vaddr %x\n",
+    mem_access_info->pc,
+    mem_access_info->mem_access,
+    mem_access_info->mem_access_is_load,
+    mem_access_info->mem_access_vaddr
   );
+  if(mem_access_info->mem_access){
+    if(mem_access_info->mem_access_is_load){
+      memdep_watcher->watch_load(mem_access_info->pc, mem_access_info->mem_access_vaddr);
+      memdep_watcher->query_load_store_dep(mem_access_info->pc, mem_access_info->mem_access_vaddr);
+    } else {
+      memdep_watcher->watch_store(mem_access_info->pc, mem_access_info->mem_access_vaddr);
+    }
+  }
   return;
 }
 #endif
