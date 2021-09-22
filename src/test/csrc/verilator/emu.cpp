@@ -484,9 +484,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   save_coverage(coverage_start_time);
 #endif
 
-  if(args.enable_runahead){
-    runahead_cleanup(); // remove all checkpoints
-  }
+  // if(args.enable_runahead){
+  //   runahead_cleanup(); // remove all checkpoints
+  // }
 
   if(args.enable_fork){
     if(waitProcess) {
@@ -609,6 +609,10 @@ void Emulator::display_trapinfo() {
     eprintf(ANSI_COLOR_MAGENTA "total guest instructions = %'" PRIu64 "\n" ANSI_COLOR_RESET, instrCnt);
     eprintf(ANSI_COLOR_MAGENTA "instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
         instrCnt, cycleCnt, ipc);
+  #ifdef TRACE_INFLIGHT_MEM_INST
+    runahead[i]->memdep_watcher->print_pred_matrix();
+  #endif
+    
   }
 
   if (trapCode != STATE_ABORT) {

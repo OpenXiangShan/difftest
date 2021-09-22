@@ -32,8 +32,8 @@ Runahead::Runahead(int coreid): Difftest(coreid) {
 
 void Runahead::remove_all_checkpoints(){
   while(checkpoints.size()){
-    kill(checkpoints.front().pid, SIGTERM);
-    checkpoints.pop_front();
+    kill(checkpoints.back().pid, SIGTERM);
+    checkpoints.pop_back();
   }
 }
 
@@ -72,11 +72,10 @@ int runahead_init() {
 }
 
 int runahead_cleanup(){
-  // runahead[0]->memdep_watcher->print_pred_matrix();
-  // for (int i = 0; i < NUM_CORES; i++) {
-  //   runahead[i]->remove_msg_queues();
-  //   runahead[i]->remove_all_checkpoints();
-  // }
+  for (int i = 0; i < NUM_CORES; i++) {
+    runahead[i]->remove_all_checkpoints();
+    runahead[i]->remove_msg_queues();
+  }
 }
 
 // Runahead exec a step
