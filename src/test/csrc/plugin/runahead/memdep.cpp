@@ -82,8 +82,8 @@ void MemdepWatchWindow::update_pred_matrix(bool dut_result, bool ref_result){
 void MemdepWatchWindow::print_pred_matrix(){
   printf("-------------- Memdep Watcher Result ----------------\n");
   printf("DUT ndep REF ndep %ld\n", pred_matrix[0][0]);
-  printf("DUT  dep REF ndep %ld\n", pred_matrix[0][1]);
-  printf("DUT ndep REF  dep %ld\n", pred_matrix[1][0]);
+  printf("DUT ndep REF  dep %ld\n", pred_matrix[0][1]);
+  printf("DUT  dep REF ndep %ld\n", pred_matrix[1][0]);
   printf("DUT  dep REF  dep %ld\n", pred_matrix[1][1]);
   printf("-----------------------------------------------------\n");
 }

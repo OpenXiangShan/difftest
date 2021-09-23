@@ -35,7 +35,7 @@ void Runahead::remove_all_checkpoints(){
     runahead_debug("Cleaning checkpoints, try to kill %d\n", checkpoints.back().pid);
     kill(checkpoints.back().pid, SIGKILL);
     checkpoints.pop_back();
-    runahead_debug("Cleaning checkpoints, %d remaining\n", checkpoints.size());
+    runahead_debug("Cleaning checkpoints, %zu remaining\n", checkpoints.size());
   }
 }
 
@@ -233,7 +233,9 @@ int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
   if(dut_ptr->runahead_memdep_pred[i].valid){
     dut_ptr->runahead_memdep_pred[i].valid = false;
     if(dut_ptr->runahead_memdep_pred[i].is_load){
-      assert(mem_access_info->mem_access_is_load);
+      // runahead_debug("Runahead step: ref pc %lx dut pc %lx\n", mem_access_info->pc, dut_ptr->runahead_memdep_pred[i].pc);
+      // assert(mem_access_info->mem_access_is_load);
+      runahead_debug("Runahead memdep_check: ref is load %x\n", mem_access_info->mem_access_is_load);
       bool golden_need_wait = memdep_watcher->query_load_store_dep(
         mem_access_info->pc,
         mem_access_info->mem_access_vaddr
@@ -242,6 +244,11 @@ int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
         dut_ptr->runahead_memdep_pred[i].need_wait,
         golden_need_wait
       );
+      auto dut_result = dut_ptr->runahead_memdep_pred[i].need_wait;
+      auto ref_result = golden_need_wait;
+      if(dut_result != ref_result){
+        printf("mem pred result mismatch: pc %lx dut %x ref %x\n", mem_access_info->pc, dut_result, ref_result);
+      }
     }
   }
   return 0;
@@ -309,6 +316,15 @@ int Runahead::step() { // override step() method
           branch_pc
         );
         branch_reported = false;
+#ifdef QUERY_MEM_ACCESS
+        RunaheadResponseQuery ref_mem_access;
+        do_query_mem_access(&ref_mem_access);
+        runahead_debug("dut runahead pc %lx ref pc %lx\n", 
+          branch_pc,
+          ref_mem_access.result.mem_access_info.pc
+        );
+        memdep_check(i, &ref_mem_access);
+#endif
       }
       if(dut_ptr->runahead[i].branch) { // TODO: add branch flag in hardware
         branch_reported = true;
@@ -320,6 +336,10 @@ int Runahead::step() { // override step() method
 #ifdef QUERY_MEM_ACCESS
         RunaheadResponseQuery ref_mem_access;
         do_query_mem_access(&ref_mem_access);
+        runahead_debug("dut runahead pc %lx ref pc %lx\n", 
+          dut_ptr->runahead[i].pc,
+          ref_mem_access.result.mem_access_info.pc
+        );
         memdep_check(i, &ref_mem_access);
 #endif
       }
@@ -382,7 +402,7 @@ void Runahead::debug_print_checkpoint_list() {
 void Runahead::do_query_mem_access(RunaheadResponseQuery* result_buffer) {
   auto mem_access_info = &result_buffer->result.mem_access_info;
   request_slave_refquery(result_buffer, REF_QUERY_MEM_EVENT);
-  runahead_debug("Query result: pc %lx mem access %x isload %x vaddr %x\n",
+  runahead_debug("Query result: pc %lx mem access %x isload %x vaddr %lx\n",
     mem_access_info->pc,
     mem_access_info->mem_access,
     mem_access_info->mem_access_is_load,
@@ -436,7 +456,7 @@ void Runahead::runahead_slave() {
         }
         break;
       case RUNAHEAD_MSG_REQ_QUERY:
-        runahead_debug("Query runahead result, type %x\n", request.query_type);
+        runahead_debug("Query runahead result, type %lx\n", request.query_type);
         proxy->query(&resp_query.result, request.query_type);
         assert_no_error(msgsnd(runahead_resp_msgq_id, &resp_query, sizeof(RunaheadResponseQuery) - sizeof(long int), 0));
         break;
