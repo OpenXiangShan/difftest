@@ -59,6 +59,7 @@ typedef struct MemdepQueryResponse {
   // uint64_t mem_access_paddr;
   uint64_t mem_access_vaddr;
   // uint64_t mem_access_result;
+  bool ref_need_wait;
 } MemdepQueryResponse;
 
 typedef struct RunaheadResponseQuery {

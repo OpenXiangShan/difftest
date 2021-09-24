@@ -65,9 +65,10 @@ bool MemdepWatchWindow::query_load_store_dep(uint64_t load_pc, uint64_t load_vad
   for(auto i: store_inflight){
     if(i.vaddr == load_vaddr){
       has_dependency = true;
-      runahead_debug("Memdep watcher: load %lx dependency detected: store pc %lx\n",
+      runahead_debug("Memdep watcher: load %lx dependency detected: store pc %lx, vaddr %lx\n",
         load_pc,
-        i.pc
+        i.pc,
+        load_vaddr
       );
       total_dependency ++;
     }

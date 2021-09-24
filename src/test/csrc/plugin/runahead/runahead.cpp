@@ -236,16 +236,12 @@ int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
       // runahead_debug("Runahead step: ref pc %lx dut pc %lx\n", mem_access_info->pc, dut_ptr->runahead_memdep_pred[i].pc);
       // assert(mem_access_info->mem_access_is_load);
       runahead_debug("Runahead memdep_check: ref is load %x\n", mem_access_info->mem_access_is_load);
-      bool golden_need_wait = memdep_watcher->query_load_store_dep(
-        mem_access_info->pc,
-        mem_access_info->mem_access_vaddr
-      );
-      memdep_watcher->update_pred_matrix(
-        dut_ptr->runahead_memdep_pred[i].need_wait,
-        golden_need_wait
-      );
       auto dut_result = dut_ptr->runahead_memdep_pred[i].need_wait;
-      auto ref_result = golden_need_wait;
+      auto ref_result = mem_access_info->ref_need_wait;
+      memdep_watcher->update_pred_matrix(
+        dut_result,
+        ref_result
+      );
       if(dut_result != ref_result){
         printf("mem pred result mismatch: pc %lx dut %x ref %x\n", mem_access_info->pc, dut_result, ref_result);
       }
@@ -319,7 +315,8 @@ int Runahead::step() { // override step() method
 #ifdef QUERY_MEM_ACCESS
         RunaheadResponseQuery ref_mem_access;
         do_query_mem_access(&ref_mem_access);
-        runahead_debug("dut runahead pc %lx ref pc %lx\n", 
+        // runahead_debug("dut runahead pc %lx ref pc %lx\n", 
+        printf("dut runahead pc %lx ref pc %lx\n", 
           branch_pc,
           ref_mem_access.result.mem_access_info.pc
         );
@@ -336,7 +333,8 @@ int Runahead::step() { // override step() method
 #ifdef QUERY_MEM_ACCESS
         RunaheadResponseQuery ref_mem_access;
         do_query_mem_access(&ref_mem_access);
-        runahead_debug("dut runahead pc %lx ref pc %lx\n", 
+        // runahead_debug("dut runahead pc %lx ref pc %lx\n", 
+        printf("dut runahead pc %lx ref pc %lx\n", 
           dut_ptr->runahead[i].pc,
           ref_mem_access.result.mem_access_info.pc
         );
@@ -408,14 +406,6 @@ void Runahead::do_query_mem_access(RunaheadResponseQuery* result_buffer) {
     mem_access_info->mem_access_is_load,
     mem_access_info->mem_access_vaddr
   );
-  if(mem_access_info->mem_access){
-    if(mem_access_info->mem_access_is_load){
-      memdep_watcher->watch_load(mem_access_info->pc, mem_access_info->mem_access_vaddr);
-      // memdep_watcher->query_load_store_dep(mem_access_info->pc, mem_access_info->mem_access_vaddr);
-    } else {
-      memdep_watcher->watch_store(mem_access_info->pc, mem_access_info->mem_access_vaddr);
-    }
-  }
   return;
 }
 #endif
@@ -433,6 +423,7 @@ void Runahead::runahead_slave() {
   resp.message_type = RUNAHEAD_MSG_RESP_EXEC;
   resp.pid = 0;
   resp_query.message_type = RUNAHEAD_MSG_RESP_QUERY;
+  auto mem_access_info = &resp_query.result.mem_access_info;
   while(1){
     assert_no_error(msgrcv(runahead_req_msgq_id, &request, sizeof(request) - sizeof(long int), 0, 0));
     runahead_debug("Received msg type: %ld\n", request.message_type);
@@ -458,6 +449,15 @@ void Runahead::runahead_slave() {
       case RUNAHEAD_MSG_REQ_QUERY:
         runahead_debug("Query runahead result, type %lx\n", request.query_type);
         proxy->query(&resp_query.result, request.query_type);
+        mem_access_info->ref_need_wait = false;
+        if(mem_access_info->mem_access){
+          if(mem_access_info->mem_access_is_load){
+            memdep_watcher->watch_load(mem_access_info->pc, mem_access_info->mem_access_vaddr);
+            mem_access_info->ref_need_wait = memdep_watcher->query_load_store_dep(mem_access_info->pc, mem_access_info->mem_access_vaddr);
+          } else {
+            memdep_watcher->watch_store(mem_access_info->pc, mem_access_info->mem_access_vaddr);
+          }
+        }
         assert_no_error(msgsnd(runahead_resp_msgq_id, &resp_query, sizeof(RunaheadResponseQuery) - sizeof(long int), 0));
         break;
       default:
