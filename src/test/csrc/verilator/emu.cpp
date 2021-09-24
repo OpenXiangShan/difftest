@@ -78,10 +78,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "no-diff",           0, NULL,  0  },
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
+    { "wave-path",         1, NULL,  0  },
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
-    { "wave-path",         1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -111,11 +111,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 5: args.enable_diff = false; continue;
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
-#ifdef DEBUG_TILELINK
-          case 8: args.dump_tl = true; continue;
-          case 9: args.wave_path = optarg; continue;
-#endif
           case 8: args.wave_path = optarg; continue;
+#ifdef DEBUG_TILELINK
+          case 9: args.dump_tl = true; continue;
+#endif
         }
         // fall through
       default:
