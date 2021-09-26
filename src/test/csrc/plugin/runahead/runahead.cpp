@@ -190,11 +190,14 @@ void Runahead::recover_checkpoint(uint64_t checkpoint_id) {
     pid_t to_be_checked_cpid = checkpoints.back().checkpoint_id;
     kill(checkpoints.back().pid, SIGKILL);
     runahead_debug("kill %d\n", checkpoints.back().pid);
-    checkpoints.pop_back();
     if(to_be_checked_cpid == checkpoint_id) {
       runahead_debug("Recover to checkpoint %lx.\n", checkpoint_id);
+      branch_checkpoint_id = checkpoints.back().checkpoint_id;
+      branch_pc = checkpoints.back().pc;
+      checkpoints.pop_back();
       return; // we have got the right checkpoint
     }
+    checkpoints.pop_back();
   }
   runahead_debug("Failed to recover runahead checkpoint.\n");
   assert(0); // failed to recover checkpoint
@@ -252,9 +255,8 @@ int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
 #endif
 
 int Runahead::step() { // override step() method
+  ticks++;
   static bool branch_reported;
-  static uint64_t branch_checkpoint_id;
-  static uint64_t branch_pc;
   if (dut_ptr->event.interrupt) {
     assert(0); //TODO
     do_interrupt();

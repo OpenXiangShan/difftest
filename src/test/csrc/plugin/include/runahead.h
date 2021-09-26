@@ -111,6 +111,8 @@ public:
 
 private:
   std::deque<RunaheadCheckpoint> checkpoints;
+  uint64_t branch_checkpoint_id;
+  uint64_t branch_pc;
 };
 
 extern Runahead** runahead;
@@ -153,5 +155,12 @@ typedef enum RefQueryType {
   REF_QUERY_MEM_EVENT
 } RefQueryType;
 
+#define loop_if_not(cond) \
+  do { \
+    if(!(cond)) { \
+      printf("Sth went wrong, run while(1); for debugging\n"); \
+      while(1); \
+    } \
+  }while(0)
 
 #endif
