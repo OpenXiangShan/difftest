@@ -328,7 +328,6 @@ INTERFACE_RUNAHEAD_REDIRECT_EVENT {
     packet->pc = pc;
     packet->target_pc = target_pc;
     packet->checkpoint_id = checkpoint_id;
-    printf("set pc %lx tpc %lx\n", pc, target_pc);
   }
 }
 

@@ -257,7 +257,7 @@ int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
         ref_result
       );
       if(dut_result != ref_result){
-        printf("mem pred result mismatch: pc %lx dut %x ref %x\n", mem_access_info->pc, dut_result, ref_result);
+        runahead_debug("mem pred result mismatch: pc %lx dut %x ref %x\n", mem_access_info->pc, dut_result, ref_result);
       }
     }
     dut_ptr->runahead_memdep_pred[i].oracle_vaddr = mem_access_info->mem_access_vaddr;
@@ -297,7 +297,6 @@ int Runahead::step() { // override step() method
       // ignore run ahead req generated in current cycle
         dut_ptr->runahead[i].valid = false;
       }
-      if()
       return 0; 
     }
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut_ptr->runahead_commit[i].valid; i++) {
@@ -515,7 +514,7 @@ pid_t Runahead::init_runahead_slave() {
   if(pid == 0){
     runahead_slave();
   } else {
-    register_checkpoint(pid, -1, FIRST_INST_ADDRESS);
+    register_checkpoint(pid, -1, FIRST_INST_ADDRESS, false);
   }
   return 0;
 }
