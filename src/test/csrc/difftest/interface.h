@@ -366,7 +366,8 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BIT  valid,                           \
     DPIC_ARG_BIT  is_load,                         \
     DPIC_ARG_BIT  need_wait,                       \
-    DPIC_ARG_LONG pc                               \
+    DPIC_ARG_LONG pc,                              \
+    uint64_t* oracle_vaddr                         \
   )
 
 INTERFACE_ARCH_EVENT;

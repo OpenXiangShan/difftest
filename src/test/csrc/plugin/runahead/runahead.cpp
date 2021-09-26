@@ -249,6 +249,7 @@ int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
         printf("mem pred result mismatch: pc %lx dut %x ref %x\n", mem_access_info->pc, dut_result, ref_result);
       }
     }
+    dut_ptr->runahead_memdep_pred[i].oracle_vaddr = mem_access_info->mem_access_vaddr;
   }
   return 0;
 }
@@ -318,10 +319,19 @@ int Runahead::step() { // override step() method
         RunaheadResponseQuery ref_mem_access;
         do_query_mem_access(&ref_mem_access);
         // runahead_debug("dut runahead pc %lx ref pc %lx\n", 
-        printf("dut runahead pc %lx ref pc %lx\n", 
+        runahead_debug("dut runahead pc %lx ref pc %lx ticks %ld\n", 
           branch_pc,
-          ref_mem_access.result.mem_access_info.pc
+          ref_mem_access.result.mem_access_info.pc,
+          ticks
         );
+        loop_if_not(branch_pc == ref_mem_access.result.mem_access_info.pc);
+        if(!(branch_pc == ref_mem_access.result.mem_access_info.pc)){
+          printf("Error: dut runahead pc %lx ref pc %lx ticks %ld\n", 
+            branch_pc,
+            ref_mem_access.result.mem_access_info.pc,
+            ticks
+          );
+        }
         memdep_check(i, &ref_mem_access);
 #endif
       }
@@ -336,10 +346,19 @@ int Runahead::step() { // override step() method
         RunaheadResponseQuery ref_mem_access;
         do_query_mem_access(&ref_mem_access);
         // runahead_debug("dut runahead pc %lx ref pc %lx\n", 
-        printf("dut runahead pc %lx ref pc %lx\n", 
+        runahead_debug("dut runahead pc %lx ref pc %lx ticks %ld\n", 
           dut_ptr->runahead[i].pc,
-          ref_mem_access.result.mem_access_info.pc
+          ref_mem_access.result.mem_access_info.pc,
+          ticks
         );
+        loop_if_not(dut_ptr->runahead[i].pc == ref_mem_access.result.mem_access_info.pc);
+        if(!(dut_ptr->runahead[i].pc == ref_mem_access.result.mem_access_info.pc)){
+          printf("Error: dut runahead pc %lx ref pc %lx ticks %ld\n", 
+            dut_ptr->runahead[i].pc,
+            ref_mem_access.result.mem_access_info.pc,
+            ticks
+          );
+        }
         memdep_check(i, &ref_mem_access);
 #endif
       }

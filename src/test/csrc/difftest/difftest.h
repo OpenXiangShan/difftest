@@ -160,6 +160,7 @@ typedef struct {
   uint8_t  is_load;
   uint8_t  need_wait;
   uint64_t pc;
+  uint64_t oracle_vaddr;
 } run_ahead_memdep_pred_t;
 
 typedef struct {

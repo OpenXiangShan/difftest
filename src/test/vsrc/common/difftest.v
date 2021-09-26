@@ -697,7 +697,8 @@ endmodule
   `DPIC_ARG_BIT  valid,
   `DPIC_ARG_BIT  is_load,
   `DPIC_ARG_BIT  need_wait,
-  `DPIC_ARG_LONG pc
+  `DPIC_ARG_LONG pc,
+  output longint oracle_vaddr
 );
 `DIFFTEST_MOD_DECL(RunaheadMemdepPred)(
   input        clock,
@@ -706,10 +707,11 @@ endmodule
   input        valid,
   input        is_load,
   input        need_wait,
-  input [63:0] pc
+  input [63:0] pc,
+  output [63:0] oracle_vaddr
 );
   `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RunaheadMemdepPred) (
-    coreid, index, valid, is_load, need_wait, pc
+    coreid, index, valid, is_load, need_wait, pc, oracle_vaddr
   ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadMemdepPred)
 endmodule
 

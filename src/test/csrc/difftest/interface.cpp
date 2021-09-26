@@ -339,4 +339,5 @@ INTERFACE_RUNAHEAD_MEMDEP_PRED {
     packet->need_wait = need_wait;
     packet->pc = pc;
   }
+  *oracle_vaddr = packet->oracle_vaddr;
 }

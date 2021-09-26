@@ -163,6 +163,7 @@ class DiffRunaheadMemdepPredIO extends DifftestBundle with DifftestWithIndex {
   val is_load       = Input(Bool())
   val need_wait     = Input(Bool())
   val pc            = Input(UInt(64.W)) // for debug only
+  val oracle_vaddr  = Output(UInt(64.W))
 }
 
 class DifftestArchEvent extends BlackBox {
