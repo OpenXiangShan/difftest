@@ -305,6 +305,7 @@ INTERFACE_RUNAHEAD_EVENT {
   packet->valid = valid;
   if (packet->valid) {
     packet->branch = branch;
+    packet->may_replay = may_replay;
     packet->checkpoint_id = checkpoint_id; // a unique branch id
     packet->pc = pc;
   }
@@ -327,6 +328,7 @@ INTERFACE_RUNAHEAD_REDIRECT_EVENT {
     packet->pc = pc;
     packet->target_pc = target_pc;
     packet->checkpoint_id = checkpoint_id;
+    printf("set pc %lx tpc %lx\n", pc, target_pc);
   }
 }
 

@@ -142,6 +142,7 @@ class DiffRefillEventIO extends DifftestBundle {
 class DiffRunaheadEventIO extends DifftestBundle with DifftestWithIndex {
   val valid         = Input(Bool())
   val branch        = Input(Bool())
+  val may_replay    = Input(Bool())
   val pc            = Input(UInt(64.W))
   val checkpoint_id = Input(UInt(64.W))
 }

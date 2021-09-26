@@ -334,6 +334,7 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE index,                   \
     DPIC_ARG_BIT  valid,                   \
     DPIC_ARG_BIT  branch,                  \
+    DPIC_ARG_BIT  may_replay,              \
     DPIC_ARG_LONG pc,                      \
     DPIC_ARG_LONG checkpoint_id            \
   )
@@ -351,7 +352,6 @@ extern "C" int v_difftest_step();
 #define INTERFACE_RUNAHEAD_REDIRECT_EVENT          \
   DIFFTEST_DPIC_FUNC_DECL(RunaheadRedirectEvent) ( \
     DPIC_ARG_BYTE coreid,                          \
-    DPIC_ARG_BYTE index,                           \
     DPIC_ARG_BIT  valid,                           \
     DPIC_ARG_LONG pc,                              \
     DPIC_ARG_LONG target_pc,                       \

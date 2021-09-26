@@ -138,6 +138,7 @@ typedef struct {
 typedef struct {
   uint8_t  valid = 0;
   uint8_t  branch = 0;
+  uint8_t  may_replay = 0;
   uint64_t pc;
   uint64_t checkpoint_id;
 } run_ahead_event_t;

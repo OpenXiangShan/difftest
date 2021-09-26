@@ -632,6 +632,7 @@ endmodule
   `DPIC_ARG_BYTE index,
   `DPIC_ARG_BIT  valid,
   `DPIC_ARG_BIT  branch,
+  `DPIC_ARG_BIT  may_replay,
   `DPIC_ARG_LONG pc,
   `DPIC_ARG_LONG checkpoint_id
 );
@@ -641,11 +642,12 @@ endmodule
   input [ 7:0] index,
   input        valid,
   input        branch,
+  input        may_replay,
   input [63:0] pc,
   input [63:0] checkpoint_id
 );
   `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(valid, RunaheadEvent) (
-    coreid, index, valid, branch, pc, checkpoint_id
+    coreid, index, valid, branch, may_replay, pc, checkpoint_id
   ) `DIFFTEST_MOD_DPIC_CALL_END_WITH_EN(RunaheadEvent)
 endmodule
 
