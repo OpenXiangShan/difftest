@@ -303,26 +303,27 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     lasttime_poll = t;
   }
 
+  //check compiling options for lightSSS 
+
   if(args.enable_fork){
 #ifndef EMU_THREAD
-      printf("[ERROR] please enable --threads option in verilator...(You may forget EMU_THREADS when compiling.)\n");
+      printf("[ERROR] please enable --threads option in verilator when using lightSSS...(You may forget EMU_THREADS when compiling.)\n");
       FAIT_EXIT
 #endif
 
 #ifndef VM_TRACE
-      printf("[ERROR] please enable --trace option in verilator...(You may forget EMU_TRACE when compiling.)\n");
+      printf("[ERROR] please enable --trace option in verilator when using lightSSS...(You may forget EMU_TRACE when compiling.)\n");
       FAIT_EXIT
 #endif
 
 #if EMU_THREAD <= 1
-      printf("[ERROR] please use more than 1 threads in EMU_THREADS option\n");
+      printf("[ERROR] please use more than 1 threads in EMU_THREADS option when using lightSSS\n");
       FAIT_EXIT
 #endif 
     printf("[INFO] enable fork debugging...\n");
   }
 
   pid_t pid =-1;
-  pid_t originPID = getpid();
   int status = -1;
   int slotCnt = 0;
   int waitProcess = 0;
@@ -437,7 +438,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           uint64_t startCycle = cycles;
           forkshm.shwait();
           //checkpoint process wakes up
-#ifdef EMU_THREAD 
+#if EMU_THREAD > 1
           dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
 #endif
           //start wave dumping
