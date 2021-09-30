@@ -244,14 +244,19 @@ void Runahead::do_first_instr_runahead() {
 #ifdef QUERY_MEM_ACCESS
 int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
   auto mem_access_info = &ref_mem_query_result->result.mem_access_info;
-  if(dut_ptr->runahead_memdep_pred[i].valid){
+  // if(dut_ptr->runahead_memdep_pred[i].valid){
+  // TODO: double check
+  if(mem_access_info->mem_access || dut_ptr->runahead_memdep_pred[i].valid){
     dut_ptr->runahead_memdep_pred[i].valid = false;
-    if(dut_ptr->runahead_memdep_pred[i].is_load){
+    if(mem_access_info->mem_access_is_load){
+      // TODO: is seems dut_ptr->runahead_memdep_pred[i].is_load != mem_access_info->mem_access_is_load
       // runahead_debug("Runahead step: ref pc %lx dut pc %lx\n", mem_access_info->pc, dut_ptr->runahead_memdep_pred[i].pc);
       // assert(mem_access_info->mem_access_is_load);
-      runahead_debug("Runahead memdep_check: ref is load %x\n", mem_access_info->mem_access_is_load);
       auto dut_result = dut_ptr->runahead_memdep_pred[i].need_wait;
       auto ref_result = mem_access_info->ref_need_wait;
+      runahead_debug("Runahead memdep_check: ref is load %x dut %x ref %x\n", 
+        mem_access_info->mem_access_is_load, dut_result, ref_result
+      );
       memdep_watcher->update_pred_matrix(
         dut_result,
         ref_result
@@ -432,11 +437,12 @@ void Runahead::debug_print_checkpoint_list() {
 void Runahead::do_query_mem_access(RunaheadResponseQuery* result_buffer) {
   auto mem_access_info = &result_buffer->result.mem_access_info;
   request_slave_refquery(result_buffer, REF_QUERY_MEM_EVENT);
-  runahead_debug("Query result: pc %lx mem access %x isload %x vaddr %lx\n",
+  runahead_debug("Query result: pc %lx mem access %x isload %x vaddr %lx ref_need_wait %x\n",
     mem_access_info->pc,
     mem_access_info->mem_access,
     mem_access_info->mem_access_is_load,
-    mem_access_info->mem_access_vaddr
+    mem_access_info->mem_access_vaddr,
+    mem_access_info->ref_need_wait
   );
   return;
 }

@@ -63,7 +63,15 @@ bool MemdepWatchWindow::query_load_store_dep(uint64_t load_pc, uint64_t load_vad
   runahead_debug("Memdep watcher: detecting dependency for load %lx, vaddr %lx\n", load_pc, load_vaddr);
   bool has_dependency= false;
   for(auto i: store_inflight){
-    if(i.vaddr == load_vaddr){
+    runahead_debug("Memdep watcher: %lx (%lx) %lx\n",
+        i.vaddr,
+        i.pc,
+        load_vaddr
+      );
+    if(
+      ((i.vaddr | 0x7) == (load_vaddr | 0x7)) && 
+      !((load_vaddr & 0xf0000000 ) == 0x40000000) // hard code mmio
+    ){
       has_dependency = true;
       runahead_debug("Memdep watcher: load %lx dependency detected: store pc %lx, vaddr %lx\n",
         load_pc,
