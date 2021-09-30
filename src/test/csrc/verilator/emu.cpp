@@ -129,7 +129,14 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'C': args.max_cycles = atoll(optarg);  break;
       case 'I': args.max_instr = atoll(optarg);  break;
 #ifdef DEBUG_REFILL
-      case 'T': args.track_instr = atoll(optarg);  break;
+      case 'T': 
+        args.track_instr = std::strtoll(optarg, NULL, 0);  
+        printf("Tracking addr 0x%lx\n", args.track_instr);
+        if(args.track_instr == 0) {
+          printf("Invalid track addr\n");
+          exit(1);
+        }
+        break;
 #endif
       case 'W': args.warmup_instr = atoll(optarg);  break;
       case 'D': args.stat_cycles = atoll(optarg);  break;
