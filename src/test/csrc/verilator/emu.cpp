@@ -144,7 +144,14 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'C': args.max_cycles = atoll(optarg);  break;
       case 'I': args.max_instr = atoll(optarg);  break;
 #ifdef DEBUG_REFILL
-      case 'T': args.track_instr = atoll(optarg);  break;
+      case 'T': 
+        args.track_instr = std::strtoll(optarg, NULL, 0);  
+        printf("Tracking addr 0x%lx\n", args.track_instr);
+        if(args.track_instr == 0) {
+          printf("Invalid track addr\n");
+          exit(1);
+        }
+        break;
 #endif
       case 'W': args.warmup_instr = atoll(optarg);  break;
       case 'D': args.stat_cycles = atoll(optarg);  break;
@@ -327,28 +334,29 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     lasttime_poll = t;
   }
 
+  //check compiling options for lightSSS 
+
   if(args.enable_fork){
     // Currently, runahead does not work well with fork based snapshot
     assert(!args.enable_runahead);
 #ifndef EMU_THREAD
-      printf("[ERROR] please enable --threads option in verilator...(You may forget EMU_THREADS when compiling.)\n");
+      printf("[ERROR] please enable --threads option in verilator when using lightSSS...(You may forget EMU_THREADS when compiling.)\n");
       FAIT_EXIT
 #endif
 
 #ifndef VM_TRACE
-      printf("[ERROR] please enable --trace option in verilator...(You may forget EMU_TRACE when compiling.)\n");
+      printf("[ERROR] please enable --trace option in verilator when using lightSSS...(You may forget EMU_TRACE when compiling.)\n");
       FAIT_EXIT
 #endif
 
 #if EMU_THREAD <= 1
-      printf("[ERROR] please use more than 1 threads in EMU_THREADS option\n");
+      printf("[ERROR] please use more than 1 threads in EMU_THREADS option when using lightSSS\n");
       FAIT_EXIT
 #endif 
     printf("[INFO] enable fork debugging...\n");
   }
 
   pid_t pid =-1;
-  // pid_t originPID = getpid();
   int status = -1;
   int slotCnt = 0;
   int waitProcess = 0;
@@ -469,7 +477,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
           forkshm.shwait();
           //checkpoint process wakes up
-#ifdef EMU_THREAD 
+#if EMU_THREAD > 1
           dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
 #endif
           //start wave dumping
