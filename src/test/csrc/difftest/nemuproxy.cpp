@@ -72,7 +72,9 @@ NemuProxy::NemuProxy(int coreid) {
   check_and_assert(guided_exec);
 
   update_config = (vaddr_t (*)(void *))dlsym(handle, "update_dynamic_config");
+#ifdef ENABLE_RUNHEAD
   check_and_assert(update_config);
+#endif
 
   store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(handle, "difftest_store_commit");
   check_and_assert(store_commit);
@@ -84,7 +86,9 @@ NemuProxy::NemuProxy(int coreid) {
   check_and_assert(isa_reg_display);
 
   query = (void (*)(void*, uint64_t))dlsym(handle, "difftest_query_ref");
+#ifdef ENABLE_RUNHEAD
   check_and_assert(query);
+#endif
 
   auto nemu_difftest_set_mhartid = (void (*)(int))dlsym(handle, "difftest_set_mhartid");
   if (NUM_CORES > 1) {

@@ -116,10 +116,20 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
           case 8: args.wave_path = optarg; continue;
-          case 9: args.enable_runahead = true; continue;
-#ifdef DEBUG_TILELINK
-          case 10: args.dump_tl = true; continue;
+          case 9: 
+#ifdef ENABLE_RUNHEAD
+            args.enable_runahead = true; 
+#else
+            printf("[WARN] runahead is not enabled at compile time, ignore --sim-run-ahead\n");
 #endif
+            continue;
+          case 10:
+#ifdef DEBUG_TILELINK
+            args.dump_tl = true; 
+#else
+            printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl\n");
+#endif
+            continue;
         }
         // fall through
       default:

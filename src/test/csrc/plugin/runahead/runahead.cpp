@@ -484,6 +484,7 @@ void Runahead::runahead_slave() {
           assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
         }
         break;
+#ifdef QUERY_MEM_ACCESS
       case RUNAHEAD_MSG_REQ_QUERY:
         runahead_debug("Query runahead result, type %lx\n", request.query_type);
         proxy->query(&resp_query.result, request.query_type);
@@ -498,6 +499,7 @@ void Runahead::runahead_slave() {
         }
         assert_no_error(msgsnd(runahead_resp_msgq_id, &resp_query, sizeof(RunaheadResponseQuery) - sizeof(long int), 0));
         break;
+#endif
       default:
         runahead_debug("Runahead slave received invalid runahead req\n");
         assert(0);

@@ -93,6 +93,9 @@
 // -----------------------------------------------------------------------
 
 // Let a fork of simulator run ahead of commit for perf analysis
+// uncomment the following line to enable this feature
+//#define ENABLE_RUNHEAD
+
 // max run ahead width
 #define DIFFTEST_RUNAHEAD_WIDTH 6
 
@@ -111,7 +114,7 @@
 // so that we do not need to implement RunaheadCommitEvent in RTL design
 // uncomment the following line to enable this feature
 #define AUTO_RUNAHEAD_CHECKPOINT_GC
-#define AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD 64
+#define AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD 192
 
 // -----------------------------------------------------------------------
 // Do not touch
@@ -127,5 +130,10 @@
 #endif
 
 #define RUNAHEAD_UNIT_TEST
+
+#ifdef ENABLE_RUNAHEAD
+#define TRACE_INFLIGHT_MEM_INST
+#define QUERY_MEM_ACCESS
+#endif
 
 #endif

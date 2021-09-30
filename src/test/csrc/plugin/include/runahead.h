@@ -28,9 +28,6 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-// config
-#define QUERY_MEM_ACCESS
-
 // Runahead framework
 
 typedef struct RunaheadCheckpoint {

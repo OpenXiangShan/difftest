@@ -19,8 +19,6 @@
 
 #include "common.h"
 
-#define TRACE_INFLIGHT_MEM_INST
-
 typedef struct MemInstInfo {
   uint64_t pc;
   uint64_t vaddr;
