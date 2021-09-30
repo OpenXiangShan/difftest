@@ -313,20 +313,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   //check compiling options for lightSSS 
 
   if(args.enable_fork){
-#ifndef EMU_THREAD
-      printf("[ERROR] please enable --threads option in verilator when using lightSSS...(You may forget EMU_THREADS when compiling.)\n");
-      FAIT_EXIT
-#endif
-
 #ifndef VM_TRACE
       printf("[ERROR] please enable --trace option in verilator when using lightSSS...(You may forget EMU_TRACE when compiling.)\n");
       FAIT_EXIT
 #endif
-
-#if EMU_THREAD <= 1
-      printf("[ERROR] please use more than 1 threads in EMU_THREADS option when using lightSSS\n");
-      FAIT_EXIT
-#endif 
     printf("[INFO] enable fork debugging...\n");
   }
 
