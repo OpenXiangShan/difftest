@@ -76,6 +76,9 @@
 // time to save a snapshot
 #define SNAPSHOT_INTERVAL 60 // unit: second
 
+// if error, let simulator print debug info
+#define ENABLE_SIMULATOR_DEBUG_INFO
+
 // -----------------------------------------------------------------------
 // Memory difftest config
 // -----------------------------------------------------------------------

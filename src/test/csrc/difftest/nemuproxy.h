@@ -58,7 +58,8 @@ struct ExecutionGuide {
 };
 
 typedef struct DynamicConfig {
-  bool ignore_illegal_mem_access;
+  bool ignore_illegal_mem_access = false;
+  bool debug_difftest = false;
 } DynamicSimulatorConfig;
 
 void ref_misc_put_gmaddr(uint8_t* ptr);

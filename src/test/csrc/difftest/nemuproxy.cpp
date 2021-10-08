@@ -72,9 +72,7 @@ NemuProxy::NemuProxy(int coreid) {
   check_and_assert(guided_exec);
 
   update_config = (vaddr_t (*)(void *))dlsym(handle, "update_dynamic_config");
-#ifdef ENABLE_RUNHEAD
   check_and_assert(update_config);
-#endif
 
   store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(handle, "difftest_store_commit");
   check_and_assert(store_commit);

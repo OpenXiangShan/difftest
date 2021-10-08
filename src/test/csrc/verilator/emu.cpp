@@ -479,6 +479,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           time_t now = time(NULL);
           tfp->open(cycle_wavefile(startCycle, now));
 #endif
+          // let simulator print debug info
+#ifdef ENABLE_SIMULATOR_DEBUG_INFO
+          DynamicSimulatorConfig nemu_config;
+          nemu_config.debug_difftest = true;
+          for (int i = 0; i < NUM_CORES; i++) {
+            difftest[i]->proxy->update_config(&nemu_config);
+          }
+#endif
         }
       }
     }
