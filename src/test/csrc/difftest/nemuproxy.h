@@ -34,6 +34,7 @@ public:
   vaddr_t (*guided_exec)(void *disambiguate_para);
   void (*raise_intr)(uint64_t no);
   void (*isa_reg_display)();
+  void (*enable_debug)();
 
   NemuProxy(int coreid);
 private:

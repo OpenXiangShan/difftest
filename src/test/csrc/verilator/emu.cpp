@@ -447,6 +447,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           time_t now = time(NULL);
           tfp->open(cycle_wavefile(startCycle, now));	
 #endif
+          for (int i = 0; i < NUM_CORES; i++) {
+            difftest[i]->enable_debug();
+          }
         }
       }
     }
