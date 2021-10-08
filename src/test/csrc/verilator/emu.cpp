@@ -450,11 +450,11 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
             time_t now = time(NULL);
             tfp->open(cycle_wavefile(startCycle, now));	
             //enable nemu debug
+            for (int i = 0; i < NUM_CORES; i++) {
+              difftest[i]->enable_debug();
+            }
           }
 #endif
-          for (int i = 0; i < NUM_CORES; i++) {
-            difftest[i]->enable_debug();
-          }
         }
       }
     }
@@ -475,8 +475,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       printf("[%d] checkpoint process: dump wave complete, exit...\n",getpid());
       return cycles;
     }
-    else if(trapCode != STATE_GOODTRAP){
-    //else if(trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED){
+    else if(trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED){
       forkshm.info->endCycles = cycles;
       forkshm.info->oldest = pidSlot.back();
       forkshm.info->notgood = true;
