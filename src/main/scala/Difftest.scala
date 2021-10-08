@@ -139,6 +139,34 @@ class DiffRefillEventIO extends DifftestBundle {
   val data  = Input(Vec(8, UInt(64.W)))
 }
 
+class DiffRunaheadEventIO extends DifftestBundle with DifftestWithIndex {
+  val valid         = Input(Bool())
+  val branch        = Input(Bool())
+  val may_replay    = Input(Bool())
+  val pc            = Input(UInt(64.W))
+  val checkpoint_id = Input(UInt(64.W))
+}
+
+class DiffRunaheadCommitEventIO extends DifftestBundle with DifftestWithIndex {
+  val valid         = Input(Bool())
+  val pc            = Input(UInt(64.W))
+}
+
+class DiffRunaheadRedirectEventIO extends DifftestBundle {
+  val valid         = Input(Bool())
+  val pc            = Input(UInt(64.W)) // for debug only
+  val target_pc     = Input(UInt(64.W)) // for debug only
+  val checkpoint_id = Input(UInt(64.W))
+}
+
+class DiffRunaheadMemdepPredIO extends DifftestBundle with DifftestWithIndex {
+  val valid         = Input(Bool())
+  val is_load       = Input(Bool())
+  val need_wait     = Input(Bool())
+  val pc            = Input(UInt(64.W)) // for debug only
+  val oracle_vaddr  = Output(UInt(64.W))
+}
+
 class DifftestArchEvent extends BlackBox {
   val io = IO(new DiffArchEventIO)
 }
@@ -185,6 +213,22 @@ class DifftestPtwEvent extends BlackBox {
 
 class DifftestRefillEvent extends BlackBox {
   val io = IO(new DiffRefillEventIO)
+}
+
+class DifftestRunaheadEvent extends BlackBox {
+  val io = IO(new DiffRunaheadEventIO)
+}
+
+class DifftestRunaheadCommitEvent extends BlackBox {
+  val io = IO(new DiffRunaheadCommitEventIO)
+}
+
+class DifftestRunaheadRedirectEvent extends BlackBox {
+  val io = IO(new DiffRunaheadRedirectEventIO)
+}
+
+class DifftestRunaheadMemdepPred extends BlackBox {
+  val io = IO(new DiffRunaheadMemdepPredIO)
 }
 
 // Difftest emulator top

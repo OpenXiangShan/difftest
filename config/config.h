@@ -33,12 +33,12 @@
 #define FIRST_INST_ADDRESS 0x80000000
 
 // sdcard image to be used in simulation
-// uncomment the follwing line to enable this feature
+// uncomment the following line to enable this feature
 // #define SDCARD_IMAGE "/home/xyn/workloads/debian/riscv-debian.img"
 
 // Use sdl to show screen
 // Note: It does not work well with clang, to use that, switch to gcc
-// uncomment the follwing line to enable this feature
+// uncomment the following line to enable this feature
 // #define SHOW_SCREEN
 
 // -----------------------------------------------------------------------
@@ -76,6 +76,9 @@
 // time to save a snapshot
 #define SNAPSHOT_INTERVAL 60 // unit: second
 
+// if error, let simulator print debug info
+#define ENABLE_SIMULATOR_DEBUG_INFO
+
 // -----------------------------------------------------------------------
 // Memory difftest config
 // -----------------------------------------------------------------------
@@ -84,8 +87,37 @@
 // #define DEBUG_REFILL
 
 // dump all tilelink trace to a database
-// uncomment the follwing line to enable this feature
+// uncomment the following line to enable this feature
 //#define DEBUG_TILELINK
+
+
+// -----------------------------------------------------------------------
+// Simulator run ahead config
+// -----------------------------------------------------------------------
+
+// Let a fork of simulator run ahead of commit for perf analysis
+// uncomment the following line to enable this feature
+//#define ENABLE_RUNHEAD
+
+// max run ahead width
+#define DIFFTEST_RUNAHEAD_WIDTH 6
+
+// print simulator runahead debug info
+// uncomment the following line to enable this feature
+// #define RUNAHEAD_DEBUG
+
+// mem dependency check config
+#define MEMDEP_WINDOW_SIZE 64
+
+// upper bound of runahead checkpoints
+// will be ignored if AUTO_RUNAHEAD_CHECKPOINT_GC is defined
+#define RUN_AHEAD_CHECKPOINT_SIZE 64
+
+// automatically free the oldest checkpoint for runahead
+// so that we do not need to implement RunaheadCommitEvent in RTL design
+// uncomment the following line to enable this feature
+#define AUTO_RUNAHEAD_CHECKPOINT_GC
+#define AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD 192
 
 // -----------------------------------------------------------------------
 // Do not touch
@@ -98,6 +130,13 @@
 
 #ifdef DEBUG_REFILL
     #define DEBUG_GOLDENMEM
+#endif
+
+#define RUNAHEAD_UNIT_TEST
+
+#ifdef ENABLE_RUNAHEAD
+#define TRACE_INFLIGHT_MEM_INST
+#define QUERY_MEM_ACCESS
 #endif
 
 #endif

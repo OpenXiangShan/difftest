@@ -32,8 +32,10 @@ public:
   int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask);
   void (*exec)(uint64_t n);
   vaddr_t (*guided_exec)(void *disambiguate_para);
+  vaddr_t (*update_config)(void *config);
   void (*raise_intr)(uint64_t no);
   void (*isa_reg_display)();
+  void (*query)(void *result_buffer, uint64_t type);
 
   NemuProxy(int coreid);
 private:
@@ -45,10 +47,20 @@ struct SyncState {
 };
 
 struct ExecutionGuide {
-  uint64_t exceptionNo;
+  // force raise exception
+  bool force_raise_exception;
+  uint64_t exception_num;
   uint64_t mtval;
   uint64_t stval;
+  // force set jump target
+  bool force_set_jump_target;
+  uint64_t jump_target;
 };
+
+typedef struct DynamicConfig {
+  bool ignore_illegal_mem_access = false;
+  bool debug_difftest = false;
+} DynamicSimulatorConfig;
 
 void ref_misc_put_gmaddr(uint8_t* ptr);
 

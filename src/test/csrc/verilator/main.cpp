@@ -37,6 +37,7 @@ int main(int argc, const char** argv) {
     printf("\ncan't catch SIGINT\n");
   }
 
+  emu_path = argv[0];
   auto emu = new Emulator(argc, argv);
 
   get_sc_time_stamp = [&emu]() -> double {

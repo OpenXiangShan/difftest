@@ -136,17 +136,50 @@ typedef struct {
 } refill_event_t;
 
 typedef struct {
-  trap_event_t     trap;
-  arch_event_t     event;
-  instr_commit_t   commit[DIFFTEST_COMMIT_WIDTH];
-  arch_reg_state_t regs;
-  arch_csr_state_t csr;
-  sbuffer_state_t  sbuffer;
-  store_event_t    store[DIFFTEST_STORE_WIDTH];
-  load_event_t     load[DIFFTEST_COMMIT_WIDTH];
-  atomic_event_t   atomic;
-  ptw_event_t      ptw;
-  refill_event_t   refill;
+  uint8_t  valid = 0;
+  uint8_t  branch = 0;
+  uint8_t  may_replay = 0;
+  uint64_t pc;
+  uint64_t checkpoint_id;
+} run_ahead_event_t;
+
+typedef struct {
+  uint8_t  valid = 0;
+  uint8_t  branch = 0;
+  uint64_t pc;
+} run_ahead_commit_event_t;
+
+typedef struct {
+  uint8_t  valid = 0;
+  uint64_t pc;
+  uint64_t target_pc;
+  uint64_t checkpoint_id;
+} run_ahead_redirect_event_t;
+
+typedef struct {
+  uint8_t  valid = 0;
+  uint8_t  is_load;
+  uint8_t  need_wait;
+  uint64_t pc;
+  uint64_t oracle_vaddr;
+} run_ahead_memdep_pred_t;
+
+typedef struct {
+  trap_event_t      trap;
+  arch_event_t      event;
+  instr_commit_t    commit[DIFFTEST_COMMIT_WIDTH];
+  arch_reg_state_t  regs;
+  arch_csr_state_t  csr;
+  sbuffer_state_t   sbuffer;
+  store_event_t     store[DIFFTEST_STORE_WIDTH];
+  load_event_t      load[DIFFTEST_COMMIT_WIDTH];
+  atomic_event_t    atomic;
+  ptw_event_t       ptw;
+  refill_event_t    refill;
+  run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
+  run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
+  run_ahead_redirect_event_t runahead_redirect;
+  run_ahead_memdep_pred_t runahead_memdep_pred[DIFFTEST_RUNAHEAD_WIDTH];
 } difftest_core_state_t;
 
 enum retire_inst_type {
@@ -207,7 +240,7 @@ public:
   uint32_t num_commit = 0; // # of commits if made progress
   bool has_commit = false;
   // Trigger a difftest checking procdure
-  int step();
+  virtual int step();
   void update_nemuproxy(int);
   inline bool get_trap_valid() {
     return dut.trap.valid;
@@ -252,13 +285,31 @@ public:
   inline refill_event_t *get_refill_event() {
     return &(dut.refill);
   }
+  inline run_ahead_event_t *get_runahead_event(uint8_t index) {
+    return &(dut.runahead[index]);
+  }
+  inline run_ahead_commit_event_t *get_runahead_commit_event(uint8_t index) {
+    return &(dut.runahead_commit[index]);
+  }
+  inline run_ahead_redirect_event_t *get_runahead_redirect_event() {
+    return &(dut.runahead_redirect);
+  }
+  inline run_ahead_memdep_pred_t *get_runahead_memdep_pred(uint8_t index) {
+    return &(dut.runahead_memdep_pred[index]);
+  }
+  difftest_core_state_t *get_dut() {
+    return &dut;
+  }
+  difftest_core_state_t *get_ref() {
+    return &ref;
+  }
 #ifdef DEBUG_REFILL
   void save_track_instr(uint64_t instr) {
     track_instr = instr;
   }
 #endif
 
-private:
+protected:
   const uint64_t firstCommit_limit = 5000;
   const uint64_t stuck_limit = 5000;
 

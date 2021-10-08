@@ -45,7 +45,7 @@ NemuProxy::NemuProxy(int coreid) {
     difftest_ref_so = buf;
   }
 
-  printf("Using %s for difftest\n", difftest_ref_so);
+  printf("NemuProxy using %s\n", difftest_ref_so);
 
   void *handle = dlmopen(LM_ID_NEWLM, difftest_ref_so, RTLD_LAZY | RTLD_DEEPBIND);
   if(!handle){
@@ -71,6 +71,9 @@ NemuProxy::NemuProxy(int coreid) {
   guided_exec = (vaddr_t (*)(void *))dlsym(handle, "difftest_guided_exec");
   check_and_assert(guided_exec);
 
+  update_config = (vaddr_t (*)(void *))dlsym(handle, "update_dynamic_config");
+  check_and_assert(update_config);
+
   store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(handle, "difftest_store_commit");
   check_and_assert(store_commit);
 
@@ -79,6 +82,11 @@ NemuProxy::NemuProxy(int coreid) {
 
   isa_reg_display = (void (*)(void))dlsym(handle, "isa_reg_display");
   check_and_assert(isa_reg_display);
+
+  query = (void (*)(void*, uint64_t))dlsym(handle, "difftest_query_ref");
+#ifdef ENABLE_RUNHEAD
+  check_and_assert(query);
+#endif
 
   auto nemu_difftest_set_mhartid = (void (*)(int))dlsym(handle, "difftest_set_mhartid");
   if (NUM_CORES > 1) {
