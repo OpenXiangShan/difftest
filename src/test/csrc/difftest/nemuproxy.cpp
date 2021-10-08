@@ -96,6 +96,9 @@ NemuProxy::NemuProxy(int coreid) {
   auto nemu_init = (void (*)(void))dlsym(handle, "difftest_init");
   check_and_assert(nemu_init);
 
+  enable_debug = (void (*)(void))dlsym(handle, "difftest_enable_debug");
+  check_and_assert(enable_debug);
+
   nemu_init();
 }
 

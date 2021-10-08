@@ -452,6 +452,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
             //enable nemu debug
           }
 #endif
+          for (int i = 0; i < NUM_CORES; i++) {
+            difftest[i]->enable_debug();
+          }
         }
       }
     }

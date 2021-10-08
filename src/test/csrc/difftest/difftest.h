@@ -216,6 +216,9 @@ public:
     return dut.trap.code;
   }
   void display();
+  void enable_debug() {
+    proxy->enable_debug();
+  }
 
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
   // These functions generally do nothing but copy the information to core_state.
