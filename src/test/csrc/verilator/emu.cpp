@@ -320,7 +320,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     printf("[INFO] enable fork debugging...\n");
   }
 
-  pid_t pid =-1;
+  pid_t pid  = -1;
   int status = -1;
   int slotCnt = 0;
   int waitProcess = 0;
@@ -386,7 +386,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     dut_ptr->io_perfInfo_clean = 0;
     dut_ptr->io_perfInfo_dump = 0;
 
-    if (args.enable_diff && !waitProcess) {
+    //if (args.enable_diff && !waitProcess) {
+    if (args.enable_diff) {
       trapCode = difftest_state();
       if (trapCode != STATE_RUNNING) break;
       if (difftest_step()) {
@@ -414,7 +415,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     if(args.enable_fork){
       timer = uptime();
       //check if it's time to fork a checkpoint process
-      if (timer - lasttime_snapshot > 1000 * FORK_INTERVAL && !waitProcess) {   // time out need to fork
+      if (timer - lasttime_snapshot > 1000 * FORK_INTERVAL && !waitProcess) {  
         lasttime_snapshot = timer;
         //kill the oldest blocked checkpoint process
         if (slotCnt == SLOT_SIZE) {   
@@ -425,7 +426,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         }
         //fork a new checkpoint process and block it 
         if ((pid = fork()) < 0) {
-          eprintf("[%d]Error: could not fork process!\n",getpid());
+          eprintf("[%d]Error: could not fork process!\n",getpid()) ;
           return -1;
         } else if (pid != 0) {      
           slotCnt++;
@@ -439,13 +440,17 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
 #endif
           //start wave dumping
-          enable_waveform = true;
+          enable_waveform = (forkshm.info->oldest == getpid());
 #if VM_TRACE == 1
-          Verilated::traceEverOn(true);	
-          tfp = new VerilatedVcdC;
-          dut_ptr->trace(tfp, 99);
-          time_t now = time(NULL);
-          tfp->open(cycle_wavefile(startCycle, now));	
+          if(enable_waveform){
+            //dump wave
+            Verilated::traceEverOn(true);	
+            tfp = new VerilatedVcdC;
+            dut_ptr->trace(tfp, 99);
+            time_t now = time(NULL);
+            tfp->open(cycle_wavefile(startCycle, now));	
+            //enable nemu debug
+          }
 #endif
         }
       }
@@ -467,10 +472,12 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       printf("[%d] checkpoint process: dump wave complete, exit...\n",getpid());
       return cycles;
     }
-    else if(trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED){
-      forkshm.info->flag = true;
-      forkshm.info->notgood = true;
+    else if(trapCode != STATE_GOODTRAP){
+    //else if(trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED){
       forkshm.info->endCycles = cycles;
+      forkshm.info->oldest = pidSlot.back();
+      forkshm.info->notgood = true;
+      forkshm.info->flag = true;
       waitpid(pidSlot.back(),&status,0);
       display_trapinfo();
       return cycles;
@@ -609,8 +616,9 @@ ForkShareMemory::ForkShareMemory() {
   }
 
   info->flag      = false;
-  info->notgood   = false;           //STATE_RUNNING
+  info->notgood   = false;     
   info->endCycles = 0;
+  info->oldest    = 0;
 }
 
 ForkShareMemory::~ForkShareMemory() {
