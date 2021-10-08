@@ -474,13 +474,23 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     if(waitProcess) {
       printf("[%d] checkpoint process: dump wave complete, exit...\n",getpid());
       return cycles;
-    }
-    else if(trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED){
+    } else if(trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED){
       forkshm.info->endCycles = cycles;
       forkshm.info->oldest = pidSlot.back();
       forkshm.info->notgood = true;
       forkshm.info->flag = true;
       waitpid(pidSlot.back(),&status,0);
+      display_trapinfo();
+      return cycles;
+    } else {
+      //when reach maximum instruction, clear the checkpoint process
+      printf("[main process] clear processes...\n");
+      while(!pidSlot.empty()){
+        pid_t temp = pidSlot.back();
+        pidSlot.pop_back();
+        kill(temp, SIGKILL);
+        slotCnt--;
+      }
       display_trapinfo();
       return cycles;
     } 
