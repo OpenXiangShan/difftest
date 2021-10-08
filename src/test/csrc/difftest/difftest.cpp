@@ -180,9 +180,11 @@ void Difftest::do_exception() {
   if (dut.event.exception == 12 || dut.event.exception == 13 || dut.event.exception == 15) {
     // printf("exception cause: %d\n", dut.event.exception);
     struct ExecutionGuide guide;
-    guide.exceptionNo = dut.event.exception;
+    guide.force_raise_exception = true;
+    guide.exception_num = dut.event.exception;
     guide.mtval = dut.csr.mtval;
     guide.stval = dut.csr.stval;
+    guide.force_set_jump_target = false;
     proxy->guided_exec(&guide);
   } else {
     proxy->exec(1);
@@ -295,6 +297,9 @@ void Difftest::do_first_instr_commit() {
 
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
+    DynamicSimulatorConfig nemu_config;
+    nemu_config.ignore_illegal_mem_access = false;
+    proxy->update_config(&nemu_config);
   }
 }
 

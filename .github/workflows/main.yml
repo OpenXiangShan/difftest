@@ -23,6 +23,8 @@ jobs:
       - name: Prepare environment
         run: |
             cd $GITHUB_WORKSPACE/..
+            git config --global url."https://github.com/".insteadOf git@github.com:
+            git config --global url."https://".insteadOf git://
             git clone https://github.com/OpenXiangShan/xs-env
             cd $GITHUB_WORKSPACE/../xs-env
             sudo -s ./setup-tools.sh

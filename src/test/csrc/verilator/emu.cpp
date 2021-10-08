@@ -18,9 +18,11 @@
 #include "device.h"
 #include "sdcard.h"
 #include "difftest.h"
+#include "runahead.h"
 #include "nemuproxy.h"
 #include "goldenmem.h"
 #include "device.h"
+#include "runahead.h"
 #include <getopt.h>
 #include <signal.h>
 #include <unistd.h>
@@ -56,6 +58,7 @@ static inline void print_help(const char *file) {
 #ifdef DEBUG_TILELINK
   printf("      --dump-tl              dump tilelink transactions\n");
 #endif
+  printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
@@ -79,6 +82,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
     { "wave-path",         1, NULL,  0  },
+    { "sim-run-ahead",     0, NULL,  0  },
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
@@ -112,9 +116,20 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
           case 8: args.wave_path = optarg; continue;
-#ifdef DEBUG_TILELINK
-          case 9: args.dump_tl = true; continue;
+          case 9: 
+#ifdef ENABLE_RUNHEAD
+            args.enable_runahead = true; 
+#else
+            printf("[WARN] runahead is not enabled at compile time, ignore --sim-run-ahead\n");
 #endif
+            continue;
+          case 10:
+#ifdef DEBUG_TILELINK
+            args.dump_tl = true; 
+#else
+            printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl\n");
+#endif
+            continue;
         }
         // fall through
       default:
@@ -144,6 +159,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'b': args.log_begin = atoll(optarg);  break;
       case 'e': args.log_end = atoll(optarg); break;
     }
+  }
+
+  if(args.image == NULL) {
+    print_help(argv[0]);
+    printf("Hint: --image=IMAGE_FILE must be given\n");
+    exit(0);
   }
 
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
@@ -292,6 +313,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     init_goldenmem();
     init_nemuproxy();
   }
+  if(args.enable_runahead){
+    runahead_init();
+  }
 
 #ifdef DEBUG_REFILL
   difftest[0]->save_track_instr(args.track_instr);
@@ -313,6 +337,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   //check compiling options for lightSSS 
 
   if(args.enable_fork){
+    // Currently, runahead does not work well with fork based snapshot
+    assert(!args.enable_runahead);
 #ifndef VM_TRACE
       printf("[ERROR] please enable --trace option in verilator when using lightSSS...(You may forget EMU_TRACE when compiling.)\n");
       FAIT_EXIT
@@ -396,6 +422,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       }
     }
 
+    if(args.enable_runahead) {
+      runahead_step();
+    }
+
 #ifdef VM_SAVABLE
     static int snapshot_count = 0;
     if (args.enable_snapshot && trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
@@ -433,7 +463,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           pidSlot.insert(pidSlot.begin(), pid);
         } else {     
           waitProcess = 1;
+#if VM_TRACE == 1
           uint64_t startCycle = cycles;
+#endif
           forkshm.shwait();
           //checkpoint process wakes up
 #if EMU_THREAD > 1
@@ -449,19 +481,21 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
             dut_ptr->trace(tfp, 99);
             time_t now = time(NULL);
             tfp->open(cycle_wavefile(startCycle, now));	
-            //enable nemu debug
-            for (int i = 0; i < NUM_CORES; i++) {
-              difftest[i]->enable_debug();
-            }
+          }
+#endif
+#ifdef ENABLE_SIMULATOR_DEBUG_INFO
+          // let simulator print debug info
+          DynamicSimulatorConfig nemu_config;
+          nemu_config.debug_difftest = true;
+          for (int i = 0; i < NUM_CORES; i++) {
+            difftest[i]->proxy->update_config(&nemu_config);
           }
 #endif
         }
       }
     }
-
-
-}
-
+  }
+  // Simulation ends here, do clean up & display jobs
 #if VM_TRACE == 1
   if (enable_waveform) tfp->close();
 #endif
@@ -469,6 +503,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #if VM_COVERAGE == 1
   save_coverage(coverage_start_time);
 #endif
+
+  if(args.enable_runahead){
+    runahead_cleanup(); // remove all checkpoints
+  }
 
   if(args.enable_fork){
     if(waitProcess) {
@@ -602,6 +640,10 @@ void Emulator::display_trapinfo() {
     eprintf(ANSI_COLOR_MAGENTA "total guest instructions = %'" PRIu64 "\n" ANSI_COLOR_RESET, instrCnt);
     eprintf(ANSI_COLOR_MAGENTA "instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
         instrCnt, cycleCnt, ipc);
+  #ifdef TRACE_INFLIGHT_MEM_INST
+    runahead[i]->memdep_watcher->print_pred_matrix();
+  #endif
+    
   }
 
   if (trapCode != STATE_ABORT) {

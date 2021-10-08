@@ -18,7 +18,7 @@ VCS_TARGET = simv
 
 VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
 VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
-VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR)
+VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
 VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz
 
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)

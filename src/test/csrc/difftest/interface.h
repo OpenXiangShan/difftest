@@ -22,6 +22,7 @@
 #define __DT_INTERFACE_H__
 
 #include "difftest.h"
+#include "runahead.h"
 
 // #ifdef __cplusplus
 // extern "C" {
@@ -326,6 +327,49 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG data_7                 \
   )
 
+// v_difftest_RunaheadEvent
+#define INTERFACE_RUNAHEAD_EVENT           \
+  DIFFTEST_DPIC_FUNC_DECL(RunaheadEvent) ( \
+    DPIC_ARG_BYTE coreid,                  \
+    DPIC_ARG_BYTE index,                   \
+    DPIC_ARG_BIT  valid,                   \
+    DPIC_ARG_BIT  branch,                  \
+    DPIC_ARG_BIT  may_replay,              \
+    DPIC_ARG_LONG pc,                      \
+    DPIC_ARG_LONG checkpoint_id            \
+  )
+
+// v_difftest_RunaheadCommitEvent 
+#define INTERFACE_RUNAHEAD_COMMIT_EVENT          \
+  DIFFTEST_DPIC_FUNC_DECL(RunaheadCommitEvent) ( \
+    DPIC_ARG_BYTE coreid,                        \
+    DPIC_ARG_BYTE index,                         \
+    DPIC_ARG_BIT  valid,                         \
+    DPIC_ARG_LONG pc                             \
+  )
+
+// v_difftest_RunaheadRedirectEvent
+#define INTERFACE_RUNAHEAD_REDIRECT_EVENT          \
+  DIFFTEST_DPIC_FUNC_DECL(RunaheadRedirectEvent) ( \
+    DPIC_ARG_BYTE coreid,                          \
+    DPIC_ARG_BIT  valid,                           \
+    DPIC_ARG_LONG pc,                              \
+    DPIC_ARG_LONG target_pc,                       \
+    DPIC_ARG_LONG checkpoint_id                    \
+  )
+
+// v_difftest_RunaheadMemdepPred
+#define INTERFACE_RUNAHEAD_MEMDEP_PRED             \
+  DIFFTEST_DPIC_FUNC_DECL(RunaheadMemdepPred) (    \
+    DPIC_ARG_BYTE coreid,                          \
+    DPIC_ARG_BYTE index,                           \
+    DPIC_ARG_BIT  valid,                           \
+    DPIC_ARG_BIT  is_load,                         \
+    DPIC_ARG_BIT  need_wait,                       \
+    DPIC_ARG_LONG pc,                              \
+    uint64_t* oracle_vaddr                         \
+  )
+
 INTERFACE_ARCH_EVENT;
 INTERFACE_INSTR_COMMIT;
 INTERFACE_TRAP_EVENT;
@@ -338,5 +382,9 @@ INTERFACE_LOAD_EVENT;
 INTERFACE_ATOMIC_EVENT;
 INTERFACE_PTW_EVENT;
 INTERFACE_REFILL_EVENT;
+INTERFACE_RUNAHEAD_EVENT;
+INTERFACE_RUNAHEAD_COMMIT_EVENT;
+INTERFACE_RUNAHEAD_REDIRECT_EVENT;
+INTERFACE_RUNAHEAD_MEMDEP_PRED;
 
 #endif

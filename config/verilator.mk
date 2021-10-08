@@ -26,9 +26,6 @@
 # Enable Verilator Savable based checkpoint
 # EMU_SNAPSHOT ?= 1
 
-# Enable Fork-wait based checkpoint 
-# EMU_FORKWAIT ?= 1
-
 # Enable Verilator coverage
 # EMU_COVERAGE ?= 1
 
