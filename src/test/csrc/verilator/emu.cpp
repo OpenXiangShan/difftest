@@ -279,7 +279,7 @@ inline void Emulator::single_cycle() {
     uint64_t begin = dut_ptr->io_logCtrl_log_begin;
     uint64_t end   = dut_ptr->io_logCtrl_log_end;
     bool in_range  = (begin <= cycle) && (cycle <= end);
-    if (in_range) { tfp->dump(cycle); }
+    if (in_range || force_dump_wave) { tfp->dump(cycle); }
   }
 #endif
 
@@ -443,9 +443,11 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
 
     if(args.enable_fork){
+      static bool have_initial_fork = false;
       timer = uptime();
       //check if it's time to fork a checkpoint process
-      if (timer - lasttime_snapshot > 1000 * FORK_INTERVAL && !waitProcess) {  
+      if (((timer - lasttime_snapshot > 1000 * FORK_INTERVAL) || !have_initial_fork) && !waitProcess) {  
+        have_initial_fork = true;
         lasttime_snapshot = timer;
         //kill the oldest blocked checkpoint process
         if (slotCnt == SLOT_SIZE) {   
@@ -481,6 +483,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
             dut_ptr->trace(tfp, 99);
             time_t now = time(NULL);
             tfp->open(cycle_wavefile(startCycle, now));	
+            // override output range config, force dump wave
+            force_dump_wave = true;
           }
 #endif
 #ifdef ENABLE_SIMULATOR_DEBUG_INFO

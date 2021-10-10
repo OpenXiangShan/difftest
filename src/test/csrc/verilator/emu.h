@@ -105,6 +105,7 @@ private:
   VSimTop *dut_ptr;
   VerilatedVcdC* tfp;
   bool enable_waveform;
+  bool force_dump_wave = false;
 #ifdef VM_SAVABLE
   VerilatedSaveMem snapshot_slot[2];
 #endif
