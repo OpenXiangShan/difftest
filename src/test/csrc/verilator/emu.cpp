@@ -443,10 +443,11 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
 
     if(args.enable_fork){
+      static bool have_initial_fork = false;
       timer = uptime();
       //check if it's time to fork a checkpoint process
-      if (timer - lasttime_snapshot > 1000 * FORK_INTERVAL && !waitProcess) {  
-        lasttime_snapshot = timer;
+      if (((timer - lasttime_snapshot > 1000 * FORK_INTERVAL) || !have_initial_fork) && !waitProcess) {  
+        have_initial_fork = true;
         //kill the oldest blocked checkpoint process
         if (slotCnt == SLOT_SIZE) {   
           pid_t temp = pidSlot.back();
