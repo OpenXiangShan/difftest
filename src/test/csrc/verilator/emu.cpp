@@ -27,7 +27,7 @@
 #include <signal.h>
 #include <unistd.h>
 #ifdef  DEBUG_TILELINK
-#include "logger.h"
+#include "tllogger.h"
 #endif
 #include "ram.h"
 #include "zlib.h"

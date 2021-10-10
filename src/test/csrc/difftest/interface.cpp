@@ -162,7 +162,7 @@ INTERFACE_FP_REG_STATE {
 
 INTERFACE_SBUFFER_EVENT {
   RETURN_NO_NULL
-  auto packet = difftest[coreid]->get_sbuffer_state();
+  auto packet = difftest[coreid]->get_sbuffer_state(index);
   packet->resp = sbufferResp;
   if (packet->resp) {
     packet->addr = sbufferAddr;

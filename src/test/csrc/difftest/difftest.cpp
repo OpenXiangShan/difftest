@@ -449,13 +449,16 @@ int Difftest::do_golden_memory_update() {
     dumpGoldenMem("Init", track_instr, ticks);    
   }
 
-  if (dut.sbuffer.resp) {
-    dut.sbuffer.resp = 0;
-    update_goldenmem(dut.sbuffer.addr, dut.sbuffer.data, dut.sbuffer.mask, 64);
-    if (dut.sbuffer.addr == track_instr) {
-      dumpGoldenMem("Store", track_instr, ticks);
+  for(int i = 0; i < DIFFTEST_SBUFFER_RESP_WIDTH; i++){
+    if (dut.sbuffer[i].resp) {
+      dut.sbuffer[i].resp = 0;
+      update_goldenmem(dut.sbuffer[i].addr, dut.sbuffer[i].data, dut.sbuffer[i].mask, 64);
+      if (dut.sbuffer[i].addr == track_instr) {
+        dumpGoldenMem("Store", track_instr, ticks);
+      }
     }
   }
+
   if (dut.atomic.resp) {
     dut.atomic.resp = 0;
     int ret = handle_atomic(id, dut.atomic.addr, dut.atomic.data, dut.atomic.mask, dut.atomic.fuop, dut.atomic.out);
@@ -503,7 +506,9 @@ void Difftest::clear_step() {
   for (int i = 0; i < DIFFTEST_COMMIT_WIDTH; i++) {
     dut.commit[i].valid = 0;
   }
-  dut.sbuffer.resp = 0;
+  for (int i = 0; i < DIFFTEST_SBUFFER_RESP_WIDTH; i++) {
+    dut.sbuffer[i].resp = 0;
+  }
   for (int i = 0; i < DIFFTEST_STORE_WIDTH; i++) {
     dut.store[i].valid = 0;
   }
