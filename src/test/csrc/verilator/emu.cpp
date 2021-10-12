@@ -475,9 +475,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
           //start wave dumping
           enable_waveform = (forkshm.info->oldest == getpid());
-#if VM_TRACE == 1
           if(enable_waveform){
             //dump wave
+#if VM_TRACE == 1      
             Verilated::traceEverOn(true);	
             tfp = new VerilatedVcdC;
             dut_ptr->trace(tfp, 99);
@@ -485,16 +485,16 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
             tfp->open(cycle_wavefile(startCycle, now));	
             // override output range config, force dump wave
             force_dump_wave = true;
-          }
 #endif
 #ifdef ENABLE_SIMULATOR_DEBUG_INFO
-          // let simulator print debug info
-          DynamicSimulatorConfig nemu_config;
-          nemu_config.debug_difftest = true;
-          for (int i = 0; i < NUM_CORES; i++) {
-            difftest[i]->proxy->update_config(&nemu_config);
-          }
+            // let simulator print debug info
+            DynamicSimulatorConfig nemu_config;
+            nemu_config.debug_difftest = true;
+            for (int i = 0; i < NUM_CORES; i++) {
+              difftest[i]->proxy->update_config(&nemu_config);
+            }
 #endif
+          } else exit(0);
         }
       }
     }
