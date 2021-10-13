@@ -366,6 +366,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
+    if(waitProcess && cycles != 0 && cycles == forkshm.info->endCycles){
+      FORK_PRINTF("checkpoint has reached the main process abort point :%d\n", cycles)
+    }
+
     if (!max_cycle) {
       trapCode = STATE_LIMIT_EXCEEDED;
       break;
@@ -517,6 +521,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       FORK_PRINTF("checkpoint process: dump wave complete, exit...\n")
       return cycles;
     } else if(trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED){
+      forkshm.info->endCycles = cycles;
       forkshm.info->oldest = pidSlot.back();
       forkshm.info->notgood = true;
       forkshm.info->flag = true;
@@ -674,6 +679,7 @@ ForkShareMemory::ForkShareMemory() {
 
   info->flag      = false;
   info->notgood   = false;     
+  info->endCycles = 0;
   info->oldest    = 0;
 }
 

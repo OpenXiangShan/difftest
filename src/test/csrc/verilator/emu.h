@@ -34,6 +34,7 @@
 typedef struct shinfo{
   bool flag;
   bool notgood;
+  uint64_t endCycles;
   pid_t oldest;
 } shinfo;
 
