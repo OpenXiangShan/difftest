@@ -331,6 +331,10 @@ int Difftest::do_refill_check() {
   dut.refill.addr = dut.refill.addr - dut.refill.addr % 64;
   if (dut.refill.valid == 1 && dut.refill.addr != last_valid_addr) {
     last_valid_addr = dut.refill.addr;
+    if(!in_pmem(dut.refill.addr)){
+      // speculated illegal mem access should be ignored
+      return 0;
+    }
     for (int i = 0; i < 8; i++) {
       read_goldenmem(dut.refill.addr + i*8, &buf, 8);
       if (dut.refill.data[i] != *((uint64_t*)buf)) {

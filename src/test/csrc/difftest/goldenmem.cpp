@@ -52,7 +52,7 @@ void read_goldenmem(paddr_t addr, void *data, uint64_t len) {
   *(uint64_t*)data = paddr_read(addr, len);
 }
 
-static inline bool in_pmem(paddr_t addr) {
+bool in_pmem(paddr_t addr) {
   return (PMEM_BASE <= addr) && (addr <= PMEM_BASE + PMEM_SIZE - 1);
 }
 
