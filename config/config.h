@@ -84,6 +84,9 @@
 // if error, let simulator print debug info
 #define ENABLE_SIMULATOR_DEBUG_INFO
 
+// how many cycles child processes step forward when reaching error point
+#define STEP_FORWARD_CYCLES 100
+
 // -----------------------------------------------------------------------
 // Memory difftest config
 // -----------------------------------------------------------------------
