@@ -94,7 +94,7 @@ extern "C" void tl_log_write_helper(
     // insert to log db
     char sql[256];
     sprintf(sql,
-        "INSERT INTO TL_LOG(NAME,CHANNEL,OPCODE,PARAM,SOURCE,SINK,ADDRESS,DATA_0,DATA_1,DATA_2,DATA_3,STAMP) VALUES('%s',%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%ld,%ld);",
+        "INSERT INTO TL_LOG(NAME,CHANNEL,OPCODE,PARAM,SOURCE,SINK,ADDRESS,DATA_0,DATA_1,DATA_2,DATA_3,USER,ECHO,STAMP) VALUES('%s',%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld);",
         prefix, channel, opcode, param, source, sink, address,
         data_0, data_1, data_2, data_3, stamp
     );
