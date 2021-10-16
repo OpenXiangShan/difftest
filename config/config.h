@@ -49,7 +49,12 @@
 #define DIFFTEST_COMMIT_WIDTH 6
 
 // max store width
+//
+// max num of stores turn from predicted to non-predicted in 1 cycle
 #define DIFFTEST_STORE_WIDTH 2
+
+// max store buffer resp width, for golden mem check
+#define DIFFTEST_SBUFFER_RESP_WIDTH 3
 
 // commit inst history length 
 #define DEBUG_INST_TRACE_SIZE 32
@@ -87,11 +92,11 @@
 // -----------------------------------------------------------------------
 
 // whether to check memory coherence during refilling
-// #define DEBUG_REFILL
+#define DEBUG_REFILL
 
 // dump all tilelink trace to a database
 // uncomment the following line to enable this feature
-//#define DEBUG_TILELINK
+#define DEBUG_TILELINK
 
 
 // -----------------------------------------------------------------------

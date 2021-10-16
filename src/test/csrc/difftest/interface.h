@@ -196,6 +196,7 @@ extern "C" int v_difftest_step();
 #define INTERFACE_SBUFFER_EVENT          \
   DIFFTEST_DPIC_FUNC_DECL(SbufferEvent) ( \
     DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BYTE index,                 \
     DPIC_ARG_BIT  sbufferResp,           \
     DPIC_ARG_LONG sbufferAddr,           \
     DPIC_ARG_BYTE sbufferData_0,         \

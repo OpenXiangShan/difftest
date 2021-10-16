@@ -97,7 +97,7 @@ class DiffArchFpRegStateIO extends DifftestBundle {
   val fpr  = Input(Vec(32, UInt(64.W)))
 }
 
-class DiffSbufferEventIO extends DifftestBundle {
+class DiffSbufferEventIO extends DifftestBundle with DifftestWithIndex{
   val sbufferResp = Input(Bool())
   val sbufferAddr = Input(UInt(64.W))
   val sbufferData = Input(Vec(64, UInt(8.W)))

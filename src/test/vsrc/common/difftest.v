@@ -342,6 +342,7 @@ endmodule
 // DifftestSbufferEvent
 `DIFFTEST_DPIC_FUNC_DECL(SbufferEvent) (
   `DPIC_ARG_BYTE coreid,
+  `DPIC_ARG_BYTE index,
   `DPIC_ARG_BIT  sbufferResp,
   `DPIC_ARG_LONG sbufferAddr,
   `DPIC_ARG_BYTE sbufferData_0,
@@ -413,6 +414,7 @@ endmodule
 `DIFFTEST_MOD_DECL(SbufferEvent)(
   input        clock, 
   input [ 7:0] coreid,
+  input [ 7:0] index,
   input        sbufferResp,
   input [63:0] sbufferAddr,
   input [ 7:0] sbufferData_0,
@@ -482,7 +484,7 @@ endmodule
   input [63:0] sbufferMask
 );
   `DIFFTEST_MOD_DPIC_CALL_BEGIN_WITH_EN(sbufferResp, SbufferEvent) (
-    coreid, sbufferResp, sbufferAddr,
+    coreid, index, sbufferResp, sbufferAddr,
     sbufferData_0,  sbufferData_1,  sbufferData_2,  sbufferData_3,  sbufferData_4,  sbufferData_5,
     sbufferData_6,  sbufferData_7,  sbufferData_8,  sbufferData_9,  sbufferData_10, sbufferData_11,
     sbufferData_12, sbufferData_13, sbufferData_14, sbufferData_15, sbufferData_16, sbufferData_17,

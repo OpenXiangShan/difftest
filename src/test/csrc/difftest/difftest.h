@@ -170,7 +170,7 @@ typedef struct {
   instr_commit_t    commit[DIFFTEST_COMMIT_WIDTH];
   arch_reg_state_t  regs;
   arch_csr_state_t  csr;
-  sbuffer_state_t   sbuffer;
+  sbuffer_state_t   sbuffer[DIFFTEST_SBUFFER_RESP_WIDTH];
   store_event_t     store[DIFFTEST_STORE_WIDTH];
   load_event_t      load[DIFFTEST_COMMIT_WIDTH];
   atomic_event_t    atomic;
@@ -267,8 +267,8 @@ public:
   inline arch_reg_state_t *get_arch_reg_state() {
     return &(dut.regs);
   }
-  inline sbuffer_state_t *get_sbuffer_state() {
-    return &(dut.sbuffer);
+  inline sbuffer_state_t *get_sbuffer_state(uint8_t index) {
+    return &(dut.sbuffer[index]);
   }
   inline store_event_t *get_store_event(uint8_t index) {
     return &(dut.store[index]);
