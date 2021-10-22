@@ -701,6 +701,7 @@ void Emulator::fork_child_init() {
   tfp->open(cycle_wavefile(cycles, now));
   // override output range config, force dump wave
   force_dump_wave = true;
+  enable_waveform = true;
 #endif
 #ifdef ENABLE_SIMULATOR_DEBUG_INFO
   // let simulator print debug info
