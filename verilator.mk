@@ -34,6 +34,12 @@ endif
 
 VEXTRA_FLAGS  = -I$(abspath $(BUILD_DIR)) --x-assign unique -O3 -CFLAGS "$(EMU_CXXFLAGS)" -LDFLAGS "$(EMU_LDFLAGS)"
 
+# Verilator version check
+VERILATOR_4_210 := $(shell expr `verilator --version | cut -f3 -d.` \>= 210)
+ifeq ($(VERILATOR_4_210),1)
+EMU_CXXFLAGS += -DVERILATOR_4_210
+endif
+
 # Verilator trace support
 EMU_TRACE ?=
 ifeq ($(EMU_TRACE),1)
@@ -101,7 +107,9 @@ $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
 		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS)
-	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g' 
+	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
+	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
+	find $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
 
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
