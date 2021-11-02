@@ -63,6 +63,8 @@ static inline void print_help(const char *file) {
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
+  printf("  -r  --branch-record PATH   load branch record from PATH\n");
+  printf("      --miss-rate RATE       revert branch direction in trace with given miss rate\n"); 
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
@@ -83,6 +85,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "enable-jtag",       0, NULL,  0  },
     { "wave-path",         1, NULL,  0  },
     { "sim-run-ahead",     0, NULL,  0  },
+    { "miss-rate",         1, NULL,  0  },
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
@@ -97,13 +100,14 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "image",             1, NULL, 'i' },
     { "log-begin",         1, NULL, 'b' },
     { "log-end",           1, NULL, 'e' },
+    { "branch-record",     1, NULL, 'r' },
     { "help",              0, NULL, 'h' },
     { 0,                   0, NULL,  0  }
   };
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:I:T:W:hi:m:b:e:", long_options, &long_index)) != -1) {
+          "-s:C:I:T:W:hi:m:b:e:r:", long_options, &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -123,7 +127,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] runahead is not enabled at compile time, ignore --sim-run-ahead\n");
 #endif
             continue;
-          case 10:
+	  case 10: args.branch_miss_rate = atoll(optarg); continue;
+          case 11:
 #ifdef DEBUG_TILELINK
             args.dump_tl = true;
 #else
@@ -158,6 +163,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'i': args.image = optarg; break;
       case 'b': args.log_begin = atoll(optarg);  break;
       case 'e': args.log_end = atoll(optarg); break;
+      case 'r': args.branch_record = optarg; break;
     }
   }
 
@@ -190,6 +196,10 @@ Emulator::Emulator(int argc, const char *argv[]):
   }
   // init core
   reset_ncycles(10);
+
+  // init branch record for oracle bp
+  extern void init_branch_record(const char *br, const uint64_t rate);
+  init_branch_record(args.branch_record, args.branch_miss_rate);
 
   // init ram
   init_ram(args.image);
@@ -231,6 +241,9 @@ Emulator::Emulator(int argc, const char *argv[]):
 Emulator::~Emulator() {
   ram_finish();
   assert_finish();
+
+  extern void free_branch_record();
+  free_branch_record();
 
 #ifdef VM_SAVABLE
   if (args.enable_snapshot && trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED) {
