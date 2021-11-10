@@ -19,6 +19,7 @@ package difftest
 import chisel3._
 import chisel3.util._
 import Chisel.BlackBox
+import chisel3.experimental.{DataMirror, ExtModule}
 
 trait DifftestParameter {
 }
@@ -56,8 +57,8 @@ class DiffInstrCommitIO extends DifftestBundle with DifftestWithIndex {
   val isRVC    = Input(Bool())
   val scFailed = Input(Bool())
   val wen      = Input(Bool())
-  val wdata    = Input(UInt(64.W))
   val wdest    = Input(UInt(8.W))
+  val wdata    = Input(UInt(64.W))
 }
 
 class DiffTrapEventIO extends DifftestBundle {
@@ -167,68 +168,144 @@ class DiffRunaheadMemdepPredIO extends DifftestBundle with DifftestWithIndex {
   val oracle_vaddr  = Output(UInt(64.W))
 }
 
-class DifftestArchEvent extends BlackBox {
+abstract class DifftestModule extends ExtModule with HasExtModuleInline {
+  val io: DifftestBundle
+
+  def getDirectionString(data: Data): String = {
+    if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
+  }
+
+  def getDPICArgString(argName: String, data: Data): String = {
+    val directionString = getDirectionString(data)
+    val typeString = data.getWidth match {
+      case 1                                  => "bit"
+      case width if width > 1  && width <= 8  => "byte"
+      case width if width > 8  && width <= 32 => "int"
+      case width if width > 32 && width <= 64 => "longint"
+      case _ => s"unsupported io type of width ${data.getWidth}!!\n"
+    }
+    val argString = Seq(directionString, f"${typeString}%7s", argName)
+    argString.mkString(" ")
+  }
+
+  def getModArgString(argName: String, data: Data): String = {
+    val widthString = if (data.getWidth == 1) "      " else f"[${data.getWidth - 1}%2d:0]"
+    val argString = Seq(getDirectionString(data), widthString, s"$argName")
+    argString.mkString(" ")
+  }
+
+  lazy val moduleName = this.getClass.getSimpleName
+  lazy val moduleBody: String = {
+    // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
+    // This is different from BlackBoxes.
+    val interfaces = io.elements.toSeq.reverse.flatMap{ case (name, data) =>
+      data match {
+        case vec: Vec[Data] => vec.zipWithIndex.map{ case (v, i) => (s"io_${name}_$i", v) }
+        case _ => Seq((s"io_$name", data))
+      }
+    }
+    // (1) DPI-C function prototype
+    val dpicInterfaces = interfaces.filterNot(_._1 == "io_clock")
+    val dpicPrototype = dpicInterfaces.map(i => getDPICArgString(i._1, i._2)).mkString(",\n")
+    val dpicDeclBase = Seq("import", "\"DPI-C\"", "function", "void").mkString(" ")
+    val dpicDeclName = s"v_difftest_${moduleName.replace("Difftest", "")}"
+    val dpicDecl = Seq(Seq(dpicDeclBase, dpicDeclName, "(").mkString(" "), dpicPrototype, ");").mkString("\n")
+    // (2) module definition
+    val modPrototype = interfaces.map(i => getModArgString(i._1, i._2)).mkString(",\n")
+    val modDecl = Seq(Seq("module", moduleName, "(").mkString(" "), modPrototype, ");").mkString("\n")
+    val modBody = Seq(
+      "`ifndef SYNTHESIS",
+      dpicDecl,
+      "  always @(posedge io_clock) begin",
+      "    " + Seq(dpicDeclName, "(", dpicInterfaces.map(_._1).mkString(", "), ");").mkString(" "),
+      "  end",
+      "`endif"
+    ).mkString("\n")
+    val modEnd = "endmodule"
+    val modDef = Seq(modDecl, modBody, modEnd).mkString("\n")
+    modDef
+  }
+  def instantiate(): Unit = setInline(s"$moduleName.v", moduleBody)
+}
+
+class DifftestArchEvent extends DifftestModule {
   val io = IO(new DiffArchEventIO)
+  instantiate()
 }
 
-class DifftestInstrCommit extends BlackBox {
+class DifftestInstrCommit extends DifftestModule {
   val io = IO(new DiffInstrCommitIO)
+  instantiate()
 }
 
-class DifftestTrapEvent extends BlackBox {
+class DifftestTrapEvent extends DifftestModule {
   val io = IO(new DiffTrapEventIO)
+  instantiate()
 }
 
-class DifftestCSRState extends BlackBox {
+class DifftestCSRState extends DifftestModule {
   val io = IO(new DiffCSRStateIO)
+  instantiate()
 }
 
-class DifftestArchIntRegState extends BlackBox {
+class DifftestArchIntRegState extends DifftestModule {
   val io = IO(new DiffArchIntRegStateIO)
+  instantiate()
 }
 
-class DifftestArchFpRegState extends BlackBox {
+class DifftestArchFpRegState extends DifftestModule {
   val io = IO(new DiffArchFpRegStateIO)
+  instantiate()
 }
 
-class DifftestSbufferEvent extends BlackBox {
+class DifftestSbufferEvent extends DifftestModule {
   val io = IO(new DiffSbufferEventIO)
+  instantiate()
 }
 
-class DifftestStoreEvent extends BlackBox {
+class DifftestStoreEvent extends DifftestModule {
   val io = IO(new DiffStoreEventIO)
+  instantiate()
 }
 
-class DifftestLoadEvent extends BlackBox {
+class DifftestLoadEvent extends DifftestModule {
   val io = IO(new DiffLoadEventIO)
+  instantiate()
 }
 
-class DifftestAtomicEvent extends BlackBox {
+class DifftestAtomicEvent extends DifftestModule {
   val io = IO(new DiffAtomicEventIO)
+  instantiate()
 }
 
-class DifftestPtwEvent extends BlackBox {
+class DifftestPtwEvent extends DifftestModule {
   val io = IO(new DiffPtwEventIO)
+  instantiate()
 }
 
-class DifftestRefillEvent extends BlackBox {
+class DifftestRefillEvent extends DifftestModule {
   val io = IO(new DiffRefillEventIO)
+  instantiate()
 }
 
-class DifftestRunaheadEvent extends BlackBox {
+class DifftestRunaheadEvent extends DifftestModule {
   val io = IO(new DiffRunaheadEventIO)
+  instantiate()
 }
 
-class DifftestRunaheadCommitEvent extends BlackBox {
+class DifftestRunaheadCommitEvent extends DifftestModule {
   val io = IO(new DiffRunaheadCommitEventIO)
+  instantiate()
 }
 
-class DifftestRunaheadRedirectEvent extends BlackBox {
+class DifftestRunaheadRedirectEvent extends DifftestModule {
   val io = IO(new DiffRunaheadRedirectEventIO)
+  instantiate()
 }
 
-class DifftestRunaheadMemdepPred extends BlackBox {
+class DifftestRunaheadMemdepPred extends DifftestModule {
   val io = IO(new DiffRunaheadMemdepPredIO)
+  instantiate()
 }
 
 // Difftest emulator top
@@ -256,8 +333,4 @@ class UARTIO extends Bundle {
     val valid = Output(Bool())
     val ch = Input(UInt(8.W))
   }
-}
-
-package object difftest {
-  
 }
