@@ -89,8 +89,13 @@ int Difftest::step() {
   progress = false;
   ticks++;
 
+#ifdef BASIC_DIFFTEST_ONLY
+  proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
+  dut.csr.this_pc = ref.csr.this_pc;
+#else
   // TODO: update nemu/xs to fix this_pc comparison
   dut.csr.this_pc = dut.commit[0].pc;
+#endif
 
   if (check_timeout()) {
     return 1;
@@ -197,7 +202,11 @@ void Difftest::do_instr_commit(int i) {
   last_commit = ticks;
 
   // store the writeback info to debug array
+#ifdef BASIC_DIFFTEST_ONLY
+  state->record_inst(ref.csr.this_pc, 0x0, dut.commit[i].wen, dut.commit[i].wdest, 0x0, dut.commit[i].skip != 0);
+#else
   state->record_inst(dut.commit[i].pc, dut.commit[i].inst, dut.commit[i].wen, dut.commit[i].wdest, dut.commit[i].wdata, dut.commit[i].skip != 0);
+#endif
 
   // sync lr/sc reg status
   if (dut.commit[i].scFailed) {
@@ -214,7 +223,7 @@ void Difftest::do_instr_commit(int i) {
     ref.csr.this_pc += dut.commit[i].isRVC ? 2 : 4;
     if (dut.commit[i].wen && dut.commit[i].wdest != 0) {
       // TODO: FPR
-      ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
+      ref_regs_ptr[dut.commit[i].wdest] = dut_regs_ptr[dut.commit[i].wdest];
     }
     proxy->regcpy(ref_regs_ptr, DIFFTEST_TO_REF);
     return;
@@ -290,10 +299,10 @@ void Difftest::do_instr_commit(int i) {
 }
 
 void Difftest::do_first_instr_commit() {
-  if (!has_commit && dut.commit[0].valid && dut.commit[0].pc == FIRST_INST_ADDRESS) {
+  if (!has_commit && dut.commit[0].valid) {
     printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
     has_commit = 1;
-    nemu_this_pc = dut.csr.this_pc;
+    nemu_this_pc = FIRST_INST_ADDRESS;
 
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);

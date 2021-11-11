@@ -64,17 +64,30 @@ extern "C" int v_difftest_step();
     DPIC_ARG_INT  exceptionInst          \
   )
 
+// v_difftest_BasicInstrCommit
+#define INTERFACE_BASIC_INSTR_COMMIT     \
+  DIFFTEST_DPIC_FUNC_DECL(BasicInstrCommit) ( \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BYTE index,                 \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_BYTE special,               \
+    DPIC_ARG_BIT  skip,                  \
+    DPIC_ARG_BIT  isRVC,                 \
+    DPIC_ARG_BIT  wen,                   \
+    DPIC_ARG_BYTE wdest                  \
+  )
+
 // v_difftest_InstrCommit
 #define INTERFACE_INSTR_COMMIT           \
   DIFFTEST_DPIC_FUNC_DECL(InstrCommit) ( \
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_BYTE index,                 \
     DPIC_ARG_BIT  valid,                 \
-    DPIC_ARG_LONG pc,                    \
-    DPIC_ARG_INT  instr,                 \
     DPIC_ARG_BYTE special,               \
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
+    DPIC_ARG_LONG pc,                    \
+    DPIC_ARG_INT  instr,                 \
     DPIC_ARG_BIT  scFailed,              \
     DPIC_ARG_BIT  wen,                   \
     DPIC_ARG_BYTE wdest,                 \
@@ -371,6 +384,7 @@ extern "C" int v_difftest_step();
     uint64_t* oracle_vaddr                         \
   )
 
+INTERFACE_BASIC_INSTR_COMMIT;
 INTERFACE_ARCH_EVENT;
 INTERFACE_INSTR_COMMIT;
 INTERFACE_TRAP_EVENT;

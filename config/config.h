@@ -30,7 +30,7 @@
 #define EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
 
 // first valid instruction's address, difftest starts from this instruction
-#define FIRST_INST_ADDRESS 0x80000000
+#define FIRST_INST_ADDRESS 0x10000000
 
 // sdcard image to be used in simulation
 // uncomment the following line to enable this feature

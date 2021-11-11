@@ -46,6 +46,19 @@ INTERFACE_ARCH_EVENT {
   packet->exceptionInst = exceptionInst;
 }
 
+INTERFACE_BASIC_INSTR_COMMIT {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_instr_commit(index);
+  packet->valid    = valid;
+  if (packet->valid) {
+    packet->skip     = skip;
+    packet->isRVC    = isRVC;
+    packet->fused    = special;
+    packet->wen      = wen;
+    packet->wdest    = wdest;
+  }
+}
+
 INTERFACE_INSTR_COMMIT {
   RETURN_NO_NULL
   auto packet = difftest[coreid]->get_instr_commit(index);

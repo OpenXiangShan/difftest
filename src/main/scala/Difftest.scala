@@ -48,16 +48,19 @@ class DiffArchEventIO extends DifftestBundle {
   val exceptionInst = Input(UInt(32.W))
 }
 
-class DiffInstrCommitIO extends DifftestBundle with DifftestWithIndex {
+class DiffBasicInstrCommitIO extends DifftestBundle with DifftestWithIndex {
   val valid    = Input(Bool())
-  val pc       = Input(UInt(64.W))
-  val instr    = Input(UInt(32.W))
   val special  = Input(UInt(8.W))
   val skip     = Input(Bool())
   val isRVC    = Input(Bool())
-  val scFailed = Input(Bool())
   val wen      = Input(Bool())
   val wdest    = Input(UInt(8.W))
+}
+
+class DiffInstrCommitIO extends DiffBasicInstrCommitIO {
+  val pc       = Input(UInt(64.W))
+  val instr    = Input(UInt(32.W))
+  val scFailed = Input(Bool())
   val wdata    = Input(UInt(64.W))
 }
 
@@ -235,6 +238,11 @@ class DifftestArchEvent extends DifftestModule {
 
 class DifftestInstrCommit extends DifftestModule {
   val io = IO(new DiffInstrCommitIO)
+  instantiate()
+}
+
+class DifftestBasicInstrCommit extends DifftestModule {
+  val io = IO(new DiffBasicInstrCommitIO)
   instantiate()
 }
 
