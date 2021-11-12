@@ -126,7 +126,7 @@ int Difftest::step() {
   if (dut.event.interrupt) {
     dut.csr.this_pc = dut.event.exceptionPC;
     do_interrupt();
-  } else if(dut.event.exception) {
+  } else if (dut.event.exception) {
     // We ignored instrAddrMisaligned exception (0) for better debug interface
     // XiangShan should always support RVC, so instrAddrMisaligned will never happen
     // TODO: update NEMU, for now, NEMU will update pc when exception happen
@@ -137,7 +137,6 @@ int Difftest::step() {
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut.commit[i].valid; i++) {
       do_instr_commit(i);
       dut.commit[i].valid = 0;
-
       num_commit++;
       // TODO: let do_instr_commit return number of instructions in this uop
       if (dut.commit[i].fused) {
@@ -305,7 +304,12 @@ void Difftest::do_first_instr_commit() {
     nemu_this_pc = FIRST_INST_ADDRESS;
 
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    // Use a temp variable to store the current pc of dut
+    uint64_t dut_this_pc = dut.csr.this_pc;
+    // NEMU should always start at FIRST_INST_ADDRESS
+    dut.csr.this_pc = FIRST_INST_ADDRESS;
     proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
+    dut.csr.this_pc = dut_this_pc;
     // Do not reconfig simulator 'proxy->update_config(&nemu_config)' here:
     // If this is main sim thread, simulator has its own initial config
     // If this process is checkpoint wakeuped, simulator's config has already been updated,
