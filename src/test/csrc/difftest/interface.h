@@ -86,11 +86,11 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE special,               \
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
+    DPIC_ARG_BIT  wen,                   \
+    DPIC_ARG_BYTE wdest,                 \
     DPIC_ARG_LONG pc,                    \
     DPIC_ARG_INT  instr,                 \
     DPIC_ARG_BIT  scFailed,              \
-    DPIC_ARG_BIT  wen,                   \
-    DPIC_ARG_BYTE wdest,                 \
     DPIC_ARG_LONG wdata                  \
   )
 
