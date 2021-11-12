@@ -37,6 +37,14 @@ INTERFACE_TRAP_EVENT {
   packet->instrCnt = instrCnt;
 }
 
+INTERFACE_BASIC_TRAP_EVENT {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_trap_event();
+  packet->valid    = valid;
+  packet->cycleCnt = cycleCnt;
+  packet->instrCnt = instrCnt;
+}
+
 INTERFACE_ARCH_EVENT {
   RETURN_NO_NULL
   auto packet = difftest[coreid]->get_arch_event();

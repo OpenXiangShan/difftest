@@ -64,12 +64,15 @@ class DiffInstrCommitIO extends DiffBasicInstrCommitIO {
   val wdata    = Input(UInt(64.W))
 }
 
-class DiffTrapEventIO extends DifftestBundle {
+class DiffBasicTrapEventIO extends DifftestBundle {
   val valid    = Input(Bool())
-  val code     = Input(UInt(3.W))
-  val pc       = Input(UInt(64.W))
   val cycleCnt = Input(UInt(64.W))
   val instrCnt = Input(UInt(64.W))
+}
+
+class DiffTrapEventIO extends DiffBasicTrapEventIO {
+  val code     = Input(UInt(3.W))
+  val pc       = Input(UInt(64.W))
 }
 
 class DiffCSRStateIO extends DifftestBundle {
@@ -231,90 +234,29 @@ abstract class DifftestModule extends ExtModule with HasExtModuleInline {
   def instantiate(): Unit = setInline(s"$moduleName.v", moduleBody)
 }
 
-class DifftestArchEvent extends DifftestModule {
-  val io = IO(new DiffArchEventIO)
+class DifftestBaseModule[T <: DifftestBundle](gen: T) extends DifftestModule {
+  val io = IO(gen)
   instantiate()
 }
 
-class DifftestInstrCommit extends DifftestModule {
-  val io = IO(new DiffInstrCommitIO)
-  instantiate()
-}
-
-class DifftestBasicInstrCommit extends DifftestModule {
-  val io = IO(new DiffBasicInstrCommitIO)
-  instantiate()
-}
-
-class DifftestTrapEvent extends DifftestModule {
-  val io = IO(new DiffTrapEventIO)
-  instantiate()
-}
-
-class DifftestCSRState extends DifftestModule {
-  val io = IO(new DiffCSRStateIO)
-  instantiate()
-}
-
-class DifftestArchIntRegState extends DifftestModule {
-  val io = IO(new DiffArchIntRegStateIO)
-  instantiate()
-}
-
-class DifftestArchFpRegState extends DifftestModule {
-  val io = IO(new DiffArchFpRegStateIO)
-  instantiate()
-}
-
-class DifftestSbufferEvent extends DifftestModule {
-  val io = IO(new DiffSbufferEventIO)
-  instantiate()
-}
-
-class DifftestStoreEvent extends DifftestModule {
-  val io = IO(new DiffStoreEventIO)
-  instantiate()
-}
-
-class DifftestLoadEvent extends DifftestModule {
-  val io = IO(new DiffLoadEventIO)
-  instantiate()
-}
-
-class DifftestAtomicEvent extends DifftestModule {
-  val io = IO(new DiffAtomicEventIO)
-  instantiate()
-}
-
-class DifftestPtwEvent extends DifftestModule {
-  val io = IO(new DiffPtwEventIO)
-  instantiate()
-}
-
-class DifftestRefillEvent extends DifftestModule {
-  val io = IO(new DiffRefillEventIO)
-  instantiate()
-}
-
-class DifftestRunaheadEvent extends DifftestModule {
-  val io = IO(new DiffRunaheadEventIO)
-  instantiate()
-}
-
-class DifftestRunaheadCommitEvent extends DifftestModule {
-  val io = IO(new DiffRunaheadCommitEventIO)
-  instantiate()
-}
-
-class DifftestRunaheadRedirectEvent extends DifftestModule {
-  val io = IO(new DiffRunaheadRedirectEventIO)
-  instantiate()
-}
-
-class DifftestRunaheadMemdepPred extends DifftestModule {
-  val io = IO(new DiffRunaheadMemdepPredIO)
-  instantiate()
-}
+class DifftestArchEvent extends DifftestBaseModule(new DiffArchEventIO)
+class DifftestBasicInstrCommit extends DifftestBaseModule(new DiffBasicInstrCommitIO)
+class DifftestInstrCommit extends DifftestBaseModule(new DiffInstrCommitIO)
+class DifftestBasicTrapEvent extends DifftestBaseModule(new DiffBasicTrapEventIO)
+class DifftestTrapEvent extends DifftestBaseModule(new DiffTrapEventIO)
+class DifftestCSRState extends DifftestBaseModule(new DiffCSRStateIO)
+class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegStateIO)
+class DifftestArchFpRegState extends DifftestBaseModule(new DiffArchFpRegStateIO)
+class DifftestSbufferEvent extends DifftestBaseModule(new DiffSbufferEventIO)
+class DifftestStoreEvent extends DifftestBaseModule(new DiffStoreEventIO)
+class DifftestLoadEvent extends DifftestBaseModule(new DiffLoadEventIO)
+class DifftestAtomicEvent extends DifftestBaseModule(new DiffAtomicEventIO)
+class DifftestPtwEvent extends DifftestBaseModule(new DiffPtwEventIO)
+class DifftestRefillEvent extends DifftestBaseModule(new DiffRefillEventIO)
+class DifftestRunaheadEvent extends DifftestBaseModule(new DiffRunaheadEventIO)
+class DifftestRunaheadCommitEvent extends DifftestBaseModule(new DiffRunaheadCommitEventIO)
+class DifftestRunaheadRedirectEvent extends DifftestBaseModule(new DiffRunaheadRedirectEventIO)
+class DifftestRunaheadMemdepPred extends DifftestBaseModule(new DiffRunaheadMemdepPredIO)
 
 // Difftest emulator top
 

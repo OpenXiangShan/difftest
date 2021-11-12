@@ -94,15 +94,24 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG wdata                  \
   )
 
+// v_difftest_BasicTrapEvent
+#define INTERFACE_BASIC_TRAP_EVENT       \
+  DIFFTEST_DPIC_FUNC_DECL(BasicTrapEvent) (   \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_LONG cycleCnt,              \
+    DPIC_ARG_LONG instrCnt               \
+  )
+
 // v_difftest_TrapEvent
 #define INTERFACE_TRAP_EVENT             \
   DIFFTEST_DPIC_FUNC_DECL(TrapEvent) (   \
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_BIT  valid,                 \
-    DPIC_ARG_BYTE code,                  \
-    DPIC_ARG_LONG pc,                    \
     DPIC_ARG_LONG cycleCnt,              \
-    DPIC_ARG_LONG instrCnt               \
+    DPIC_ARG_LONG instrCnt,              \
+    DPIC_ARG_BYTE code,                  \
+    DPIC_ARG_LONG pc                     \
   )
 
 // v_difftest_CSRState
@@ -387,6 +396,7 @@ extern "C" int v_difftest_step();
 INTERFACE_BASIC_INSTR_COMMIT;
 INTERFACE_ARCH_EVENT;
 INTERFACE_INSTR_COMMIT;
+INTERFACE_BASIC_TRAP_EVENT;
 INTERFACE_TRAP_EVENT;
 INTERFACE_CSR_STATE;
 INTERFACE_INT_REG_STATE;
