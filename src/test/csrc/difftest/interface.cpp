@@ -63,6 +63,7 @@ INTERFACE_BASIC_INSTR_COMMIT {
     packet->isRVC    = isRVC;
     packet->fused    = special;
     packet->wen      = wen;
+    packet->wpdest   = wpdest;
     packet->wdest    = wdest;
   }
 }
@@ -79,8 +80,8 @@ INTERFACE_INSTR_COMMIT {
     packet->scFailed = scFailed;
     packet->fused    = special;
     packet->wen      = wen;
+    packet->wpdest   = wpdest;
     packet->wdest    = wdest;
-    packet->wdata    = wdata;
   }
 }
 
@@ -105,6 +106,14 @@ INTERFACE_CSR_STATE {
   packet->sscratch = sscratch;
   packet->mideleg = mideleg;
   packet->medeleg = medeleg;
+}
+
+INTERFACE_INT_WRITEBACK {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_physical_reg_state();
+  if (valid) {
+    packet->gpr[dest] = data;
+  }
 }
 
 INTERFACE_INT_REG_STATE {
@@ -142,6 +151,14 @@ INTERFACE_INT_REG_STATE {
   packet->gpr[29] = gpr_29;
   packet->gpr[30] = gpr_30;
   packet->gpr[31] = gpr_31;
+}
+
+INTERFACE_FP_WRITEBACK {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_physical_reg_state();
+  if (valid) {
+    packet->fpr[dest] = data;
+  }
 }
 
 INTERFACE_FP_REG_STATE {

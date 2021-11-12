@@ -74,6 +74,7 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
     DPIC_ARG_BIT  wen,                   \
+    DPIC_ARG_BYTE wpdest,                \
     DPIC_ARG_BYTE wdest                  \
   )
 
@@ -87,6 +88,7 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
     DPIC_ARG_BIT  wen,                   \
+    DPIC_ARG_BYTE wpdest,                \
     DPIC_ARG_BYTE wdest,                 \
     DPIC_ARG_LONG pc,                    \
     DPIC_ARG_INT  instr,                 \
@@ -138,6 +140,15 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG medeleg                \
   )
 
+// v_difftest_IntWriteback
+#define INTERFACE_INT_WRITEBACK          \
+  DIFFTEST_DPIC_FUNC_DECL(IntWriteback) (\
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_BYTE dest,                  \
+    DPIC_ARG_LONG data                   \
+  )
+
 // v_difftest_ArchIntRegState
 #define INTERFACE_INT_REG_STATE          \
   DIFFTEST_DPIC_FUNC_DECL(ArchIntRegState) ( \
@@ -174,6 +185,15 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG gpr_29,                \
     DPIC_ARG_LONG gpr_30,                \
     DPIC_ARG_LONG gpr_31                 \
+  )
+
+// v_difftest_FpWriteback
+#define INTERFACE_FP_WRITEBACK           \
+  DIFFTEST_DPIC_FUNC_DECL(FpWriteback) ( \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_BYTE dest,                  \
+    DPIC_ARG_LONG data                   \
   )
 
 // v_difftest_ArchFpRegState
@@ -399,7 +419,9 @@ INTERFACE_INSTR_COMMIT;
 INTERFACE_BASIC_TRAP_EVENT;
 INTERFACE_TRAP_EVENT;
 INTERFACE_CSR_STATE;
+INTERFACE_INT_WRITEBACK;
 INTERFACE_INT_REG_STATE;
+INTERFACE_FP_WRITEBACK;
 INTERFACE_FP_REG_STATE;
 INTERFACE_SBUFFER_EVENT;
 INTERFACE_STORE_EVENT;

@@ -54,6 +54,7 @@ class DiffBasicInstrCommitIO extends DifftestBundle with DifftestWithIndex {
   val skip     = Input(Bool())
   val isRVC    = Input(Bool())
   val wen      = Input(Bool())
+  val wpdest   = Input(UInt(8.W))
   val wdest    = Input(UInt(8.W))
 }
 
@@ -61,7 +62,6 @@ class DiffInstrCommitIO extends DiffBasicInstrCommitIO {
   val pc       = Input(UInt(64.W))
   val instr    = Input(UInt(32.W))
   val scFailed = Input(Bool())
-  val wdata    = Input(UInt(64.W))
 }
 
 class DiffBasicTrapEventIO extends DifftestBundle {
@@ -94,6 +94,18 @@ class DiffCSRStateIO extends DifftestBundle {
   val sscratch = Input(UInt(64.W))
   val mideleg = Input(UInt(64.W))
   val medeleg = Input(UInt(64.W))
+}
+
+class DiffIntWritebackIO extends DifftestBundle {
+  val valid = Input(Bool())
+  val dest  = Input(UInt(8.W))
+  val data  = Input(UInt(64.W))
+}
+
+class DiffFpWritebackIO extends DifftestBundle {
+  val valid = Input(Bool())
+  val dest  = Input(UInt(8.W))
+  val data  = Input(UInt(64.W))
 }
 
 class DiffArchIntRegStateIO extends DifftestBundle {
@@ -245,6 +257,8 @@ class DifftestInstrCommit extends DifftestBaseModule(new DiffInstrCommitIO)
 class DifftestBasicTrapEvent extends DifftestBaseModule(new DiffBasicTrapEventIO)
 class DifftestTrapEvent extends DifftestBaseModule(new DiffTrapEventIO)
 class DifftestCSRState extends DifftestBaseModule(new DiffCSRStateIO)
+class DifftestIntWriteback extends DifftestBaseModule(new DiffIntWritebackIO)
+class DifftestFpWriteback extends DifftestBaseModule(new DiffFpWritebackIO)
 class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegStateIO)
 class DifftestArchFpRegState extends DifftestBaseModule(new DiffArchFpRegStateIO)
 class DifftestSbufferEvent extends DifftestBaseModule(new DiffSbufferEventIO)

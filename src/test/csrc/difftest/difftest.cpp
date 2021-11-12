@@ -202,10 +202,13 @@ void Difftest::do_instr_commit(int i) {
 
   // store the writeback info to debug array
 #ifdef BASIC_DIFFTEST_ONLY
-  state->record_inst(ref.csr.this_pc, 0x0, dut.commit[i].wen, dut.commit[i].wdest, 0x0, dut.commit[i].skip != 0);
+  uint64_t commit_pc = ref.csr.this_pc;
+  uint64_t commit_instr = 0x0;
 #else
-  state->record_inst(dut.commit[i].pc, dut.commit[i].inst, dut.commit[i].wen, dut.commit[i].wdest, dut.commit[i].wdata, dut.commit[i].skip != 0);
+  uint64_t commit_pc = dut.commit[i].pc;
+  uint64_t commit_instr = dut.commit[i].inst;
 #endif
+  state->record_inst(commit_pc, commit_instr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
 
   // sync lr/sc reg status
   if (dut.commit[i].scFailed) {
@@ -221,8 +224,10 @@ void Difftest::do_instr_commit(int i) {
     proxy->regcpy(ref_regs_ptr, REF_TO_DIFFTEST);
     ref.csr.this_pc += dut.commit[i].isRVC ? 2 : 4;
     if (dut.commit[i].wen && dut.commit[i].wdest != 0) {
+      // We use the physical register file to get wdata
       // TODO: FPR
-      ref_regs_ptr[dut.commit[i].wdest] = dut_regs_ptr[dut.commit[i].wdest];
+      ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
+      // printf("skip %x %x %x\n",  get_commit_data(i), dut.commit[i].wpdest, dut.commit[i].wdest);
     }
     proxy->regcpy(ref_regs_ptr, DIFFTEST_TO_REF);
     return;
@@ -239,9 +244,9 @@ void Difftest::do_instr_commit(int i) {
   if (NUM_CORES > 1) {
     if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
       proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
-      if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != dut.commit[i].wdata) {
+      if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != get_commit_data(i)) {
         // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
-        // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, dut.commit[i].wdata, dut.commit[i].pc);
+        // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].pc);
         uint64_t golden;
         int len = 0;
         if (dut.load[i].fuType == 0xC) {
@@ -272,16 +277,16 @@ void Difftest::do_instr_commit(int i) {
           }
         }
         // printf("---    golden: 0x%lx  original: 0x%lx\n", golden, ref_regs_ptr[dut.commit[i].wdest]);
-        if (golden == dut.commit[i].wdata) {
+        if (golden == get_commit_data(i)) {
           proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
           if (dut.commit[i].wdest != 0) {
-            ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
+            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else if (dut.load[i].fuType == 0xF) {  //  atomic instr carefully handled
           proxy->memcpy(dut.load[i].paddr, &golden, len, DIFFTEST_TO_REF);
           if (dut.commit[i].wdest != 0) {
-            ref_regs_ptr[dut.commit[i].wdest] = dut.commit[i].wdata;
+            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else {

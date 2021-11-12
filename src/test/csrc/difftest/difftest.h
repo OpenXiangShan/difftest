@@ -60,8 +60,8 @@ typedef struct {
   uint8_t  scFailed;
   uint8_t  fused;
   uint8_t  wen;
+  uint8_t  wpdest;
   uint8_t  wdest;
-  uint64_t wdata;
 } instr_commit_t;
 
 typedef struct {
@@ -165,6 +165,11 @@ typedef struct {
 } run_ahead_memdep_pred_t;
 
 typedef struct {
+  uint64_t gpr[256];
+  uint64_t fpr[256];
+} physical_reg_state_t;
+
+typedef struct {
   trap_event_t      trap;
   arch_event_t      event;
   instr_commit_t    commit[DIFFTEST_COMMIT_WIDTH];
@@ -180,6 +185,7 @@ typedef struct {
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_redirect_event_t runahead_redirect;
   run_ahead_memdep_pred_t runahead_memdep_pred[DIFFTEST_RUNAHEAD_WIDTH];
+  physical_reg_state_t pregs;
 } difftest_core_state_t;
 
 enum retire_inst_type {
@@ -297,12 +303,16 @@ public:
   inline run_ahead_memdep_pred_t *get_runahead_memdep_pred(uint8_t index) {
     return &(dut.runahead_memdep_pred[index]);
   }
-  difftest_core_state_t *get_dut() {
+  inline difftest_core_state_t *get_dut() {
     return &dut;
   }
-  difftest_core_state_t *get_ref() {
+  inline difftest_core_state_t *get_ref() {
     return &ref;
   }
+  inline physical_reg_state_t *get_physical_reg_state() {
+    return &(dut.pregs);
+  }
+
 #ifdef DEBUG_REFILL
   void save_track_instr(uint64_t instr) {
     track_instr = instr;
@@ -339,6 +349,9 @@ protected:
   int do_golden_memory_update();
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }
+  inline uint64_t get_commit_data(int i) {
+    return dut.pregs.gpr[dut.commit[i].wpdest];
+  }
 
   void raise_trap(int trapCode);
   void clear_step();
