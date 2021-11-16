@@ -304,6 +304,10 @@ void Difftest::do_first_instr_commit() {
   }
 }
 
+inline bool in_same_cacheline(uint64_t addr1, uint64_t addr2) {
+  return (CACHELINE_ADDR_MASK | addr1) == (CACHELINE_ADDR_MASK | addr2);
+}
+
 int Difftest::do_store_check() {
   for (int i = 0; i < DIFFTEST_STORE_WIDTH; i++) {
     if (!dut.store[i].valid) {
@@ -312,6 +316,15 @@ int Difftest::do_store_check() {
     auto addr = dut.store[i].addr;
     auto data = dut.store[i].data;
     auto mask = dut.store[i].mask;
+#ifdef TRACE_SINGLE_STORE
+    if (addr == track_instr) {
+      printf("[ADDR TRACK] store data commit to sbuffer: data %lx mask %x time %ld\n", 
+        data,
+        mask,
+        ticks
+      );    
+    }
+#endif
     if (proxy->store_commit(&addr, &data, &mask)) {
       display();
       printf("Mismatch for store commits %d: \n", i);
@@ -437,7 +450,7 @@ void dumpGoldenMem(char* banner, uint64_t addr, uint64_t time) {
   if (addr == 0) {
     return;
   }
-  printf("============== %s =============== time = %ld\ndata: ", banner, time);
+  printf("[ADDR TRACK] ============== %s =============== time = %ld\n[ADDR TRACK] data: ", banner, time);
     for (int i = 0; i < 8; i++) {
       read_goldenmem(addr + i*8, &buf, 8);
       printf("%016lx", *((uint64_t*)buf));

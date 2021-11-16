@@ -62,6 +62,8 @@
 // commit inst group history length 
 #define DEBUG_GROUP_TRACE_SIZE 16
 
+#define CACHELINE_ADDR_MASK 0x3f 
+
 // -----------------------------------------------------------------------
 // Checkpoint config
 // -----------------------------------------------------------------------
@@ -98,6 +100,8 @@
 // uncomment the following line to enable this feature
 #define DEBUG_TILELINK
 
+// track store data commit
+#define TRACE_SINGLE_STORE
 
 // -----------------------------------------------------------------------
 // Simulator run ahead config
