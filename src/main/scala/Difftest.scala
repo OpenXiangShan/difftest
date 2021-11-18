@@ -186,8 +186,9 @@ class DiffRunaheadMemdepPredIO extends DifftestBundle with DifftestWithIndex {
   val oracle_vaddr  = Output(UInt(64.W))
 }
 
-abstract class DifftestModule extends ExtModule with HasExtModuleInline {
-  val io: DifftestBundle
+abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline
+{
+  val io: T
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -212,8 +213,8 @@ abstract class DifftestModule extends ExtModule with HasExtModuleInline {
     argString.mkString(" ")
   }
 
-  lazy val moduleName = this.getClass.getSimpleName
-  lazy val moduleBody: String = {
+  def moduleName = this.getClass.getSimpleName
+  def moduleBody: String = {
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
     val interfaces = io.elements.toSeq.reverse.flatMap{ case (name, data) =>
@@ -224,29 +225,34 @@ abstract class DifftestModule extends ExtModule with HasExtModuleInline {
     }
     // (1) DPI-C function prototype
     val dpicInterfaces = interfaces.filterNot(_._1 == "io_clock")
-    val dpicPrototype = dpicInterfaces.map(i => getDPICArgString(i._1, i._2)).mkString(",\n")
-    val dpicDeclBase = Seq("import", "\"DPI-C\"", "function", "void").mkString(" ")
-    val dpicDeclName = s"v_difftest_${moduleName.replace("Difftest", "")}"
-    val dpicDecl = Seq(Seq(dpicDeclBase, dpicDeclName, "(").mkString(" "), dpicPrototype, ");").mkString("\n")
+    val dpicName = s"v_difftest_${moduleName.replace("Difftest", "")}"
+    val dpicDecl =
+      s"""
+         |import "DPI-C" function void $dpicName (
+         |${dpicInterfaces.map(ifc => getDPICArgString(ifc._1, ifc._2)).mkString(",\n")}
+         |);
+         |""".stripMargin
     // (2) module definition
-    val modPrototype = interfaces.map(i => getModArgString(i._1, i._2)).mkString(",\n")
-    val modDecl = Seq(Seq("module", moduleName, "(").mkString(" "), modPrototype, ");").mkString("\n")
-    val modBody = Seq(
-      "`ifndef SYNTHESIS",
-      dpicDecl,
-      "  always @(posedge io_clock) begin",
-      "    " + Seq(dpicDeclName, "(", dpicInterfaces.map(_._1).mkString(", "), ");").mkString(" "),
-      "  end",
-      "`endif"
-    ).mkString("\n")
-    val modEnd = "endmodule"
-    val modDef = Seq(modDecl, modBody, modEnd).mkString("\n")
+    val modPorts = interfaces.map(i => getModArgString(i._1, i._2)).mkString(",\n")
+    val modDef =
+      s"""
+         |module $moduleName(
+         |  $modPorts
+         |);
+         |`ifndef SYNTHESIS
+         |$dpicDecl
+         |  always @(posedge io_clock) begin
+         |    $dpicName (${dpicInterfaces.map(_._1).mkString(",")});
+         |  end
+         |`endif
+         |endmodule
+         |""".stripMargin
     modDef
   }
   def instantiate(): Unit = setInline(s"$moduleName.v", moduleBody)
 }
 
-class DifftestBaseModule[T <: DifftestBundle](gen: T) extends DifftestModule {
+class DifftestBaseModule[T <: DifftestBundle](gen: T) extends DifftestModule[T] {
   val io = IO(gen)
   instantiate()
 }
