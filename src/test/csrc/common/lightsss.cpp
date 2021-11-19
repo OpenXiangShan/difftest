@@ -49,6 +49,8 @@ int LightSSS::do_fork() {
     pid_t temp = pidSlot.back();
     pidSlot.pop_back();
     kill(temp, SIGKILL);
+    int status = 0;
+    waitpid(temp, NULL, 0);
     slotCnt--;
   }
   // fork a new checkpoint process and block it
@@ -91,6 +93,7 @@ int LightSSS::do_clear() {
     pid_t temp = pidSlot.back();
     pidSlot.pop_back();
     kill(temp, SIGKILL);
+    waitpid(temp, NULL, 0);
     slotCnt--;
   }
   return 0;
