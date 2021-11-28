@@ -36,8 +36,8 @@ enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
 // trap events: self-defined traps
 typedef struct {
   uint8_t  valid = 0;
-  uint8_t  code;
-  uint64_t pc;
+  uint8_t  code = 0;
+  uint64_t pc = 0;
   uint64_t cycleCnt = 0;
   uint64_t instrCnt = 0;
 } trap_event_t;
