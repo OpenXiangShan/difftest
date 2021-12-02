@@ -19,10 +19,6 @@
 #include "ram.h"
 #include "spikedasm.h"
 
-#ifndef FIRST_INST_ADDRESS
-#define FIRST_INST_ADDRESS 0x80000000
-#endif
-
 static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "$0",  "ra",  "sp",   "gp",   "tp",  "t0",  "t1",   "t2",
   "s0",  "s1",  "a0",   "a1",   "a2",  "a3",  "a4",   "a5",
@@ -303,7 +299,7 @@ void Difftest::do_instr_commit(int i) {
 }
 
 void Difftest::do_first_instr_commit() {
-  if (!has_commit && dut.commit[0].valid) {
+  if (!has_commit && dut.commit[0].valid && dut.commit[0].pc == FIRST_INST_ADDRESS) {
     printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
     has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;

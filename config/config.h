@@ -50,6 +50,9 @@
 // -----------------------------------------------------------------------
 // Difftest interface config
 // -----------------------------------------------------------------------
+#ifndef DIFF_PROXY
+#define DIFF_PROXY NemuProxy
+#endif
 
 // max commit width
 #define DIFFTEST_COMMIT_WIDTH 6

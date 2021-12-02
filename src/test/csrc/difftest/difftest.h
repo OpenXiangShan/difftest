@@ -19,8 +19,7 @@
 
 #include "common.h"
 
-#include "nemuproxy.h"
-#define DIFF_PROXY NemuProxy
+#include "refproxy.h"
 
 #define DIFFTEST_CORE_NUMBER  NUM_CORES
 

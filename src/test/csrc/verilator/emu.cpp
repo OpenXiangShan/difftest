@@ -19,7 +19,7 @@
 #include "sdcard.h"
 #include "difftest.h"
 #include "runahead.h"
-#include "nemuproxy.h"
+#include "refproxy.h"
 #include "goldenmem.h"
 #include "device.h"
 #include "runahead.h"

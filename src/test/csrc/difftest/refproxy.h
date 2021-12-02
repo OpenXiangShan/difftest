@@ -22,22 +22,35 @@
 
 #include "common.h"
 
-class NemuProxy {
+class RefProxy {
 public:
   // public callable functions
-  void (*memcpy)(paddr_t nemu_addr, void *dut_buf, size_t n, bool direction);
-  void (*regcpy)(void *dut, bool direction);
-  void (*csrcpy)(void *dut, bool direction);
-  void (*uarchstatus_cpy)(void *dut, bool direction);
-  int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask);
-  void (*exec)(uint64_t n);
-  vaddr_t (*guided_exec)(void *disambiguate_para);
-  vaddr_t (*update_config)(void *config);
-  void (*raise_intr)(uint64_t no);
-  void (*isa_reg_display)();
-  void (*query)(void *result_buffer, uint64_t type);
+  void (*memcpy)(paddr_t nemu_addr, void *dut_buf, size_t n, bool direction) = NULL;
+  void (*regcpy)(void *dut, bool direction) = NULL;
+  void (*csrcpy)(void *dut, bool direction) = NULL;
+  void (*uarchstatus_cpy)(void *dut, bool direction) = NULL;
+  int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask) = NULL;
+  void (*exec)(uint64_t n) = NULL;
+  vaddr_t (*guided_exec)(void *disambiguate_para) = NULL;
+  vaddr_t (*update_config)(void *config) = NULL;
+  void (*raise_intr)(uint64_t no) = NULL;
+  void (*isa_reg_display)() = NULL;
+  void (*query)(void *result_buffer, uint64_t type) = NULL;
+};
 
+#define NEMU_ENV_VARIABLE "NEMU_HOME"
+#define NEMU_SO_FILENAME  "build/riscv64-nemu-interpreter-so"
+class NemuProxy : public RefProxy {
+public:
   NemuProxy(int coreid);
+private:
+};
+
+#define SPIKE_ENV_VARIABLE "SPIKE_HOME"
+#define SPIKE_SO_FILENAME  "difftest/build/riscv64-spike-so"
+class SpikeProxy : public RefProxy {
+public:
+  SpikeProxy(int coreid);
 private:
 };
 

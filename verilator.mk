@@ -35,6 +35,11 @@ endif
 
 VEXTRA_FLAGS  = -I$(abspath $(BUILD_DIR)) --x-assign unique -O3 -CFLAGS "$(EMU_CXXFLAGS) $(EMU_CXX_EXTRA_FLAGS)" -LDFLAGS "$(EMU_LDFLAGS)"
 
+# REF SELECTION
+ifeq ($(REF),spike)
+EMU_CXXFLAGS += -DDIFF_PROXY=SpikeProxy -DFIRST_INST_ADDRESS=0x80000000
+endif
+
 # Verilator version check
 VERILATOR_4_210 := $(shell expr `verilator --version | cut -f3 -d.` \>= 210)
 ifeq ($(VERILATOR_4_210),1)
