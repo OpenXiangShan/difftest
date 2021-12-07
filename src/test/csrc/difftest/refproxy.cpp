@@ -144,20 +144,20 @@ SpikeProxy::SpikeProxy(int coreid) {
   regcpy = (void (*)(void *, bool))dlsym(handle, "difftest_regcpy");
   check_and_assert(regcpy);
 
-  // csrcpy = (void (*)(void *, bool))dlsym(handle, "difftest_csrcpy");
-  // check_and_assert(csrcpy);
+  csrcpy = (void (*)(void *, bool))dlsym(handle, "isa_reg_display");
+  check_and_assert(csrcpy);
 
-  // uarchstatus_cpy = (void (*)(void *, bool))dlsym(handle, "difftest_uarchstatus_cpy");
-  // check_and_assert(uarchstatus_cpy);
+  uarchstatus_cpy = (void (*)(void *, bool))dlsym(handle, "isa_reg_display");
+  check_and_assert(uarchstatus_cpy);
 
   exec = (void (*)(uint64_t))dlsym(handle, "difftest_exec");
   check_and_assert(exec);
 
-  // guided_exec = (vaddr_t (*)(void *))dlsym(handle, "difftest_guided_exec");
-  // check_and_assert(guided_exec);
+  guided_exec = (vaddr_t (*)(void *))dlsym(handle, "difftest_guided_exec");
+  check_and_assert(guided_exec);
 
-  // update_config = (vaddr_t (*)(void *))dlsym(handle, "update_dynamic_config");
-  // check_and_assert(update_config);
+  update_config = (vaddr_t (*)(void *))dlsym(handle, "isa_reg_display");
+  check_and_assert(update_config);
 
   store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(handle, "difftest_store_commit");
   check_and_assert(store_commit);
