@@ -43,6 +43,7 @@
 
 extern int assert_count;
 extern const char* emu_path;
+extern bool enable_simjtag;
 void assert_init();
 void assert_finish();
 

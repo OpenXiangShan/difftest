@@ -108,6 +108,16 @@ INTERFACE_CSR_STATE {
   packet->medeleg = medeleg;
 }
 
+INTERFACE_DM_STATE {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_debug_state();
+  packet->debugMode = dMode;
+  packet->dcsr = dcsr;
+  packet->dpc = dpc;
+  packet->dscratch0 = dscratch0;
+  packet->dscratch1 = dscratch1;
+}
+
 INTERFACE_INT_WRITEBACK {
   RETURN_NO_NULL
   auto packet = difftest[coreid]->get_physical_reg_state();

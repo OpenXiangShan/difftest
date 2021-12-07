@@ -30,6 +30,10 @@ enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
 // DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
 #define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
 
+#define DEBUG_MEM_REGION(v, f) (f <= 0x38030000 && \
+        f >= 0x38020000 && \
+        v)
+#define IS_LOAD_STORE(instr) (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
 
 // Difftest structures
 // trap events: self-defined traps
@@ -89,6 +93,14 @@ typedef struct __attribute__((packed)) {
   uint64_t stvec;
   uint64_t priviledgeMode;
 } arch_csr_state_t;
+
+typedef struct {
+  uint64_t debugMode;
+  uint64_t dcsr;
+  uint64_t dpc;
+  uint64_t dscratch0;
+  uint64_t dscratch1;
+} debug_mode_t;
 
 const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t)) / sizeof(uint64_t);
 
@@ -185,6 +197,7 @@ typedef struct {
   run_ahead_redirect_event_t runahead_redirect;
   run_ahead_memdep_pred_t runahead_memdep_pred[DIFFTEST_RUNAHEAD_WIDTH];
   physical_reg_state_t pregs;
+  debug_mode_t      dmregs;
 } difftest_core_state_t;
 
 enum retire_inst_type {
@@ -311,10 +324,19 @@ public:
   inline physical_reg_state_t *get_physical_reg_state() {
     return &(dut.pregs);
   }
+  inline debug_mode_t *get_debug_state() {
+    return &(dut.dmregs);
+  }
 
 #ifdef DEBUG_REFILL
   void save_track_instr(uint64_t instr) {
     track_instr = instr;
+  }
+#endif
+
+#ifdef DEBUG_MODE
+  void debug_mode_copy(uint64_t addr, size_t size, uint32_t data) {
+    proxy->debug_mem_sync(addr, &data, size);
   }
 #endif
 

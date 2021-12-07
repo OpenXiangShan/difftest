@@ -117,6 +117,16 @@ int Difftest::step() {
   }
 #endif
 
+#ifdef DEBUG_MODE
+  // skip load & store insts in debug mode
+  // for other insts copy inst content to ref's dummy debug module
+  for(int i = 0; i < DIFFTEST_COMMIT_WIDTH; i++){
+    if(DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc))
+      debug_mode_copy(dut.commit[i].pc, dut.commit[i].isRVC ? 2 : 4, dut.commit[i].inst);     
+  }
+
+#endif
+
   num_commit = 0; // reset num_commit this cycle to 0
   // interrupt has the highest priority
   if (dut.event.interrupt) {
@@ -187,6 +197,12 @@ void Difftest::do_exception() {
     guide.force_set_jump_target = false;
     proxy->guided_exec(&guide);
   } else {
+  #ifdef DEBUG_MODE
+    if(DEBUG_MEM_REGION(true, dut.event.exceptionPC)){
+      printf("exception instr is %x\n", dut.event.exceptionInst);
+      debug_mode_copy(dut.event.exceptionPC, 4, dut.event.exceptionInst);
+    }
+  #endif
     proxy->exec(1);
   }
   progress = true;
@@ -216,14 +232,15 @@ void Difftest::do_instr_commit(int i) {
 
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
-  if (dut.commit[i].skip) {
+  if (dut.commit[i].skip || (DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc) && IS_LOAD_STORE(dut.commit[i].inst))) {
     proxy->regcpy(ref_regs_ptr, REF_TO_DIFFTEST);
     ref.csr.this_pc += dut.commit[i].isRVC ? 2 : 4;
     if (dut.commit[i].wen && dut.commit[i].wdest != 0) {
       // We use the physical register file to get wdata
       // TODO: FPR
       ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
-      // printf("skip %x %x %x\n",  get_commit_data(i), dut.commit[i].wpdest, dut.commit[i].wdest);
+      printf("Debug Mode? %x is ls? %x\n", DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc), IS_LOAD_STORE(dut.commit[i].inst));
+      // printf("skip %x %x %x %x %x\n", dut.commit[i].pc, dut.commit[i].inst, get_commit_data(i), dut.commit[i].wpdest, dut.commit[i].wdest);
     }
     proxy->regcpy(ref_regs_ptr, DIFFTEST_TO_REF);
     return;

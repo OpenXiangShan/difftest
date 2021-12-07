@@ -137,6 +137,13 @@
 #define AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD 192
 
 // -----------------------------------------------------------------------
+// Debug mode and trigger
+// -----------------------------------------------------------------------
+// make diff in debug mode available by copying debug mode mmio
+// currently only usable on spike
+#define DEBUG_MODE
+
+// -----------------------------------------------------------------------
 // Do not touch
 // -----------------------------------------------------------------------
 
