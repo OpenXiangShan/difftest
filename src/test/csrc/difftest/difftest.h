@@ -30,8 +30,8 @@ enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
 // DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
 #define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
 
-#define DEBUG_MEM_REGION(v, f) (f <= 0x38030000 && \
-        f >= 0x38020000 && \
+#define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && \
+        f >= DEBUG_MEM_BASE && \
         v)
 #define IS_LOAD_STORE(instr) (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
 

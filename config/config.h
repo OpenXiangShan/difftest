@@ -143,6 +143,10 @@
 // currently only usable on spike
 //#define DEBUG_MODE_DIFF
 
+#ifndef DEBUG_MEM_BASE
+#define DEBUG_MEM_BASE 0x38020000
+#endif 
+
 // -----------------------------------------------------------------------
 // Do not touch
 // -----------------------------------------------------------------------
