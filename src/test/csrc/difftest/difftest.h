@@ -94,7 +94,7 @@ typedef struct __attribute__((packed)) {
   uint64_t priviledgeMode;
 } arch_csr_state_t;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
   uint64_t debugMode;
   uint64_t dcsr;
   uint64_t dpc;
@@ -102,7 +102,11 @@ typedef struct {
   uint64_t dscratch1;
 } debug_mode_t;
 
+// #ifndef DEBUG_MODE
 const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t)) / sizeof(uint64_t);
+// #else
+// const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(debug_mode_t)) / sizeof(uint64_t);
+// #endif
 
 typedef struct {
   uint8_t  resp = 0;
@@ -186,6 +190,7 @@ typedef struct {
   instr_commit_t    commit[DIFFTEST_COMMIT_WIDTH];
   arch_reg_state_t  regs;
   arch_csr_state_t  csr;
+  debug_mode_t      dmregs;
   sbuffer_state_t   sbuffer[DIFFTEST_SBUFFER_RESP_WIDTH];
   store_event_t     store[DIFFTEST_STORE_WIDTH];
   load_event_t      load[DIFFTEST_COMMIT_WIDTH];
@@ -197,7 +202,6 @@ typedef struct {
   run_ahead_redirect_event_t runahead_redirect;
   run_ahead_memdep_pred_t runahead_memdep_pred[DIFFTEST_RUNAHEAD_WIDTH];
   physical_reg_state_t pregs;
-  debug_mode_t      dmregs;
 } difftest_core_state_t;
 
 enum retire_inst_type {

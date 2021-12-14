@@ -34,6 +34,7 @@ static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "satp",
   "mip", "mie", "mscratch", "sscratch", "mideleg", "medeleg",
   "mtval", "stval", "mtvec", "stvec", "mode",
+//  "debug mode", "dcsr", "dpc", "dscratch0", "dscratch1",
 };
 
 Difftest **difftest = NULL;
@@ -239,7 +240,7 @@ void Difftest::do_instr_commit(int i) {
       // We use the physical register file to get wdata
       // TODO: FPR
       ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
-      printf("Debug Mode? %x is ls? %x\n", DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc), IS_LOAD_STORE(dut.commit[i].inst));
+      // printf("Debug Mode? %x is ls? %x\n", DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc), IS_LOAD_STORE(dut.commit[i].inst));
       // printf("skip %x %x %x %x %x\n", dut.commit[i].pc, dut.commit[i].inst, get_commit_data(i), dut.commit[i].wpdest, dut.commit[i].wdest);
     }
     proxy->regcpy(ref_regs_ptr, DIFFTEST_TO_REF);
