@@ -61,7 +61,6 @@ class DiffBasicInstrCommitIO extends DifftestBundle with DifftestWithIndex {
 class DiffInstrCommitIO extends DiffBasicInstrCommitIO {
   val pc       = Input(UInt(64.W))
   val instr    = Input(UInt(32.W))
-  val scFailed = Input(Bool())
 }
 
 class DiffBasicTrapEventIO extends DifftestBundle {
@@ -164,6 +163,11 @@ class DiffRefillEventIO extends DifftestBundle {
   val valid = Input(Bool())
   val addr  = Input(UInt(64.W))
   val data  = Input(Vec(8, UInt(64.W)))
+}
+
+class DiffLrScEventIO extends DifftestBundle {
+  val valid   = Input(Bool())
+  val success = Input(Bool())
 }
 
 class DiffRunaheadEventIO extends DifftestBundle with DifftestWithIndex {
@@ -282,6 +286,7 @@ class DifftestLoadEvent extends DifftestBaseModule(new DiffLoadEventIO)
 class DifftestAtomicEvent extends DifftestBaseModule(new DiffAtomicEventIO)
 class DifftestPtwEvent extends DifftestBaseModule(new DiffPtwEventIO)
 class DifftestRefillEvent extends DifftestBaseModule(new DiffRefillEventIO)
+class DifftestLrScEvent extends DifftestBaseModule(new DiffLrScEventIO)
 class DifftestRunaheadEvent extends DifftestBaseModule(new DiffRunaheadEventIO)
 class DifftestRunaheadCommitEvent extends DifftestBaseModule(new DiffRunaheadCommitEventIO)
 class DifftestRunaheadRedirectEvent extends DifftestBaseModule(new DiffRunaheadRedirectEventIO)

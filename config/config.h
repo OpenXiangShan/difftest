@@ -141,7 +141,7 @@
 // -----------------------------------------------------------------------
 // make diff in debug mode available by copying debug mode mmio
 // currently only usable on spike
-#define DEBUG_MODE
+//#define DEBUG_MODE_DIFF
 
 // -----------------------------------------------------------------------
 // Do not touch

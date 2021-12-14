@@ -118,7 +118,7 @@ int Difftest::step() {
   }
 #endif
 
-#ifdef DEBUG_MODE
+#ifdef DEBUG_MODE_DIFF
   // skip load & store insts in debug mode
   // for other insts copy inst content to ref's dummy debug module
   for(int i = 0; i < DIFFTEST_COMMIT_WIDTH; i++){
@@ -198,7 +198,7 @@ void Difftest::do_exception() {
     guide.force_set_jump_target = false;
     proxy->guided_exec(&guide);
   } else {
-  #ifdef DEBUG_MODE
+  #ifdef DEBUG_MODE_DIFF
     if(DEBUG_MEM_REGION(true, dut.event.exceptionPC)){
       printf("exception instr is %x\n", dut.event.exceptionInst);
       debug_mode_copy(dut.event.exceptionPC, 4, dut.event.exceptionInst);
@@ -224,11 +224,12 @@ void Difftest::do_instr_commit(int i) {
   state->record_inst(commit_pc, commit_instr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
 
   // sync lr/sc reg status
-  if (dut.commit[i].scFailed) {
+  if (dut.lrsc.valid) {
     struct SyncState sync;
-    sync.lrscValid = 0;
-    sync.lrscAddr = 0;
+    sync.lrscValid = dut.lrsc.success;
     proxy->uarchstatus_cpy((uint64_t*)&sync, DUT_TO_REF); // sync lr/sc microarchitectural regs
+    // clear SC instruction valid bit
+    dut.lrsc.valid = 0;
   }
 
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc

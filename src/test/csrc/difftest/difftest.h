@@ -60,7 +60,6 @@ typedef struct {
   uint32_t inst;
   uint8_t  skip;
   uint8_t  isRVC;
-  uint8_t  scFailed;
   uint8_t  fused;
   uint8_t  wen;
   uint8_t  wpdest;
@@ -102,11 +101,8 @@ typedef struct __attribute__((packed)) {
   uint64_t dscratch1;
 } debug_mode_t;
 
-// #ifndef DEBUG_MODE
 const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t)) / sizeof(uint64_t);
-// #else
 // const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(debug_mode_t)) / sizeof(uint64_t);
-// #endif
 
 typedef struct {
   uint8_t  resp = 0;
@@ -149,6 +145,11 @@ typedef struct {
   uint64_t addr;
   uint64_t data[8];
 } refill_event_t;
+
+typedef struct {
+  uint8_t valid = 0;
+  uint8_t success;
+} lr_sc_evevnt_t;
 
 typedef struct {
   uint8_t  valid = 0;
@@ -197,6 +198,7 @@ typedef struct {
   atomic_event_t    atomic;
   ptw_event_t       ptw;
   refill_event_t    refill;
+  lr_sc_evevnt_t    lrsc;
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_redirect_event_t runahead_redirect;
@@ -307,6 +309,9 @@ public:
   inline refill_event_t *get_refill_event() {
     return &(dut.refill);
   }
+  inline lr_sc_evevnt_t *get_lr_sc_event() {
+    return &(dut.lrsc);
+  }
   inline run_ahead_event_t *get_runahead_event(uint8_t index) {
     return &(dut.runahead[index]);
   }
@@ -338,7 +343,7 @@ public:
   }
 #endif
 
-#ifdef DEBUG_MODE
+#ifdef DEBUG_MODE_DIFF
   void debug_mode_copy(uint64_t addr, size_t size, uint32_t data) {
     proxy->debug_mem_sync(addr, &data, size);
   }
