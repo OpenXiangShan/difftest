@@ -30,6 +30,10 @@ enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
 // DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
 #define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
 
+#define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && \
+        f >= DEBUG_MEM_BASE && \
+        v)
+#define IS_LOAD_STORE(instr) (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
 
 // Difftest structures
 // trap events: self-defined traps
@@ -89,7 +93,16 @@ typedef struct __attribute__((packed)) {
   uint64_t priviledgeMode;
 } arch_csr_state_t;
 
+typedef struct __attribute__((packed)) {
+  uint64_t debugMode;
+  uint64_t dcsr;
+  uint64_t dpc;
+  uint64_t dscratch0;
+  uint64_t dscratch1;
+} debug_mode_t;
+
 const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t)) / sizeof(uint64_t);
+// const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(debug_mode_t)) / sizeof(uint64_t);
 
 typedef struct {
   uint8_t  resp = 0;
@@ -178,6 +191,7 @@ typedef struct {
   instr_commit_t    commit[DIFFTEST_COMMIT_WIDTH];
   arch_reg_state_t  regs;
   arch_csr_state_t  csr;
+  debug_mode_t      dmregs;
   sbuffer_state_t   sbuffer[DIFFTEST_SBUFFER_RESP_WIDTH];
   store_event_t     store[DIFFTEST_STORE_WIDTH];
   load_event_t      load[DIFFTEST_COMMIT_WIDTH];
@@ -319,10 +333,19 @@ public:
   inline physical_reg_state_t *get_physical_reg_state() {
     return &(dut.pregs);
   }
+  inline debug_mode_t *get_debug_state() {
+    return &(dut.dmregs);
+  }
 
 #ifdef DEBUG_REFILL
   void save_track_instr(uint64_t instr) {
     track_instr = instr;
+  }
+#endif
+
+#ifdef DEBUG_MODE_DIFF
+  void debug_mode_copy(uint64_t addr, size_t size, uint32_t data) {
+    proxy->debug_mem_sync(addr, &data, size);
   }
 #endif
 

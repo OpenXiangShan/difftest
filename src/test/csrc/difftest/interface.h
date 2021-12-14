@@ -139,6 +139,17 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG medeleg                \
   )
 
+// v_difftest_DebugMode
+#define INTERFACE_DM_STATE               \
+  DIFFTEST_DPIC_FUNC_DECL(DebugMode) (   \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BIT dMode,                  \
+    DPIC_ARG_LONG dcsr,                  \
+    DPIC_ARG_LONG dpc,                   \
+    DPIC_ARG_LONG dscratch0,             \
+    DPIC_ARG_LONG dscratch1              \
+  )
+
 // v_difftest_IntWriteback
 #define INTERFACE_INT_WRITEBACK          \
   DIFFTEST_DPIC_FUNC_DECL(IntWriteback) (\

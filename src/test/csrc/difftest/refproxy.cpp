@@ -168,6 +168,9 @@ SpikeProxy::SpikeProxy(int coreid) {
   isa_reg_display = (void (*)(void))dlsym(handle, "isa_reg_display");
   check_and_assert(isa_reg_display);
 
+  debug_mem_sync = (void (*)(paddr_t, void *, size_t))dlsym(handle, "debug_mem_sync");
+  check_and_assert(debug_mem_sync);
+
   query = (void (*)(void*, uint64_t))dlsym(handle, "difftest_query_ref");
 #ifdef ENABLE_RUNHEAD
   check_and_assert(query);

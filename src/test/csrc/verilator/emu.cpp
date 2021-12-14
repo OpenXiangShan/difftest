@@ -185,6 +185,7 @@ Emulator::Emulator(int argc, const char *argv[]):
   assert_init();
 
   // init remote-bitbang
+  enable_simjtag = args.enable_jtag;
   if (args.enable_jtag) {
     jtag = new remote_bitbang_t(23334);
   }
