@@ -56,7 +56,6 @@ typedef struct {
   uint32_t inst;
   uint8_t  skip;
   uint8_t  isRVC;
-  uint8_t  scFailed;
   uint8_t  fused;
   uint8_t  wen;
   uint8_t  wpdest;
@@ -135,6 +134,11 @@ typedef struct {
 } refill_event_t;
 
 typedef struct {
+  uint8_t valid = 0;
+  uint8_t success;
+} lr_sc_evevnt_t;
+
+typedef struct {
   uint8_t  valid = 0;
   uint8_t  branch = 0;
   uint8_t  may_replay = 0;
@@ -180,6 +184,7 @@ typedef struct {
   atomic_event_t    atomic;
   ptw_event_t       ptw;
   refill_event_t    refill;
+  lr_sc_evevnt_t    lrsc;
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_redirect_event_t runahead_redirect;
@@ -289,6 +294,9 @@ public:
   }
   inline refill_event_t *get_refill_event() {
     return &(dut.refill);
+  }
+  inline lr_sc_evevnt_t *get_lr_sc_event() {
+    return &(dut.lrsc);
   }
   inline run_ahead_event_t *get_runahead_event(uint8_t index) {
     return &(dut.runahead[index]);

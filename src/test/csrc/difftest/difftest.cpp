@@ -207,11 +207,12 @@ void Difftest::do_instr_commit(int i) {
   state->record_inst(commit_pc, commit_instr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
 
   // sync lr/sc reg status
-  if (dut.commit[i].scFailed) {
+  if (dut.lrsc.valid) {
     struct SyncState sync;
-    sync.lrscValid = 0;
-    sync.lrscAddr = 0;
+    sync.lrscValid = dut.lrsc.success;
     proxy->uarchstatus_cpy((uint64_t*)&sync, DUT_TO_REF); // sync lr/sc microarchitectural regs
+    // clear SC instruction valid bit
+    dut.lrsc.valid = 0;
   }
 
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc

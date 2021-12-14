@@ -77,7 +77,6 @@ INTERFACE_INSTR_COMMIT {
     packet->inst     = instr;
     packet->skip     = skip;
     packet->isRVC    = isRVC;
-    packet->scFailed = scFailed;
     packet->fused    = special;
     packet->wen      = wen;
     packet->wpdest   = wpdest;
@@ -334,6 +333,15 @@ INTERFACE_REFILL_EVENT {
     packet->data[5] = data_5;
     packet->data[6] = data_6;
     packet->data[7] = data_7;
+  }
+}
+
+INTERFACE_LR_SC_EVENT {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_lr_sc_event();
+  if (!packet->valid && valid) {
+    packet->valid = valid;
+    packet->success = success;
   }
 }
 
