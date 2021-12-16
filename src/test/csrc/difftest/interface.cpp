@@ -77,7 +77,6 @@ INTERFACE_INSTR_COMMIT {
     packet->inst     = instr;
     packet->skip     = skip;
     packet->isRVC    = isRVC;
-    packet->scFailed = scFailed;
     packet->fused    = special;
     packet->wen      = wen;
     packet->wpdest   = wpdest;
@@ -106,6 +105,16 @@ INTERFACE_CSR_STATE {
   packet->sscratch = sscratch;
   packet->mideleg = mideleg;
   packet->medeleg = medeleg;
+}
+
+INTERFACE_DM_STATE {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_debug_state();
+  packet->debugMode = dMode;
+  packet->dcsr = dcsr;
+  packet->dpc = dpc;
+  packet->dscratch0 = dscratch0;
+  packet->dscratch1 = dscratch1;
 }
 
 INTERFACE_INT_WRITEBACK {
@@ -334,6 +343,15 @@ INTERFACE_REFILL_EVENT {
     packet->data[5] = data_5;
     packet->data[6] = data_6;
     packet->data[7] = data_7;
+  }
+}
+
+INTERFACE_LR_SC_EVENT {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_lr_sc_event();
+  if (!packet->valid && valid) {
+    packet->valid = valid;
+    packet->success = success;
   }
 }
 

@@ -61,7 +61,6 @@ class DiffBasicInstrCommitIO extends DifftestBundle with DifftestWithIndex {
 class DiffInstrCommitIO extends DiffBasicInstrCommitIO {
   val pc       = Input(UInt(64.W))
   val instr    = Input(UInt(32.W))
-  val scFailed = Input(Bool())
 }
 
 class DiffBasicTrapEventIO extends DifftestBundle {
@@ -94,6 +93,14 @@ class DiffCSRStateIO extends DifftestBundle {
   val sscratch = Input(UInt(64.W))
   val mideleg = Input(UInt(64.W))
   val medeleg = Input(UInt(64.W))
+}
+
+class DiffDebugModeIO extends  DifftestBundle {
+  val debugMode = Input(Bool())
+  val dcsr = Input(UInt(64.W))
+  val dpc = Input(UInt(64.W))
+  val dscratch0 = Input(UInt(64.W))
+  val dscratch1 = Input(UInt(64.W))
 }
 
 class DiffIntWritebackIO extends DifftestBundle {
@@ -156,6 +163,11 @@ class DiffRefillEventIO extends DifftestBundle {
   val valid = Input(Bool())
   val addr  = Input(UInt(64.W))
   val data  = Input(Vec(8, UInt(64.W)))
+}
+
+class DiffLrScEventIO extends DifftestBundle {
+  val valid   = Input(Bool())
+  val success = Input(Bool())
 }
 
 class DiffRunaheadEventIO extends DifftestBundle with DifftestWithIndex {
@@ -263,6 +275,7 @@ class DifftestInstrCommit extends DifftestBaseModule(new DiffInstrCommitIO)
 class DifftestBasicTrapEvent extends DifftestBaseModule(new DiffBasicTrapEventIO)
 class DifftestTrapEvent extends DifftestBaseModule(new DiffTrapEventIO)
 class DifftestCSRState extends DifftestBaseModule(new DiffCSRStateIO)
+class DifftestDebugMode extends DifftestBaseModule(new DiffDebugModeIO)
 class DifftestIntWriteback extends DifftestBaseModule(new DiffIntWritebackIO)
 class DifftestFpWriteback extends DifftestBaseModule(new DiffFpWritebackIO)
 class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegStateIO)
@@ -273,6 +286,7 @@ class DifftestLoadEvent extends DifftestBaseModule(new DiffLoadEventIO)
 class DifftestAtomicEvent extends DifftestBaseModule(new DiffAtomicEventIO)
 class DifftestPtwEvent extends DifftestBaseModule(new DiffPtwEventIO)
 class DifftestRefillEvent extends DifftestBaseModule(new DiffRefillEventIO)
+class DifftestLrScEvent extends DifftestBaseModule(new DiffLrScEventIO)
 class DifftestRunaheadEvent extends DifftestBaseModule(new DiffRunaheadEventIO)
 class DifftestRunaheadCommitEvent extends DifftestBaseModule(new DiffRunaheadCommitEventIO)
 class DifftestRunaheadRedirectEvent extends DifftestBaseModule(new DiffRunaheadRedirectEventIO)

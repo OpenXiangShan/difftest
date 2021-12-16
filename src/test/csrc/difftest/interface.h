@@ -92,7 +92,6 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE wdest,                 \
     DPIC_ARG_LONG pc,                    \
     DPIC_ARG_INT  instr,                 \
-    DPIC_ARG_BIT  scFailed,              \
     DPIC_ARG_LONG wdata                  \
   )
 
@@ -138,6 +137,17 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG sscratch,              \
     DPIC_ARG_LONG mideleg,               \
     DPIC_ARG_LONG medeleg                \
+  )
+
+// v_difftest_DebugMode
+#define INTERFACE_DM_STATE               \
+  DIFFTEST_DPIC_FUNC_DECL(DebugMode) (   \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BIT dMode,                  \
+    DPIC_ARG_LONG dcsr,                  \
+    DPIC_ARG_LONG dpc,                   \
+    DPIC_ARG_LONG dscratch0,             \
+    DPIC_ARG_LONG dscratch1              \
   )
 
 // v_difftest_IntWriteback
@@ -370,6 +380,14 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG data_7                 \
   )
 
+// v_difftest_RefillEvent
+#define INTERFACE_LR_SC_EVENT            \
+  DIFFTEST_DPIC_FUNC_DECL(LrScEvent) (   \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_BIT  success                \
+  )
+
 // v_difftest_RunaheadEvent
 #define INTERFACE_RUNAHEAD_EVENT           \
   DIFFTEST_DPIC_FUNC_DECL(RunaheadEvent) ( \
@@ -429,6 +447,7 @@ INTERFACE_LOAD_EVENT;
 INTERFACE_ATOMIC_EVENT;
 INTERFACE_PTW_EVENT;
 INTERFACE_REFILL_EVENT;
+INTERFACE_LR_SC_EVENT;
 INTERFACE_RUNAHEAD_EVENT;
 INTERFACE_RUNAHEAD_COMMIT_EVENT;
 INTERFACE_RUNAHEAD_REDIRECT_EVENT;

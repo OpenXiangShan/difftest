@@ -20,7 +20,7 @@
 #include <time.h>
 #include "common.h"
 #include "compress.h"
-#include "nemuproxy.h"
+#include "refproxy.h"
 
 // #define DIFFTEST_STORE_COMMIT
 
