@@ -403,9 +403,12 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     dut_ptr->io_perfInfo_clean = 0;
     dut_ptr->io_perfInfo_dump = 0;
 
+    trapCode = difftest_state();
+    if (trapCode != STATE_RUNNING) {
+      break;
+    } 
+
     if (args.enable_diff) {
-      trapCode = difftest_state();
-      if (trapCode != STATE_RUNNING) break;
       if (difftest_step()) {
         trapCode = STATE_ABORT;
         break;
