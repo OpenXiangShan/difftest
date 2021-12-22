@@ -24,7 +24,7 @@ EMU_CXXFLAGS += -std=c++11 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
 EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
-EMU_CXX_EXTRA_FLAGS ?= 
+EMU_CXX_EXTRA_FLAGS ?=
 
 EMU_VFILES    = $(SIM_VSRC)
 

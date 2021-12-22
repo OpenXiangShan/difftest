@@ -31,7 +31,7 @@
 
 // first valid instruction's address, difftest starts from this instruction
 #ifndef FIRST_INST_ADDRESS
-#define FIRST_INST_ADDRESS 0x10000000
+#define FIRST_INST_ADDRESS 0x40000000
 #endif
 
 // sdcard image to be used in simulation
@@ -65,10 +65,10 @@
 // max store buffer resp width, for golden mem check
 #define DIFFTEST_SBUFFER_RESP_WIDTH 3
 
-// commit inst history length 
+// commit inst history length
 #define DEBUG_INST_TRACE_SIZE 32
 
-// commit inst group history length 
+// commit inst group history length
 #define DEBUG_GROUP_TRACE_SIZE 16
 
 // -----------------------------------------------------------------------
@@ -78,13 +78,13 @@
 // time to fork a new checkpoint process
 #define FORK_INTERVAL 1 // unit: second
 
-// max number of checkpoint process at a time 
+// max number of checkpoint process at a time
 #define SLOT_SIZE 2
 
-// exit when error when fork 
+// exit when error when fork
 #define FAIT_EXIT    exit(EXIT_FAILURE);
 
-// process sleep time  
+// process sleep time
 #define WAIT_INTERVAL 5
 
 // time to save a snapshot
@@ -145,7 +145,7 @@
 
 #ifndef DEBUG_MEM_BASE
 #define DEBUG_MEM_BASE 0x38020000
-#endif 
+#endif
 
 // -----------------------------------------------------------------------
 // Do not touch

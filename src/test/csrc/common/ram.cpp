@@ -217,7 +217,7 @@ uint64_t pmem_read(uint64_t raddr) {
   if (raddr % sizeof(uint64_t)) {
     printf("Warning: pmem_read only supports 64-bit aligned memory access\n");
   }
-  raddr -= 0x80000000;
+  raddr -= 0x40000000;
   return ram_read_helper(1, raddr / sizeof(uint64_t));
 }
 
@@ -225,7 +225,7 @@ void pmem_write(uint64_t waddr, uint64_t wdata) {
   if (waddr % sizeof(uint64_t)) {
     printf("Warning: pmem_write only supports 64-bit aligned memory access\n");
   }
-  waddr -= 0x80000000;
+  waddr -= 0x40000000;
   return ram_write_helper(waddr / sizeof(uint64_t), wdata, -1UL, 1);
 }
 

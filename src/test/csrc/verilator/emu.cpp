@@ -268,8 +268,8 @@ inline void Emulator::single_cycle() {
 #ifdef WITH_DRAMSIM3
   axi_channel axi;
   axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
+  axi.aw.addr -= 0x40000000UL;
+  axi.ar.addr -= 0x40000000UL;
   dramsim3_helper_rising(axi);
 #endif
 
@@ -289,8 +289,8 @@ inline void Emulator::single_cycle() {
 
 #ifdef WITH_DRAMSIM3
   axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
+  axi.aw.addr -= 0x40000000UL;
+  axi.ar.addr -= 0x40000000UL;
   dramsim3_helper_falling(axi);
   axi_set_dut_ptr(dut_ptr, axi);
 #endif
@@ -407,7 +407,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     trapCode = difftest_state();
     if (trapCode != STATE_RUNNING) {
       break;
-    } 
+    }
 
     if (args.enable_diff) {
       if (difftest_step()) {
@@ -621,7 +621,7 @@ void Emulator::snapshot_save(const char *filename) {
   stream.unbuf_write(ref_r, sizeof(ref_r));
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_DUT);
+  proxy->memcpy(0x40000000, buf, size, DIFFTEST_TO_DUT);
   stream.unbuf_write(buf, size);
   munmap(buf, size);
 
@@ -665,7 +665,7 @@ void Emulator::snapshot_load(const char *filename) {
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   stream.read(buf, size);
-  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_REF);
+  proxy->memcpy(0x40000000, buf, size, DIFFTEST_TO_REF);
   munmap(buf, size);
 
   struct SyncState sync_mastate;

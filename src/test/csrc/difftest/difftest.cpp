@@ -123,7 +123,7 @@ int Difftest::step() {
   // for other insts copy inst content to ref's dummy debug module
   for(int i = 0; i < DIFFTEST_COMMIT_WIDTH; i++){
     if(DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc))
-      debug_mode_copy(dut.commit[i].pc, dut.commit[i].isRVC ? 2 : 4, dut.commit[i].inst);     
+      debug_mode_copy(dut.commit[i].pc, dut.commit[i].isRVC ? 2 : 4, dut.commit[i].inst);
   }
 
 #endif
@@ -328,7 +328,7 @@ void Difftest::do_first_instr_commit() {
     has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;
 
-    proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    proxy->memcpy(0x40000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     // Use a temp variable to store the current pc of dut
     uint64_t dut_this_pc = dut.csr.this_pc;
     // NEMU should always start at FIRST_INST_ADDRESS
@@ -386,7 +386,7 @@ int Difftest::do_refill_check() {
         for (int j = 0; j < 8; j++) {
           printf("%016lx", dut.refill.data[j]);
         }
-        printf("\n"); 
+        printf("\n");
         return 1;
       }
     }
@@ -489,7 +489,7 @@ int Difftest::do_golden_memory_update() {
   // Update Golden Memory info
 
   if (ticks == 100) {
-    dumpGoldenMem("Init", track_instr, ticks);    
+    dumpGoldenMem("Init", track_instr, ticks);
   }
 
   for(int i = 0; i < DIFFTEST_SBUFFER_RESP_WIDTH; i++){
@@ -520,7 +520,7 @@ int Difftest::check_timeout() {
     eprintf("No instruction commits for %lu cycles of core %d. Please check the first instruction.\n",
       firstCommit_limit, id);
     eprintf("Note: The first instruction may lie in 0x10000000 which may executes and commits after 500 cycles.\n");
-    eprintf("   Or the first instruction may lie in 0x80000000 which may executes and commits after 2000 cycles.\n");
+    eprintf("   Or the first instruction may lie in 0x40000000 which may executes and commits after 2000 cycles.\n");
     display();
     return 1;
   }
