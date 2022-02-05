@@ -18,7 +18,6 @@
 #define __DIFFTEST_H__
 
 #include "common.h"
-
 #include "refproxy.h"
 
 #define DIFFTEST_CORE_NUMBER  NUM_CORES
@@ -34,6 +33,14 @@ enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
         f >= DEBUG_MEM_BASE && \
         v)
 #define IS_LOAD_STORE(instr) (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
+#define IS_TRIGGERCSR(instr) (((instr & 0x7f) == 0x73) && ((instr & (0xff0 << 20)) == (0x7a0 << 20)))
+#define IS_DEBUGCSR(instr) (((instr & 0x7f) == 0x73) && ((instr & (0xffe << 20)) == (0x7b0 << 20))) // 7b0 and 7b1
+#ifdef DEBUG_MODE_DIFF
+#define DEBUG_MODE_SKIP(v, f, instr) DEBUG_MEM_REGION(v, f) && \
+(IS_LOAD_STORE(instr) || IS_TRIGGERCSR(instr))
+#else
+#define DEBUG_MODE_SKIP(v, f, instr) false
+#endif
 
 // Difftest structures
 // trap events: self-defined traps
@@ -101,8 +108,11 @@ typedef struct __attribute__((packed)) {
   uint64_t dscratch1;
 } debug_mode_t;
 
+#ifndef DEBUG_MODE_DIFF
 const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t)) / sizeof(uint64_t);
-// const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(debug_mode_t)) / sizeof(uint64_t);
+#else
+const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(debug_mode_t)) / sizeof(uint64_t);
+#endif
 
 typedef struct {
   uint8_t  resp = 0;
