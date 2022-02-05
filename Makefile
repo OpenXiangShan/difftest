@@ -82,5 +82,5 @@ release-lock:
 clean: vcs-clean
 	rm -rf $(BUILD_DIR)
 
-.PHONY: sim-verilog emu difftest_v clean$(REF_SO)
+.PHONY: sim-verilog emu difftest_verilog clean$(REF_SO)
 
