@@ -22,29 +22,6 @@ USE_DIFFTEST_MAIN ?= 0
 
 BUILD_DIR  = $(DESIGN_DIR)/build
 SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).v
-DIFFTEST_V = \
-	$(BUILD_DIR)/DifftestArchEvent.v \
-	$(BUILD_DIR)/DifftestBasicInstrCommit.v \
-	$(BUILD_DIR)/DifftestInstrCommit.v \
-	$(BUILD_DIR)/DifftestBasicTrapEvent.v \
-	$(BUILD_DIR)/DifftestTrapEvent.v \
-	$(BUILD_DIR)/DifftestCSRState.v \
-	$(BUILD_DIR)/DifftestDebugMode.v \
-	$(BUILD_DIR)/DifftestIntWriteback.v \
-	$(BUILD_DIR)/DifftestFpWriteback.v \
-	$(BUILD_DIR)/DifftestArchIntRegState.v \
-	$(BUILD_DIR)/DifftestArchFpRegState.v \
-	$(BUILD_DIR)/DifftestSbufferEvent.v \
-	$(BUILD_DIR)/DifftestStoreEvent.v \
-	$(BUILD_DIR)/DifftestLoadEvent.v \
-	$(BUILD_DIR)/DifftestAtomicEvent.v \
-	$(BUILD_DIR)/DifftestPtwEvent.v \
-	$(BUILD_DIR)/DifftestRefillEvent.v \
-	$(BUILD_DIR)/DifftestLrScEvent.v \
-	$(BUILD_DIR)/DifftestRunaheadEvent.v \
-	$(BUILD_DIR)/DifftestRunaheadCommitEvent.v \
-	$(BUILD_DIR)/DifftestRunaheadRedirectEvent.v \
-	$(BUILD_DIR)/DifftestRunaheadMemdepPred.v
 
 DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
 SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)
@@ -54,12 +31,10 @@ $(SIM_TOP_V): $(DIFF_SCALA_FILE) $(SCALA_FILE)
 	$(MAKE) -C $(DESIGN_DIR) sim-verilog
 
 # generate difftest files for non-chisel design.
-$(DIFFTEST_V): $(DIFF_SCALA_FILE)
+difftest_verilog:
 ifeq ($(USE_DIFFTEST_MAIN), 1)
 	mill chiselModule.runMain difftest.DifftestMain -td $(BUILD_DIR)
 endif
-
-difftest_v: $(DIFFTEST_V)
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
