@@ -33,7 +33,7 @@ ifneq ($(CCACHE),)
 export OBJCACHE = ccache
 endif
 
-VEXTRA_FLAGS  = -I$(abspath $(BUILD_DIR)) --x-assign unique -O3 -CFLAGS "$(EMU_CXXFLAGS) $(EMU_CXX_EXTRA_FLAGS)" -LDFLAGS "$(EMU_LDFLAGS)"
+VEXTRA_FLAGS += -I$(abspath $(BUILD_DIR)) --x-assign unique -O3 -CFLAGS "$(EMU_CXXFLAGS) $(EMU_CXX_EXTRA_FLAGS)" -LDFLAGS "$(EMU_LDFLAGS)"
 
 # REF SELECTION
 ifeq ($(REF),spike)
