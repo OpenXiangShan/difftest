@@ -18,6 +18,9 @@ SIM_TOP    ?= SimTop
 DESIGN_DIR ?= ..
 NUM_CORES  ?= 1
 
+# Set USE_DIFFTEST_MAIN to 1 in your design's Makefile to generate Verilog by difftest
+# rather than by design.
+# Set this varieble if your design is written in Verilog.
 USE_DIFFTEST_MAIN ?= 0
 
 BUILD_DIR  = $(DESIGN_DIR)/build
