@@ -305,12 +305,20 @@ void Difftest::do_instr_commit(int i) {
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else {
+#ifdef DEBUG_SMP
           // goldenmem check failed as well, raise error
           printf("---  SMP difftest mismatch!\n");
           printf("---  Trying to probe local data of another core\n");
           uint64_t buf;
           difftest[(NUM_CORES-1) - this->id]->proxy->memcpy(dut.load[i].paddr, &buf, len, DIFFTEST_TO_DUT);
           printf("---    content: %lx\n", buf);
+#else
+          proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
+          if (dut.commit[i].wdest != 0) {
+            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
+            proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
+          }
+#endif
         }
       }
     }
