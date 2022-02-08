@@ -26,8 +26,8 @@
 // -----------------------------------------------------------------------
 
 // emulated memory size (Byte)
-// #define EMU_RAM_SIZE (256 * 1024 * 1024UL) // 256 MB
-#define EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
+#define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
+extern unsigned long EMU_RAM_SIZE;
 
 // first valid instruction's address, difftest starts from this instruction
 #ifndef FIRST_INST_ADDRESS
