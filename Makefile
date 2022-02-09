@@ -18,15 +18,26 @@ SIM_TOP    ?= SimTop
 DESIGN_DIR ?= ..
 NUM_CORES  ?= 1
 
-BUILD_DIR = $(DESIGN_DIR)/build
-SIM_TOP_V = $(BUILD_DIR)/$(SIM_TOP).v
+# Set USE_DIFFTEST_MAIN to 1 in your design's Makefile to generate Verilog by difftest
+# rather than by design.
+# Set this variable if your design is written in Verilog.
+USE_DIFFTEST_MAIN ?= 0
+
+BUILD_DIR  = $(DESIGN_DIR)/build
+SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).v
 
 DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
-SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala')
+SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)
 
 # generate SimTop.v
 $(SIM_TOP_V): $(DIFF_SCALA_FILE) $(SCALA_FILE)
 	$(MAKE) -C $(DESIGN_DIR) sim-verilog
+
+# generate difftest files for non-chisel design.
+difftest_verilog:
+ifeq ($(USE_DIFFTEST_MAIN), 1)
+	mill chiselModule.runMain difftest.DifftestMain -td $(BUILD_DIR)
+endif
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
@@ -74,5 +85,5 @@ release-lock:
 clean: vcs-clean
 	rm -rf $(BUILD_DIR)
 
-.PHONY: sim-verilog emu clean$(REF_SO)
+.PHONY: sim-verilog emu difftest_verilog clean$(REF_SO)
 

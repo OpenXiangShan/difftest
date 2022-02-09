@@ -34,7 +34,9 @@ static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "satp",
   "mip", "mie", "mscratch", "sscratch", "mideleg", "medeleg",
   "mtval", "stval", "mtvec", "stvec", "mode",
-//  "debug mode", "dcsr", "dpc", "dscratch0", "dscratch1",
+#ifdef DEBUG_MODE_DIFF
+  "debug mode", "dcsr", "dpc", "dscratch0", "dscratch1",
+ #endif
 };
 
 Difftest **difftest = NULL;
@@ -200,7 +202,7 @@ void Difftest::do_exception() {
   } else {
   #ifdef DEBUG_MODE_DIFF
     if(DEBUG_MEM_REGION(true, dut.event.exceptionPC)){
-      printf("exception instr is %x\n", dut.event.exceptionInst);
+      // printf("exception instr is %x\n", dut.event.exceptionInst);
       debug_mode_copy(dut.event.exceptionPC, 4, dut.event.exceptionInst);
     }
   #endif
@@ -223,6 +225,18 @@ void Difftest::do_instr_commit(int i) {
 #endif
   state->record_inst(commit_pc, commit_instr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
 
+#ifdef DEBUG_MODE_DIFF
+  int spike_invalid = test_spike();
+  if (!spike_invalid && (IS_DEBUGCSR(commit_instr) || IS_TRIGGERCSR(commit_instr))) {
+    char inst_str[32];
+    char dasm_result[64] = {0};
+    sprintf(inst_str, "%08x", commit_instr);
+    spike_dasm(dasm_result, inst_str);
+    printf("s0 is %016lx ", dut.regs.gpr[8]);
+    printf("pc is %lx %s\n", commit_pc, dasm_result);
+  }
+#endif
+
   // sync lr/sc reg status
   if (dut.lrsc.valid) {
     struct SyncState sync;
@@ -234,7 +248,7 @@ void Difftest::do_instr_commit(int i) {
 
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
-  if (dut.commit[i].skip || (DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc) && IS_LOAD_STORE(dut.commit[i].inst))) {
+  if (dut.commit[i].skip || (DEBUG_MODE_SKIP(dut.commit[i].valid, dut.commit[i].pc, dut.commit[i].inst))) {
     proxy->regcpy(ref_regs_ptr, REF_TO_DIFFTEST);
     ref.csr.this_pc += dut.commit[i].isRVC ? 2 : 4;
     if (dut.commit[i].wen && dut.commit[i].wdest != 0) {
