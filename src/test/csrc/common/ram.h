@@ -19,8 +19,8 @@
 
 #include "common.h"
 
-#ifndef EMU_RAM_SIZE
-#define EMU_RAM_SIZE (256 * 1024 * 1024UL)
+#ifndef DEFAULT_EMU_RAM_SIZE
+#define DEFAULT_EMU_RAM_SIZE (256 * 1024 * 1024UL)
 #endif
 
 void init_ram(const char *img);
