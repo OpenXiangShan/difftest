@@ -31,6 +31,8 @@ static uint64_t *ram;
 static long img_size = 0;
 static pthread_mutex_t ram_mutex;
 
+unsigned long EMU_RAM_SIZE = DEFAULT_EMU_RAM_SIZE;
+
 void* get_img_start() { return &ram[0]; }
 long get_img_size() { return img_size; }
 void* get_ram_start() { return &ram[0]; }
@@ -128,12 +130,17 @@ void init_ram(const char *img) {
   printf("The image is %s\n", img);
 
   // initialize memory using Linux mmap
-  printf("Using simulated %luMB RAM\n", EMU_RAM_SIZE / (1024 * 1024));
   ram = (uint64_t *)mmap(NULL, EMU_RAM_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {
-    printf("Cound not mmap 0x%lx bytes\n", EMU_RAM_SIZE);
-    assert(0);
+    printf("Warning: Insufficient phisical memory\n");
+    EMU_RAM_SIZE = 128 * 1024 * 1024UL;
+    ram = (uint64_t *)mmap(NULL, EMU_RAM_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (ram == (uint64_t *)MAP_FAILED) {
+      printf("Error: Cound not mmap 0x%lx bytes\n", EMU_RAM_SIZE);
+      assert(0);
+    }
   }
+  printf("Using simulated %luMB RAM\n", EMU_RAM_SIZE / (1024 * 1024));
 
 #ifdef TLB_UNITTEST
   //new add
