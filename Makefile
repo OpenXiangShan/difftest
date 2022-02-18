@@ -59,6 +59,9 @@ sim-verilog: $(SIM_TOP_V)
 SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
 SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
 
+PLUGIN_CSRC_DIR =  $(abspath ./src/test/csrc/plugin)
+PLUGIN_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR) -name "*.cpp")
+
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 

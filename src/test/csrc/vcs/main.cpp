@@ -33,13 +33,12 @@ extern "C" void simv_init() {
   setlocale(LC_NUMERIC, "");
 
   difftest_init();
-  init_goldenmem();
   init_nemuproxy();
   init_device();
 
   assert_init();
   init_ram(bin_file);
-
+  init_goldenmem();
 }
 
 extern "C" int simv_step() {
