@@ -88,7 +88,7 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
     DPIC_ARG_BIT  wen,                   \
-    DPIC_ARG_BYTE wpdest,                \
+    DPIC_ARG_INT  wpdest,                \
     DPIC_ARG_BYTE wdest,                 \
     DPIC_ARG_LONG pc,                    \
     DPIC_ARG_INT  instr,                 \
@@ -143,7 +143,7 @@ extern "C" int v_difftest_step();
 #define INTERFACE_DM_STATE               \
   DIFFTEST_DPIC_FUNC_DECL(DebugMode) (   \
     DPIC_ARG_BYTE coreid,                \
-    DPIC_ARG_BIT dMode,                  \
+    DPIC_ARG_BIT  dMode,                 \
     DPIC_ARG_LONG dcsr,                  \
     DPIC_ARG_LONG dpc,                   \
     DPIC_ARG_LONG dscratch0,             \
@@ -155,7 +155,7 @@ extern "C" int v_difftest_step();
   DIFFTEST_DPIC_FUNC_DECL(IntWriteback) (\
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_BIT  valid,                 \
-    DPIC_ARG_BYTE dest,                  \
+    DPIC_ARG_INT  dest,                  \
     DPIC_ARG_LONG data                   \
   )
 
@@ -202,7 +202,7 @@ extern "C" int v_difftest_step();
   DIFFTEST_DPIC_FUNC_DECL(FpWriteback) ( \
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_BIT  valid,                 \
-    DPIC_ARG_BYTE dest,                  \
+    DPIC_ARG_INT  dest,                  \
     DPIC_ARG_LONG data                   \
   )
 
