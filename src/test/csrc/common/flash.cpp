@@ -17,40 +17,33 @@
 #include "common.h"
 #include "flash.h"
 
-FILE *flash_fp = NULL;
+static char *flash_path = DEFAULT_FLASH_IMAGE;
+static long flash_bin_size = 0;
 
-extern "C" {
+FILE *flash_fp   = NULL;
 
+char *get_flash_path() { return flash_path;  }
+long get_flash_size() { return flash_bin_size; }
+
+extern "C"{
 void flash_read(uint32_t addr, uint64_t *data) {
-#ifdef FLASH_IMAGE
   fseek(flash_fp, addr, SEEK_SET);
   fread(data, 8, 1, flash_fp);
-#else
-  uint32_t index = addr & 0x00000fff;
-  switch(index>>3){
-    case 0 :
-      *data = 0x01f292930010029b;
-      break;
-    case 1 :
-      *data = 0x00028067;
-      break;
-    default :
-      *data = 0;
-  }
-#endif
+  //TODO: assert illegal access
+}
 }
 
-void init_flash(void) {
-#ifdef FLASH_IMAGE
-  flash_fp = fopen(FLASH_IMAGE, "r");
+
+void init_flash(const char *flash_bin) {
+  if(!flash_bin){
+    printf("no valid flash bin path, use default instead\n");
+  } else{
+    flash_path = (char *)flash_bin;
+  }
+  flash_fp = fopen(flash_path, "r");
   if(!flash_fp)
   {
     eprintf(ANSI_COLOR_MAGENTA "[warning] flash img not found\n");
   }
-  printf("use bin as a flash!\n"); 
-#else 
-  printf("use fixed 3 instructions!\n");
-#endif
-}
-
+  printf("use %s as flash bin\n",flash_path); 
 }

@@ -83,6 +83,9 @@ NemuProxy::NemuProxy(int coreid) {
   isa_reg_display = (void (*)(void))dlsym(handle, "isa_reg_display");
   check_and_assert(isa_reg_display);
 
+  load_flash_bin = (void (*)(void *flash_bin, size_t size))dlsym(handle, "difftest_load_flash");
+  check_and_assert(load_flash_bin);
+
   query = (void (*)(void*, uint64_t))dlsym(handle, "difftest_query_ref");
 #ifdef ENABLE_RUNHEAD
   check_and_assert(query);
