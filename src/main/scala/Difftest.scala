@@ -252,10 +252,12 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
          |  $modPorts
          |);
          |`ifndef SYNTHESIS
+         |`ifdef DIFFTEST
          |$dpicDecl
          |  always @(posedge io_clock) begin
          |    $dpicName (${dpicInterfaces.map(_._1).mkString(",")});
          |  end
+         |`endif
          |`endif
          |endmodule
          |""".stripMargin
