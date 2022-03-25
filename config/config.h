@@ -40,7 +40,7 @@ extern unsigned long EMU_RAM_SIZE;
 
 // flash image to be used in simulation
 // uncomment the following line to enable this feature
-#define DEFAULT_FLASH_IMAGE "../../ready-to-run/flash.bin"
+#define DEFAULT_FLASH_IMAGE "../ready-to-run/flash.bin"
 
 // Use sdl to show screen
 // Note: It does not work well with clang, to use that, switch to gcc
