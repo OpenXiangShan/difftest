@@ -19,7 +19,13 @@ VCS_TARGET = simv
 VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
 VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
 VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
+VCS_CXXFLAGS += -DNUM_CORES=$(NUM_CORES)
 VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
+
+ifeq ($(RELEASE),1)
+VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
+VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
+endif
 
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
@@ -28,12 +34,14 @@ VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
 VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
 
 VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
+# DiffTest
+VCS_FLAGS += +define+DIFFTEST
 # randomize all undefined signals (instead of using X)
 VCS_FLAGS += +vcs+initreg+random
-# VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN +define+RANDOMIZE_INVALID_ASSIGN
-# VCS_FLAGS += +define+RANDOMIZE_MEM_INIT +define+RANDOMIZE_DELAY=0 +define+RANDOMIZE_REG_INIT
+VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN +define+RANDOMIZE_INVALID_ASSIGN
+VCS_FLAGS += +define+RANDOMIZE_MEM_INIT +define+RANDOMIZE_DELAY=0 +define+RANDOMIZE_REG_INIT
 # SRAM lib defines
-# VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
+VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
 VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
 # search build for other missing verilog files
@@ -46,4 +54,3 @@ $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 
 vcs-clean:
 	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)
-
