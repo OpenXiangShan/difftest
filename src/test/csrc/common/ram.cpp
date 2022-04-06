@@ -236,6 +236,16 @@ void pmem_write(uint64_t waddr, uint64_t wdata) {
   return ram_write_helper(waddr / sizeof(uint64_t), wdata, -1UL, 1);
 }
 
+extern "C" uint64_t* pmem_host_addr_map(uint64_t paddr) {
+  if (paddr % sizeof(uint64_t)) {
+    printf("Warning: pmem_host_addr_map only supports 64-bit aligned memory access\n");
+  }
+  if (paddr < 0x80000000) {
+    printf("Warning: address below 0x80000000 is not in pmem\n");
+  }
+  return &ram[0] + paddr - 0x80000000;
+}
+
 #ifdef WITH_DRAMSIM3
 #include <iostream>
 

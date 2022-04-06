@@ -99,13 +99,17 @@ private:
   };
 
   // emu control variable
-  uint64_t cycles;
+  uint64_t cycles; // sim cycle counter
+  uint64_t max_instr = (uint64_t) -1; // no limitation by default
+  uint64_t max_cycle = (uint64_t) -1; // no limitation by default
   int trapCode;
+  uint32_t lasttime_snapshot = 0;
+  uint32_t lasttime_poll = 0;
+  uint64_t core_max_instr[NUM_CORES];
 
   inline void reset_ncycles(size_t cycles);
-  inline void single_cycle();
+  inline void rtl_single_cycle(); // let rtl run one cycle
   void trigger_stat_dump();
-  void display_trapinfo();
   inline char* timestamp_filename(time_t t, char *buf);
   inline char* logdb_filename(time_t t);
   inline char* snapshot_filename(time_t t);
@@ -124,11 +128,18 @@ public:
   Emulator(int argc, const char *argv[]);
   ~Emulator();
   uint64_t execute(uint64_t max_cycle, uint64_t max_instr);
+  void execute_init();
+  int execute_single_cycle();
+  void execute_cleanup();
+  void display_trapinfo();
   uint64_t get_cycles() const { return cycles; }
   EmuArgs get_args() const { return args; }
   bool is_good_trap() {
     return trapCode == STATE_GOODTRAP || trapCode == STATE_LIMIT_EXCEEDED;
   };
+  bool is_finished() {
+    return !(!Verilated::gotFinish() && trapCode == STATE_RUNNING);
+  }
   int get_trapcode() { return trapCode; }
 };
 

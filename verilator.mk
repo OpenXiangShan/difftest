@@ -22,7 +22,7 @@ EMU_CSRC_DIR = $(abspath ./src/test/csrc)
 EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIFFTEST_CXXFILES)
 EMU_CXXFLAGS += -std=c++11 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
-EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
+EMU_CXXFLAGS += $(shell sdl2-config --cflags)
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
 EMU_CXX_EXTRA_FLAGS ?=
 
@@ -82,6 +82,12 @@ endif
 
 ifeq ($(RELEASE),1)
 EMU_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
+endif
+
+ifeq ($(GEN_DYNAMIC_LIB), 1)
+EMU_CXXFLAGS += -shared -fPIC
+else
+EMU_CXXFLAGS += -fPIE
 endif
 
 # --trace

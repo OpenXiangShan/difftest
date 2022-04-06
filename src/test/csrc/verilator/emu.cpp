@@ -269,7 +269,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   }
 }
 
-inline void Emulator::single_cycle() {
+inline void Emulator::rtl_single_cycle() {
   dut_ptr->clock = 0;
   dut_ptr->eval();
 
@@ -314,8 +314,7 @@ inline void Emulator::single_cycle() {
   cycles ++;
 }
 
-uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
-
+void Emulator::execute_init() {
   difftest_init();
   init_device();
   if (args.enable_diff) {
@@ -330,9 +329,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   difftest[0]->save_track_instr(args.track_instr);
 #endif
 
-  uint32_t lasttime_poll = 0;
-  uint32_t lasttime_snapshot = 0;
-  uint64_t core_max_instr[NUM_CORES];
+  lasttime_snapshot = 0;
+  lasttime_poll = 0;
   for (int i = 0; i < NUM_CORES; i++) {
     core_max_instr[i] = max_instr;
   }
@@ -356,111 +354,114 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   // we distinguish multiple dat files by emu start time
   time_t coverage_start_time = time(NULL);
 #endif
+}
 
-  while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
-    if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
-      FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
-    }
-    if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles() + STEP_FORWARD_CYCLES) {
-      trapCode = STATE_ABORT;
-      break;
-    }
+int Emulator::execute_single_cycle() {
+  if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
+    FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
+  }
+  if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles() + STEP_FORWARD_CYCLES) {
+    trapCode = STATE_ABORT;
+    return 1;
+  }
 
-    if (!max_cycle) {
+  if (!max_cycle) {
+    trapCode = STATE_LIMIT_EXCEEDED;
+    return 1;
+  }
+  // instruction limitation
+  for (int i = 0; i < NUM_CORES; i++) {
+    auto trap = difftest[i]->get_trap_event();
+    if (trap->instrCnt >= core_max_instr[i]) {
       trapCode = STATE_LIMIT_EXCEEDED;
-      break;
+      return 1;
     }
-    // instruction limitation
-    for (int i = 0; i < NUM_CORES; i++) {
-      auto trap = difftest[i]->get_trap_event();
-      if (trap->instrCnt >= core_max_instr[i]) {
-        trapCode = STATE_LIMIT_EXCEEDED;
-        break;
-      }
+  }
+  // assertions
+  if (assert_count > 0) {
+    eprintf("The simulation stopped. There might be some assertion failed.\n");
+    trapCode = STATE_ABORT;
+    return 1;
+  }
+  // signals
+  if (signal_num != 0) {
+    trapCode = STATE_SIG;
+  }
+
+  if (trapCode != STATE_RUNNING) {
+    return 1;
+  }
+  for (int i = 0; i < NUM_CORES; i++) {
+    auto trap = difftest[i]->get_trap_event();
+    if (trap->instrCnt >= args.warmup_instr) {
+      printf("Warmup finished. The performance counters will be dumped and then reset.\n");
+      dut_ptr->io_perfInfo_clean = 1;
+      dut_ptr->io_perfInfo_dump = 1;
+      args.warmup_instr = -1;
     }
-    // assertions
-    if (assert_count > 0) {
-      eprintf("The simulation stopped. There might be some assertion failed.\n");
+    if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
+      dut_ptr->io_perfInfo_clean = 1;
+      dut_ptr->io_perfInfo_dump = 1;
+    }
+  }
+
+  rtl_single_cycle();
+
+  max_cycle --;
+  dut_ptr->io_perfInfo_clean = 0;
+  dut_ptr->io_perfInfo_dump = 0;
+
+  trapCode = difftest_state();
+  if (trapCode != STATE_RUNNING) {
+    return 1;
+  } 
+
+  if (args.enable_diff) {
+    if (difftest_step()) {
       trapCode = STATE_ABORT;
-      break;
+      return 1;
     }
-    // signals
-    if (signal_num != 0) {
-      trapCode = STATE_SIG;
-    }
+  }
 
-    if (trapCode != STATE_RUNNING) {
-      break;
-    }
-    for (int i = 0; i < NUM_CORES; i++) {
-      auto trap = difftest[i]->get_trap_event();
-      if (trap->instrCnt >= args.warmup_instr) {
-        printf("Warmup finished. The performance counters will be dumped and then reset.\n");
-        dut_ptr->io_perfInfo_clean = 1;
-        dut_ptr->io_perfInfo_dump = 1;
-        args.warmup_instr = -1;
-      }
-      if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
-        dut_ptr->io_perfInfo_clean = 1;
-        dut_ptr->io_perfInfo_dump = 1;
-      }
-    }
-
-    single_cycle();
-
-    max_cycle --;
-    dut_ptr->io_perfInfo_clean = 0;
-    dut_ptr->io_perfInfo_dump = 0;
-
-    trapCode = difftest_state();
-    if (trapCode != STATE_RUNNING) {
-      break;
-    } 
-
-    if (args.enable_diff) {
-      if (difftest_step()) {
-        trapCode = STATE_ABORT;
-        break;
-      }
-    }
-
-    if (args.enable_runahead) {
-      runahead_step();
-    }
+  if (args.enable_runahead) {
+    runahead_step();
+  }
 
 #ifdef VM_SAVABLE
-    static int snapshot_count = 0;
-    if (args.enable_snapshot && trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
-      // save snapshot every 60s
-      time_t now = time(NULL);
-      snapshot_save(snapshot_filename(now));
-      lasttime_snapshot = t;
-      // dump one snapshot to file every 60 snapshots
-      snapshot_count++;
-      if (snapshot_count == 60) {
-        snapshot_slot[0].save();
-        snapshot_count = 0;
-      }
+  static int snapshot_count = 0;
+  if (args.enable_snapshot && trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
+    // save snapshot every 60s
+    time_t now = time(NULL);
+    snapshot_save(snapshot_filename(now));
+    lasttime_snapshot = t;
+    // dump one snapshot to file every 60 snapshots
+    snapshot_count++;
+    if (snapshot_count == 60) {
+      snapshot_slot[0].save();
+      snapshot_count = 0;
     }
+  }
 #endif
 
-    if (args.enable_fork) {
-      static bool have_initial_fork = false;
-      uint32_t timer = uptime();
-      //check if it's time to fork a checkpoint process
-      if (((timer - lasttime_snapshot > 1000 * FORK_INTERVAL) || !have_initial_fork) && !is_fork_child()) {
-        have_initial_fork = true;
-        lasttime_snapshot = timer;
-        switch (lightsss.do_fork()) {
-          case FORK_ERROR: return -1;
-          case WAIT_EXIT: exit(0);
-          case WAIT_LAST: fork_child_init();
-          default: break;
-        }
+  if (args.enable_fork) {
+    static bool have_initial_fork = false;
+    uint32_t timer = uptime();
+    //check if it's time to fork a checkpoint process
+    if (((timer - lasttime_snapshot > 1000 * FORK_INTERVAL) || !have_initial_fork) && !is_fork_child()) {
+      have_initial_fork = true;
+      lasttime_snapshot = timer;
+      switch (lightsss.do_fork()) {
+        case FORK_ERROR: return -1;
+        case WAIT_EXIT: exit(0);
+        case WAIT_LAST: fork_child_init();
+        default: break;
       }
     }
   }
-  // Simulation ends here, do clean up & display jobs
+  return 0;
+}
+
+void Emulator::execute_cleanup() {
 #if VM_TRACE == 1
   if (enable_waveform) tfp->close();
 #endif
@@ -486,9 +487,19 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       lightsss.do_clear();
     }
   }
+}
 
+uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
+  this->max_cycle = max_cycle;
+  this->max_instr = max_instr;
+  execute_init();
+  while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
+    if(execute_single_cycle() != 0)
+      break; // break if execute_single_cycle requires abortion
+  }
+  // Simulation ends here, do clean up & display jobs
+  execute_cleanup();
   display_trapinfo();
-
   return cycles;
 }
 
@@ -558,7 +569,7 @@ void Emulator::trigger_stat_dump() {
   if(get_args().force_dump_result) {
     dut_ptr->io_logCtrl_log_end = -1;
   }
-  single_cycle();
+  rtl_single_cycle();
 }
 
 void Emulator::display_trapinfo() {
