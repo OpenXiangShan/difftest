@@ -16,7 +16,7 @@
 
 include config/verilator.mk
 
-EMU_TOP      = SimTop
+EMU_TOP      = CacheWarmup
 
 EMU_CSRC_DIR = $(abspath ./src/test/csrc)
 EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIFFTEST_CXXFILES)
