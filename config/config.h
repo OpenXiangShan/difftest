@@ -42,7 +42,8 @@ extern unsigned long EMU_RAM_SIZE;
 // falsh access address align mask
 #define FLASH_ALIGH_MASK 0xfffffff8
 
-#define DEFAULT_FLASH_IMAGE "../ready-to-run/flash.bin"
+#define DEFAULT_EMU_FLASH_SIZE (32 * 1024UL) // 4 MB
+extern unsigned long EMU_FLASH_SIZE;
 
 // Use sdl to show screen
 // Note: It does not work well with clang, to use that, switch to gcc
