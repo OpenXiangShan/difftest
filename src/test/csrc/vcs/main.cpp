@@ -32,13 +32,14 @@ extern "C" void simv_init() {
   printf("simv compiled at %s, %s\n", __DATE__, __TIME__);
   setlocale(LC_NUMERIC, "");
 
+  init_ram(bin_file);
+
   difftest_init();
-  init_nemuproxy();
   init_device();
+  init_goldenmem();
+  init_nemuproxy();
 
   assert_init();
-  init_ram(bin_file);
-  init_goldenmem();
 }
 
 extern "C" int simv_step() {

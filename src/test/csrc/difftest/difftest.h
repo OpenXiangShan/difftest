@@ -69,7 +69,7 @@ typedef struct {
   uint8_t  isRVC;
   uint8_t  fused;
   uint8_t  wen;
-  uint8_t  wpdest;
+  uint32_t wpdest;
   uint8_t  wdest;
 } instr_commit_t;
 
@@ -191,8 +191,8 @@ typedef struct {
 } run_ahead_memdep_pred_t;
 
 typedef struct {
-  uint64_t gpr[256];
-  uint64_t fpr[256];
+  uint64_t gpr[DIFFTEST_MAX_PRF_SIZE];
+  uint64_t fpr[DIFFTEST_MAX_PRF_SIZE];
 } physical_reg_state_t;
 
 typedef struct {

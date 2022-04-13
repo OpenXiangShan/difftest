@@ -24,7 +24,7 @@ EMU_CXXFLAGS += -std=c++11 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
 EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
-EMU_CXX_EXTRA_FLAGS ?= 
+EMU_CXX_EXTRA_FLAGS ?=
 
 EMU_VFILES    = $(SIM_VSRC)
 
@@ -89,6 +89,7 @@ VERILATOR_FLAGS =                   \
   --top-module $(EMU_TOP)           \
   --compiler clang                  \
   +define+VERILATOR=1               \
+  +define+DIFFTEST                  \
   +define+PRINTF_COND=1             \
   +define+RANDOMIZE_REG_INIT        \
   +define+RANDOMIZE_MEM_INIT        \
@@ -114,9 +115,9 @@ $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
 		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS)
-	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
-	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
-	find $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
+	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
+	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
+	find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
 
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
