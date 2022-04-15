@@ -5,17 +5,18 @@ ForkShareMemory::ForkShareMemory() {
     perror("Fail to ftok\n");
     FAIT_EXIT
   }
-  // FORK_PRINTF("key num:%d\n", key_n);
 
   if ((shm_id = shmget(key_n, 1024, 0666 | IPC_CREAT))==-1) {
     perror("shmget failed...\n");
     FAIT_EXIT
   }
-  // FORK_PRINTF("share memory id:%d\n", shm_id);
 
-  if ((info = (shinfo*)(shmat(shm_id, NULL, 0))) == NULL ) {
+  void* ret = shmat(shm_id, NULL, 0);
+  if ( ret == (void *)-1 ) {
     perror("shmat failed...\n");
     FAIT_EXIT
+  } else{
+    info = (shinfo*) ret; 
   }
 
   info->flag      = false;
