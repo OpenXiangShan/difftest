@@ -39,7 +39,7 @@ extern unsigned long EMU_RAM_SIZE;
 // #define SDCARD_IMAGE "/home/xyn/workloads/debian/riscv-debian.img"
 
 // flash image to be used in simulation
-// falsh access address align mask
+// flash access address align mask
 #define FLASH_ALIGH_MASK 0xfffffff8
 
 #define DEFAULT_EMU_FLASH_SIZE (32 * 1024UL) // 4 MB
