@@ -4,7 +4,7 @@ name: CI
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ master ]
+    branches: [ update-nemu ]
   pull_request:
     branches: [ master ]
 
@@ -27,13 +27,15 @@ jobs:
             git config --global url."https://".insteadOf git://
             git clone https://github.com/OpenXiangShan/xs-env
             cd $GITHUB_WORKSPACE/../xs-env
+            rm -r ./NEMU
+            git clone https://github.com/OpenXiangShan/NEMU
             sudo -s ./setup-tools.sh
             source ./setup.sh
             rm -r $GITHUB_WORKSPACE/../xs-env/NutShell/difftest
             rm -r $GITHUB_WORKSPACE/../xs-env/XiangShan/difftest
             cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/NutShell
             cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/XiangShan
-            
+
       - name: Basic Difftest (NutShell)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
