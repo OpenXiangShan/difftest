@@ -37,6 +37,7 @@ public:
   void (*isa_reg_display)() = NULL;
   void (*query)(void *result_buffer, uint64_t type) = NULL;
   void (*debug_mem_sync)(paddr_t addr, void *bytes, size_t size) = NULL;
+  void (*load_flash_bin)(void *flash_bin, size_t size) = NULL;
 };
 
 #define NEMU_ENV_VARIABLE "NEMU_HOME"

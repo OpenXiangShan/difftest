@@ -33,11 +33,16 @@ jobs:
             rm -r $GITHUB_WORKSPACE/../xs-env/XiangShan/difftest
             cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/NutShell
             cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/XiangShan
-            
+
       - name: Basic Difftest (NutShell)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
+            rm -r ./NEMU
+            git clone https://github.com/OpenXiangShan/NEMU
+            cd NEMU
+            make riscv64-xs-ref_defconfig
+            make
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
@@ -58,6 +63,11 @@ jobs:
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
+            rm -r ./NEMU
+            git clone https://github.com/OpenXiangShan/NEMU
+            cd NEMU
+            make riscv64-xs-ref_defconfig
+            make
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
@@ -68,6 +78,11 @@ jobs:
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
+            rm -r ./NEMU
+            git clone https://github.com/OpenXiangShan/NEMU
+            cd NEMU
+            make riscv64-xs-ref_defconfig
+            make
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
