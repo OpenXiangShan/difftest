@@ -17,6 +17,7 @@
 #include "difftest.h"
 #include "goldenmem.h"
 #include "ram.h"
+#include "flash.h"
 #include "spikedasm.h"
 
 static const char *reg_name[DIFFTEST_NR_REG+1] = {
@@ -350,6 +351,7 @@ void Difftest::do_first_instr_commit() {
     has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;
 
+    proxy->load_flash_bin(get_flash_path(), get_flash_size());
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     // Use a temp variable to store the current pc of dut
     uint64_t dut_this_pc = dut.csr.this_pc;
