@@ -21,7 +21,7 @@
 #include "runahead.h"
 #include "refproxy.h"
 #include "goldenmem.h"
-#include "device.h"
+#include "flash.h"
 #include "runahead.h"
 #include <getopt.h>
 #include <signal.h>
@@ -57,6 +57,7 @@ static inline void print_help(const char *file) {
   printf("      --dump-wave            dump waveform when log is enabled\n");
 #ifdef DEBUG_TILELINK
   printf("      --dump-tl              dump tilelink transactions\n");
+  printf("      --flash                the flash bin file for simulation\n");
 #endif
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
@@ -97,13 +98,14 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "image",             1, NULL, 'i' },
     { "log-begin",         1, NULL, 'b' },
     { "log-end",           1, NULL, 'e' },
+    { "flash",             1, NULL, 'F' },
     { "help",              0, NULL, 'h' },
     { 0,                   0, NULL,  0  }
   };
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:I:T:W:hi:m:b:e:", long_options, &long_index)) != -1) {
+          "-s:C:I:T:W:hi:m:b:e:F:", long_options, &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -158,6 +160,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'i': args.image = optarg; break;
       case 'b': args.log_begin = atoll(optarg);  break;
       case 'e': args.log_end = atoll(optarg); break;
+      case 'F': args.flash_bin = optarg; break;
     }
   }
 
@@ -189,6 +192,13 @@ Emulator::Emulator(int argc, const char *argv[]):
   if (args.enable_jtag) {
     jtag = new remote_bitbang_t(23334);
   }
+
+  init_flash(args.flash_bin);
+
+#ifdef DEBUG_TILELINK
+  // init logger
+  init_logger(args.dump_tl);
+#endif
 
 #if VM_TRACE == 1
   enable_waveform = args.enable_waveform && !args.enable_fork;

@@ -39,8 +39,11 @@ extern unsigned long EMU_RAM_SIZE;
 // #define SDCARD_IMAGE "/home/xyn/workloads/debian/riscv-debian.img"
 
 // flash image to be used in simulation
-// uncomment the following line to enable this feature
-// #define FLASH_IMAGE "/home/jy/Project/nexus-am/tests/cputest/build/dummy-riscv64-noop.bin"
+// flash access address align mask
+#define FLASH_ALIGH_MASK 0xfffffff8
+
+#define DEFAULT_EMU_FLASH_SIZE (32 * 1024UL) // 4 MB
+extern unsigned long EMU_FLASH_SIZE;
 
 // Use sdl to show screen
 // Note: It does not work well with clang, to use that, switch to gcc
