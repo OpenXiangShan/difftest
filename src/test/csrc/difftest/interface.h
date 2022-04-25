@@ -73,7 +73,8 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE special,               \
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
-    DPIC_ARG_BIT  wen,                   \
+    DPIC_ARG_BIT  rfwen,                 \
+    DPIC_ARG_BIT  fpwen,                 \
     DPIC_ARG_BYTE wpdest,                \
     DPIC_ARG_BYTE wdest                  \
   )
@@ -87,7 +88,8 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE special,               \
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
-    DPIC_ARG_BIT  wen,                   \
+    DPIC_ARG_BIT  rfwen,                 \
+    DPIC_ARG_BIT  fpwen,                 \
     DPIC_ARG_INT  wpdest,                \
     DPIC_ARG_BYTE wdest,                 \
     DPIC_ARG_LONG pc,                    \
