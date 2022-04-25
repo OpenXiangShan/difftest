@@ -171,7 +171,7 @@ int Difftest::step() {
   nemu_this_pc = nemu_next_pc;
 
   // FIXME: the following code is dirty
-  if (dut_regs_ptr[72] != ref_regs_ptr[72] {  // Ignore difftest for MIP
+  if (dut_regs_ptr[72] != ref_regs_ptr[72]) {  // Ignore difftest for MIP
     ref_regs_ptr[72] = dut_regs_ptr[72];
   }
 
