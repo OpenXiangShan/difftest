@@ -70,7 +70,8 @@ typedef struct {
   uint8_t  skip;
   uint8_t  isRVC;
   uint8_t  fused;
-  uint8_t  wen;
+  uint8_t  rfwen;
+  uint8_t  fpwen;
   uint32_t wpdest;
   uint8_t  wdest;
 } instr_commit_t;
@@ -397,7 +398,8 @@ protected:
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }
   inline uint64_t get_commit_data(int i) {
-    return dut.pregs.gpr[dut.commit[i].wpdest];
+    uint64_t result = (dut.commit[i].fpwen) ? dut.pregs.fpr[dut.commit[i].wpdest] : dut.pregs.gpr[dut.commit[i].wpdest];
+    return result;
   }
   inline bool has_wfi() {
     return dut.trap.hasWFI;
