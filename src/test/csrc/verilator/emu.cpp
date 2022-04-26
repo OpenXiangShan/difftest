@@ -192,12 +192,14 @@ Emulator::Emulator(int argc, const char *argv[]):
   if (args.enable_jtag) {
     jtag = new remote_bitbang_t(23334);
   }
+  // init flash
+  init_flash(args.flash_bin);
+
   // init core
   reset_ncycles(10);
 
   // init ram
   init_ram(args.image);
-  init_flash(args.flash_bin);
 
 #ifdef DEBUG_TILELINK
   // init logger
