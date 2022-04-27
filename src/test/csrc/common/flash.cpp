@@ -29,7 +29,8 @@ void flash_read(uint32_t addr, uint64_t *data) {
   uint32_t index = addr & 0x00000fff;
   switch(index>>3){
     case 0 :
-      *data = 0x01f292930010029b;
+      // *data = 0x01f292930010029b;
+      *data = 0x025292930010029b;
       break;
     case 1 :
       *data = 0x00028067;
@@ -47,8 +48,8 @@ void init_flash(void) {
   {
     eprintf(ANSI_COLOR_MAGENTA "[warning] flash img not found\n");
   }
-  printf("use bin as a flash!\n"); 
-#else 
+  printf("use bin as a flash!\n");
+#else
   printf("use fixed 3 instructions!\n");
 #endif
 }
