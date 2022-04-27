@@ -169,6 +169,12 @@ int Difftest::step() {
   uint64_t nemu_next_pc = ref.csr.this_pc;
   ref.csr.this_pc = nemu_this_pc;
   nemu_this_pc = nemu_next_pc;
+
+  // FIXME: the following code is dirty
+  if (dut_regs_ptr[72] != ref_regs_ptr[72]) {  // Ignore difftest for MIP
+    ref_regs_ptr[72] = dut_regs_ptr[72];
+  }
+
   if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
     display();
     for (int i = 0; i < DIFFTEST_NR_REG; i ++) {
@@ -184,13 +190,13 @@ int Difftest::step() {
 }
 
 void Difftest::do_interrupt() {
-  state->record_abnormal_inst(dut.commit[0].pc, dut.commit[0].inst, RET_INT, dut.event.interrupt);
+  state->record_abnormal_inst(dut.event.exceptionPC, dut.event.exceptionInst, RET_INT, dut.event.interrupt);
   proxy->raise_intr(dut.event.interrupt | (1ULL << 63));
   progress = true;
 }
 
 void Difftest::do_exception() {
-  state->record_abnormal_inst(dut.event.exceptionPC, dut.commit[0].inst, RET_EXC, dut.event.exception);
+  state->record_abnormal_inst(dut.event.exceptionPC, dut.event.exceptionInst, RET_EXC, dut.event.exception);
   if (dut.event.exception == 12 || dut.event.exception == 13 || dut.event.exception == 15) {
     // printf("exception cause: %d\n", dut.event.exception);
     struct ExecutionGuide guide;
@@ -224,7 +230,7 @@ void Difftest::do_instr_commit(int i) {
   uint64_t commit_pc = dut.commit[i].pc;
   uint64_t commit_instr = dut.commit[i].inst;
 #endif
-  state->record_inst(commit_pc, commit_instr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
+  state->record_inst(commit_pc, commit_instr, (dut.commit[i].rfwen | dut.commit[i].fpwen), dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
 
 #ifdef DEBUG_MODE_DIFF
   int spike_invalid = test_spike();
@@ -247,14 +253,16 @@ void Difftest::do_instr_commit(int i) {
     dut.lrsc.valid = 0;
   }
 
+  bool realWen = (dut.commit[i].rfwen && dut.commit[i].wdest != 0) || (dut.commit[i].fpwen);
+
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
   if (dut.commit[i].skip || (DEBUG_MODE_SKIP(dut.commit[i].valid, dut.commit[i].pc, dut.commit[i].inst))) {
     proxy->regcpy(ref_regs_ptr, REF_TO_DIFFTEST);
     ref.csr.this_pc += dut.commit[i].isRVC ? 2 : 4;
-    if (dut.commit[i].wen && dut.commit[i].wdest != 0) {
+    if (realWen) {
       // We use the physical register file to get wdata
-      // TODO: FPR
+      // TODO: what if skip with fpwen?
       ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
       // printf("Debug Mode? %x is ls? %x\n", DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc), IS_LOAD_STORE(dut.commit[i].inst));
       // printf("skip %x %x %x %x %x\n", dut.commit[i].pc, dut.commit[i].inst, get_commit_data(i), dut.commit[i].wpdest, dut.commit[i].wdest);
@@ -274,7 +282,7 @@ void Difftest::do_instr_commit(int i) {
   if (NUM_CORES > 1) {
     if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
       proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
-      if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != get_commit_data(i)) {
+      if (realWen && ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] != get_commit_data(i)) {
         // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
         // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].pc);
         uint64_t golden;
@@ -309,14 +317,14 @@ void Difftest::do_instr_commit(int i) {
         // printf("---    golden: 0x%lx  original: 0x%lx\n", golden, ref_regs_ptr[dut.commit[i].wdest]);
         if (golden == get_commit_data(i)) {
           proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
-          if (dut.commit[i].wdest != 0) {
-            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
+          if (realWen) {
+            ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else if (dut.load[i].fuType == 0xF) {  //  atomic instr carefully handled
           proxy->memcpy(dut.load[i].paddr, &golden, len, DIFFTEST_TO_REF);
-          if (dut.commit[i].wdest != 0) {
-            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
+          if (realWen) {
+            ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else {
@@ -329,8 +337,8 @@ void Difftest::do_instr_commit(int i) {
           printf("---    content: %lx\n", buf);
 #else
           proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
-          if (dut.commit[i].wdest != 0) {
-            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
+          if (realWen) {
+            ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
 #endif

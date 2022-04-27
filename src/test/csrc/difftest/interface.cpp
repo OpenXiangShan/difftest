@@ -62,7 +62,8 @@ INTERFACE_BASIC_INSTR_COMMIT {
     packet->skip     = skip;
     packet->isRVC    = isRVC;
     packet->fused    = special;
-    packet->wen      = wen;
+    packet->rfwen    = rfwen;
+    packet->fpwen    = fpwen;
     packet->wpdest   = wpdest;
     packet->wdest    = wdest;
   }
@@ -78,7 +79,8 @@ INTERFACE_INSTR_COMMIT {
     packet->skip     = skip;
     packet->isRVC    = isRVC;
     packet->fused    = special;
-    packet->wen      = wen;
+    packet->rfwen    = rfwen;
+    packet->fpwen    = fpwen;
     packet->wpdest   = wpdest;
     packet->wdest    = wdest;
   }
