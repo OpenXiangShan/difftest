@@ -445,7 +445,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, u
     }
     switch (atomicFuop) {
       case 002: case 003: ret = t; break;
-      case 006: case 007: ret = rs; break;
+      case 006: case 007: if (t == 1) return 0; ret = rs; break;
       case 012: case 013: ret = rs; break;
       case 016: case 017: ret = t+rs; break;
       case 022: case 023: ret = (t^rs); break;
@@ -481,7 +481,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, u
     }
     switch (atomicFuop) {
       case 002: case 003: ret = t; break;
-      case 006: case 007: ret = rs; break;  // TODO
+      case 006: case 007: if (t == 1) return 0; ret = rs; break;
       case 012: case 013: ret = rs; break;
       case 016: case 017: ret = t+rs; break;
       case 022: case 023: ret = (t^rs); break;
