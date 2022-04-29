@@ -35,6 +35,7 @@ INTERFACE_TRAP_EVENT {
   packet->pc       = pc;
   packet->cycleCnt = cycleCnt;
   packet->instrCnt = instrCnt;
+  packet->hasWFI   = hasWFI;
 }
 
 INTERFACE_BASIC_TRAP_EVENT {
@@ -43,6 +44,7 @@ INTERFACE_BASIC_TRAP_EVENT {
   packet->valid    = valid;
   packet->cycleCnt = cycleCnt;
   packet->instrCnt = instrCnt;
+  packet->hasWFI   = hasWFI;
 }
 
 INTERFACE_ARCH_EVENT {
