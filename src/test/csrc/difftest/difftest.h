@@ -50,6 +50,7 @@ typedef struct {
   uint64_t pc = 0;
   uint64_t cycleCnt = 0;
   uint64_t instrCnt = 0;
+  uint8_t  hasWFI = 0;
 } trap_event_t;
 
 // architectural events: interrupts and exceptions
@@ -393,6 +394,9 @@ protected:
   inline uint64_t get_commit_data(int i) {
     uint64_t result = (dut.commit[i].fpwen) ? dut.pregs.fpr[dut.commit[i].wpdest] : dut.pregs.gpr[dut.commit[i].wpdest];
     return result;
+  }
+  inline bool has_wfi() {
+    return dut.trap.hasWFI;
   }
 
   void raise_trap(int trapCode);
