@@ -67,6 +67,7 @@ class DiffBasicTrapEventIO extends DifftestBundle {
   val valid    = Input(Bool())
   val cycleCnt = Input(UInt(64.W))
   val instrCnt = Input(UInt(64.W))
+  val hasWFI   = Input(Bool())
 }
 
 class DiffTrapEventIO extends DiffBasicTrapEventIO {
