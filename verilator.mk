@@ -92,7 +92,6 @@ VERILATOR_FLAGS =                   \
   +define+DIFFTEST                  \
   +define+PRINTF_COND=1             \
   +define+RANDOMIZE_REG_INIT        \
-  +define+RANDOMIZE_MEM_INIT        \
   +define+RANDOMIZE_GARBAGE_ASSIGN  \
   +define+RANDOMIZE_DELAY=0         \
   -Wno-STMTDLY -Wno-WIDTH           \
@@ -101,6 +100,8 @@ VERILATOR_FLAGS =                   \
   --stats-vars                      \
   --output-split 30000              \
   --output-split-cfuncs 30000
+
+# +define+RANDOMIZE_MEM_INIT        \
 
 EMU_MK := $(BUILD_DIR)/emu-compile/V$(EMU_TOP).mk
 EMU_DEPS := $(EMU_VFILES) $(EMU_CXXFILES)
