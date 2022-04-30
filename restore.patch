@@ -1,0 +1,12 @@
+diff --git a/verilator.mk b/verilator.mk
+index d8d18da7..833b9e6b 100644
+--- a/verilator.mk
++++ b/verilator.mk
+@@ -16,6 +16,6 @@
+ 
+ include config/verilator.mk
+ 
+-EMU_TOP      = CacheWarmup
++EMU_TOP      = SimTop
+ 
+ EMU_CSRC_DIR = $(abspath ./src/test/csrc)
