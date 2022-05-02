@@ -100,19 +100,21 @@ int Difftest::step() {
   if (check_timeout()) {
     return 1;
   }
-  do_first_instr_commit();
-  if (do_store_check()) {
-    return 1;
-  }
 
+  do_first_instr_commit();
+  
 #ifdef DEBUG_GOLDENMEM
   if (do_golden_memory_update()) {
     return 1;
   }
 #endif
-
+  
   if (!has_commit) {
     return 0;
+  }
+
+  if (do_store_check()) {
+    return 1;
   }
 
 #ifdef DEBUG_REFILL
