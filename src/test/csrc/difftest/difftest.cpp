@@ -342,6 +342,7 @@ void Difftest::do_instr_commit(int i) {
 
 void Difftest::do_first_instr_commit() {
   if (!has_commit && dut.commit[0].valid) {
+    printf("pc %lx\n",(dut.commit[0].pc));
 #ifndef BASIC_DIFFTEST_ONLY
     if (dut.commit[0].pc != FIRST_INST_ADDRESS) {
       return;
