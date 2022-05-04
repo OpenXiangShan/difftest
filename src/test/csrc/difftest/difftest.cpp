@@ -220,7 +220,7 @@ void Difftest::do_exception() {
 
 void Difftest::do_instr_commit(int i) {
   progress = true;
-  last_commit = ticks;
+  update_last_commit();
 
   // store the writeback info to debug array
 #ifdef BASIC_DIFFTEST_ONLY
@@ -559,9 +559,15 @@ int Difftest::check_timeout() {
     return 1;
   }
 
-  // check whether there're any commits in the last 5000 cycles
-  // NOTE: the WFI instruction may cause the CPU to halt for more than 5000 cycles.
-  if (has_commit && ticks > last_commit + stuck_limit && !has_wfi()) {
+  // NOTE: the WFI instruction may cause the CPU to halt for more than `stuck_limit` cycles.
+  // We update the `last_commit` if the CPU has a WFI instruction
+  // to allow the CPU to run at most `stuck_limit` cycles after WFI resumes execution.
+  if (has_wfi()) {
+    update_last_commit();
+  }
+
+  // check whether there're any commits in the last `stuck_limit` cycles
+  if (has_commit && ticks > last_commit + stuck_limit) {
     eprintf("No instruction of core %d commits for %lu cycles, maybe get stuck\n"
         "(please also check whether a fence.i instruction requires more than %lu cycles to flush the icache)\n",
         id, stuck_limit, stuck_limit);
