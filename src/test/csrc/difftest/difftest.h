@@ -380,6 +380,7 @@ protected:
   uint64_t track_instr = 0;
 #endif
 
+  void update_last_commit() { last_commit = ticks; }
   int check_timeout();
   void do_first_instr_commit();
   void do_interrupt();
