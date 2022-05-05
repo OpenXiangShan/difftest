@@ -174,8 +174,10 @@ SpikeProxy::SpikeProxy(int coreid) {
   load_flash_bin = (void (*)(void *flash_bin, size_t size))dlsym(handle, "difftest_load_flash");
   check_and_assert(load_flash_bin);
 
+#ifdef DEBUG_MODE_DIFF
   debug_mem_sync = (void (*)(paddr_t, void *, size_t))dlsym(handle, "debug_mem_sync");
   check_and_assert(debug_mem_sync);
+#endif
 
   query = (void (*)(void*, uint64_t))dlsym(handle, "difftest_query_ref");
 #ifdef ENABLE_RUNHEAD
