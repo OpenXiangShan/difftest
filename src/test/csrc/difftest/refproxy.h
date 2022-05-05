@@ -32,7 +32,7 @@ public:
   int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask) = NULL;
   void (*exec)(uint64_t n) = NULL;
   vaddr_t (*guided_exec)(void *disambiguate_para) = NULL;
-  vaddr_t (*update_config)(void *config) = NULL;
+  void (*update_config)(void *config) = NULL;
   void (*raise_intr)(uint64_t no) = NULL;
   void (*isa_reg_display)() = NULL;
   void (*query)(void *result_buffer, uint64_t type) = NULL;
