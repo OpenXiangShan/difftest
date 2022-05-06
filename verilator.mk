@@ -85,6 +85,8 @@ EMU_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
 endif
 
 # --trace
+# +define+RANDOMIZE_GARBAGE_ASSIGN
+
 VERILATOR_FLAGS =                   \
   --top-module $(EMU_TOP)           \
   --compiler clang                  \
@@ -93,7 +95,6 @@ VERILATOR_FLAGS =                   \
   +define+PRINTF_COND=1             \
   +define+RANDOMIZE_REG_INIT        \
   +define+RANDOMIZE_MEM_INIT        \
-  +define+RANDOMIZE_GARBAGE_ASSIGN  \
   +define+RANDOMIZE_DELAY=0         \
   -Wno-STMTDLY -Wno-WIDTH           \
   $(VEXTRA_FLAGS)                   \
