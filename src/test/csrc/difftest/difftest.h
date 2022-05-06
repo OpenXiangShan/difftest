@@ -399,9 +399,6 @@ protected:
   inline bool has_wfi() {
     return dut.trap.hasWFI;
   }
-  inline bool has_wfi() {
-    return dut.trap.hasWFI;
-  }
 
   void raise_trap(int trapCode);
   void clear_step();
