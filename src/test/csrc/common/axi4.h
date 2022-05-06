@@ -96,94 +96,94 @@ struct axi_channel {
 // dut helper for AXI
 
 // NOTE: change this when migrating between different hardware designs
-#define DUT_AXI(name) io_memAXI_0_##name
+#define DUT_AXI(channel, field) io_memAXI_0_##channel##field
 
-#define axi_aw_copy_from_dut_ptr(dut_ptr, aw)             \
+#define axi_aw_copy_from_dut_ptr(dut_ptr, _aw)            \
   do {                                                    \
-    aw.ready = dut_ptr->DUT_AXI(aw_ready);                \
-    aw.valid = dut_ptr->DUT_AXI(aw_valid);                \
-    aw.addr = dut_ptr->DUT_AXI(aw_bits_addr);             \
-    aw.prot = dut_ptr->DUT_AXI(aw_bits_prot);             \
-    aw.id = dut_ptr->DUT_AXI(aw_bits_id);                 \
-    aw.len = dut_ptr->DUT_AXI(aw_bits_len);               \
-    aw.size = dut_ptr->DUT_AXI(aw_bits_size);             \
-    aw.burst = dut_ptr->DUT_AXI(aw_bits_burst);           \
-    aw.lock = dut_ptr->DUT_AXI(aw_bits_lock);             \
-    aw.cache = dut_ptr->DUT_AXI(aw_bits_cache);           \
-    aw.qos = dut_ptr->DUT_AXI(aw_bits_qos);               \
+    _aw.ready = dut_ptr->DUT_AXI(aw, ready);              \
+    _aw.valid = dut_ptr->DUT_AXI(aw, valid);              \
+    _aw.addr = dut_ptr->DUT_AXI(aw, addr);                \
+    _aw.prot = dut_ptr->DUT_AXI(aw, prot);                \
+    _aw.id = dut_ptr->DUT_AXI(aw, id);                    \
+    _aw.len = dut_ptr->DUT_AXI(aw, len);                  \
+    _aw.size = dut_ptr->DUT_AXI(aw, size);                \
+    _aw.burst = dut_ptr->DUT_AXI(aw, burst);              \
+    _aw.lock = dut_ptr->DUT_AXI(aw, lock);                \
+    _aw.cache = dut_ptr->DUT_AXI(aw, cache);              \
+    _aw.qos = dut_ptr->DUT_AXI(aw, qos);                  \
   } while (0);
 
-#define axi_aw_set_dut_ptr(dut_ptr, aw)                   \
+#define axi_aw_set_dut_ptr(dut_ptr, _aw)                  \
   do {                                                    \
-    dut_ptr->DUT_AXI(aw_ready) = aw.ready;                \
+    dut_ptr->DUT_AXI(aw, ready) = _aw.ready;              \
   } while (0);
 
-#define axi_w_copy_from_dut_ptr(dut_ptr, w)               \
+#define axi_w_copy_from_dut_ptr(dut_ptr, _w)              \
   do {                                                    \
-    w.ready = dut_ptr->DUT_AXI(w_ready);                  \
-    w.valid = dut_ptr->DUT_AXI(w_valid);                  \
-    axi_copy_data(w.data, dut_ptr->DUT_AXI(w_bits_data))  \
-    w.strb = dut_ptr->DUT_AXI(w_bits_strb);               \
-    w.last = dut_ptr->DUT_AXI(w_bits_last);               \
+    _w.ready = dut_ptr->DUT_AXI(w, ready);                \
+    _w.valid = dut_ptr->DUT_AXI(w, valid);                \
+    axi_copy_data(_w.data, dut_ptr->DUT_AXI(w, data))     \
+    _w.strb = dut_ptr->DUT_AXI(w, strb);                  \
+    _w.last = dut_ptr->DUT_AXI(w, last);                  \
   } while (0);
 
-#define axi_w_set_dut_ptr(dut_ptr, w)                     \
+#define axi_w_set_dut_ptr(dut_ptr, _w)                    \
   do {                                                    \
-    dut_ptr->DUT_AXI(w_ready) = w.ready;                  \
+    dut_ptr->DUT_AXI(w, ready) = _w.ready;                \
   } while (0);
 
-#define axi_b_copy_from_dut_ptr(dut_ptr, b)               \
+#define axi_b_copy_from_dut_ptr(dut_ptr, _b)              \
   do {                                                    \
-    b.ready = dut_ptr->DUT_AXI(b_ready);                  \
-    b.valid = dut_ptr->DUT_AXI(b_valid);                  \
-    b.resp = dut_ptr->DUT_AXI(b_bits_resp);               \
-    b.id = dut_ptr->DUT_AXI(b_bits_id);                   \
+    _b.ready = dut_ptr->DUT_AXI(b, ready);                \
+    _b.valid = dut_ptr->DUT_AXI(b, valid);                \
+    _b.resp = dut_ptr->DUT_AXI(b, resp);                  \
+    _b.id = dut_ptr->DUT_AXI(b, id);                      \
   } while (0);
 
-#define axi_b_set_dut_ptr(dut_ptr, b)                     \
+#define axi_b_set_dut_ptr(dut_ptr, _b)                    \
   do {                                                    \
-    dut_ptr->DUT_AXI(b_valid) = b.valid;                  \
-    dut_ptr->DUT_AXI(b_bits_resp) = b.resp;               \
-    dut_ptr->DUT_AXI(b_bits_id) = b.id;                   \
+    dut_ptr->DUT_AXI(b, valid) = _b.valid;                \
+    dut_ptr->DUT_AXI(b, resp) = _b.resp;                  \
+    dut_ptr->DUT_AXI(b, id) = _b.id;                      \
   } while (0);
 
-#define axi_ar_copy_from_dut_ptr(dut_ptr, ar)             \
+#define axi_ar_copy_from_dut_ptr(dut_ptr, _ar)            \
   do {                                                    \
-    ar.ready = dut_ptr->DUT_AXI(ar_ready);                \
-    ar.valid = dut_ptr->DUT_AXI(ar_valid);                \
-    ar.addr = dut_ptr->DUT_AXI(ar_bits_addr);             \
-    ar.prot = dut_ptr->DUT_AXI(ar_bits_prot);             \
-    ar.id = dut_ptr->DUT_AXI(ar_bits_id);                 \
-    ar.len = dut_ptr->DUT_AXI(ar_bits_len);               \
-    ar.size = dut_ptr->DUT_AXI(ar_bits_size);             \
-    ar.burst = dut_ptr->DUT_AXI(ar_bits_burst);           \
-    ar.lock = dut_ptr->DUT_AXI(ar_bits_lock);             \
-    ar.cache = dut_ptr->DUT_AXI(ar_bits_cache);           \
-    ar.qos = dut_ptr->DUT_AXI(ar_bits_qos);               \
+    _ar.ready = dut_ptr->DUT_AXI(ar, ready);              \
+    _ar.valid = dut_ptr->DUT_AXI(ar, valid);              \
+    _ar.addr = dut_ptr->DUT_AXI(ar, addr);                \
+    _ar.prot = dut_ptr->DUT_AXI(ar, prot);                \
+    _ar.id = dut_ptr->DUT_AXI(ar, id);                    \
+    _ar.len = dut_ptr->DUT_AXI(ar, len);                  \
+    _ar.size = dut_ptr->DUT_AXI(ar, size);                \
+    _ar.burst = dut_ptr->DUT_AXI(ar, burst);              \
+    _ar.lock = dut_ptr->DUT_AXI(ar, lock);                \
+    _ar.cache = dut_ptr->DUT_AXI(ar, cache);              \
+    _ar.qos = dut_ptr->DUT_AXI(ar, qos);                  \
   } while (0);
 
-#define axi_ar_set_dut_ptr(dut_ptr, ar)                   \
+#define axi_ar_set_dut_ptr(dut_ptr, _ar)                  \
   do {                                                    \
-    dut_ptr->DUT_AXI(ar_ready) = ar.ready;                \
+    dut_ptr->DUT_AXI(ar, ready) = _ar.ready;              \
   } while (0);
 
-#define axi_r_copy_from_dut_ptr(dut_ptr, r)               \
+#define axi_r_copy_from_dut_ptr(dut_ptr, _r)              \
   do {                                                    \
-    r.ready = dut_ptr->DUT_AXI(r_ready);                  \
-    r.valid = dut_ptr->DUT_AXI(r_valid);                  \
-    r.resp = dut_ptr->DUT_AXI(r_bits_resp);               \
-    axi_copy_data(r.data, dut_ptr->DUT_AXI(r_bits_data))  \
-    r.last = dut_ptr->DUT_AXI(r_bits_last);               \
-    r.id = dut_ptr->DUT_AXI(r_bits_id);                   \
+    _r.ready = dut_ptr->DUT_AXI(r, ready);                \
+    _r.valid = dut_ptr->DUT_AXI(r, valid);                \
+    _r.resp = dut_ptr->DUT_AXI(r, resp);                  \
+    axi_copy_data(_r.data, dut_ptr->DUT_AXI(r, data))     \
+    _r.last = dut_ptr->DUT_AXI(r, last);                  \
+    _r.id = dut_ptr->DUT_AXI(r, id);                      \
   } while (0);
 
-#define axi_r_set_dut_ptr(dut_ptr, r)                     \
+#define axi_r_set_dut_ptr(dut_ptr, _r)                    \
   do {                                                    \
-    dut_ptr->DUT_AXI(r_valid) = r.valid;                  \
-    dut_ptr->DUT_AXI(r_bits_resp) = r.resp;               \
-    axi_copy_data(dut_ptr->DUT_AXI(r_bits_data), r.data)  \
-    dut_ptr->DUT_AXI(r_bits_last) = r.last;               \
-    dut_ptr->DUT_AXI(r_bits_id) = r.id;                   \
+    dut_ptr->DUT_AXI(r, valid) = _r.valid;                \
+    dut_ptr->DUT_AXI(r, resp) = _r.resp;                  \
+    axi_copy_data(dut_ptr->DUT_AXI(r, data), _r.data)     \
+    dut_ptr->DUT_AXI(r, last) = _r.last;                  \
+    dut_ptr->DUT_AXI(r, id) = _r.id;                      \
   } while (0);
 
 #define axi_copy_from_dut_ptr(dut_ptr, axi)               \

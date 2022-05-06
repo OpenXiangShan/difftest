@@ -53,8 +53,9 @@ class DiffBasicInstrCommitIO extends DifftestBundle with DifftestWithIndex {
   val special  = Input(UInt(8.W))
   val skip     = Input(Bool())
   val isRVC    = Input(Bool())
-  val wen      = Input(Bool())
-  val wpdest   = Input(UInt(8.W))
+  val rfwen    = Input(Bool())
+  val fpwen    = Input(Bool())
+  val wpdest   = Input(UInt(32.W))
   val wdest    = Input(UInt(8.W))
 }
 
@@ -96,7 +97,7 @@ class DiffCSRStateIO extends DifftestBundle {
   val medeleg = Input(UInt(64.W))
 }
 
-class DiffDebugModeIO extends  DifftestBundle {
+class DiffDebugModeIO extends DifftestBundle {
   val debugMode = Input(Bool())
   val dcsr = Input(UInt(64.W))
   val dpc = Input(UInt(64.W))
@@ -106,13 +107,13 @@ class DiffDebugModeIO extends  DifftestBundle {
 
 class DiffIntWritebackIO extends DifftestBundle {
   val valid = Input(Bool())
-  val dest  = Input(UInt(8.W))
+  val dest  = Input(UInt(32.W))
   val data  = Input(UInt(64.W))
 }
 
 class DiffFpWritebackIO extends DifftestBundle {
   val valid = Input(Bool())
-  val dest  = Input(UInt(8.W))
+  val dest  = Input(UInt(32.W))
   val data  = Input(UInt(64.W))
 }
 
@@ -253,10 +254,12 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
          |  $modPorts
          |);
          |`ifndef SYNTHESIS
+         |`ifdef DIFFTEST
          |$dpicDecl
          |  always @(posedge io_clock) begin
          |    $dpicName (${dpicInterfaces.map(_._1).mkString(",")});
          |  end
+         |`endif
          |`endif
          |endmodule
          |""".stripMargin

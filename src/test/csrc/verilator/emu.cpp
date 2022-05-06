@@ -37,6 +37,14 @@
 extern remote_bitbang_t * jtag;
 
 
+static inline long long int atoll_strict(const char *str, const char *arg) {
+  if (strspn(str, " +-0123456789") != strlen(str)) {
+    printf("[ERROR] --%s=NUM only accept numeric argument\n", arg);
+    exit(EINVAL);
+  }
+  return atoll(str);
+}
+
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
   printf("\n");
@@ -139,12 +147,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         exit(0);
       case 's':
         if(std::string(optarg) != "NO_SEED") {
-          args.seed = atoll(optarg);
+          args.seed = atoll_strict(optarg, "seed");
           printf("Using seed = %d\n", args.seed);
         }
         break;
-      case 'C': args.max_cycles = atoll(optarg);  break;
-      case 'I': args.max_instr = atoll(optarg);  break;
+      case 'C': args.max_cycles = atoll_strict(optarg, "max-cycles");  break;
+      case 'I': args.max_instr = atoll_strict(optarg, "max-instr");  break;
 #ifdef DEBUG_REFILL
       case 'T':
         args.track_instr = std::strtoll(optarg, NULL, 0);
@@ -155,11 +163,11 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         }
         break;
 #endif
-      case 'W': args.warmup_instr = atoll(optarg);  break;
-      case 'D': args.stat_cycles = atoll(optarg);  break;
+      case 'W': args.warmup_instr = atoll_strict(optarg, "warmup-instr");  break;
+      case 'D': args.stat_cycles = atoll_strict(optarg, "stat-cycles");  break;
       case 'i': args.image = optarg; break;
-      case 'b': args.log_begin = atoll(optarg);  break;
-      case 'e': args.log_end = atoll(optarg); break;
+      case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
+      case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
       case 'F': args.flash_bin = optarg; break;
     }
   }

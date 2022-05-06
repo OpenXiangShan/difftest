@@ -57,6 +57,9 @@ extern unsigned long EMU_FLASH_SIZE;
 #define DIFF_PROXY NemuProxy
 #endif
 
+// max physical register file size
+#define DIFFTEST_MAX_PRF_SIZE 256
+
 // max commit width
 #define DIFFTEST_COMMIT_WIDTH 6
 

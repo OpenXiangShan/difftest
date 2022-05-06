@@ -58,7 +58,7 @@ void init_flash(const char *flash_bin) {
     /** no specified flash_path ,use defualt 3 instructions*/
     printf("[warning]no valid flash bin path, use preset flash instead\n");
     // addiw   t0,zero,1
-    // slli    to,to,  0x1f
+    // slli    to,to,  0x25
     // jr      t0
     flash_base[0] = 0x025292930010029b;
     flash_base[1] = 0x00028067;
@@ -67,7 +67,7 @@ void init_flash(const char *flash_bin) {
 
   /** no specified flash_path ,use defualt 3 instructions*/
   flash_path = (char *)flash_bin;
-  printf("[info]use %s as flash bin\n",flash_path);   
+  printf("[info]use %s as flash bin\n",flash_path);
 
   FILE *flash_fp = fopen(flash_path, "r");
   if(!flash_fp)
@@ -75,7 +75,7 @@ void init_flash(const char *flash_bin) {
     eprintf(ANSI_COLOR_MAGENTA "[error] flash img not found\n");
     exit(1);
   }
-  
+
   fseek(flash_fp, 0, SEEK_END);
   flash_bin_size = ftell(flash_fp);
   if (flash_bin_size > EMU_FLASH_SIZE) {
