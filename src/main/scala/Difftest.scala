@@ -165,6 +165,7 @@ class DiffRefillEventIO extends DifftestBundle {
   val valid = Input(Bool())
   val addr  = Input(UInt(64.W))
   val data  = Input(Vec(8, UInt(64.W)))
+  val cacheid = Input(Bool())
 }
 
 class DiffLrScEventIO extends DifftestBundle {
