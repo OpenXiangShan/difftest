@@ -116,7 +116,7 @@ int Difftest::step() {
   }
 
 #ifdef DEBUG_REFILL
-  if (do_refill_check()) {
+  if (do_irefill_check() || do_drefill_check() ) {
     return 1;
   }
 #endif
@@ -387,28 +387,30 @@ int Difftest::do_store_check() {
   return 0;
 }
 
-int Difftest::do_refill_check() {
+int Difftest::do_refill_check(int cacheid) {
   static uint64_t last_valid_addr = 0;
   char buf[512];
-  dut.refill.addr = dut.refill.addr - dut.refill.addr % 64;
-  if (dut.refill.valid == 1 && dut.refill.addr != last_valid_addr) {
-    last_valid_addr = dut.refill.addr;
-    if(!in_pmem(dut.refill.addr)){
+  refill_event_t dut_refill = cacheid == DCACHEID ? dut.d_refill : dut.i_refill ;    
+  const char* name = cacheid == DCACHEID ? "DCache" : "ICache";
+  dut_refill.addr = dut_refill.addr - dut_refill.addr % 64;
+  if (dut_refill.valid == 1 && dut_refill.addr != last_valid_addr) {
+    last_valid_addr = dut_refill.addr;
+    if(!in_pmem(dut_refill.addr)){
       // speculated illegal mem access should be ignored
       return 0;
     }
     for (int i = 0; i < 8; i++) {
-      read_goldenmem(dut.refill.addr + i*8, &buf, 8);
-      if (dut.refill.data[i] != *((uint64_t*)buf)) {
-        printf("Refill test failed!\n");
-        printf("addr: %lx\nGold: ", dut.refill.addr);
+      read_goldenmem(dut_refill.addr + i*8, &buf, 8);
+      if (dut_refill.data[i] != *((uint64_t*)buf)) {
+        printf("%s Refill test failed!\n",name);
+        printf("addr: %lx\nGold: ", dut_refill.addr);
         for (int j = 0; j < 8; j++) {
-          read_goldenmem(dut.refill.addr + j*8, &buf, 8);
+          read_goldenmem(dut_refill.addr + j*8, &buf, 8);
           printf("%016lx", *((uint64_t*)buf));
         }
         printf("\nCore: ");
         for (int j = 0; j < 8; j++) {
-          printf("%016lx", dut.refill.data[j]);
+          printf("%016lx", dut_refill.data[j]);
         }
         printf("\n");
         return 1;
@@ -417,6 +419,17 @@ int Difftest::do_refill_check() {
   }
   return 0;
 }
+
+int Difftest::do_irefill_check() {
+    return do_refill_check(ICACHEID);   
+}
+
+
+int Difftest::do_drefill_check() {
+    return do_refill_check(DCACHEID);   
+}
+
+
 
 inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, uint64_t atomicMask, uint8_t atomicFuop, uint64_t atomicOut) {
   // We need to do atmoic operations here so as to update goldenMem
