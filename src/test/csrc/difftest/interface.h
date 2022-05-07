@@ -435,6 +435,24 @@ extern "C" int v_difftest_step();
     uint64_t* oracle_vaddr                         \
   )
 
+// v_difftest_RunaheadMemdepPred
+#define INTERFACE_DMA_TRANSACTION                  \
+  DIFFTEST_DPIC_FUNC_DECL(DMATransaction) (        \
+    DPIC_ARG_BYTE coreid,                          \
+    DPIC_ARG_BIT  valid,                           \
+    DPIC_ARG_BIT  is_write,                        \
+    DPIC_ARG_LONG address,                         \
+    DPIC_ARG_LONG mask,                            \
+    DPIC_ARG_LONG data_0,                          \
+    DPIC_ARG_LONG data_1,                          \
+    DPIC_ARG_LONG data_2,                          \
+    DPIC_ARG_LONG data_3,                          \
+    DPIC_ARG_LONG data_4,                          \
+    DPIC_ARG_LONG data_5,                          \
+    DPIC_ARG_LONG data_6,                          \
+    DPIC_ARG_LONG data_7                           \
+  )
+
 INTERFACE_BASIC_INSTR_COMMIT;
 INTERFACE_ARCH_EVENT;
 INTERFACE_INSTR_COMMIT;
@@ -456,5 +474,6 @@ INTERFACE_RUNAHEAD_EVENT;
 INTERFACE_RUNAHEAD_COMMIT_EVENT;
 INTERFACE_RUNAHEAD_REDIRECT_EVENT;
 INTERFACE_RUNAHEAD_MEMDEP_PRED;
+INTERFACE_DMA_TRANSACTION;
 
 #endif

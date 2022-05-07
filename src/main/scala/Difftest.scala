@@ -200,6 +200,14 @@ class DiffRunaheadMemdepPredIO extends DifftestBundle with DifftestWithIndex {
   val oracle_vaddr  = Output(UInt(64.W))
 }
 
+class DiffDMATransactionIO extends DifftestBundle {
+  val valid         = Input(Bool())
+  val is_write      = Input(Bool())
+  val address       = Input(UInt(64.W))
+  val mask          = Input(UInt(64.W))
+  val data          = Input(Vec(8, UInt(64.W)))
+}
+
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline
 {
   val io: T
@@ -295,8 +303,7 @@ class DifftestRunaheadEvent extends DifftestBaseModule(new DiffRunaheadEventIO)
 class DifftestRunaheadCommitEvent extends DifftestBaseModule(new DiffRunaheadCommitEventIO)
 class DifftestRunaheadRedirectEvent extends DifftestBaseModule(new DiffRunaheadRedirectEventIO)
 class DifftestRunaheadMemdepPred extends DifftestBaseModule(new DiffRunaheadMemdepPredIO)
-
-// Difftest emulator top
+class DifftestDMATransaction extends DifftestBaseModule(new DiffDMATransactionIO)
 
 // XiangShan log / perf ctrl, should be inited in SimTop IO
 // If not needed, just ingore these signals

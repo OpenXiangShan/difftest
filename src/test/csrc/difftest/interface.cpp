@@ -402,3 +402,7 @@ INTERFACE_RUNAHEAD_MEMDEP_PRED {
   }
   *oracle_vaddr = packet->oracle_vaddr;
 }
+
+INTERFACE_DMA_TRANSACTION {
+
+}
