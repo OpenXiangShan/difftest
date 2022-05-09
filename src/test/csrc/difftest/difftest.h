@@ -25,6 +25,7 @@
 enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 enum { REF_TO_DUT, DUT_TO_REF };
 enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
+enum { ICACHEID, DCACHEID };
 // DIFFTEST_TO_DUT ~ REF_TO_DUT ~ REF_TO_DIFFTEST
 // DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
 #define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
@@ -209,7 +210,8 @@ typedef struct {
   load_event_t      load[DIFFTEST_COMMIT_WIDTH];
   atomic_event_t    atomic;
   ptw_event_t       ptw;
-  refill_event_t    refill;
+  refill_event_t    d_refill;
+  refill_event_t    i_refill;
   lr_sc_evevnt_t    lrsc;
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
@@ -318,8 +320,9 @@ public:
   inline ptw_event_t *get_ptw_event() {
     return &(dut.ptw);
   }
-  inline refill_event_t *get_refill_event() {
-    return &(dut.refill);
+  inline refill_event_t *get_refill_event(bool dcache) {
+    if(dcache) return &(dut.d_refill);
+    return &(dut.i_refill);
   }
   inline lr_sc_evevnt_t *get_lr_sc_event() {
     return &(dut.lrsc);
@@ -388,7 +391,9 @@ protected:
   void do_exception();
   void do_instr_commit(int index);
   int do_store_check();
-  int do_refill_check();
+  int do_refill_check(int cacheid);
+  int do_irefill_check();
+  int do_drefill_check();
   int do_golden_memory_update();
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }
