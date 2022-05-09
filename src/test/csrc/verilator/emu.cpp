@@ -33,9 +33,11 @@
 #include "compress.h"
 #include "lightsss.h"
 #include "remote_bitbang.h"
+#include "jtag_utils.h"
 
 extern remote_bitbang_t * jtag;
-
+extern jtag_dump_helper * jtag_dumper;
+extern jtag_testcase_driver * jtag_driver;
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
   if (strspn(str, " +-0123456789") != strlen(str)) {
@@ -73,6 +75,8 @@ static inline void print_help(const char *file) {
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
+  printf("      --dump-jtag            dump jtag input to NOOP_HOME/jtag-dump.txt\n");
+  printf("      --jtag-testcase        use custom jtag testcase input from NOOP_HOME/jtag-input.txt\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -95,6 +99,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
+    { "dump-jtag",         0, NULL,  0  },
+    { "jtag-testcase",     0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -140,6 +146,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl\n");
 #endif
             continue;
+          case 11:
+            args.dump_jtag = true; continue;
+          case 12:
+            args.enable_jtag_testcase = true; continue;
         }
         // fall through
       default:
@@ -197,9 +207,22 @@ Emulator::Emulator(int argc, const char *argv[]):
 
   // init remote-bitbang
   enable_simjtag = args.enable_jtag;
-  if (args.enable_jtag) {
+  
+  dump_jtag = args.dump_jtag;
+  enable_jtag_testcase = args.enable_jtag_testcase;
+  assert(!(enable_simjtag && enable_jtag_testcase));
+
+  if (enable_simjtag) {
     jtag = new remote_bitbang_t(23334);
+  }  
+  if (dump_jtag) {
+    jtag_dumper = new jtag_dump_helper;
   }
+
+  if (enable_jtag_testcase) {
+    jtag_driver = new jtag_testcase_driver;
+  }
+
   // init flash
   init_flash(args.flash_bin);
 

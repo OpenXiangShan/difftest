@@ -52,6 +52,8 @@ struct EmuArgs {
   bool enable_jtag;
   bool enable_runahead;
   bool dump_tl;
+  bool dump_jtag;
+  bool enable_jtag_testcase;
 
   EmuArgs() {
     seed = 0;
@@ -76,6 +78,8 @@ struct EmuArgs {
     enable_jtag = false;
     enable_runahead = false;
     dump_tl = false;
+    dump_jtag = false;
+    enable_jtag_testcase = false;
   }
 };
 

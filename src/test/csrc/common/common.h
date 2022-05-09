@@ -44,6 +44,8 @@
 extern int assert_count;
 extern const char* emu_path;
 extern bool enable_simjtag;
+extern bool dump_jtag;
+extern bool enable_jtag_testcase;
 void assert_init();
 void assert_finish();
 
