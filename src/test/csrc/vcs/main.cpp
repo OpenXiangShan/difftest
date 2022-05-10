@@ -20,12 +20,21 @@
 #include "device.h"
 #include "goldenmem.h"
 #include "ram.h"
+#include "flash.h"
 
 static bool has_reset = false;
-static char bin_file[64] = "ram.bin";
+static char bin_file[256] = "ram.bin";
+static char *flash_bin_file = NULL;
 
 extern "C" void set_bin_file(char *s) {
+  printf("ram image:%s\n",s);
   strcpy(bin_file, s);
+}
+
+extern "C" void set_flash_bin(char *s) {
+  printf("flash image:%s\n",s);
+  flash_bin_file = (char *)malloc(256);
+  strcpy(flash_bin_file, s);
 }
 
 extern "C" void simv_init() {
@@ -33,6 +42,7 @@ extern "C" void simv_init() {
   setlocale(LC_NUMERIC, "");
 
   init_ram(bin_file);
+  init_flash(flash_bin_file);
 
   difftest_init();
   init_device();
