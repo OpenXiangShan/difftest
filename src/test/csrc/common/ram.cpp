@@ -39,7 +39,8 @@ void* get_ram_start() { return &ram[0]; }
 long get_ram_size() { return EMU_RAM_SIZE; }
 
 #ifdef TLB_UNITTEST
-void addpageSv39() {
+// Note: addpageSv39 only supports pmem base 0x80000000
+void addpageSv39() { 
 //three layers
 //addr range: 0x0000000080000000 - 0x0000000088000000 for 128MB from 2GB - 2GB128MB
 //the first layer: one entry for 1GB. (512GB in total by 512 entries). need the 2th entries
@@ -224,7 +225,7 @@ uint64_t pmem_read(uint64_t raddr) {
   if (raddr % sizeof(uint64_t)) {
     printf("Warning: pmem_read only supports 64-bit aligned memory access\n");
   }
-  raddr -= 0x80000000;
+  raddr -= PMEM_BASE;
   return ram_read_helper(1, raddr / sizeof(uint64_t));
 }
 
@@ -232,7 +233,7 @@ void pmem_write(uint64_t waddr, uint64_t wdata) {
   if (waddr % sizeof(uint64_t)) {
     printf("Warning: pmem_write only supports 64-bit aligned memory access\n");
   }
-  waddr -= 0x80000000;
+  waddr -= PMEM_BASE;
   return ram_write_helper(waddr / sizeof(uint64_t), wdata, -1UL, 1);
 }
 

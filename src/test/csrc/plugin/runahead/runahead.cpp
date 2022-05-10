@@ -229,7 +229,7 @@ void Runahead::do_first_instr_runahead() {
     has_commit = 1;
     // nemu_this_pc = dut_ptr->runahead[0].pc;
 
-    proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    proxy->memcpy(PMEM_BASE, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     // Manually setup simulator init regs,
     // for at this time, the first has not been initialied
     dut_ptr->csr.this_pc = FIRST_INST_ADDRESS; 

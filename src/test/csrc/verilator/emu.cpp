@@ -69,6 +69,7 @@ static inline void print_help(const char *file) {
 #endif
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
+  printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
@@ -91,6 +92,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
     { "wave-path",         1, NULL,  0  },
+    { "ram-size",          1, NULL,  0  },
     { "sim-run-ahead",     0, NULL,  0  },
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
@@ -126,14 +128,15 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
           case 8: args.wave_path = optarg; continue;
-          case 9:
+          case 9: args.ram_size = optarg; continue;
+          case 10:
 #ifdef ENABLE_RUNHEAD
             args.enable_runahead = true;
 #else
             printf("[WARN] runahead is not enabled at compile time, ignore --sim-run-ahead\n");
 #endif
             continue;
-          case 10:
+          case 11:
 #ifdef DEBUG_TILELINK
             args.dump_tl = true;
 #else
@@ -176,6 +179,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     print_help(argv[0]);
     printf("Hint: --image=IMAGE_FILE must be given\n");
     exit(0);
+  }
+
+  if(args.ram_size){
+    parse_and_update_ramsize(args.ram_size);
   }
 
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
@@ -283,8 +290,8 @@ inline void Emulator::single_cycle() {
 #ifdef WITH_DRAMSIM3
   axi_channel axi;
   axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
+  axi.aw.addr -= PMEM_BASE;
+  axi.ar.addr -= PMEM_BASE;
   dramsim3_helper_rising(axi);
 #endif
 
@@ -304,8 +311,8 @@ inline void Emulator::single_cycle() {
 
 #ifdef WITH_DRAMSIM3
   axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
+  axi.aw.addr -= PMEM_BASE;
+  axi.ar.addr -= PMEM_BASE;
   dramsim3_helper_falling(axi);
   axi_set_dut_ptr(dut_ptr, axi);
 #endif
@@ -499,6 +506,23 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   return cycles;
 }
 
+void parse_and_update_ramsize(const char* arg_ramsize_str) {
+  unsigned long ram_size_value = 0;
+  char ram_size_unit[64];
+  sscanf(arg_ramsize_str, "%d%s", &ram_size_value, &ram_size_unit);
+  assert(ram_size_value > 0);
+  
+  if(!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")){
+    EMU_RAM_SIZE = ram_size_value * 1024 * 1024 * 1024;
+    return;
+  }
+  if(!strcmp(ram_size_unit, "MB") || !strcmp(ram_size_unit, "mb")){
+    EMU_RAM_SIZE = ram_size_value * 1024 * 1024;
+    return;
+  }
+  printf("Invalid ram size %s\n", ram_size_unit);
+  assert(0);
+}
 
 inline char* Emulator::timestamp_filename(time_t t, char *buf) {
   char buf_time[64];
@@ -636,7 +660,7 @@ void Emulator::snapshot_save(const char *filename) {
   stream.unbuf_write(ref_r, sizeof(ref_r));
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_DUT);
+  proxy->memcpy(PMEM_BASE, buf, size, DIFFTEST_TO_DUT);
   stream.unbuf_write(buf, size);
   munmap(buf, size);
 
@@ -680,7 +704,7 @@ void Emulator::snapshot_load(const char *filename) {
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   stream.read(buf, size);
-  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_REF);
+  proxy->memcpy(PMEM_BASE, buf, size, DIFFTEST_TO_REF);
   munmap(buf, size);
 
   struct SyncState sync_mastate;

@@ -360,7 +360,7 @@ void Difftest::do_first_instr_commit() {
     nemu_this_pc = FIRST_INST_ADDRESS;
 
     proxy->load_flash_bin(get_flash_path(), get_flash_size());
-    proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    proxy->memcpy(PMEM_BASE, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     // Use a temp variable to store the current pc of dut
     uint64_t dut_this_pc = dut.csr.this_pc;
     // NEMU should always start at FIRST_INST_ADDRESS
@@ -566,8 +566,8 @@ int Difftest::check_timeout() {
   if (!has_commit && ticks > last_commit + firstCommit_limit) {
     eprintf("No instruction commits for %lu cycles of core %d. Please check the first instruction.\n",
       firstCommit_limit, id);
-    eprintf("Note: The first instruction may lie in 0x10000000 which may executes and commits after 500 cycles.\n");
-    eprintf("   Or the first instruction may lie in 0x80000000 which may executes and commits after 2000 cycles.\n");
+    eprintf("Note: The first instruction may lie in 0x%lx which may executes and commits after 500 cycles.\n", FIRST_INST_ADDRESS);
+    eprintf("   Or the first instruction may lie in 0x%lx which may executes and commits after 2000 cycles.\n", PMEM_BASE);
     display();
     return 1;
   }

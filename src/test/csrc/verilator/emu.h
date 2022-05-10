@@ -43,6 +43,7 @@ struct EmuArgs {
   const char *image;
   const char *snapshot_path;
   const char *wave_path;
+  const char *ram_size;
   const char *flash_bin;
   bool enable_waveform;
   bool enable_snapshot;
@@ -66,6 +67,7 @@ struct EmuArgs {
 #endif
     snapshot_path = NULL;
     wave_path = NULL;
+    ram_size = NULL;
     image = NULL;
     flash_bin = NULL;
     enable_waveform = false;
@@ -133,5 +135,7 @@ public:
   };
   int get_trapcode() { return trapCode; }
 };
+
+void parse_and_update_ramsize(const char* arg_ramsize_str);
 
 #endif

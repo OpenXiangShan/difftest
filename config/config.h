@@ -26,8 +26,10 @@
 // -----------------------------------------------------------------------
 
 // emulated memory size (Byte)
-#define DEFAULT_EMU_RAM_SIZE (16 * 1024 * 1024 * 1024UL) // 16 GB
-extern unsigned long EMU_RAM_SIZE;
+#define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
+
+// physical memory base address
+#define PMEM_BASE 0x80000000UL
 
 // first valid instruction's address, difftest starts from this instruction
 #ifndef FIRST_INST_ADDRESS
@@ -175,5 +177,7 @@ extern unsigned long EMU_FLASH_SIZE;
 #define TRACE_INFLIGHT_MEM_INST
 #define QUERY_MEM_ACCESS
 #endif
+
+extern unsigned long EMU_RAM_SIZE;
 
 #endif

@@ -33,6 +33,9 @@ SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/nu
 $(SIM_TOP_V): $(DIFF_SCALA_FILE) $(SCALA_FILE)
 	$(MAKE) -C $(DESIGN_DIR) sim-verilog
 
+# build simulation top verilog
+sim-verilog: $(SIM_TOP_V)
+
 # generate difftest files for non-chisel design.
 difftest_verilog:
 ifeq ($(USE_DIFFTEST_MAIN), 1)
@@ -54,8 +57,7 @@ TIME_CMD = time -a -o $(TIMELOG)
 REMOTE ?= localhost
 .DEFAULT_GOAL = emu
 
-sim-verilog: $(SIM_TOP_V)
-
+# simulation
 SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
 SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
 
@@ -81,9 +83,6 @@ $(REF_SO):
 	$(MAKE) -C $(NEMU_HOME)
 
 SEED ?= $(shell shuf -i 1-10000 -n 1)
-
-release-lock:
-	ssh -tt $(REMOTE) 'rm -f $(LOCK)'
 
 clean: vcs-clean
 	rm -rf $(BUILD_DIR)
