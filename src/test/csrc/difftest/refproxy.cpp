@@ -112,8 +112,6 @@ NemuProxy::NemuProxy(int coreid, size_t ram_size = 0) {
 
   if(ram_size){
     set_ramsize(ram_size); // set ram_size before nemu_init()
-  }else{
-    printf("Difftest uses NEMU's default ramsize\n");
   }
 
   nemu_init(); 
