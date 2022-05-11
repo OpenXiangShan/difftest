@@ -47,7 +47,7 @@ extern "C" void simv_init() {
   difftest_init();
   init_device();
   init_goldenmem();
-  init_nemuproxy();
+  init_nemuproxy(EMU_RAM_SIZE);
 
   assert_init();
 }

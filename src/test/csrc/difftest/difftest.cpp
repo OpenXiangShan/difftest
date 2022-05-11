@@ -50,9 +50,9 @@ int difftest_init() {
   return 0;
 }
 
-int init_nemuproxy() {
+int init_nemuproxy(size_t ramsize = 0) {
   for (int i = 0; i < NUM_CORES; i++) {
-    difftest[i]->update_nemuproxy(i);
+    difftest[i]->update_nemuproxy(i, ramsize);
   }
   return 0;
 }
@@ -81,8 +81,8 @@ Difftest::Difftest(int coreid) : id(coreid) {
   clear_step();
 }
 
-void Difftest::update_nemuproxy(int coreid) {
-  proxy = new DIFF_PROXY(coreid);
+void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
+  proxy = new DIFF_PROXY(coreid, ram_size);
 }
 
 int Difftest::step() {

@@ -334,7 +334,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   init_device();
   if (args.enable_diff) {
     init_goldenmem();
-    init_nemuproxy();
+    size_t ref_ramsize = args.ram_size ? EMU_RAM_SIZE : 0;
+    init_nemuproxy(ref_ramsize);
   }
   if(args.enable_runahead){
     runahead_init();
@@ -509,7 +510,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 void parse_and_update_ramsize(const char* arg_ramsize_str) {
   unsigned long ram_size_value = 0;
   char ram_size_unit[64];
-  sscanf(arg_ramsize_str, "%d%s", &ram_size_value, &ram_size_unit);
+  sscanf(arg_ramsize_str, "%ld%s", &ram_size_value, (char*) &ram_size_unit);
   assert(ram_size_value > 0);
   
   if(!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")){
