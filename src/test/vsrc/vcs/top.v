@@ -16,6 +16,9 @@
 
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
+import "DPI-C" function void set_diff_ref_so(string diff_so);
+import "DPI-C" function void set_no_diff();
+import "DPI-C" function void set_max_cycles(int mc);
 import "DPI-C" function void simv_init();
 import "DPI-C" function int simv_step();
 
@@ -36,6 +39,8 @@ wire [ 7:0] io_uart_in_ch;
 string bin_file;
 string flash_bin_file;
 string wave_type;
+string diff_ref_so;
+reg [31:0] max_cycles;
 
 initial begin
   clock = 0;
@@ -80,7 +85,23 @@ initial begin
     $value$plusargs("flash=%s", flash_bin_file);
     set_flash_bin(flash_bin_file);
   end
-
+  // diff-test golden model: nemu-so
+  if ($test$plusargs("diff")) begin
+    $value$plusargs("diff=%s", diff_ref_so);
+    set_diff_ref_so(diff_ref_so);
+  end
+  // disable diff-test
+  if ($test$plusargs("no-diff")) begin
+    set_no_diff();
+  end
+  // max cycles to execute, no limit for default
+  if ($test$plusargs("max-cycles")) begin
+    $value$plusargs("max-cycles=%d", max_cycles);
+    set_max_cycles(max_cycles);
+  end
+  else begin
+    max_cycles = 0;
+  end
 
   #100 reset = 0;
 end
