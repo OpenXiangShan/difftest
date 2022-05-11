@@ -39,6 +39,7 @@ public:
   void (*debug_mem_sync)(paddr_t addr, void *bytes, size_t size) = NULL;
   void (*load_flash_bin)(void *flash_bin, size_t size) = NULL;
 };
+extern const char *difftest_ref_so;
 
 #define NEMU_ENV_VARIABLE "NEMU_HOME"
 #define NEMU_SO_FILENAME  "build/riscv64-nemu-interpreter-so"
