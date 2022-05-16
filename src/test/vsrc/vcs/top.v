@@ -18,6 +18,7 @@ import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
+import "DPI-C" function void set_enable_jtag();
 import "DPI-C" function void set_max_cycles(int mc);
 import "DPI-C" function void simv_init();
 import "DPI-C" function int simv_step();
@@ -81,6 +82,9 @@ initial begin
   // disable diff-test
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
+  end
+  if ($test$plusargs("enable-jtag")) begin
+    set_enable_jtag();
   end
   // max cycles to execute, no limit for default
   if ($test$plusargs("max-cycles")) begin
