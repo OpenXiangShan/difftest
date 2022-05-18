@@ -59,7 +59,7 @@ int runahead_init() {
     // to be refactored later
     runahead[i]->dut_ptr = difftest[i]->get_dut(); 
     runahead[i]->ref_ptr = runahead[i]->get_ref(); 
-    runahead[i]->update_nemuproxy(i);
+    runahead[i]->update_nemuproxy(i, 0);
   }
   runahead_debug("Allocate msgq for %s\n", emu_path);
   key_t req_msgq_key = ftok(emu_path, 'a');

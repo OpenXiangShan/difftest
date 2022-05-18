@@ -279,7 +279,7 @@ public:
   bool has_commit = false;
   // Trigger a difftest checking procdure
   virtual int step();
-  void update_nemuproxy(int);
+  void update_nemuproxy(int, size_t);
   inline bool get_trap_valid() {
     return dut.trap.valid;
   }
@@ -413,6 +413,6 @@ extern Difftest **difftest;
 int difftest_init();
 int difftest_step();
 int difftest_state();
-int init_nemuproxy();
+int init_nemuproxy(size_t);
 
 #endif
