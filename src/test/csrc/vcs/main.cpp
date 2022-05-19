@@ -22,7 +22,9 @@
 #include "ram.h"
 #include "flash.h"
 #include "refproxy.h"
+#include "remote_bitbang.h"
 
+extern remote_bitbang_t * jtag;
 static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
@@ -46,6 +48,11 @@ extern "C" void set_diff_ref_so(char *s) {
   char* buf = (char *)malloc(256);
   strcpy(buf, s);
   difftest_ref_so = buf;
+}
+
+extern "C" void set_enable_jtag() {
+  printf("enable jtag and remote bitbang server\n");
+  jtag = new remote_bitbang_t(23334);
 }
 
 extern "C" void set_no_diff() {
