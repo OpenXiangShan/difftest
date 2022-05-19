@@ -35,13 +35,26 @@ wire [ 7:0] io_uart_in_ch;
 
 string bin_file;
 string flash_bin_file;
+string wave_type;
+
 initial begin
   clock = 0;
   reset = 1;
   // enable waveform
   if ($test$plusargs("dump-wave")) begin
-    $vcdplusfile("simv.vpd");
-    $vcdpluson;
+    $value$plusargs("dump-wave=%s", wave_type);
+    if (wave_type == "vpd") begin
+      $vcdplusfile("simv.vpd");
+      $vcdpluson;
+    end
+    else if (wave_type == "fsdb") begin
+      $fsdbDumpfile("simv.fsdb");
+      $fsdbDumpvars(0,"+mda");
+    end
+    else begin
+      $display("unknown wave file format, want [vpd, fsdb] but:%s\n", wave_type);
+      $finish();
+    end
   end
   // log begin
   if ($test$plusargs("b")) begin

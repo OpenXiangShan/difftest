@@ -48,6 +48,8 @@ VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
 VCS_FLAGS += -y $(VCS_SEARCH_DIR) +libext+.v
 # build files put into $(VCS_BUILD_DIR)
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
+# enable fsdb dump
+VCS_FLAGS += -debug_access+all
 
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
