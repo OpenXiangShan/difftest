@@ -26,13 +26,8 @@ VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
 endif
 
-# if VCS_HOME is not set automatically after 'module load', please set manually.
-ifndef VCS_HOME
-$(error VCS_HOME is not set)
-endif
-
 # if fsdb is considered
-CONSIDER_FSDB ?= 1
+# CONSIDER_FSDB ?= 0
 ifeq ($(CONSIDER_FSDB),1)
 EXTRA = +define+CONSIDER_FSDB
 # if VERDI_HOME is not set automatically after 'module load', please set manually.
