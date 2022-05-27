@@ -21,6 +21,30 @@ VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell f
 VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
 VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
 
+ifeq ($(RELEASE),1)
+VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
+VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
+endif
+
+# if VCS_HOME is not set automatically after 'module load', please set manually.
+ifndef VCS_HOME
+$(error VCS_HOME is not set)
+endif
+
+# if fsdb is considered
+CONSIDER_FSDB ?= 1
+ifeq ($(CONSIDER_FSDB),1)
+EXTRA = +define+CONSIDER_FSDB
+# if VERDI_HOME is not set automatically after 'module load', please set manually.
+ifndef VERDI_HOME
+$(error VERDI_HOME is not set. Try whereis verdi, abandon /bin/verdi and set VERID_HOME manually)
+else
+NOVAS_HOME = $(VERDI_HOME)
+NOVAS = $(NOVAS_HOME)/share/PLI/VCS/LINUX64
+EXTRA += -P $(NOVAS)/novas.tab $(NOVAS)/pli.a
+endif
+endif
+
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 
@@ -41,7 +65,7 @@ VCS_FLAGS += -y $(VCS_SEARCH_DIR) +libext+.v
 # build files put into $(VCS_BUILD_DIR)
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump
-VCS_FLAGS += -debug_access+all -fsdb
+VCS_FLAGS += $(EXTRA)
 
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
