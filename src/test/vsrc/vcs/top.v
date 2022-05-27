@@ -52,10 +52,12 @@ initial begin
       $vcdplusfile("simv.vpd");
       $vcdpluson;
     end
+`ifdef CONSIDER_FSDB
     else if (wave_type == "fsdb") begin
       $fsdbDumpfile("simv.fsdb");
       $fsdbDumpvars(0,"+mda");
     end
+`endif
     else begin
       $display("unknown wave file format, want [vpd, fsdb] but:%s\n", wave_type);
       $finish();

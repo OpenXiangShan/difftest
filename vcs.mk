@@ -27,6 +27,25 @@ VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
 endif
 
+# if VCS_HOME is not set automatically after 'module load', please set manually.
+ifndef VCS_HOME
+$(error VCS_HOME is not set)
+endif
+
+# if fsdb is considered
+CONSIDER_FSDB ?= 1
+ifeq ($(CONSIDER_FSDB),1)
+EXTRA = +define+CONSIDER_FSDB
+# if VERDI_HOME is not set automatically after 'module load', please set manually.
+ifndef VERDI_HOME
+$(error VERDI_HOME is not set. Try whereis verdi, abandon /bin/verdi and set VERID_HOME manually)
+else
+NOVAS_HOME = $(VERDI_HOME)
+NOVAS = $(NOVAS_HOME)/share/PLI/VCS/LINUX64
+EXTRA += -P $(NOVAS)/novas.tab $(NOVAS)/pli.a
+endif
+endif
+
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 
@@ -38,7 +57,7 @@ VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=T
 VCS_FLAGS += +define+DIFFTEST
 # randomize all undefined signals (instead of using X)
 VCS_FLAGS += +vcs+initreg+random
-#VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN 
+#VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN
 VCS_FLAGS += +define+RANDOMIZE_INVALID_ASSIGN
 VCS_FLAGS += +define+RANDOMIZE_MEM_INIT +define+RANDOMIZE_DELAY=0 +define+RANDOMIZE_REG_INIT
 # SRAM lib defines
@@ -50,7 +69,7 @@ VCS_FLAGS += -y $(VCS_SEARCH_DIR) +libext+.v
 # build files put into $(VCS_BUILD_DIR)
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump
-VCS_FLAGS += -debug_access+all -fsdb
+VCS_FLAGS += $(EXTRA)
 
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
