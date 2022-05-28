@@ -86,6 +86,7 @@ endif
 
 # --trace
 # +define+RANDOMIZE_GARBAGE_ASSIGN
+# +define+RANDOMIZE_MEM_INIT
 
 VERILATOR_FLAGS =                   \
   --top-module $(EMU_TOP)           \
@@ -94,7 +95,6 @@ VERILATOR_FLAGS =                   \
   +define+DIFFTEST                  \
   +define+PRINTF_COND=1             \
   +define+RANDOMIZE_REG_INIT        \
-  +define+RANDOMIZE_MEM_INIT        \
   +define+RANDOMIZE_DELAY=0         \
   -Wno-STMTDLY -Wno-WIDTH           \
   $(VEXTRA_FLAGS)                   \

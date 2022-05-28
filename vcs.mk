@@ -54,7 +54,8 @@ VCS_FLAGS += +define+DIFFTEST
 VCS_FLAGS += +vcs+initreg+random
 #VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN
 VCS_FLAGS += +define+RANDOMIZE_INVALID_ASSIGN
-VCS_FLAGS += +define+RANDOMIZE_MEM_INIT +define+RANDOMIZE_DELAY=0 +define+RANDOMIZE_REG_INIT
+# VCS_FLAGS += +define+RANDOMIZE_MEM_INIT
+VCS_FLAGS += +define+RANDOMIZE_DELAY=0 +define+RANDOMIZE_REG_INIT
 # SRAM lib defines
 VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
