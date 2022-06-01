@@ -47,10 +47,16 @@ VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
 VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
 
 VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
+# DiffTest
+VCS_FLAGS += +define+DIFFTEST
+# X prop
+VCS_FLAGS += -xprop
 # randomize all undefined signals (instead of using X)
-VCS_FLAGS += +vcs+initreg+random
-# VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN +define+RANDOMIZE_INVALID_ASSIGN
-# VCS_FLAGS += +define+RANDOMIZE_MEM_INIT +define+RANDOMIZE_DELAY=0 +define+RANDOMIZE_REG_INIT
+# VCS_FLAGS += +vcs+initreg+random
+# VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN
+# VCS_FLAGS += +define+RANDOMIZE_INVALID_ASSIGN
+# VCS_FLAGS += +define+RANDOMIZE_MEM_INIT
+VCS_FLAGS += +define+RANDOMIZE_DELAY=0 +define+RANDOMIZE_REG_INIT
 # SRAM lib defines
 # VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
