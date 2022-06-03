@@ -15,6 +15,7 @@
 #***************************************************************************************
 
 VCS_TARGET = simv
+VCS_XSTOP_TARGET = simv-xstop
 
 VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
 VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
@@ -42,6 +43,7 @@ endif
 endif
 
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
+VCS_TOP_V = $(VCS_VSRC_DIR)/top.v
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 
 VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
@@ -67,8 +69,12 @@ VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
-$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
-	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_TOP_V)
+	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_TOP_V)
+
+$(VCS_XSTOP_TARGET): $(XSTOP_FLIST) $(VCS_CXXFILES) $(VCS_VFILES)
+	vcs $(VCS_FLAGS) -F $(XSTOP_FLIST) $(VCS_CXXFILES) $(VCS_VFILES) +error+1000
+
 
 vcs-clean:
 	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)

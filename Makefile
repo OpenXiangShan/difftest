@@ -15,6 +15,7 @@
 #***************************************************************************************
 
 SIM_TOP    ?= SimTop
+XSTOP_DIR  ?= ../XSTop-Release-DefaultConfig-June-03-2022
 DESIGN_DIR ?= ..
 NUM_CORES  ?= 1
 
@@ -25,6 +26,8 @@ USE_DIFFTEST_MAIN ?= 0
 
 BUILD_DIR  = $(DESIGN_DIR)/build
 SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).v
+XSTOP_V    = $(shell find $(XSTOP_DIR) -name *.v)
+XSTOP_FLIST= $(XSTOP_DIR)/bosc_XSTop.f
 
 DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
 SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)
