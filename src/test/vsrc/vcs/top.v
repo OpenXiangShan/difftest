@@ -105,6 +105,7 @@ initial begin
     max_cycles = 0;
   end
 
+  // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
   #100 reset = 0;
 end
 always #1 clock <= ~clock;
