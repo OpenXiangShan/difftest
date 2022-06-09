@@ -36,7 +36,6 @@
 
 extern remote_bitbang_t * jtag;
 
-
 static inline long long int atoll_strict(const char *str, const char *arg) {
   if (strspn(str, " +-0123456789") != strlen(str)) {
     printf("[ERROR] --%s=NUM only accept numeric argument\n", arg);
@@ -73,6 +72,7 @@ static inline void print_help(const char *file) {
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
+  printf("      --jtag-test            test jtag using testcases in jtag-testcase.h\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -95,6 +95,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
+    { "jtag-test",         0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -140,6 +141,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl\n");
 #endif
             continue;
+          case 11:
+            args.jtag_test = true; continue;
         }
         // fall through
       default:
@@ -199,6 +202,11 @@ Emulator::Emulator(int argc, const char *argv[]):
   enable_simjtag = args.enable_jtag;
   if (args.enable_jtag) {
     jtag = new remote_bitbang_t(23334);
+  }
+
+  enable_jtag_testcase = args.jtag_test;
+  if (enable_jtag_testcase) {
+    init_cmd();
   }
 
   init_flash(args.flash_bin);
