@@ -298,8 +298,8 @@ inline void Emulator::single_cycle() {
 #ifdef WITH_DRAMSIM3
   axi_channel axi;
   axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
+  axi.aw.addr -= 0x2000000000UL;
+  axi.ar.addr -= 0x2000000000UL;
   dramsim3_helper_rising(axi);
 #endif
 
@@ -319,8 +319,8 @@ inline void Emulator::single_cycle() {
 
 #ifdef WITH_DRAMSIM3
   axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
+  axi.aw.addr -= 0x2000000000UL;
+  axi.ar.addr -= 0x2000000000UL;
   dramsim3_helper_falling(axi);
   axi_set_dut_ptr(dut_ptr, axi);
 #endif
