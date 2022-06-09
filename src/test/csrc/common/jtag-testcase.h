@@ -20,13 +20,27 @@
 // some useful commands
 
 // a "read dr" command is literally a write 0
-#define CMD_JTAG_RESET              {.cmd = JTAG_RESET, .retry_func = NULL}
-#define CMD_WRITE_IR(ir_addr)       {.cmd = JTAG_WRITE_IR, .size = 5, .arg = ir_addr}
-#define CMD_READ_DR(s, str)         {.cmd = JTAG_DR_SCAN, .size = s, .arg = 0, .result_print = str}
-#define CMD_WRITE_DR(s, content)    {.cmd = JTAG_DR_SCAN, .size = s, .arg = content}
-#define CMD_READ_DR_RETRY(s, func, target)     {.cmd = JTAG_DR_SCAN, .size = s, .arg = 0, .retry_func = func, .retry_target = target}
-#define CMD_RUN_IDLE(cycles)        {.cmd = JTAG_IDLE, .arg = cycles}
-#define CMD_FINISH                  {.cmd = JTAG_FINISH}
+#define CMD_JTAG_RESET                        {.cmd = JTAG_RESET, \
+  .status = CMD_DONE, .size = 0, .arg = 0, .result_print = NULL, \
+  .retry_func = NULL, .retry_target = 0}
+#define CMD_WRITE_IR(ir_addr)                 {.cmd = JTAG_WRITE_IR, \
+  .status = CMD_DONE, .size = 5, .arg = ir_addr, .result_print = NULL, \
+  .retry_func = NULL, .retry_target = 0}
+#define CMD_READ_DR(s, str)                   {.cmd = JTAG_DR_SCAN, \
+  .status = CMD_DONE, .size = s, .arg = 0, .result_print = str, \
+  .retry_func = NULL, .retry_target = 0}
+#define CMD_WRITE_DR(s, content)              {.cmd = JTAG_DR_SCAN, \
+  .status = CMD_DONE, .size = s, .arg = content, .result_print = NULL, \
+  .retry_func = NULL, .retry_target = 0}
+#define CMD_READ_DR_RETRY(s, func, target)    {.cmd = JTAG_DR_SCAN, \
+  .status = CMD_DONE, .size = s, .arg = 0, .result_print = NULL, \
+  .retry_func = func, .retry_target = target}
+#define CMD_RUN_IDLE(cycles)                  {.cmd = JTAG_IDLE, \
+  .status = CMD_DONE, .size = 0, .arg = cycles, .result_print = NULL, \
+  .retry_func = NULL, .retry_target = 0}
+#define CMD_FINISH                            {.cmd = JTAG_FINISH, \
+  .status = CMD_DONE, .size = 0, .arg = 0, .result_print = NULL, \
+  .retry_func = NULL, .retry_target = 0}
 
 // explicit clr_req needed if no CMD_DMI_GET_RES
 #define CMD_DMI_CLR_REQ                 CMD_WRITE_IR(0x11), \

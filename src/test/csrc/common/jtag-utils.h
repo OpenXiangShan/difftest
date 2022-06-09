@@ -18,12 +18,12 @@
 //============= Command structure
 typedef struct {
   int cmd;
-  int status = CMD_DONE;
-  uint8_t size = 0;
+  int status;
+  uint8_t size;
   uint64_t arg;  // For ir scans this is ir addr, for dr scan this is reg content
-  const char *result_print = NULL;
-  bool (* retry_func)(uint64_t) = NULL;  // test if retry is needed. NULL if
-  int retry_target = 0;        // retry target, relative to current cmd position
+  const char *result_print;
+  bool (* retry_func)(uint64_t);  // test if retry is needed. NULL if
+  int retry_target;        // retry target, relative to current cmd position
 } jtag_cmd;
 
 //============ PIN Stuff ==============
