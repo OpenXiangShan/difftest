@@ -6,4 +6,5 @@
 
 void init_logger(bool enable);
 void save_db(const char *zFilename);
+void checkpoint_db(const char *zFilename);
 #endif

@@ -65,8 +65,9 @@ static inline void print_help(const char *file) {
   printf("      --dump-wave            dump waveform when log is enabled\n");
 #ifdef DEBUG_TILELINK
   printf("      --dump-tl              dump tilelink transactions\n");
-  printf("      --flash                the flash bin file for simulation\n");
+  printf("      --dump-tl-interval     set cycle interval of tilelink transaction dump\n");
 #endif
+  printf("      --flash                the flash bin file for simulation\n");
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
@@ -96,6 +97,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "sim-run-ahead",     0, NULL,  0  },
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
+    { "dump-tl-interval",  1, NULL,  0  },
 #endif
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
@@ -141,6 +143,13 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             args.dump_tl = true;
 #else
             printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl\n");
+#endif
+            continue;
+          case 12:
+#ifdef DEBUG_TILELINK
+            args.dump_tl_interval = atoll_strict(optarg, "dump-tl-interval");
+#else
+            printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl-interval\n");
 #endif
             continue;
         }
@@ -455,6 +464,15 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       if (snapshot_count == 60) {
         snapshot_slot[0].save();
         snapshot_count = 0;
+      }
+    }
+#endif
+
+#ifdef DEBUG_TILELINK
+    if (args.dump_tl_interval != 0) {
+      if ((cycles != 0) && (cycles % args.dump_tl_interval == 0)) {
+        time_t now = time(NULL);
+        checkpoint_db(logdb_filename(now));
       }
     }
 #endif

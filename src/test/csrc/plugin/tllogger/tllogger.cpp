@@ -11,15 +11,20 @@ static int callback(void *NotUsed, int argc, char **argv, char **azColName){
    return 0;
 }
 
+static inline void handle_error() {
+    printf("[LOGGER] SQL error: %s\n", zErrMsg);
+    exit(0);
+}
+
 void init_logger(bool dump) {
     dump_tl = dump;
-    if(!dump) return;
+    if (!dump) return;
     rc = sqlite3_open(":memory:", &mem_db);
-    if(rc) {
-        printf("Can't open database: %s\n", sqlite3_errmsg(mem_db));
+    if (rc) {
+        printf("[LOGGER] Can't open database: %s\n", sqlite3_errmsg(mem_db));
         exit(0);
     } else {
-        printf("Open database successfully\n");
+        printf("[LOGGER] Open database successfully\n");
     }
     char* sql =  "CREATE TABLE TL_LOG("  \
                  "ID                INTEGER     PRIMARY KEY AUTOINCREMENT," \
@@ -38,11 +43,10 @@ void init_logger(bool dump) {
                  "ECHO              INT," \
                  "STAMP             INT    NOT NULL);";
     rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
-    if(rc != SQLITE_OK) {
-        printf("SQL error: %s\n", zErrMsg);
-        exit(0);
+    if (rc != SQLITE_OK) {
+        handle_error();
     } else {
-        printf("TL_LOG table created successfully!\n");
+        printf("[LOGGER] TL_LOG table created successfully!\n");
     }
 
     sql =  "CREATE TABLE DIR_LOG("  \
@@ -55,21 +59,40 @@ void init_logger(bool dump) {
            "TYPEID            INT     NOT NULL," \
            "STAMP             INT     NOT NULL);";
     rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
-    if(rc != SQLITE_OK) {
-        printf("SQL error: %s\n", zErrMsg);
-        exit(0);
+    if (rc != SQLITE_OK) {
+        handle_error();
     } else {
-        printf("DIR_LOG table created successfully!\n");
+        printf("[LOGGER] DIR_LOG table created successfully!\n");
     }
 }
 
+void checkpoint_db(const char *zFilename) {
+    printf("[LOGGER] Checkpointing memdb to %s ...\n", zFilename);
+    rc = sqlite3_open(zFilename, &disk_db);
+    if (rc == SQLITE_OK) {
+        pBackup = sqlite3_backup_init(disk_db, "main", mem_db, "main");
+        if (pBackup) {
+            (void)sqlite3_backup_step(pBackup, -1);
+            (void)sqlite3_backup_finish(pBackup);
+        }
+        rc = sqlite3_errcode(disk_db);
+    }
+    sqlite3_close(disk_db);
+    char* sql = "DELETE FROM TL_LOG;";
+    rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
+    sql = "DELETE FROM DIR_LOG;";
+    rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
+    if (rc != SQLITE_OK) {
+        handle_error();
+    }
+}
 
 void save_db(const char *zFilename) {
-    printf("Saving memedb to %s ...\n", zFilename);
+    printf("[LOGGER] Saving memdb to %s ...\n", zFilename);
     rc = sqlite3_open(zFilename, &disk_db);
-    if(rc == SQLITE_OK){
+    if (rc == SQLITE_OK) {
         pBackup = sqlite3_backup_init(disk_db, "main", mem_db, "main");
-        if(pBackup){
+        if (pBackup) {
             (void)sqlite3_backup_step(pBackup, -1);
             (void)sqlite3_backup_finish(pBackup);
         }
@@ -105,7 +128,7 @@ extern "C" void tl_log_write_helper(
 
     rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
     if(rc != SQLITE_OK) {
-        printf("SQL error: %s\n", zErrMsg);
+        printf("[LOGGER] SQL error: %s\n", zErrMsg);
         exit(0);
     };
 }
@@ -128,7 +151,7 @@ extern "C" void dir_log_write_helper(
 
     rc = sqlite3_exec(mem_db, sql, callback, 0, &zErrMsg);
     if(rc != SQLITE_OK) {
-        printf("SQL error: %s\n", zErrMsg);
+        printf("[LOGGER] SQL error: %s\n", zErrMsg);
         exit(0);
     };
 }
