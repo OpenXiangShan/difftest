@@ -52,6 +52,7 @@ struct EmuArgs {
   bool enable_jtag;
   bool enable_runahead;
   bool dump_tl;
+  bool jtag_test;
 
   EmuArgs() {
     seed = 0;
@@ -135,3 +136,6 @@ public:
 };
 
 #endif
+
+void init_cmd(void);
+extern bool enable_jtag_testcase;
