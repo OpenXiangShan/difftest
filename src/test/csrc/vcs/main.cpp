@@ -25,6 +25,9 @@
 #include "remote_bitbang.h"
 
 extern remote_bitbang_t * jtag;
+extern bool enable_simjtag;
+extern bool enable_jtag_testcase;
+void init_cmd(void);
 static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
@@ -52,7 +55,14 @@ extern "C" void set_diff_ref_so(char *s) {
 
 extern "C" void set_enable_jtag() {
   printf("enable jtag and remote bitbang server\n");
+  enable_simjtag = true;
   jtag = new remote_bitbang_t(23334);
+}
+
+extern "C" void set_jtag_testcase() {
+  printf("enable individual jtag testcase\n");
+  enable_jtag_testcase = true;
+  init_cmd();
 }
 
 extern "C" void set_no_diff() {
