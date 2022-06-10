@@ -110,12 +110,20 @@ EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
                $(shell find $(DIFFTEST_CSRC_DIR) -name "*.h")
 EMU := $(BUILD_DIR)/emu
 
-$(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
+ifndef RELEASE_DIR
+VERILATOR_SIMTOP = $(SIM_TOP_V)
+FLIST_ARG =
+else
+VERILATOR_SIMTOP = $(SPLIT_SIMTOP)
+FLIST_ARG = -F $(RELEASE_FLIST)
+endif
+
+$(EMU_MK): $(VERILATOR_SIMTOP) | $(EMU_DEPS)
 	@mkdir -p $(@D)
 	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
-		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS)
+		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS) $(FLIST_ARG)
 	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
 	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
 	find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'

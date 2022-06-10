@@ -43,7 +43,6 @@ endif
 endif
 
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
-VCS_TOP_V = $(VCS_VSRC_DIR)/top.v
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 
 VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
@@ -69,12 +68,11 @@ VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
-$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_TOP_V)
-	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_TOP_V)
+$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 
-$(VCS_XSTOP_TARGET): $(XSTOP_FLIST) $(VCS_CXXFILES) $(VCS_VFILES)
-	vcs $(VCS_FLAGS) -F $(XSTOP_FLIST) $(VCS_CXXFILES) $(VCS_VFILES) +error+1000
-
+$(VCS_XSTOP_TARGET): $(VCS_CXXFILES) $(VCS_VFILES)
+	vcs $(VCS_FLAGS) -F $(RELEASE_FLIST) $(VCS_CXXFILES) $(VCS_VFILES) $(SPLIT_SIMTOP)
 
 vcs-clean:
 	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)
