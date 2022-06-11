@@ -19,6 +19,18 @@ make init
 make emu
 ```
 
+# Run difftest on released rtl
+
+```
+make emu RELEASE_DIR=......
+```
+
+Or,
+
+```sh
+make simv RELEASE_DIR=......
+```
+
 # API
 
 Difftest functions:

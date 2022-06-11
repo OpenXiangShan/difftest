@@ -15,7 +15,6 @@
 #***************************************************************************************
 
 VCS_TARGET = simv
-VCS_XSTOP_TARGET = simv-xstop
 
 VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
 VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
@@ -73,11 +72,13 @@ VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
+ifndef RELEASE_DIR
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
-
-$(VCS_XSTOP_TARGET): $(VCS_CXXFILES) $(VCS_VFILES)
-	vcs $(VCS_FLAGS) -F $(RELEASE_FLIST) $(VCS_CXXFILES) $(VCS_VFILES) $(SPLIT_SIMTOP)
+else
+$(VCS_TARGET): $(VCS_CXXFILES) $(VCS_VFILES)
+	vcs $(VCS_FLAGS) -F $(RELEASE_FLIST) $(VCS_CXXFILES) $(VCS_VFILES) $(RELEASE_SIMTOP)
+endif
 
 vcs-clean:
 	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)
