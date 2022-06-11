@@ -16,7 +16,7 @@
 
 include config/verilator.mk
 
-EMU_TOP      = CacheWarmup
+EMU_TOP      = SimTop
 
 EMU_CSRC_DIR = $(abspath ./src/test/csrc)
 EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIFFTEST_CXXFILES)
@@ -70,7 +70,7 @@ endif
 # Verilator coverage
 EMU_COVERAGE ?=
 ifeq ($(EMU_COVERAGE),1)
-VEXTRA_FLAGS += --coverage-line --coverage-toggle
+VEXTRA_FLAGS += --coverage-line
 endif
 
 # co-simulation with DRAMsim3
