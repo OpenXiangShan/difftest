@@ -92,9 +92,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "enable-jtag",       0, NULL,  0  },
     { "wave-path",         1, NULL,  0  },
     { "sim-run-ahead",     0, NULL,  0  },
-#ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
-#endif
     { "jtag-test",         0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },

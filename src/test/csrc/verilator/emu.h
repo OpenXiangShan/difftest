@@ -77,6 +77,7 @@ struct EmuArgs {
     enable_jtag = false;
     enable_runahead = false;
     dump_tl = false;
+    jtag_test = false;
   }
 };
 
