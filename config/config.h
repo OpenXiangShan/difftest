@@ -93,6 +93,9 @@
 // if error, let simulator print debug info
 #define ENABLE_SIMULATOR_DEBUG_INFO
 
+// dump chisel-db to a database file
+#define ENABLE_CHISEL_DB
+
 // how many cycles child processes step forward when reaching error point
 #define STEP_FORWARD_CYCLES 100
 
@@ -105,11 +108,6 @@
 
 // whether to check memory coherence during refilling
 #define DEBUG_REFILL
-
-// dump all tilelink trace to a database
-// uncomment the following line to enable this feature
-#define DEBUG_TILELINK
-
 
 // -----------------------------------------------------------------------
 // Simulator run ahead config

@@ -50,7 +50,7 @@ struct EmuArgs {
   bool enable_fork;
   bool enable_jtag;
   bool enable_runahead;
-  bool dump_tl;
+  bool dump_db;
 
   EmuArgs() {
     seed = 0;
@@ -73,7 +73,7 @@ struct EmuArgs {
     enable_fork = false;
     enable_jtag = false;
     enable_runahead = false;
-    dump_tl = false;
+    dump_db = false;
   }
 };
 
