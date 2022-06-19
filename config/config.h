@@ -101,9 +101,6 @@ extern unsigned long EMU_FLASH_SIZE;
 // if error, let simulator print debug info
 #define ENABLE_SIMULATOR_DEBUG_INFO
 
-// dump chisel-db to a database file
-#define ENABLE_CHISEL_DB
-
 // how many cycles child processes step forward when reaching error point
 #define STEP_FORWARD_CYCLES 100
 
@@ -159,6 +156,10 @@ extern unsigned long EMU_FLASH_SIZE;
 // -----------------------------------------------------------------------
 // Do not touch
 // -----------------------------------------------------------------------
+
+// dump chisel-db to a database file
+// set WITH_CHISELDB=1 when make to enable chisel db in verilator simulation
+// #define ENABLE_CHISEL_DB
 
 // whether to maintain goldenmem
 #if NUM_CORES>1
