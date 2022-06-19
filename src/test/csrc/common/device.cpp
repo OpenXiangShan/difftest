@@ -36,9 +36,6 @@ void init_device(void) {
 #endif
   init_uart();
   init_sd();
-#ifdef FLASH_IMAGE
-  init_flash();
-#endif
   gettimeofday(&boot, NULL);
 }
 

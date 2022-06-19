@@ -29,7 +29,7 @@ const char *difftest_ref_so = NULL;
     }                                                         \
   } while (0);
 
-NemuProxy::NemuProxy(int coreid) {
+NemuProxy::NemuProxy(int coreid, size_t ram_size = 0) {
   if (difftest_ref_so == NULL) {
     printf("--diff is not given, "
         "try to use $(" NEMU_ENV_VARIABLE ")/" NEMU_SO_FILENAME " by default\n");
@@ -71,7 +71,7 @@ NemuProxy::NemuProxy(int coreid) {
   guided_exec = (vaddr_t (*)(void *))dlsym(handle, "difftest_guided_exec");
   check_and_assert(guided_exec);
 
-  update_config = (vaddr_t (*)(void *))dlsym(handle, "update_dynamic_config");
+  update_config = (void (*)(void *))dlsym(handle, "update_dynamic_config");
   check_and_assert(update_config);
 
   store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(handle, "difftest_store_commit");
@@ -82,6 +82,12 @@ NemuProxy::NemuProxy(int coreid) {
 
   isa_reg_display = (void (*)(void))dlsym(handle, "isa_reg_display");
   check_and_assert(isa_reg_display);
+
+  load_flash_bin = (void (*)(void *flash_bin, size_t size))dlsym(handle, "difftest_load_flash");
+  check_and_assert(load_flash_bin);
+
+  set_ramsize = (void (*)(size_t size)) dlsym(handle, "difftest_set_ramsize");
+  check_and_assert(set_ramsize);
 
   query = (void (*)(void*, uint64_t))dlsym(handle, "difftest_query_ref");
 #ifdef ENABLE_RUNHEAD
@@ -104,14 +110,18 @@ NemuProxy::NemuProxy(int coreid) {
   auto nemu_init = (void (*)(void))dlsym(handle, "difftest_init");
   check_and_assert(nemu_init);
 
-  nemu_init();
+  if(ram_size){
+    set_ramsize(ram_size); // set ram_size before nemu_init()
+  }
+
+  nemu_init(); 
 }
 
 void ref_misc_put_gmaddr(uint8_t* ptr) {
   goldenMem = ptr;
 }
 
-SpikeProxy::SpikeProxy(int coreid) {
+SpikeProxy::SpikeProxy(int coreid, size_t ram_size = 0) {
   if (difftest_ref_so == NULL) {
     printf("--diff is not given, "
         "try to use $(" SPIKE_ENV_VARIABLE ")/" SPIKE_SO_FILENAME " by default\n");
@@ -144,10 +154,10 @@ SpikeProxy::SpikeProxy(int coreid) {
   regcpy = (void (*)(void *, bool))dlsym(handle, "difftest_regcpy");
   check_and_assert(regcpy);
 
-  csrcpy = (void (*)(void *, bool))dlsym(handle, "isa_reg_display");
+  csrcpy = (void (*)(void *, bool))dlsym(handle, "difftest_csrcpy");
   check_and_assert(csrcpy);
 
-  uarchstatus_cpy = (void (*)(void *, bool))dlsym(handle, "isa_reg_display");
+  uarchstatus_cpy = (void (*)(void *, bool))dlsym(handle, "difftest_uarchstatus_cpy");
   check_and_assert(uarchstatus_cpy);
 
   exec = (void (*)(uint64_t))dlsym(handle, "difftest_exec");
@@ -156,7 +166,7 @@ SpikeProxy::SpikeProxy(int coreid) {
   guided_exec = (vaddr_t (*)(void *))dlsym(handle, "difftest_guided_exec");
   check_and_assert(guided_exec);
 
-  update_config = (vaddr_t (*)(void *))dlsym(handle, "isa_reg_display");
+  update_config = (void (*)(void *))dlsym(handle, "update_dynamic_config");
   check_and_assert(update_config);
 
   store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(handle, "difftest_store_commit");
@@ -168,8 +178,13 @@ SpikeProxy::SpikeProxy(int coreid) {
   isa_reg_display = (void (*)(void))dlsym(handle, "isa_reg_display");
   check_and_assert(isa_reg_display);
 
+  load_flash_bin = (void (*)(void *flash_bin, size_t size))dlsym(handle, "difftest_load_flash");
+  check_and_assert(load_flash_bin);
+
+#ifdef DEBUG_MODE_DIFF
   debug_mem_sync = (void (*)(paddr_t, void *, size_t))dlsym(handle, "debug_mem_sync");
   check_and_assert(debug_mem_sync);
+#endif
 
   query = (void (*)(void*, uint64_t))dlsym(handle, "difftest_query_ref");
 #ifdef ENABLE_RUNHEAD
@@ -187,6 +202,10 @@ SpikeProxy::SpikeProxy(int coreid) {
     check_and_assert(spike_misc_put_gmaddr);
     assert(goldenMem);
     spike_misc_put_gmaddr(goldenMem);
+  }
+
+  if(ram_size){
+    printf("Spike ram_size api to be added later, ignore ram_size set\n");
   }
 
   spike_init(0);

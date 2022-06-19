@@ -35,6 +35,7 @@ INTERFACE_TRAP_EVENT {
   packet->pc       = pc;
   packet->cycleCnt = cycleCnt;
   packet->instrCnt = instrCnt;
+  packet->hasWFI   = hasWFI;
 }
 
 INTERFACE_BASIC_TRAP_EVENT {
@@ -43,6 +44,7 @@ INTERFACE_BASIC_TRAP_EVENT {
   packet->valid    = valid;
   packet->cycleCnt = cycleCnt;
   packet->instrCnt = instrCnt;
+  packet->hasWFI   = hasWFI;
 }
 
 INTERFACE_ARCH_EVENT {
@@ -62,7 +64,8 @@ INTERFACE_BASIC_INSTR_COMMIT {
     packet->skip     = skip;
     packet->isRVC    = isRVC;
     packet->fused    = special;
-    packet->wen      = wen;
+    packet->rfwen    = rfwen;
+    packet->fpwen    = fpwen;
     packet->wpdest   = wpdest;
     packet->wdest    = wdest;
   }
@@ -78,7 +81,8 @@ INTERFACE_INSTR_COMMIT {
     packet->skip     = skip;
     packet->isRVC    = isRVC;
     packet->fused    = special;
-    packet->wen      = wen;
+    packet->rfwen    = rfwen;
+    packet->fpwen    = fpwen;
     packet->wpdest   = wpdest;
     packet->wdest    = wdest;
   }
@@ -331,18 +335,19 @@ INTERFACE_PTW_EVENT {
 
 INTERFACE_REFILL_EVENT {
   RETURN_NO_NULL
-  auto packet = difftest[coreid]->get_refill_event();
+  // 0 for icache and 1 for dcache
+  auto packet = difftest[coreid]->get_refill_event(cacheid);
   packet->valid = valid;
   if (packet->valid) {
-    packet->addr = addr;
-    packet->data[0] = data_0;
-    packet->data[1] = data_1;
-    packet->data[2] = data_2;
-    packet->data[3] = data_3;
-    packet->data[4] = data_4;
-    packet->data[5] = data_5;
-    packet->data[6] = data_6;
-    packet->data[7] = data_7;
+   packet->addr = addr;
+   packet->data[0] = data_0;
+   packet->data[1] = data_1;
+   packet->data[2] = data_2;
+   packet->data[3] = data_3;
+   packet->data[4] = data_4;
+   packet->data[5] = data_5;
+   packet->data[6] = data_6;
+   packet->data[7] = data_7;
   }
 }
 

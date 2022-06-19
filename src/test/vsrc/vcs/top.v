@@ -15,6 +15,10 @@
 ***************************************************************************************/
 
 import "DPI-C" function void set_bin_file(string bin);
+import "DPI-C" function void set_flash_bin(string bin);
+import "DPI-C" function void set_diff_ref_so(string diff_so);
+import "DPI-C" function void set_no_diff();
+import "DPI-C" function void set_max_cycles(int mc);
 import "DPI-C" function void simv_init();
 import "DPI-C" function int simv_step();
 
@@ -33,13 +37,31 @@ wire        io_uart_in_valid;
 wire [ 7:0] io_uart_in_ch;
 
 string bin_file;
+string flash_bin_file;
+string wave_type;
+string diff_ref_so;
+reg [31:0] max_cycles;
+
 initial begin
   clock = 0;
   reset = 1;
   // enable waveform
   if ($test$plusargs("dump-wave")) begin
-    $vcdplusfile("simv.vpd");
-    $vcdpluson;
+    $value$plusargs("dump-wave=%s", wave_type);
+    if (wave_type == "vpd") begin
+      $vcdplusfile("simv.vpd");
+      $vcdpluson;
+    end
+`ifdef CONSIDER_FSDB
+    else if (wave_type == "fsdb") begin
+      $fsdbDumpfile("simv.fsdb");
+      $fsdbDumpvars(0,"+mda");
+    end
+`endif
+    else begin
+      $display("unknown wave file format, want [vpd, fsdb] but:%s\n", wave_type);
+      $finish();
+    end
   end
   // log begin
   if ($test$plusargs("b")) begin
@@ -60,7 +82,30 @@ initial begin
     $value$plusargs("workload=%s", bin_file);
     set_bin_file(bin_file);
   end
+  // boot flash image: bin file
+  if ($test$plusargs("flash")) begin
+    $value$plusargs("flash=%s", flash_bin_file);
+    set_flash_bin(flash_bin_file);
+  end
+  // diff-test golden model: nemu-so
+  if ($test$plusargs("diff")) begin
+    $value$plusargs("diff=%s", diff_ref_so);
+    set_diff_ref_so(diff_ref_so);
+  end
+  // disable diff-test
+  if ($test$plusargs("no-diff")) begin
+    set_no_diff();
+  end
+  // max cycles to execute, no limit for default
+  if ($test$plusargs("max-cycles")) begin
+    $value$plusargs("max-cycles=%d", max_cycles);
+    set_max_cycles(max_cycles);
+  end
+  else begin
+    max_cycles = 0;
+  end
 
+  // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
   #100 reset = 0;
 end
 always #1 clock <= ~clock;

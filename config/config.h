@@ -26,8 +26,10 @@
 // -----------------------------------------------------------------------
 
 // emulated memory size (Byte)
-// #define EMU_RAM_SIZE (256 * 1024 * 1024UL) // 256 MB
-#define EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
+#define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
+
+// physical memory base address
+#define PMEM_BASE 0x80000000UL
 
 // first valid instruction's address, difftest starts from this instruction
 #ifndef FIRST_INST_ADDRESS
@@ -39,8 +41,11 @@
 // #define SDCARD_IMAGE "/home/xyn/workloads/debian/riscv-debian.img"
 
 // flash image to be used in simulation
-// uncomment the following line to enable this feature
-// #define FLASH_IMAGE "/home/jy/Project/nexus-am/tests/cputest/build/dummy-riscv64-noop.bin"
+// flash access address align mask
+#define FLASH_ALIGH_MASK 0xfffffff8
+
+#define DEFAULT_EMU_FLASH_SIZE (32 * 1024UL) // 4 MB
+extern unsigned long EMU_FLASH_SIZE;
 
 // Use sdl to show screen
 // Note: It does not work well with clang, to use that, switch to gcc
@@ -53,6 +58,9 @@
 #ifndef DIFF_PROXY
 #define DIFF_PROXY NemuProxy
 #endif
+
+// max physical register file size
+#define DIFFTEST_MAX_PRF_SIZE 256
 
 // max commit width
 #define DIFFTEST_COMMIT_WIDTH 6
@@ -167,5 +175,7 @@
 #define TRACE_INFLIGHT_MEM_INST
 #define QUERY_MEM_ACCESS
 #endif
+
+extern unsigned long EMU_RAM_SIZE;
 
 #endif

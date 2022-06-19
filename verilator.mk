@@ -19,7 +19,7 @@ include config/verilator.mk
 EMU_TOP      = SimTop
 
 EMU_CSRC_DIR = $(abspath ./src/test/csrc)
-EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES)
+EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIFFTEST_CXXFILES)
 EMU_CXXFLAGS += -std=c++11 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
 EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
@@ -28,7 +28,7 @@ EMU_CXXFILES += $(BUILD_DIR)/chisel_db.cpp
 EMU_CXXFLAGS += -I$(BUILD_DIR)
 
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
-EMU_CXX_EXTRA_FLAGS ?= 
+EMU_CXX_EXTRA_FLAGS ?=
 
 EMU_VFILES    = $(SIM_VSRC)
 
@@ -48,6 +48,7 @@ endif
 VERILATOR_4_210 := $(shell expr `verilator --version | cut -f3 -d.` \>= 210)
 ifeq ($(VERILATOR_4_210),1)
 EMU_CXXFLAGS += -DVERILATOR_4_210
+VEXTRA_FLAGS += --instr-count-dpi 1
 endif
 
 # Verilator trace support
@@ -92,6 +93,7 @@ VERILATOR_FLAGS =                   \
   --top-module $(EMU_TOP)           \
   --compiler clang                  \
   +define+VERILATOR=1               \
+  +define+DIFFTEST                  \
   +define+PRINTF_COND=1             \
   +define+RANDOMIZE_REG_INIT        \
   +define+RANDOMIZE_MEM_INIT        \
@@ -117,9 +119,9 @@ $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
 		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS)
-	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
-	find $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
-	find $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
+	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
+	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
+	find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
 
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'

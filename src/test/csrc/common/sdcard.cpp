@@ -21,14 +21,26 @@ FILE *fp = NULL;
 
 extern "C" {
 
+void check_sdcard() {
+  if (!fp) {
+    eprintf(ANSI_COLOR_MAGENTA "[warning] sdcard img not found\n");
+  }
+}
+
 void sd_setaddr(uint32_t addr) {
+  check_sdcard();
+#ifdef SDCARD_IMAGE
   fseek(fp, addr, SEEK_SET);
+#endif
   //printf("set addr to 0x%08x\n", addr);
   //assert(0);
 }
 
 void sd_read(uint32_t *data) {
+  check_sdcard();
+#ifdef SDCARD_IMAGE
   fread(data, 4, 1, fp);
+#endif
   //printf("read data = 0x%08x\n", *data);
   //assert(0);
 }
@@ -36,10 +48,7 @@ void sd_read(uint32_t *data) {
 void init_sd(void) {
 #ifdef SDCARD_IMAGE
   fp = fopen(SDCARD_IMAGE, "r");
-  if(!fp)
-  {
-    eprintf(ANSI_COLOR_MAGENTA "[warning] sdcard img not found\n");
-  }
+  check_sdcard();
 #endif
 }
 

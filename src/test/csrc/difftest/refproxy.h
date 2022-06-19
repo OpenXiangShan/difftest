@@ -32,18 +32,21 @@ public:
   int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask) = NULL;
   void (*exec)(uint64_t n) = NULL;
   vaddr_t (*guided_exec)(void *disambiguate_para) = NULL;
-  vaddr_t (*update_config)(void *config) = NULL;
+  void (*update_config)(void *config) = NULL;
   void (*raise_intr)(uint64_t no) = NULL;
   void (*isa_reg_display)() = NULL;
   void (*query)(void *result_buffer, uint64_t type) = NULL;
   void (*debug_mem_sync)(paddr_t addr, void *bytes, size_t size) = NULL;
+  void (*load_flash_bin)(void *flash_bin, size_t size) = NULL;
+  void (*set_ramsize)(size_t size) = NULL;
 };
+extern const char *difftest_ref_so;
 
 #define NEMU_ENV_VARIABLE "NEMU_HOME"
 #define NEMU_SO_FILENAME  "build/riscv64-nemu-interpreter-so"
 class NemuProxy : public RefProxy {
 public:
-  NemuProxy(int coreid);
+  NemuProxy(int coreid, size_t ram_size);
 private:
 };
 
@@ -51,7 +54,7 @@ private:
 #define SPIKE_SO_FILENAME  "difftest/build/riscv64-spike-so"
 class SpikeProxy : public RefProxy {
 public:
-  SpikeProxy(int coreid);
+  SpikeProxy(int coreid, size_t ram_size);
 private:
 };
 

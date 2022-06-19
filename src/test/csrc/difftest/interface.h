@@ -49,9 +49,9 @@ extern "C" int v_difftest_init();
 extern "C" int v_difftest_step();
 
 // v_difftest_step
-// extern "C" int 
-// #define INTERFACE_STEP                   
-//   DIFFTEST_DPIC_FUNC_DECL(step) (        
+// extern "C" int
+// #define INTERFACE_STEP
+//   DIFFTEST_DPIC_FUNC_DECL(step) (
 //   )
 
 // v_difftest_ArchEvent
@@ -73,7 +73,8 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE special,               \
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
-    DPIC_ARG_BIT  wen,                   \
+    DPIC_ARG_BIT  rfwen,                 \
+    DPIC_ARG_BIT  fpwen,                 \
     DPIC_ARG_BYTE wpdest,                \
     DPIC_ARG_BYTE wdest                  \
   )
@@ -87,8 +88,9 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE special,               \
     DPIC_ARG_BIT  skip,                  \
     DPIC_ARG_BIT  isRVC,                 \
-    DPIC_ARG_BIT  wen,                   \
-    DPIC_ARG_BYTE wpdest,                \
+    DPIC_ARG_BIT  rfwen,                 \
+    DPIC_ARG_BIT  fpwen,                 \
+    DPIC_ARG_INT  wpdest,                \
     DPIC_ARG_BYTE wdest,                 \
     DPIC_ARG_LONG pc,                    \
     DPIC_ARG_INT  instr,                 \
@@ -101,7 +103,8 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_BIT  valid,                 \
     DPIC_ARG_LONG cycleCnt,              \
-    DPIC_ARG_LONG instrCnt               \
+    DPIC_ARG_LONG instrCnt,              \
+    DPIC_ARG_BIT  hasWFI                 \
   )
 
 // v_difftest_TrapEvent
@@ -111,6 +114,7 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BIT  valid,                 \
     DPIC_ARG_LONG cycleCnt,              \
     DPIC_ARG_LONG instrCnt,              \
+    DPIC_ARG_BIT  hasWFI,                \
     DPIC_ARG_BYTE code,                  \
     DPIC_ARG_LONG pc                     \
   )
@@ -143,7 +147,7 @@ extern "C" int v_difftest_step();
 #define INTERFACE_DM_STATE               \
   DIFFTEST_DPIC_FUNC_DECL(DebugMode) (   \
     DPIC_ARG_BYTE coreid,                \
-    DPIC_ARG_BIT dMode,                  \
+    DPIC_ARG_BIT  dMode,                 \
     DPIC_ARG_LONG dcsr,                  \
     DPIC_ARG_LONG dpc,                   \
     DPIC_ARG_LONG dscratch0,             \
@@ -155,7 +159,7 @@ extern "C" int v_difftest_step();
   DIFFTEST_DPIC_FUNC_DECL(IntWriteback) (\
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_BIT  valid,                 \
-    DPIC_ARG_BYTE dest,                  \
+    DPIC_ARG_INT  dest,                  \
     DPIC_ARG_LONG data                   \
   )
 
@@ -202,7 +206,7 @@ extern "C" int v_difftest_step();
   DIFFTEST_DPIC_FUNC_DECL(FpWriteback) ( \
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_BIT  valid,                 \
-    DPIC_ARG_BYTE dest,                  \
+    DPIC_ARG_INT  dest,                  \
     DPIC_ARG_LONG data                   \
   )
 
@@ -377,7 +381,8 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG data_4,                \
     DPIC_ARG_LONG data_5,                \
     DPIC_ARG_LONG data_6,                \
-    DPIC_ARG_LONG data_7                 \
+    DPIC_ARG_LONG data_7,                \
+    DPIC_ARG_BIT  cacheid                \
   )
 
 // v_difftest_RefillEvent
@@ -400,7 +405,7 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG checkpoint_id            \
   )
 
-// v_difftest_RunaheadCommitEvent 
+// v_difftest_RunaheadCommitEvent
 #define INTERFACE_RUNAHEAD_COMMIT_EVENT          \
   DIFFTEST_DPIC_FUNC_DECL(RunaheadCommitEvent) ( \
     DPIC_ARG_BYTE coreid,                        \

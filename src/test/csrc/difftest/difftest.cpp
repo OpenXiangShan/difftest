@@ -17,6 +17,7 @@
 #include "difftest.h"
 #include "goldenmem.h"
 #include "ram.h"
+#include "flash.h"
 #include "spikedasm.h"
 
 static const char *reg_name[DIFFTEST_NR_REG+1] = {
@@ -49,9 +50,9 @@ int difftest_init() {
   return 0;
 }
 
-int init_nemuproxy() {
+int init_nemuproxy(size_t ramsize = 0) {
   for (int i = 0; i < NUM_CORES; i++) {
-    difftest[i]->update_nemuproxy(i);
+    difftest[i]->update_nemuproxy(i, ramsize);
   }
   return 0;
 }
@@ -80,8 +81,8 @@ Difftest::Difftest(int coreid) : id(coreid) {
   clear_step();
 }
 
-void Difftest::update_nemuproxy(int coreid) {
-  proxy = new DIFF_PROXY(coreid);
+void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
+  proxy = new DIFF_PROXY(coreid, ram_size);
 }
 
 int Difftest::step() {
@@ -115,7 +116,7 @@ int Difftest::step() {
   }
 
 #ifdef DEBUG_REFILL
-  if (do_refill_check()) {
+  if (do_irefill_check() || do_drefill_check() ) {
     return 1;
   }
 #endif
@@ -125,7 +126,7 @@ int Difftest::step() {
   // for other insts copy inst content to ref's dummy debug module
   for(int i = 0; i < DIFFTEST_COMMIT_WIDTH; i++){
     if(DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc))
-      debug_mode_copy(dut.commit[i].pc, dut.commit[i].isRVC ? 2 : 4, dut.commit[i].inst);     
+      debug_mode_copy(dut.commit[i].pc, dut.commit[i].isRVC ? 2 : 4, dut.commit[i].inst);
   }
 
 #endif
@@ -168,6 +169,12 @@ int Difftest::step() {
   uint64_t nemu_next_pc = ref.csr.this_pc;
   ref.csr.this_pc = nemu_this_pc;
   nemu_this_pc = nemu_next_pc;
+
+  // FIXME: the following code is dirty
+  if (dut_regs_ptr[72] != ref_regs_ptr[72]) {  // Ignore difftest for MIP
+    ref_regs_ptr[72] = dut_regs_ptr[72];
+  }
+
   if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
     display();
     for (int i = 0; i < DIFFTEST_NR_REG; i ++) {
@@ -183,13 +190,13 @@ int Difftest::step() {
 }
 
 void Difftest::do_interrupt() {
-  state->record_abnormal_inst(dut.commit[0].pc, dut.commit[0].inst, RET_INT, dut.event.interrupt);
+  state->record_abnormal_inst(dut.event.exceptionPC, dut.event.exceptionInst, RET_INT, dut.event.interrupt);
   proxy->raise_intr(dut.event.interrupt | (1ULL << 63));
   progress = true;
 }
 
 void Difftest::do_exception() {
-  state->record_abnormal_inst(dut.event.exceptionPC, dut.commit[0].inst, RET_EXC, dut.event.exception);
+  state->record_abnormal_inst(dut.event.exceptionPC, dut.event.exceptionInst, RET_EXC, dut.event.exception);
   if (dut.event.exception == 12 || dut.event.exception == 13 || dut.event.exception == 15) {
     // printf("exception cause: %d\n", dut.event.exception);
     struct ExecutionGuide guide;
@@ -213,7 +220,7 @@ void Difftest::do_exception() {
 
 void Difftest::do_instr_commit(int i) {
   progress = true;
-  last_commit = ticks;
+  update_last_commit();
 
   // store the writeback info to debug array
 #ifdef BASIC_DIFFTEST_ONLY
@@ -223,7 +230,7 @@ void Difftest::do_instr_commit(int i) {
   uint64_t commit_pc = dut.commit[i].pc;
   uint64_t commit_instr = dut.commit[i].inst;
 #endif
-  state->record_inst(commit_pc, commit_instr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
+  state->record_inst(commit_pc, commit_instr, (dut.commit[i].rfwen | dut.commit[i].fpwen), dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
 
 #ifdef DEBUG_MODE_DIFF
   int spike_invalid = test_spike();
@@ -246,14 +253,16 @@ void Difftest::do_instr_commit(int i) {
     dut.lrsc.valid = 0;
   }
 
+  bool realWen = (dut.commit[i].rfwen && dut.commit[i].wdest != 0) || (dut.commit[i].fpwen);
+
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
   if (dut.commit[i].skip || (DEBUG_MODE_SKIP(dut.commit[i].valid, dut.commit[i].pc, dut.commit[i].inst))) {
     proxy->regcpy(ref_regs_ptr, REF_TO_DIFFTEST);
     ref.csr.this_pc += dut.commit[i].isRVC ? 2 : 4;
-    if (dut.commit[i].wen && dut.commit[i].wdest != 0) {
+    if (realWen) {
       // We use the physical register file to get wdata
-      // TODO: FPR
+      // TODO: what if skip with fpwen?
       ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
       // printf("Debug Mode? %x is ls? %x\n", DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc), IS_LOAD_STORE(dut.commit[i].inst));
       // printf("skip %x %x %x %x %x\n", dut.commit[i].pc, dut.commit[i].inst, get_commit_data(i), dut.commit[i].wpdest, dut.commit[i].wdest);
@@ -273,7 +282,7 @@ void Difftest::do_instr_commit(int i) {
   if (NUM_CORES > 1) {
     if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
       proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
-      if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != get_commit_data(i)) {
+      if (realWen && ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] != get_commit_data(i)) {
         // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
         // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].pc);
         uint64_t golden;
@@ -308,14 +317,14 @@ void Difftest::do_instr_commit(int i) {
         // printf("---    golden: 0x%lx  original: 0x%lx\n", golden, ref_regs_ptr[dut.commit[i].wdest]);
         if (golden == get_commit_data(i)) {
           proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
-          if (dut.commit[i].wdest != 0) {
-            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
+          if (realWen) {
+            ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else if (dut.load[i].fuType == 0xF) {  //  atomic instr carefully handled
           proxy->memcpy(dut.load[i].paddr, &golden, len, DIFFTEST_TO_REF);
-          if (dut.commit[i].wdest != 0) {
-            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
+          if (realWen) {
+            ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else {
@@ -328,8 +337,8 @@ void Difftest::do_instr_commit(int i) {
           printf("---    content: %lx\n", buf);
 #else
           proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
-          if (dut.commit[i].wdest != 0) {
-            ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
+          if (realWen) {
+            ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
 #endif
@@ -350,7 +359,8 @@ void Difftest::do_first_instr_commit() {
     has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;
 
-    proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    proxy->load_flash_bin(get_flash_path(), get_flash_size());
+    proxy->memcpy(PMEM_BASE, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
     // Use a temp variable to store the current pc of dut
     uint64_t dut_this_pc = dut.csr.this_pc;
     // NEMU should always start at FIRST_INST_ADDRESS
@@ -385,36 +395,49 @@ int Difftest::do_store_check() {
   return 0;
 }
 
-int Difftest::do_refill_check() {
+int Difftest::do_refill_check(int cacheid) {
   static uint64_t last_valid_addr = 0;
   char buf[512];
-  dut.refill.addr = dut.refill.addr - dut.refill.addr % 64;
-  if (dut.refill.valid == 1 && dut.refill.addr != last_valid_addr) {
-    last_valid_addr = dut.refill.addr;
-    if(!in_pmem(dut.refill.addr)){
+  refill_event_t dut_refill = cacheid == DCACHEID ? dut.d_refill : dut.i_refill ;    
+  const char* name = cacheid == DCACHEID ? "DCache" : "ICache";
+  dut_refill.addr = dut_refill.addr - dut_refill.addr % 64;
+  if (dut_refill.valid == 1 && dut_refill.addr != last_valid_addr) {
+    last_valid_addr = dut_refill.addr;
+    if(!in_pmem(dut_refill.addr)){
       // speculated illegal mem access should be ignored
       return 0;
     }
     for (int i = 0; i < 8; i++) {
-      read_goldenmem(dut.refill.addr + i*8, &buf, 8);
-      if (dut.refill.data[i] != *((uint64_t*)buf)) {
-        printf("Refill test failed!\n");
-        printf("addr: %lx\nGold: ", dut.refill.addr);
+      read_goldenmem(dut_refill.addr + i*8, &buf, 8);
+      if (dut_refill.data[i] != *((uint64_t*)buf)) {
+        printf("%s Refill test failed!\n",name);
+        printf("addr: %lx\nGold: ", dut_refill.addr);
         for (int j = 0; j < 8; j++) {
-          read_goldenmem(dut.refill.addr + j*8, &buf, 8);
+          read_goldenmem(dut_refill.addr + j*8, &buf, 8);
           printf("%016lx", *((uint64_t*)buf));
         }
         printf("\nCore: ");
         for (int j = 0; j < 8; j++) {
-          printf("%016lx", dut.refill.data[j]);
+          printf("%016lx", dut_refill.data[j]);
         }
-        printf("\n"); 
+        printf("\n");
         return 1;
       }
     }
   }
   return 0;
 }
+
+int Difftest::do_irefill_check() {
+    return do_refill_check(ICACHEID);   
+}
+
+
+int Difftest::do_drefill_check() {
+    return do_refill_check(DCACHEID);   
+}
+
+
 
 inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, uint64_t atomicMask, uint8_t atomicFuop, uint64_t atomicOut) {
   // We need to do atmoic operations here so as to update goldenMem
@@ -435,7 +458,8 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, u
     }
     switch (atomicFuop) {
       case 002: case 003: ret = t; break;
-      case 006: case 007: ret = rs; break;
+      // if sc fails(aka atomicOut == 1), no update to goldenmem
+      case 006: case 007: if (t == 1) return 0; ret = rs; break;
       case 012: case 013: ret = rs; break;
       case 016: case 017: ret = t+rs; break;
       case 022: case 023: ret = (t^rs); break;
@@ -471,7 +495,8 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, u
     }
     switch (atomicFuop) {
       case 002: case 003: ret = t; break;
-      case 006: case 007: ret = rs; break;  // TODO
+      // if sc fails(aka atomicOut == 1), no update to goldenmem
+      case 006: case 007: if (t == 1) return 0; ret = rs; break;
       case 012: case 013: ret = rs; break;
       case 016: case 017: ret = t+rs; break;
       case 022: case 023: ret = (t^rs); break;
@@ -511,7 +536,7 @@ int Difftest::do_golden_memory_update() {
   // Update Golden Memory info
 
   if (ticks == 100) {
-    dumpGoldenMem("Init", track_instr, ticks);    
+    dumpGoldenMem("Init", track_instr, ticks);
   }
 
   for(int i = 0; i < DIFFTEST_SBUFFER_RESP_WIDTH; i++){
@@ -541,13 +566,20 @@ int Difftest::check_timeout() {
   if (!has_commit && ticks > last_commit + firstCommit_limit) {
     eprintf("No instruction commits for %lu cycles of core %d. Please check the first instruction.\n",
       firstCommit_limit, id);
-    eprintf("Note: The first instruction may lie in 0x10000000 which may executes and commits after 500 cycles.\n");
-    eprintf("   Or the first instruction may lie in 0x80000000 which may executes and commits after 2000 cycles.\n");
+    eprintf("Note: The first instruction may lie in 0x%lx which may executes and commits after 500 cycles.\n", FIRST_INST_ADDRESS);
+    eprintf("   Or the first instruction may lie in 0x%lx which may executes and commits after 2000 cycles.\n", PMEM_BASE);
     display();
     return 1;
   }
 
-  // check whether there're any commits in the last 5000 cycles
+  // NOTE: the WFI instruction may cause the CPU to halt for more than `stuck_limit` cycles.
+  // We update the `last_commit` if the CPU has a WFI instruction
+  // to allow the CPU to run at most `stuck_limit` cycles after WFI resumes execution.
+  if (has_wfi()) {
+    update_last_commit();
+  }
+
+  // check whether there're any commits in the last `stuck_limit` cycles
   if (has_commit && ticks > last_commit + stuck_limit) {
     eprintf("No instruction of core %d commits for %lu cycles, maybe get stuck\n"
         "(please also check whether a fence.i instruction requires more than %lu cycles to flush the icache)\n",

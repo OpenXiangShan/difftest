@@ -21,7 +21,7 @@
 #include "runahead.h"
 #include "refproxy.h"
 #include "goldenmem.h"
-#include "device.h"
+#include "flash.h"
 #include "runahead.h"
 #include <getopt.h>
 #include <signal.h>
@@ -36,6 +36,14 @@
 
 extern remote_bitbang_t * jtag;
 
+
+static inline long long int atoll_strict(const char *str, const char *arg) {
+  if (strspn(str, " +-0123456789") != strlen(str)) {
+    printf("[ERROR] --%s=NUM only accept numeric argument\n", arg);
+    exit(EINVAL);
+  }
+  return atoll(str);
+}
 
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
@@ -58,8 +66,10 @@ static inline void print_help(const char *file) {
 #ifdef ENABLE_CHISEL_DB
   printf("      --dump-db              enable database dump\n");
 #endif
+  printf("      --flash                the flash bin file for simulation\n");
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
+  printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
@@ -82,6 +92,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "enable-fork",       0, NULL,  0  },
     { "enable-jtag",       0, NULL,  0  },
     { "wave-path",         1, NULL,  0  },
+    { "ram-size",          1, NULL,  0  },
     { "sim-run-ahead",     0, NULL,  0  },
 #ifdef ENABLE_CHISEL_DB
     { "dump-db",           0, NULL,  0  },
@@ -97,13 +108,14 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "image",             1, NULL, 'i' },
     { "log-begin",         1, NULL, 'b' },
     { "log-end",           1, NULL, 'e' },
+    { "flash",             1, NULL, 'F' },
     { "help",              0, NULL, 'h' },
     { 0,                   0, NULL,  0  }
   };
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:I:T:W:hi:m:b:e:", long_options, &long_index)) != -1) {
+          "-s:C:I:T:W:hi:m:b:e:F:", long_options, &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -116,14 +128,15 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 6: args.enable_fork = true; continue;
           case 7: args.enable_jtag = true; continue;
           case 8: args.wave_path = optarg; continue;
-          case 9:
+          case 9: args.ram_size = optarg; continue;
+          case 10:
 #ifdef ENABLE_RUNHEAD
             args.enable_runahead = true;
 #else
             printf("[WARN] runahead is not enabled at compile time, ignore --sim-run-ahead\n");
 #endif
             continue;
-          case 10:
+          case 11:
 #ifdef ENABLE_CHISEL_DB
             args.dump_db = true;
 #else
@@ -137,12 +150,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         exit(0);
       case 's':
         if(std::string(optarg) != "NO_SEED") {
-          args.seed = atoll(optarg);
+          args.seed = atoll_strict(optarg, "seed");
           printf("Using seed = %d\n", args.seed);
         }
         break;
-      case 'C': args.max_cycles = atoll(optarg);  break;
-      case 'I': args.max_instr = atoll(optarg);  break;
+      case 'C': args.max_cycles = atoll_strict(optarg, "max-cycles");  break;
+      case 'I': args.max_instr = atoll_strict(optarg, "max-instr");  break;
 #ifdef DEBUG_REFILL
       case 'T':
         args.track_instr = std::strtoll(optarg, NULL, 0);
@@ -153,11 +166,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         }
         break;
 #endif
-      case 'W': args.warmup_instr = atoll(optarg);  break;
-      case 'D': args.stat_cycles = atoll(optarg);  break;
+      case 'W': args.warmup_instr = atoll_strict(optarg, "warmup-instr");  break;
+      case 'D': args.stat_cycles = atoll_strict(optarg, "stat-cycles");  break;
       case 'i': args.image = optarg; break;
-      case 'b': args.log_begin = atoll(optarg);  break;
-      case 'e': args.log_end = atoll(optarg); break;
+      case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
+      case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
+      case 'F': args.flash_bin = optarg; break;
     }
   }
 
@@ -165,6 +179,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     print_help(argv[0]);
     printf("Hint: --image=IMAGE_FILE must be given\n");
     exit(0);
+  }
+
+  if(args.ram_size){
+    parse_and_update_ramsize(args.ram_size);
   }
 
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
@@ -189,6 +207,9 @@ Emulator::Emulator(int argc, const char *argv[]):
   if (args.enable_jtag) {
     jtag = new remote_bitbang_t(23334);
   }
+  // init flash
+  init_flash(args.flash_bin);
+
   // init core
   reset_ncycles(10);
 
@@ -267,8 +288,8 @@ inline void Emulator::single_cycle() {
 #ifdef WITH_DRAMSIM3
   axi_channel axi;
   axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
+  axi.aw.addr -= PMEM_BASE;
+  axi.ar.addr -= PMEM_BASE;
   dramsim3_helper_rising(axi);
 #endif
 
@@ -288,8 +309,8 @@ inline void Emulator::single_cycle() {
 
 #ifdef WITH_DRAMSIM3
   axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= 0x80000000UL;
-  axi.ar.addr -= 0x80000000UL;
+  axi.aw.addr -= PMEM_BASE;
+  axi.ar.addr -= PMEM_BASE;
   dramsim3_helper_falling(axi);
   axi_set_dut_ptr(dut_ptr, axi);
 #endif
@@ -311,7 +332,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   init_device();
   if (args.enable_diff) {
     init_goldenmem();
-    init_nemuproxy();
+    size_t ref_ramsize = args.ram_size ? EMU_RAM_SIZE : 0;
+    init_nemuproxy(ref_ramsize);
   }
   if(args.enable_runahead){
     runahead_init();
@@ -435,6 +457,15 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     }
 #endif
 
+#ifdef DEBUG_TILELINK
+    if (args.dump_tl_interval != 0) {
+      if ((cycles != 0) && (cycles % args.dump_tl_interval == 0)) {
+        time_t now = time(NULL);
+        checkpoint_db(logdb_filename(now));
+      }
+    }
+#endif
+
     if (args.enable_fork) {
       static bool have_initial_fork = false;
       uint32_t timer = uptime();
@@ -483,6 +514,23 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   return cycles;
 }
 
+void parse_and_update_ramsize(const char* arg_ramsize_str) {
+  unsigned long ram_size_value = 0;
+  char ram_size_unit[64];
+  sscanf(arg_ramsize_str, "%ld%s", &ram_size_value, (char*) &ram_size_unit);
+  assert(ram_size_value > 0);
+  
+  if(!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")){
+    EMU_RAM_SIZE = ram_size_value * 1024 * 1024 * 1024;
+    return;
+  }
+  if(!strcmp(ram_size_unit, "MB") || !strcmp(ram_size_unit, "mb")){
+    EMU_RAM_SIZE = ram_size_value * 1024 * 1024;
+    return;
+  }
+  printf("Invalid ram size %s\n", ram_size_unit);
+  assert(0);
+}
 
 inline char* Emulator::timestamp_filename(time_t t, char *buf) {
   char buf_time[64];
@@ -620,7 +668,7 @@ void Emulator::snapshot_save(const char *filename) {
   stream.unbuf_write(ref_r, sizeof(ref_r));
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_DUT);
+  proxy->memcpy(PMEM_BASE, buf, size, DIFFTEST_TO_DUT);
   stream.unbuf_write(buf, size);
   munmap(buf, size);
 
@@ -664,7 +712,7 @@ void Emulator::snapshot_load(const char *filename) {
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   stream.read(buf, size);
-  proxy->memcpy(0x80000000, buf, size, DIFFTEST_TO_REF);
+  proxy->memcpy(PMEM_BASE, buf, size, DIFFTEST_TO_REF);
   munmap(buf, size);
 
   struct SyncState sync_mastate;

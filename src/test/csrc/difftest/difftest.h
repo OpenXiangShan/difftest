@@ -25,6 +25,7 @@
 enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 enum { REF_TO_DUT, DUT_TO_REF };
 enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
+enum { ICACHEID, DCACHEID };
 // DIFFTEST_TO_DUT ~ REF_TO_DUT ~ REF_TO_DIFFTEST
 // DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
 #define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
@@ -50,6 +51,7 @@ typedef struct {
   uint64_t pc = 0;
   uint64_t cycleCnt = 0;
   uint64_t instrCnt = 0;
+  uint8_t  hasWFI = 0;
 } trap_event_t;
 
 // architectural events: interrupts and exceptions
@@ -68,8 +70,9 @@ typedef struct {
   uint8_t  skip;
   uint8_t  isRVC;
   uint8_t  fused;
-  uint8_t  wen;
-  uint8_t  wpdest;
+  uint8_t  rfwen;
+  uint8_t  fpwen;
+  uint32_t wpdest;
   uint8_t  wdest;
 } instr_commit_t;
 
@@ -191,8 +194,8 @@ typedef struct {
 } run_ahead_memdep_pred_t;
 
 typedef struct {
-  uint64_t gpr[256];
-  uint64_t fpr[256];
+  uint64_t gpr[DIFFTEST_MAX_PRF_SIZE];
+  uint64_t fpr[DIFFTEST_MAX_PRF_SIZE];
 } physical_reg_state_t;
 
 typedef struct {
@@ -207,7 +210,8 @@ typedef struct {
   load_event_t      load[DIFFTEST_COMMIT_WIDTH];
   atomic_event_t    atomic;
   ptw_event_t       ptw;
-  refill_event_t    refill;
+  refill_event_t    d_refill;
+  refill_event_t    i_refill;
   lr_sc_evevnt_t    lrsc;
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
@@ -275,7 +279,7 @@ public:
   bool has_commit = false;
   // Trigger a difftest checking procdure
   virtual int step();
-  void update_nemuproxy(int);
+  void update_nemuproxy(int, size_t);
   inline bool get_trap_valid() {
     return dut.trap.valid;
   }
@@ -316,8 +320,9 @@ public:
   inline ptw_event_t *get_ptw_event() {
     return &(dut.ptw);
   }
-  inline refill_event_t *get_refill_event() {
-    return &(dut.refill);
+  inline refill_event_t *get_refill_event(bool dcache) {
+    if(dcache) return &(dut.d_refill);
+    return &(dut.i_refill);
   }
   inline lr_sc_evevnt_t *get_lr_sc_event() {
     return &(dut.lrsc);
@@ -379,18 +384,25 @@ protected:
   uint64_t track_instr = 0;
 #endif
 
+  void update_last_commit() { last_commit = ticks; }
   int check_timeout();
   void do_first_instr_commit();
   void do_interrupt();
   void do_exception();
   void do_instr_commit(int index);
   int do_store_check();
-  int do_refill_check();
+  int do_refill_check(int cacheid);
+  int do_irefill_check();
+  int do_drefill_check();
   int do_golden_memory_update();
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }
   inline uint64_t get_commit_data(int i) {
-    return dut.pregs.gpr[dut.commit[i].wpdest];
+    uint64_t result = (dut.commit[i].fpwen) ? dut.pregs.fpr[dut.commit[i].wpdest] : dut.pregs.gpr[dut.commit[i].wpdest];
+    return result;
+  }
+  inline bool has_wfi() {
+    return dut.trap.hasWFI;
   }
 
   void raise_trap(int trapCode);
@@ -401,6 +413,6 @@ extern Difftest **difftest;
 int difftest_init();
 int difftest_step();
 int difftest_state();
-int init_nemuproxy();
+int init_nemuproxy(size_t);
 
 #endif
