@@ -25,8 +25,8 @@
 #include "runahead.h"
 #include <getopt.h>
 #include <signal.h>
-#ifdef  DEBUG_TILELINK
-#include "tllogger.h"
+#ifdef  ENABLE_CHISEL_DB
+#include "chisel_db.h"
 #endif
 #include "ram.h"
 #include "zlib.h"
@@ -63,9 +63,8 @@ static inline void print_help(const char *file) {
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
   printf("      --dump-wave            dump waveform when log is enabled\n");
-#ifdef DEBUG_TILELINK
-  printf("      --dump-tl              dump tilelink transactions\n");
-  printf("      --dump-tl-interval     set cycle interval of tilelink transaction dump\n");
+#ifdef ENABLE_CHISEL_DB
+  printf("      --dump-db              enable database dump\n");
 #endif
   printf("      --flash                the flash bin file for simulation\n");
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
@@ -95,9 +94,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "wave-path",         1, NULL,  0  },
     { "ram-size",          1, NULL,  0  },
     { "sim-run-ahead",     0, NULL,  0  },
-#ifdef DEBUG_TILELINK
-    { "dump-tl",           0, NULL,  0  },
-    { "dump-tl-interval",  1, NULL,  0  },
+#ifdef ENABLE_CHISEL_DB
+    { "dump-db",           0, NULL,  0  },
 #endif
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
@@ -139,17 +137,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #endif
             continue;
           case 11:
-#ifdef DEBUG_TILELINK
-            args.dump_tl = true;
+#ifdef ENABLE_CHISEL_DB
+            args.dump_db = true;
 #else
-            printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl\n");
-#endif
-            continue;
-          case 12:
-#ifdef DEBUG_TILELINK
-            args.dump_tl_interval = atoll_strict(optarg, "dump-tl-interval");
-#else
-            printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl-interval\n");
+            printf("[WARN] chisel db is not enabled at compile time, ignore --dump-db\n");
 #endif
             continue;
         }
@@ -224,10 +215,8 @@ Emulator::Emulator(int argc, const char *argv[]):
 
   // init ram
   init_ram(args.image);
-
-#ifdef DEBUG_TILELINK
-  // init logger
-  init_logger(args.dump_tl);
+#ifdef ENABLE_CHISEL_DB
+  init_db(args.dump_db);
 #endif
 
 #if VM_TRACE == 1
@@ -273,8 +262,8 @@ Emulator::~Emulator() {
   }
 #endif
 
-#ifdef DEBUG_TILELINK
-  if(args.dump_tl){
+#ifdef ENABLE_CHISEL_DB
+  if(args.dump_db){
     time_t now = time(NULL);
     save_db(logdb_filename(now));
   }

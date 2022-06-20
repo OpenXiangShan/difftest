@@ -114,11 +114,6 @@ extern unsigned long EMU_FLASH_SIZE;
 // whether to check memory coherence during refilling
 #define DEBUG_REFILL
 
-// dump all tilelink trace to a database
-// uncomment the following line to enable this feature
-#define DEBUG_TILELINK
-
-
 // -----------------------------------------------------------------------
 // Simulator run ahead config
 // -----------------------------------------------------------------------
@@ -161,6 +156,10 @@ extern unsigned long EMU_FLASH_SIZE;
 // -----------------------------------------------------------------------
 // Do not touch
 // -----------------------------------------------------------------------
+
+// dump chisel-db to a database file
+// set WITH_CHISELDB=1 when make to enable chisel db in verilator simulation
+// #define ENABLE_CHISEL_DB
 
 // whether to maintain goldenmem
 #if NUM_CORES>1
