@@ -25,8 +25,9 @@ EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
 EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
 
 ifeq ($(WITH_CHISELDB), 1)
-EMU_CXXFILES += $(BUILD_DIR)/chisel_db.cpp
-EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
+CHISELDB_EXTRA_ARG = $(BUILD_DIR)/chisel_db.cpp -I$(BUILD_DIR) -DENABLE_CHISEL_DB
+else
+CHISELDB_EXTRA_ARG =
 endif
 
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
@@ -120,7 +121,7 @@ $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
-		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS)
+		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS) $(CHISELDB_EXTRA_ARG)
 	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
 	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
 	find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
