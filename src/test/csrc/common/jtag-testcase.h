@@ -1,6 +1,6 @@
 #include "jtag-utils.h"
 
-#define MAX_CMDS 100
+#define MAX_CMDS 1000
 
 #define DMI_ADDR_SIZE   7
 #define DMI_DATA_SIZE   32
@@ -88,9 +88,21 @@ jtag_cmd cmd_list[MAX_CMDS] = {
   CMD_DMI_CLR_REQ,
   CMD_DMI_READ_REQ(0x11),       // read dmstatus
   CMD_DMI_GET_RES,              // this clears read req
-  CMD_DMI_WRITE_REQ(0x10, 0x87FFFFC1),      // halt req to dmcontrol, fill hasel and hartsel bits
+  CMD_DMI_WRITE_REQ(0x10, 0x80000001),      // halt req to dmcontrol, fill hasel and hartsel bits
+  CMD_DMI_CLR_REQ,
   CMD_RUN_IDLE(20),             // idle cycles should not be larger than 64
   CMD_DMI_READ_REQ(0x11),       // check dmstatus to see if halted
+  CMD_DMI_GET_RES,
+  CMD_DMI_WRITE_REQ(0x20, 0x30102473),      // progbuf 0 "csrr s0, misa"
+  CMD_DMI_CLR_REQ,
+  CMD_DMI_WRITE_REQ(0x21, 0x00100073),      // progbuf 1 "ebreak"
+  CMD_DMI_CLR_REQ,
+  CMD_DMI_WRITE_REQ(0x17, 0x00040000),      // postexec command
+  CMD_DMI_CLR_REQ,
+  CMD_DMI_WRITE_REQ(0x17, 0x00021008),      // transfer, s0 = 0x1008
+  CMD_DMI_CLR_REQ,
+  CMD_RUN_IDLE(40),
+  CMD_DMI_READ_REQ(0x4),        // read data0
   CMD_DMI_GET_RES,
   CMD_FINISH
 };
