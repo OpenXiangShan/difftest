@@ -29,6 +29,9 @@ char *get_flash_path() { return flash_path;  }
 long get_flash_size() { return flash_bin_size; }
 
 extern "C" void flash_read(uint32_t addr, uint64_t *data) {
+  if (!flash_base) {
+    return;
+  }
   //addr must be 8 bytes aligned first
   uint32_t aligned_addr = addr & FLASH_ALIGH_MASK;
   uint64_t rIdx = aligned_addr / sizeof(uint64_t);
@@ -67,7 +70,7 @@ void init_flash(const char *flash_bin) {
 
   /** no specified flash_path ,use defualt 3 instructions*/
   flash_path = (char *)flash_bin;
-  printf("[info]use %s as flash bin\n",flash_path);   
+  printf("[info]use %s as flash bin\n",flash_path);
 
   FILE *flash_fp = fopen(flash_path, "r");
   if(!flash_fp)
@@ -75,7 +78,7 @@ void init_flash(const char *flash_bin) {
     eprintf(ANSI_COLOR_MAGENTA "[error] flash img not found\n");
     exit(1);
   }
-  
+
   fseek(flash_fp, 0, SEEK_END);
   flash_bin_size = ftell(flash_fp);
   if (flash_bin_size > EMU_FLASH_SIZE) {
