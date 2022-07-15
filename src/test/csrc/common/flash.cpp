@@ -56,7 +56,7 @@ void init_flash(const char *flash_bin) {
   if(!flash_bin)
   {
     /** no specified flash_path ,use defualt 3 instructions*/
-    printf("[warning]no valid flash bin path, use preset flash instead\n");
+    printf("No valid flash bin path, use preset flash instead\n");
     // addiw   t0,zero,1
     // slli    to,to,  0x1f
     // jr      t0

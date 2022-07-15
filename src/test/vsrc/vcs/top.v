@@ -152,6 +152,7 @@ always @(posedge clock) begin
   else if (!has_init) begin
     simv_init();
     has_init <= 1'b1;
+    $display("VCS simulation starts now.");
   end
 
   // check errors

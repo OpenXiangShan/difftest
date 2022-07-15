@@ -35,18 +35,15 @@ static bool enable_difftest = true;
 static int max_cycles = 0;
 
 extern "C" void set_bin_file(char *s) {
-  printf("ram image:%s\n",s);
   strcpy(bin_file, s);
 }
 
 extern "C" void set_flash_bin(char *s) {
-  printf("flash image:%s\n",s);
   flash_bin_file = (char *)malloc(256);
   strcpy(flash_bin_file, s);
 }
 
 extern "C" void set_diff_ref_so(char *s) {
-  printf("diff-test ref so:%s\n", s);
   extern const char *difftest_ref_so;
   char* buf = (char *)malloc(256);
   strcpy(buf, s);
@@ -90,7 +87,6 @@ extern "C" void simv_init() {
   }
 
   assert_init();
-  init_ram(bin_file);
   init_goldenmem();
 }
 
