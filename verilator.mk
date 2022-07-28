@@ -44,6 +44,7 @@ endif
 VERILATOR_4_210 := $(shell expr `verilator --version | cut -f3 -d.` \>= 210)
 ifeq ($(VERILATOR_4_210),1)
 EMU_CXXFLAGS += -DVERILATOR_4_210
+VEXTRA_FLAGS += --instr-count-dpi 1
 endif
 
 # Verilator trace support
