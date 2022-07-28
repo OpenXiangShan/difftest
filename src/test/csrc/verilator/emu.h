@@ -53,6 +53,7 @@ struct EmuArgs {
   bool enable_runahead;
   bool dump_tl;
   bool jtag_test;
+  uint64_t fork_interval;
 
   EmuArgs() {
     seed = 0;
@@ -78,6 +79,7 @@ struct EmuArgs {
     enable_runahead = false;
     dump_tl = false;
     jtag_test = false;
+    fork_interval = 1;
   }
 };
 

@@ -73,6 +73,7 @@ static inline void print_help(const char *file) {
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --jtag-test            test jtag using testcases in jtag-testcase.h\n");
+  printf("      --fork-interval=N      fork interval for LightSSS\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -94,6 +95,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "sim-run-ahead",     0, NULL,  0  },
     { "dump-tl",           0, NULL,  0  },
     { "jtag-test",         0, NULL,  0  },
+    { "fork-interval",     1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -141,6 +143,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             continue;
           case 11:
             args.jtag_test = true; continue;
+          case 12: args.fork_interval = atoll_strict(optarg, "fork-interval"); continue;
         }
         // fall through
       default:
@@ -452,7 +455,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     trapCode = difftest_state();
     if (trapCode != STATE_RUNNING) {
       break;
-    } 
+    }
 
     if (args.enable_diff) {
       if (difftest_step()) {
@@ -485,7 +488,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       static bool have_initial_fork = false;
       uint32_t timer = uptime();
       //check if it's time to fork a checkpoint process
-      if (((timer - lasttime_snapshot > 1000 * FORK_INTERVAL) || !have_initial_fork) && !is_fork_child()) {
+      if (((timer - lasttime_snapshot > 1000 * args.fork_interval) || !have_initial_fork) && !is_fork_child()) {
         have_initial_fork = true;
         lasttime_snapshot = timer;
         switch (lightsss.do_fork()) {
