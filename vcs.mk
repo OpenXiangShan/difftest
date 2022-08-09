@@ -74,6 +74,7 @@ VCS_FLAGS += $(EXTRA)
 
 ifndef USE_RELEASE
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+	sed -i -e "s/RW0_conflict_data = \([[:digit:]]\+\)'h[[:digit:]]*f*;/RW0_conflict_data = {\1{1'bx}};/g" $(SIM_TOP_V)
 	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 else
 # usage: make simv USE_RELEASE="-F rtl_file_list -F sim_file_list" RELEASE=1
