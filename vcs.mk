@@ -55,14 +55,14 @@ VCS_FLAGS += -xprop
 # randomize all undefined signals (instead of using X)
 # VCS_FLAGS += +vcs+initreg+random
 # VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN
-VCS_FLAGS += +define+RANDOMIZE_INVALID_ASSIGN
+# VCS_FLAGS += +define+RANDOMIZE_INVALID_ASSIGN
 # VCS_FLAGS += +define+RANDOMIZE_MEM_INIT
-VCS_FLAGS += +define+RANDOMIZE_REG_INIT
+# VCS_FLAGS += +define+RANDOMIZE_REG_INIT
 # manually set RANDOMIZE_DELAY to avoid VCS from incorrect random initialize
 # NOTE: RANDOMIZE_DELAY must NOT be rounded to 0
-VCS_FLAGS += +define+RANDOMIZE_DELAY=1
+# VCS_FLAGS += +define+RANDOMIZE_DELAY=1
 # SRAM lib defines
-VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
+# VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
 VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
 # search build for other missing verilog files
