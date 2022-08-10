@@ -145,7 +145,8 @@ always @(posedge clock) begin
 end
 
 reg has_init;
-always @(posedge clock) begin
+reg [63:0] trap_code;
+always @(posedge clock or posedge reset) begin
   if (reset) begin
     has_init <= 1'b0;
   end
@@ -155,9 +156,19 @@ always @(posedge clock) begin
   end
 
   // check errors
-  if (!reset && has_init) begin
-    if (simv_step()) begin
+  if (reset) begin
+    trap_code <= 64'b0;
+  end
+  else if (has_init) begin
+    trap_code <= simv_step();
+  end
+
+  if (!reset) begin
+    if (trap_code == 1) begin
       $finish();
+    end
+    else if (trap_code > 1) begin
+      $fatal();
     end
   end
 

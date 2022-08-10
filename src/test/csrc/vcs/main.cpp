@@ -94,7 +94,7 @@ extern "C" void simv_init() {
 
 extern "C" int simv_step() {
   if (assert_count > 0) {
-    return 1;
+    return 2;
   }
 
   static int cycles = 0;
@@ -119,7 +119,8 @@ extern "C" int simv_step() {
   }
 
   if (enable_difftest) {
-    return difftest_step();
+    int trapCode = difftest_step();
+    return (trapCode == 0) ? trapCode : trapCode + 1;
   } else {
     return 0;
   }
