@@ -7,7 +7,7 @@
 
 #define RAMSIZE (128 * 1024 * 1024)
 #define PRED_WIDTH 16
-#define MAX_BR_NUM 20000000
+#define MAX_BR_NUM 40000000
 
 using namespace std;
 int reset =1;
@@ -47,6 +47,9 @@ string Trim(string& str)
 
 
 // reads branch records into global arrays
+// format: (hex)pc taken type (hex)target
+// taken: 1: taken 0: not taken
+// type: 0: branch 1: jump
 void init_branch_record(const char *branch, const uint64_t rate) {
   if (branch == NULL) {
     printf("Branch trace file not provided, oracle branch should not work!\n");
