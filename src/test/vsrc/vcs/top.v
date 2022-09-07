@@ -13,7 +13,7 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-
+`timescale 1ns/100ps
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
@@ -56,8 +56,14 @@ initial begin
     end
 `ifdef CONSIDER_FSDB
     else if (wave_type == "fsdb") begin
+      $timeformat(-9,3,"ns",20);
+      $display("Dumping FSDB Waveform for DEBUG is active !!!");
+      $fsdbAutoSwitchDumpfile(10000,"simv.fsdb",60);
       $fsdbDumpfile("simv.fsdb");
-      $fsdbDumpvars(0,"+mda");
+      if ($test$plusargs("mda"))
+        $fsdbDumpvars(0,"+mda");
+      else
+        $fsdbDumpvars(0,tb_top.sim);    
     end
 `endif
     else begin
@@ -116,7 +122,7 @@ initial begin
   // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
   #100 reset = 0;
 end
-always #1 clock <= ~clock;
+always #0.25 clock <= ~clock;
 
 SimTop sim(
   .clock(clock),

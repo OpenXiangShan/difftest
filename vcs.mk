@@ -14,7 +14,8 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-VCS_TARGET = simv
+VCS_RTL = simv_rtl
+VCS_PG  = simv_pg
 
 VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
 VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
@@ -40,13 +41,13 @@ EXTRA += -P $(NOVAS)/novas.tab $(NOVAS)/pli.a
 endif
 endif
 
-VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
+VCS_VSRC_DIR = $(shell pwd)/src/test/vsrc/vcs
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 
 VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
 VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
 
-VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
+VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L -lca -kdb -l vcs.log -top tb_top
 # DiffTest
 VCS_FLAGS += +define+DIFFTEST
 # X prop
@@ -67,13 +68,19 @@ VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
 # search build for other missing verilog files
 VCS_FLAGS += -y $(VCS_SEARCH_DIR) +libext+.v
 # build files put into $(VCS_BUILD_DIR)
-VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
+# VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
-$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
-	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+SIM_FLIST := $(shell pwd)/sim_flist.f
+$(VCS_RTL): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+	$(shell if [ ! -e $(VCS_SIM_DIR)/rtl ];then mkdir -p $(VCS_SIM_DIR)/rtl; fi)
+	$(shell find $(VCS_VSRC_DIR) -name "*.v" > $(SIM_FLIST))
+	$(shell find $(SIM_VSRC_DIR) -name "*.v" -or -name "*.sv" >> $(SIM_FLIST))
+	$(shell echo -f $(BUILD_DIR)/cpu_flist.f >> $(SIM_FLIST))
+	cp $(SIM_FLIST) $(VCS_SIM_DIR)/rtl
+	cd $(VCS_SIM_DIR)/rtl && vcs $(VCS_FLAGS) -f $(SIM_FLIST) $(VCS_CXXFILES)
 
 vcs-clean:
-	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)
+	rm -rf $(VCS_SIM_DIR) $(VCS_BUILD_DIR)
 

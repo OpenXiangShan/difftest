@@ -15,7 +15,7 @@
 #***************************************************************************************
 
 SIM_TOP    ?= SimTop
-DESIGN_DIR ?= ..
+DESIGN_DIR ?= $(shell pwd)/..
 NUM_CORES  ?= 1
 
 # Set USE_DIFFTEST_MAIN to 1 in your design's Makefile to generate Verilog by difftest
@@ -25,6 +25,7 @@ USE_DIFFTEST_MAIN ?= 0
 
 BUILD_DIR  = $(DESIGN_DIR)/build
 SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).v
+VCS_SIM_DIR = $(DESIGN_DIR)/sim
 
 DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
 SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)
@@ -67,7 +68,8 @@ DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 
 PLUGIN_CHEAD_DIR = $(abspath ./src/test/csrc/plugin/include)
 
-SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
+SIM_VSRC_DIR = $(shell pwd)/src/test/vsrc/common
+SIM_VSRC = $(shell find $(SIM_VSRC_DIR) -name "*.v" -or -name "*.sv")
 
 include verilator.mk
 include vcs.mk
