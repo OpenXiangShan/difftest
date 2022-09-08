@@ -58,7 +58,7 @@ initial begin
     else if (wave_type == "fsdb") begin
       $timeformat(-9,3,"ns",20);
       $display("Dumping FSDB Waveform for DEBUG is active !!!");
-      $fsdbAutoSwitchDumpfile(10000,"simv.fsdb",60);
+      $fsdbAutoSwitchDumpfile(10000,"tb_top.fsdb",60);
       $fsdbDumpfile("simv.fsdb");
       if ($test$plusargs("mda"))
         $fsdbDumpvars(0,"+mda");
