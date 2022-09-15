@@ -43,6 +43,7 @@ string flash_bin_file;
 string diff_ref_so;
 string wave_type;
 reg [31:0] max_cycles;
+reg verbose;
 
 initial begin
   clock = 0;
@@ -103,6 +104,13 @@ initial begin
   // disable diff-test
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
+  end
+  // enable verbose for cycleCnt
+  if ($test$plusargs("verbose")) begin
+    verbose = 1;
+  end
+  else begin
+    verbose = 0;
   end
   if ($test$plusargs("enable-jtag")) begin
     set_enable_jtag();
@@ -168,6 +176,19 @@ always @(posedge clock) begin
     end
   end
 
+end
+
+reg [63:0] cycle_count;
+always @(posedge clock) begin
+  if (reset) begin
+    cycle_count <= 64'h0;
+  end
+  else begin
+    cycle_count <= cycle_count + 64'h1;
+    if (verbose && cycle_count % 10000 == 0) begin
+      $display("cycle_count: %d", cycle_count);
+    end
+  end
 end
 
 endmodule
