@@ -31,7 +31,10 @@ extern "C" int jtag_tick
  unsigned char jtag_TDO
 )
 {
-  if (!enable_simjtag && !enable_jtag_testcase) return 0;
+  if (!enable_simjtag && !enable_jtag_testcase) {
+    *jtag_TCK = 0;
+    return 0;
+  }
   if (!jtag && enable_simjtag) {
     // TODO: Pass in real port number
     jtag = new remote_bitbang_t(23334);
