@@ -210,17 +210,6 @@ Emulator::Emulator(int argc, const char *argv[]):
   // init flash
   init_flash(args.flash_bin);
 
-  // init core
-  reset_ncycles(10);
-
-  // init ram
-  init_ram(args.image);
-
-#ifdef DEBUG_TILELINK
-  // init logger
-  init_logger(args.dump_tl);
-#endif
-
 #if VM_TRACE == 1
   enable_waveform = args.enable_waveform && !args.enable_fork;
   if (enable_waveform ) {
@@ -235,6 +224,17 @@ Emulator::Emulator(int argc, const char *argv[]):
       tfp->open(waveform_filename(now));	// Open the dump file
     }
   }
+#endif
+
+  // init core
+  reset_ncycles(10);
+
+  // init ram
+  init_ram(args.image);
+
+#ifdef DEBUG_TILELINK
+  // init logger
+  init_logger(args.dump_tl);
 #endif
 
 #ifdef VM_SAVABLE
