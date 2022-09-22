@@ -199,12 +199,8 @@ void ram_finish() {
 extern "C" uint64_t ram_read_helper(uint8_t en, uint64_t rIdx) {
   if (!ram)
     return 0;
-  if (en && rIdx >= EMU_RAM_SIZE / sizeof(uint64_t)) {
-    rIdx %= EMU_RAM_SIZE / sizeof(uint64_t);
-  }
-  pthread_mutex_lock(&ram_mutex);
+  rIdx %= EMU_RAM_SIZE / sizeof(uint64_t);
   uint64_t rdata = (en) ? ram[rIdx] : 0;
-  pthread_mutex_unlock(&ram_mutex);
   return rdata;
 }
 
@@ -212,11 +208,9 @@ extern "C" void ram_write_helper(uint64_t wIdx, uint64_t wdata, uint64_t wmask, 
   if (wen && ram) {
     if (wIdx >= EMU_RAM_SIZE / sizeof(uint64_t)) {
       printf("ERROR: ram wIdx = 0x%lx out of bound!\n", wIdx);
-      assert(wIdx < EMU_RAM_SIZE / sizeof(uint64_t));
+      return;
     }
-    pthread_mutex_lock(&ram_mutex);
     ram[wIdx] = (ram[wIdx] & ~wmask) | (wdata & wmask);
-    pthread_mutex_unlock(&ram_mutex);
   }
 }
 
@@ -359,7 +353,9 @@ void dramsim3_helper_rising(const axi_channel &axi) {
     uint64_t waddr = wait_resp_b->req->address % EMU_RAM_SIZE;
     dramsim3_meta *meta = static_cast<dramsim3_meta *>(wait_resp_b->req->meta);
     void *start_addr = ram + (waddr / sizeof(uint64_t));
-    memcpy(start_addr, meta->data, meta->len * meta->size);
+    if (waddr < EMU_RAM_SIZE) {
+      memcpy(start_addr, meta->data, meta->len * meta->size);
+    }
     for (int i = 0; i < meta->len; i++) {
     //   uint64_t address = wait_resp_b->req->address % EMU_RAM_SIZE;
     //   ram[address / sizeof(uint64_t) + i] = meta->data[i];
