@@ -47,7 +47,8 @@ VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
 VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
 
-VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L -lca -kdb -l vcs.log -top tb_top
+VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L -l vcs.log -top tb_top
+VCS_FLAGS += -fgp -lca -kdb
 # DiffTest
 VCS_FLAGS += +define+DIFFTEST
 # X prop
@@ -74,12 +75,12 @@ VCS_FLAGS += $(EXTRA)
 
 SIM_FLIST := $(shell pwd)/sim_flist.f
 $(VCS_RTL): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
-	$(shell if [ ! -e $(VCS_SIM_DIR)/rtl ];then mkdir -p $(VCS_SIM_DIR)/rtl; fi)
+	$(shell if [ ! -e $(VCS_SIM_DIR)/rtl/comp ];then mkdir -p $(VCS_SIM_DIR)/rtl/comp; fi)
 	$(shell find $(VCS_VSRC_DIR) -name "*.v" > $(SIM_FLIST))
 	$(shell find $(SIM_VSRC_DIR) -name "*.v" -or -name "*.sv" >> $(SIM_FLIST))
 	$(shell echo -f $(BUILD_DIR)/cpu_flist.f >> $(SIM_FLIST))
-	cp $(SIM_FLIST) $(VCS_SIM_DIR)/rtl
-	cd $(VCS_SIM_DIR)/rtl && vcs $(VCS_FLAGS) -f $(SIM_FLIST) $(VCS_CXXFILES)
+	cp $(SIM_FLIST) $(VCS_SIM_DIR)/rtl/comp
+	cd $(VCS_SIM_DIR)/rtl/comp && vcs $(VCS_FLAGS) -f $(SIM_FLIST) $(VCS_CXXFILES)
 
 vcs-clean:
 	rm -rf $(VCS_SIM_DIR) $(VCS_BUILD_DIR)
