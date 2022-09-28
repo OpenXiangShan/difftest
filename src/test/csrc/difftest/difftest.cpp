@@ -356,6 +356,8 @@ void Difftest::do_first_instr_commit() {
     }
 #endif
     printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
+    // Set skip to true to avoid the first instruction being executed once more by REF.
+    dut.commit[0].skip = 1;
     has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;
 
