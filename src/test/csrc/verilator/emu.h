@@ -91,7 +91,7 @@ private:
   VerilatedSaveMem snapshot_slot[2];
 #endif
   EmuArgs args;
-  LightSSS lightsss;
+  LightSSS *lightsss = NULL;
 
   enum {
     STATE_GOODTRAP = 0,
@@ -122,7 +122,7 @@ private:
   inline void save_coverage(time_t t);
 #endif
   void fork_child_init();
-  bool is_fork_child() { return lightsss.is_child(); }
+  inline bool is_fork_child() { return lightsss->is_child(); }
 
 public:
   Emulator(int argc, const char *argv[]);

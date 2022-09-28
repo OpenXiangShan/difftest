@@ -360,6 +360,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   if (args.enable_fork) {
     // Currently, runahead does not work well with fork based snapshot
     assert(!args.enable_runahead);
+    lightsss = new LightSSS;
     FORK_PRINTF("enable fork debugging...\n")
   }
 
@@ -371,12 +372,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
-    if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
-      FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
-    }
-    if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles() + STEP_FORWARD_CYCLES) {
-      trapCode = STATE_ABORT;
-      break;
+    if (args.enable_fork && is_fork_child() && cycles != 0) {
+      if (cycles == lightsss->get_end_cycles()) {
+        FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
+      }
+      if (cycles == lightsss->get_end_cycles() + STEP_FORWARD_CYCLES) {
+        trapCode = STATE_ABORT;
+        break;
+      }
     }
 
     if (!max_cycle) {
@@ -428,7 +431,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     trapCode = difftest_state();
     if (trapCode != STATE_RUNNING) {
       break;
-    } 
+    }
 
     if (args.enable_diff) {
       if (difftest_step()) {
@@ -473,7 +476,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       if (((timer - lasttime_snapshot > 1000 * FORK_INTERVAL) || !have_initial_fork) && !is_fork_child()) {
         have_initial_fork = true;
         lasttime_snapshot = timer;
-        switch (lightsss.do_fork()) {
+        switch (lightsss->do_fork()) {
           case FORK_ERROR: return -1;
           case WAIT_EXIT: exit(0);
           case WAIT_LAST: fork_child_init();
@@ -498,14 +501,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   if (args.enable_fork) {
     bool need_wakeup = trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED && trapCode != STATE_SIG;
     if (need_wakeup) {
-      lightsss.wakeup_child(cycles);
+      lightsss->wakeup_child(cycles);
     }
     printf("*************** ");
     printf("%s", is_fork_child() ? "CHECHPOINT" : "MAIN");
     printf(" INFO START (PID %d) ***************\n", getpid());
     //when reach maximum instruction, clear the checkpoint process
     if (!is_fork_child()) {
-      lightsss.do_clear();
+      lightsss->do_clear();
     }
   }
 
@@ -519,7 +522,7 @@ void parse_and_update_ramsize(const char* arg_ramsize_str) {
   char ram_size_unit[64];
   sscanf(arg_ramsize_str, "%ld%s", &ram_size_value, (char*) &ram_size_unit);
   assert(ram_size_value > 0);
-  
+
   if(!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")){
     EMU_RAM_SIZE = ram_size_value * 1024 * 1024 * 1024;
     return;
