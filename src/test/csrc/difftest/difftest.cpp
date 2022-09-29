@@ -357,7 +357,10 @@ void Difftest::do_first_instr_commit() {
 #endif
     printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
     // Set skip to true to avoid the first instruction being executed once more by REF.
+    // Also need to set rfwen and fpwen to false to avoid register file been overrided.
     dut.commit[0].skip = 1;
+    dut.commit[0].rfwen = 0;
+    dut.commit[0].fpwen = 0;
     has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;
 
@@ -402,7 +405,7 @@ int Difftest::do_store_check() {
 int Difftest::do_refill_check(int cacheid) {
   static uint64_t last_valid_addr = 0;
   char buf[512];
-  refill_event_t dut_refill = cacheid == DCACHEID ? dut.d_refill : dut.i_refill ;    
+  refill_event_t dut_refill = cacheid == DCACHEID ? dut.d_refill : dut.i_refill;
   const char* name = cacheid == DCACHEID ? "DCache" : "ICache";
   dut_refill.addr = dut_refill.addr - dut_refill.addr % 64;
   if (dut_refill.valid == 1 && dut_refill.addr != last_valid_addr) {
@@ -433,12 +436,12 @@ int Difftest::do_refill_check(int cacheid) {
 }
 
 int Difftest::do_irefill_check() {
-    return do_refill_check(ICACHEID);   
+  return do_refill_check(ICACHEID);
 }
 
 
 int Difftest::do_drefill_check() {
-    return do_refill_check(DCACHEID);   
+  return do_refill_check(DCACHEID);
 }
 
 
