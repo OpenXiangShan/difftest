@@ -278,14 +278,14 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     dut_ptr->clock = 0;
     dut_ptr->eval();
 #if VM_TRACE == 1
-    if (enable_waveform) {
+    if (enable_waveform && args.log_begin == 0) {
       tfp->dump(2 * i);
     }
 #endif
     dut_ptr->clock = 1;
     dut_ptr->eval();
 #if VM_TRACE == 1
-    if (enable_waveform) {
+    if (enable_waveform && args.log_begin == 0) {
       tfp->dump(2 * i + 1);
     }
 #endif
@@ -452,7 +452,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     trapCode = difftest_state();
     if (trapCode != STATE_RUNNING) {
       break;
-    } 
+    }
 
     if (args.enable_diff) {
       if (difftest_step()) {
