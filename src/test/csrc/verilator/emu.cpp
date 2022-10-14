@@ -301,16 +301,6 @@ inline void Emulator::single_cycle() {
   dut_ptr->clock = 0;
   dut_ptr->eval();
 
-#ifdef WITH_DRAMSIM3
-  axi_channel axi;
-  if (!dut_ptr->io_clock_div2) {
-    axi_copy_from_dut_ptr(dut_ptr, axi);
-    axi.aw.addr -= 0x2000000000UL;
-    axi.ar.addr -= 0x2000000000UL;
-    dramsim3_helper_rising(axi);
-  }
-#endif
-
 #if VM_TRACE == 1
   if (enable_waveform) {
     auto trap = difftest[0]->get_trap_event();
@@ -326,25 +316,7 @@ inline void Emulator::single_cycle() {
   dut_ptr->eval();
 
 #ifdef WITH_DRAMSIM3
-  if (dut_ptr->io_clock_div2) {
-    axi_copy_from_dut_ptr(dut_ptr, axi);
-    axi.aw.addr -= 0x2000000000UL;
-    axi.ar.addr -= 0x2000000000UL;
-    dramsim3_helper_falling(axi);
-    axi_set_dut_ptr(dut_ptr, axi);
-  }
-#endif
-
-#if VM_TRACE == 1
-  if (enable_waveform) {
-    auto trap = difftest[0]->get_trap_event();
-    uint64_t cycle = trap->cycleCnt;
-    uint64_t begin = dut_ptr->io_logCtrl_log_begin;
-    uint64_t end   = dut_ptr->io_logCtrl_log_end;
-    bool in_range  = (begin <= wave_ticks) && (wave_ticks <= end);
-    if (in_range || force_dump_wave) { tfp->dump(2 * wave_ticks + 1); }
-  }
-  wave_ticks++;
+  dramsim3_step();
 #endif
 
   if (dut_ptr->io_uart_out_valid) {

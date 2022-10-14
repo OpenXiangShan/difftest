@@ -35,11 +35,18 @@ uint64_t pmem_read(uint64_t raddr);
 void pmem_write(uint64_t waddr, uint64_t wdata);
 
 #ifdef WITH_DRAMSIM3
-#include "axi4.h"
 
+void dramsim3_init();
+void dramsim3_step();
 void dramsim3_finish();
-void dramsim3_helper_rising(const struct axi_channel &axi);
-void dramsim3_helper_falling(struct axi_channel &axi);
+
+extern "C" uint64_t memory_response(bool isWrite);
+extern "C" bool memory_request(uint64_t address, uint32_t id, bool isWrite);
+
+struct dramsim3_meta {
+  uint32_t id;
+};
+
 #endif
 
 #endif
