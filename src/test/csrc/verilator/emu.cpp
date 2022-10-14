@@ -285,14 +285,6 @@ inline void Emulator::single_cycle() {
   dut_ptr->clock = 0;
   dut_ptr->eval();
 
-#ifdef WITH_DRAMSIM3
-  axi_channel axi;
-  axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= PMEM_BASE;
-  axi.ar.addr -= PMEM_BASE;
-  dramsim3_helper_rising(axi);
-#endif
-
 #if VM_TRACE == 1
   if (enable_waveform) {
     auto trap = difftest[0]->get_trap_event();
@@ -308,11 +300,7 @@ inline void Emulator::single_cycle() {
   dut_ptr->eval();
 
 #ifdef WITH_DRAMSIM3
-  axi_copy_from_dut_ptr(dut_ptr, axi);
-  axi.aw.addr -= PMEM_BASE;
-  axi.ar.addr -= PMEM_BASE;
-  dramsim3_helper_falling(axi);
-  axi_set_dut_ptr(dut_ptr, axi);
+  dramsim3_step();
 #endif
 
   if (dut_ptr->io_uart_out_valid) {
@@ -428,7 +416,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     trapCode = difftest_state();
     if (trapCode != STATE_RUNNING) {
       break;
-    } 
+    }
 
     if (args.enable_diff) {
       if (difftest_step()) {
@@ -519,7 +507,7 @@ void parse_and_update_ramsize(const char* arg_ramsize_str) {
   char ram_size_unit[64];
   sscanf(arg_ramsize_str, "%ld%s", &ram_size_value, (char*) &ram_size_unit);
   assert(ram_size_value > 0);
-  
+
   if(!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")){
     EMU_RAM_SIZE = ram_size_value * 1024 * 1024 * 1024;
     return;
