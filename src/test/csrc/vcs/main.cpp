@@ -118,6 +118,10 @@ extern "C" int simv_step() {
     return trapCode + 1;
   }
 
+#ifdef WITH_DRAMSIM3
+  dramsim3_step();
+#endif
+
   if (enable_difftest) {
     int trapCode = difftest_step();
     return (trapCode == 0) ? trapCode : trapCode + 1;

@@ -16,34 +16,6 @@
 
 VCS_TARGET = simv
 
-VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
-VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
-VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
-VCS_CXXFLAGS += -DNUM_CORES=$(NUM_CORES)
-VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
-
-ifeq ($(RELEASE),1)
-VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
-VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
-endif
-
-# if fsdb is considered
-# CONSIDER_FSDB ?= 0
-ifeq ($(CONSIDER_FSDB),1)
-EXTRA = +define+CONSIDER_FSDB
-# if VERDI_HOME is not set automatically after 'module load', please set manually.
-ifndef VERDI_HOME
-$(error VERDI_HOME is not set. Try whereis verdi, abandon /bin/verdi and set VERID_HOME manually)
-else
-NOVAS_HOME = $(VERDI_HOME)
-NOVAS = $(NOVAS_HOME)/share/PLI/VCS/LINUX64
-EXTRA += -P $(NOVAS)/novas.tab $(NOVAS)/pli.a
-endif
-endif
-
-VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
-VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
-
 VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
 VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
 
@@ -66,13 +38,48 @@ VCS_FLAGS += -xprop
 # SRAM lib defines
 # VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
-VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
 # search build for other missing verilog files
 VCS_FLAGS += -y $(VCS_SEARCH_DIR) +libext+.v
 # build files put into $(VCS_BUILD_DIR)
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
-# enable fsdb dump
-VCS_FLAGS += $(EXTRA)
+
+VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
+VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
+
+VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
+VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
+VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
+VCS_CXXFLAGS += -DNUM_CORES=$(NUM_CORES)
+VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
+
+ifeq ($(RELEASE),1)
+VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
+VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
+endif
+
+# co-simulation with DRAMsim3
+ifeq ($(WITH_DRAMSIM3),1)
+VCS_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
+VCS_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
+# VCS_LDFLAGS  += $(DRAMSIM3_HOME)/build/libdramsim3.a
+VCS_FLAGS    += -syslib $(DRAMSIM3_HOME)/build/libdramsim3.a
+endif # WITH_DRAMSIM3
+
+# if fsdb is considered, enable fsdb dump
+CONSIDER_FSDB ?= 0
+ifeq ($(CONSIDER_FSDB),1)
+VCS_FLAGS += +define+CONSIDER_FSDB
+# if VERDI_HOME is not set automatically after 'module load', please set manually.
+ifndef VERDI_HOME
+$(error VERDI_HOME is not set. Try whereis verdi, abandon /bin/verdi and set VERID_HOME manually)
+else
+NOVAS_HOME = $(VERDI_HOME)
+NOVAS      = $(NOVAS_HOME)/share/PLI/VCS/LINUX64
+VCS_FLAGS += -P $(NOVAS)/novas.tab $(NOVAS)/pli.a
+endif # VERDI_HOME
+endif # CONSIDER_FSDB
+
+VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
 
 ifndef USE_RELEASE
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
