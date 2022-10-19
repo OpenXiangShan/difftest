@@ -221,9 +221,13 @@ Emulator::Emulator(int argc, const char *argv[]):
 
 #if VM_TRACE == 1
   enable_waveform = args.enable_waveform && !args.enable_fork;
-  if (enable_waveform ) {
+  if (enable_waveform) {
     Verilated::traceEverOn(true);	// Verilator must compute traced signals
+#ifdef ENABLE_FST
+    tfp = new VerilatedFstC;
+#else
     tfp = new VerilatedVcdC;
+#endif
     dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
     if (args.wave_path != NULL) {
       tfp->open(args.wave_path);
@@ -551,7 +555,11 @@ inline char* Emulator::logdb_filename(time_t t) {
 inline char* Emulator::waveform_filename(time_t t) {
   static char buf[1024];
   char *p = timestamp_filename(t, buf);
+#ifdef ENABLE_FST
+  strcpy(p, ".fst");
+#else
   strcpy(p, ".vcd");
+#endif
   printf("dump wave to %s...\n", buf);
   return buf;
 }
@@ -563,7 +571,11 @@ inline char* Emulator::cycle_wavefile(uint64_t cycles, time_t t) {
   char *noop_home = getenv("NOOP_HOME");
   assert(noop_home != NULL);
   int len = snprintf(buf, 1024, "%s/build/%s_%ld", noop_home, buf_time, cycles);
+#ifdef ENABLE_FST
+  strcpy(buf + len, ".fst");
+#else
   strcpy(buf + len, ".vcd");
+#endif
   FORK_PRINTF("dump wave to %s...\n", buf);
   return buf;
 }
@@ -737,7 +749,11 @@ void Emulator::fork_child_init() {
 #if VM_TRACE == 1
   //dump wave
   Verilated::traceEverOn(true);
+#ifdef ENABLE_FST
+  tfp = new VerilatedFstC;
+#else
   tfp = new VerilatedVcdC;
+#endif
   dut_ptr->trace(tfp, 99);
   time_t now = time(NULL);
   tfp->open(cycle_wavefile(cycles, now));
