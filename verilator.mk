@@ -57,8 +57,12 @@ endif
 
 # Verilator trace support
 EMU_TRACE ?=
-ifeq ($(EMU_TRACE),1)
+ifneq (,$(filter $(EMU_TRACE),1 vcd VCD))
 VEXTRA_FLAGS += --trace
+endif
+ifneq (,$(filter $(EMU_TRACE),fst FST))
+VEXTRA_FLAGS += --trace-fst
+EMU_CXXFLAGS += -DENABLE_FST
 endif
 
 # Verilator multi-thread support
