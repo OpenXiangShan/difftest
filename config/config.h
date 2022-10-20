@@ -82,7 +82,7 @@ extern unsigned long EMU_FLASH_SIZE;
 // -----------------------------------------------------------------------
 
 // time to fork a new checkpoint process
-#define FORK_INTERVAL 1 // unit: second
+#define FORK_INTERVAL 10 // unit: second
 
 // max number of checkpoint process at a time
 #define SLOT_SIZE 2
