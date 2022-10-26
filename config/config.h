@@ -31,7 +31,7 @@ extern unsigned long EMU_RAM_SIZE;
 
 // first valid instruction's address, difftest starts from this instruction
 #ifndef FIRST_INST_ADDRESS
-#define FIRST_INST_ADDRESS 0x10000000
+#define FIRST_INST_ADDRESS 0x80000000
 #endif
 
 // sdcard image to be used in simulation
