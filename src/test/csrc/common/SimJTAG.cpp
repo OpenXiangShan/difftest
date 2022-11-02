@@ -33,6 +33,7 @@ extern "C" int jtag_tick
 {
   if (!enable_simjtag && !enable_jtag_testcase) {
     *jtag_TCK = 0;
+    *jtag_TRSTn = 1;
     return 0;
   }
   if (!jtag && enable_simjtag) {
@@ -45,6 +46,7 @@ extern "C" int jtag_tick
   }
 
   if (enable_jtag_testcase) {
+    *jtag_TRSTn = 1;
     switch (cmd_ptr->status) {
     case CMD_DONE:
       register_cmd(cmd_ptr);
@@ -75,7 +77,7 @@ int jtag_pin_tick( unsigned char *tck_pin,
   *tck_pin = global_pin_buf.pin_buf_ptr->tck;
   *tms_pin = global_pin_buf.pin_buf_ptr->tms;
   *tdi_pin = global_pin_buf.pin_buf_ptr->tdi;
-  *trstn_pin = global_pin_buf.pin_buf_ptr->trst;
+  *trstn_pin = !global_pin_buf.pin_buf_ptr->trst;
   if (global_pin_buf.pin_buf_ptr->capture) {
       // read_val is written from high to low
       read_val |= ((uint64_t) tdo_pin & 0x1) << global_pin_buf.pos;
