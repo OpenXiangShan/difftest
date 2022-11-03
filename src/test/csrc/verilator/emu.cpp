@@ -725,12 +725,17 @@ void Emulator::snapshot_load(const char *filename) {
 
 void Emulator::fork_child_init() {
 #if EMU_THREAD > 1
+#ifdef VERILATOR_5_000
+  printf("Does not support verilator v5.0 now.\n");
+  exit(0);
+#else
 #ifdef VERILATOR_4_210
   dut_ptr->vlSymsp->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
 #else
   dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
-#endif
-#endif
+#endif // VERILATOR_4_210
+#endif // VERILATOR_5_000
+#endif // EMU_THREAD
   FORK_PRINTF("the oldest checkpoint start to dump wave and dump nemu log...\n")
 #if VM_TRACE == 1
   //dump wave
