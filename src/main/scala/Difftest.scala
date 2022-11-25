@@ -62,6 +62,11 @@ class DiffBasicInstrCommitIO extends DifftestBundle with DifftestWithIndex {
 class DiffInstrCommitIO extends DiffBasicInstrCommitIO {
   val pc       = Input(UInt(64.W))
   val instr    = Input(UInt(32.W))
+  val robIdx   = Input(UInt(10.W))
+  val lqIdx    = Input(UInt(7.W))
+  val sqIdx    = Input(UInt(7.W))
+  val isLoad   = Input(Bool())
+  val isStore  = Input(Bool())
 }
 
 class DiffBasicTrapEventIO extends DifftestBundle {

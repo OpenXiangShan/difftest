@@ -85,6 +85,11 @@ INTERFACE_INSTR_COMMIT {
     packet->fpwen    = fpwen;
     packet->wpdest   = wpdest;
     packet->wdest    = wdest;
+    packet->sqidx    = sqidx;
+    packet->lqidx    = lqidx;
+    packet->robidx   = robidx;
+    packet->isLoad   = isLoad;
+    packet->isStore  = isStore;
   }
 }
 
