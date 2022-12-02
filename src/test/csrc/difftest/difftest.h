@@ -74,6 +74,11 @@ typedef struct {
   uint8_t  fpwen;
   uint32_t wpdest;
   uint8_t  wdest;
+  uint8_t  lqidx;
+  uint8_t  sqidx;
+  uint16_t robidx;
+  uint8_t  isLoad;
+  uint8_t  isStore;
 } instr_commit_t;
 
 typedef struct {
@@ -226,6 +231,12 @@ enum retire_inst_type {
   RET_EXC
 };
 
+enum retire_mem_type {
+  RET_OTHER=0,
+  RET_LOAD,
+  RET_STORE
+};
+
 class DiffState {
 public:
   DiffState();
@@ -234,7 +245,7 @@ public:
     retire_group_cnt_queue[retire_group_pointer] = count;
     retire_group_pointer = (retire_group_pointer + 1) % DEBUG_GROUP_TRACE_SIZE;
   };
-  void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip) {
+  void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore, bool skip) {
     retire_inst_pc_queue   [retire_inst_pointer] = pc;
     retire_inst_inst_queue [retire_inst_pointer] = inst;
     retire_inst_wen_queue  [retire_inst_pointer] = en;
@@ -242,6 +253,10 @@ public:
     retire_inst_wdata_queue[retire_inst_pointer] = data;
     retire_inst_skip_queue[retire_inst_pointer] = skip;
     retire_inst_type_queue[retire_inst_pointer] = RET_NORMAL;
+    retire_inst_robidx_queue[retire_inst_pointer] = robidx;
+    retire_inst_lqidx_queue[retire_inst_pointer] = lqidx;
+    retire_inst_sqidx_queue[retire_inst_pointer] = sqidx;
+    retire_inst_mem_type_queue[retire_inst_pointer] = isLoad ? RET_LOAD : (isStore ? RET_STORE : RET_OTHER);
     retire_inst_pointer = (retire_inst_pointer + 1) % DEBUG_INST_TRACE_SIZE;
   };
   void record_abnormal_inst(uint64_t pc, uint32_t inst, uint32_t abnormal_type, uint64_t cause) {
@@ -265,6 +280,10 @@ private:
   uint32_t retire_inst_wdst_queue[DEBUG_INST_TRACE_SIZE] = {0};
   uint64_t retire_inst_wdata_queue[DEBUG_INST_TRACE_SIZE] = {0};
   uint32_t retire_inst_type_queue[DEBUG_INST_TRACE_SIZE] = {0};
+  uint16_t retire_inst_robidx_queue[DEBUG_INST_TRACE_SIZE] = {0};
+  uint8_t retire_inst_lqidx_queue[DEBUG_INST_TRACE_SIZE] = {0};
+  uint8_t retire_inst_sqidx_queue[DEBUG_INST_TRACE_SIZE] = {0};
+  enum retire_mem_type retire_inst_mem_type_queue[DEBUG_INST_TRACE_SIZE] = {RET_OTHER};
   bool retire_inst_skip_queue[DEBUG_INST_TRACE_SIZE] = {0};
 };
 

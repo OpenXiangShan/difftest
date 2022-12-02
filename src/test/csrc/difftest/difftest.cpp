@@ -230,7 +230,7 @@ void Difftest::do_instr_commit(int i) {
   uint64_t commit_pc = dut.commit[i].pc;
   uint64_t commit_instr = dut.commit[i].inst;
 #endif
-  state->record_inst(commit_pc, commit_instr, (dut.commit[i].rfwen | dut.commit[i].fpwen), dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0);
+  state->record_inst(commit_pc, commit_instr, (dut.commit[i].rfwen | dut.commit[i].fpwen), dut.commit[i].wdest, get_commit_data(i), dut.commit[i].lqidx, dut.commit[i].sqidx, dut.commit[i].robidx, dut.commit[i].isLoad, dut.commit[i].isStore, dut.commit[i].skip != 0);
 
 #ifdef DEBUG_MODE_DIFF
   int spike_invalid = test_spike();
@@ -640,10 +640,17 @@ void DiffState::display(int coreid) {
   for (int j = 0; j < DEBUG_INST_TRACE_SIZE; j++) {
     switch (retire_inst_type_queue[j]) {
       case RET_NORMAL:
-        printf("commit inst [%02d]: pc %010lx inst %08x wen %x dst %08x data %016lx%s",
+        printf("commit inst [%02d]: pc %010lx inst %08x wen %x dst %08x data %016lx robidx %06x%s",
             j, retire_inst_pc_queue[j], retire_inst_inst_queue[j],
             retire_inst_wen_queue[j] != 0, retire_inst_wdst_queue[j],
-            retire_inst_wdata_queue[j], retire_inst_skip_queue[j]?" (skip)":"");
+            retire_inst_wdata_queue[j], retire_inst_robidx_queue[j] , retire_inst_skip_queue[j]?" (skip)":"");
+        if(retire_inst_mem_type_queue[j] == RET_LOAD) {
+          printf(" lqidx %06x", retire_inst_lqidx_queue[j]);
+        }else if(retire_inst_mem_type_queue[j] == RET_STORE) {
+          printf(" sqidx %06x", retire_inst_sqidx_queue[j]);
+        }else {
+          printf("             ");
+        }
         break;
       case RET_EXC:
         printf("exception   [%02d]: pc %010lx inst %08x cause %016lx", j,
