@@ -126,6 +126,18 @@ INTERFACE_DM_STATE {
   packet->dscratch1 = dscratch1;
 }
 
+INTERFACE_V_STATE {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_vector_state();
+  packet->vstart = vstart;
+  packet->vxsat = vxsat;
+  packet->vxrm = vxrm;
+  packet->vcsr = vcsr;
+  packet->vl = vl;
+  packet->vtype = vtype;
+  packet->vlenb = vlenb;
+}
+
 INTERFACE_INT_WRITEBACK {
   RETURN_NO_NULL
   auto packet = difftest[coreid]->get_physical_reg_state();

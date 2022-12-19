@@ -37,7 +37,10 @@ static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "mtval", "stval", "mtvec", "stvec", "mode",
 #ifdef DEBUG_MODE_DIFF
   "debug mode", "dcsr", "dpc", "dscratch0", "dscratch1",
- #endif
+#endif
+#ifdef VECTOR_EXTENSION_DIFF
+  "vstart", "vxsat", "vxrm", "vcsr", "vl", "vtype", "vlenb",
+#endif
 };
 
 Difftest **difftest = NULL;

@@ -116,6 +116,16 @@ typedef struct __attribute__((packed)) {
   uint64_t dscratch1;
 } debug_mode_t;
 
+typedef struct __attribute__((packed)) {
+  uint64_t vstart;
+  uint64_t vxsat;
+  uint64_t vxrm;
+  uint64_t vcsr;
+  uint64_t vl;
+  uint64_t vtype;
+  uint64_t vlenb;
+} vector_extension_t;
+
 #ifndef DEBUG_MODE_DIFF
 const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t)) / sizeof(uint64_t);
 #else
@@ -210,6 +220,7 @@ typedef struct {
   arch_reg_state_t  regs;
   arch_csr_state_t  csr;
   debug_mode_t      dmregs;
+  vector_extension_t vregs;
   sbuffer_state_t   sbuffer[DIFFTEST_SBUFFER_RESP_WIDTH];
   store_event_t     store[DIFFTEST_STORE_WIDTH];
   load_event_t      load[DIFFTEST_COMMIT_WIDTH];
@@ -369,6 +380,9 @@ public:
   }
   inline debug_mode_t *get_debug_state() {
     return &(dut.dmregs);
+  }
+  inline vector_extension_t *get_vector_state() {
+    return &(dut.vregs);
   }
 
 #ifdef DEBUG_REFILL
