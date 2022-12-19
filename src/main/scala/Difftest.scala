@@ -110,6 +110,17 @@ class DiffDebugModeIO extends DifftestBundle {
   val dscratch1 = Input(UInt(64.W))
 }
 
+class DiffVectorModuleIO extends DifftestBundle {
+  val valid = Input(Bool())
+  val vstart = Input(UInt(64.W))
+  val vxsat = Input(UInt(64.W))
+  val vxrm = Input(UInt(64.W))
+  val vcsr = Input(UInt(64.W))
+  val vl = Input(UInt(64.W))
+  val vtype = Input(UInt(64.W))
+  val vlenb = Input(UInt(64.W))
+}
+
 class DiffIntWritebackIO extends DifftestBundle {
   val valid = Input(Bool())
   val dest  = Input(UInt(32.W))
@@ -300,6 +311,7 @@ class DifftestBasicTrapEvent extends DifftestBaseModule(new DiffBasicTrapEventIO
 class DifftestTrapEvent extends DifftestBaseModule(new DiffTrapEventIO)
 class DifftestCSRState extends DifftestBaseModule(new DiffCSRStateIO)
 class DifftestDebugMode extends DifftestBaseModule(new DiffDebugModeIO)
+class DifftestVectorState extends DifftestBaseModule(new DiffVectorModuleIO)
 class DifftestIntWriteback extends DifftestBaseModule(new DiffIntWritebackIO)
 class DifftestFpWriteback extends DifftestBaseModule(new DiffFpWritebackIO)
 class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegStateIO)

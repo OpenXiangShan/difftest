@@ -158,6 +158,20 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG dscratch1              \
   )
 
+// v_difftest_VectorExtension
+#define INTERFACE_V_STATE          \
+  DIFFTEST_DPIC_FUNC_DECL(VectorState) (\
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_LONG vstart,                \
+    DPIC_ARG_LONG vxsat,                 \
+    DPIC_ARG_LONG vxrm,                  \
+    DPIC_ARG_LONG vcsr,                  \
+    DPIC_ARG_LONG vl,                    \
+    DPIC_ARG_LONG vtype,                 \
+    DPIC_ARG_LONG vlenb                 \
+  )
+
 // v_difftest_IntWriteback
 #define INTERFACE_INT_WRITEBACK          \
   DIFFTEST_DPIC_FUNC_DECL(IntWriteback) (\
