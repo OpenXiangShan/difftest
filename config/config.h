@@ -169,6 +169,7 @@ extern unsigned long EMU_FLASH_SIZE;
 // make diff in debug mode available by copying debug mode mmio
 // currently only usable on spike
 //#define DEBUG_MODE_DIFF
+#define VECTOR_EXTENSION_DIFF 1
 
 #ifndef DEBUG_MEM_BASE
 #define DEBUG_MEM_BASE 0x38020000
