@@ -111,7 +111,6 @@ class DiffDebugModeIO extends DifftestBundle {
 }
 
 class DiffVectorModuleIO extends DifftestBundle {
-  val valid = Input(Bool())
   val vstart = Input(UInt(64.W))
   val vxsat = Input(UInt(64.W))
   val vxrm = Input(UInt(64.W))
