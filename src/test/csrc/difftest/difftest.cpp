@@ -36,11 +36,11 @@ static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "satp",
   "mip", "mie", "mscratch", "sscratch", "mideleg", "medeleg",
   "mtval", "stval", "mtvec", "stvec", "mode",
-#ifdef DEBUG_MODE_DIFF
-  "debug mode", "dcsr", "dpc", "dscratch0", "dscratch1",
-#endif
 #ifdef VECTOR_EXTENSION_DIFF
   "vstart", "vxsat", "vxrm", "vcsr", "vl", "vtype", "vlenb",
+#endif
+#ifdef DEBUG_MODE_DIFF
+  "debug mode", "dcsr", "dpc", "dscratch0", "dscratch1",
 #endif
 };
 
