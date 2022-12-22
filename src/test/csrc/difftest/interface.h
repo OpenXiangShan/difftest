@@ -162,7 +162,6 @@ extern "C" int v_difftest_step();
 #define INTERFACE_V_STATE          \
   DIFFTEST_DPIC_FUNC_DECL(VectorState) (\
     DPIC_ARG_BYTE coreid,                \
-    DPIC_ARG_BIT  valid,                 \
     DPIC_ARG_LONG vstart,                \
     DPIC_ARG_LONG vxsat,                 \
     DPIC_ARG_LONG vxrm,                  \
