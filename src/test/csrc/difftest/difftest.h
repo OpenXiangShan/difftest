@@ -87,6 +87,10 @@ typedef struct {
   uint64_t fpr[32];
 } arch_reg_state_t;
 
+typedef struct {
+  uint64_t vpr[64];
+} vec_reg_state_t;
+
 typedef struct __attribute__((packed)) {
   uint64_t this_pc;
   uint64_t mstatus;
@@ -128,11 +132,11 @@ typedef struct __attribute__((packed)) {
 } vector_extension_t;
 
 #if defined DEBUG_MODE_DIFF && defined VECTOR_EXTENSION_DIFF
-  const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(debug_mode_t) + sizeof(vector_extension_t)) / sizeof(uint64_t);
+  const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(debug_mode_t) + sizeof(vec_reg_state_t) + sizeof(vector_extension_t)) / sizeof(uint64_t);
 #elif defined DEBUG_MODE_DIFF
   const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(debug_mode_t)) / sizeof(uint64_t);
 #elif defined VECTOR_EXTENSION_DIFF
-  const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(vector_extension_t)) / sizeof(uint64_t);
+  const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t) + sizeof(vec_reg_state_t) + sizeof(vector_extension_t)) / sizeof(uint64_t);
 #else
   const int DIFFTEST_NR_REG = (sizeof(arch_reg_state_t) + sizeof(arch_csr_state_t)) / sizeof(uint64_t);
 #endif
@@ -237,7 +241,8 @@ typedef struct {
   instr_commit_t    commit[DIFFTEST_COMMIT_WIDTH];
   arch_reg_state_t  regs;
   arch_csr_state_t  csr;
-  vector_extension_t vregs;
+  vec_reg_state_t   vregs;
+  vector_extension_t vcsrs;
   debug_mode_t      dmregs;
   sbuffer_state_t   sbuffer[DIFFTEST_SBUFFER_RESP_WIDTH];
   store_event_t     store[DIFFTEST_STORE_WIDTH];
@@ -355,6 +360,9 @@ public:
   inline arch_reg_state_t *get_arch_reg_state() {
     return &(dut.regs);
   }
+  inline vec_reg_state_t *get_vec_reg_state() {
+    return &(dut.vregs);
+  }
   inline sbuffer_state_t *get_sbuffer_state(uint8_t index) {
     return &(dut.sbuffer[index]);
   }
@@ -406,7 +414,7 @@ public:
     return &(dut.dmregs);
   }
   inline vector_extension_t *get_vector_state() {
-    return &(dut.vregs);
+    return &(dut.vcsrs);
   }
 
 #ifdef DEBUG_REFILL
