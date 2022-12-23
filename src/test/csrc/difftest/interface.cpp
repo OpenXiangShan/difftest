@@ -183,6 +183,75 @@ INTERFACE_INT_REG_STATE {
   packet->gpr[31] = gpr_31;
 }
 
+INTERFACE_VEC_REG_STATE {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_vec_reg_state();
+  packet->vpr[ 0] = vpr_0;
+  packet->vpr[ 1] = vpr_1;
+  packet->vpr[ 2] = vpr_2;
+  packet->vpr[ 3] = vpr_3;
+  packet->vpr[ 4] = vpr_4;
+  packet->vpr[ 5] = vpr_5;
+  packet->vpr[ 6] = vpr_6;
+  packet->vpr[ 7] = vpr_7;
+  packet->vpr[ 8] = vpr_8;
+  packet->vpr[ 9] = vpr_9;
+  packet->vpr[10] = vpr_10;
+  packet->vpr[11] = vpr_11;
+  packet->vpr[12] = vpr_12;
+  packet->vpr[13] = vpr_13;
+  packet->vpr[14] = vpr_14;
+  packet->vpr[15] = vpr_15;
+  packet->vpr[16] = vpr_16;
+  packet->vpr[17] = vpr_17;
+  packet->vpr[18] = vpr_18;
+  packet->vpr[19] = vpr_19;
+  packet->vpr[20] = vpr_20;
+  packet->vpr[21] = vpr_21;
+  packet->vpr[22] = vpr_22;
+  packet->vpr[23] = vpr_23;
+  packet->vpr[24] = vpr_24;
+  packet->vpr[25] = vpr_25;
+  packet->vpr[26] = vpr_26;
+  packet->vpr[27] = vpr_27;
+  packet->vpr[28] = vpr_28;
+  packet->vpr[29] = vpr_29;
+  packet->vpr[30] = vpr_30;
+  packet->vpr[31] = vpr_31;
+  packet->vpr[32] = vpr_32;
+  packet->vpr[33] = vpr_33;
+  packet->vpr[34] = vpr_34;
+  packet->vpr[35] = vpr_35;
+  packet->vpr[36] = vpr_36;
+  packet->vpr[37] = vpr_37;
+  packet->vpr[38] = vpr_38;
+  packet->vpr[39] = vpr_39;
+  packet->vpr[40] = vpr_40;
+  packet->vpr[41] = vpr_41;
+  packet->vpr[42] = vpr_42;
+  packet->vpr[43] = vpr_43;
+  packet->vpr[44] = vpr_44;
+  packet->vpr[45] = vpr_45;
+  packet->vpr[46] = vpr_46;
+  packet->vpr[47] = vpr_47;
+  packet->vpr[48] = vpr_48;
+  packet->vpr[49] = vpr_49;
+  packet->vpr[50] = vpr_50;
+  packet->vpr[51] = vpr_51;
+  packet->vpr[52] = vpr_52;
+  packet->vpr[53] = vpr_53;
+  packet->vpr[54] = vpr_54;
+  packet->vpr[55] = vpr_55;
+  packet->vpr[56] = vpr_56;
+  packet->vpr[57] = vpr_57;
+  packet->vpr[58] = vpr_58;
+  packet->vpr[59] = vpr_59;
+  packet->vpr[60] = vpr_60;
+  packet->vpr[61] = vpr_61;
+  packet->vpr[62] = vpr_62;
+  packet->vpr[63] = vpr_63;
+}
+
 INTERFACE_FP_WRITEBACK {
   RETURN_NO_NULL
   auto packet = difftest[coreid]->get_physical_reg_state();

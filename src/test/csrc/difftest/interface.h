@@ -265,6 +265,75 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG fpr_31                 \
   )
 
+#define INTERFACE_VEC_REG_STATE           \
+  DIFFTEST_DPIC_FUNC_DECL(ArchVecRegState) ( \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_LONG vpr_0,                 \
+    DPIC_ARG_LONG vpr_1,                 \
+    DPIC_ARG_LONG vpr_2,                 \
+    DPIC_ARG_LONG vpr_3,                 \
+    DPIC_ARG_LONG vpr_4,                 \
+    DPIC_ARG_LONG vpr_5,                 \
+    DPIC_ARG_LONG vpr_6,                 \
+    DPIC_ARG_LONG vpr_7,                 \
+    DPIC_ARG_LONG vpr_8,                 \
+    DPIC_ARG_LONG vpr_9,                 \
+    DPIC_ARG_LONG vpr_10,                \
+    DPIC_ARG_LONG vpr_11,                \
+    DPIC_ARG_LONG vpr_12,                \
+    DPIC_ARG_LONG vpr_13,                \
+    DPIC_ARG_LONG vpr_14,                \
+    DPIC_ARG_LONG vpr_15,                \
+    DPIC_ARG_LONG vpr_16,                \
+    DPIC_ARG_LONG vpr_17,                \
+    DPIC_ARG_LONG vpr_18,                \
+    DPIC_ARG_LONG vpr_19,                \
+    DPIC_ARG_LONG vpr_20,                \
+    DPIC_ARG_LONG vpr_21,                \
+    DPIC_ARG_LONG vpr_22,                \
+    DPIC_ARG_LONG vpr_23,                \
+    DPIC_ARG_LONG vpr_24,                \
+    DPIC_ARG_LONG vpr_25,                \
+    DPIC_ARG_LONG vpr_26,                \
+    DPIC_ARG_LONG vpr_27,                \
+    DPIC_ARG_LONG vpr_28,                \
+    DPIC_ARG_LONG vpr_29,                \
+    DPIC_ARG_LONG vpr_30,                \
+    DPIC_ARG_LONG vpr_31,                \
+    DPIC_ARG_LONG vpr_32,                \
+    DPIC_ARG_LONG vpr_33,                \
+    DPIC_ARG_LONG vpr_34,                \
+    DPIC_ARG_LONG vpr_35,                \
+    DPIC_ARG_LONG vpr_36,                \
+    DPIC_ARG_LONG vpr_37,                \
+    DPIC_ARG_LONG vpr_38,                \
+    DPIC_ARG_LONG vpr_39,                \
+    DPIC_ARG_LONG vpr_40,                \
+    DPIC_ARG_LONG vpr_41,                \
+    DPIC_ARG_LONG vpr_42,                \
+    DPIC_ARG_LONG vpr_43,                \
+    DPIC_ARG_LONG vpr_44,                \
+    DPIC_ARG_LONG vpr_45,                \
+    DPIC_ARG_LONG vpr_46,                \
+    DPIC_ARG_LONG vpr_47,                \
+    DPIC_ARG_LONG vpr_48,                \
+    DPIC_ARG_LONG vpr_49,                \
+    DPIC_ARG_LONG vpr_50,                \
+    DPIC_ARG_LONG vpr_51,                \
+    DPIC_ARG_LONG vpr_52,                \
+    DPIC_ARG_LONG vpr_53,                \
+    DPIC_ARG_LONG vpr_54,                \
+    DPIC_ARG_LONG vpr_55,                \
+    DPIC_ARG_LONG vpr_56,                \
+    DPIC_ARG_LONG vpr_57,                \
+    DPIC_ARG_LONG vpr_58,                \
+    DPIC_ARG_LONG vpr_59,                \
+    DPIC_ARG_LONG vpr_60,                \
+    DPIC_ARG_LONG vpr_61,                \
+    DPIC_ARG_LONG vpr_62,                \
+    DPIC_ARG_LONG vpr_63                 \
+  )
+
 // v_difftest_SbufferEvent
 #define INTERFACE_SBUFFER_EVENT          \
   DIFFTEST_DPIC_FUNC_DECL(SbufferEvent) ( \
@@ -463,6 +532,8 @@ INTERFACE_INT_WRITEBACK;
 INTERFACE_INT_REG_STATE;
 INTERFACE_FP_WRITEBACK;
 INTERFACE_FP_REG_STATE;
+INTERFACE_VEC_REG_STATE;
+INTERFACE_V_STATE;
 INTERFACE_SBUFFER_EVENT;
 INTERFACE_STORE_EVENT;
 INTERFACE_LOAD_EVENT;

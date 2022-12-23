@@ -140,6 +140,10 @@ class DiffArchFpRegStateIO extends DifftestBundle {
   val fpr  = Input(Vec(32, UInt(64.W)))
 }
 
+class DiffArchVecRegStateIO extends DifftestBundle {
+  val vpr = Input(Vec(64, UInt(64.W)))
+}
+
 class DiffSbufferEventIO extends DifftestBundle with DifftestWithIndex{
   val sbufferResp = Input(Bool())
   val sbufferAddr = Input(UInt(64.W))
@@ -301,6 +305,7 @@ class DifftestIntWriteback extends DifftestBaseModule(new DiffIntWritebackIO)
 class DifftestFpWriteback extends DifftestBaseModule(new DiffFpWritebackIO)
 class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegStateIO)
 class DifftestArchFpRegState extends DifftestBaseModule(new DiffArchFpRegStateIO)
+class DifftestArchVecRegState extends DifftestBaseModule(new DiffArchVecRegStateIO)
 class DifftestSbufferEvent extends DifftestBaseModule(new DiffSbufferEventIO)
 class DifftestStoreEvent extends DifftestBaseModule(new DiffStoreEventIO)
 class DifftestLoadEvent extends DifftestBaseModule(new DiffLoadEventIO)
