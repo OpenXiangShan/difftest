@@ -41,10 +41,15 @@ EMU_CXXFLAGS += -DDIFF_PROXY=SpikeProxy -DFIRST_INST_ADDRESS=0x80000000
 endif
 
 # Verilator version check
-VERILATOR_4_210 := $(shell expr `verilator --version | cut -f3 -d.` \>= 210)
+VERILATOR_VER_CMD = verilator --version | cut -f2 -d' ' | tr -d '.'
+VERILATOR_4_210 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 4210)
 ifeq ($(VERILATOR_4_210),1)
 EMU_CXXFLAGS += -DVERILATOR_4_210
 VEXTRA_FLAGS += --instr-count-dpi 1
+endif
+VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000)
+ifeq ($(VERILATOR_5_000),1)
+VEXTRA_FLAGS += --no-timing
 endif
 
 # Verilator trace support
