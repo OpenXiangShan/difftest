@@ -16,6 +16,7 @@
 
 #include "ref.h"
 #include "ram.h"
+#include <goldenmem.h>
 
 typedef union PageTableEntry {
   struct {
@@ -41,7 +42,7 @@ extern "C" uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_
   PTE *pte_p = (PTE *)pte;
   for (*level = 0; *level < 3; (*level)++) {
     pte_addr = pg_base + VPNi(vpn, *level) * sizeof(uint64_t);
-    pte_p->val = pmem_read(pte_addr);
+    read_goldenmem(pte_addr, &pte_p->val, 8);
     pg_base = pte_p->ppn << 12;
     // pf
     if (!pte_p->v) {
