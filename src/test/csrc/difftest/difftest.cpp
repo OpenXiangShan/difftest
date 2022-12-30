@@ -516,7 +516,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, u
   return 0;
 }
 
-void dumpGoldenMem(char* banner, uint64_t addr, uint64_t time) {
+void dumpGoldenMem(const char* banner, uint64_t addr, uint64_t time) {
 #ifdef DEBUG_REFILL
   char buf[512];
   if (addr == 0) {

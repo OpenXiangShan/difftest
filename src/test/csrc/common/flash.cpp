@@ -87,6 +87,11 @@ void init_flash(const char *flash_bin) {
   }
   fseek(flash_fp, 0, SEEK_SET);
   int ret = fread(flash_base, flash_bin_size, 1, flash_fp);
-  assert(ret = 1);
+  assert(ret == 1);
   fclose(flash_fp);
+}
+
+void flash_finish() {
+  munmap(flash_base, EMU_FLASH_SIZE);
+  flash_base = NULL;
 }
