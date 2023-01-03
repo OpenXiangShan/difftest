@@ -32,6 +32,8 @@ typedef uint64_t word_t;
 extern uint8_t* pmem;
 
 void init_goldenmem();
+void goldenmem_finish();
+
 void update_goldenmem(paddr_t addr, void *data, uint64_t mask, int len);
 void read_goldenmem(paddr_t addr, void *data, uint64_t len);
 

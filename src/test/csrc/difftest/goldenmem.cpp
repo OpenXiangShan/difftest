@@ -20,9 +20,8 @@
 #include <time.h>
 #include "common.h"
 #include "compress.h"
+#include "ram.h"
 #include "refproxy.h"
-
-// #define DIFFTEST_STORE_COMMIT
 
 uint8_t *pmem;
 
@@ -33,10 +32,13 @@ void init_goldenmem() {
   if (pmem == (uint8_t *)MAP_FAILED) {
     printf("ERROR allocating physical memory. \n");
   }
-  void* get_img_start();
-  long get_img_size();
   nonzero_large_memcpy(pmem, get_img_start(), get_img_size());
   ref_misc_put_gmaddr(pmem);
+}
+
+void goldenmem_finish() {
+  munmap(pmem, PMEM_SIZE);
+  pmem = NULL;
 }
 
 void update_goldenmem(paddr_t addr, void *data, uint64_t mask, int len) {
@@ -74,16 +76,16 @@ static inline void pmem_write(paddr_t addr, word_t data, int len) {
 
   void *p = &pmem[addr - PMEM_BASE];
   switch (len) {
-    case 1: 
+    case 1:
       *(uint8_t  *)p = data;
       return;
-    case 2: 
+    case 2:
       *(uint16_t *)p = data;
       return;
-    case 4: 
+    case 4:
       *(uint32_t *)p = data;
       return;
-    case 8: 
+    case 8:
       *(uint64_t *)p = data;
       return;
     default: assert(0);

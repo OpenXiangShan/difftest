@@ -30,6 +30,7 @@ const char *difftest_ref_so = NULL;
   } while (0);
 
 NemuProxy::NemuProxy(int coreid, size_t ram_size = 0) {
+  bool use_given_diff = true;
   if (difftest_ref_so == NULL) {
     printf("--diff is not given, "
         "try to use $(" NEMU_ENV_VARIABLE ")/" NEMU_SO_FILENAME " by default\n");
@@ -43,11 +44,12 @@ NemuProxy::NemuProxy(int coreid, size_t ram_size = 0) {
     strcpy(buf, nemu_home);
     strcat(buf, so);
     difftest_ref_so = buf;
+    use_given_diff = false;
   }
 
   printf("NemuProxy using %s\n", difftest_ref_so);
 
-  void *handle = dlmopen(LM_ID_NEWLM, difftest_ref_so, RTLD_LAZY | RTLD_DEEPBIND);
+  handle = dlmopen(LM_ID_NEWLM, difftest_ref_so, RTLD_LAZY | RTLD_DEEPBIND);
   if(!handle){
     printf("%s\n", dlerror());
     assert(0);
@@ -114,7 +116,12 @@ NemuProxy::NemuProxy(int coreid, size_t ram_size = 0) {
     set_ramsize(ram_size); // set ram_size before nemu_init()
   }
 
-  nemu_init(); 
+  nemu_init();
+
+  if (!use_given_diff) {
+    free((void *)difftest_ref_so);
+    difftest_ref_so = nullptr;
+  }
 }
 
 void ref_misc_put_gmaddr(uint8_t* ptr) {
@@ -122,6 +129,7 @@ void ref_misc_put_gmaddr(uint8_t* ptr) {
 }
 
 SpikeProxy::SpikeProxy(int coreid, size_t ram_size = 0) {
+  bool use_given_diff = true;
   if (difftest_ref_so == NULL) {
     printf("--diff is not given, "
         "try to use $(" SPIKE_ENV_VARIABLE ")/" SPIKE_SO_FILENAME " by default\n");
@@ -135,6 +143,7 @@ SpikeProxy::SpikeProxy(int coreid, size_t ram_size = 0) {
     strcpy(buf, spike_home);
     strcat(buf, so);
     difftest_ref_so = buf;
+    use_given_diff = false;
   }
 
   printf("SpikeProxy using %s\n", difftest_ref_so);
@@ -209,4 +218,9 @@ SpikeProxy::SpikeProxy(int coreid, size_t ram_size = 0) {
   }
 
   spike_init(0);
+
+  if (!use_given_diff) {
+    free((void *)difftest_ref_so);
+    difftest_ref_so = nullptr;
+  }
 }

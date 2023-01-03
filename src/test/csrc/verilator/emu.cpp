@@ -256,6 +256,10 @@ Emulator::Emulator(int argc, const char *argv[]):
 Emulator::~Emulator() {
   ram_finish();
   assert_finish();
+  if (args.enable_diff) {
+    goldenmem_finish();
+  }
+  flash_finish();
 
 #ifdef VM_SAVABLE
   if (args.enable_snapshot && trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED) {
@@ -272,6 +276,12 @@ Emulator::~Emulator() {
     save_db(logdb_filename(now));
   }
 #endif
+
+  if (args.enable_jtag) {
+    delete jtag;
+  }
+
+  delete dut_ptr;
 }
 
 inline void Emulator::reset_ncycles(size_t cycles) {
@@ -501,6 +511,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     //when reach maximum instruction, clear the checkpoint process
     if (!is_fork_child()) {
       lightsss->do_clear();
+      delete lightsss;
     }
   }
 
