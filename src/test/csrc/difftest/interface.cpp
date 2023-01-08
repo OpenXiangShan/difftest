@@ -340,7 +340,7 @@ INTERFACE_PTW_EVENT {
 
 INTERFACE_REFILL_EVENT {
   RETURN_NO_NULL
-  // 0 for icache and 1 for dcache
+  // 0 for icache, 1 for dcache and 2 for page cache
   auto packet = difftest[coreid]->get_refill_event(cacheid);
   packet->valid = valid;
   if (packet->valid) {

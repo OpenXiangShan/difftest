@@ -116,7 +116,7 @@ int Difftest::step() {
   }
 
 #ifdef DEBUG_REFILL
-  if (do_irefill_check() || do_drefill_check() ) {
+  if (do_irefill_check() || do_drefill_check() || do_ptwrefill_check() ) {
     return 1;
   }
 #endif
@@ -398,8 +398,8 @@ int Difftest::do_store_check() {
 int Difftest::do_refill_check(int cacheid) {
   static uint64_t last_valid_addr = 0;
   char buf[512];
-  refill_event_t dut_refill = cacheid == DCACHEID ? dut.d_refill : dut.i_refill ;    
-  const char* name = cacheid == DCACHEID ? "DCache" : "ICache";
+  refill_event_t dut_refill = cacheid == PAGECACHEID ? dut.ptw_refill : cacheid == DCACHEID ? dut.d_refill : dut.i_refill ;
+  const char* name = cacheid == PAGECACHEID ? "PageCache" : cacheid == DCACHEID ? "DCache" : "ICache";
   dut_refill.addr = dut_refill.addr - dut_refill.addr % 64;
   if (dut_refill.valid == 1 && dut_refill.addr != last_valid_addr) {
     last_valid_addr = dut_refill.addr;
@@ -429,15 +429,16 @@ int Difftest::do_refill_check(int cacheid) {
 }
 
 int Difftest::do_irefill_check() {
-    return do_refill_check(ICACHEID);   
+    return do_refill_check(ICACHEID);
 }
-
 
 int Difftest::do_drefill_check() {
-    return do_refill_check(DCACHEID);   
+    return do_refill_check(DCACHEID);
 }
 
-
+int Difftest::do_ptwrefill_check() {
+    return do_refill_check(PAGECACHEID);
+}
 
 inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, uint64_t atomicMask, uint8_t atomicFuop, uint64_t atomicOut) {
   // We need to do atmoic operations here so as to update goldenMem

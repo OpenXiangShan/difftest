@@ -386,7 +386,7 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG data_5,                \
     DPIC_ARG_LONG data_6,                \
     DPIC_ARG_LONG data_7,                \
-    DPIC_ARG_BIT  cacheid                \
+    DPIC_ARG_BYTE cacheid                \
   )
 
 // v_difftest_RefillEvent
