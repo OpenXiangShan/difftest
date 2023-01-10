@@ -67,6 +67,7 @@ class DiffInstrCommitIO extends DiffBasicInstrCommitIO {
   val sqIdx    = Input(UInt(7.W))
   val isLoad   = Input(Bool())
   val isStore  = Input(Bool())
+  val isVsetFirst = Input(Bool())
 }
 
 class DiffBasicTrapEventIO extends DifftestBundle {

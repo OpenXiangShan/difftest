@@ -80,6 +80,7 @@ typedef struct {
   uint16_t robidx;
   uint8_t  isLoad;
   uint8_t  isStore;
+  uint8_t  isVsetFirst;
 } instr_commit_t;
 
 typedef struct {
