@@ -40,6 +40,7 @@ class DifftestTop extends Module {
     var difftest_ptw_event = Module(new DifftestPtwEvent);
     var difftest_irefill_event = Module(new DifftestRefillEvent);
     var difftest_drefill_event = Module(new DifftestRefillEvent);
+    var difftest_ptwrefill_event = Module(new DifftestRefillEvent);
     var difftest_lr_sc_event = Module(new DifftestLrScEvent);
     var difftest_runahead_event = Module(new DifftestRunaheadEvent);
     var difftest_runahead_commit_event = Module(new DifftestRunaheadCommitEvent);

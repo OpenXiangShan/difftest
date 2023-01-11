@@ -25,7 +25,7 @@
 enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 enum { REF_TO_DUT, DUT_TO_REF };
 enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
-enum { ICACHEID, DCACHEID };
+enum { ICACHEID, DCACHEID, PAGECACHEID };
 // DIFFTEST_TO_DUT ~ REF_TO_DUT ~ REF_TO_DIFFTEST
 // DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
 #define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
@@ -217,6 +217,7 @@ typedef struct {
   ptw_event_t       ptw;
   refill_event_t    d_refill;
   refill_event_t    i_refill;
+  refill_event_t    ptw_refill;
   lr_sc_evevnt_t    lrsc;
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
@@ -339,8 +340,9 @@ public:
   inline ptw_event_t *get_ptw_event() {
     return &(dut.ptw);
   }
-  inline refill_event_t *get_refill_event(bool dcache) {
-    if(dcache) return &(dut.d_refill);
+  inline refill_event_t *get_refill_event(uint8_t cacheid) {
+    if (cacheid == PAGECACHEID) return &(dut.ptw_refill);
+    else if(cacheid == DCACHEID) return &(dut.d_refill);
     return &(dut.i_refill);
   }
   inline lr_sc_evevnt_t *get_lr_sc_event() {
@@ -413,6 +415,7 @@ protected:
   int do_refill_check(int cacheid);
   int do_irefill_check();
   int do_drefill_check();
+  int do_ptwrefill_check();
   int do_golden_memory_update();
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }
