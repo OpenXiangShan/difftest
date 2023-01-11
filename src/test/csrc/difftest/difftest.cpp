@@ -156,8 +156,9 @@ int Difftest::step() {
   } else {
     // TODO: is this else necessary?
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut.commit[i].valid; i++) {
+      if(dut.commit[i].isVsetFirst) continue;
       do_instr_commit(i);
-      dut.commit[i].valid = 0;
+      // dut.commit[i].valid = 0;
       num_commit++;
       // TODO: let do_instr_commit return number of instructions in this uop
       if (dut.commit[i].fused) {
@@ -172,7 +173,15 @@ int Difftest::step() {
 
   proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
 
+  int isVsetHalf = 0;
   if (num_commit > 0) {
+    for(int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut.commit[i].valid; i++) {
+        
+        if(dut.commit[i].isVsetFirst) isVsetHalf ++;
+        if(dut.commit[i].wdest == 32) 
+          if(isVsetHalf > 0) isVsetHalf --;
+        dut.commit[i].valid = 0;
+      }
     state->record_group(dut.commit[0].pc, num_commit);
   }
 
@@ -186,6 +195,7 @@ int Difftest::step() {
     ref_regs_ptr[72] = dut_regs_ptr[72];
   }
 
+  if(isVsetHalf) return 0;
   if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
     display();
     for (int i = 0; i < DIFFTEST_NR_REG; i ++) {
