@@ -325,16 +325,17 @@ INTERFACE_ATOMIC_EVENT {
   }
 }
 
-INTERFACE_PTW_EVENT {
+INTERFACE_L2TLB_EVENT {
   RETURN_NO_NULL
-  auto packet = difftest[coreid]->get_ptw_event();
-  packet->resp = resp;
-  if (packet->resp) {
-    packet->addr = addr;
-    packet->data[0] = data_0;
-    packet->data[1] = data_1;
-    packet->data[2] = data_2;
-    packet->data[3] = data_3;
+  auto packet = difftest[coreid]->get_l2tlb_event(index);
+  packet->valid = valid;
+  if (packet->valid) {
+    packet->satp = satp;
+    packet->vpn = vpn;
+    packet->ppn = ppn;
+    packet->perm = perm;
+    packet->level = level;
+    packet->pf = pf;
   }
 }
 

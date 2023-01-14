@@ -19,6 +19,7 @@
 #include "ram.h"
 #include "flash.h"
 #include "spikedasm.h"
+#include "ref.h"
 
 static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "$0",  "ra",  "sp",   "gp",   "tp",  "t0",  "t1",   "t2",
@@ -117,6 +118,12 @@ int Difftest::step() {
 
 #ifdef DEBUG_REFILL
   if (do_irefill_check() || do_drefill_check() || do_ptwrefill_check() ) {
+    return 1;
+  }
+#endif
+
+#ifdef DEBUG_TLB
+  if (do_l1tlb_check() || do_l2tlb_check()) {
     return 1;
   }
 #endif
@@ -440,6 +447,40 @@ int Difftest::do_ptwrefill_check() {
     return do_refill_check(PAGECACHEID);
 }
 
+int Difftest::do_l1tlb_check() {
+    return 0; // TODO: implement it
+}
+
+int Difftest::do_l2tlb_check() {
+  for (int i = 0; i < DIFFTEST_PTW_WIDTH; i++) {
+    if (!dut.l2tlb[i].valid) {
+      return 0;
+    }
+
+    PTE pte;
+    uint64_t pg_base = dut.l2tlb[i].satp << 12;
+    uint64_t paddr;
+    uint8_t difftest_level;
+
+    for (difftest_level = 0; difftest_level < 3; difftest_level++) {
+      paddr = pg_base + VPNi(dut.l2tlb[i].vpn, difftest_level) * sizeof(uint64_t);
+      read_goldenmem(paddr, &pte.val, 8);
+      if (!pte.v || pte.r || pte.x) {
+        break;
+      }
+      pg_base = pte.ppn << 12;
+    }
+
+    if (pte.difftest_ppn != dut.l2tlb[i].ppn || pte.difftest_perm != dut.l2tlb[i].perm || difftest_level != dut.l2tlb[i].level || !pte.difftest_v != dut.l2tlb[i].pf) {
+      printf("L2TLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.l2tlb[i].vpn);
+      printf("  REF commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", pte.difftest_ppn, pte.difftest_perm, difftest_level, !pte.difftest_v);
+      printf("  DUT commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", dut.l2tlb[i].ppn, dut.l2tlb[i].perm, dut.l2tlb[i].level, dut.l2tlb[i].pf);
+      return 1;
+    }
+    return 0;
+  }
+}
+
 inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, uint64_t atomicMask, uint8_t atomicFuop, uint64_t atomicOut) {
   // We need to do atmoic operations here so as to update goldenMem
   if (!(atomicMask == 0xf || atomicMask == 0xf0 || atomicMask == 0xff)) {
@@ -613,8 +654,10 @@ void Difftest::clear_step() {
   for (int i = 0; i < DIFFTEST_COMMIT_WIDTH; i++) {
     dut.load[i].valid = 0;
   }
+  for (int i = 0; i < DIFFTEST_PTW_WIDTH; i++) {
+    dut.l2tlb[i].valid = 0;
+  }
   dut.atomic.resp = 0;
-  dut.ptw.resp = 0;
 }
 
 void Difftest::display() {

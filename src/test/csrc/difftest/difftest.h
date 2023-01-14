@@ -153,10 +153,14 @@ typedef struct {
 } atomic_event_t;
 
 typedef struct {
-  uint8_t  resp = 0;
-  uint64_t addr;
-  uint64_t data[4];
-} ptw_event_t;
+  uint8_t  valid = 0;
+  uint64_t satp;
+  uint64_t vpn;
+  uint64_t ppn;
+  uint8_t perm;
+  uint8_t level;
+  uint8_t pf;
+} l2tlb_event_t;
 
 typedef struct {
   uint8_t  valid = 0;
@@ -214,7 +218,7 @@ typedef struct {
   store_event_t     store[DIFFTEST_STORE_WIDTH];
   load_event_t      load[DIFFTEST_COMMIT_WIDTH];
   atomic_event_t    atomic;
-  ptw_event_t       ptw;
+  l2tlb_event_t     l2tlb[DIFFTEST_PTW_WIDTH];
   refill_event_t    d_refill;
   refill_event_t    i_refill;
   refill_event_t    ptw_refill;
@@ -337,8 +341,8 @@ public:
   inline atomic_event_t *get_atomic_event() {
     return &(dut.atomic);
   }
-  inline ptw_event_t *get_ptw_event() {
-    return &(dut.ptw);
+  inline l2tlb_event_t *get_l2tlb_event(uint8_t index) {
+    return &(dut.l2tlb[index]);
   }
   inline refill_event_t *get_refill_event(uint8_t cacheid) {
     if (cacheid == PAGECACHEID) return &(dut.ptw_refill);
@@ -416,6 +420,8 @@ protected:
   int do_irefill_check();
   int do_drefill_check();
   int do_ptwrefill_check();
+  int do_l1tlb_check();
+  int do_l2tlb_check();
   int do_golden_memory_update();
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }

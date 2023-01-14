@@ -160,10 +160,14 @@ class DiffAtomicEventIO extends DifftestBundle {
   val atomicOut  = Input(UInt(64.W))
 }
 
-class DiffPtwEventIO extends DifftestBundle {
-  val ptwResp = Input(Bool())
-  val ptwAddr = Input(UInt(64.W))
-  val ptwData = Input(Vec(4, UInt(64.W)))
+class DiffL2TLBEventIO extends DifftestBundle with DifftestWithIndex {
+  val valid = Input(Bool())
+  val satp = Input(UInt(64.W))
+  val vpn = Input(UInt(64.W))
+  val ppn = Input(UInt(64.W))
+  val perm = Input(UInt(8.W))
+  val level = Input(UInt(8.W))
+  val pf = Input(Bool())
 }
 
 class DiffRefillEventIO extends DifftestBundle {
@@ -294,7 +298,7 @@ class DifftestSbufferEvent extends DifftestBaseModule(new DiffSbufferEventIO)
 class DifftestStoreEvent extends DifftestBaseModule(new DiffStoreEventIO)
 class DifftestLoadEvent extends DifftestBaseModule(new DiffLoadEventIO)
 class DifftestAtomicEvent extends DifftestBaseModule(new DiffAtomicEventIO)
-class DifftestPtwEvent extends DifftestBaseModule(new DiffPtwEventIO)
+class DifftestL2TLBEvent extends DifftestBaseModule(new DiffL2TLBEventIO)
 class DifftestRefillEvent extends DifftestBaseModule(new DiffRefillEventIO)
 class DifftestLrScEvent extends DifftestBaseModule(new DiffLrScEventIO)
 class DifftestRunaheadEvent extends DifftestBaseModule(new DiffRunaheadEventIO)

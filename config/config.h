@@ -73,6 +73,9 @@ extern unsigned long EMU_FLASH_SIZE;
 // max store buffer resp width, for golden mem check
 #define DIFFTEST_SBUFFER_RESP_WIDTH 3
 
+// max ptw width
+#define DIFFTEST_PTW_WIDTH 2
+
 // commit inst history length
 #define DEBUG_INST_TRACE_SIZE 32
 
@@ -113,6 +116,9 @@ extern unsigned long EMU_FLASH_SIZE;
 
 // whether to check memory coherence during refilling
 #define DEBUG_REFILL
+
+// whether to check tlb response including l1tlb and l2tlb
+#define DEBUG_TLB
 
 // -----------------------------------------------------------------------
 // Simulator run ahead config
