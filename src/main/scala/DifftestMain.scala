@@ -37,6 +37,9 @@ class DifftestTop extends Module {
     var difftest_store_event = Module(new DifftestStoreEvent);
     var difftest_load_event = Module(new DifftestLoadEvent);
     var difftest_atomic_event = Module(new DifftestAtomicEvent);
+    var difftest_itlb_event = Module(new DifftestL1TLBEvent);
+    var difftest_ldtlb_event = Module(new DifftestL1TLBEvent);
+    var difftest_sttlb_event = Module(new DifftestL1TLBEvent);
     var difftest_l2tlb_event = Module(new DifftestL2TLBEvent);
     var difftest_irefill_event = Module(new DifftestRefillEvent);
     var difftest_drefill_event = Module(new DifftestRefillEvent);

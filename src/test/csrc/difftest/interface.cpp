@@ -325,6 +325,17 @@ INTERFACE_ATOMIC_EVENT {
   }
 }
 
+INTERFACE_L1TLB_EVENT {
+  RETURN_NO_NULL
+  auto packet = difftest[coreid]->get_l1tlb_event(l1tlbid, index);
+  packet->valid = valid;
+  if (packet->valid) {
+    packet->satp = satp;
+    packet->vpn = vpn;
+    packet->ppn = ppn;
+  }
+}
+
 INTERFACE_L2TLB_EVENT {
   RETURN_NO_NULL
   auto packet = difftest[coreid]->get_l2tlb_event(index);

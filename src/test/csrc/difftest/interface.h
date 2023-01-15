@@ -360,6 +360,18 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG out              \
   )
 
+// v_difftest_l1tlbEvent
+#define INTERFACE_L1TLB_EVENT            \
+  DIFFTEST_DPIC_FUNC_DECL(L1TLBEvent) (  \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BYTE index,                 \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_BYTE l1tlbid,               \
+    DPIC_ARG_LONG satp,                  \
+    DPIC_ARG_LONG vpn,                   \
+    DPIC_ARG_LONG ppn                    \
+  )
+
 // v_difftest_l2tlbEvent
 #define INTERFACE_L2TLB_EVENT            \
   DIFFTEST_DPIC_FUNC_DECL(L2TLBEvent) (  \
@@ -456,6 +468,7 @@ INTERFACE_SBUFFER_EVENT;
 INTERFACE_STORE_EVENT;
 INTERFACE_LOAD_EVENT;
 INTERFACE_ATOMIC_EVENT;
+INTERFACE_L1TLB_EVENT;
 INTERFACE_L2TLB_EVENT;
 INTERFACE_REFILL_EVENT;
 INTERFACE_LR_SC_EVENT;

@@ -122,8 +122,14 @@ int Difftest::step() {
   }
 #endif
 
-#ifdef DEBUG_TLB
-  if (do_l1tlb_check() || do_l2tlb_check()) {
+#ifdef DEBUG_L2TLB
+  if (do_l2tlb_check()) {
+    return 1;
+  }
+#endif
+
+#ifdef DEBUG_L1TLB
+  if (do_itlb_check() || do_ldtlb_check() || do_sttlb_check()) {
     return 1;
   }
 #endif
@@ -447,14 +453,104 @@ int Difftest::do_ptwrefill_check() {
     return do_refill_check(PAGECACHEID);
 }
 
-int Difftest::do_l1tlb_check() {
-    return 0; // TODO: implement it
+int Difftest::do_l1tlb_check(int l1tlbid) {
+
+  PTE pte;
+  uint64_t paddr;
+  uint8_t difftest_level;
+
+  if (l1tlbid == STTLBID) {
+    for (int i = 0; i < DIFFTEST_STTLB_WIDTH; i++) {
+      if (!dut.sttlb[i].valid) {
+        continue;
+      }
+
+      uint64_t pg_base = dut.sttlb[i].satp << 12;
+      for (difftest_level = 0; difftest_level < 3; difftest_level++) {
+        paddr = pg_base + VPNi(dut.sttlb[i].vpn, difftest_level) * sizeof(uint64_t);
+        read_goldenmem(paddr, &pte.val, 8);
+        if (!pte.v || pte.r || pte.x) {
+          break;
+        }
+        pg_base = pte.ppn << 12;
+      }
+
+      dut.sttlb[i].ppn = dut.sttlb[i].ppn >> (2 - difftest_level) * 9 << (2 - difftest_level) * 9;
+      if (pte.difftest_ppn != dut.sttlb[i].ppn ) {
+        printf("STTLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.sttlb[i].vpn);
+        printf("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut.sttlb[i].ppn);
+        return 1;
+      }
+    }
+    return 0;
+  }
+  if (l1tlbid == LDTLBID) {
+    for (int i = 0; i < DIFFTEST_LDTLB_WIDTH; i++) {
+      if (!dut.ldtlb[i].valid) {
+        continue;
+      }
+
+      uint64_t pg_base = dut.ldtlb[i].satp << 12;
+      for (difftest_level = 0; difftest_level < 3; difftest_level++) {
+        paddr = pg_base + VPNi(dut.ldtlb[i].vpn, difftest_level) * sizeof(uint64_t);
+        read_goldenmem(paddr, &pte.val, 8);
+        if (!pte.v || pte.r || pte.x) {
+          break;
+        }
+        pg_base = pte.ppn << 12;
+      }
+
+      dut.ldtlb[i].ppn = dut.ldtlb[i].ppn >> (2 - difftest_level) * 9 << (2 - difftest_level) * 9;
+      if (pte.difftest_ppn != dut.ldtlb[i].ppn ) {
+        printf("LDTLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.ldtlb[i].vpn);
+        printf("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut.ldtlb[i].ppn);
+        return 1;
+      }
+    }
+    return 0;
+  }
+  if (l1tlbid == ITLBID) {
+    for (int i = 0; i < DIFFTEST_ITLB_WIDTH; i++) {
+      if (!dut.itlb[i].valid) {
+        continue;
+      }
+      uint64_t pg_base = dut.itlb[i].satp << 12;
+      for (difftest_level = 0; difftest_level < 3; difftest_level++) {
+        paddr = pg_base + VPNi(dut.itlb[i].vpn, difftest_level) * sizeof(uint64_t);
+        read_goldenmem(paddr, &pte.val, 8);
+        if (!pte.v || pte.r || pte.x) {
+          break;
+        }
+        pg_base = pte.ppn << 12;
+      }
+
+      dut.itlb[i].ppn = dut.itlb[i].ppn >> (2 - difftest_level) * 9 << (2 - difftest_level) * 9;
+      if (pte.difftest_ppn != dut.itlb[i].ppn) {
+        printf("ITLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.itlb[i].vpn);
+        printf("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut.itlb[i].ppn);
+        return 1;
+      }
+    }
+    return 0;
+  }
+}
+
+int Difftest::do_itlb_check() {
+    return do_l1tlb_check(ITLBID);
+}
+
+int Difftest::do_ldtlb_check() {
+    return do_l1tlb_check(LDTLBID);
+}
+
+int Difftest::do_sttlb_check() {
+    return do_l1tlb_check(STTLBID);
 }
 
 int Difftest::do_l2tlb_check() {
   for (int i = 0; i < DIFFTEST_PTW_WIDTH; i++) {
     if (!dut.l2tlb[i].valid) {
-      return 0;
+      continue;
     }
 
     PTE pte;
@@ -477,8 +573,8 @@ int Difftest::do_l2tlb_check() {
       printf("  DUT commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", dut.l2tlb[i].ppn, dut.l2tlb[i].perm, dut.l2tlb[i].level, dut.l2tlb[i].pf);
       return 1;
     }
-    return 0;
   }
+  return 0;
 }
 
 inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, uint64_t atomicMask, uint8_t atomicFuop, uint64_t atomicOut) {
@@ -656,6 +752,15 @@ void Difftest::clear_step() {
   }
   for (int i = 0; i < DIFFTEST_PTW_WIDTH; i++) {
     dut.l2tlb[i].valid = 0;
+  }
+  for (int i = 0; i < DIFFTEST_ITLB_WIDTH; i++) {
+    dut.itlb[i].valid = 0;
+  }
+  for (int i = 0; i < DIFFTEST_LDTLB_WIDTH; i++) {
+    dut.ldtlb[i].valid = 0;
+  }
+  for (int i = 0; i < DIFFTEST_STTLB_WIDTH; i++) {
+    dut.sttlb[i].valid = 0;
   }
   dut.atomic.resp = 0;
 }
