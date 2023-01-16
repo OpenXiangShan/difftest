@@ -469,7 +469,7 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
       for (difftest_level = 0; difftest_level < 3; difftest_level++) {
         paddr = pg_base + VPNi(dut.sttlb[i].vpn, difftest_level) * sizeof(uint64_t);
         read_goldenmem(paddr, &pte.val, 8);
-        if (!pte.v || pte.r || pte.x) {
+        if (!pte.v || pte.r || pte.x || pte.w) {
           break;
         }
         pg_base = pte.ppn << 12;
@@ -494,7 +494,7 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
       for (difftest_level = 0; difftest_level < 3; difftest_level++) {
         paddr = pg_base + VPNi(dut.ldtlb[i].vpn, difftest_level) * sizeof(uint64_t);
         read_goldenmem(paddr, &pte.val, 8);
-        if (!pte.v || pte.r || pte.x) {
+        if (!pte.v || pte.r || pte.x || pte.w) {
           break;
         }
         pg_base = pte.ppn << 12;
@@ -518,7 +518,7 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
       for (difftest_level = 0; difftest_level < 3; difftest_level++) {
         paddr = pg_base + VPNi(dut.itlb[i].vpn, difftest_level) * sizeof(uint64_t);
         read_goldenmem(paddr, &pte.val, 8);
-        if (!pte.v || pte.r || pte.x) {
+        if (!pte.v || pte.r || pte.x || pte.w) {
           break;
         }
         pg_base = pte.ppn << 12;
@@ -561,13 +561,14 @@ int Difftest::do_l2tlb_check() {
     for (difftest_level = 0; difftest_level < 3; difftest_level++) {
       paddr = pg_base + VPNi(dut.l2tlb[i].vpn, difftest_level) * sizeof(uint64_t);
       read_goldenmem(paddr, &pte.val, 8);
-      if (!pte.v || pte.r || pte.x) {
+      if (!pte.v || pte.r || pte.x || pte.w) {
         break;
       }
       pg_base = pte.ppn << 12;
     }
 
-    if (pte.difftest_ppn != dut.l2tlb[i].ppn || pte.difftest_perm != dut.l2tlb[i].perm || difftest_level != dut.l2tlb[i].level || !pte.difftest_v != dut.l2tlb[i].pf) {
+    bool difftest_pf = !pte.v || (!pte.r && pte.w);
+    if (pte.difftest_ppn != dut.l2tlb[i].ppn || pte.difftest_perm != dut.l2tlb[i].perm || difftest_level != dut.l2tlb[i].level || difftest_pf != dut.l2tlb[i].pf) {
       printf("L2TLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.l2tlb[i].vpn);
       printf("  REF commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", pte.difftest_ppn, pte.difftest_perm, difftest_level, !pte.difftest_v);
       printf("  DUT commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", dut.l2tlb[i].ppn, dut.l2tlb[i].perm, dut.l2tlb[i].level, dut.l2tlb[i].pf);
