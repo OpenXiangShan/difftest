@@ -360,16 +360,30 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG out              \
   )
 
-// v_difftest_PtwEvent
-#define INTERFACE_PTW_EVENT              \
-  DIFFTEST_DPIC_FUNC_DECL(PtwEvent) (    \
+// v_difftest_l1tlbEvent
+#define INTERFACE_L1TLB_EVENT            \
+  DIFFTEST_DPIC_FUNC_DECL(L1TLBEvent) (  \
     DPIC_ARG_BYTE coreid,                \
-    DPIC_ARG_BIT  resp,                  \
-    DPIC_ARG_LONG addr,                  \
-    DPIC_ARG_LONG data_0,                \
-    DPIC_ARG_LONG data_1,                \
-    DPIC_ARG_LONG data_2,                \
-    DPIC_ARG_LONG data_3                 \
+    DPIC_ARG_BYTE index,                 \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_BYTE l1tlbid,               \
+    DPIC_ARG_LONG satp,                  \
+    DPIC_ARG_LONG vpn,                   \
+    DPIC_ARG_LONG ppn                    \
+  )
+
+// v_difftest_l2tlbEvent
+#define INTERFACE_L2TLB_EVENT            \
+  DIFFTEST_DPIC_FUNC_DECL(L2TLBEvent) (  \
+    DPIC_ARG_BYTE coreid,                \
+    DPIC_ARG_BYTE index,                 \
+    DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_LONG satp,                  \
+    DPIC_ARG_LONG vpn,                   \
+    DPIC_ARG_LONG ppn,                   \
+    DPIC_ARG_BYTE perm,                  \
+    DPIC_ARG_BYTE level,                 \
+    DPIC_ARG_BIT  pf                     \
   )
 
 // v_difftest_RefillEvent
@@ -454,7 +468,8 @@ INTERFACE_SBUFFER_EVENT;
 INTERFACE_STORE_EVENT;
 INTERFACE_LOAD_EVENT;
 INTERFACE_ATOMIC_EVENT;
-INTERFACE_PTW_EVENT;
+INTERFACE_L1TLB_EVENT;
+INTERFACE_L2TLB_EVENT;
 INTERFACE_REFILL_EVENT;
 INTERFACE_LR_SC_EVENT;
 INTERFACE_RUNAHEAD_EVENT;
