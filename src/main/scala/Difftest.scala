@@ -55,6 +55,8 @@ class DiffBasicInstrCommitIO extends DifftestBundle with DifftestWithIndex {
   val isRVC    = Input(Bool())
   val rfwen    = Input(Bool())
   val fpwen    = Input(Bool())
+  val vecwen   = Input(Bool())
+  val fpvecwen = Input(Bool())
   val wpdest   = Input(UInt(32.W))
   val wdest    = Input(UInt(8.W))
 }
