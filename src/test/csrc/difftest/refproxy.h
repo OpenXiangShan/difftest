@@ -38,6 +38,23 @@ public:
   void (*query)(void *result_buffer, uint64_t type) = NULL;
   void (*debug_mem_sync)(paddr_t addr, void *bytes, size_t size) = NULL;
   void (*load_flash_bin)(void *flash_bin, size_t size) = NULL;
+
+  // run ahead ones
+  void (*ahead_memcpy)(paddr_t nemu_addr, void *dut_buf, size_t n, bool direction) = NULL;
+  void (*ahead_regcpy)(void *dut, bool direction, bool restore, uint64_t restore_count) = NULL;
+  void (*ahead_csrcpy)(void *dut, bool direction) = NULL;
+  void (*ahead_uarchstatus_cpy)(void *dut, bool direction) = NULL;
+  int (*ahead_store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask) = NULL;
+  void (*ahead_exec)(uint64_t n) = NULL;
+  vaddr_t (*ahead_guided_exec)(void *disambiguate_para, uint64_t restore_count) = NULL;
+  vaddr_t (*ahead_update_config)(void *config) = NULL;
+  void (*ahead_raise_intr)(uint64_t no, uint64_t restore_count) = NULL;
+  void (*ahead_isa_reg_display)() = NULL;
+  void (*ahead_query)(void *result_buffer, uint64_t type) = NULL;
+  void (*ahead_debug_mem_sync)(paddr_t addr, void *bytes, size_t size) = NULL;
+  void (*ahead_load_flash_bin)(void *flash_bin, size_t size) = NULL;
+  void (*ahead_runahead_init)(void) = NULL;
+
 };
 
 #define NEMU_ENV_VARIABLE "NEMU_HOME"

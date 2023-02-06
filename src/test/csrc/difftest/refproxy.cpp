@@ -108,6 +108,59 @@ NemuProxy::NemuProxy(int coreid) {
   check_and_assert(nemu_init);
 
   nemu_init();
+
+  void *ahead_handle = dlopen("/nfs/home/chenguokai/NEMU_ahead/NEMU/build/riscv64-nemu-interpreter-so", RTLD_LAZY | RTLD_DEEPBIND);
+  if(!ahead_handle){
+    printf("%s\n", dlerror());
+    assert(0);
+  }
+
+  this->ahead_memcpy = (void (*)(paddr_t, void *, size_t, bool))dlsym(ahead_handle, "difftest_memcpy");
+  check_and_assert(this->ahead_memcpy);
+
+  ahead_regcpy = (void (*)(void *, bool, bool, uint64_t))dlsym(ahead_handle, "difftest_regcpy");
+  check_and_assert(ahead_regcpy);
+  
+  ahead_csrcpy = (void (*)(void *, bool))dlsym(ahead_handle, "difftest_csrcpy");
+  check_and_assert(ahead_csrcpy);
+
+  ahead_uarchstatus_cpy = (void (*)(void *, bool))dlsym(ahead_handle, "difftest_uarchstatus_cpy");
+  check_and_assert(ahead_uarchstatus_cpy);
+
+  ahead_exec = (void (*)(uint64_t))dlsym(ahead_handle, "difftest_exec");
+  check_and_assert(ahead_exec);
+
+  ahead_guided_exec = (vaddr_t (*)(void *, uint64_t))dlsym(ahead_handle, "difftest_guided_exec");
+  check_and_assert(ahead_guided_exec);
+
+  ahead_update_config = (vaddr_t (*)(void *))dlsym(ahead_handle, "update_dynamic_config");
+  check_and_assert(ahead_update_config);
+
+  ahead_store_commit = (int (*)(uint64_t*, uint64_t*, uint8_t*))dlsym(ahead_handle, "difftest_store_commit");
+  check_and_assert(ahead_store_commit);
+
+  ahead_raise_intr = (void (*)(uint64_t, uint64_t))dlsym(ahead_handle, "difftest_raise_intr");
+  check_and_assert(ahead_raise_intr);
+
+  ahead_isa_reg_display = (void (*)(void))dlsym(ahead_handle, "isa_reg_display");
+  check_and_assert(ahead_isa_reg_display);
+
+  ahead_load_flash_bin = (void (*)(void *ahead_flash_bin, size_t size))dlsym(ahead_handle, "difftest_load_flash");
+  check_and_assert(ahead_load_flash_bin);
+
+  auto ahead_nemu_difftest_set_mhartid = (void (*)(int))dlsym(ahead_handle, "difftest_set_mhartid");
+  if (NUM_CORES > 1) {
+    check_and_assert(ahead_nemu_difftest_set_mhartid);
+    ahead_nemu_difftest_set_mhartid(coreid);
+  }
+
+  auto ahead_nemu_init = (void (*)(void))dlsym(ahead_handle, "difftest_init");
+  check_and_assert(ahead_nemu_init);
+
+  ahead_runahead_init = (void (*)(void))dlsym(ahead_handle, "difftest_runahead_init");
+
+  ahead_nemu_init();
+
 }
 
 void ref_misc_put_gmaddr(uint8_t* ptr) {
