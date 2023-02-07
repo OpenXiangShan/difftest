@@ -161,9 +161,11 @@ int Difftest::step() {
       do_instr_commit(i);
       dut.commit[i].valid = 0;
       num_commit++;
+      ++total_commit;
       // TODO: let do_instr_commit return number of instructions in this uop
       if (dut.commit[i].fused) {
         num_commit++;
+        ++total_commit;
       }
     }
   }
@@ -205,6 +207,9 @@ int Difftest::step() {
 void Difftest::do_interrupt() {
   state->record_abnormal_inst(dut.event.exceptionPC, dut.event.exceptionInst, RET_INT, dut.event.interrupt);
   proxy->raise_intr(dut.event.interrupt | (1ULL << 63));
+  #ifdef LIGHTQS
+  proxy->ahead_raise_intr(dut.event.interrupt | (1ULL << 64), total_commit);
+  #endif // LIGHTQS
   progress = true;
 }
 
@@ -213,12 +218,24 @@ void Difftest::do_exception() {
   if (dut.event.exception == 12 || dut.event.exception == 13 || dut.event.exception == 15) {
     // printf("exception cause: %d\n", dut.event.exception);
     struct ExecutionGuide guide;
+    #ifdef LIGHTQS
+    struct ExecutionGuide ahead_guide;
+    #endif // LIGHTQS
     guide.force_raise_exception = true;
     guide.exception_num = dut.event.exception;
     guide.mtval = dut.csr.mtval;
     guide.stval = dut.csr.stval;
     guide.force_set_jump_target = false;
     proxy->guided_exec(&guide);
+
+    #ifdef LIGHTQS
+    ahead_guide.force_raise_exception = true;
+    ahead_guide.exception_num = dut.event.exception;
+    ahead_guide.mtval = dut.csr.mtval;
+    ahead_guide.stval = dut.csr.stval;
+    ahead_guide.force_set_jump_target = false;
+    proxy->ahead_guided_exec(&ahead_guide, total_commit);
+    #endif // LIGHTQS
   } else {
   #ifdef DEBUG_MODE_DIFF
     if(DEBUG_MEM_REGION(true, dut.event.exceptionPC)){
@@ -227,6 +244,9 @@ void Difftest::do_exception() {
     }
   #endif
     proxy->exec(1);
+    #ifdef LIGHTQS
+    proxy->ahead_exec(1);
+    #endif // LIGHTQS
   }
   progress = true;
 }
@@ -262,6 +282,9 @@ void Difftest::do_instr_commit(int i) {
     struct SyncState sync;
     sync.lrscValid = dut.lrsc.success;
     proxy->uarchstatus_cpy((uint64_t*)&sync, DUT_TO_REF); // sync lr/sc microarchitectural regs
+    #ifdef LIGHTQS
+    proxy->ahead_uarchstatus_cpy((uint64_t*)&sync, DUT_TO_REF, total_commit);
+    #endif // LIGHTQS
     // clear SC instruction valid bit
     dut.lrsc.valid = 0;
   }
@@ -279,6 +302,12 @@ void Difftest::do_instr_commit(int i) {
       ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
       // printf("Debug Mode? %x is ls? %x\n", DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc), IS_LOAD_STORE(dut.commit[i].inst));
       // printf("skip %x %x %x %x %x\n", dut.commit[i].pc, dut.commit[i].inst, get_commit_data(i), dut.commit[i].wpdest, dut.commit[i].wdest);
+      #ifdef LIGHTQS_DEBUG
+      printf("total commit %d, skip pc == %lx\n", total_commit, dut.commit[i].pc);
+      #endif // LIGHTQS_DEBUG
+      #ifdef LIGHTQS
+      proxy->ahead_regcpy(ref_regs_ptr, DIFFTEST_TO_REF, true, total_commit);
+      #endif // LIGHTQS
     }
     proxy->regcpy(ref_regs_ptr, DIFFTEST_TO_REF);
     return;
@@ -286,9 +315,16 @@ void Difftest::do_instr_commit(int i) {
 
   // single step exec
   proxy->exec(1);
+  #ifdef LIGHTQS
+  proxy->ahead_exec(1);
+  #endif // LIGHTQS
+  // printf("intentionally ahead exec\n");
   // when there's a fused instruction, let proxy execute one more instruction.
   if (dut.commit[i].fused) {
     proxy->exec(1);
+    #ifdef LIGHTQS
+    proxy->ahead_exec(1);
+    #endif // LIGHTQS
   }
 
   // Handle load instruction carefully for SMP
@@ -384,6 +420,15 @@ void Difftest::do_first_instr_commit() {
     // If this is main sim thread, simulator has its own initial config
     // If this process is checkpoint wakeuped, simulator's config has already been updated,
     // do not override it.
+
+
+    // run ahead part
+    #ifdef LIGHTQS
+    proxy->ahead_load_flash_bin(get_flash_path(), get_flash_size());
+    proxy->ahead_memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    proxy->ahead_regcpy(dut_regs_ptr, DIFFTEST_TO_REF, false, 0);
+    proxy->ahead_runahead_init();
+    #endif // LIGHTQS
   }
 }
 
