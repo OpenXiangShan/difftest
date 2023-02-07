@@ -57,6 +57,7 @@ struct EmuArgs {
   bool enable_jtag;
   bool enable_runahead;
   bool dump_db;
+  bool enable_ref_trace;
 
   EmuArgs() {
     seed = 0;
@@ -82,6 +83,7 @@ struct EmuArgs {
     enable_jtag = false;
     enable_runahead = false;
     dump_db = false;
+    enable_ref_trace = false;
   }
 };
 
