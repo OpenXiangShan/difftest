@@ -469,7 +469,7 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
       for (difftest_level = 0; difftest_level < 3; difftest_level++) {
         paddr = pg_base + VPNi(dut.sttlb[i].vpn, difftest_level) * sizeof(uint64_t);
         read_goldenmem(paddr, &pte.val, 8);
-        if (!pte.v || pte.r || pte.x || pte.w) {
+        if (!pte.v || pte.r || pte.x || pte.w || difftest_level == 2) {
           break;
         }
         pg_base = pte.ppn << 12;
@@ -494,7 +494,7 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
       for (difftest_level = 0; difftest_level < 3; difftest_level++) {
         paddr = pg_base + VPNi(dut.ldtlb[i].vpn, difftest_level) * sizeof(uint64_t);
         read_goldenmem(paddr, &pte.val, 8);
-        if (!pte.v || pte.r || pte.x || pte.w) {
+        if (!pte.v || pte.r || pte.x || pte.w || difftest_level == 2) {
           break;
         }
         pg_base = pte.ppn << 12;
@@ -518,7 +518,7 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
       for (difftest_level = 0; difftest_level < 3; difftest_level++) {
         paddr = pg_base + VPNi(dut.itlb[i].vpn, difftest_level) * sizeof(uint64_t);
         read_goldenmem(paddr, &pte.val, 8);
-        if (!pte.v || pte.r || pte.x || pte.w) {
+        if (!pte.v || pte.r || pte.x || pte.w || difftest_level == 2) {
           break;
         }
         pg_base = pte.ppn << 12;
@@ -561,7 +561,7 @@ int Difftest::do_l2tlb_check() {
     for (difftest_level = 0; difftest_level < 3; difftest_level++) {
       paddr = pg_base + VPNi(dut.l2tlb[i].vpn, difftest_level) * sizeof(uint64_t);
       read_goldenmem(paddr, &pte.val, 8);
-      if (!pte.v || pte.r || pte.x || pte.w) {
+      if (!pte.v || pte.r || pte.x || pte.w || difftest_level == 2) {
         break;
       }
       pg_base = pte.ppn << 12;
