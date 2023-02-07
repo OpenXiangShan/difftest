@@ -272,7 +272,7 @@ void Difftest::do_instr_commit(int i) {
       ref_regs_ptr[dut.commit[i].wdest] = get_commit_data(i);
       // printf("Debug Mode? %x is ls? %x\n", DEBUG_MEM_REGION(dut.commit[i].valid, dut.commit[i].pc), IS_LOAD_STORE(dut.commit[i].inst));
       // printf("skip %x %x %x %x %x\n", dut.commit[i].pc, dut.commit[i].inst, get_commit_data(i), dut.commit[i].wpdest, dut.commit[i].wdest);
-      printf("total commit %d\n", total_commit);
+      printf("total commit %d, skip pc == %lx\n", total_commit, dut.commit[i].pc);
       proxy->ahead_regcpy(ref_regs_ptr, DIFFTEST_TO_REF, true, total_commit);
     }
     proxy->regcpy(ref_regs_ptr, DIFFTEST_TO_REF);
@@ -282,7 +282,7 @@ void Difftest::do_instr_commit(int i) {
   // single step exec
   proxy->exec(1);
   proxy->ahead_exec(1);
-  printf("intentionally ahead exec");
+  printf("intentionally ahead exec\n");
   // when there's a fused instruction, let proxy execute one more instruction.
   if (dut.commit[i].fused) {
     proxy->exec(1);
