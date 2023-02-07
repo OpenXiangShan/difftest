@@ -33,7 +33,7 @@
 
 // first valid instruction's address, difftest starts from this instruction
 #ifndef FIRST_INST_ADDRESS
-#define FIRST_INST_ADDRESS 0x10000000UL
+#define FIRST_INST_ADDRESS 0x80000000UL
 #endif
 
 // sdcard image to be used in simulation
