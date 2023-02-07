@@ -25,7 +25,8 @@
 enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 enum { REF_TO_DUT, DUT_TO_REF };
 enum { REF_TO_DIFFTEST, DUT_TO_DIFFTEST };
-enum { ICACHEID, DCACHEID };
+enum { ICACHEID, DCACHEID, PAGECACHEID };
+enum { ITLBID, LDTLBID, STTLBID};
 // DIFFTEST_TO_DUT ~ REF_TO_DUT ~ REF_TO_DIFFTEST
 // DIFFTEST_TO_REF ~ DUT_TO_REF ~ DUT_TO_DIFFTEST
 #define CP printf("%s: %d\n", __FILE__, __LINE__);fflush( stdout );
@@ -174,10 +175,21 @@ typedef struct {
 } atomic_event_t;
 
 typedef struct {
-  uint8_t  resp = 0;
-  uint64_t addr;
-  uint64_t data[4];
-} ptw_event_t;
+  uint8_t  valid = 0;
+  uint64_t satp;
+  uint64_t vpn;
+  uint64_t ppn;
+} l1tlb_event_t;
+
+typedef struct {
+  uint8_t  valid = 0;
+  uint64_t satp;
+  uint64_t vpn;
+  uint64_t ppn;
+  uint8_t perm;
+  uint8_t level;
+  uint8_t pf;
+} l2tlb_event_t;
 
 typedef struct {
   uint8_t  valid = 0;
@@ -237,9 +249,13 @@ typedef struct {
   store_event_t     store[DIFFTEST_STORE_WIDTH];
   load_event_t      load[DIFFTEST_COMMIT_WIDTH];
   atomic_event_t    atomic;
-  ptw_event_t       ptw;
+  l1tlb_event_t     itlb[DIFFTEST_ITLB_WIDTH];
+  l1tlb_event_t     ldtlb[DIFFTEST_LDTLB_WIDTH];
+  l1tlb_event_t     sttlb[DIFFTEST_STTLB_WIDTH];
+  l2tlb_event_t     l2tlb[DIFFTEST_PTW_WIDTH];
   refill_event_t    d_refill;
   refill_event_t    i_refill;
+  refill_event_t    ptw_refill;
   lr_sc_evevnt_t    lrsc;
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
@@ -362,11 +378,17 @@ public:
   inline atomic_event_t *get_atomic_event() {
     return &(dut.atomic);
   }
-  inline ptw_event_t *get_ptw_event() {
-    return &(dut.ptw);
+  inline l1tlb_event_t *get_l1tlb_event(uint8_t l1tlbid, uint8_t index) {
+    if (l1tlbid == STTLBID) return &(dut.sttlb[index]);
+    else if(l1tlbid == LDTLBID) return &(dut.ldtlb[index]);
+    return &(dut.itlb[index]);
   }
-  inline refill_event_t *get_refill_event(bool dcache) {
-    if(dcache) return &(dut.d_refill);
+  inline l2tlb_event_t *get_l2tlb_event(uint8_t index) {
+    return &(dut.l2tlb[index]);
+  }
+  inline refill_event_t *get_refill_event(uint8_t cacheid) {
+    if (cacheid == PAGECACHEID) return &(dut.ptw_refill);
+    else if(cacheid == DCACHEID) return &(dut.d_refill);
     return &(dut.i_refill);
   }
   inline lr_sc_evevnt_t *get_lr_sc_event() {
@@ -442,6 +464,12 @@ protected:
   int do_refill_check(int cacheid);
   int do_irefill_check();
   int do_drefill_check();
+  int do_ptwrefill_check();
+  int do_l1tlb_check(int l1tlbid);
+  int do_itlb_check();
+  int do_ldtlb_check();
+  int do_sttlb_check();
+  int do_l2tlb_check();
   int do_golden_memory_update();
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }
