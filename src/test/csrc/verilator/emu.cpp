@@ -219,6 +219,11 @@ Emulator::Emulator(int argc, const char *argv[]):
   init_db(args.dump_db);
 #endif
 
+#ifdef ENABLE_CONSTANTIN
+  void constantinLoad();
+  constantinLoad();
+#endif // CONSTANTIN
+
 #if VM_TRACE == 1
   enable_waveform = args.enable_waveform && !args.enable_fork;
   if (enable_waveform) {

@@ -30,6 +30,13 @@ EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
 else
 CHISELDB_EXTRA_ARG =
 endif
+ifeq ($(WITH_CONSTANTIN), 1)
+CONSTANTIN_SRC = $(BUILD_DIR)/constantin.cxx
+EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
+else
+CONSTANTIN_SRC =
+endif
+
 
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
 EMU_CXX_EXTRA_FLAGS ?=
@@ -131,7 +138,7 @@ $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
-		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS) $(CHISELDB_EXTRA_ARG)
+		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS) $(CHISELDB_EXTRA_ARG) $(CONSTANTIN_SRC)
 	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
 	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
 	find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
