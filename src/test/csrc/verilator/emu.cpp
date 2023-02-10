@@ -68,6 +68,7 @@ static inline void print_help(const char *file) {
 #endif
   printf("      --flash                the flash bin file for simulation\n");
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
+  printf("      --ref-trace            print reference trace\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
@@ -94,9 +95,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "wave-path",         1, NULL,  0  },
     { "ram-size",          1, NULL,  0  },
     { "sim-run-ahead",     0, NULL,  0  },
-#ifdef ENABLE_CHISEL_DB
     { "dump-db",           0, NULL,  0  },
-#endif
+    { "ref-trace",         0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -143,6 +143,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] chisel db is not enabled at compile time, ignore --dump-db\n");
 #endif
             continue;
+          case 12: args.enable_ref_trace = true; continue;
         }
         // fall through
       default:
@@ -364,6 +365,16 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     assert(!args.enable_runahead);
     lightsss = new LightSSS;
     FORK_PRINTF("enable fork debugging...\n")
+  }
+
+  // if ref trace is enabled in co-sim args
+  // let simulator print debug info
+  if (args.enable_ref_trace) {
+    DynamicSimulatorConfig nemu_config;
+    nemu_config.debug_difftest = true;
+    for (int i = 0; i < NUM_CORES; i++) {
+      difftest[i]->proxy->update_config(&nemu_config);
+    }
   }
 
 #if VM_COVERAGE == 1
