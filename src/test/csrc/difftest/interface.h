@@ -99,11 +99,11 @@ extern "C" int v_difftest_step();
     DPIC_ARG_LONG pc,                    \
     DPIC_ARG_INT  instr,                 \
     DPIC_ARG_INT  robidx,                \
+    DPIC_ARG_INT  uopidx,                \
     DPIC_ARG_BYTE lqidx,                 \
     DPIC_ARG_BYTE sqidx,                 \
     DPIC_ARG_BIT  isLoad,                \
-    DPIC_ARG_BIT  isStore,               \
-    DPIC_ARG_BIT  isVsetFirst            \
+    DPIC_ARG_BIT  isStore                \
   )
 
 // v_difftest_BasicTrapEvent
