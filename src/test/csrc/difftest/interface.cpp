@@ -92,9 +92,9 @@ INTERFACE_INSTR_COMMIT {
     packet->sqidx    = sqidx;
     packet->lqidx    = lqidx;
     packet->robidx   = robidx;
+    packet->uopidx   = uopidx;
     packet->isLoad   = isLoad;
     packet->isStore  = isStore;
-    packet->isVsetFirst = isVsetFirst;
   }
 }
 
