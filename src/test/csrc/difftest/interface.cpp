@@ -70,6 +70,7 @@ INTERFACE_BASIC_INSTR_COMMIT {
     packet->fpvecwen = fpvecwen;
     packet->wpdest   = wpdest;
     packet->wdest    = wdest;
+    packet->uopidx   = uopidx;
   }
 }
 
