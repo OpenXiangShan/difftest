@@ -78,7 +78,8 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BIT  vecwen,                \
     DPIC_ARG_BIT  fpvecwen,              \
     DPIC_ARG_BYTE wpdest,                \
-    DPIC_ARG_BYTE wdest                  \
+    DPIC_ARG_BYTE wdest,                 \
+    DPIC_ARG_BYTE uopidx                \
   )
 
 // v_difftest_InstrCommit
@@ -96,10 +97,10 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BIT  fpvecwen,              \
     DPIC_ARG_INT  wpdest,                \
     DPIC_ARG_BYTE wdest,                 \
+    DPIC_ARG_BYTE uopidx,                \
     DPIC_ARG_LONG pc,                    \
     DPIC_ARG_INT  instr,                 \
     DPIC_ARG_INT  robidx,                \
-    DPIC_ARG_INT  uopidx,                \
     DPIC_ARG_BYTE lqidx,                 \
     DPIC_ARG_BYTE sqidx,                 \
     DPIC_ARG_BIT  isLoad,                \
