@@ -149,7 +149,48 @@ void init_ram(const char *img) {
 #endif
 
   int ret;
-  if (isGzFile(img)) {
+  char imgs[2][1024];
+  int i = 0;
+  while(img[i]!=' '){
+    imgs[0][i]=img[i];
+    i++;
+  }
+  imgs[0][i++]='\0';
+  printf("The image 1 is %s\n", imgs[0]);
+  int j = 0;
+  while(img[i]!='\0'){
+    imgs[1][j]=img[i];
+    i++;j++;
+  }
+  imgs[1][j]='\0';
+  printf("The image 2 is %s\n", imgs[1]);
+
+  for (int i = 0; i < 2; i++){
+    if (isGzFile(imgs[i])) {
+      printf("Gzip file detected and loading image from extracted gz file\n");
+      img_size = readFromGz(ram+0x40000000*i, imgs[i], EMU_RAM_SIZE/2, LOAD_RAM);
+      assert(img_size >= 0);
+    }else{
+      FILE *fp = fopen(imgs[i], "rb");
+      if (fp == NULL) {
+        printf("Can not open '%s'\n", imgs[i]);
+        assert(0);
+      }
+
+      fseek(fp, 0, SEEK_END);
+      img_size = ftell(fp);
+      if (img_size > EMU_RAM_SIZE) {
+        img_size = EMU_RAM_SIZE;
+      }
+
+      fseek(fp, 0, SEEK_SET);
+      ret = fread(ram+0x40000000*i, img_size, 1, fp);    //ram: uint64, ar_address: byte -> nohype_offset 0x20000000/8
+
+      assert(ret == 1);
+      fclose(fp);
+    }
+  }
+  /*if (isGzFile(img)) {
     printf("Gzip file detected and loading image from extracted gz file\n");
     img_size = readFromGz(ram, img, EMU_RAM_SIZE, LOAD_RAM);
     assert(img_size >= 0);
@@ -172,7 +213,7 @@ void init_ram(const char *img) {
 
     assert(ret == 1);
     fclose(fp);
-  }
+  }*/
 
 #ifdef WITH_DRAMSIM3
   #if !defined(DRAMSIM3_CONFIG) || !defined(DRAMSIM3_OUTDIR)

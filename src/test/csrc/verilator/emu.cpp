@@ -35,7 +35,8 @@
 #include "remote_bitbang.h"
 
 extern remote_bitbang_t * jtag;
-
+static FILE *core0_io_fp;
+static FILE *core1_io_fp;
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
   if (strspn(str, " +-0123456789") != strlen(str)) {
@@ -73,6 +74,7 @@ static inline void print_help(const char *file) {
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
+  printf("      --waymask=NUM          implement cache way partition with waymask\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -95,6 +97,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #ifdef DEBUG_TILELINK
     { "dump-tl",           0, NULL,  0  },
 #endif
+    { "waymask",           1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -140,6 +143,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] debug tilelink is not enabled at compile time, ignore --dump-tl\n");
 #endif
             continue;
+          case 11: args.waymask = atoll(optarg); continue;
         }
         // fall through
       default:
@@ -310,14 +314,24 @@ inline void Emulator::single_cycle() {
   axi_set_dut_ptr(dut_ptr, axi);
 #endif
 
-  if (dut_ptr->io_uart_out_valid) {
-    printf("%c", dut_ptr->io_uart_out_ch);
-    fflush(stdout);
+  if (dut_ptr->io_uart0_out_valid) {
+    //printf("%c", dut_ptr->io_uart_out_ch);
+    //fflush(stdout);
+    fwrite(&(dut_ptr->io_uart0_out_ch), 1, 1, core0_io_fp);
+    fflush(core0_io_fp);
   }
-  if (dut_ptr->io_uart_in_valid) {
+  if (dut_ptr->io_uart0_in_valid) {
     extern uint8_t uart_getc();
-    dut_ptr->io_uart_in_ch = uart_getc();
+    dut_ptr->io_uart0_in_ch = uart_getc();
   }
+  if (dut_ptr->io_uart1_out_valid) {
+    fwrite(&(dut_ptr->io_uart1_out_ch), 1, 1, core1_io_fp);
+    fflush(core1_io_fp);
+  }
+  if (dut_ptr->io_uart1_in_valid) {
+    extern uint8_t uart_getc();
+    dut_ptr->io_uart1_in_ch = uart_getc();
+  }//cannot read input from board in verilator, only FPGA can
   cycles ++;
 }
 
@@ -333,6 +347,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     runahead_init();
   }
 
+  core0_io_fp = fopen( "io_serial0.txt" , "w+" );
+  core1_io_fp = fopen( "io_serial1.txt" , "w+" );
+  dut_ptr->io_cp_waymask0 = args.waymask;
+  printf("emu sim_io_waymask0 = %lx\n",dut_ptr->io_cp_waymask0);
 #ifdef DEBUG_REFILL
   difftest[0]->save_track_instr(args.track_instr);
 #endif
@@ -468,6 +486,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     }
   }
   // Simulation ends here, do clean up & display jobs
+  fclose(core0_io_fp);
+  fclose(core1_io_fp);
 #if VM_TRACE == 1
   if (enable_waveform) tfp->close();
 #endif

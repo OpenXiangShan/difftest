@@ -52,6 +52,7 @@ struct EmuArgs {
   bool enable_jtag;
   bool enable_runahead;
   bool dump_tl;
+  uint64_t waymask;
 
   EmuArgs() {
     seed = 0;
@@ -76,6 +77,7 @@ struct EmuArgs {
     enable_jtag = false;
     enable_runahead = false;
     dump_tl = false;
+    waymask = 0;
   }
 };
 

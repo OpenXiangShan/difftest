@@ -27,10 +27,15 @@ reg  [63:0] io_logCtrl_log_end;
 wire [63:0] io_logCtrl_log_level;
 wire        io_perfInfo_clean;
 wire        io_perfInfo_dump;
-wire        io_uart_out_valid;
-wire [ 7:0] io_uart_out_ch;
-wire        io_uart_in_valid;
-wire [ 7:0] io_uart_in_ch;
+wire        io_uart0_out_valid;
+wire [ 7:0] io_uart0_out_ch;
+wire        io_uart0_in_valid;
+wire [ 7:0] io_uart0_in_ch;
+wire        io_uart1_out_valid;
+wire [ 7:0] io_uart1_out_ch;
+wire        io_uart1_in_valid;
+wire [ 7:0] io_uart1_in_ch;
+reg  [15:0] io_cp_waymask0;
 
 string bin_file;
 initial begin
@@ -60,6 +65,13 @@ initial begin
     $value$plusargs("workload=%s", bin_file);
     set_bin_file(bin_file);
   end
+  // set cp_waymask0
+  if ($test$plusargs("waymask")) begin
+    $value$plusargs("waymask=%d", io_cp_waymask0);
+  end
+  else begin
+    io_cp_waymask0 = 0;
+  end
 
   #100 reset = 0;
 end
@@ -73,16 +85,22 @@ SimTop sim(
   .io_logCtrl_log_level(io_logCtrl_log_level),
   .io_perfInfo_clean(io_perfInfo_clean),
   .io_perfInfo_dump(io_perfInfo_dump),
-  .io_uart_out_valid(io_uart_out_valid),
-  .io_uart_out_ch(io_uart_out_ch),
-  .io_uart_in_valid(io_uart_in_valid),
-  .io_uart_in_ch(io_uart_in_ch)
+  .io_uart0_out_valid(io_uart0_out_valid),
+  .io_uart0_out_ch(io_uart0_out_ch),
+  .io_uart0_in_valid(io_uart0_in_valid),
+  .io_uart0_in_ch(io_uart0_in_ch),
+  .io_uart1_out_valid(io_uart1_out_valid),
+  .io_uart1_out_ch(io_uart1_out_ch),
+  .io_uart1_in_valid(io_uart1_in_valid),
+  .io_uart1_in_ch(io_uart1_in_ch),
+  .io_cp_waymask0(io_cp_waymask0)
 );
 
 assign io_logCtrl_log_level = 0;
 assign io_perfInfo_clean = 0;
 assign io_perfInfo_dump = 0;
-assign io_uart_in_ch = 8'hff;
+assign io_uart0_in_ch = 8'hff;
+assign io_uart1_in_ch = 8'hff;
 
 always @(posedge clock) begin
   if (!reset && io_uart_out_valid) begin
