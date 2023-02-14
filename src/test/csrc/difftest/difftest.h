@@ -74,7 +74,6 @@ typedef struct {
   uint8_t  rfwen;
   uint8_t  fpwen;
   uint8_t  vecwen;
-  uint8_t  fpvecwen;
   uint32_t wpdest;
   uint8_t  wdest;
   uint8_t  lqidx;
@@ -441,6 +440,7 @@ protected:
   difftest_core_state_t ref;
   uint64_t *ref_regs_ptr = (uint64_t*)&ref.regs;
   uint64_t *dut_regs_ptr = (uint64_t*)&dut.regs;
+  uint64_t *ref_vregs_ptr = (uint64_t*)&ref.vregs;
 
   bool progress = false;
   uint64_t ticks = 0;
@@ -472,7 +472,7 @@ protected:
   // inline uint64_t *ref_regs_ptr() { return (uint64_t*)&ref.regs; }
   // inline uint64_t *dut_regs_ptr() { return (uint64_t*)&dut.regs; }
   inline uint64_t get_commit_data(int i) {
-    uint64_t result = (dut.commit[i].fpvecwen) ? dut.pregs.fpr[dut.commit[i].wpdest] : dut.pregs.gpr[dut.commit[i].wpdest];
+    uint64_t result = (dut.commit[i].fpwen) ? dut.pregs.fpr[dut.commit[i].wpdest] : dut.pregs.gpr[dut.commit[i].wpdest];
     return result;
   }
   inline bool has_wfi() {
