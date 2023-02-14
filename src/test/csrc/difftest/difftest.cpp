@@ -285,7 +285,7 @@ void Difftest::do_instr_commit(int i) {
     dut.lrsc.valid = 0;
   }
 
-  bool realWen = (dut.commit[i].rfwen && dut.commit[i].wdest != 0) || (dut.commit[i].fpvecwen);
+  bool realWen = (dut.commit[i].rfwen && dut.commit[i].wdest != 0) || (dut.commit[i].fpwen);
 
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
@@ -314,7 +314,8 @@ void Difftest::do_instr_commit(int i) {
   if (NUM_CORES > 1) {
     if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
       proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
-      if (realWen && ref_regs_ptr[dut.commit[i].fpvecwen * 32 + dut.commit[i].wdest] != get_commit_data(i)) {
+      bool reg_cmp_fail = !dut.commit[i].vecwen && ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] != get_commit_data(i);
+      if (realWen && (reg_cmp_fail)) {
         // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
         // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].pc);
         uint64_t golden;
@@ -350,13 +351,17 @@ void Difftest::do_instr_commit(int i) {
         if (golden == get_commit_data(i)) {
           proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
           if (realWen) {
-            ref_regs_ptr[dut.commit[i].fpvecwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
+            if(!dut.commit[i].vecwen) {
+              ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
+            }
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else if (dut.load[i].fuType == 0xF) {  //  atomic instr carefully handled
           proxy->memcpy(dut.load[i].paddr, &golden, len, DIFFTEST_TO_REF);
           if (realWen) {
-            ref_regs_ptr[dut.commit[i].fpvecwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
+            if(!dut.commit[i].vecwen) {
+              ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
+            }
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
         } else {
@@ -370,7 +375,9 @@ void Difftest::do_instr_commit(int i) {
 #else
           proxy->memcpy(dut.load[i].paddr, &golden, len, DUT_TO_DIFFTEST);
           if (realWen) {
-            ref_regs_ptr[dut.commit[i].fpvecwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
+            if(!dut.commit[i].vecwen) {
+              ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] = get_commit_data(i);
+            }
             proxy->regcpy(ref_regs_ptr, DUT_TO_DIFFTEST);
           }
 #endif
