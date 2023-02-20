@@ -43,6 +43,7 @@ EMU_CXX_EXTRA_FLAGS ?=
 
 EMU_VFILES    = $(SIM_VSRC)
 
+OBJCACHE =
 CCACHE := $(if $(shell which ccache),ccache,)
 ifneq ($(CCACHE),)
 export OBJCACHE = ccache
