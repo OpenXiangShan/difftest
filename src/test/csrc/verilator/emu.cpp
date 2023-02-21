@@ -202,6 +202,11 @@ Emulator::Emulator(int argc, const char *argv[]):
   srand48(args.seed);
   Verilated::randReset(2);
   assert_init();
+  
+#ifdef ENABLE_CONSTANTIN
+  void constantinLoad();
+  constantinLoad();
+#endif // CONSTANTIN
 
   // init remote-bitbang
   enable_simjtag = args.enable_jtag;
@@ -219,11 +224,6 @@ Emulator::Emulator(int argc, const char *argv[]):
 #ifdef ENABLE_CHISEL_DB
   init_db(args.dump_db);
 #endif
-
-#ifdef ENABLE_CONSTANTIN
-  void constantinLoad();
-  constantinLoad();
-#endif // CONSTANTIN
 
 #if VM_TRACE == 1
   enable_waveform = args.enable_waveform && !args.enable_fork;
