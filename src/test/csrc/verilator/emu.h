@@ -53,6 +53,10 @@ struct EmuArgs {
   bool enable_runahead;
   bool dump_tl;
   bool jtag_test;
+#ifdef ENABLE_LVNA
+  const char *nohype_loader_path;
+  const char *uart1_path;
+#endif
 
   EmuArgs() {
     seed = 0;
@@ -78,6 +82,10 @@ struct EmuArgs {
     enable_runahead = false;
     dump_tl = false;
     jtag_test = false;
+#ifdef ENABLE_LVNA
+    nohype_loader_path = NULL;
+    uart1_path = NULL;
+#endif
   }
 };
 

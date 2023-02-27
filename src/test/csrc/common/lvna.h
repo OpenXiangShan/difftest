@@ -14,36 +14,14 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __RAM_H
-#define __RAM_H
+#ifndef __LVNA_H
+#define __LVNA_H
 
 #include "common.h"
 
-#ifndef DEFAULT_EMU_RAM_SIZE
-#define DEFAULT_EMU_RAM_SIZE (256 * 1024 * 1024UL)
-#endif
+void putc_uart1(char c);
 
-void init_ram(const char *img);
-void ram_finish();
-void* get_ram_start();
-long get_ram_size();
+void init_lvna(const char *uart1_path);
+void release_lvna();
 
-void* get_img_start();
-long get_img_size();
-
-uint64_t pmem_read(uint64_t raddr);
-void pmem_write(uint64_t waddr, uint64_t wdata);
-
-#ifdef WITH_DRAMSIM3
-#include "axi4.h"
-
-void dramsim3_finish();
-void dramsim3_helper_rising(const struct axi_channel &axi);
-void dramsim3_helper_falling(struct axi_channel &axi);
-#endif
-
-#ifdef ENABLE_LVNA
-void set_nohype_loader(const char *path);
-#endif
-
-#endif
+#endif // __LVNA_H

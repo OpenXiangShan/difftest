@@ -26,7 +26,7 @@
 // -----------------------------------------------------------------------
 
 // emulated memory size (Byte)
-#define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
+#define DEFAULT_EMU_RAM_SIZE (16 * 1024 * 1024 * 1024UL) // 16 GB
 extern unsigned long EMU_RAM_SIZE;
 
 // first valid instruction's address, difftest starts from this instruction
@@ -116,6 +116,15 @@ extern unsigned long EMU_FLASH_SIZE;
 // uncomment the following line to enable this feature
 #define DEBUG_TILELINK
 
+// -----------------------------------------------------------------------
+// LvNA difftest config
+// -----------------------------------------------------------------------
+
+// whether to enable LvNA (include controlplane, uart1)
+#define ENABLE_LVNA
+
+#define NOHYPE_BIN_START 0xa0000
+#define NOHYPE_LOADER_SIZE 0x800
 
 // -----------------------------------------------------------------------
 // Simulator run ahead config

@@ -28,6 +28,9 @@
 #ifdef  DEBUG_TILELINK
 #include "tllogger.h"
 #endif
+#ifdef ENABLE_LVNA
+#include "lvna.h"
+#endif
 #include "ram.h"
 #include "zlib.h"
 #include "compress.h"
@@ -66,6 +69,10 @@ static inline void print_help(const char *file) {
   printf("      --dump-tl              dump tilelink transactions\n");
   printf("      --flash                the flash bin file for simulation\n");
 #endif
+#ifdef ENABLE_LVNA
+  printf("      --nohype-loader=FILE    run with this loader for nohype boot and enable nohype\n");
+  printf("      --uart1-path=FILE       output uart1 to a specified FILE\n");
+#endif
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
@@ -95,6 +102,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dump-tl",           0, NULL,  0  },
     { "jtag-test",         0, NULL,  0  },
     { "seed",              1, NULL, 's' },
+    { "nohype-loader",     1, NULL,  0  },
+    { "uart1-path",        1, NULL,  0  },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
 #ifdef DEBUG_REFILL
@@ -141,6 +150,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             continue;
           case 11:
             args.jtag_test = true; continue;
+#ifdef ENABLE_LVNA
+          case 13:
+            args.nohype_loader_path = optarg; continue;
+          case 14:
+            args.uart1_path = optarg; continue;
+#endif
         }
         // fall through
       default:
@@ -230,11 +245,20 @@ Emulator::Emulator(int argc, const char *argv[]):
   reset_ncycles(10);
 
   // init ram
+#ifdef ENABLE_LVNA
+  // init ram nohype params if needed
+  set_nohype_loader(args.nohype_loader_path);
+#endif
   init_ram(args.image);
 
 #ifdef DEBUG_TILELINK
   // init logger
   init_logger(args.dump_tl);
+#endif
+
+#ifdef ENABLE_LVNA
+  // init lvna
+  init_lvna(args.uart1_path);
 #endif
 
 #ifdef VM_SAVABLE
@@ -343,6 +367,9 @@ inline void Emulator::single_cycle() {
   if (dut_ptr->io_uart_out_valid) {
     printf("%c", dut_ptr->io_uart_out_ch);
     fflush(stdout);
+  }
+  if (dut_ptr->io_uart1_out_valid) {
+    putc_uart1(dut_ptr->io_uart1_out_ch);
   }
   if (dut_ptr->io_uart_in_valid) {
     extern uint8_t uart_getc();

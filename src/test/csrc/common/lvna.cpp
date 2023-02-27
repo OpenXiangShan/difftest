@@ -14,36 +14,37 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __RAM_H
-#define __RAM_H
+#include <sys/mman.h>
 
 #include "common.h"
+#include "lvna.h"
 
-#ifndef DEFAULT_EMU_RAM_SIZE
-#define DEFAULT_EMU_RAM_SIZE (256 * 1024 * 1024UL)
-#endif
+static char *uart1_out_path = NULL;
+static FILE *uart1_fp = NULL;
 
-void init_ram(const char *img);
-void ram_finish();
-void* get_ram_start();
-long get_ram_size();
+void putc_uart1(char c) {
+  if (uart1_fp)
+  {
+    fputc(c,uart1_fp);
+  }
+}
 
-void* get_img_start();
-long get_img_size();
+void init_lvna(const char *uart1_path) {
+  if (uart1_path) {
+    uart1_out_path = (char *)uart1_path;
+    printf("[info]use %s as uart1 path\n",uart1_out_path);
+    uart1_fp = fopen(uart1_out_path, "w");
+    if (!uart1_fp) {
+      printf("[error]open uart1 path %s failed\n",uart1_out_path);
+      exit(1);
+    }
+    setvbuf(uart1_fp,NULL,_IOLBF,1024);
+  }
+}
 
-uint64_t pmem_read(uint64_t raddr);
-void pmem_write(uint64_t waddr, uint64_t wdata);
+void release_lvna(){
+  if (uart1_fp) {
+    fclose(uart1_fp);
+  }
+}
 
-#ifdef WITH_DRAMSIM3
-#include "axi4.h"
-
-void dramsim3_finish();
-void dramsim3_helper_rising(const struct axi_channel &axi);
-void dramsim3_helper_falling(struct axi_channel &axi);
-#endif
-
-#ifdef ENABLE_LVNA
-void set_nohype_loader(const char *path);
-#endif
-
-#endif

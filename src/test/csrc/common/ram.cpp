@@ -20,6 +20,11 @@
 #include "ram.h"
 #include "compress.h"
 
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
 // #define TLB_UNITTEST
 
 #ifdef WITH_DRAMSIM3
@@ -32,6 +37,14 @@ static long img_size = 0;
 static pthread_mutex_t ram_mutex;
 
 unsigned long EMU_RAM_SIZE = DEFAULT_EMU_RAM_SIZE;
+
+#ifdef ENABLE_LVNA
+unsigned long nohype_mem_offset = EMU_RAM_SIZE / NUM_CORES;
+static char *nohype_loader_path = NULL;
+void set_nohype_loader(const char *path) {
+  nohype_loader_path = (char *)path;
+}
+#endif
 
 void* get_img_start() { return &ram[0]; }
 long get_img_size() { return img_size; }
@@ -149,6 +162,65 @@ void init_ram(const char *img) {
 #endif
 
   int ret;
+#ifdef ENABLE_LVNA
+  std::string imgStr(img);
+  std::istringstream iss(imgStr);
+  std::string oneImg;
+  std::vector<std::string> imgFiles;
+  while (getline(iss, oneImg, ';')){
+    imgFiles.push_back(oneImg);
+  }
+  assert(imgFiles.size() == NUM_CORES || imgFiles.size() == 1);
+  if (nohype_loader_path){
+    //nohype enabled
+    for (size_t i = 0; i < NUM_CORES; i++)
+    {
+      std::string one_filepath = imgFiles.size() == 1 ?
+                              imgFiles[0] : imgFiles[i];
+      uint8_t* nohype_ram_start = (uint8_t*)ram + i * nohype_mem_offset;
+      printf("start loading img %s to 0x%lx\n", one_filepath.c_str(), nohype_ram_start);
+      if (isGzFile(one_filepath.c_str())) {
+        printf("Gzip file detected and loading image from extracted gz file\n");
+        img_size = readFromGz(nohype_ram_start, one_filepath.c_str(), nohype_mem_offset, LOAD_RAM);
+        assert(img_size >= 0);
+      }
+      else {
+        //bin file in nohype has offsets for nohype loader
+        memset(nohype_ram_start, 0, NOHYPE_BIN_START);
+        uint8_t* nohype_bin_start = nohype_ram_start + NOHYPE_BIN_START;
+        FILE *fp = fopen(one_filepath.c_str(), "rb");
+        if (fp == NULL) {
+          printf("Can not open '%s'\n", one_filepath.c_str());
+          assert(0);
+        }
+
+        fseek(fp, 0, SEEK_END);
+        img_size = ftell(fp);
+        if (img_size > nohype_mem_offset) {
+          img_size = nohype_mem_offset;
+        }
+
+        fseek(fp, 0, SEEK_SET);
+        ret = fread(nohype_bin_start, img_size, 1, fp);
+
+        assert(ret == 1);
+        fclose(fp);
+      }
+      //overwrite nohyper loader
+      FILE *loader_fp = fopen(nohype_loader_path, "rb");
+      if (!loader_fp) {
+          panic("Can not open '%s'", nohype_loader_path);
+      }
+
+      fseek(loader_fp, 0, SEEK_SET);
+      assert(NOHYPE_LOADER_SIZE == \
+          fread(nohype_ram_start, 1, NOHYPE_LOADER_SIZE, loader_fp));
+      fclose(loader_fp);
+    }
+  }
+  else {
+#endif
+
   if (isGzFile(img)) {
     printf("Gzip file detected and loading image from extracted gz file\n");
     img_size = readFromGz(ram, img, EMU_RAM_SIZE, LOAD_RAM);
@@ -173,6 +245,10 @@ void init_ram(const char *img) {
     assert(ret == 1);
     fclose(fp);
   }
+
+#ifdef ENABLE_LVNA
+  }
+#endif
 
 #ifdef WITH_DRAMSIM3
   #if !defined(DRAMSIM3_CONFIG) || !defined(DRAMSIM3_OUTDIR)
