@@ -33,9 +33,16 @@ void init_goldenmem() {
   if (pmem == (uint8_t *)MAP_FAILED) {
     printf("ERROR allocating physical memory. \n");
   }
+#ifdef ENABLE_LVNA
+  for (int i = 0; i < NUM_CORES; i++) {
+    nonzero_large_memcpy(pmem + i * nohype_mem_offset, get_img_start(i), get_img_size(i));
+  }
+#else
   void* get_img_start();
   long get_img_size();
   nonzero_large_memcpy(pmem, get_img_start(), get_img_size());
+#endif
+
   ref_misc_put_gmaddr(pmem);
 }
 

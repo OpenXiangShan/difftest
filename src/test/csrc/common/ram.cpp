@@ -33,7 +33,12 @@ CoDRAMsim3 *dram = NULL;
 #endif
 
 static uint64_t *ram;
+#ifdef ENABLE_LVNA
+static void *img_starts[NUM_CORES] = {NULL};
+static long img_sizes[NUM_CORES] = {0};
+#else
 static long img_size = 0;
+#endif
 static pthread_mutex_t ram_mutex;
 
 unsigned long EMU_RAM_SIZE = DEFAULT_EMU_RAM_SIZE;
@@ -44,10 +49,13 @@ static char *nohype_loader_path = NULL;
 void set_nohype_loader(const char *path) {
   nohype_loader_path = (char *)path;
 }
-#endif
 
+void* get_img_start(int i) { return (void*)img_starts[i]; }
+long get_img_size(int i) { return img_sizes[i]; }
+#else
 void* get_img_start() { return &ram[0]; }
 long get_img_size() { return img_size; }
+#endif
 void* get_ram_start() { return &ram[0]; }
 long get_ram_size() { return EMU_RAM_SIZE; }
 
@@ -163,6 +171,7 @@ void init_ram(const char *img) {
 
   int ret;
 #ifdef ENABLE_LVNA
+  long img_size;
   std::string imgStr(img);
   std::istringstream iss(imgStr);
   std::string oneImg;
@@ -178,6 +187,7 @@ void init_ram(const char *img) {
       std::string one_filepath = imgFiles.size() == 1 ?
                               imgFiles[0] : imgFiles[i];
       uint8_t* nohype_ram_start = (uint8_t*)ram + i * nohype_mem_offset;
+      img_starts[i] = nohype_ram_start;
       printf("start loading img %s to 0x%lx\n", one_filepath.c_str(), nohype_ram_start);
       if (isGzFile(one_filepath.c_str())) {
         printf("Gzip file detected and loading image from extracted gz file\n");
@@ -196,8 +206,12 @@ void init_ram(const char *img) {
 
         fseek(fp, 0, SEEK_END);
         img_size = ftell(fp);
-        if (img_size > nohype_mem_offset) {
+        if (img_size > nohype_mem_offset - NOHYPE_BIN_START) {
           img_size = nohype_mem_offset;
+        }
+        else {
+          //add size of nohype loader
+          img_size += NOHYPE_BIN_START;
         }
 
         fseek(fp, 0, SEEK_SET);
@@ -216,6 +230,8 @@ void init_ram(const char *img) {
       assert(NOHYPE_LOADER_SIZE == \
           fread(nohype_ram_start, 1, NOHYPE_LOADER_SIZE, loader_fp));
       fclose(loader_fp);
+      //record img_size
+      img_sizes[i] = img_size;
     }
   }
   else {
@@ -247,6 +263,11 @@ void init_ram(const char *img) {
   }
 
 #ifdef ENABLE_LVNA
+    for (size_t i = 0; i < NUM_CORES; i++)
+    {
+      img_starts[i] = ram;
+      img_sizes[i] = img_size;
+    }
   }
 #endif
 

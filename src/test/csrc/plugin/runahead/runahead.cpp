@@ -229,7 +229,14 @@ void Runahead::do_first_instr_runahead() {
     has_commit = 1;
     // nemu_this_pc = dut_ptr->runahead[0].pc;
 
+#ifdef ENABLE_LVNA
+    for (int i = 0; i < NUM_CORES; i++) {
+      proxy->memcpy(0x80000000 + i * nohype_mem_offset, get_img_start(i), get_img_size(i), DIFFTEST_TO_REF);
+    }
+#else
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+#endif
+
     // Manually setup simulator init regs,
     // for at this time, the first has not been initialied
     dut_ptr->csr.this_pc = FIRST_INST_ADDRESS; 

@@ -28,8 +28,14 @@ void ram_finish();
 void* get_ram_start();
 long get_ram_size();
 
+#ifdef ENABLE_LVNA
+void* get_img_start(int i);
+long get_img_size(int i);
+extern unsigned long nohype_mem_offset;
+#else
 void* get_img_start();
 long get_img_size();
+#endif
 
 uint64_t pmem_read(uint64_t raddr);
 void pmem_write(uint64_t waddr, uint64_t wdata);
