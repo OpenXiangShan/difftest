@@ -171,7 +171,7 @@ int Difftest::step() {
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut.commit[i].valid; i++) {
       dut.commit[i].valid = 0;
 
-      if(dut.commit[i].uopidx == 0x1f) incmpInstFlag = false;
+      if(dut.commit[i].uopidx >> 5 & 1) incmpInstFlag = false;
       else {
         incmpInstFlag = true;
         continue;
