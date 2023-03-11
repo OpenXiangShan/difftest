@@ -79,7 +79,6 @@ typedef struct {
   uint8_t  lqidx;
   uint8_t  sqidx;
   uint16_t robidx;
-  uint8_t  uopidx;
   uint8_t  isLoad;
   uint8_t  isStore;
 } instr_commit_t;
