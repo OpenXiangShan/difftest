@@ -69,7 +69,6 @@ INTERFACE_BASIC_INSTR_COMMIT {
     packet->vecwen   = vecwen;
     packet->wpdest   = wpdest;
     packet->wdest    = wdest;
-    packet->uopidx   = uopidx;
   }
 }
 
@@ -91,7 +90,6 @@ INTERFACE_INSTR_COMMIT {
     packet->sqidx    = sqidx;
     packet->lqidx    = lqidx;
     packet->robidx   = robidx;
-    packet->uopidx   = uopidx;
     packet->isLoad   = isLoad;
     packet->isStore  = isStore;
   }

@@ -154,7 +154,7 @@ int Difftest::step() {
   }
 
 #endif
-  int incmpInstFlag = false;
+
   num_commit = 0; // reset num_commit this cycle to 0
   // interrupt has the highest priority
   if (dut.event.interrupt) {
@@ -169,15 +169,8 @@ int Difftest::step() {
   } else {
     // TODO: is this else necessary?
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut.commit[i].valid; i++) {
-      dut.commit[i].valid = 0;
-
-      if(dut.commit[i].uopidx >> 5 & 1) incmpInstFlag = false;
-      else {
-        incmpInstFlag = true;
-        continue;
-      }
       do_instr_commit(i);
-
+      dut.commit[i].valid = 0;
       num_commit++;
       // TODO: let do_instr_commit return number of instructions in this uop
       if (dut.commit[i].fused) {
@@ -206,7 +199,6 @@ int Difftest::step() {
     ref_regs_ptr[72] = dut_regs_ptr[72];
   }
 
-  if(incmpInstFlag) return 0;
   if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
     display();
     for (int i = 0; i < DIFFTEST_NR_REG; i ++) {
