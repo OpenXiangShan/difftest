@@ -174,6 +174,7 @@ typedef struct {
   uint8_t  valid = 0;
   uint64_t addr;
   uint64_t data[8];
+  uint8_t idtfr = 0;
 } refill_event_t;
 
 typedef struct {
@@ -230,9 +231,10 @@ typedef struct {
   l1tlb_event_t     ldtlb[DIFFTEST_LDTLB_WIDTH];
   l1tlb_event_t     sttlb[DIFFTEST_STTLB_WIDTH];
   l2tlb_event_t     l2tlb[DIFFTEST_PTW_WIDTH];
-  refill_event_t    d_refill;
-  refill_event_t    i_refill;
-  refill_event_t    ptw_refill;
+  refill_event_t    refill[10];
+  // refill_event_t    d_refill;
+  // refill_event_t    i_refill;
+  // refill_event_t    ptw_refill;
   lr_sc_evevnt_t    lrsc;
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
@@ -361,9 +363,10 @@ public:
     return &(dut.l2tlb[index]);
   }
   inline refill_event_t *get_refill_event(uint8_t cacheid) {
-    if (cacheid == PAGECACHEID) return &(dut.ptw_refill);
-    else if(cacheid == DCACHEID) return &(dut.d_refill);
-    return &(dut.i_refill);
+    // if (cacheid == PAGECACHEID) return &(dut.ptw_refill);
+    // else if(cacheid == DCACHEID) return &(dut.d_refill);
+    // return &(dut.i_refill);
+    return &(dut.refill[cacheid]);
   }
   inline lr_sc_evevnt_t *get_lr_sc_event() {
     return &(dut.lrsc);

@@ -365,6 +365,7 @@ INTERFACE_REFILL_EVENT {
    packet->data[5] = data_5;
    packet->data[6] = data_6;
    packet->data[7] = data_7;
+   packet->idtfr = idtfr;
   }
 }
 
