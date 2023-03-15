@@ -196,7 +196,10 @@ Emulator::Emulator(int argc, const char *argv[]):
   cycles(0), trapCode(STATE_RUNNING)
 {
   args = parse_args(argc, argv);
-
+#ifdef ENABLE_CONSTANTIN
+  void constantinLoad();
+  constantinLoad();
+#endif // CONSTANTIN
   // srand
   srand(args.seed);
   srand48(args.seed);
@@ -219,11 +222,6 @@ Emulator::Emulator(int argc, const char *argv[]):
 #ifdef ENABLE_CHISEL_DB
   init_db(args.dump_db);
 #endif
-
-#ifdef ENABLE_CONSTANTIN
-  void constantinLoad();
-  constantinLoad();
-#endif // CONSTANTIN
 
 #if VM_TRACE == 1
   enable_waveform = args.enable_waveform && !args.enable_fork;
