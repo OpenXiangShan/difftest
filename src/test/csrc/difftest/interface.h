@@ -378,9 +378,24 @@ extern "C" int v_difftest_step();
     DPIC_ARG_BYTE coreid,                \
     DPIC_ARG_BYTE index,                 \
     DPIC_ARG_BIT  valid,                 \
+    DPIC_ARG_BIT  valididx_0,            \
+    DPIC_ARG_BIT  valididx_1,            \
+    DPIC_ARG_BIT  valididx_2,            \
+    DPIC_ARG_BIT  valididx_3,            \
+    DPIC_ARG_BIT  valididx_4,            \
+    DPIC_ARG_BIT  valididx_5,            \
+    DPIC_ARG_BIT  valididx_6,            \
+    DPIC_ARG_BIT  valididx_7,            \
     DPIC_ARG_LONG satp,                  \
     DPIC_ARG_LONG vpn,                   \
-    DPIC_ARG_LONG ppn,                   \
+    DPIC_ARG_LONG ppn_0,                 \
+    DPIC_ARG_LONG ppn_1,                 \
+    DPIC_ARG_LONG ppn_2,                 \
+    DPIC_ARG_LONG ppn_3,                 \
+    DPIC_ARG_LONG ppn_4,                 \
+    DPIC_ARG_LONG ppn_5,                 \
+    DPIC_ARG_LONG ppn_6,                 \
+    DPIC_ARG_LONG ppn_7,                 \
     DPIC_ARG_BYTE perm,                  \
     DPIC_ARG_BYTE level,                 \
     DPIC_ARG_BIT  pf                     \

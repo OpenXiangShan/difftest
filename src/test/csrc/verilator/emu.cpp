@@ -205,6 +205,11 @@ Emulator::Emulator(int argc, const char *argv[]):
   srand48(args.seed);
   Verilated::randReset(2);
   assert_init();
+  
+#ifdef ENABLE_CONSTANTIN
+  void constantinLoad();
+  constantinLoad();
+#endif // CONSTANTIN
 
   // init remote-bitbang
   enable_simjtag = args.enable_jtag;
