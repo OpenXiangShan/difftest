@@ -232,7 +232,7 @@ typedef struct {
   l1tlb_event_t     ldtlb[DIFFTEST_LDTLB_WIDTH];
   l1tlb_event_t     sttlb[DIFFTEST_STTLB_WIDTH];
   l2tlb_event_t     l2tlb[DIFFTEST_PTW_WIDTH];
-  refill_event_t    refill[10];
+  refill_event_t    refill[DIFFTEST_REFFILL_EVENT_ENTRY_NUM];
   lr_sc_evevnt_t    lrsc;
   run_ahead_event_t runahead[DIFFTEST_RUNAHEAD_WIDTH];
   run_ahead_commit_event_t runahead_commit[DIFFTEST_RUNAHEAD_WIDTH];
