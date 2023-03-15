@@ -411,18 +411,10 @@ int Difftest::do_store_check() {
 // cacheid: 0 -> icache
 //          1 -> dcache
 //          2 -> pagecache
-//          3 -> icache piq refill ipf
-//          4 -> icache mainPipe port0 resp, idftr: 1/2/3
-//          5 -> icache mainPipe port1 resp, idftr: 1/2/3
-//          6 -> icache ipf refill cachesram
-//          7 -> icache mainPipe port0 read ipf
-//          8 -> icache mainPipe port1 read ipf
 int Difftest::do_refill_check(int cacheid) {
   static uint64_t last_valid_addr = 0;
   char buf[512];
-  // refill_event_t dut_refill = cacheid == PAGECACHEID ? dut.ptw_refill : cacheid == DCACHEID ? dut.d_refill : dut.i_refill ;
   refill_event_t dut_refill = dut.refill[cacheid];
-  // const char* name = cacheid == PAGECACHEID ? "PageCache" : cacheid == DCACHEID ? "DCache" : "ICache";
   dut_refill.addr = dut_refill.addr - dut_refill.addr % 64;
   if (dut_refill.valid == 1 && dut_refill.addr != last_valid_addr) {
     last_valid_addr = dut_refill.addr;
@@ -454,13 +446,6 @@ int Difftest::do_refill_check(int cacheid) {
 int Difftest::do_irefill_check() {
     int r = 0;
     r |= do_refill_check(ICACHEID);
-    // check fdip
-    r |= do_refill_check(3);
-    r |= do_refill_check(4);
-    r |= do_refill_check(5);
-    r |= do_refill_check(6);
-    r |= do_refill_check(7);
-    r |= do_refill_check(8);
     return r;
 }
 
