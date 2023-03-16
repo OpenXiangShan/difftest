@@ -418,6 +418,8 @@ int Difftest::do_store_check() {
 //          7 -> icache mainPipe port0 read PIQ
 //          8 -> icache mainPipe port1 read PIQ
 int Difftest::do_refill_check(int cacheid) {
+  static int delay = 0;
+  delay = delay * 2;
   static uint64_t last_valid_addr = 0;
   char buf[512];
   refill_event_t dut_refill = dut.refill[cacheid];
@@ -443,7 +445,10 @@ int Difftest::do_refill_check(int cacheid) {
           printf("%016lx", dut_refill.data[j]);
         }
         printf("\n");
-        return 1;
+        // continue run some cycle before aborted to dump wave
+        if (delay == 0) { delay = 1; }
+        if (delay > 16) { return 1; }
+        return 0;
       }
     }
   }
