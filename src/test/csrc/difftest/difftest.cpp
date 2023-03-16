@@ -421,6 +421,7 @@ int Difftest::do_refill_check(int cacheid) {
   static uint64_t last_valid_addr = 0;
   char buf[512];
   refill_event_t dut_refill = dut.refill[cacheid];
+  uint64_t realpaddr = dut_refill.addr;
   dut_refill.addr = dut_refill.addr - dut_refill.addr % 64;
   if (dut_refill.valid == 1 && dut_refill.addr != last_valid_addr) {
     last_valid_addr = dut_refill.addr;
@@ -431,7 +432,7 @@ int Difftest::do_refill_check(int cacheid) {
     for (int i = 0; i < 8; i++) {
       read_goldenmem(dut_refill.addr + i*8, &buf, 8);
       if (dut_refill.data[i] != *((uint64_t*)buf)) {
-        printf("cacheid=%d,idtfr=%d: Refill test failed!\n",cacheid, dut_refill.idtfr);
+        printf("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n",cacheid, dut_refill.idtfr,realpaddr);
         printf("addr: %lx\nGold: ", dut_refill.addr);
         for (int j = 0; j < 8; j++) {
           read_goldenmem(dut_refill.addr + j*8, &buf, 8);
