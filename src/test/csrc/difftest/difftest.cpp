@@ -411,6 +411,12 @@ int Difftest::do_store_check() {
 // cacheid: 0 -> icache
 //          1 -> dcache
 //          2 -> pagecache
+//          3 -> icache PIQ refill ipf
+//          4 -> icache mainPipe port0 toIFU
+//          5 -> icache mainPipe port1 toIFU
+//          6 -> icache ipf refill cache
+//          7 -> icache mainPipe port0 read PIQ
+//          8 -> icache mainPipe port1 read PIQ
 int Difftest::do_refill_check(int cacheid) {
   static uint64_t last_valid_addr = 0;
   char buf[512];
@@ -446,6 +452,12 @@ int Difftest::do_refill_check(int cacheid) {
 int Difftest::do_irefill_check() {
     int r = 0;
     r |= do_refill_check(ICACHEID);
+    r |= do_refill_check(3);
+    r |= do_refill_check(4);
+    r |= do_refill_check(5);
+    r |= do_refill_check(6);
+    r |= do_refill_check(7);
+    r |= do_refill_check(8);
     return r;
 }
 
