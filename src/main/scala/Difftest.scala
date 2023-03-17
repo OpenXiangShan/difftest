@@ -185,9 +185,10 @@ class DiffL1TLBEventIO extends DifftestBundle with DifftestWithIndex {
 
 class DiffL2TLBEventIO extends DifftestBundle with DifftestWithIndex {
   val valid = Input(Bool())
+  val valididx = Input(Vec(8, Bool()))
   val satp = Input(UInt(64.W))
   val vpn = Input(UInt(64.W))
-  val ppn = Input(UInt(64.W))
+  val ppn = Input(Vec(8, UInt(64.W)))
   val perm = Input(UInt(8.W))
   val level = Input(UInt(8.W))
   val pf = Input(Bool())

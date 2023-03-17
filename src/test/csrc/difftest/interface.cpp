@@ -424,9 +424,24 @@ INTERFACE_L2TLB_EVENT {
   auto packet = difftest[coreid]->get_l2tlb_event(index);
   packet->valid = valid;
   if (packet->valid) {
+    packet->valididx[0] = valididx_0;
+    packet->valididx[1] = valididx_1;
+    packet->valididx[2] = valididx_2;
+    packet->valididx[3] = valididx_3;
+    packet->valididx[4] = valididx_4;
+    packet->valididx[5] = valididx_5;
+    packet->valididx[6] = valididx_6;
+    packet->valididx[7] = valididx_7;
     packet->satp = satp;
     packet->vpn = vpn;
-    packet->ppn = ppn;
+    packet->ppn[0] = ppn_0;
+    packet->ppn[1] = ppn_1;
+    packet->ppn[2] = ppn_2;
+    packet->ppn[3] = ppn_3;
+    packet->ppn[4] = ppn_4;
+    packet->ppn[5] = ppn_5;
+    packet->ppn[6] = ppn_6;
+    packet->ppn[7] = ppn_7;
     packet->perm = perm;
     packet->level = level;
     packet->pf = pf;
