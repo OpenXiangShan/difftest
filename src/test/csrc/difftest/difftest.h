@@ -162,9 +162,10 @@ typedef struct {
 
 typedef struct {
   uint8_t  valid = 0;
+  uint8_t  valididx[8];
   uint64_t satp;
   uint64_t vpn;
-  uint64_t ppn;
+  uint64_t ppn[8];
   uint8_t perm;
   uint8_t level;
   uint8_t pf;

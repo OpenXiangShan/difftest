@@ -202,7 +202,10 @@ Emulator::Emulator(int argc, const char *argv[]):
   cycles(0), trapCode(STATE_RUNNING)
 {
   args = parse_args(argc, argv);
-
+#ifdef ENABLE_CONSTANTIN
+  void constantinLoad();
+  constantinLoad();
+#endif // CONSTANTIN
   // srand
   srand(args.seed);
   srand48(args.seed);
