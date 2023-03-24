@@ -408,11 +408,22 @@ int Difftest::do_store_check() {
   return 0;
 }
 
+// cacheid: 0 -> icache
+//          1 -> dcache
+//          2 -> pagecache
+//          3 -> icache PIQ refill ipf
+//          4 -> icache mainPipe port0 toIFU
+//          5 -> icache mainPipe port1 toIFU
+//          6 -> icache ipf refill cache
+//          7 -> icache mainPipe port0 read PIQ
+//          8 -> icache mainPipe port1 read PIQ
 int Difftest::do_refill_check(int cacheid) {
+  static int delay = 0;
+  delay = delay * 2;
   static uint64_t last_valid_addr = 0;
   char buf[512];
-  refill_event_t dut_refill = cacheid == PAGECACHEID ? dut.ptw_refill : cacheid == DCACHEID ? dut.d_refill : dut.i_refill ;
-  const char* name = cacheid == PAGECACHEID ? "PageCache" : cacheid == DCACHEID ? "DCache" : "ICache";
+  refill_event_t dut_refill = dut.refill[cacheid];
+  uint64_t realpaddr = dut_refill.addr;
   dut_refill.addr = dut_refill.addr - dut_refill.addr % 64;
   if (dut_refill.valid == 1 && dut_refill.addr != last_valid_addr) {
     last_valid_addr = dut_refill.addr;
@@ -423,7 +434,7 @@ int Difftest::do_refill_check(int cacheid) {
     for (int i = 0; i < 8; i++) {
       read_goldenmem(dut_refill.addr + i*8, &buf, 8);
       if (dut_refill.data[i] != *((uint64_t*)buf)) {
-        printf("%s Refill test failed!\n",name);
+        printf("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n",cacheid, dut_refill.idtfr,realpaddr);
         printf("addr: %lx\nGold: ", dut_refill.addr);
         for (int j = 0; j < 8; j++) {
           read_goldenmem(dut_refill.addr + j*8, &buf, 8);
@@ -434,7 +445,10 @@ int Difftest::do_refill_check(int cacheid) {
           printf("%016lx", dut_refill.data[j]);
         }
         printf("\n");
-        return 1;
+        // continue run some cycle before aborted to dump wave
+        if (delay == 0) { delay = 1; }
+        if (delay > 16) { return 1; }
+        return 0;
       }
     }
   }
@@ -442,7 +456,15 @@ int Difftest::do_refill_check(int cacheid) {
 }
 
 int Difftest::do_irefill_check() {
-    return do_refill_check(ICACHEID);
+    int r = 0;
+    r |= do_refill_check(ICACHEID);
+    r |= do_refill_check(3);
+    r |= do_refill_check(4);
+    r |= do_refill_check(5);
+    r |= do_refill_check(6);
+    r |= do_refill_check(7);
+    r |= do_refill_check(8);
+    return r;
 }
 
 int Difftest::do_drefill_check() {
