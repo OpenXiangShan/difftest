@@ -30,9 +30,13 @@ EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
 else
 CHISELDB_EXTRA_ARG =
 endif
+
 ifeq ($(WITH_CONSTANTIN), 1)
 CONSTANTIN_SRC = $(BUILD_DIR)/constantin.cpp
 EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
+ifndef NOOP_HOME
+$(error NOOP_HOME which is used in constantin is not set)
+endif
 else
 CONSTANTIN_SRC =
 endif
