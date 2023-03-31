@@ -71,7 +71,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_SNAPSHOT=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0
+            make emu EMU_SNAPSHOT=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
 
       - name: Difftest with Trace
@@ -86,7 +86,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_TRACE=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0
+            make emu EMU_TRACE=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
             ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave
 
 # Github hosted CI does not support XiangShan
@@ -99,3 +99,4 @@ jobs:
 #             make emu CONFIG=MinimalConfig
 #             ./build/emu -b 0 -e 0 -i ./ready-to-run/linux.bin
            
+
