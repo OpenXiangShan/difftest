@@ -91,6 +91,9 @@ extern unsigned long EMU_FLASH_SIZE;
 // commit inst group history length
 #define DEBUG_GROUP_TRACE_SIZE 16
 
+// max refill entry num in difftest_core_state_t
+#define DIFFTEST_REFFILL_EVENT_ENTRY_NUM 10
+
 // -----------------------------------------------------------------------
 // Checkpoint config
 // -----------------------------------------------------------------------
