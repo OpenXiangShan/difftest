@@ -207,15 +207,14 @@ void init_ram(const char *img) {
         fseek(fp, 0, SEEK_END);
         img_size = ftell(fp);
         if (img_size > nohype_mem_offset - NOHYPE_BIN_START) {
-          img_size = nohype_mem_offset;
-        }
-        else {
-          //add size of nohype loader
-          img_size += NOHYPE_BIN_START;
+          printf("Can not alloc enough space\n");
+          assert(0);
         }
 
         fseek(fp, 0, SEEK_SET);
         ret = fread(nohype_bin_start, img_size, 1, fp);
+
+        img_size += NOHYPE_BIN_START;
 
         assert(ret == 1);
         fclose(fp);
