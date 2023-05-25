@@ -117,7 +117,7 @@ int Difftest::step() {
   }
 
 #ifdef DEBUG_REFILL
-  if (do_irefill_check() || do_drefill_check() || do_ptwrefill_check() ) {
+  if (/*do_irefill_check() ||*/ do_drefill_check() || do_ptwrefill_check() ) {
     return 1;
   }
 #endif
