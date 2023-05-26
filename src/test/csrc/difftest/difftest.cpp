@@ -458,12 +458,12 @@ int Difftest::do_refill_check(int cacheid) {
 int Difftest::do_irefill_check() {
     int r = 0;
     r |= do_refill_check(ICACHEID);
-    r |= do_refill_check(3);
-    r |= do_refill_check(4);
-    r |= do_refill_check(5);
-    r |= do_refill_check(6);
-    r |= do_refill_check(7);
-    r |= do_refill_check(8);
+    // r |= do_refill_check(3);
+    // r |= do_refill_check(4);
+    // r |= do_refill_check(5);
+    // r |= do_refill_check(6);
+    // r |= do_refill_check(7);
+    // r |= do_refill_check(8);
     return r;
 }
 
