@@ -49,6 +49,8 @@ struct EmuArgs {
   const char *wave_path;
   const char *ram_size;
   const char *flash_bin;
+  const char *branch_record;
+  uint64_t branch_miss_rate;
   bool enable_waveform;
   bool enable_snapshot;
   bool force_dump_result;
@@ -75,6 +77,8 @@ struct EmuArgs {
     ram_size = NULL;
     image = NULL;
     flash_bin = NULL;
+    branch_record = NULL;
+    branch_miss_rate = 0;
     enable_waveform = false;
     enable_snapshot = true;
     force_dump_result = false;

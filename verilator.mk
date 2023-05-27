@@ -41,6 +41,10 @@ else
 CONSTANTIN_SRC =
 endif
 
+ifeq ($(WITH_LIGHTQS), 1)
+EMU_CXXFLAGS +=-DLIGHTQS
+endif
+
 
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
 EMU_CXX_EXTRA_FLAGS ?=

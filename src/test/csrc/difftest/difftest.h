@@ -310,6 +310,7 @@ public:
   // Initialize difftest environments
   Difftest(int coreid);
   DIFF_PROXY *proxy = NULL;
+  uint64_t total_commit = 0;
   uint32_t num_commit = 0; // # of commits if made progress
   bool has_commit = false;
   // Trigger a difftest checking procdure
