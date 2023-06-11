@@ -154,7 +154,6 @@ class DiffInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
   with DifftestWithIndex
   with DifftestWithValid
 {
-  val special  = UInt(8.W)
   val skip     = Bool()
   val isRVC    = Bool()
   val rfwen    = Bool()
@@ -169,13 +168,14 @@ class DiffInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
   val sqIdx    = UInt(7.W)
   val isLoad   = Bool()
   val isStore  = Bool()
+  val nFused   = UInt(8.W)
+  val special  = UInt(8.W)
 
   def setSpecial(
-    isFused: Bool = false.B,
-    isExit: Bool = false.B,
     isDelayedWb: Bool = false.B,
+    isExit: Bool = false.B,
   ): Unit = {
-    special := Cat(isDelayedWb, isExit, isFused)
+    special := Cat(isExit, isDelayedWb)
   }
   override val desiredCppName: String = "commit"
 }
