@@ -171,7 +171,7 @@ int Difftest::step() {
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut.commit[i].valid; i++) {
       do_instr_commit(i);
       dut.commit[i].valid = 0;
-      num_commit++;
+      num_commit += dut.commit[i].instrSize;
       // TODO: let do_instr_commit return number of instructions in this uop
       if (dut.commit[i].fused) {
         num_commit++;
@@ -301,7 +301,11 @@ void Difftest::do_instr_commit(int i) {
   if (dut.commit[i].fused) {
     proxy->exec(1);
   }
-
+  if(dut.commit[i].instrSize > 1){
+    for(int j = 0; j < dut.commit[i].instrSize - 1; j ++){
+      proxy->exec(1);
+    }
+  }
   // Handle load instruction carefully for SMP
   if (NUM_CORES > 1) {
     if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
