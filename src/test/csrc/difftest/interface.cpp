@@ -92,6 +92,7 @@ INTERFACE_INSTR_COMMIT {
     packet->robidx   = robidx;
     packet->isLoad   = isLoad;
     packet->isStore  = isStore;
+    packet->instrSize = instrSize;
   }
 }
 
