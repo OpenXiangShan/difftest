@@ -182,6 +182,10 @@ extern unsigned long EMU_FLASH_SIZE;
 // set WITH_CHISELDB=1 when make to enable chisel db in verilator simulation
 // #define ENABLE_CHISEL_DB
 
+// draw ipc curve to a database file
+// set WITH_IPC=1 when make to enable drawing ipc curve in verilator simulation
+// #define ENABLE_IPC
+
 // whether to maintain goldenmem
 #if NUM_CORES>1
     #define DEBUG_GOLDENMEM
