@@ -32,6 +32,9 @@
 # Enable co-simulation with DRAMsim3
 # WITH_DRAMSIM3 ?= 1
 
+# Enable drawing ipc curve
+# ENABLE_IPC ?= 1
+
 # Enable chisel database
 WITH_CHISELDB ?= 1
 

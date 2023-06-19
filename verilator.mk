@@ -41,6 +41,9 @@ else
 CONSTANTIN_SRC =
 endif
 
+ifeq ($(WITH_IPC), 1)
+EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_IPC
+endif
 
 EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
 EMU_CXX_EXTRA_FLAGS ?=
