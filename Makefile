@@ -26,6 +26,7 @@ USE_DIFFTEST_MAIN ?= 0
 BUILD_DIR  = $(DESIGN_DIR)/build
 SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).sv
 VCS_SIM_DIR = $(DESIGN_DIR)/sim
+EMU_SIM_DIR = $(DESIGN_DIR)/sim
 
 DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
 SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)

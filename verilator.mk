@@ -146,11 +146,25 @@ EMU_FLAGS = -s $(SEED) -b $(B) -e $(E) $(SNAPSHOT_OPTION) $(WAVEFORM) $(EMU_ARGS
 
 emu: $(EMU)
 
-emu-run: emu
-ifneq ($(REMOTE),localhost)
-	ls build
-endif
-	$(EMU) -i $(IMAGE) --diff=$(REF_SO) $(EMU_FLAGS)
+EMU_RTL_COMP_DIR := $(EMU_SIM_DIR)/emu/comp
+EMU_RTL_MK := $(EMU_RTL_COMP_DIR)/V$(EMU_TOP).mk
+EMU_RTL := $(EMU_RTL_COMP_DIR)/emu
+$(EMU_RTL_MK): $(SIM_TOP_V) | $(EMU_DEPS)
+	$(shell if [ ! -e $(EMU_RTL_COMP_DIR) ];then mkdir -p $(EMU_RTL_COMP_DIR); fi)
+	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
+	@date -R | tee -a $(TIMELOG)
+	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
+		-o $(abspath $(EMU_RTL)) -Mdir $(EMU_RTL_COMP_DIR) $^ $(EMU_DEPS)
+	find $(EMU_RTL_COMP_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
+	find $(EMU_RTL_COMP_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
+	find $(EMU_RTL_COMP_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
+
+$(EMU_RTL): $(EMU_RTL_MK) $(EMU_DEPS) $(EMU_HEADERS)
+	@echo "\n[g++] Compiling C++ files..." >> $(TIMELOG)
+	@date -R | tee -a $(TIMELOG)
+	$(TIME_CMD) $(MAKE) CXX=clang++ LINK=clang++  VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+
+emu_rtl: $(EMU_RTL)
 
 coverage:
 	verilator_coverage --annotate build/logs/annotated --annotate-min 1 build/logs/coverage.dat
