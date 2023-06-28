@@ -105,6 +105,8 @@ private:
   // emu control variable
   uint64_t cycles;
   int trapCode;
+  bool wave_file_defined;
+  char wave_file[1024];
 
   inline void reset_ncycles(size_t cycles);
   inline void single_cycle();

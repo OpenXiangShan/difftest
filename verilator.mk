@@ -149,9 +149,12 @@ emu: $(EMU)
 EMU_RTL_COMP_DIR := $(EMU_SIM_DIR)/emu/comp
 EMU_RTL_MK := $(EMU_RTL_COMP_DIR)/V$(EMU_TOP).mk
 EMU_RTL := $(EMU_RTL_COMP_DIR)/emu
+EMU_FLIST := $(EMU_RTL_COMP_DIR)/design.f
 $(EMU_RTL_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 	$(shell if [ ! -e $(EMU_RTL_COMP_DIR) ];then mkdir -p $(EMU_RTL_COMP_DIR); fi)
 	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
+	@echo $(EMU_VFILES) > $(EMU_FLIST)
+	@cat $(BUILD_DIR)/cpu_flist.f >> $(EMU_FLIST)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
 		-o $(abspath $(EMU_RTL)) -Mdir $(EMU_RTL_COMP_DIR) $^ $(EMU_DEPS)
