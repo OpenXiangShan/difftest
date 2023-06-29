@@ -67,6 +67,8 @@ PLUGIN_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR) -name "*.cpp")
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 
+DIFFTEST_CONFIG = $(abspath ./config/config.h)
+
 PLUGIN_CHEAD_DIR = $(abspath ./src/test/csrc/plugin/include)
 
 SIM_VSRC_DIR = $(shell pwd)/src/test/vsrc/common
