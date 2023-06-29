@@ -26,6 +26,7 @@ ifeq ($(RELEASE),1)
 VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
 endif
+VCS_CSSFLAGS += -DNUM_CORES=$(NUM_CORES)
 
 # if fsdb is considered
 # CONSIDER_FSDB ?= 0
