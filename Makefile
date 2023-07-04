@@ -33,7 +33,7 @@ SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/nu
 
 # generate SimTop.v
 $(SIM_TOP_V): $(DIFF_SCALA_FILE) $(SCALA_FILE)
-	$(MAKE) -C $(DESIGN_DIR) sim-verilog
+	$(MAKE) -C $(DESIGN_DIR) sim-verilog VCS=$(VCS)
 
 # generate difftest files for non-chisel design.
 difftest_verilog:
