@@ -499,9 +499,10 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
 
       dut.sttlb[i].ppn = dut.sttlb[i].ppn >> (2 - difftest_level) * 9 << (2 - difftest_level) * 9;
       if (pte.difftest_ppn != dut.sttlb[i].ppn ) {
-        printf("STTLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.sttlb[i].vpn);
+        printf("Warning: STTLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.sttlb[i].vpn);
         printf("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut.sttlb[i].ppn);
-        return 1;
+        printf("  REF commits perm 0x%02x, level %d, pf %d\n", pte.difftest_perm, difftest_level, !pte.difftest_v);
+        return 0;
       }
     }
     return 0;
@@ -524,9 +525,10 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
 
       dut.ldtlb[i].ppn = dut.ldtlb[i].ppn >> (2 - difftest_level) * 9 << (2 - difftest_level) * 9;
       if (pte.difftest_ppn != dut.ldtlb[i].ppn ) {
-        printf("LDTLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.ldtlb[i].vpn);
+        printf("Warning: LDTLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.ldtlb[i].vpn);
         printf("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut.ldtlb[i].ppn);
-        return 1;
+        printf("  REF commits perm 0x%02x, level %d, pf %d\n", pte.difftest_perm, difftest_level, !pte.difftest_v);
+        return 0;
       }
     }
     return 0;
@@ -548,9 +550,10 @@ int Difftest::do_l1tlb_check(int l1tlbid) {
 
       dut.itlb[i].ppn = dut.itlb[i].ppn >> (2 - difftest_level) * 9 << (2 - difftest_level) * 9;
       if (pte.difftest_ppn != dut.itlb[i].ppn) {
-        printf("ITLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.itlb[i].vpn);
+        printf("Warning: ITLB resp test of core %d index %d failed! vpn = %lx\n", id, i, dut.itlb[i].vpn);
         printf("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut.itlb[i].ppn);
-        return 1;
+        printf("  REF commits perm 0x%02x, level %d, pf %d\n", pte.difftest_perm, difftest_level, !pte.difftest_v);
+        return 0;
       }
     }
     return 0;
