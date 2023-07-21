@@ -13,7 +13,7 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-`timescale 1ns/10ps
+`timescale 1ns/1ns
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
@@ -132,20 +132,14 @@ end
 
 initial begin
   repeat (114) begin
-   #0.25 clock = 1'bx;
-   #0.25 clock = 1'b0;
+   #1 clock = 1'bx;
+   #1 clock = 1'b0;
   end
   forever begin
-    #0.25 clock = ~clock;
+    #1 clock = ~clock;
   end
 end
 
-initial begin
-  forever begin
-    #100us;
-    $display("100us passed, sim time @%t ",$time());
-  end
-end
 SimTop sim(
   .clock(clock),
   .reset(reset),
