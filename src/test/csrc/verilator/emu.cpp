@@ -28,6 +28,9 @@
 #ifdef  ENABLE_CHISEL_DB
 #include "chisel_db.h"
 #endif
+#ifdef ENABLE_IPC
+#include <sys/stat.h>
+#endif
 #include "ram.h"
 #include "zlib.h"
 #include "compress.h"
@@ -58,6 +61,9 @@ static inline void print_help(const char *file) {
   printf("  -e, --log-end=NUM          stop display log at NUM th cycle\n");
 #ifdef DEBUG_REFILL
   printf("  -T, --track-instr=ADDR     track refill action concerning ADDR\n");
+#endif
+#ifdef ENABLE_IPC
+  printf("  -R, --ipc-interval=NUM     the interval insts of drawing IPC curve\n");
 #endif
   printf("      --force-dump-result    force dump performance counter result in the end\n");
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
@@ -103,6 +109,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #ifdef DEBUG_REFILL
     { "track-instr",       1, NULL, 'T' },
 #endif
+    { "ipc-interval",      1, NULL, 'R' },
     { "warmup-instr",      1, NULL, 'W' },
     { "stat-cycles",       1, NULL, 'D' },
     { "image",             1, NULL, 'i' },
@@ -115,7 +122,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:I:T:W:hi:m:b:e:F:", long_options, &long_index)) != -1) {
+          "-s:C:I:T:R:W:hi:m:b:e:F:", long_options, &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -167,6 +174,18 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         }
         break;
 #endif
+      case 'R':
+#ifdef ENABLE_IPC
+        args.ipc_interval = atoll_strict(optarg, "ipc-interval");
+        printf("Drawing IPC curve each %d cycles\n", args.ipc_interval);
+        if(args.ipc_interval == 0) {
+          printf("Invalid ipc interval\n");
+          exit(1);
+        }
+#else
+        printf("[WARN] drawing ipc curve is not enabled at compile time, ignore --ipc-interval\n");
+#endif
+        break;
       case 'W': args.warmup_instr = atoll_strict(optarg, "warmup-instr");  break;
       case 'D': args.stat_cycles = atoll_strict(optarg, "stat-cycles");  break;
       case 'i': args.image = optarg; break;
@@ -181,6 +200,23 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     printf("Hint: --image=IMAGE_FILE must be given\n");
     exit(0);
   }
+
+#ifdef ENABLE_IPC
+  char *ipc_image = (char *)malloc(255);
+  char *ipc_file = (char *)malloc(255);
+  strcpy(ipc_image, args.image);
+  char *c = strchr(ipc_image, '/');
+  while (c) {
+    *c = '_';
+    c = strchr(c, '/');
+  }
+  printf("%s\n", ipc_image);
+  strcpy(ipc_file, "ipc/");
+  strcat(ipc_file, ipc_image);
+  strcat(ipc_file, ".txt");
+  mkdir("ipc", 0755);
+  args.ipc_file = fopen(ipc_file, "w");
+#endif
 
   if(args.ram_size){
     parse_and_update_ramsize(args.ram_size);
@@ -436,6 +472,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         dut_ptr->io_perfInfo_clean = 1;
         dut_ptr->io_perfInfo_dump = 1;
       }
+#ifdef ENABLE_IPC
+      if (trap->instrCnt >= args.ipc_times * args.ipc_interval && args.ipc_last_instr < args.ipc_times * args.ipc_interval) {
+        fprintf(args.ipc_file, "%d %f\n", args.ipc_times * args.ipc_interval, (float)args.ipc_interval / (cycles - args.ipc_last_cycle));
+        args.ipc_times++;
+        args.ipc_last_instr = trap->instrCnt;
+        args.ipc_last_cycle = cycles;
+      }
+#endif
     }
 
     single_cycle();
@@ -504,6 +548,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   // Simulation ends here, do clean up & display jobs
 #if VM_TRACE == 1
   if (enable_waveform) tfp->close();
+#endif
+
+#ifdef ENABLE_IPC
+  fclose(args.ipc_file);
 #endif
 
 #if VM_COVERAGE == 1

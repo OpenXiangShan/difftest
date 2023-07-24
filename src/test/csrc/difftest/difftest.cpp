@@ -420,6 +420,7 @@ int Difftest::do_store_check() {
 int Difftest::do_refill_check(int cacheid) {
   static int delay = 0;
   delay = delay * 2;
+  if (delay > 16) { return 1; }
   static uint64_t last_valid_addr = 0;
   char buf[512];
   refill_event_t dut_refill = dut.refill[cacheid];
@@ -447,7 +448,6 @@ int Difftest::do_refill_check(int cacheid) {
         printf("\n");
         // continue run some cycle before aborted to dump wave
         if (delay == 0) { delay = 1; }
-        if (delay > 16) { return 1; }
         return 0;
       }
     }

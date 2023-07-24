@@ -44,6 +44,13 @@ struct EmuArgs {
 #ifdef DEBUG_REFILL
   uint64_t track_instr;
 #endif
+#ifdef ENABLE_IPC
+  uint64_t ipc_interval;
+  FILE *ipc_file;
+  uint64_t ipc_last_instr;
+  uint64_t ipc_last_cycle;
+  uint64_t ipc_times;
+#endif
   const char *image;
   const char *snapshot_path;
   const char *wave_path;
@@ -69,6 +76,13 @@ struct EmuArgs {
     log_end = -1;
 #ifdef DEBUG_REFILL
     track_instr = 0;
+#endif
+#ifdef ENABLE_IPC
+    ipc_interval = 0;
+    ipc_file = NULL;
+    ipc_last_instr = 0;
+    ipc_last_cycle = 0;
+    ipc_times = 1;
 #endif
     snapshot_path = NULL;
     wave_path = NULL;
