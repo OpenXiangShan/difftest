@@ -71,6 +71,7 @@ static inline void print_help(const char *file) {
   printf("      --dump-wave            dump waveform when log is enabled\n");
 #ifdef ENABLE_CHISEL_DB
   printf("      --dump-db              enable database dump\n");
+  printf("      --dump-select-db       select database's table to dump\n");
 #endif
   printf("      --flash                the flash bin file for simulation\n");
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
@@ -101,8 +102,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "wave-path",         1, NULL,  0  },
     { "ram-size",          1, NULL,  0  },
     { "sim-run-ahead",     0, NULL,  0  },
-    { "dump-db",           0, NULL,  0  },
     { "ref-trace",         0, NULL,  0  },
+    { "dump-db",           0, NULL,  0  },
+    { "dump-select-db",    1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -143,14 +145,19 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] runahead is not enabled at compile time, ignore --sim-run-ahead\n");
 #endif
             continue;
-          case 11:
+          case 11: args.enable_ref_trace = true; continue;
 #ifdef ENABLE_CHISEL_DB
+          case 12: args.dump_db = true; continue;
+          case 13:
             args.dump_db = true;
-#else
-            printf("[WARN] chisel db is not enabled at compile time, ignore --dump-db\n");
-#endif
+            args.select_db = optarg;
             continue;
-          case 12: args.enable_ref_trace = true; continue;
+#else
+          case 12:
+          case 13:
+            printf("[WARN] chisel db is not enabled at compile time, ignore --dump-db\n");
+            continue;
+#endif
         }
         // fall through
       default:
@@ -256,7 +263,7 @@ Emulator::Emulator(int argc, const char *argv[]):
   // init ram
   init_ram(args.image);
 #ifdef ENABLE_CHISEL_DB
-  init_db(args.dump_db);
+  init_db(args.dump_db, (args.select_db != NULL), args.select_db);
 #endif
 
 #if VM_TRACE == 1
