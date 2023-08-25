@@ -246,6 +246,7 @@ Emulator::Emulator(int argc, const char *argv[]):
   // srand
   srand(args.seed);
   srand48(args.seed);
+  Verilated::randSeed(args.seed);
   Verilated::randReset(2);
   assert_init();
 
