@@ -80,6 +80,11 @@ EMU_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/X
 EMU_LDFLAGS  += $(DRAMSIM3_HOME)/build/libdramsim3.a
 endif
 
+ifeq ($(CONFIG_USE_SPARSEMM), 1)
+$(warning "NOTE: Sparse Memory is enable")
+EMU_CXXFLAGS += -DCONFIG_USE_SPARSEMM
+endif
+
 ifeq ($(RELEASE),1)
 EMU_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
 endif

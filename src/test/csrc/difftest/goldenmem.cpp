@@ -21,14 +21,37 @@
 #include "common.h"
 #include "compress.h"
 #include "refproxy.h"
+#include "sparseram.h"
+#include "ram.h"
 
 // #define DIFFTEST_STORE_COMMIT
 
 uint8_t *pmem;
 
-void* guest_to_host(paddr_t addr) { return &pmem[addr]; }
+#ifdef CONFIG_USE_SPARSEMM
+void* sparse_gd_mm = NULL;
+void * get_gd_sparsemm(){
+  if (sparse_gd_mm==NULL){
+    sparse_gd_mm = sparse_mem_new(4, 1024); //4kB
+  }
+  assert(sparse_gd_mm != NULL);
+  return sparse_gd_mm;
+}
+#endif
+
+void* guest_to_host(paddr_t addr) { 
+  #ifdef CONFIG_USE_SPARSEMM
+  assert(0);
+  #endif
+  return &pmem[addr]; 
+}
 
 void init_goldenmem() {
+  #ifdef CONFIG_USE_SPARSEMM
+  printf("init sparse goldenmem");
+  sparse_mem_copy(get_gd_sparsemm(), get_sparsemm());
+  ref_misc_put_gmaddr((uint8_t*)get_gd_sparsemm());
+  #else
   pmem = (uint8_t *)mmap(NULL, PMEM_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   if (pmem == (uint8_t *)MAP_FAILED) {
     printf("ERROR allocating physical memory. \n");
@@ -37,6 +60,7 @@ void init_goldenmem() {
   long get_img_size();
   nonzero_large_memcpy(pmem, get_img_start(), get_img_size());
   ref_misc_put_gmaddr(pmem);
+  #endif
 }
 
 void update_goldenmem(paddr_t addr, void *data, uint64_t mask, int len) {
@@ -48,15 +72,22 @@ void update_goldenmem(paddr_t addr, void *data, uint64_t mask, int len) {
   }
 }
 
-void read_goldenmem(paddr_t addr, void *data, uint64_t len) {
+void read_goldenmem(paddr_t addr, void *data, uint64_t len) {  
   *(uint64_t*)data = paddr_read(addr, len);
 }
 
 bool in_pmem(paddr_t addr) {
+  #ifdef CONFIG_USE_SPARSEMM
+  return PMEM_BASE <= addr;
+  #else
   return (PMEM_BASE <= addr) && (addr <= PMEM_BASE + PMEM_SIZE - 1);
+  #endif
 }
 
 static inline word_t pmem_read(paddr_t addr, int len) {
+  #ifdef CONFIG_USE_SPARSEMM
+  return sparse_mem_wread(get_gd_sparsemm(), addr, len);
+  #else
   void *p = &pmem[addr - PMEM_BASE];
   switch (len) {
     case 1: return *(uint8_t  *)p;
@@ -65,6 +96,7 @@ static inline word_t pmem_read(paddr_t addr, int len) {
     case 8: return *(uint64_t *)p;
     default: assert(0);
   }
+  #endif
 }
 
 static inline void pmem_write(paddr_t addr, word_t data, int len) {
@@ -72,6 +104,9 @@ static inline void pmem_write(paddr_t addr, word_t data, int len) {
   store_commit_queue_push(addr, data, len);
 #endif
 
+  #ifdef CONFIG_USE_SPARSEMM
+  sparse_mem_wwrite(get_gd_sparsemm(), addr, len, data);
+  #else
   void *p = &pmem[addr - PMEM_BASE];
   switch (len) {
     case 1: 
@@ -88,6 +123,7 @@ static inline void pmem_write(paddr_t addr, word_t data, int len) {
       return;
     default: assert(0);
   }
+  #endif
 }
 
 /* Memory accessing interfaces */

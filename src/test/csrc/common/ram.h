@@ -34,6 +34,10 @@ long get_img_size();
 uint64_t pmem_read(uint64_t raddr);
 void pmem_write(uint64_t waddr, uint64_t wdata);
 
+#ifdef CONFIG_USE_SPARSEMM
+void * get_sparsemm();
+#endif
+
 #ifdef WITH_DRAMSIM3
 #include "axi4.h"
 

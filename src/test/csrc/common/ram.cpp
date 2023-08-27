@@ -19,6 +19,7 @@
 #include "common.h"
 #include "ram.h"
 #include "compress.h"
+#include "sparseram.h"
 
 // #define TLB_UNITTEST
 
@@ -27,16 +28,45 @@
 CoDRAMsim3 *dram = NULL;
 #endif
 
-static uint64_t *ram;
+#ifdef CONFIG_USE_SPARSEMM
+#if defined(WITH_DRAMSIM3) || defined(TLB_UNITTEST)
+  #error SPARSE Memory is conflict with DRAMSIM3, TLB_TEST and Golden Memory
+#endif
+void* sparse_mm = NULL;
+#endif
+
+static uint64_t *ram = NULL;
 static long img_size = 0;
 static pthread_mutex_t ram_mutex;
 
 unsigned long EMU_RAM_SIZE = DEFAULT_EMU_RAM_SIZE;
 
-void* get_img_start() { return &ram[0]; }
+void* get_img_start() {
+  #ifdef CONFIG_USE_SPARSEMM
+  assert(0);
+  #endif
+  return &ram[0];
+}
 long get_img_size() { return img_size; }
-void* get_ram_start() { return &ram[0]; }
+
+void* get_ram_start() {
+  #ifdef CONFIG_USE_SPARSEMM
+  assert(0);
+  #endif
+  return &ram[0];
+}
+
 long get_ram_size() { return EMU_RAM_SIZE; }
+
+#ifdef CONFIG_USE_SPARSEMM
+void * get_sparsemm(){
+  if (sparse_mm==NULL){
+    sparse_mm = sparse_mem_new(4, 1024); //4kB
+  }
+  assert(sparse_mm != NULL);
+  return sparse_mm;
+}
+#endif
 
 #ifdef TLB_UNITTEST
 void addpageSv39() {
@@ -128,7 +158,10 @@ void init_ram(const char *img) {
   assert(img != NULL);
 
   printf("The image is %s\n", img);
-
+  #ifdef CONFIG_USE_SPARSEMM
+  get_sparsemm();
+  printf("Using Sparse RAM with 4kB block\n");
+  #else
   // initialize memory using Linux mmap
   ram = (uint64_t *)mmap(NULL, EMU_RAM_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {
@@ -141,6 +174,7 @@ void init_ram(const char *img) {
     }
   }
   printf("Using simulated %luMB RAM\n", EMU_RAM_SIZE / (1024 * 1024));
+  #endif
 
 #ifdef TLB_UNITTEST
   //new add
@@ -148,6 +182,16 @@ void init_ram(const char *img) {
   //new end
 #endif
 
+#ifdef CONFIG_USE_SPARSEMM
+  if(file_is_elf(img)){
+    sparse_mem_elf(get_sparsemm(), img);
+    printf("load %s (ELF) to sparse mem complete\n", img);
+  }else{
+    sparse_mem_bin(get_sparsemm(), img, 0x80000000);
+    printf("load %s (BIN) to sparse mem(0x80000000) complete\n", img);
+  }
+  sparse_mem_info(get_sparsemm());
+#else
   int ret;
   if (isGzFile(img)) {
     printf("Gzip file detected and loading image from extracted gz file\n");
@@ -183,12 +227,17 @@ void init_ram(const char *img) {
   // dram = new SimpleCoDRAMsim3(90);
 #endif
 
+#endif
   pthread_mutex_init(&ram_mutex, 0);
 
 }
 
 void ram_finish() {
+#ifdef CONFIG_USE_SPARSEMM
+  sparse_mem_del(sparse_mm);
+#else
   munmap(ram, EMU_RAM_SIZE);
+#endif
 #ifdef WITH_DRAMSIM3
   dramsim3_finish();
 #endif
@@ -197,20 +246,33 @@ void ram_finish() {
 
 
 extern "C" uint64_t ram_read_helper(uint8_t en, uint64_t rIdx) {
+  #ifdef CONFIG_USE_SPARSEMM
+  auto addr = 0x80000000 + rIdx * sizeof(uint64_t);
+  auto ret = (en) ? sparse_mem_wread(get_sparsemm(), addr, sizeof(uint64_t)):0;
+  return ret;
+  #else
   if (!ram)
     return 0;
   rIdx %= EMU_RAM_SIZE / sizeof(uint64_t);
   uint64_t rdata = (en) ? ram[rIdx] : 0;
   return rdata;
+  #endif
 }
 
 extern "C" void ram_write_helper(uint64_t wIdx, uint64_t wdata, uint64_t wmask, uint8_t wen) {
   if (wen && ram) {
+    #ifdef CONFIG_USE_SPARSEMM
+    auto addr = 0x80000000 + wIdx * sizeof(uint64_t);
+    uint64_t data = sparse_mem_wread(get_sparsemm(), addr, sizeof(uint64_t));
+    data = (data & ~wmask) | (wdata & wmask);
+    sparse_mem_wwrite(get_sparsemm(), addr, sizeof(uint64_t), data);
+    #else
     if (wIdx >= EMU_RAM_SIZE / sizeof(uint64_t)) {
       printf("ERROR: ram wIdx = 0x%lx out of bound!\n", wIdx);
       return;
     }
     ram[wIdx] = (ram[wIdx] & ~wmask) | (wdata & wmask);
+    #endif
   }
 }
 
@@ -263,7 +325,12 @@ void axi_read_data(const axi_ar_channel &ar, dramsim3_meta *meta) {
   else if (ar.burst == 1) {
     assert(transaction_size / sizeof(uint64_t) <= MAX_AXI_DATA_LEN);
     for (int i = 0; i < transaction_size / sizeof(uint64_t); i++) {
+      #ifdef CONFIG_USE_SPARSEMM
+      auto addr = (address / sizeof(uint64_t)) * sizeof(uint64_t);
+      meta->data[i] = sparse_mem_wread(get_sparsemm(), addr, sizeof(uint64_t));
+      #else
       meta->data[i] = ram[address / sizeof(uint64_t)];
+      #endif
       address += sizeof(uint64_t);
     }
   }
@@ -276,7 +343,12 @@ void axi_read_data(const axi_ar_channel &ar, dramsim3_meta *meta) {
       if (address == high) {
         address = low;
       }
+      #ifdef CONFIG_USE_SPARSEMM
+      auto addr = (address / sizeof(uint64_t)) * sizeof(uint64_t);
+      meta->data[i] = sparse_mem_wread(get_sparsemm(), addr, sizeof(uint64_t));
+      #else
       meta->data[i] = ram[address / sizeof(uint64_t)];
+      #endif
       address += sizeof(uint64_t);
     }
   }

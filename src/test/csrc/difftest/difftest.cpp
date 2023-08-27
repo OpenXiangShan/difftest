@@ -19,6 +19,7 @@
 #include "ram.h"
 #include "flash.h"
 #include "spikedasm.h"
+#include "sparseram.h"
 
 static const char *reg_name[DIFFTEST_NR_REG+1] = {
   "$0",  "ra",  "sp",   "gp",   "tp",  "t0",  "t1",   "t2",
@@ -280,6 +281,9 @@ void Difftest::do_instr_commit(int i) {
 
   // Handle load instruction carefully for SMP
   if (NUM_CORES > 1) {
+    #ifdef CONFIG_USE_SPARSEMM
+    assert(0); // sparsemem not suport multi core now
+    #endif
     if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
       proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
       if (realWen && ref_regs_ptr[dut.commit[i].fpwen * 32 + dut.commit[i].wdest] != get_commit_data(i)) {
@@ -362,7 +366,12 @@ void Difftest::do_first_instr_commit() {
     if (proxy->load_flash_bin) {
         proxy->load_flash_bin(get_flash_path(), get_flash_size());
     }
+    #ifdef CONFIG_USE_SPARSEMM
+    printf("copy sparse mem(%lx) to ref\n", get_sparsemm());
+    proxy->memcpy(0x80000000, get_sparsemm(), get_img_size(), DIFFTEST_TO_REF);
+    #else
     proxy->memcpy(0x80000000, get_img_start(), get_img_size(), DIFFTEST_TO_REF);
+    #endif
     // Use a temp variable to store the current pc of dut
     uint64_t dut_this_pc = dut.csr.this_pc;
     // NEMU should always start at FIRST_INST_ADDRESS
@@ -422,6 +431,12 @@ int Difftest::do_refill_check(int cacheid) {
         for (int j = 0; j < 8; j++) {
           printf("%016lx", dut_refill.data[j]);
         }
+        #ifdef CONFIG_USE_SPARSEMM
+        printf("\nRAM : ");
+        for (int j = 0; j < 8; j++) {
+          printf("%016lx", sparse_mem_wread(get_sparsemm(), dut_refill.addr + j*sizeof(uint64_t), sizeof(uint64_t)));
+        }
+        #endif
         printf("\n");
         return 1;
       }
