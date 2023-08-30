@@ -734,7 +734,9 @@ void Emulator::snapshot_load(const char *filename) {
 
 void Emulator::fork_child_init() {
 #if EMU_THREAD > 1
-#ifdef VERILATOR_4_210
+#if VERILATOR_VERSION_INTEGER >= 4228000
+  dut_ptr->vlSymsp->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1);
+#elif VERILATOR_VERSION_INTEGER >= 4210000
   dut_ptr->vlSymsp->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
 #else
   dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);

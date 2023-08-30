@@ -42,9 +42,10 @@ endif
 
 # Verilator version check
 VERILATOR_VER_CMD = verilator --version | cut -f2 -d' ' | tr -d '.'
+VERILATOR_VERSION = $(shell `$(VERILATOR_VER_CMD)`)
+
 VERILATOR_4_210 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 4210)
 ifeq ($(VERILATOR_4_210),1)
-EMU_CXXFLAGS += -DVERILATOR_4_210
 VEXTRA_FLAGS += --instr-count-dpi 1
 endif
 VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000)
