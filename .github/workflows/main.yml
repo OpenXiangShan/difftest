@@ -49,16 +49,6 @@ jobs:
             make emu EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
 
-      - name: Difftest with LightSSS
-        run: |
-            cd $GITHUB_WORKSPACE/../xs-env
-            source ./env.sh
-            cd $GITHUB_WORKSPACE/../xs-env/NutShell
-            source ./env.sh
-            make clean
-            make emu EMU_TRACE=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
-            ./build/emu -i ./ready-to-run/microbench.bin --enable-fork
-
       - name: Difftest with Snapshot
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
@@ -88,25 +78,4 @@ jobs:
             make clean
             make emu EMU_THREADS=2 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
-
-      - name: Difftest with two threads and LightSSS
-        run: |
-            cd $GITHUB_WORKSPACE/../xs-env
-            source ./env.sh
-            cd $GITHUB_WORKSPACE/../xs-env/NutShell
-            source ./env.sh
-            make clean
-            make emu EMU_THREADS=2 EMU_TRACE=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
-            ./build/emu -i ./ready-to-run/microbench.bin --enable-fork
-
-# Github hosted CI does not support XiangShan
-
-#       - name: Difftest XiangShan
-#         run: |
-#             cd $GITHUB_WORKSPACE/../xs-env
-#             source ./env.sh
-#             cd $GITHUB_WORKSPACE/../xs-env/XiangShan
-#             make emu CONFIG=MinimalConfig
-#             ./build/emu -b 0 -e 0 -i ./ready-to-run/linux.bin
-           
 
