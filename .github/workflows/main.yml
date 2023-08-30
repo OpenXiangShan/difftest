@@ -89,6 +89,21 @@ jobs:
             make emu EMU_TRACE=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
             ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave
 
+      - name: Difftest with two threads
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            rm -r ./NEMU
+            git clone https://github.com/OpenXiangShan/NEMU
+            cd NEMU
+            make riscv64-xs-ref_defconfig
+            make
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu EMU_THREADS=2 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
+
 # Github hosted CI does not support XiangShan
 
 #       - name: Difftest XiangShan
