@@ -1,20 +1,29 @@
 name: CI
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  test-difftest-main:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Mill Installation
+        run: |
+          sudo curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.1/0.11.1 > /usr/local/bin/mill
+          chmod +x /usr/local/bin/mill
+
+      - name: Generate Verilog
+        run: |
+          make difftest_verilog NOOP_HOME=$GITHUB_WORKSPACE
+
   test-difftest:
-    # The type of runner that the job will run on
     runs-on: ubuntu-20.04
 
     steps:

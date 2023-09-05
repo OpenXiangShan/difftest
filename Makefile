@@ -14,14 +14,13 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-SIM_TOP    ?= SimTop
-DESIGN_DIR ?= ..
-NUM_CORES  ?= 1
+ifndef NOOP_HOME
+$(error NOOP_HOME is not set)
+endif
 
-# Set USE_DIFFTEST_MAIN to 1 in your design's Makefile to generate Verilog by difftest
-# rather than by design.
-# Set this variable if your design is written in Verilog.
-USE_DIFFTEST_MAIN ?= 0
+SIM_TOP    ?= SimTop
+DESIGN_DIR ?= $(NOOP_HOME)
+NUM_CORES  ?= 1
 
 BUILD_DIR  = $(DESIGN_DIR)/build
 SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).v
@@ -38,9 +37,7 @@ sim-verilog: $(SIM_TOP_V)
 
 # generate difftest files for non-chisel design.
 difftest_verilog:
-ifeq ($(USE_DIFFTEST_MAIN), 1)
-	mill chiselModule.runMain difftest.DifftestMain -td $(BUILD_DIR)
-endif
+	mill difftest.runMain difftest.DifftestMain -td $(BUILD_DIR)
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
@@ -74,18 +71,9 @@ SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
 include verilator.mk
 include vcs.mk
 
-ifndef NEMU_HOME
-$(error NEMU_HOME is not set)
-endif
-REF_SO := $(NEMU_HOME)/build/riscv64-nemu-interpreter-so
-$(REF_SO):
-	$(MAKE) -C $(NEMU_HOME) riscv64-xs-ref_defconfig
-	$(MAKE) -C $(NEMU_HOME)
-
 SEED ?= $(shell shuf -i 1-10000 -n 1)
 
 clean: vcs-clean
 	rm -rf $(BUILD_DIR)
 
 .PHONY: sim-verilog emu difftest_verilog clean$(REF_SO)
-

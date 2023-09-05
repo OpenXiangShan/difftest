@@ -34,9 +34,6 @@ endif
 ifeq ($(WITH_CONSTANTIN), 1)
 CONSTANTIN_SRC = $(BUILD_DIR)/constantin.cpp
 EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
-ifndef NOOP_HOME
-$(error NOOP_HOME which is used in constantin is not set)
-endif
 else
 CONSTANTIN_SRC =
 endif
@@ -171,9 +168,6 @@ endif
 B ?= 0
 E ?= 0
 
-ifndef NOOP_HOME
-$(error NOOP_HOME is not set)
-endif
 EMU_FLAGS = -s $(SEED) -b $(B) -e $(E) $(SNAPSHOT_OPTION) $(WAVEFORM) $(EMU_ARGS)
 
 emu: $(EMU)
