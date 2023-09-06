@@ -21,6 +21,5 @@
 
 void init_device();
 void poll_event();
-uint32_t uptime(void);
 
 #endif

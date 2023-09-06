@@ -58,13 +58,21 @@ REMOTE ?= localhost
 SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
 SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
 
-PLUGIN_CSRC_DIR =  $(abspath ./src/test/csrc/plugin)
-PLUGIN_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR) -name "*.cpp")
+# generated-src
+GEN_CSRC_DIR = $(BUILD_DIR)/generated-src
+GEN_CXXFILES = $(shell find $(GEN_CSRC_DIR) -name "*.cpp")
 
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 
-PLUGIN_CHEAD_DIR = $(abspath ./src/test/csrc/plugin/include)
+PLUGIN_CSRC_DIR   = $(abspath ./src/test/csrc/plugin)
+PLUGIN_INC_DIR    = $(abspath $(PLUGIN_CSRC_DIR)/include)
+
+PLUGIN_DASM_DIR      = $(abspath $(PLUGIN_CSRC_DIR)/spikedasm)
+PLUGIN_DASM_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR)/spikedasm -name "*.cpp")
+
+PLUGIN_RUNAHEAD_DIR      = $(abspath $(PLUGIN_CSRC_DIR)/runahead)
+PLUGIN_RUNAHEAD_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR)/runahead -name "*.cpp")
 
 SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
 

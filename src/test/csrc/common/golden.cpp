@@ -14,7 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "ref.h"
+#include "golden.h"
 #include "ram.h"
 #include <goldenmem.h>
 

@@ -59,8 +59,7 @@ extern "C" void set_max_cycles(long mc) {
 }
 
 extern "C" void simv_init() {
-  printf("simv compiled at %s, %s\n", __DATE__, __TIME__);
-  setlocale(LC_NUMERIC, "");
+  common_init("simv");
 
   init_ram(bin_file);
   init_flash(flash_bin_file);
@@ -71,8 +70,6 @@ extern "C" void simv_init() {
     init_goldenmem();
     init_nemuproxy(EMU_RAM_SIZE);
   }
-
-  assert_init();
 }
 
 extern "C" int simv_step() {

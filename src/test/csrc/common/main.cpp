@@ -1,5 +1,6 @@
 /***************************************************************************************
 * Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2022 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -13,26 +14,29 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-import os.Path
-import mill._
-import scalalib._
-import publish._
+#include "common.h"
+#include "dut.h"
 
-object ivys {
-  val scala = "2.13.10"
-  val chisel3 = ivy"edu.berkeley.cs::chisel3:3.5.6"
-  val chisel3Plugin = ivy"edu.berkeley.cs:::chisel3-plugin:3.5.6"
-  val scalatest = ivy"org.scalatest::scalatest:3.2.2"
+
+#ifdef VERILATOR
+#include "emu.h"
+#define DUT_MODEL Emulator
+#endif
+
+#ifdef DUT_MODEL
+int main(int argc, const char *argv[]) {
+  common_init(argv[0]);
+
+  // main simulation loop
+  auto emu = new DUT_MODEL(argc, argv);
+  while (!emu->is_finished()) {
+    emu->tick();
+  }
+  bool is_good = emu->is_good();
+  delete emu;
+
+  common_finish();
+
+  return !is_good;
 }
-
-trait CommonDiffTest extends ScalaModule with SbtModule {
-  override def scalaVersion = ivys.scala
-
-  override def scalacPluginIvyDeps = Agg(ivys.chisel3Plugin)
-
-  override def ivyDeps = Agg(ivys.chisel3)
-}
-
-object difftest extends CommonDiffTest {
-  override def millSourcePath = os.pwd
-}
+#endif // DUT_MODEL

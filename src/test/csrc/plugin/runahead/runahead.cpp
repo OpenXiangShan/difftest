@@ -55,7 +55,7 @@ int runahead_init() {
   assert(difftest);
   for (int i = 0; i < NUM_CORES; i++) {
     runahead[i] = new Runahead(i);
-    // runahead uses difftest_core_state_t dut in Difftest
+    // runahead uses DiffTestState dut in Difftest
     // to be refactored later
     runahead[i]->dut_ptr = difftest[i]->get_dut();
     runahead[i]->ref_ptr = runahead[i]->get_ref();

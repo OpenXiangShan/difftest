@@ -47,7 +47,7 @@ void VerilatedSaveMem::save() {
     // printf("Compress cost time (msec.usec): %lf\n", calcTime(s, e));
   }
   size = 0;
-  printf("save snapshot to %s...\n", saved_filename.c_str());
+  Info("save snapshot to %s...\n", saved_filename.c_str());
 }
 
 void VerilatedRestoreMem::fill() {

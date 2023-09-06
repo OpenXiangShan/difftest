@@ -1,6 +1,5 @@
 /***************************************************************************************
 * Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -14,25 +13,56 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef COMPRESS_H
-#define COMPRESS_H
+#ifndef __DUT_H__
+#define __DUT_H__
+
+#include <vector>
 
 #include "common.h"
 
-#ifndef NO_GZ_COMPRESSION
-#include <zlib.h>
-#endif
-#include <sys/time.h>
+class DUT {
+public:
+  DUT() { };
+  DUT(int argc, const char *argv[]) { };
+  virtual int tick() = 0;
+  virtual int is_finished() = 0;
+  virtual int is_good() = 0;
+};
 
-#define LOAD_SNAPSHOT 0
-#define LOAD_RAM 1
+#define simstats_display(s, ...) \
+  eprintf(ANSI_COLOR_GREEN s ANSI_COLOR_RESET, ##__VA_ARGS__)
 
-double calcTime(timeval s, timeval e);
+enum class SimExitCode {
+  good_trap,
+  exceed_limit,
+  bad_trap,
+  exception_loop,
+  sim_exit,
+  difftest,
+  unknown
+};
 
-bool isGzFile(const char *filename);
-long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size);
-long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_type);
+class SimStats {
+public:
+  // simulation exit code
+  SimExitCode exit_code;
 
-void nonzero_large_memcpy(const void* __restrict dest, const void* __restrict src, size_t n);
+  SimStats() {
+    reset();
+  };
+
+  void reset() {
+    exit_code = SimExitCode::unknown;
+  }
+
+  void update(DiffTestState *state) {
+  }
+
+  void display() {
+    simstats_display("ExitCode: %d\n", exit_code);
+  }
+};
+
+extern SimStats stats;
 
 #endif

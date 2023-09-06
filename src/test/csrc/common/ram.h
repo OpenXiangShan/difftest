@@ -17,22 +17,116 @@
 #ifndef __RAM_H
 #define __RAM_H
 
+#include <iostream>
+#include <fstream>
+#include <functional>
+#include <memory>
+#include <set>
+#include <unordered_map>
+#include <vector>
 #include "common.h"
 
 #ifndef DEFAULT_EMU_RAM_SIZE
 #define DEFAULT_EMU_RAM_SIZE (256 * 1024 * 1024UL)
 #endif
 
-void init_ram(const char *img);
-void ram_finish();
-void* get_ram_start();
-long get_ram_size();
-
-void* get_img_start();
-long get_img_size();
-
 uint64_t pmem_read(uint64_t raddr);
 void pmem_write(uint64_t waddr, uint64_t wdata);
+
+class InputReader {
+public:
+  virtual ~InputReader() {};
+  virtual uint64_t len() { return 0; };
+  virtual uint64_t next() = 0;
+  virtual uint64_t read_all(void *, uint64_t) = 0;
+};
+
+class StdinReader : public InputReader {
+public:
+  StdinReader();
+  ~StdinReader() {}
+  uint64_t next();
+  uint64_t read_all(void *dest, uint64_t max_bytes = -1ULL);
+
+private:
+  uint64_t n_bytes;
+};
+
+class FileReader : public InputReader {
+public:
+  FileReader(const char *filename);
+  ~FileReader() { file.close(); }
+  uint64_t len() { return file_size; };
+  uint64_t next();
+  uint64_t read_all(void *dest, uint64_t max_bytes = -1ULL);
+
+private:
+  std::ifstream file;
+  uint64_t file_size;
+};
+
+class SimMemory {
+private:
+  bool is_stdin(const char *image);
+  uint64_t *is_wim(const char *image, uint64_t &wim_size);
+
+protected:
+  uint64_t memory_size; // in bytes
+  std::set<uint64_t> accessed_indices;
+  InputReader *createInputReader(const char *image);
+  virtual uint64_t get_img_size() = 0;
+  void inline on_access(uint64_t index) {
+    accessed_indices.insert(index);
+  }
+
+public:
+  SimMemory(uint64_t n_bytes) : memory_size(n_bytes) {}
+  virtual ~SimMemory();
+  uint64_t get_size() {
+    return memory_size;
+  }
+  bool in_range_u8(uint64_t address) {
+    return address < memory_size;
+  }
+  bool in_range_u64(uint64_t index) {
+    return index < memory_size / sizeof(uint64_t);
+  }
+
+  virtual void clone(std::function<void(void*, size_t)> func, bool skip_zero = false) = 0;
+  virtual void clone_on_demand(std::function<void(uint64_t, void*, size_t)> func, bool skip_zero = false) {
+    clone([func](void* src, size_t n) { func(0, src, n); }, skip_zero);
+  }
+  virtual uint64_t *as_ptr() { return nullptr; }
+  virtual uint64_t& at(uint64_t index) = 0;
+  void display_stats();
+};
+
+class MmapMemory : public SimMemory {
+private:
+  uint64_t *ram;
+  uint64_t img_size;
+
+protected:
+  virtual inline uint64_t get_img_size() {
+    return img_size;
+  }
+
+public:
+  MmapMemory(const char *image, uint64_t n_bytes);
+  virtual ~MmapMemory();
+  void clone(std::function<void(void*, uint64_t)> func, bool skip_zero = false) {
+    uint64_t n_bytes = skip_zero ? img_size : get_size();
+    func(ram, n_bytes);
+  }
+  uint64_t& at(uint64_t index) {
+    on_access(index);
+    return ram[index];
+  }
+
+  uint64_t *as_ptr() { return ram; }
+};
+
+extern SimMemory *simMemory;
 
 #ifdef WITH_DRAMSIM3
 
