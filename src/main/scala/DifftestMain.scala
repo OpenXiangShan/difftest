@@ -22,9 +22,7 @@ import chisel3.stage._
 // Main class to generate difftest modules when design is not written in chisel.
 class DifftestTop extends Module {
   val difftest_arch_event = DifftestModule(new DiffArchEvent, dontCare = true)
-  val difftest_basic_instr_commit = DifftestModule(new DiffBasicInstrCommit, dontCare = true)
   val difftest_instr_commit = DifftestModule(new DiffInstrCommit, dontCare = true)
-  val difftest_basic_trap_event = DifftestModule(new DiffBasicTrapEvent, dontCare = true)
   val difftest_trap_event = DifftestModule(new DiffTrapEvent, dontCare = true)
   val difftest_csr_state = DifftestModule(new DiffCSRState, dontCare = true)
   val difftest_debug_mode = DifftestModule(new DiffDebugMode, dontCare = true)

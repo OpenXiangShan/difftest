@@ -150,7 +150,7 @@ class DiffArchEvent extends DifftestBundle
   override val desiredCppName: String = "event"
 }
 
-class DiffBasicInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
+class DiffInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
   with DifftestWithIndex
   with DifftestWithValid
 {
@@ -162,6 +162,14 @@ class DiffBasicInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
   val wpdest   = UInt(log2Ceil(numPhyRegs).W)
   val wdest    = UInt(8.W)
 
+  val pc       = UInt(64.W)
+  val instr    = UInt(32.W)
+  val robIdx   = UInt(10.W)
+  val lqIdx    = UInt(7.W)
+  val sqIdx    = UInt(7.W)
+  val isLoad   = Bool()
+  val isStore  = Bool()
+
   def setSpecial(
     isFused: Bool = false.B,
     isExit: Bool = false.B,
@@ -172,27 +180,16 @@ class DiffBasicInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
   override val desiredCppName: String = "commit"
 }
 
-class DiffInstrCommit(numPhyRegs: Int = 32) extends DiffBasicInstrCommit(numPhyRegs) {
-  val pc       = UInt(64.W)
-  val instr    = UInt(32.W)
-  val robIdx   = UInt(10.W)
-  val lqIdx    = UInt(7.W)
-  val sqIdx    = UInt(7.W)
-  val isLoad   = Bool()
-  val isStore  = Bool()
-}
-
-class DiffBasicTrapEvent extends DifftestBundle {
+class DiffTrapEvent extends DifftestBundle {
   val hasTrap  = Bool()
   val cycleCnt = UInt(64.W)
   val instrCnt = UInt(64.W)
   val hasWFI   = Bool()
-  override val desiredCppName: String = "trap"
-}
 
-class DiffTrapEvent extends DiffBasicTrapEvent {
   val code     = UInt(3.W)
   val pc       = UInt(64.W)
+
+  override val desiredCppName: String = "trap"
 }
 
 class DiffCSRState extends DifftestBundle {

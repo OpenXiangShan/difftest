@@ -89,10 +89,10 @@ protected:
   void display_custom() {
     printf(" wen %d dst %02d data %016lx idx %03x", wen, dest, data, robidx);
     if (isLoad) {
-      printf(" L%02x", lqidx);
+      printf(" (%02x)", lqidx);
     }
     if (isStore) {
-      printf(" S%02x", sqidx);
+      printf(" (%02x)", sqidx);
     }
     if (tag) {
       printf(" (%c)", tag);
