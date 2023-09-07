@@ -438,17 +438,20 @@ object DifftestModule {
     difftestCpp += s"#define CPU_$cpu_s"
     difftestCpp += ""
 
+    val numCores = instances.filter(_._1.isUniqueIdentifier).length
     val uniqBundles = instances.groupBy(_._1.desiredModuleName)
     // Create cpp declaration for each bundle type
     uniqBundles.values.map(_.map(_._1)).foreach(bundles => {
       val bundleType = bundles.head
       difftestCpp += bundleType.toCppDeclMacro
+      val macroName = bundleType.desiredCppName.toUpperCase
       if (bundleType.isInstanceOf[DifftestWithIndex]) {
-        val configWidthName = s"CONFIG_DIFF_${bundleType.desiredCppName.toUpperCase}_WIDTH"
-        difftestCpp += s"#define $configWidthName ${bundles.length}"
+        val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
+        require(bundles.length % numCores == 0, s"Cores seem to have different # of ${macroName}")
+        difftestCpp += s"#define $configWidthName ${bundles.length / numCores}"
       }
       if (bundleType.isFlatten) {
-        val configWidthName = s"CONFIG_DIFF_${bundleType.desiredCppName.toUpperCase}_WIDTH"
+        val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
         difftestCpp += s"#define $configWidthName ${bundleType.numFlattenElements}"
       }
       difftestCpp += bundleType.toCppDeclaration
@@ -461,8 +464,10 @@ object DifftestModule {
       val bundleType = cppInstances.head._1
       val instanceName = bundleType.desiredCppName
       val cppIsArray = bundleType.isInstanceOf[DifftestWithIndex] || bundleType.isFlatten
-      val instanceCount = if (bundleType.isFlatten) bundleType.numFlattenElements else cppInstances.length
-      require(cppIsArray || cppInstances.length == 1)
+      val nInstances = cppInstances.length
+      val instanceCount = if (bundleType.isFlatten) bundleType.numFlattenElements else nInstances / numCores
+      require(nInstances % numCores == 0, s"Cores seem to have different # of ${instanceName}")
+      require(cppIsArray || nInstances == numCores, s"# of ${instanceName} should not be ${nInstances}")
       val arrayWidth = if (cppIsArray) s"[$instanceCount]" else ""
       difftestCpp += f"  $className%-30s $instanceName$arrayWidth;"
     }
