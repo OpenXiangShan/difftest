@@ -72,14 +72,28 @@ public:
   uint64_t data;
   char tag;
 
+  uint16_t robidx;
+  uint8_t isLoad;
+  uint8_t lqidx;
+  uint8_t isStore;
+  uint8_t sqidx;
+
   InstrTrace(uint64_t pc, uint32_t inst, uint8_t wen, uint8_t dest, uint64_t data,
+    uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore,
     bool skip = false, bool delayed = false) : CommitTrace(pc, inst),
+    robidx(robidx), isLoad(isLoad), lqidx(lqidx), isStore(isStore), sqidx(sqidx),
     wen(wen), dest(dest), data(data), tag(get_tag(skip, delayed)) {}
   virtual inline const char *get_type() { return "commit"; };
 
 protected:
   void display_custom() {
-    printf(" wen %d dst %02d data %016lx", wen, dest, data);
+    printf(" wen %d dst %02d data %016lx idx %03x", wen, dest, data, robidx);
+    if (isLoad) {
+      printf(" L%02x", lqidx);
+    }
+    if (isStore) {
+      printf(" S%02x", sqidx);
+    }
     if (tag) {
       printf(" (%c)", tag);
     }
@@ -124,7 +138,7 @@ public:
   };
   void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip, bool delayed,
       uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore) {
-    push_back_trace(new InstrTrace(pc, inst, en, dest, data, skip, delayed));
+    push_back_trace(new InstrTrace(pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
     retire_inst_pointer = (retire_inst_pointer + 1) % DEBUG_INST_TRACE_SIZE;
   };
   void record_exception(uint64_t pc, uint32_t inst, uint64_t cause) {
