@@ -337,6 +337,7 @@ Emulator::Emulator(int argc, const char *argv[]):
 #endif
 
 #ifdef VM_SAVABLE
+  snapshot_slot = new VerilatedSaveMem[2];
   if (args.snapshot_path != NULL) {
     Info("loading from snapshot `%s`...\n", args.snapshot_path);
     snapshot_load(args.snapshot_path);
@@ -455,6 +456,7 @@ Emulator::~Emulator() {
     snapshot_slot[1].save();
     Info("Please remove unused snapshots manually\n");
   }
+  delete[] snapshot_slot;
 #endif
 
 #ifdef ENABLE_CHISEL_DB
@@ -690,17 +692,20 @@ int Emulator::tick() {
 #endif // ENABLE_RUNAHEAD
 
 #ifdef VM_SAVABLE
-  static int snapshot_count = 0;
-  if (args.enable_snapshot && trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
-    // save snapshot every 60s
-    time_t now = time(NULL);
-    snapshot_save(snapshot_filename(now));
-    lasttime_snapshot = t;
-    // dump one snapshot to file every 60 snapshots
-    snapshot_count++;
-    if (snapshot_count == 60) {
-      snapshot_slot[0].save();
-      snapshot_count = 0;
+  if (args.enable_snapshot) {
+    static int snapshot_count = 0;
+    uint32_t t = uptime();
+    if (trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
+      // save snapshot every 60s
+      time_t now = time(NULL);
+      snapshot_save(snapshot_filename(now));
+      lasttime_snapshot = t;
+      // dump one snapshot to file every 60 snapshots
+      snapshot_count++;
+      if (snapshot_count == 60) {
+        snapshot_slot[0].save();
+        snapshot_count = 0;
+      }
     }
   }
 #endif
@@ -876,31 +881,33 @@ void Emulator::snapshot_save(const char *filename) {
   stream << *dut_ptr;
   stream.flush();
 
-  long size = get_ram_size();
+  long size = simMemory->get_size();
   stream.unbuf_write(&size, sizeof(size));
-  stream.unbuf_write(get_ram_start(), size);
+  if (!simMemory->as_ptr()) {
+    printf("simMemory does not support as_ptr\n");
+    assert(0);
+  }
+  stream.unbuf_write(simMemory->as_ptr(), size);
 
   auto diff = difftest[0];
   uint64_t cycleCnt = diff->get_trap_event()->cycleCnt;
   stream.unbuf_write(&cycleCnt, sizeof(cycleCnt));
 
   auto proxy = diff->proxy;
-
-  uint64_t ref_r[DIFFTEST_NR_REG];
-  proxy->regcpy(&ref_r, REF_TO_DUT);
-  stream.unbuf_write(ref_r, sizeof(ref_r));
+  stream.unbuf_write(&proxy->regs_int, sizeof(proxy->regs_int));
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
+  stream.unbuf_write(&proxy->regs_fp, sizeof(proxy->regs_fp));
+#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
+  stream.unbuf_write(&proxy->csr, sizeof(proxy->csr));
+  stream.unbuf_write(&proxy->pc, sizeof(proxy->pc));
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  proxy->memcpy(PMEM_BASE, buf, size, DIFFTEST_TO_DUT);
+  proxy->ref_memcpy(PMEM_BASE, buf, size, REF_TO_DUT);
   stream.unbuf_write(buf, size);
   munmap(buf, size);
 
-  struct SyncState sync_mastate;
-  proxy->uarchstatus_cpy(&sync_mastate, REF_TO_DUT);
-  stream.unbuf_write(&sync_mastate, sizeof(struct SyncState));
-
   uint64_t csr_buf[4096];
-  proxy->csrcpy(csr_buf, REF_TO_DIFFTEST);
+  proxy->ref_csrcpy(csr_buf, REF_TO_DUT);
   stream.unbuf_write(&csr_buf, sizeof(csr_buf));
 
   long sdcard_offset;
@@ -920,31 +927,34 @@ void Emulator::snapshot_load(const char *filename) {
 
   long size;
   stream.read(&size, sizeof(size));
-  assert(size == get_ram_size());
-  stream.read(get_ram_start(), size);
+  assert(size == simMemory->get_size());
+  if (!simMemory->as_ptr()) {
+    printf("simMemory does not support as_ptr\n");
+    assert(0);
+  }
+  stream.read(simMemory->as_ptr(), size);
 
   auto diff = difftest[0];
   uint64_t *cycleCnt = &(diff->get_trap_event()->cycleCnt);
   stream.read(cycleCnt, sizeof(*cycleCnt));
 
   auto proxy = diff->proxy;
-
-  uint64_t ref_r[DIFFTEST_NR_REG];
-  stream.read(ref_r, sizeof(ref_r));
-  proxy->regcpy(&ref_r, DUT_TO_REF);
+  stream.read(&proxy->regs_int, sizeof(proxy->regs_int));
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
+  stream.read(&proxy->regs_fp, sizeof(proxy->regs_fp));
+#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
+  stream.read(&proxy->csr, sizeof(proxy->csr));
+  stream.read(&proxy->pc, sizeof(proxy->pc));
+  proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   stream.read(buf, size);
-  proxy->memcpy(PMEM_BASE, buf, size, DIFFTEST_TO_REF);
+  proxy->ref_memcpy(PMEM_BASE, buf, size, DUT_TO_REF);
   munmap(buf, size);
-
-  struct SyncState sync_mastate;
-  stream.read(&sync_mastate, sizeof(struct SyncState));
-  proxy->uarchstatus_cpy(&sync_mastate, DUT_TO_REF);
 
   uint64_t csr_buf[4096];
   stream.read(&csr_buf, sizeof(csr_buf));
-  proxy->csrcpy(csr_buf, DIFFTEST_TO_REF);
+  proxy->ref_csrcpy(csr_buf, DUT_TO_REF);
 
   long sdcard_offset = 0;
   stream.read(&sdcard_offset, sizeof(sdcard_offset));

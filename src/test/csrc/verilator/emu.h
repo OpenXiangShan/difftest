@@ -95,7 +95,7 @@ private:
   bool enable_waveform;
   bool force_dump_wave = false;
 #ifdef VM_SAVABLE
-  VerilatedSaveMem snapshot_slot[2];
+  VerilatedSaveMem *snapshot_slot = nullptr;
 #endif
   EmuArgs args;
   LightSSS *lightsss = NULL;
