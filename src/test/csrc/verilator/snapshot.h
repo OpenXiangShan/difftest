@@ -24,7 +24,7 @@
 #include "compress.h"
 #include "ram.h"
 
-#define SNAPSHOT_SIZE (3UL * EMU_RAM_SIZE)
+#define SNAPSHOT_SIZE (3UL * simMemory->get_size())
 
 class VerilatedSaveMem : public VerilatedSerialize {
   unsigned long buf_size;

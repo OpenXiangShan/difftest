@@ -14,50 +14,71 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
+EMU          = $(BUILD_DIR)/emu
 EMU_TOP      = SimTop
 
-EMU_CSRC_DIR = $(abspath ./src/test/csrc)
-EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIFFTEST_CXXFILES)
-EMU_CXXFLAGS += -std=c++14 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
-EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
-EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
+EMU_CSRC_DIR   = $(abspath ./src/test/csrc/verilator)
+EMU_CONFIG_DIR = $(abspath ./config)
 
+EMU_CXXFILES   = $(shell find $(EMU_CSRC_DIR) -name "*.cpp")
+EMU_CXXFILES  += $(SIM_CXXFILES) $(GEN_CXXFILES)
+
+EMU_CXXFLAGS += -I$(SIM_CSRC_DIR) -I$(GEN_CSRC_DIR) -I$(PLUGIN_INC_DIR)
+EMU_CXXFLAGS += -I$(EMU_CONFIG_DIR) -I$(EMU_CSRC_DIR)
+EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES) --std=c++17
+EMU_LDFLAGS  += -ldl
+
+# DiffTest support
+ifeq ($(NO_DIFF), 1)
+EMU_CXXFLAGS += -DCONFIG_NO_DIFFTEST
+else
+EMU_CXXFILES += $(DIFFTEST_CXXFILES)
+EMU_CXXFLAGS += -I$(DIFFTEST_CSRC_DIR)
+VEXTRA_FLAGS += +define+DIFFTEST
+endif
+
+# ChiselDB
 WITH_CHISELDB ?= 1
 ifeq ($(WITH_CHISELDB), 1)
-CHISELDB_EXTRA_ARG = $(BUILD_DIR)/chisel_db.cpp
+EMU_CXXFILES += $(BUILD_DIR)/chisel_db.cpp
 EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
-else
-CHISELDB_EXTRA_ARG =
+EMU_LDFLAGS  += -lsqlite3
 endif
 
 WITH_CONSTANTIN ?= 1
 ifeq ($(WITH_CONSTANTIN), 1)
-CONSTANTIN_SRC = $(BUILD_DIR)/constantin.cpp
+EMU_CXXFILES += $(BUILD_DIR)/constantin.cpp
 EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
-else
-CONSTANTIN_SRC =
 endif
 
 ifeq ($(WITH_IPC), 1)
 EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_IPC
 endif
 
-EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
-EMU_CXX_EXTRA_FLAGS ?=
-
-EMU_VFILES    = $(SIM_VSRC)
-
-OBJCACHE =
+# CCACHE
 CCACHE := $(if $(shell which ccache),ccache,)
 ifneq ($(CCACHE),)
 export OBJCACHE = ccache
 endif
 
-VEXTRA_FLAGS += -I$(abspath $(BUILD_DIR)) --x-assign unique -O3 -CFLAGS "$(EMU_CXXFLAGS) $(EMU_CXX_EXTRA_FLAGS)" -LDFLAGS "$(EMU_LDFLAGS)"
-
 # REF SELECTION
-ifeq ($(REF),spike)
-EMU_CXXFLAGS += -DDIFF_PROXY=SpikeProxy -DFIRST_INST_ADDRESS=0x80000000
+ifneq ($(REF),)
+ifneq ($(wildcard $(REF)),)
+EMU_CXXFLAGS += -DREF_PROXY=LinkedProxy -DLINKED_REFPROXY_LIB=\\\"$(REF)\\\"
+EMU_LDFLAGS  += $(REF)
+else
+EMU_CXXFLAGS += -DREF_PROXY=$(REF)Proxy
+REF_HOME_VAR = $(shell echo $(REF)_HOME | tr a-z A-Z)
+ifneq ($(origin $(REF_HOME_VAR)), undefined)
+EMU_CXXFLAGS += -DREF_HOME=\\\"$(shell echo $$$(REF_HOME_VAR))\\\"
+endif
+endif
+endif
+
+# Verilator
+USE_VERILATOR ?= 1
+ifeq ($(USE_VERILATOR),1)
+EMU_CXXFLAGS += -I$(EMU_CSRC_DIR)/verilator
 endif
 
 # Verilator version check
@@ -82,6 +103,11 @@ VEXTRA_FLAGS += --trace-fst
 EMU_CXXFLAGS += -DENABLE_FST
 endif
 
+# Verilator trace underscore support
+ifeq ($(EMU_TRACE_ALL),1)
+VEXTRA_FLAGS += --trace-underscore
+endif
+
 # Verilator multi-thread support
 EMU_THREADS  ?= 0
 ifneq ($(EMU_THREADS),0)
@@ -96,12 +122,6 @@ VEXTRA_FLAGS += --savable
 EMU_CXXFLAGS += -DVM_SAVABLE
 endif
 
-# Verilator coverage
-EMU_COVERAGE ?=
-ifeq ($(EMU_COVERAGE),1)
-VEXTRA_FLAGS += --coverage-line --coverage-toggle
-endif
-
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
 EMU_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
@@ -113,40 +133,69 @@ ifeq ($(RELEASE),1)
 EMU_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
 endif
 
-# --trace
+# VGA support
+ifeq ($(SHOW_SCREEN),1)
+EMU_CXXFLAGS += $(shell sdl2-config --cflags) -DSHOW_SCREEN
+EMU_LDFLAGS  += -lSDL2
+endif
+
+# GZ image support
+EMU_GZ_COMPRESS ?= 1
+ifeq ($(EMU_GZ_COMPRESS),0)
+EMU_CXXFLAGS += -DNO_GZ_COMPRESSION
+else
+EMU_LDFLAGS  += -lz
+endif
+
+# Verilator
+WITH_SPIKE_DASM ?= 1
+ifeq ($(WITH_SPIKE_DASM),1)
+EMU_CXXFLAGS += -I$(PLUGIN_DASM_DIR)
+EMU_CXXFILES += $(PLUGIN_DASM_CXXFILES)
+endif
+
+# runahead support
+ifeq ($(WITH_RUNAHEAD),1)
+EMU_CXXFLAGS += -I$(PLUGIN_RUNAHEAD_DIR)
+EMU_CXXFILES += $(PLUGIN_RUNAHEAD_CXXFILES)
+endif
+
 VERILATOR_FLAGS =                   \
-  --top-module $(EMU_TOP)           \
-  --compiler clang                  \
+  --exe                             \
+  --cc -O3 --top-module $(EMU_TOP)  \
   +define+VERILATOR=1               \
-  +define+DIFFTEST                  \
   +define+PRINTF_COND=1             \
   +define+RANDOMIZE_REG_INIT        \
   +define+RANDOMIZE_MEM_INIT        \
   +define+RANDOMIZE_GARBAGE_ASSIGN  \
   +define+RANDOMIZE_DELAY=0         \
   -Wno-STMTDLY -Wno-WIDTH           \
-  $(VEXTRA_FLAGS)                   \
-  --assert                          \
+  --assert --x-assign unique        \
   --stats-vars                      \
   --output-split 30000              \
-  --output-split-cfuncs 30000
+  --output-split-cfuncs 30000       \
+  -I$(BUILD_DIR)                    \
+  -CFLAGS "$(EMU_CXXFLAGS)"         \
+  -LDFLAGS "$(EMU_LDFLAGS)"         \
+  -o $(abspath $(EMU))              \
+  $(VEXTRA_FLAGS)
 
-EMU_MK := $(BUILD_DIR)/emu-compile/V$(EMU_TOP).mk
-EMU_DEPS := $(EMU_VFILES) $(EMU_CXXFILES)
+EMU_MK    := $(BUILD_DIR)/emu-compile/V$(EMU_TOP).mk
+EMU_DEPS  := $(SIM_VSRC) $(EMU_CXXFILES)
 EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
                $(shell find $(SIM_CSRC_DIR) -name "*.h")     \
                $(shell find $(DIFFTEST_CSRC_DIR) -name "*.h")
-EMU := $(BUILD_DIR)/emu
 
 $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 	@mkdir -p $(@D)
 	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) verilator --cc --exe $(VERILATOR_FLAGS) \
-		-o $(abspath $(EMU)) -Mdir $(@D) $^ $(EMU_DEPS) $(CHISELDB_EXTRA_ARG) $(CONSTANTIN_SRC)
-	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
-	find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
-	find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
+	$(TIME_CMD) verilator $(VERILATOR_FLAGS) -Mdir $(@D) $^ $(EMU_DEPS)
+ifneq ($(VERILATOR_5_000),1)
+	@find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
+	@find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
+	@find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
+endif
 
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
@@ -154,13 +203,13 @@ EMU_COMPILE_FILTER =
 build_emu_local: $(EMU_MK)
 	@echo "\n[g++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) $(MAKE) CXX=clang++ LINK=clang++  VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
-$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS) $(REF_SO)
+$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
 ifeq ($(REMOTE),localhost)
-	$(MAKE) build_emu_local
+	@$(MAKE) build_emu_local
 else
-	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); export NEMU_HOME=$(NEMU_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local'
+	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local'
 endif
 
 emu: $(EMU)

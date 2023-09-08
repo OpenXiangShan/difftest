@@ -21,6 +21,16 @@
 #define NUM_CORES 1
 #endif
 
+#include "diffstate.h"
+
+#if defined(CPU_NUTSHELL)
+#elif defined(CPU_XIANGSHAN)
+#elif defined(CPU_ROCKET_CHIP)
+#else
+// This is the default CPU
+#define CPU_NUTSHELL
+#endif
+
 // -----------------------------------------------------------------------
 // Memory and device config
 // -----------------------------------------------------------------------
@@ -32,7 +42,9 @@
 #define PMEM_BASE 0x80000000UL
 
 // first valid instruction's address, difftest starts from this instruction
-#ifndef FIRST_INST_ADDRESS
+#if defined(CPU_NUTSHELL)
+#define FIRST_INST_ADDRESS 0x80000000UL
+#elif defined(CPU_XIANGSHAN) || defined(CPU_ROCKET_CHIP)
 #define FIRST_INST_ADDRESS 0x10000000UL
 #endif
 
@@ -44,7 +56,11 @@
 // flash access address align mask
 #define FLASH_ALIGH_MASK 0xfffffff8
 
+#if defined(CPU_ROCKET_CHIP)
+#define DEFAULT_EMU_FLASH_SIZE 0x10000UL
+#else
 #define DEFAULT_EMU_FLASH_SIZE (32 * 1024UL) // 4 MB
+#endif
 extern unsigned long EMU_FLASH_SIZE;
 
 // Use sdl to show screen
@@ -55,51 +71,13 @@ extern unsigned long EMU_FLASH_SIZE;
 // -----------------------------------------------------------------------
 // Difftest interface config
 // -----------------------------------------------------------------------
-#ifndef DIFF_PROXY
-#define DIFF_PROXY NemuProxy
+#ifndef REF_PROXY
+#define REF_PROXY NemuProxy
 #endif
-
-// max physical register file size
-#define DIFFTEST_MAX_PRF_SIZE 256
-
-// max commit width
-#define DIFFTEST_COMMIT_WIDTH 6
-
-// max store width
-//
-// max num of stores turn from predicted to non-predicted in 1 cycle
-#define DIFFTEST_STORE_WIDTH 2
-
-// max store buffer resp width, for golden mem check
-#define DIFFTEST_SBUFFER_RESP_WIDTH 3
-
-// max itlb width
-#define DIFFTEST_ITLB_WIDTH 4
-
-// max ldtlb width
-#define DIFFTEST_LDTLB_WIDTH 2
-
-// max sttlb width
-#define DIFFTEST_STTLB_WIDTH 2
-
-// max ptw width
-#define DIFFTEST_PTW_WIDTH 2
-
-// commit inst history length
-#define DEBUG_INST_TRACE_SIZE 32
-
-// commit inst group history length
-#define DEBUG_GROUP_TRACE_SIZE 16
-
-// max refill entry num in difftest_core_state_t
-#define DIFFTEST_REFFILL_EVENT_ENTRY_NUM 10
 
 // -----------------------------------------------------------------------
 // Checkpoint config
 // -----------------------------------------------------------------------
-
-// time to fork a new checkpoint process
-#define FORK_INTERVAL 1 // unit: second
 
 // max number of checkpoint process at a time
 #define SLOT_SIZE 2
@@ -133,7 +111,7 @@ extern unsigned long EMU_FLASH_SIZE;
 #define DEBUG_L1TLB
 
 // whether to check l2tlb response
-#define DEBUG_L2TLB
+// #define DEBUG_L2TLB
 
 // -----------------------------------------------------------------------
 // Simulator run ahead config
@@ -188,11 +166,11 @@ extern unsigned long EMU_FLASH_SIZE;
 
 // whether to maintain goldenmem
 #if NUM_CORES>1
-    #define DEBUG_GOLDENMEM
+#define DEBUG_GOLDENMEM
 #endif
 
 #ifdef DEBUG_REFILL
-    #define DEBUG_GOLDENMEM
+#define DEBUG_GOLDENMEM
 #endif
 
 #define RUNAHEAD_UNIT_TEST
@@ -201,7 +179,5 @@ extern unsigned long EMU_FLASH_SIZE;
 #define TRACE_INFLIGHT_MEM_INST
 #define QUERY_MEM_ACCESS
 #endif
-
-extern unsigned long EMU_RAM_SIZE;
 
 #endif
