@@ -151,9 +151,9 @@ public:
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
   DifftestArchVecRegState regs_vec;
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
-#ifdef CONFIG_DIFFTEST_ARCHVECCSRSTATE
+#ifdef CONFIG_DIFFTEST_VECCSRSTATE
   DifftestVecCSRState vcsr;
-#endif // CONFIG_DIFFTEST_ARCHVECCSRSTATE
+#endif // CONFIG_DIFFTEST_VECCSRSTATE
 
   inline uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return

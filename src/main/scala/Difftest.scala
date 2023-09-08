@@ -270,6 +270,7 @@ class DiffArchFpRegState extends DifftestBundle {
 class DiffArchVecRegState extends DifftestBundle {
   val value = Vec(64, UInt(64.W))
   override val desiredCppName: String = "regs_vec"
+  override val desiredOffset: Int = 4
 }
 
 class DiffVecCSRState extends DifftestBundle {
@@ -281,6 +282,7 @@ class DiffVecCSRState extends DifftestBundle {
   val vtype  = UInt(64.W)
   val vlenb  = UInt(64.W)
   override val desiredCppName: String = "vcsr"
+  override val desiredOffset: Int = 5
 }
 
 class DiffSbufferEvent extends DifftestBundle
