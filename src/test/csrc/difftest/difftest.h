@@ -276,7 +276,7 @@ protected:
     if (dut.commit[i].fpwen) {
       return
 #ifdef CONFIG_DIFFTEST_FPWRITEBACK
-        dut.wb_fp[dut.commit[i].wpdest].data :
+        dut.wb_fp[dut.commit[i].wpdest].data;
 #else
         dut.regs_fp.value[dut.commit[i].wdest];
 #endif // CONFIG_DIFFTEST_FPWRITEBACK
