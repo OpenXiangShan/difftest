@@ -23,7 +23,7 @@ jobs:
         run: |
           make difftest_verilog NOOP_HOME=$GITHUB_WORKSPACE
 
-  test-difftest:
+  test-difftest-nutshell:
     runs-on: ubuntu-20.04
 
     steps:
@@ -35,28 +35,28 @@ jobs:
             git config --global url."https://github.com/".insteadOf git@github.com:
             git config --global url."https://".insteadOf git://
             git clone https://github.com/OpenXiangShan/xs-env
-            cd $GITHUB_WORKSPACE/../xs-env
+            cd xs-env
             sudo -s ./setup-tools.sh
             source ./setup.sh
-            rm -r $GITHUB_WORKSPACE/../xs-env/NutShell/difftest
-            rm -r $GITHUB_WORKSPACE/../xs-env/XiangShan/difftest
-            cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/NutShell
-            cp -r $GITHUB_WORKSPACE $GITHUB_WORKSPACE/../xs-env/XiangShan
 
-      - name: Basic Difftest (NutShell)
+      - name: Prepare NutShell
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            rm -r NutShell
+            git clone -b dev-difftest --single-branch https://github.com/OSCPU/NutShell.git
+            cd NutShell && git submodule update --init
+            rm -r difftest
+            cp -r $GITHUB_WORKSPACE .
+
+      - name: Basic Difftest
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
-            rm -r ./NEMU
-            git clone https://github.com/OpenXiangShan/NEMU
-            cd NEMU
-            make riscv64-xs-ref_defconfig
-            make
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
-            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
+            make emu EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000"
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
 
       - name: Difftest with Snapshot
         run: |
@@ -65,8 +65,8 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_SNAPSHOT=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
-            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
+            make emu EMU_SNAPSHOT=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000"
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
 
       - name: Difftest with Trace
         run: |
@@ -75,8 +75,8 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_TRACE=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
-            ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave
+            make emu EMU_TRACE=1 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000"
+            ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave --diff ./ready-to-run/riscv64-nemu-interpreter-so
 
       - name: Difftest with two threads
         run: |
@@ -85,6 +85,5 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_THREADS=2 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000" WITH_CHISELDB=0 WITH_CONSTANTIN=0
-            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
-
+            make emu EMU_THREADS=2 EMU_CXX_EXTRA_FLAGS="-DFIRST_INST_ADDRESS=0x80000000"
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
