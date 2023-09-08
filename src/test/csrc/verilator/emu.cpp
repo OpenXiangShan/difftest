@@ -210,7 +210,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         }
         break;
       case 'C': args.max_cycles = atoll_strict(optarg, "max-cycles");  break;
-      case 'X': args.fork_interval = atoll_strict(optarg, "fork-interval"); break;
+      case 'X': args.fork_interval = 1000 * atoll_strict(optarg, "fork-interval"); break;
       case 'I': args.max_instr = atoll_strict(optarg, "max-instr");  break;
 #ifdef DEBUG_REFILL
       case 'T':
@@ -722,7 +722,7 @@ int Emulator::tick() {
     static bool have_initial_fork = false;
     uint32_t timer = uptime();
     // check if it's time to fork a checkpoint process
-    if (((timer - lasttime_snapshot > 1000 * args.fork_interval) || !have_initial_fork) && !is_fork_child()) {
+    if (((timer - lasttime_snapshot > args.fork_interval) || !have_initial_fork) && !is_fork_child()) {
       have_initial_fork = true;
       lasttime_snapshot = timer;
       switch (lightsss->do_fork()) {

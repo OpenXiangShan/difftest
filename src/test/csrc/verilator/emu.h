@@ -39,7 +39,7 @@
 struct EmuArgs {
   uint32_t seed = 0;
   uint64_t max_cycles = -1;
-  uint64_t fork_interval = 1;
+  uint64_t fork_interval = 1000;
   uint64_t max_instr = -1;
   uint64_t warmup_instr = -1;
   uint64_t stat_cycles = -1;
