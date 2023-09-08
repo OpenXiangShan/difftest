@@ -287,11 +287,7 @@ int Difftest::do_instr_commit(int i) {
   for (int j = 0; j < dut.commit[i].nFused; j++) {
     proxy->ref_exec(1);
   }
-  if(dut.commit[i].instrSize > 1){
-    for(int j = 0; j < dut.commit[i].instrSize - 1; j ++){
-      proxy->exec(1);
-    }
-  }
+
   // Handle load instruction carefully for SMP
   if (NUM_CORES > 1) {
 #ifdef CONFIG_DIFFTEST_LOADEVENT

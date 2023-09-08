@@ -272,20 +272,27 @@ protected:
   int do_l2tlb_check();
   int do_golden_memory_update();
   inline uint64_t get_commit_data(int i) {
-#ifdef CONFIG_DIFFTEST_INTWRITEBACK
-    uint64_t result =
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
+    if (dut.commit[i].fpwen) {
+      return
 #ifdef CONFIG_DIFFTEST_FPWRITEBACK
-      (dut.commit[i].fpwen) ? dut.wb_fp[dut.commit[i].wpdest].data :
+        dut.wb_fp[dut.commit[i].wpdest].data :
+#else
+        dut.regs_fp.value[dut.commit[i].wdest];
 #endif // CONFIG_DIFFTEST_FPWRITEBACK
+    } else
+#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+    if (dut.commit[i].vecwen) {
+      return dut.regs_vec.value[dut.commit[i].wdest];
+    } else
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+    return
+#ifdef CONFIG_DIFFTEST_INTWRITEBACK
       dut.wb_int[dut.commit[i].wpdest].data;
 #else
-    uint64_t result =
-#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-      (dut.commit[i].fpwen) ? dut.regs_fp.value[dut.commit[i].wdest] :
-#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
       dut.regs_int.value[dut.commit[i].wdest];
 #endif // CONFIG_DIFFTEST_INTWRITEBACK
-    return result;
   }
   inline bool has_wfi() {
     return dut.trap.hasWFI;
