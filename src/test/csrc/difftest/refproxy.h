@@ -49,6 +49,21 @@ static const char *debug_regs_name[] = {
   "debug mode", "dcsr", "dpc", "dscratch0", "dscratch1",
 };
 
+static const char *regs_name_vec[] = {
+  "v0_low",  "v0_high",  "v1_low",  "v1_high",  "v2_low",  "v2_high",  "v3_low",  "v3_high",
+  "v4_low",  "v4_high",  "v5_low",  "v5_high",  "v6_low",  "v6_high",  "v7_low",  "v7_high",
+  "v8_low",  "v8_high",  "v9_low",  "v9_high",  "v10_low", "v10_high", "v11_low", "v11_high",
+  "v12_low", "v12_high", "v13_low", "v13_high", "v14_low", "v14_high", "v15_low", "v15_high",
+  "v16_low", "v16_high", "v17_low", "v17_high", "v18_low", "v18_high", "v19_low", "v19_high",
+  "v20_low", "v20_high", "v21_low", "v21_high", "v22_low", "v22_high", "v23_low", "v23_high",
+  "v24_low", "v24_high", "v25_low", "v25_high", "v26_low", "v26_high", "v27_low", "v27_high",
+  "v28_low", "v28_high", "v29_low", "v29_high", "v30_low", "v30_high", "v31_low", "v31_high"
+};
+
+static const char *regs_name_vec_csr[] = {
+  "vstart", "vxsat", "vxrm", "vcsr", "vl", "vtype", "vlenb"
+};
+
 enum { REF_TO_DUT, DUT_TO_REF };
 
 class RefProxyConfig {
@@ -133,6 +148,12 @@ public:
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
   DifftestCSRState csr;
   uint64_t pc;
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+  DifftestArchVecRegState regs_vec;
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+#ifdef CONFIG_DIFFTEST_VECCSRSTATE
+  DifftestVecCSRState vcsr;
+#endif // CONFIG_DIFFTEST_VECCSRSTATE
 
   inline uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return

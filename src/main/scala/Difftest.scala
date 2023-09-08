@@ -158,6 +158,7 @@ class DiffInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
   val isRVC    = Bool()
   val rfwen    = Bool()
   val fpwen    = Bool()
+  val vecwen   = Bool()
   val wpdest   = UInt(log2Ceil(numPhyRegs).W)
   val wdest    = UInt(8.W)
 
@@ -264,6 +265,24 @@ class DiffArchFpRegState extends DifftestBundle {
   val value = Vec(32, UInt(64.W))
   override val desiredCppName: String = "regs_fp"
   override val desiredOffset: Int = 2
+}
+
+class DiffArchVecRegState extends DifftestBundle {
+  val value = Vec(64, UInt(64.W))
+  override val desiredCppName: String = "regs_vec"
+  override val desiredOffset: Int = 4
+}
+
+class DiffVecCSRState extends DifftestBundle {
+  val vstart = UInt(64.W)
+  val vxsat  = UInt(64.W)
+  val vxrm   = UInt(64.W)
+  val vcsr   = UInt(64.W)
+  val vl     = UInt(64.W)
+  val vtype  = UInt(64.W)
+  val vlenb  = UInt(64.W)
+  override val desiredCppName: String = "vcsr"
+  override val desiredOffset: Int = 5
 }
 
 class DiffSbufferEvent extends DifftestBundle

@@ -221,7 +221,7 @@ int Difftest::do_instr_commit(int i) {
   uint64_t commit_pc = dut.commit[i].pc;
 #endif
   uint64_t commit_instr = dut.commit[i].instr;
-  state->record_inst(commit_pc, commit_instr, (dut.commit[i].rfwen | dut.commit[i].fpwen),
+  state->record_inst(commit_pc, commit_instr, (dut.commit[i].rfwen | dut.commit[i].fpwen | dut.commit[i].vecwen),
     dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0, dut.commit[i].special & 0x1,
     dut.commit[i].lqIdx, dut.commit[i].sqIdx, dut.commit[i].robIdx, dut.commit[i].isLoad, dut.commit[i].isStore);
 
@@ -293,7 +293,8 @@ int Difftest::do_instr_commit(int i) {
 #ifdef CONFIG_DIFFTEST_LOADEVENT
     if (dut.load[i].fuType == 0xC || dut.load[i].fuType == 0xF) {
       proxy->sync();
-      if (realWen && *proxy->arch_reg(dut.commit[i].wdest, dut.commit[i].fpwen) != get_commit_data(i)) {
+      bool reg_cmp_fail = !dut.commit[i].vecwen && *proxy->arch_reg(dut.commit[i].wdest, dut.commit[i].fpwen) != get_commit_data(i);
+      if (realWen && reg_cmp_fail) {
         // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
         // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut.load[i].opType, dut.load[i].paddr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.commit[i].pc);
         uint64_t golden;
@@ -329,13 +330,17 @@ int Difftest::do_instr_commit(int i) {
         if (golden == get_commit_data(i)) {
           proxy->ref_memcpy(dut.load[i].paddr, &golden, len, DUT_TO_REF);
           if (realWen) {
-            *proxy->arch_reg(dut.commit[i].wdest, dut.commit[i].fpwen) = get_commit_data(i);
+            if (!dut.commit[i].vecwen) {
+              *proxy->arch_reg(dut.commit[i].wdest, dut.commit[i].fpwen) = get_commit_data(i);
+            }
             proxy->sync(true);
           }
         } else if (dut.load[i].fuType == 0xF) {  //  atomic instr carefully handled
           proxy->ref_memcpy(dut.load[i].paddr, &golden, len, DUT_TO_REF);
           if (realWen) {
-            *proxy->arch_reg(dut.commit[i].wdest, dut.commit[i].fpwen) = get_commit_data(i);
+            if (!dut.commit[i].vecwen) {
+              *proxy->arch_reg(dut.commit[i].wdest, dut.commit[i].fpwen) = get_commit_data(i);
+            }
             proxy->sync(true);
           }
         } else {
@@ -349,7 +354,9 @@ int Difftest::do_instr_commit(int i) {
 #else
           proxy->ref_memcpy(dut.load[i].paddr, &golden, len, DUT_TO_REF);
           if (realWen) {
-            *proxy->arch_reg(dut.commit[i].wdest, dut.commit[i].fpwen) = get_commit_data(i);
+            if (!dut.commit[i].vecwen) {
+              *proxy->arch_reg(dut.commit[i].wdest, dut.commit[i].fpwen) = get_commit_data(i);
+            }
             proxy->sync(true);
           }
 #endif
