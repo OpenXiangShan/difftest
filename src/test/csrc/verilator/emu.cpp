@@ -675,13 +675,11 @@ int Emulator::tick() {
       trapCode = STATE_ABORT;
       return trapCode;
     }
+  }
 
-    trapCode = difftest_state();
-    if (trapCode != STATE_RUNNING) {
-      trapCode %= 2;
-      return trapCode;
-    }
-
+  trapCode = difftest_state();
+  if (trapCode != STATE_RUNNING) {
+    return trapCode;
   }
 #endif // CONFIG_NO_DIFFTEST
 
