@@ -14,8 +14,6 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-include config/verilator.mk
-
 EMU_TOP      = SimTop
 
 EMU_CSRC_DIR = $(abspath ./src/test/csrc)
@@ -24,6 +22,7 @@ EMU_CXXFLAGS += -std=c++14 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
 EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
 
+WITH_CHISELDB ?= 1
 ifeq ($(WITH_CHISELDB), 1)
 CHISELDB_EXTRA_ARG = $(BUILD_DIR)/chisel_db.cpp
 EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
@@ -31,6 +30,7 @@ else
 CHISELDB_EXTRA_ARG =
 endif
 
+WITH_CONSTANTIN ?= 1
 ifeq ($(WITH_CONSTANTIN), 1)
 CONSTANTIN_SRC = $(BUILD_DIR)/constantin.cpp
 EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
@@ -163,20 +163,7 @@ else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); export NEMU_HOME=$(NEMU_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local'
 endif
 
-# log will only be printed when (B<=GTimer<=E) && (L < loglevel)
-# use 'emu -h' to see more details
-B ?= 0
-E ?= 0
-
-EMU_FLAGS = -s $(SEED) -b $(B) -e $(E) $(SNAPSHOT_OPTION) $(WAVEFORM) $(EMU_ARGS)
-
 emu: $(EMU)
-
-emu-run: emu
-ifneq ($(REMOTE),localhost)
-	ls build
-endif
-	$(EMU) -i $(IMAGE) --diff=$(REF_SO) $(EMU_FLAGS)
 
 coverage:
 	verilator_coverage --annotate build/logs/annotated --annotate-min 1 build/logs/coverage.dat

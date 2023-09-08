@@ -44,7 +44,6 @@ endif
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 
-VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
 VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
 
 VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
@@ -64,7 +63,7 @@ VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
 VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
 # search build for other missing verilog files
-VCS_FLAGS += -y $(VCS_SEARCH_DIR) +libext+.v
+VCS_FLAGS += -y $(BUILD_DIR) +libext+.v
 # build files put into $(VCS_BUILD_DIR)
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump

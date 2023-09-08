@@ -71,9 +71,7 @@ SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
 include verilator.mk
 include vcs.mk
 
-SEED ?= $(shell shuf -i 1-10000 -n 1)
-
 clean: vcs-clean
 	rm -rf $(BUILD_DIR)
 
-.PHONY: sim-verilog emu difftest_verilog clean$(REF_SO)
+.PHONY: sim-verilog emu difftest_verilog clean
