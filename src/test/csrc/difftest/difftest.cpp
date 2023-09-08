@@ -148,11 +148,7 @@ int Difftest::step() {
         return 1;
       }
       dut.commit[i].valid = 0;
-      num_commit++;
-      // TODO: let do_instr_commit return number of instructions in this uop
-      if (dut.commit[i].special & 0x1) {
-        num_commit++;
-      }
+      num_commit += 1 + dut.commit[i].nFused;
     }
   }
 
@@ -226,14 +222,14 @@ int Difftest::do_instr_commit(int i) {
 #endif
   uint64_t commit_instr = dut.commit[i].instr;
   state->record_inst(commit_pc, commit_instr, (dut.commit[i].rfwen | dut.commit[i].fpwen),
-    dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0, dut.commit[i].special & 0x4,
+    dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0, dut.commit[i].special & 0x1,
     dut.commit[i].lqIdx, dut.commit[i].sqIdx, dut.commit[i].robIdx, dut.commit[i].isLoad, dut.commit[i].isStore);
 
   progress = true;
   update_last_commit();
 
   // isDelayeWb
-  if (dut.commit[i].special & 0x4) {
+  if (dut.commit[i].special & 0x1) {
     int *status =
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
       dut.commit[i].rfwen ? delayed_int:
@@ -287,8 +283,8 @@ int Difftest::do_instr_commit(int i) {
 
   // single step exec
   proxy->ref_exec(1);
-  // when there's a fused instruction, let proxy execute one more instruction.
-  if (dut.commit[i].special & 0x1) {
+  // when there's a fused instruction, let proxy execute more instructions.
+  for (int j = 0; j < dut.commit[i].nFused; j++) {
     proxy->ref_exec(1);
   }
 
