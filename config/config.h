@@ -111,7 +111,7 @@ extern unsigned long EMU_FLASH_SIZE;
 #define DEBUG_L1TLB
 
 // whether to check l2tlb response
-#define DEBUG_L2TLB
+// #define DEBUG_L2TLB
 
 // -----------------------------------------------------------------------
 // Simulator run ahead config
