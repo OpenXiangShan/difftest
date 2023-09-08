@@ -50,9 +50,9 @@ static const char *debug_regs_name[] = {
 };
 
 static const char *regs_name_vec[] = {
-  "v0_low", "v0_high", "v1_low", "v1_high", "v2_low", "v2_high", "v3_low", "v3_high",
-  "v4_low", "v4_high", "v5_low", "v5_high", "v6_low", "v6_high", "v7_low", "v7_high",
-  "v8_low", "v8_high", "v9_low", "v9_high", "v10_low", "v10_high", "v11_low", "v11_high",
+  "v0_low",  "v0_high",  "v1_low",  "v1_high",  "v2_low",  "v2_high",  "v3_low",  "v3_high",
+  "v4_low",  "v4_high",  "v5_low",  "v5_high",  "v6_low",  "v6_high",  "v7_low",  "v7_high",
+  "v8_low",  "v8_high",  "v9_low",  "v9_high",  "v10_low", "v10_high", "v11_low", "v11_high",
   "v12_low", "v12_high", "v13_low", "v13_high", "v14_low", "v14_high", "v15_low", "v15_high",
   "v16_low", "v16_high", "v17_low", "v17_high", "v18_low", "v18_high", "v19_low", "v19_high",
   "v20_low", "v20_high", "v21_low", "v21_high", "v22_low", "v22_high", "v23_low", "v23_high",
