@@ -1,6 +1,6 @@
 /***************************************************************************************
 * Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
+* Copyright (c) 2020-2022 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -14,35 +14,29 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-import "DPI-C" function void ram_write_helper
-(
-  input  longint    wIdx,
-  input  longint    wdata,
-  input  longint    wmask,
-  input  bit        wen
-);
+#include "common.h"
+#include "dut.h"
 
-import "DPI-C" function longint ram_read_helper
-(
-  input  bit        en,
-  input  longint    rIdx
-);
 
-module RAMHelper(
-  input         clk,
-  input         en,
-  input  [63:0] rIdx,
-  output [63:0] rdata,
-  input  [63:0] wIdx,
-  input  [63:0] wdata,
-  input  [63:0] wmask,
-  input         wen
-);
+#ifdef VERILATOR
+#include "emu.h"
+#define DUT_MODEL Emulator
+#endif
 
-  assign rdata = ram_read_helper(en, rIdx);
+#ifdef DUT_MODEL
+int main(int argc, const char *argv[]) {
+  common_init(argv[0]);
 
-  always @(posedge clk) begin
-    ram_write_helper(wIdx, wdata, wmask, wen && en);
-  end
+  // main simulation loop
+  auto emu = new DUT_MODEL(argc, argv);
+  while (!emu->is_finished()) {
+    emu->tick();
+  }
+  bool is_good = emu->is_good();
+  delete emu;
 
-endmodule
+  common_finish();
+
+  return !is_good;
+}
+#endif // DUT_MODEL

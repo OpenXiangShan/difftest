@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -59,8 +59,7 @@ extern "C" void set_max_cycles(long mc) {
 }
 
 extern "C" void simv_init() {
-  printf("simv compiled at %s, %s\n", __DATE__, __TIME__);
-  setlocale(LC_NUMERIC, "");
+  common_init("simv");
 
   init_ram(bin_file);
   init_flash(flash_bin_file);
@@ -71,8 +70,6 @@ extern "C" void simv_init() {
     init_goldenmem();
     init_nemuproxy(EMU_RAM_SIZE);
   }
-
-  assert_init();
 }
 
 extern "C" int simv_step() {

@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -23,9 +23,10 @@
 #include <cstdint>
 #include <cassert>
 #include <cerrno>
-#include <pthread.h>
+#include <sys/time.h>
 #include <unistd.h>
-#include "../../../../config/config.h"
+
+#include "config.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -44,16 +45,22 @@
 extern int assert_count;
 extern const char* emu_path;
 extern bool enable_simjtag;
-void assert_init();
-void assert_finish();
 
 extern int signal_num;
 void sig_handler(int signo);
 
 typedef uint64_t rtlreg_t;
-typedef uint64_t paddr_t;
 typedef uint64_t vaddr_t;
 typedef uint16_t ioaddr_t;
+
+extern bool sim_verbose;
+
+#define Info(...)           \
+  do {                      \
+    if (sim_verbose) {      \
+      eprintf(__VA_ARGS__); \
+    }                       \
+  } while (0)
 
 #define Assert(cond, ...) \
   do { \
@@ -80,5 +87,10 @@ typedef uint16_t ioaddr_t;
   }while(0)
 
 #define TODO() panic("please implement me")
+
+void common_init(const char *program_name);
+void common_finish();
+
+uint32_t uptime(void);
 
 #endif // __COMMON_H

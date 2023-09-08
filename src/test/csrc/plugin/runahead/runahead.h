@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -93,11 +93,11 @@ public:
   void do_first_instr_runahead();
   void request_slave_refquery(void* target, int type);
 
-  difftest_core_state_t *dut_ptr;
-  difftest_core_state_t *ref_ptr;
+  DiffTestState *dut_ptr;
+  DiffTestState *ref_ptr;
   // Note: dut & ref does not contain valid value in runahead
   // use dut_ptr & ref_ptr instead.
-  // To be refactored later. 
+  // To be refactored later.
 
 #ifdef QUERY_MEM_ACCESS
   void do_query_mem_access(RunaheadResponseQuery* result_buffer);

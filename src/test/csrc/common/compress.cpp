@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -24,12 +24,15 @@ double calcTime(timeval s, timeval e) {
 }
 
 // Return whether the file is a gz file
-int isGzFile(const char *filename) {
-  assert(filename != NULL && strlen(filename) >= 4);
+bool isGzFile(const char *filename) {
+  if (filename == NULL || strlen(filename) < 4) {
+    return false;
+  }
   return !strcmp(filename + (strlen(filename) - 3), ".gz");
 }
 
 long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) {
+#ifndef NO_GZ_COMPRESSION
   gzFile compressed_mem = gzopen(filename, "wb");
 
   if (compressed_mem == NULL) {
@@ -65,9 +68,13 @@ long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) 
     return -1;
   }
   return curr_size;
+#else
+  return 0;
+#endif
 }
 
 long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_type) {
+#ifndef NO_GZ_COMPRESSION
   assert(buf_size > 0);
   gzFile compressed_mem = gzopen(file_name, "rb");
 
@@ -84,19 +91,17 @@ long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_ty
     printf("buf_size must be divisible by chunk_size\n");
     assert(0);
   }
-  
+
   long *temp_page = new long[chunk_size];
-  long *pmem_current = (long*)ptr;
 
   while (curr_size < buf_size) {
-    uint32_t bytes_read = gzread(compressed_mem, temp_page, chunk_size);
+    uint32_t bytes_read = gzread(compressed_mem, temp_page, chunk_size * sizeof(long));
     if (bytes_read == 0) {
       break;
     }
-    assert(load_type != LOAD_RAM || bytes_read % sizeof(long) == 0);
     for (uint32_t x = 0; x < bytes_read / sizeof(long) + 1; x++) {
       if (*(temp_page + x) != 0) {
-        pmem_current = (long*)((uint8_t*)ptr + curr_size + x * sizeof(long));
+        long *pmem_current = (long*)((uint8_t*)ptr + curr_size + x * sizeof(long));
         *pmem_current = *(temp_page + x);
       }
     }
@@ -116,6 +121,9 @@ long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_ty
     return -1;
   }
   return curr_size;
+#else
+  return 0;
+#endif
 }
 
 void nonzero_large_memcpy(const void* __restrict dest, const void* __restrict src, size_t n) {

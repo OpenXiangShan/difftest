@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -23,28 +23,28 @@ int test_spike()
   return system("echo \"DASM(deadbeef)\" | spike-dasm > /dev/null");
 }
 
-void execute_cmd(const char *cmd, char *result)   
-{   
-  char buf_ps[1024];   
-  char ps[1024]={0};   
-  FILE *ptr;   
-  strcpy(ps, cmd);   
-  if((ptr=popen(ps, "r"))!=NULL)   
-  {   
-    while(fgets(buf_ps, 1024, ptr)!=NULL)   
-    {   
-       strcat(result, buf_ps);   
-       if(strlen(result)>1024)   
-         break;   
-    }   
-    pclose(ptr);   
-    ptr = NULL;   
-  }   
-  else  
-  {   
-    printf("popen %s error\n", ps);   
-  }   
-}  
+void execute_cmd(const char *cmd, char *result)
+{
+  char buf_ps[1024];
+  char ps[1024]={0};
+  FILE *ptr;
+  strcpy(ps, cmd);
+  if((ptr=popen(ps, "r"))!=NULL)
+  {
+    while(fgets(buf_ps, 1024, ptr)!=NULL)
+    {
+       strcat(result, buf_ps);
+       if(strlen(result)>1024)
+         break;
+    }
+    pclose(ptr);
+    ptr = NULL;
+  }
+  else
+  {
+    printf("popen %s error\n", ps);
+  }
+}
 
 void spike_dasm(char* result, char* input)
 {
@@ -69,7 +69,7 @@ int usage()
   int spike_invalid = test_spike();
   if(!spike_invalid)
     spike_dasm(dasm_result, input);
-    
+
   printf("%s", dasm_result);
   return 0;
 }

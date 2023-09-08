@@ -1,6 +1,5 @@
 /***************************************************************************************
 * Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -14,42 +13,56 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#ifndef __DUT_H__
+#define __DUT_H__
+
+#include <vector>
+
 #include "common.h"
-#include "sdcard.h"
 
-FILE *fp = NULL;
+class DUT {
+public:
+  DUT() { };
+  DUT(int argc, const char *argv[]) { };
+  virtual int tick() = 0;
+  virtual int is_finished() = 0;
+  virtual int is_good() = 0;
+};
 
-extern "C" {
+#define simstats_display(s, ...) \
+  eprintf(ANSI_COLOR_GREEN s ANSI_COLOR_RESET, ##__VA_ARGS__)
 
-void check_sdcard() {
-  if (!fp) {
-    eprintf(ANSI_COLOR_MAGENTA "[warning] sdcard img not found\n");
+enum class SimExitCode {
+  good_trap,
+  exceed_limit,
+  bad_trap,
+  exception_loop,
+  sim_exit,
+  difftest,
+  unknown
+};
+
+class SimStats {
+public:
+  // simulation exit code
+  SimExitCode exit_code;
+
+  SimStats() {
+    reset();
+  };
+
+  void reset() {
+    exit_code = SimExitCode::unknown;
   }
-}
 
-void sd_setaddr(uint32_t addr) {
-  check_sdcard();
-#ifdef SDCARD_IMAGE
-  fseek(fp, addr, SEEK_SET);
+  void update(DiffTestState *state) {
+  }
+
+  void display() {
+    simstats_display("ExitCode: %d\n", exit_code);
+  }
+};
+
+extern SimStats stats;
+
 #endif
-  //printf("set addr to 0x%08x\n", addr);
-  //assert(0);
-}
-
-void sd_read(uint32_t *data) {
-  check_sdcard();
-#ifdef SDCARD_IMAGE
-  fread(data, 4, 1, fp);
-#endif
-  //printf("read data = 0x%08x\n", *data);
-  //assert(0);
-}
-
-void init_sd(void) {
-#ifdef SDCARD_IMAGE
-  fp = fopen(SDCARD_IMAGE, "r");
-  check_sdcard();
-#endif
-}
-
-}

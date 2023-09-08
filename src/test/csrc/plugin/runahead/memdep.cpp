@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -69,7 +69,7 @@ bool MemdepWatchWindow::query_load_store_dep(uint64_t load_pc, uint64_t load_vad
         load_vaddr
       );
     if(
-      ((i.vaddr | 0x7) == (load_vaddr | 0x7)) && 
+      ((i.vaddr | 0x7) == (load_vaddr | 0x7)) &&
       !((load_vaddr & 0xf0000000 ) == 0x40000000) // hard code mmio
     ){
       has_dependency = true;

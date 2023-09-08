@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -54,12 +54,11 @@ void init_flash(const char *flash_bin) {
       assert(0);
     }
   }
-  printf("Using simulated %luB flash\n", EMU_FLASH_SIZE);
+  Info("Using simulated %luB flash\n", EMU_FLASH_SIZE);
 
   if(!flash_bin)
   {
     /** no specified flash_path ,use defualt 3 instructions*/
-    printf("[warning]no valid flash bin path, use preset flash instead\n");
     // addiw   t0,zero,1
     // slli    to,to,  0x1f
     // jr      t0
@@ -70,7 +69,7 @@ void init_flash(const char *flash_bin) {
 
   /** no specified flash_path ,use defualt 3 instructions*/
   flash_path = (char *)flash_bin;
-  printf("[info]use %s as flash bin\n",flash_path);
+  Info("use %s as flash bin\n",flash_path);
 
   FILE *flash_fp = fopen(flash_path, "r");
   if(!flash_fp)

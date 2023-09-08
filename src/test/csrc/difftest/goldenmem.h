@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -24,27 +24,25 @@
 #include "ram.h"
 #include "common.h"
 
-typedef uint64_t paddr_t;
+typedef uint64_t uint64_t;
 typedef uint64_t word_t;
-
-#define PMEM_SIZE EMU_RAM_SIZE
 
 extern uint8_t* pmem;
 
 void init_goldenmem();
 void goldenmem_finish();
 
-void update_goldenmem(paddr_t addr, void *data, uint64_t mask, int len);
-void read_goldenmem(paddr_t addr, void *data, uint64_t len);
+void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len);
+void read_goldenmem(uint64_t addr, void *data, uint64_t len);
 
 /* convert the guest physical address in the guest program to host virtual address in NEMU */
-void* guest_to_host(paddr_t addr);
+void* guest_to_host(uint64_t addr);
 /* convert the host virtual address in NEMU to guest physical address in the guest program */
-paddr_t host_to_guest(void *addr);
+uint64_t host_to_guest(void *addr);
 
-word_t paddr_read(paddr_t addr, int len);
-void paddr_write(paddr_t addr, word_t data, int len);
-bool is_sfence_safe(paddr_t addr, int len);
-bool in_pmem(paddr_t addr);
+word_t paddr_read(uint64_t addr, int len);
+void paddr_write(uint64_t addr, word_t data, int len);
+bool is_sfence_safe(uint64_t addr, int len);
+bool in_pmem(uint64_t addr);
 
 #endif

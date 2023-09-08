@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -19,7 +19,9 @@
 
 #include "common.h"
 
+#ifndef NO_GZ_COMPRESSION
 #include <zlib.h>
+#endif
 #include <sys/time.h>
 
 #define LOAD_SNAPSHOT 0
@@ -27,7 +29,7 @@
 
 double calcTime(timeval s, timeval e);
 
-int isGzFile(const char *filename);
+bool isGzFile(const char *filename);
 long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size);
 long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_type);
 

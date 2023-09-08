@@ -1,8 +1,8 @@
 /***************************************************************************************
-* Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
-* XiangShan is licensed under Mulan PSL v2.
+* DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
 * You may obtain a copy of Mulan PSL v2 at:
 *          http://license.coscl.org.cn/MulanPSL2
@@ -17,9 +17,11 @@
 #ifndef __EMU_H
 #define __EMU_H
 
+#include <sys/types.h>
 #include "common.h"
-#include "snapshot.h"
+#include "dut.h"
 #include "lightsss.h"
+#include "snapshot.h"
 #include "VSimTop.h"
 #include "VSimTop__Syms.h"
 #ifdef ENABLE_FST
@@ -27,22 +29,23 @@
 #else
 #include <verilated_vcd_c.h>	// Trace file format header
 #endif
-#include <sys/types.h>
-#include <stdlib.h>
-#include <unistd.h>
 #ifdef EMU_THREAD
 #include <verilated_threads.h>
 #endif
+#if VM_TRACE == 1
+#include <verilated_vcd_c.h>	// Trace file format header
+#endif
 
 struct EmuArgs {
-  uint32_t seed;
-  uint64_t max_cycles;
-  uint64_t max_instr;
-  uint64_t warmup_instr;
-  uint64_t stat_cycles;
-  uint64_t log_begin, log_end;
+  uint32_t seed = 0;
+  uint64_t max_cycles = -1;
+  uint64_t fork_interval = 1000;
+  uint64_t max_instr = -1;
+  uint64_t warmup_instr = -1;
+  uint64_t stat_cycles = -1;
+  uint64_t log_begin = 0, log_end = -1;
 #ifdef DEBUG_REFILL
-  uint64_t track_instr;
+  uint64_t track_instr = 0;
 #endif
 #ifdef ENABLE_IPC
   uint64_t ipc_interval;
@@ -51,57 +54,37 @@ struct EmuArgs {
   uint64_t ipc_last_cycle;
   uint64_t ipc_times;
 #endif
-  const char *image;
-  const char *snapshot_path;
-  const char *wave_path;
-  const char *ram_size;
-  const char *flash_bin;
-  bool enable_waveform;
-  bool enable_snapshot;
-  bool force_dump_result;
-  bool enable_diff;
-  bool enable_fork;
-  bool enable_jtag;
-  bool enable_runahead;
-  bool dump_db;
-  bool enable_ref_trace;
-
-  EmuArgs() {
-    seed = 0;
-    max_cycles = -1;
-    max_instr = -1;
-    warmup_instr = -1;
-    stat_cycles = -1;
-    log_begin = 1;
-    log_end = -1;
-#ifdef DEBUG_REFILL
-    track_instr = 0;
-#endif
-#ifdef ENABLE_IPC
-    ipc_interval = 0;
-    ipc_file = NULL;
-    ipc_last_instr = 0;
-    ipc_last_cycle = 0;
-    ipc_times = 1;
-#endif
-    snapshot_path = NULL;
-    wave_path = NULL;
-    ram_size = NULL;
-    image = NULL;
-    flash_bin = NULL;
-    enable_waveform = false;
-    enable_snapshot = true;
-    force_dump_result = false;
-    enable_diff = true;
-    enable_fork = false;
-    enable_jtag = false;
-    enable_runahead = false;
-    dump_db = false;
-    enable_ref_trace = false;
-  }
+  const char *image = nullptr;
+  const char *snapshot_path = nullptr;
+  const char *wave_path = nullptr;
+  const char *ram_size = nullptr;
+  const char *flash_bin = nullptr;
+  const char *select_db = nullptr;
+  bool enable_waveform = false;
+  bool enable_ref_trace = false;
+  bool enable_commit_trace = false;
+  bool enable_snapshot = true;
+  bool force_dump_result = false;
+  bool enable_diff = true;
+  bool enable_fork = false;
+  bool enable_jtag = false;
+  bool enable_runahead = false;
+  bool dump_db = false;
+  bool dump_coverage = false;
 };
 
-class Emulator {
+enum {
+  STATE_GOODTRAP = 0,
+  STATE_BADTRAP = 1,
+  STATE_ABORT = 2,
+  STATE_LIMIT_EXCEEDED = 3,
+  STATE_SIG = 4,
+  STATE_AMBIGUOUS = 5,
+  STATE_SIM_EXIT = 6,
+  STATE_RUNNING = -1
+};
+
+class Emulator final : public DUT {
 private:
   VSimTop *dut_ptr;
 #ifdef ENABLE_FST
@@ -112,23 +95,21 @@ private:
   bool enable_waveform;
   bool force_dump_wave = false;
 #ifdef VM_SAVABLE
-  VerilatedSaveMem snapshot_slot[2];
+  VerilatedSaveMem *snapshot_slot = nullptr;
 #endif
   EmuArgs args;
   LightSSS *lightsss = NULL;
-
-  enum {
-    STATE_GOODTRAP = 0,
-    STATE_BADTRAP = 1,
-    STATE_ABORT = 2,
-    STATE_LIMIT_EXCEEDED = 3,
-    STATE_SIG = 4,
-    STATE_RUNNING = -1
-  };
+#if VM_COVERAGE == 1
+  VerilatedCovContext *coverage = NULL;
+#endif // VM_COVERAGE
 
   // emu control variable
   uint64_t cycles;
   int trapCode;
+  uint32_t lasttime_snapshot = 0;
+  uint64_t core_max_instr[NUM_CORES];
+  uint32_t lasttime_poll = 0;
+  uint32_t elapsed_time;
 
   inline void reset_ncycles(size_t cycles);
   inline void single_cycle();
@@ -158,8 +139,9 @@ public:
     return trapCode == STATE_GOODTRAP || trapCode == STATE_LIMIT_EXCEEDED;
   };
   int get_trapcode() { return trapCode; }
+  int tick();
+  int is_finished();
+  int is_good();
 };
-
-void parse_and_update_ramsize(const char* arg_ramsize_str);
 
 #endif

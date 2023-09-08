@@ -1,8 +1,8 @@
 #***************************************************************************************
-# Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
 # Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
-# XiangShan is licensed under Mulan PSL v2.
+# DiffTest is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
 # You may obtain a copy of Mulan PSL v2 at:
 #          http://license.coscl.org.cn/MulanPSL2
@@ -14,14 +14,13 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-SIM_TOP    ?= SimTop
-DESIGN_DIR ?= ..
-NUM_CORES  ?= 1
+ifndef NOOP_HOME
+$(error NOOP_HOME is not set)
+endif
 
-# Set USE_DIFFTEST_MAIN to 1 in your design's Makefile to generate Verilog by difftest
-# rather than by design.
-# Set this variable if your design is written in Verilog.
-USE_DIFFTEST_MAIN ?= 0
+SIM_TOP    ?= SimTop
+DESIGN_DIR ?= $(NOOP_HOME)
+NUM_CORES  ?= 1
 
 BUILD_DIR  = $(DESIGN_DIR)/build
 SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).v
@@ -38,9 +37,7 @@ sim-verilog: $(SIM_TOP_V)
 
 # generate difftest files for non-chisel design.
 difftest_verilog:
-ifeq ($(USE_DIFFTEST_MAIN), 1)
-	mill chiselModule.runMain difftest.DifftestMain -td $(BUILD_DIR)
-endif
+	mill difftest.runMain difftest.DifftestMain -td $(BUILD_DIR)
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
@@ -61,31 +58,28 @@ REMOTE ?= localhost
 SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
 SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
 
-PLUGIN_CSRC_DIR =  $(abspath ./src/test/csrc/plugin)
-PLUGIN_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR) -name "*.cpp")
+# generated-src
+GEN_CSRC_DIR = $(BUILD_DIR)/generated-src
+GEN_CXXFILES = $(shell find $(GEN_CSRC_DIR) -name "*.cpp")
 
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 
-PLUGIN_CHEAD_DIR = $(abspath ./src/test/csrc/plugin/include)
+PLUGIN_CSRC_DIR   = $(abspath ./src/test/csrc/plugin)
+PLUGIN_INC_DIR    = $(abspath $(PLUGIN_CSRC_DIR)/include)
+
+PLUGIN_DASM_DIR      = $(abspath $(PLUGIN_CSRC_DIR)/spikedasm)
+PLUGIN_DASM_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR)/spikedasm -name "*.cpp")
+
+PLUGIN_RUNAHEAD_DIR      = $(abspath $(PLUGIN_CSRC_DIR)/runahead)
+PLUGIN_RUNAHEAD_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR)/runahead -name "*.cpp")
 
 SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
 
 include verilator.mk
 include vcs.mk
 
-ifndef NEMU_HOME
-$(error NEMU_HOME is not set)
-endif
-REF_SO := $(NEMU_HOME)/build/riscv64-nemu-interpreter-so
-$(REF_SO):
-	$(MAKE) -C $(NEMU_HOME) riscv64-xs-ref_defconfig
-	$(MAKE) -C $(NEMU_HOME)
-
-SEED ?= $(shell shuf -i 1-10000 -n 1)
-
 clean: vcs-clean
 	rm -rf $(BUILD_DIR)
 
-.PHONY: sim-verilog emu difftest_verilog clean$(REF_SO)
-
+.PHONY: sim-verilog emu difftest_verilog clean
