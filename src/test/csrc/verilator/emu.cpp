@@ -975,7 +975,7 @@ void Emulator::fork_child_init() {
 #else
 #error Please use Verilator v5.016 or newer versions.
 #endif // check VERILATOR_VERSION_INTEGER values
-#elif EMU_THREADS > 1 // VERILATOR_VERSION_INTEGER not defined
+#elif EMU_THREAD > 1 // VERILATOR_VERSION_INTEGER not defined
 #ifdef VERILATOR_4_210 // v4.210 <= version < 4.220
   dut_ptr->vlSymsp->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
 #else // older than v4.210
