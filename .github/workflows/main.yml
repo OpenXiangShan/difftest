@@ -119,3 +119,14 @@ jobs:
             make emu
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --dump-difftrace microbench
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --load-difftrace microbench
+
+      - name: Difftest with Footprints
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu
+            ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --dump-footprints microbench.bin
+            ./build/emu -e 0 -i microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --as-footprints

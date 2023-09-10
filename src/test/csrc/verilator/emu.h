@@ -61,6 +61,8 @@ struct EmuArgs {
   const char *flash_bin = nullptr;
   const char *select_db = nullptr;
   const char *trace_name = nullptr;
+  const char *footprints_name = nullptr;
+  const char *linearized_name = nullptr;
   bool enable_waveform = false;
   bool enable_ref_trace = false;
   bool enable_commit_trace = false;
@@ -73,6 +75,7 @@ struct EmuArgs {
   bool dump_db = false;
   bool trace_is_read = true;
   bool dump_coverage = false;
+  bool image_as_footprints = false;
 };
 
 enum {

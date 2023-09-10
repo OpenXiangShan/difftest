@@ -52,6 +52,19 @@ private:
   uint64_t n_bytes;
 };
 
+class WimReader : public InputReader {
+public:
+  WimReader(uint64_t *addr, uint64_t size) : base_addr(addr), size(size), index(0) {}
+  ~WimReader() {}
+  uint64_t len() { return size; };
+  uint64_t next();
+  uint64_t read_all(void *dest, uint64_t max_bytes = -1ULL);
+
+private:
+  uint64_t *base_addr;
+  uint64_t size, index;
+};
+
 class FileReader : public InputReader {
 public:
   FileReader(const char *filename);
@@ -124,6 +137,64 @@ public:
   }
 
   uint64_t *as_ptr() { return ram; }
+};
+
+class MmapMemoryWithFootprints : public MmapMemory {
+private:
+  uint8_t *touched;
+  std::ofstream footprints_file;
+
+public:
+  MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name);
+  ~MmapMemoryWithFootprints();
+  uint64_t& at(uint64_t index);
+};
+
+class FootprintsMemory : public SimMemory {
+private:
+  std::unordered_map<uint64_t, uint64_t> ram;
+  std::ifstream footprints_file;
+  std::vector<std::function<void(uint64_t, uint64_t)>> callbacks;
+  InputReader *reader;
+  uint64_t n_accessed;
+
+protected:
+  virtual inline uint64_t get_img_size() {
+    return reader->len();
+  }
+  void add_callback(std::function<void(uint64_t, uint64_t)> func) {
+    callbacks.push_back(func);
+  }
+
+public:
+  FootprintsMemory(const char *footprints_name, uint64_t n_bytes);
+  ~FootprintsMemory();
+  uint64_t& at(uint64_t index);
+  void clone(std::function<void(void*, uint64_t)> func, bool skip_zero = false) {
+    printf("clone_instant not support by FootprintsMemory\n");
+    assert(0);
+  }
+  void clone_on_demand(std::function<void(uint64_t, void*, size_t)> func, bool skip_zero = false) {
+    auto cb = [func](uint64_t index, uint64_t value) {
+      func(index * sizeof(uint64_t), &value, sizeof(uint64_t));
+    };
+    for (const auto& [index, value] : ram) {
+      cb(index, value);
+    }
+    add_callback(cb);
+  }
+};
+
+class LinearizedFootprintsMemory : public FootprintsMemory {
+private:
+  const char *linear_name;
+  uint64_t* linear_memory;
+  uint64_t n_touched; // for performance opt
+
+public:
+  LinearizedFootprintsMemory(const char *footprints_name, uint64_t n_bytes, const char *linear_name);
+  ~LinearizedFootprintsMemory();
+  void save_linear_memory(const char* filename);
 };
 
 extern SimMemory *simMemory;
