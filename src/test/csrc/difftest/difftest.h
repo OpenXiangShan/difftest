@@ -19,6 +19,7 @@
 
 #include <vector>
 #include "common.h"
+#include "difftrace.h"
 #include "emu.h"
 #include "refproxy.h"
 #include "golden.h"
@@ -202,6 +203,17 @@ public:
     return dut.trap.code;
   }
   void display();
+  void set_trace(const char *name, bool is_read) {
+    difftrace = new DiffTrace(name, is_read);
+  }
+  void trace() {
+    if (difftrace) {
+      if (difftrace->is_read)
+        difftrace->read_next(&dut);
+      else
+        difftrace->append(&dut);
+    }
+  }
 
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
   // These functions generally do nothing but copy the information to core_state.
@@ -236,6 +248,8 @@ public:
   }
 
 protected:
+  DiffTrace *difftrace = nullptr;
+
 #if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
   const uint64_t firstCommit_limit = 1000;
   const uint64_t stuck_limit = 500;
@@ -325,6 +339,7 @@ int difftest_init();
 int difftest_step();
 int difftest_state();
 void difftest_finish();
+void difftest_trace();
 int init_nemuproxy(size_t);
 
 #endif

@@ -108,3 +108,14 @@ jobs:
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so -C 10000 --dump-coverage
             make -C difftest coverage
             ls -lh *.coverage
+
+      - name: Difftest with DiffTrace
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu
+            ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --dump-difftrace microbench
+            ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --load-difftrace microbench

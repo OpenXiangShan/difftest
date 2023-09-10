@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "difftest.h"
+#include "difftrace.h"
 #include "goldenmem.h"
 #include "ram.h"
 #include "flash.h"
@@ -56,6 +57,12 @@ int difftest_step() {
   return 0;
 }
 
+void difftest_trace() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    difftest[i]->trace();
+  }
+}
+
 void difftest_finish() {
   for (int i = 0; i < NUM_CORES; i++) {
     delete difftest[i];
@@ -79,6 +86,7 @@ Difftest::Difftest(int coreid) : id(coreid) {
 
 Difftest::~Difftest() {
   delete state;
+  delete difftrace;
   if (proxy) {
     delete proxy;
   }
