@@ -146,6 +146,45 @@ uint64_t StdinReader::read_all(void *dest, uint64_t max_bytes) {
   return n_read;
 }
 
+// wim@[base_addr],[wim_size]
+uint64_t *SimMemory::is_wim(const char *image, uint64_t &wim_size) {
+  const char wim_prefix[] = "wim";
+  const char *wim_info = strchr(image, '@');
+  if (!wim_info || strncmp(wim_prefix, image, sizeof(wim_prefix) - 1)) {
+    return nullptr;
+  }
+  wim_info++;
+  uint64_t base_addr = strtoul(wim_info, (char **)&wim_info, 16);
+  if (base_addr % sizeof(uint64_t) || *wim_info != '+') {
+    return nullptr;
+  }
+  wim_info++;
+  wim_size = strtoul(wim_info, (char **)&wim_info, 16);
+  if (*wim_info) {
+    return nullptr;
+  }
+  return (uint64_t *)base_addr;
+}
+
+uint64_t WimReader::next() {
+  if (index + sizeof(uint64_t) > size) {
+    return 0;
+  }
+  uint64_t value = base_addr[index / sizeof(uint64_t)];
+  index += sizeof(uint64_t);
+  return value;
+}
+
+uint64_t WimReader::read_all(void *dest, uint64_t max_bytes) {
+  uint64_t n_read = size - index;
+  if (n_read >= max_bytes) {
+    n_read = max_bytes;
+  }
+  memcpy(dest, base_addr, n_read);
+  index += n_read;
+  return n_read;
+}
+
 FileReader::FileReader(const char *filename) : file(filename, std::ios::binary) {
   if (!file.is_open()) {
     std::cerr << "Cannot open '" << filename << "'\n";
@@ -178,6 +217,10 @@ uint64_t FileReader::read_all(void *dest, uint64_t max_bytes) {
 InputReader *SimMemory::createInputReader(const char *image) {
   if (is_stdin(image)) {
     return new StdinReader();
+  }
+  uint64_t n_bytes;
+  if (uint64_t *ptr = is_wim(image, n_bytes)) {
+    return new WimReader(ptr, n_bytes);
   }
   return new FileReader(image);
 }
@@ -275,6 +318,97 @@ void pmem_write(uint64_t waddr, uint64_t wdata) {
   }
   waddr -= PMEM_BASE;
   return ram_write_helper(waddr / sizeof(uint64_t), wdata, -1UL, 1);
+}
+
+MmapMemoryWithFootprints::MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name)
+  : MmapMemory(image, n_bytes) {
+  uint64_t n_touched = memory_size / sizeof(uint64_t);
+  touched = (uint8_t *)mmap(NULL, n_touched, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+  footprints_file.open(footprints_name, std::ios::binary);
+  if (!footprints_file.is_open()) {
+    printf("Cannot open %s as the footprints file\n", footprints_name);
+    assert(0);
+  }
+}
+
+MmapMemoryWithFootprints::~MmapMemoryWithFootprints() {
+  munmap(touched, memory_size / sizeof(uint64_t));
+  footprints_file.close();
+}
+
+uint64_t& MmapMemoryWithFootprints::at(uint64_t index) {
+  uint64_t &data = MmapMemory::at(index);
+  if (!touched[index]) {
+    footprints_file.write(reinterpret_cast<const char*>(&data), sizeof(data));
+    touched[index] = 1;
+  }
+  return data;
+}
+
+FootprintsMemory::FootprintsMemory(const char *footprints_name, uint64_t n_bytes)
+  : SimMemory(n_bytes), reader(createInputReader(footprints_name)), n_accessed(0) {
+  printf("The image is %s\n", footprints_name);
+  add_callback([this](uint64_t, uint64_t) { this->on_access(this->n_accessed / sizeof(uint64_t)); });
+}
+
+FootprintsMemory::~FootprintsMemory() {
+  delete reader;
+}
+
+uint64_t& FootprintsMemory::at(uint64_t index) {
+  if (ram.find(index) == ram.end()) {
+    uint64_t value = reader->next();
+    ram[index] = value;
+    for (auto& cb : callbacks) {
+      cb(index, value);
+    }
+    n_accessed += sizeof(uint64_t);
+  }
+  return ram[index];
+}
+
+LinearizedFootprintsMemory::LinearizedFootprintsMemory(
+    const char *footprints_name,
+    uint64_t n_bytes,
+    const char *linear_name)
+  : FootprintsMemory(footprints_name, n_bytes), linear_name(linear_name), n_touched(0) {
+  linear_memory = (uint64_t*)mmap(nullptr, n_bytes,
+    PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  if (linear_memory == MAP_FAILED) {
+    perror("mmap");
+    exit(EXIT_FAILURE);
+  }
+  add_callback([this](uint64_t index, uint64_t value) {
+    if (value) {
+      linear_memory[index] = value;
+      n_touched++;
+    }
+  });
+}
+
+LinearizedFootprintsMemory::~LinearizedFootprintsMemory() {
+  save_linear_memory(linear_name);
+  munmap(linear_memory, get_size());
+}
+
+void LinearizedFootprintsMemory::save_linear_memory(const char* filename) {
+  std::ofstream out_file(filename, std::ios::out | std::ios::binary);
+  if (!out_file) {
+    std::cerr << "Cannot open output file: " << filename << std::endl;
+    return;
+  }
+  // Find the position of the last non-zero element
+  uint64_t last_nonzero_index = 0, nonzero_count = 0;
+  for (uint64_t i = 0; i < get_size() / sizeof(uint64_t) && nonzero_count < n_touched; ++i) {
+    if (linear_memory[i] != 0) {
+      last_nonzero_index = i;
+      nonzero_count++;
+    }
+  }
+  // Even if all all zeros, we still write one uint64_t.
+  size_t n_bytes = (last_nonzero_index + 1) * sizeof(uint64_t);
+  out_file.write(reinterpret_cast<char*>(linear_memory), n_bytes);
+  out_file.close();
 }
 
 #ifdef WITH_DRAMSIM3

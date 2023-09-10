@@ -107,6 +107,9 @@ static inline void print_help(const char *file) {
 #endif // VM_COVERAGE
   printf("      --load-difftrace=NAME  load from trace NAME\n");
   printf("      --dump-difftrace=NAME  dump to trace NAME\n");
+  printf("      --dump-footprints=NAME dump memory access footprints to NAME\n");
+  printf("      --as-footprints        load the image as memory access footprints\n");
+  printf("      --dump-linearized=NAME dump the linearized footprints to NAME\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -137,6 +140,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dump-commit-trace", 0, NULL,  0  },
     { "load-difftrace",    1, NULL,  0  },
     { "dump-difftrace",    1, NULL,  0  },
+    { "dump-footprints",   1, NULL,  0  },
+    { "as-footprints",     0, NULL,  0  },
+    { "dump-linearized",   1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -204,6 +210,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 16: args.enable_commit_trace = true; continue;
           case 17: args.trace_name = optarg; args.trace_is_read = true; continue;
           case 18: args.trace_name = optarg; args.trace_is_read = false; continue;
+          case 19: args.footprints_name = optarg; continue;
+          case 20: args.image_as_footprints = true; continue;
+          case 21: args.linearized_name = optarg; continue;
         }
         // fall through
       default:
@@ -316,7 +325,24 @@ Emulator::Emulator(int argc, const char *argv[]):
   if (args.ram_size) {
     ram_size = parse_and_update_ramsize(args.ram_size);
   }
-  simMemory = new MmapMemory(args.image, ram_size);
+  // footprints
+  if (args.image_as_footprints) {
+    if (args.linearized_name) {
+      simMemory = new LinearizedFootprintsMemory(args.image, ram_size, args.linearized_name);
+    }
+    else {
+      simMemory = new FootprintsMemory(args.image, ram_size);
+    }
+  }
+  // normal linear memory
+  else {
+    if (args.footprints_name) {
+      simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
+    }
+    else {
+      simMemory = new MmapMemory(args.image, ram_size);
+    }
+  }
 
 #ifdef ENABLE_CHISEL_DB
   init_db(args.dump_db, (args.select_db != NULL), args.select_db);
