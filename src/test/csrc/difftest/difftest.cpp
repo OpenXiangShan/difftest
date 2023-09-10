@@ -184,8 +184,17 @@ int Difftest::step() {
   }
 
   if (proxy->compare(&dut)) {
+#ifdef FUZZING
+    if (in_disambiguation_state()) {
+      Info("Mismatch detected with a disambiguation state at pc = 0x%lx.\n", dut.trap.pc);
+      return 0;
+    }
+#endif
     display();
     proxy->display(&dut);
+#ifdef FUZZER_LIB
+    stats.exit_code = SimExitCode::difftest;
+#endif // FUZZER_LIB
     return 1;
   }
 
@@ -217,6 +226,27 @@ void Difftest::do_exception() {
     proxy->ref_exec(1);
   }
 
+#ifdef FUZZING
+  static uint64_t lastExceptionPC = 0xdeadbeafUL;
+  static int sameExceptionPCCount = 0;
+  if (dut.event.exceptionPC == lastExceptionPC) {
+    if (sameExceptionPCCount >= 5) {
+      Info("Found infinite loop at exception_pc %lx. Exiting.\n", dut.event.exceptionPC);
+      dut.trap.hasTrap = 1;
+      dut.trap.code = STATE_FUZZ_COND;
+#ifdef FUZZER_LIB
+      stats.exit_code = SimExitCode::exception_loop;
+#endif // FUZZER_LIB
+      return;
+    }
+    sameExceptionPCCount++;
+  }
+  if (!sameExceptionPCCount && dut.event.exceptionPC != lastExceptionPC) {
+    sameExceptionPCCount = 0;
+  }
+  lastExceptionPC = dut.event.exceptionPC;
+#endif // FUZZING
+
   progress = true;
 }
 
@@ -232,6 +262,18 @@ int Difftest::do_instr_commit(int i) {
   state->record_inst(commit_pc, commit_instr, (dut.commit[i].rfwen | dut.commit[i].fpwen | dut.commit[i].vecwen),
     dut.commit[i].wdest, get_commit_data(i), dut.commit[i].skip != 0, dut.commit[i].special & 0x1,
     dut.commit[i].lqIdx, dut.commit[i].sqIdx, dut.commit[i].robIdx, dut.commit[i].isLoad, dut.commit[i].isStore);
+
+#ifdef FUZZING
+  // isExit
+  if (dut.commit[i].special & 0x2) {
+    dut.trap.hasTrap = 1;
+    dut.trap.code = STATE_SIM_EXIT;
+#ifdef FUZZER_LIB
+    stats.exit_code = SimExitCode::sim_exit;
+#endif // FUZZER_LIB
+    return 0;
+  }
+#endif // FUZZING
 
   progress = true;
   update_last_commit();
@@ -415,6 +457,12 @@ int Difftest::do_store_check() {
     auto data = dut.store[i].data;
     auto mask = dut.store[i].mask;
     if (proxy->store_commit(&addr, &data, &mask)) {
+#ifdef FUZZING
+      if (in_disambiguation_state()) {
+        Info("Store mismatch detected with a disambiguation state at pc = 0x%lx.\n", dut.trap.pc);
+        return 0;
+      }
+#endif
       display();
       printf("Mismatch for store commits %d: \n", i);
       printf("  REF commits addr 0x%lx, data 0x%lx, mask 0x%x\n", addr, data, mask);

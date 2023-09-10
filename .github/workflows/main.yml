@@ -130,3 +130,20 @@ jobs:
             make emu
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --dump-footprints microbench.bin
             ./build/emu -e 0 -i microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --as-footprints
+
+      - name: Difftest with Coverage-Guided Fuzzer
+        run: |
+            git clone https://github.com/OpenXiangShan/riscv-isa-sim.git
+            export SPIKE_HOME=$(pwd)/riscv-isa-sim
+            make -C riscv-isa-sim/difftest CPU=NUTSHELL SANCOV=1 -j2
+            git clone https://github.com/OpenXiangShan/xfuzz.git
+            export XFUZZ_HOME=$(pwd)/xfuzz
+            cargo install cargo-make
+            cd xfuzz && git submodule update --init && make build-all
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1
+            ./build/fuzzer -v -- ./ready-to-run/microbench.bin -e 0

@@ -24,7 +24,17 @@
 #endif
 
 #ifdef DUT_MODEL
+#ifdef FUZZER_LIB
+
+extern "C" int sim_main(int argc, const char** argv);
+int sim_main(int argc, const char *argv[]) {
+  optind = 1;
+
+  stats.reset();
+
+#else
 int main(int argc, const char *argv[]) {
+#endif // FUZZER_LIB
   common_init(argv[0]);
 
   // main simulation loop
@@ -35,8 +45,25 @@ int main(int argc, const char *argv[]) {
   bool is_good = emu->is_good();
   delete emu;
 
+#ifdef FUZZER_LIB
+  stats.accumulate();
+  stats.display();
+#endif
+
   common_finish();
 
+#if defined(FUZZING) && !defined(FUZZER_LIB)
+  if (!is_good) {
+    volatile uint64_t *ptr = 0;
+    uint64_t a = *ptr;
+  }
+  return 0;
+#else
+#ifdef FUZZER_LIB
+  return !is_good || stats.exit_code == SimExitCode::unknown;
+#else
   return !is_good;
+#endif // FUZZER_LIB
+#endif // FUZZING && !FUZZER_LIB
 }
 #endif // DUT_MODEL
