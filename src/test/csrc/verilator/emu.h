@@ -60,6 +60,7 @@ struct EmuArgs {
   const char *ram_size = nullptr;
   const char *flash_bin = nullptr;
   const char *select_db = nullptr;
+  const char *trace_name = nullptr;
   bool enable_waveform = false;
   bool enable_ref_trace = false;
   bool enable_commit_trace = false;
@@ -70,6 +71,7 @@ struct EmuArgs {
   bool enable_jtag = false;
   bool enable_runahead = false;
   bool dump_db = false;
+  bool trace_is_read = true;
   bool dump_coverage = false;
 };
 

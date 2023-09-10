@@ -105,6 +105,8 @@ static inline void print_help(const char *file) {
 #if VM_COVERAGE == 1
   printf("      --dump-coverage        enable coverage dump\n");
 #endif // VM_COVERAGE
+  printf("      --load-difftrace=NAME  load from trace NAME\n");
+  printf("      --dump-difftrace=NAME  dump to trace NAME\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -133,6 +135,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dump-coverage",     0, NULL,  0  },
     { "dump-ref-trace",    0, NULL,  0  },
     { "dump-commit-trace", 0, NULL,  0  },
+    { "load-difftrace",    1, NULL,  0  },
+    { "dump-difftrace",    1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -198,6 +202,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             continue;
           case 15: args.enable_ref_trace = true; continue;
           case 16: args.enable_commit_trace = true; continue;
+          case 17: args.trace_name = optarg; args.trace_is_read = true; continue;
+          case 18: args.trace_name = optarg; args.trace_is_read = false; continue;
         }
         // fall through
       default:
@@ -353,6 +359,13 @@ Emulator::Emulator(int argc, const char *argv[]):
 #ifndef CONFIG_NO_DIFFTEST
   // init difftest
   difftest_init();
+
+  // init difftest traces
+  if (args.trace_name) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      difftest[i]->set_trace(args.trace_name, args.trace_is_read);
+    }
+  }
 #endif // CONFIG_NO_DIFFTEST
 
   init_device();
@@ -480,6 +493,9 @@ Emulator::~Emulator() {
 }
 
 inline void Emulator::reset_ncycles(size_t cycles) {
+  if (args.trace_name && args.trace_is_read) {
+    return;
+  }
   for(int i = 0; i < cycles; i++) {
     dut_ptr->reset = 1;
 #ifdef COVERAGE_PORT_RESET
@@ -503,6 +519,10 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 }
 
 inline void Emulator::single_cycle() {
+  if (args.trace_name && args.trace_is_read) {
+    goto end_single_cycle;
+  }
+
   dut_ptr->clock = 0;
 #ifdef COVERAGE_PORT_CLOCK
   dut_ptr->coverage_clock = dut_ptr->clock;
@@ -546,6 +566,11 @@ inline void Emulator::single_cycle() {
   }
 
 end_single_cycle:
+#ifndef CONFIG_NO_DIFFTEST
+  if (args.trace_name) {
+    difftest_trace();
+  }
+#endif // CONFIG_NO_DIFFTEST
   cycles ++;
 }
 
