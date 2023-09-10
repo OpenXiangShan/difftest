@@ -16,3 +16,24 @@
 #include "dut.h"
 
 SimStats stats;
+
+extern "C" uint32_t get_cover_number() {
+  if (auto c = stats.get_feedback_cover()) {
+    return c->get_total_points();
+  }
+  return 0;
+}
+
+extern "C" void update_stats(uint8_t *icover_bitmap) {
+  if (auto c = stats.get_feedback_cover()) {
+    c->to_covered_bytes(icover_bitmap);
+  }
+}
+
+extern "C" void display_uncovered_points() {
+  stats.display_uncovered_points();
+}
+
+extern "C" void set_cover_feedback(const char *name) {
+  stats.set_feedback_cover(name);
+}

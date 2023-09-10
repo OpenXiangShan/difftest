@@ -86,6 +86,7 @@ enum {
   STATE_SIG = 4,
   STATE_AMBIGUOUS = 5,
   STATE_SIM_EXIT = 6,
+  STATE_FUZZ_COND = 7,
   STATE_RUNNING = -1
 };
 
@@ -141,7 +142,11 @@ public:
   uint64_t get_cycles() const { return cycles; }
   EmuArgs get_args() const { return args; }
   bool is_good_trap() {
+#ifdef FUZZING
+    return !(trapCode == STATE_ABORT);
+#else
     return trapCode == STATE_GOODTRAP || trapCode == STATE_LIMIT_EXCEEDED;
+#endif
   };
   int get_trapcode() { return trapCode; }
   int tick();

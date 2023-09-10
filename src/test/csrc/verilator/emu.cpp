@@ -475,6 +475,9 @@ Emulator::~Emulator() {
   stats.update(&(difftest[0]->dut));
 #endif // CONFIG_NO_DIFFTEST
 
+#ifdef FUZZING
+  simMemory->display_stats();
+#endif
   delete simMemory;
   simMemory = nullptr;
 
@@ -645,6 +648,9 @@ int Emulator::tick() {
 
   if (exceed_cycle_limit) {
     trapCode = STATE_LIMIT_EXCEEDED;
+#ifdef FUZZER_LIB
+    stats.exit_code = SimExitCode::exceed_limit;
+#endif // FUZZER_LIB
     return trapCode;
   }
 
@@ -654,6 +660,9 @@ int Emulator::tick() {
     auto trap = difftest[i]->get_trap_event();
     if (trap->instrCnt >= core_max_instr[i]) {
       trapCode = STATE_LIMIT_EXCEEDED;
+#ifdef FUZZER_LIB
+    stats.exit_code = SimExitCode::exceed_limit;
+#endif // FUZZER_LIB
       return trapCode;
     }
   }
@@ -730,6 +739,17 @@ int Emulator::tick() {
 
   trapCode = difftest_state();
   if (trapCode != STATE_RUNNING) {
+#ifdef FUZZER_LIB
+      if (trapCode == STATE_GOODTRAP) {
+        stats.exit_code = SimExitCode::good_trap;
+      }
+      else if (trapCode != STATE_FUZZ_COND && trapCode != STATE_SIM_EXIT) {
+        stats.exit_code = SimExitCode::bad_trap;
+      }
+      else if (stats.exit_code == SimExitCode::unknown) {
+        stats.exit_code = SimExitCode::bad_trap;
+      }
+#endif
     return trapCode;
   }
 #endif // CONFIG_NO_DIFFTEST

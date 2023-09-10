@@ -318,6 +318,9 @@ protected:
       was_found = true;
       dut.trap.hasTrap = 1;
       dut.trap.code = STATE_AMBIGUOUS;
+#ifdef FUZZER_LIB
+      stats.exit_code = SimExitCode::ambiguous;
+#endif // FUZZER_LIB
     }
     return was_found;
   }

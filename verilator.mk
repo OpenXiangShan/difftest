@@ -37,6 +37,25 @@ EMU_CXXFLAGS += -I$(DIFFTEST_CSRC_DIR)
 VEXTRA_FLAGS += +define+DIFFTEST
 endif
 
+# Check if XFUZZ is set
+ifeq ($(XFUZZ), 1)
+XFUZZ_HOME_VAR = XFUZZ_HOME
+ifeq ($(origin $(XFUZZ_HOME_VAR)), undefined)
+$(error $(XFUZZ_HOME_VAR) is not set)
+endif
+FUZZER_LIB   = $(shell echo $$$(XFUZZ_HOME_VAR))/target/release/libfuzzer.a
+EMU_LDFLAGS += -lrt -lpthread
+endif
+
+# Link fuzzer libraries
+ifneq ($(FUZZER_LIB), )
+# the target is named as fuzzer for clarity
+EMU           = $(BUILD_DIR)/fuzzer
+EMU_CXXFLAGS += -DFUZZER_LIB
+EMU_LDFLAGS  += $(abspath $(FUZZER_LIB))
+FUZZING       = 1
+endif
+
 # ChiselDB
 WITH_CHISELDB ?= 1
 ifeq ($(WITH_CHISELDB), 1)
@@ -164,6 +183,22 @@ endif
 ifeq ($(WITH_RUNAHEAD),1)
 EMU_CXXFLAGS += -I$(PLUGIN_RUNAHEAD_DIR)
 EMU_CXXFILES += $(PLUGIN_RUNAHEAD_CXXFILES)
+endif
+
+# Fuzzer support
+ifeq ($(FUZZING),1)
+EMU_CXXFLAGS += -DFUZZING
+endif
+
+# FIRRTL Coverage support
+ifneq ($(FIRRTL_COVER),)
+EMU_CXXFLAGS += -DFIRRTL_COVER
+endif
+
+# LLVM Sanitizer Coverage support
+ifneq ($(LLVM_COVER),)
+EMU_CXXFLAGS += -DLLVM_COVER
+EMU_LDFLAGS += -fsanitize-coverage=trace-pc-guard -fsanitize-coverage=pc-table
 endif
 
 VERILATOR_FLAGS =                   \
