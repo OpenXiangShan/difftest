@@ -122,6 +122,12 @@ VEXTRA_FLAGS += --savable
 EMU_CXXFLAGS += -DVM_SAVABLE
 endif
 
+# Verilator coverage
+EMU_COVERAGE ?=
+ifeq ($(EMU_COVERAGE),1)
+VEXTRA_FLAGS += --coverage-line --coverage-toggle
+endif
+
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
 EMU_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
@@ -187,6 +193,9 @@ EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
                $(shell find $(DIFFTEST_CSRC_DIR) -name "*.h")
 
 $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
+ifeq ($(EMU_COVERAGE),1)
+	@python3 ./scripts/coverage/vtransform.py $(BUILD_DIR)
+endif
 	@mkdir -p $(@D)
 	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
@@ -214,9 +223,12 @@ endif
 
 emu: $(EMU)
 
+COVERAGE_DATA ?= $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.dat")
+COVERAGE_DIR  ?= $(DESIGN_DIR)/$(basename $(notdir $(COVERAGE_DATA)))
 coverage:
-	verilator_coverage --annotate build/logs/annotated --annotate-min 1 build/logs/coverage.dat
-	python3 scripts/coverage/coverage.py build/logs/annotated/XSSimTop.v build/XSSimTop_annotated.v
-	python3 scripts/coverage/statistics.py build/XSSimTop_annotated.v >build/coverage.log
+	@verilator_coverage --annotate $(COVERAGE_DIR) --annotate-min 1 $(COVERAGE_DATA)
+	@python3 scripts/coverage/coverage.py $(COVERAGE_DIR)/$(SIM_TOP).v $(COVERAGE_DIR)/$(SIM_TOP)_annotated.v
+	@python3 scripts/coverage/statistics.py $(COVERAGE_DIR)/$(SIM_TOP)_annotated.v > $(COVERAGE_DIR)/coverage_$(SIM_TOP).log
+	@mv $(COVERAGE_DATA) $(COVERAGE_DIR)
 
 .PHONY: build_emu_local

@@ -95,3 +95,16 @@ jobs:
             make clean
             make emu EMU_THREADS=2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
+
+      - name: Difftest with Verilator Coverage
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            rm -rf *.coverage
+            make emu EMU_COVERAGE=1
+            ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so -C 10000 --dump-coverage
+            make -C difftest coverage
+            ls -lh *.coverage
