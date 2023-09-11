@@ -22,12 +22,14 @@
 #include "ram.h"
 #include "flash.h"
 #include "refproxy.h"
+#include "perfhelper.h"
 
 static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
 static bool enable_difftest = true;
 static int max_cycles = 0;
+static int cycles = 0;
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
@@ -58,11 +60,13 @@ extern "C" void set_max_cycles(long mc) {
   max_cycles = mc;
 }
 
-extern "C" void simv_init() {
+extern "C" void simv_init(uint64_t log_begin, uint64_t log_end) {
   common_init("simv");
 
   init_ram(bin_file);
   init_flash(flash_bin_file);
+
+  perf_init(log_begin, log_end, &cycles);
 
   difftest_init();
   init_device();
@@ -77,7 +81,6 @@ extern "C" int simv_step() {
     return 1;
   }
 
-  static int cycles = 0;
   if (max_cycles != 0) { // 0 for no limit
     if (cycles >= max_cycles) {
       eprintf(ANSI_COLOR_YELLOW "EXCEEDED MAX CYCLE:%d\n" ANSI_COLOR_RESET, max_cycles);
