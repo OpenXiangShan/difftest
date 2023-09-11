@@ -286,21 +286,33 @@ MmapMemory::~MmapMemory() {
 #endif
 }
 
-extern "C" uint64_t ram_read_helper(uint8_t en, uint64_t rIdx) {
-  if (!en || !simMemory)
+extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
+  if (!simMemory)
     return 0;
   rIdx %= simMemory->get_size() / sizeof(uint64_t);
   uint64_t rdata = simMemory->at(rIdx);
   return rdata;
 }
 
-extern "C" void ram_write_helper(uint64_t wIdx, uint64_t wdata, uint64_t wmask, uint8_t wen) {
-  if (wen && simMemory) {
+extern "C" uint64_t ram_read_helper(uint8_t en, uint64_t rIdx) {
+  if (!en)
+    return 0;
+  return difftest_ram_read(rIdx);
+}
+
+extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask) {
+  if (simMemory) {
     if (!simMemory->in_range_u64(wIdx)) {
       printf("ERROR: ram wIdx = 0x%lx out of bound!\n", wIdx);
       return;
     }
     simMemory->at(wIdx) = (simMemory->at(wIdx) & ~wmask) | (wdata & wmask);
+  }
+}
+
+extern "C" void ram_write_helper(uint64_t wIdx, uint64_t wdata, uint64_t wmask, uint8_t wen) {
+  if (wen) {
+    difftest_ram_write(wIdx, wdata, wmask);
   }
 }
 
