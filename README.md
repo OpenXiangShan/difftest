@@ -1,51 +1,129 @@
-Difftest Submodule
-===================
+# DiffTest
 
-Difftest (差分测试) co-sim framework
+DiffTest (差分测试): a modern co-simulation framework for RISC-V processors.
 
-# Usage
+## Generate Example Verilog
 
-1. Init this submodule in your design, add it to dependency list.
-2. Add difftest to your design.
-3. Generate verilog files for simulation.
-4. Assign `SIM_TOP`, `DESIGN_DIR` for `difftest/Makefile`
-5. `cd difftest` and `make emu`, then start simulating & debugging!
+DiffTest interfaces are provided in Chisel bundles and expected to be integrated
+into Chisel designs with auto-generated C++ interfaces.
+However, we also provide examples of the generated Verilog modules.
 
-To use difftest in XiangShan project:
-```sh
-cd XiangShan
-make init
-# cd difftest
-make emu
+```
+make difftest_verilog NOOP_HOME=$(pwd)
 ```
 
-# API
+## Example Usage
 
-Difftest functions:
+1. Add this submodule to your design.
 
-* DifftestArchEvent (essential)
-* DifftestInstrCommit (essential)
-* DifftestTrapEvent (essential)
-* DifftestCSRState (essential)
-* DifftestArchIntRegState (essential)
-* DifftestArchFpRegState
-* DifftestSbufferEvent
-* DifftestStoreEvent
-* DifftestLoadEvent
-* DifftestAtomicEvent
-* DifftestPtwEvent
+In Git `.gitmodules`:
+```
+[submodule "difftest"]
+	path = difftest
+	url = https://github.com/OpenXiangShan/difftest.git
+```
 
-Simulation top:
+In Mill `build.sc`:
+```scala
+object difftestDep extends difftest.build.CommonDiffTest with PublishModule {
+  override def millSourcePath = os.pwd / "difftest"
 
-* LogCtrlIO
-* PerfInfoIO
-* UARTIO
+  override def pomSettings = T {
+    your_design.pomSettings()
+  }
 
-Simulation memory:
+  override def publishVersion = T {
+    your_design.publishVersion()
+  }
+}
+```
 
-* RAMHelper (essential)
+In `Makefile`:
+```Makefile
+emu: sim-verilog
+	@$(MAKE) -C difftest emu WITH_CHISELDB=0 WITH_CONSTANTIN=0
+```
 
-To use `difftest`, include all these modules / simtopIO in your design.
+2. Add difftest modules (in Chisel or Verilog) to your design.
+```scala
+import difftest._
+
+val difftest = DifftestModule(new DiffInstrCommit, delay = 1, dontCare = true)
+difftest.clock  := clock
+difftest.coreid := 0.U
+difftest.index  := 0.U
+difftest.valid  := io.in.valid
+difftest.pc     := SignExt(io.in.bits.decode.cf.pc, AddrBits)
+difftest.instr  := io.in.bits.decode.cf.instr
+difftest.skip   := io.in.bits.isMMIO
+difftest.isRVC  := io.in.bits.decode.cf.instr(1, 0)=/="b11".U
+difftest.rfwen  := io.wb.rfWen && io.wb.rfDest =/= 0.U
+difftest.wdest  := io.wb.rfDest
+difftest.wpdest := io.wb.rfDest
+```
+
+3. Generate verilog files for simulation.
+
+4. `make emu` and start simulating & debugging!
+
+We provide example designs, including:
+- [XiangShan](https://github.com/OpenXiangShan/XiangShan)
+- [NutShell](https://github.com/OSCPU/NutShell/tree/dev-difftest)
+- [Rocket](https://github.com/OpenXiangShan/rocket-chip/tree/dev-difftest)
+
+## APIs
+
+Currently we are supporting the RISC-V base ISA as well as some extensions,
+including Float/Double, Debug, and Vector. We also support checking the cache
+coherence via RefillTest.
+
+| Probe Name | Descriptions | Mandatory |
+| ---------- | ------------ | --------- |
+| `DiffArchEvent` | Exceptions and interrupts | Yes |
+| `DiffInstrCommit` | Executed instructions | Yes |
+| `DiffTrapEvent` | Simulation environment call | Yes |
+| `DiffArchIntRegState` | General-purpose registers | Yes |
+| `DiffArchFpRegState` | Floating-point registers | No |
+| `DiffArchVecRegState` | Floating-point registers | No |
+| `DiffCSRState` | Control and status registers | Yes |
+| `DiffVecCSRState` | Control and status registers | No |
+| `DiffDebugMode` | Debug mode registers | No |
+| `DiffIntWriteback` | General-purpose writeback operations | No |
+| `DiffFpWriteback` | Floating-point writeback operations | No |
+| `DiffArchIntDelayedUpdate` | Delayed general-purpose writeback | No |
+| `DiffArchFpDelayedUpdate` | Delayed floating-point writeback | No |
+| `DiffStoreEvent` | Store operations | No |
+| `DiffSbufferEvent` | Store buffer operations | No |
+| `DiffLoadEvent` | Load operations | No |
+| `DiffAtomicEvent` | Atomic operations | No |
+| `DiffL1TLBEvent` | L1 TLB operations | No |
+| `DiffL2TLBEvent` | L2 TLB operations | No |
+| `DiffRefillEvent` | Cache refill operations | No |
+| `DiffLrScEvent` | Executed LR/SC instructions | No |
+
+The DiffTest framework comes with a simulation framework with some top-level IOs.
+* `LogCtrlIO`
+* `PerfInfoIO`
+* `UARTIO`
+
+For compatibility on different platforms, the CPU should access a C++ memory via
+DPI-C interfaces. This memory will be initialized in C++.
+
+```scala
+val mem = DifftestMem(memByte, 8)
+when (wen) {
+    mem.write(
+    addr = wIdx,
+    data = in.w.bits.data.asTypeOf(Vec(DataBytes, UInt(8.W))),
+    mask = in.w.bits.strb.asBools
+    )
+}
+val rdata = mem.readAndHold(rIdx, ren).asUInt
+```
+
+To use DiffTest, please include all necessary modules and top-level IOs in your design.
+It's worth noting the Chisel Bundles may have arguments with default values.
+Please set the correct parameters for the interfaces.
 
 # Further reference
 
