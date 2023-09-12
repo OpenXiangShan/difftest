@@ -226,6 +226,7 @@ InputReader *SimMemory::createInputReader(const char *image) {
 }
 
 void SimMemory::display_stats() {
+#ifdef FUZZING
   uint64_t req_in_range = 0;
   auto const img_indices = get_img_size() / sizeof(uint64_t);
   for (auto index : accessed_indices) {
@@ -235,6 +236,7 @@ void SimMemory::display_stats() {
   }
   auto req_all = accessed_indices.size();
   printf("SimMemory: img_size %lu, req_all %lu, req_in_range %lu\n", img_indices, req_all, req_in_range);
+#endif // FUZZING
 }
 
 MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes) {
