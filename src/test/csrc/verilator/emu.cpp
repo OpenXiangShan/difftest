@@ -480,9 +480,7 @@ Emulator::~Emulator() {
   stats.update(&(difftest[0]->dut));
 #endif // CONFIG_NO_DIFFTEST
 
-#ifdef FUZZING
   simMemory->display_stats();
-#endif
   delete simMemory;
   simMemory = nullptr;
 

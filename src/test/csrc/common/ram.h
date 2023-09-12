@@ -85,11 +85,15 @@ private:
 
 protected:
   uint64_t memory_size; // in bytes
+#ifdef FUZZING
   std::set<uint64_t> accessed_indices;
+#endif
   InputReader *createInputReader(const char *image);
   virtual uint64_t get_img_size() = 0;
   void inline on_access(uint64_t index) {
+#ifdef FUZZING
     accessed_indices.insert(index);
+#endif
   }
 
 public:
