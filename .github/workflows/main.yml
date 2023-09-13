@@ -48,6 +48,17 @@ jobs:
             rm -r difftest
             cp -r $GITHUB_WORKSPACE .
 
+      - name: Simulation without DiffTest
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu NO_DIFF=1 EMU_TRACE=1
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin
+            ./build/emu -b 0 -e 100 -i ./ready-to-run/microbench.bin --dump-wave
+
       - name: Simulation with No Diff
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
