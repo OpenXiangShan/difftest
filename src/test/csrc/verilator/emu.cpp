@@ -38,8 +38,6 @@
 #include "compress.h"
 #include "lightsss.h"
 #include "remote_bitbang.h"
-#include "perfhelper.h"
-#include <algorithm>
 
 extern remote_bitbang_t * jtag;
 
@@ -319,9 +317,6 @@ Emulator::Emulator(int argc, const char *argv[]):
   // init flash
   init_flash(args.flash_bin);
 
-  // set log time range and log level
-  perf_init(args.log_begin, args.log_end, &cycles);
-
   // init core
   reset_ncycles(10);
 
@@ -566,8 +561,8 @@ inline void Emulator::single_cycle() {
 #ifndef CONFIG_NO_DIFFTEST
     auto trap = difftest[0]->get_trap_event();
     uint64_t cycle = trap->cycleCnt;
-    uint64_t begin = std::max(dut_ptr->io_logCtrl_log_begin, perf_get_begin());
-    uint64_t end   = std::max(dut_ptr->io_logCtrl_log_end, perf_get_end());
+    uint64_t begin = dut_ptr->io_logCtrl_log_begin;
+    uint64_t end   = dut_ptr->io_logCtrl_log_end;
     bool in_range  = (begin <= cycle) && (cycle <= end);
 #else
     bool in_range = true;
@@ -689,15 +684,11 @@ int Emulator::tick() {
     auto trap = difftest[i]->get_trap_event();
     if (trap->instrCnt >= args.warmup_instr) {
       Info("Warmup finished. The performance counters will be dumped and then reset.\n");
-      perf_set_clean();
-      perf_set_dump();
       dut_ptr->io_perfInfo_clean = 1;
       dut_ptr->io_perfInfo_dump = 1;
       args.warmup_instr = -1;
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
-      perf_set_clean();
-      perf_set_dump();
       dut_ptr->io_perfInfo_clean = 1;
       dut_ptr->io_perfInfo_dump = 1;
     }
@@ -733,8 +724,6 @@ int Emulator::tick() {
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles --;
 #endif // CONFIG_NO_DIFFTEST
-  perf_unset_clean();
-  perf_unset_dump();
   dut_ptr->io_perfInfo_clean = 0;
   dut_ptr->io_perfInfo_dump = 0;
 
@@ -898,10 +887,8 @@ inline void Emulator::save_coverage(time_t t) {
 #endif
 
 void Emulator::trigger_stat_dump() {
-  perf_set_dump();
   dut_ptr->io_perfInfo_dump = 1;
   if(get_args().force_dump_result) {
-    perf_set_end(UINT64_MAX);
     dut_ptr->io_logCtrl_log_end = -1;
   }
   single_cycle();

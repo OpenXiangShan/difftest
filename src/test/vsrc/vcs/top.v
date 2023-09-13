@@ -19,11 +19,8 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void set_max_cycles(int mc);
-import "DPI-C" function void simv_init(longint log_begin, longint log_end);
+import "DPI-C" function void simv_init();
 import "DPI-C" function int simv_step();
-import "DPI-C" function void perf_set_begin(longint perf_begin);
-import "DPI-C" function void perf_set_end(longint perf_end);
-import "DPI-C" function void perf_alloc_cycles();
 
 module tb_top();
 
@@ -44,12 +41,10 @@ string flash_bin_file;
 string wave_type;
 string diff_ref_so;
 reg [31:0] max_cycles;
-reg [63:0] arg_log_begin;
-reg [63:0] arg_log_end;
 
 initial begin
-  reset = 1;
   clock = 0;
+  reset = 1;
   // enable waveform
   if ($test$plusargs("dump-wave")) begin
     $value$plusargs("dump-wave=%s", wave_type);
@@ -70,20 +65,16 @@ initial begin
   end
   // log begin
   if ($test$plusargs("b")) begin
-    $value$plusargs("b=%lu", arg_log_begin);
     $value$plusargs("b=%d", io_logCtrl_log_begin);
   end
   else begin
-    arg_log_begin = 0;
     io_logCtrl_log_begin = 0;
   end
   // log end
   if ($test$plusargs("e")) begin
-    $value$plusargs("e=%lu", arg_log_end);
     $value$plusargs("e=%d", io_logCtrl_log_end);
   end
   else begin
-    arg_log_end = 0;
     io_logCtrl_log_end = 0;
   end
   // workload: bin file
@@ -113,8 +104,6 @@ initial begin
   else begin
     max_cycles = 0;
   end
-
-  simv_init(arg_log_begin, arg_log_end);
 
   // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
   #100 reset = 0;
@@ -147,9 +136,18 @@ always @(posedge clock) begin
   end
 end
 
+reg has_init;
 always @(posedge clock) begin
+  if (reset) begin
+    has_init <= 1'b0;
+  end
+  else if (!has_init) begin
+    simv_init();
+    has_init <= 1'b1;
+  end
+
   // check errors
-  if (!reset) begin
+  if (!reset && has_init) begin
     if (simv_step()) begin
       $finish();
     end
