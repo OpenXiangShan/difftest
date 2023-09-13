@@ -528,12 +528,12 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 #ifdef COVERAGE_PORT_RESET
     dut_ptr->coverage_reset = dut_ptr->reset;
 #endif // COVERAGE_PORT_RESET
-    dut_ptr->clock = 0;
+    dut_ptr->clock = 1;
 #ifdef COVERAGE_PORT_CLOCK
     dut_ptr->coverage_clock = dut_ptr->clock;
 #endif // COVERAGE_PORT_CLOCK
     dut_ptr->eval();
-    dut_ptr->clock = 1;
+    dut_ptr->clock = 0;
 #ifdef COVERAGE_PORT_CLOCK
     dut_ptr->coverage_clock = dut_ptr->clock;
 #endif // COVERAGE_PORT_CLOCK
@@ -550,7 +550,7 @@ inline void Emulator::single_cycle() {
     goto end_single_cycle;
   }
 
-  dut_ptr->clock = 0;
+  dut_ptr->clock = 1;
 #ifdef COVERAGE_PORT_CLOCK
   dut_ptr->coverage_clock = dut_ptr->clock;
 #endif // COVERAGE_PORT_CLOCK
@@ -573,12 +573,6 @@ inline void Emulator::single_cycle() {
   }
 #endif
 
-  dut_ptr->clock = 1;
-#ifdef COVERAGE_PORT_CLOCK
-  dut_ptr->coverage_clock = dut_ptr->clock;
-#endif // COVERAGE_PORT_CLOCK
-  dut_ptr->eval();
-
 #ifdef WITH_DRAMSIM3
   dramsim3_step();
 #endif
@@ -591,6 +585,12 @@ inline void Emulator::single_cycle() {
     extern uint8_t uart_getc();
     dut_ptr->io_uart_in_ch = uart_getc();
   }
+
+  dut_ptr->clock = 0;
+#ifdef COVERAGE_PORT_CLOCK
+  dut_ptr->coverage_clock = dut_ptr->clock;
+#endif // COVERAGE_PORT_CLOCK
+  dut_ptr->eval();
 
 end_single_cycle:
 #ifndef CONFIG_NO_DIFFTEST
@@ -1038,7 +1038,7 @@ void Emulator::snapshot_load(const char *filename) {
 
 void Emulator::fork_child_init() {
 #ifdef VERILATOR_VERSION_INTEGER // >= v4.220
-#if VERILATOR_VERSION_INTEGER >= 5016000
+#if VERILATOR_VERSION_INTEGER >= 5015000
   // This will cause 288 bytes leaked for each one fork call.
   // However, one million snapshots cause only 288MB leaks, which is still acceptable.
   // See verilator/test_regress/t/t_wrapper_clone.cpp:48 to avoid leaks.
