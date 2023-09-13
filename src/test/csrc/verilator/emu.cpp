@@ -611,6 +611,7 @@ int Emulator::tick() {
   }
 #endif
 
+#ifndef CONFIG_NO_DIFFTEST
   // if ref trace is enabled in co-sim args
   // let simulator print debug info
   if (args.enable_ref_trace) {
@@ -620,6 +621,7 @@ int Emulator::tick() {
       difftest[i]->proxy->update_config(&ref_config);
     }
   }
+#endif // CONFIG_NO_DIFFTEST
 
   if (args.enable_fork && is_fork_child() && cycles != 0) {
     if (cycles == lightsss->get_end_cycles()) {

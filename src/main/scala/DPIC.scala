@@ -201,9 +201,13 @@ object DPIC {
     Files.write(Paths.get(outputHeaderFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
 
     interfaceCpp.clear()
+    interfaceCpp += "#ifndef CONFIG_NO_DIFFTEST"
+    interfaceCpp += ""
     interfaceCpp += "#include \"difftest.h\""
     interfaceCpp += "#include \"difftest-dpic.h\""
     interfaceCpp += interfaces.map(_._3).mkString("")
+    interfaceCpp += ""
+    interfaceCpp += "#endif // CONFIG_NO_DIFFTEST"
     interfaceCpp += ""
     val outputFile = outputDir + "/difftest-dpic.cpp"
     Files.write(Paths.get(outputFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
