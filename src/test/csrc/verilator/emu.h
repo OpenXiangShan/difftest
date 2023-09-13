@@ -99,8 +99,6 @@ private:
 #else
   VerilatedVcdC* tfp;
 #endif
-  bool enable_waveform;
-  bool enable_waveform_full;
   bool force_dump_wave = false;
 #ifdef VM_SAVABLE
   VerilatedSaveMem *snapshot_slot = nullptr;
