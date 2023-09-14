@@ -88,7 +88,7 @@ abstract class DifftestBundle extends Bundle
     val raw = elements.toSeq.reverse.filterNot(e => filteredElements.contains(e._1))
     raw.map{ case (s, data) =>
       data match {
-        case v: Vec[UInt] => (s, Some(v))
+        case v: Vec[_] => (s, Some(v.asInstanceOf[Vec[UInt]]))
         case u: UInt => (s, Some(Seq(u)))
         case _ => println(s"Unknown type: ($s, $data)")
           (s, None)
