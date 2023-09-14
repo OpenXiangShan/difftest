@@ -30,6 +30,9 @@ trait CommonDiffTest extends ScalaModule with SbtModule {
 
   override def scalacPluginIvyDeps = Agg(ivys.chisel3Plugin)
 
+  override def scalacOptions = Seq("-Ymacro-annotations") ++
+    Seq("-Xfatal-warnings", "-feature", "-deprecation", "-language:reflectiveCalls")
+
   override def ivyDeps = Agg(ivys.chisel3)
 }
 
