@@ -146,6 +146,16 @@ int Difftest::step() {
 
 #endif
 
+#ifdef CONFIG_DIFFTEST_LRSCEVENT
+  // sync lr/sc reg microarchitectural status to the REF
+  if (dut.lrsc.valid) {
+    struct SyncState sync;
+    sync.sc_fail = !dut.lrsc.success;
+    printf("sync: sc_fail %lu\n", sync.sc_fail);
+    proxy->uarchstatus_sync((uint64_t*)&sync);
+  }
+#endif
+
   num_commit = 0; // reset num_commit this cycle to 0
   if (dut.event.valid) {
   // interrupt has a higher priority than exception
@@ -309,15 +319,6 @@ int Difftest::do_instr_commit(int i) {
     spike_dasm(dasm_result, inst_str);
     Info("s0 is %016lx ", dut.regs.gpr[8]);
     Info("pc is %lx %s\n", commit_pc, dasm_result);
-  }
-#endif
-
-#ifdef CONFIG_DIFFTEST_LRSCEVENT
-  // sync lr/sc reg microarchitectural status to the REF
-  if (dut.lrsc.valid) {
-    struct SyncState sync;
-    sync.sc_fail = !dut.lrsc.success;
-    proxy->uarchstatus_sync((uint64_t*)&sync);
   }
 #endif
 
