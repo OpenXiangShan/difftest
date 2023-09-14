@@ -57,6 +57,7 @@ jobs:
             make clean
             make emu NO_DIFF=1 EMU_TRACE=1
             ./build/emu -b 0 -e 100 -i ./ready-to-run/microbench.bin --dump-wave -C 10000
+            ./build/emu -b 0 -e 100 -i ./ready-to-run/microbench.bin --dump-wave-full -C 10000
 
       - name: Simulation with No Diff
         run: |
@@ -95,6 +96,7 @@ jobs:
             make clean
             make emu EMU_TRACE=1
             ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave --diff ./ready-to-run/riscv64-nemu-interpreter-so
+            ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave-full --diff ./ready-to-run/riscv64-nemu-interpreter-so
 
       - name: Difftest with two threads
         run: |

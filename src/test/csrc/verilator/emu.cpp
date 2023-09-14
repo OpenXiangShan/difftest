@@ -87,6 +87,7 @@ static inline void print_help(const char *file) {
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
   printf("      --dump-wave            dump waveform when log is enabled\n");
+  printf("      --dump-wave-full       dump full waveform when log is enabled\n");
   printf("      --dump-ref-trace       dump REF trace when log is enabled\n");
   printf("      --dump-commit-trace    dump commit trace when log is enabled\n");
 #ifdef ENABLE_CHISEL_DB
@@ -143,6 +144,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dump-footprints",   1, NULL,  0  },
     { "as-footprints",     0, NULL,  0  },
     { "dump-linearized",   1, NULL,  0  },
+    { "dump-wave-full",    0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -213,6 +215,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 19: args.footprints_name = optarg; continue;
           case 20: args.image_as_footprints = true; continue;
           case 21: args.linearized_name = optarg; continue;
+          case 22: args.enable_waveform = true; args.enable_waveform_full = true; continue;
         }
         // fall through
       default:
@@ -263,6 +266,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     Info("Hint: --image=IMAGE_FILE must be given\n");
     exit(0);
   }
+
+  args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
 #ifdef ENABLE_IPC
   char *ipc_image = (char *)malloc(255);
@@ -317,6 +322,25 @@ Emulator::Emulator(int argc, const char *argv[]):
   // init flash
   init_flash(args.flash_bin);
 
+#if VM_TRACE == 1
+  if (args.enable_waveform) {
+    Verilated::traceEverOn(true);	// Verilator must compute traced signals
+#ifdef ENABLE_FST
+    tfp = new VerilatedFstC;
+#else
+    tfp = new VerilatedVcdC;
+#endif
+    dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
+    if (args.wave_path != NULL) {
+      tfp->open(args.wave_path);
+    }
+    else {
+      time_t now = time(NULL);
+      tfp->open(waveform_filename(now));	// Open the dump file
+    }
+  }
+#endif
+
   // init core
   reset_ncycles(10);
 
@@ -346,26 +370,6 @@ Emulator::Emulator(int argc, const char *argv[]):
 
 #ifdef ENABLE_CHISEL_DB
   init_db(args.dump_db, (args.select_db != NULL), args.select_db);
-#endif
-
-#if VM_TRACE == 1
-  enable_waveform = args.enable_waveform && !args.enable_fork;
-  if (enable_waveform) {
-    Verilated::traceEverOn(true);	// Verilator must compute traced signals
-#ifdef ENABLE_FST
-    tfp = new VerilatedFstC;
-#else
-    tfp = new VerilatedVcdC;
-#endif
-    dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
-    if (args.wave_path != NULL) {
-      tfp->open(args.wave_path);
-    }
-    else {
-      time_t now = time(NULL);
-      tfp->open(waveform_filename(now));	// Open the dump file
-    }
-  }
 #endif
 
 #ifdef VM_SAVABLE
@@ -440,7 +444,7 @@ Emulator::Emulator(int argc, const char *argv[]):
 Emulator::~Emulator() {
   // Simulation ends here, do clean up & display jobs
 #if VM_TRACE == 1
-  if (enable_waveform) tfp->close();
+  if (args.enable_waveform) tfp->close();
 #endif
 
 #if VM_COVERAGE == 1
@@ -528,16 +532,30 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 #ifdef COVERAGE_PORT_RESET
     dut_ptr->coverage_reset = dut_ptr->reset;
 #endif // COVERAGE_PORT_RESET
-    dut_ptr->clock = 0;
-#ifdef COVERAGE_PORT_CLOCK
-    dut_ptr->coverage_clock = dut_ptr->clock;
-#endif // COVERAGE_PORT_CLOCK
-    dut_ptr->eval();
     dut_ptr->clock = 1;
 #ifdef COVERAGE_PORT_CLOCK
     dut_ptr->coverage_clock = dut_ptr->clock;
 #endif // COVERAGE_PORT_CLOCK
     dut_ptr->eval();
+
+#if VM_TRACE == 1
+  if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
+    tfp->dump(2 * i);
+  }
+#endif
+
+    dut_ptr->clock = 0;
+#ifdef COVERAGE_PORT_CLOCK
+    dut_ptr->coverage_clock = dut_ptr->clock;
+#endif // COVERAGE_PORT_CLOCK
+    dut_ptr->eval();
+
+#if VM_TRACE == 1
+  if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
+    tfp->dump(2 * i + 1);
+  }
+#endif
+
     dut_ptr->reset = 0;
 #ifdef COVERAGE_PORT_RESET
     dut_ptr->coverage_reset = dut_ptr->reset;
@@ -550,34 +568,31 @@ inline void Emulator::single_cycle() {
     goto end_single_cycle;
   }
 
-  dut_ptr->clock = 0;
+  dut_ptr->clock = 1;
 #ifdef COVERAGE_PORT_CLOCK
   dut_ptr->coverage_clock = dut_ptr->clock;
 #endif // COVERAGE_PORT_CLOCK
   dut_ptr->eval();
 
 #if VM_TRACE == 1
-  if (enable_waveform) {
+  if (args.enable_waveform) {
 #ifndef CONFIG_NO_DIFFTEST
-    auto trap = difftest[0]->get_trap_event();
-    uint64_t cycle = trap->cycleCnt;
-    uint64_t begin = dut_ptr->io_logCtrl_log_begin;
-    uint64_t end   = dut_ptr->io_logCtrl_log_end;
-    bool in_range  = (begin <= cycle) && (cycle <= end);
+    uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
 #else
-    bool in_range = true;
-    static uint64_t cycle = 0;
+    static uint64_t cycle = -1UL;
     cycle++;
 #endif
-    if (in_range || force_dump_wave) { tfp->dump(cycle); }
+    bool in_range  = (args.log_begin <= cycle) && (cycle <= args.log_end);
+    if (in_range || force_dump_wave) {
+      if (args.enable_waveform_full) {
+        tfp->dump(20 + 2*cycle);
+      }
+      else {
+        tfp->dump(cycle);
+      }
+    }
   }
 #endif
-
-  dut_ptr->clock = 1;
-#ifdef COVERAGE_PORT_CLOCK
-  dut_ptr->coverage_clock = dut_ptr->clock;
-#endif // COVERAGE_PORT_CLOCK
-  dut_ptr->eval();
 
 #ifdef WITH_DRAMSIM3
   dramsim3_step();
@@ -591,6 +606,27 @@ inline void Emulator::single_cycle() {
     extern uint8_t uart_getc();
     dut_ptr->io_uart_in_ch = uart_getc();
   }
+
+  dut_ptr->clock = 0;
+#ifdef COVERAGE_PORT_CLOCK
+  dut_ptr->coverage_clock = dut_ptr->clock;
+#endif // COVERAGE_PORT_CLOCK
+  dut_ptr->eval();
+
+#if VM_TRACE == 1
+  if (args.enable_waveform && args.enable_waveform_full) {
+#ifndef CONFIG_NO_DIFFTEST
+    uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
+#else
+    static uint64_t cycle = -1UL;
+    cycle++;
+#endif
+    bool in_range  = (args.log_begin <= cycle) && (cycle <= args.log_end);
+    if (in_range || force_dump_wave) {
+      tfp->dump(21 + 2*cycle);
+    }
+  }
+#endif
 
 end_single_cycle:
 #ifndef CONFIG_NO_DIFFTEST
@@ -1068,7 +1104,7 @@ void Emulator::fork_child_init() {
   tfp->open(cycle_wavefile(cycles, now));
   // override output range config, force dump wave
   force_dump_wave = true;
-  enable_waveform = true;
+  args.enable_waveform = true;
 #endif
 #ifndef CONFIG_NO_DIFFTEST
 #ifdef ENABLE_SIMULATOR_DEBUG_INFO

@@ -64,6 +64,7 @@ struct EmuArgs {
   const char *footprints_name = nullptr;
   const char *linearized_name = nullptr;
   bool enable_waveform = false;
+  bool enable_waveform_full = false;
   bool enable_ref_trace = false;
   bool enable_commit_trace = false;
   bool enable_snapshot = true;
@@ -98,7 +99,6 @@ private:
 #else
   VerilatedVcdC* tfp;
 #endif
-  bool enable_waveform;
   bool force_dump_wave = false;
 #ifdef VM_SAVABLE
   VerilatedSaveMem *snapshot_slot = nullptr;
