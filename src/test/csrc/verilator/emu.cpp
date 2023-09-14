@@ -1074,7 +1074,7 @@ void Emulator::snapshot_load(const char *filename) {
 
 void Emulator::fork_child_init() {
 #ifdef VERILATOR_VERSION_INTEGER // >= v4.220
-#if VERILATOR_VERSION_INTEGER >= 5015000
+#if VERILATOR_VERSION_INTEGER >= 5016000
   // This will cause 288 bytes leaked for each one fork call.
   // However, one million snapshots cause only 288MB leaks, which is still acceptable.
   // See verilator/test_regress/t/t_wrapper_clone.cpp:48 to avoid leaks.
