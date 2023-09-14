@@ -63,7 +63,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
     // This is different from BlackBoxes.
     io.elements.toSeq.reverse.map{ case (name, data) =>
       data match {
-        case vec: Vec[Data] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
+        case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
         case _ => Seq((s"io_$name", data))
       }
     }
