@@ -16,14 +16,20 @@
 
 #include "golden.h"
 #include "ram.h"
+#ifndef CONFIG_NO_DIFFTEST
 #include <goldenmem.h>
+#endif // CONFIG_NO_DIFFTEST
 
 extern "C" uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_t *level) {
   uint64_t pg_base = satp << 12, pte_addr;
   PTE *pte_p = (PTE *)pte;
   for (*level = 0; *level < 3; (*level)++) {
     pte_addr = pg_base + VPNi(vpn, *level) * sizeof(uint64_t);
+#ifdef CONFIG_NO_DIFFTEST
+    pte_p->val = pmem_read(pte_addr);
+#else
     read_goldenmem(pte_addr, &pte_p->val, 8);
+#endif // CONFIG_NO_DIFFTEST
     pg_base = pte_p->ppn << 12;
     // pf
     if (!pte_p->v) {
