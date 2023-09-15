@@ -151,7 +151,6 @@ int Difftest::step() {
   if (dut.lrsc.valid) {
     struct SyncState sync;
     sync.sc_fail = !dut.lrsc.success;
-    printf("sync: sc_fail %lu\n", sync.sc_fail);
     proxy->uarchstatus_sync((uint64_t*)&sync);
   }
 #endif
