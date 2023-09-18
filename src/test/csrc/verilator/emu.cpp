@@ -74,6 +74,7 @@ static inline void print_help(const char *file) {
   printf("  -W, --warmup-instr=NUM     the number of warmup instructions\n");
   printf("  -D, --stat-cycles=NUM      the interval cycles of dumping statistics\n");
   printf("  -i, --image=FILE           run with this image file\n");
+  printf("  -r, --gcpt-restore=FILE    overwrite gcptrestore img with this image file\n");
   printf("  -b, --log-begin=NUM        display log from NUM th cycle\n");
   printf("  -e, --log-end=NUM          stop display log at NUM th cycle\n");
 #ifdef DEBUG_REFILL
@@ -83,6 +84,7 @@ static inline void print_help(const char *file) {
   printf("  -R, --ipc-interval=NUM     the interval insts of drawing IPC curve\n");
 #endif
   printf("  -X, --fork-interval=NUM    LightSSS snapshot interval (in seconds)\n");
+  printf("      --overwrite-nbytes=n   set valid bytes,but less than 0xf00,default value is 0x700\n");
   printf("      --force-dump-result    force dump performance counter result in the end\n");
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
@@ -145,6 +147,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "as-footprints",     0, NULL,  0  },
     { "dump-linearized",   1, NULL,  0  },
     { "dump-wave-full",    0, NULL,  0  },
+    { "overwrite-nbytes",  1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -156,6 +159,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "warmup-instr",      1, NULL, 'W' },
     { "stat-cycles",       1, NULL, 'D' },
     { "image",             1, NULL, 'i' },
+    { "gcpt-restore",      1, NULL, 'r' },
     { "log-begin",         1, NULL, 'b' },
     { "log-end",           1, NULL, 'e' },
     { "flash",             1, NULL, 'F' },
@@ -165,7 +169,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:X:I:T:R:W:hi:m:b:e:F:", long_options, &long_index)) != -1) {
+          "-s:C:X:I:T:R:W:hi:r:m:b:e:F:", long_options, &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -216,6 +220,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 20: args.image_as_footprints = true; continue;
           case 21: args.linearized_name = optarg; continue;
           case 22: args.enable_waveform = true; args.enable_waveform_full = true; continue;
+          case 23: args.overwrite_nbytes = atoll_strict(optarg, "overwrite_nbytes"); continue;
         }
         // fall through
       default:
@@ -255,6 +260,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'W': args.warmup_instr = atoll_strict(optarg, "warmup-instr");  break;
       case 'D': args.stat_cycles = atoll_strict(optarg, "stat-cycles");  break;
       case 'i': args.image = optarg; break;
+      case 'r': args.gcpt_restore = optarg; break;
       case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
       case 'F': args.flash_bin = optarg; break;
@@ -366,6 +372,12 @@ Emulator::Emulator(int argc, const char *argv[]):
     else {
       simMemory = new MmapMemory(args.image, ram_size);
     }
+  }
+
+  if (args.gcpt_restore) {
+    InputReader *reader=new FileReader(args.gcpt_restore);
+    int size=reader->read_all(simMemory->as_ptr(),args.overwrite_nbytes);
+    delete reader;
   }
 
 #ifdef ENABLE_CHISEL_DB
