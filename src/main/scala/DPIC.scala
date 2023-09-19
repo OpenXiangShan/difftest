@@ -149,22 +149,14 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T) extends Module
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
 
-  def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
+  def apply[T <: DifftestBundle](gen: T): T = {
     val module = Module(new DummyDPICWrapper(gen))
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-    if (delay > 0) {
-      val difftest: T = Wire(module.io.cloneType)
-      module.io := Delayer(difftest, delay)
-      module.io.coreid := difftest.coreid
-      difftest
-    }
-    else {
-      module.io
-    }
+    module.io
   }
 
   def collect(): Unit = {

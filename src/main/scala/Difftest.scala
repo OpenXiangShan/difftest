@@ -415,14 +415,17 @@ object DifftestModule {
     delay:    Int     = 0,
   ): T = {
     val id = register(gen, style)
-    val mod = style match {
+    val difftest: T = Wire(gen)
+    val sink = style match {
       // By default, use the DPI-C style.
-      case _ => DPIC(gen, delay)
+      case _ => DPIC(gen)
     }
+    sink := Delayer(difftest, delay)
+    sink.coreid := difftest.coreid
     if (dontCare) {
-      mod := DontCare
+      difftest := DontCare
     }
-    mod
+    difftest
   }
 
   def register[T <: DifftestBundle](gen: T, style: String): Int = {
