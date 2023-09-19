@@ -436,14 +436,14 @@ object DifftestModule {
   }
 
   def hasDPIC: Boolean = instances.exists(_._2 == "dpic")
-  def finish(cpu: String, cppHeader: Boolean = true): Unit = {
+  def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
     DPIC.collect()
-    if (cppHeader) {
-      generateCppHeader(cpu)
+    if (cppHeader.isDefined) {
+      generateCppHeader(cpu, cppHeader.get)
     }
   }
 
-  def generateCppHeader(cpu: String): Unit = {
+  def generateCppHeader(cpu: String, style: String): Unit = {
     val difftestCpp = ListBuffer.empty[String]
     difftestCpp += "#ifndef __DIFFSTATE_H__"
     difftestCpp += "#define __DIFFSTATE_H__"
@@ -455,11 +455,13 @@ object DifftestModule {
     difftestCpp += s"#define CPU_$cpu_s"
     difftestCpp += ""
 
-    val numCores = instances.count(_._1.isUniqueIdentifier)
+    val headerInstances = instances.filter(_._2 == style)
+
+    val numCores = headerInstances.count(_._1.isUniqueIdentifier)
     difftestCpp += s"#define NUM_CORES $numCores"
     difftestCpp += ""
 
-    val uniqBundles = instances.groupBy(_._1.desiredModuleName)
+    val uniqBundles = headerInstances.groupBy(_._1.desiredModuleName)
     // Create cpp declaration for each bundle type
     uniqBundles.values.map(_.map(_._1)).foreach(bundles => {
       val bundleType = bundles.head
