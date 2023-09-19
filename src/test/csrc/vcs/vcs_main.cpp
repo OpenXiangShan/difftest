@@ -61,14 +61,14 @@ extern "C" void set_max_cycles(long mc) {
 extern "C" void simv_init() {
   common_init("simv");
 
-  init_ram(bin_file);
+  simMemory = new MmapMemory(bin_file, DEFAULT_EMU_RAM_SIZE);
   init_flash(flash_bin_file);
 
   difftest_init();
   init_device();
   if (enable_difftest) {
     init_goldenmem();
-    init_nemuproxy(EMU_RAM_SIZE);
+    init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
   }
 }
 

@@ -21,9 +21,10 @@ endif
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 NUM_CORES  ?= 1
+SIM_DIR = $(DESIGN_DIR)/sim
 
 BUILD_DIR  = $(DESIGN_DIR)/build
-SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).v
+SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).sv
 
 DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
 SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)
@@ -59,7 +60,7 @@ SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
 SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
 
 # generated-src
-GEN_CSRC_DIR = $(BUILD_DIR)/generated-src
+GEN_CSRC_DIR = $(abspath ./src/test/csrc/artifacts)
 GEN_CXXFILES = $(shell find $(GEN_CSRC_DIR) -name "*.cpp")
 
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)
@@ -73,6 +74,9 @@ PLUGIN_DASM_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR)/spikedasm -name "*.cpp")
 
 PLUGIN_RUNAHEAD_DIR      = $(abspath $(PLUGIN_CSRC_DIR)/runahead)
 PLUGIN_RUNAHEAD_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR)/runahead -name "*.cpp")
+
+CFG_DIR      = $(abspath config)
+CFG_HEADERS = $(shell find $(CFG_DIR) -name "*.h")
 
 SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
 

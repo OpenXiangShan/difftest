@@ -22,6 +22,7 @@
 #include "dut.h"
 #include "lightsss.h"
 #include "snapshot.h"
+#include "difftest.h"
 #include "VSimTop.h"
 #include "VSimTop__Syms.h"
 #ifdef ENABLE_FST
@@ -79,18 +80,6 @@ struct EmuArgs {
   bool image_as_footprints = false;
 };
 
-enum {
-  STATE_GOODTRAP = 0,
-  STATE_BADTRAP = 1,
-  STATE_ABORT = 2,
-  STATE_LIMIT_EXCEEDED = 3,
-  STATE_SIG = 4,
-  STATE_AMBIGUOUS = 5,
-  STATE_SIM_EXIT = 6,
-  STATE_FUZZ_COND = 7,
-  STATE_RUNNING = -1
-};
-
 class Emulator final : public DUT {
 private:
   VSimTop *dut_ptr;
@@ -116,6 +105,8 @@ private:
   uint64_t core_max_instr[NUM_CORES];
   uint32_t lasttime_poll = 0;
   uint32_t elapsed_time;
+  bool wave_file_defined;
+  char wave_file[1024];
 
   inline void reset_ncycles(size_t cycles);
   inline void single_cycle();

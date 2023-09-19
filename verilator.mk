@@ -13,9 +13,18 @@
 #
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
-
 EMU          = $(BUILD_DIR)/emu
 EMU_TOP      = SimTop
+EMU_SIM_DIR  = $(SIM_DIR)/emu
+EMU_COMP_DIR  = $(EMU_SIM_DIR)/comp
+
+ifeq ($(SIMDIR), 1)
+  EMU_FINAL_TARGET = $(EMU_COMP_DIR)/emu
+  EMU_MK = $(EMU_COMP_DIR)/V$(EMU_TOP).mk
+else
+  EMU_FINAL_TARGET = $(BUILD_DIR)/emu
+  EMU_MK = $(BUILD_DIR)/emu-compile/V$(EMU_TOP).mk
+endif
 
 EMU_CSRC_DIR   = $(abspath ./src/test/csrc/verilator)
 EMU_CONFIG_DIR = $(abspath ./config)
@@ -25,7 +34,7 @@ EMU_CXXFILES  += $(SIM_CXXFILES) $(GEN_CXXFILES)
 
 EMU_CXXFLAGS += -I$(SIM_CSRC_DIR) -I$(GEN_CSRC_DIR) -I$(PLUGIN_INC_DIR)
 EMU_CXXFLAGS += -I$(EMU_CONFIG_DIR) -I$(EMU_CSRC_DIR)
-EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES) --std=c++17
+EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES) -std=c++17
 EMU_LDFLAGS  += -ldl
 
 # DiffTest support
@@ -59,15 +68,15 @@ endif
 # ChiselDB
 WITH_CHISELDB ?= 1
 ifeq ($(WITH_CHISELDB), 1)
-EMU_CXXFILES += $(BUILD_DIR)/chisel_db.cpp
-EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
+EMU_CXXFILES += $(GEN_CSRC_DIR)/chisel_db.cpp
+EMU_CXXFLAGS += -I$(GEN_CSRC_DIR) -DENABLE_CHISEL_DB
 EMU_LDFLAGS  += -lsqlite3
 endif
 
-WITH_CONSTANTIN ?= 1
+WITH_CONSTANTIN ?= 0
 ifeq ($(WITH_CONSTANTIN), 1)
-EMU_CXXFILES += $(BUILD_DIR)/constantin.cpp
-EMU_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
+EMU_CXXFILES += $(GEN_CSRC_DIR)/constantin.cpp
+EMU_CXXFLAGS += -I$(GEN_CSRC_DIR) -DENABLE_CONSTANTIN
 endif
 
 ifeq ($(WITH_IPC), 1)
@@ -111,6 +120,7 @@ VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000)
 ifeq ($(VERILATOR_5_000),1)
 VEXTRA_FLAGS += --no-timing
 endif
+VEXTRA_FLAGS += +define+VERILATOR_$(shell $(VERILATOR_VER_CMD))
 
 # Verilator trace support
 EMU_TRACE ?=
@@ -218,10 +228,9 @@ VERILATOR_FLAGS =                   \
   -I$(BUILD_DIR)                    \
   -CFLAGS "$(EMU_CXXFLAGS)"         \
   -LDFLAGS "$(EMU_LDFLAGS)"         \
-  -o $(abspath $(EMU))              \
+  -o $(abspath $(EMU_FINAL_TARGET))              \
   $(VEXTRA_FLAGS)
-
-EMU_MK    := $(BUILD_DIR)/emu-compile/V$(EMU_TOP).mk
+  
 EMU_DEPS  := $(SIM_VSRC) $(EMU_CXXFILES)
 EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
                $(shell find $(SIM_CSRC_DIR) -name "*.h")     \
@@ -249,14 +258,14 @@ build_emu_local: $(EMU_MK)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
-$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
+$(EMU_FINAL_TARGET): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
 ifeq ($(REMOTE),localhost)
-	@$(MAKE) build_emu_local
+	@$(MAKE) build_emu_local SIMDIR=$(SIMDIR)
 else
-	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local'
+	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local SIMDIR=$(SIMDIR)'
 endif
 
-emu: $(EMU)
+emu: $(EMU_FINAL_TARGET)
 
 COVERAGE_DATA ?= $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.dat")
 COVERAGE_DIR  ?= $(DESIGN_DIR)/$(basename $(notdir $(COVERAGE_DATA)))

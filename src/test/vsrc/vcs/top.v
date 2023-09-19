@@ -54,8 +54,12 @@ initial begin
     end
 `ifdef CONSIDER_FSDB
     else if (wave_type == "fsdb") begin
-      $fsdbDumpfile("simv.fsdb");
-      $fsdbDumpvars(0,"+mda");
+      $display("Dumping FSDB Waveform for DEBUG is active !!!");
+      $fsdbAutoSwitchDumpfile(10000,"tb_top.fsdb",60);
+      $fsdbDumpfile("tb_top.fsdb");
+      if ($test$plusargs("mda"))
+        $fsdbDumpMDA();
+      $fsdbDumpvars(0,tb_top.sim);
     end
 `endif
     else begin
@@ -131,6 +135,7 @@ assign io_uart_in_ch = 8'hff;
 
 always @(posedge clock) begin
   if (!reset && io_uart_out_valid) begin
+    if(io_uart_out_ch[7] == 1'b1) $finish();
     $fwrite(32'h8000_0001, "%c", io_uart_out_ch);
     $fflush();
   end

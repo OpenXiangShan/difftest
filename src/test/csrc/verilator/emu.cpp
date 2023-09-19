@@ -339,6 +339,13 @@ Emulator::Emulator(int argc, const char *argv[]):
       tfp->open(waveform_filename(now));	// Open the dump file
     }
   }
+  if(args.wave_path != NULL){
+    wave_file_defined = true;
+    strcpy(wave_file, args.wave_path);
+  } else {
+    wave_file_defined = false;
+    wave_file[0] = 0;
+  }
 #endif
 
   // init core
@@ -895,10 +902,17 @@ inline char* Emulator::waveform_filename(time_t t) {
 inline char* Emulator::cycle_wavefile(uint64_t cycles, time_t t) {
   static char buf[1024];
   char buf_time[64];
-  strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
-  char *noop_home = getenv("NOOP_HOME");
-  assert(noop_home != NULL);
-  int len = snprintf(buf, 1024, "%s/build/%s_%ld", noop_home, buf_time, cycles);
+  int len = 0;
+  if(wave_file_defined){
+    strcpy(buf, wave_file);
+    len = sizeof(wave_file);
+  } else {
+    strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
+    char *noop_home = getenv("NOOP_HOME");
+    assert(noop_home != NULL);
+    len = snprintf(buf, 1024, "%s/build/%s_%ld", noop_home, buf_time, cycles);
+    strcpy(buf + len, ".vcd");
+  }
 #ifdef ENABLE_FST
   strcpy(buf + len, ".fst");
 #else

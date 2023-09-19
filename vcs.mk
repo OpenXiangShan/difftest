@@ -16,11 +16,17 @@
 
 VCS_TARGET = simv
 
+VCS_SIM_DIR = $(SIM_DIR)/rtl
+
 VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
-VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
-VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
+VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(GEN_CXXFILES) $(PLUGIN_DASM_CXXFILES) 
+VCS_CXXFILES += $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
+
+VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(CFG_DIR) -I$(GEN_CSRC_DIR) -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR)
+VCS_CXXFLAGS += -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_DASM_DIR) -I$(PLUGIN_INC_DIR)
 VCS_CXXFLAGS += -DNUM_CORES=$(NUM_CORES)
-VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
+VCS_LDFLAGS  += -Wl,--no-as-needed -lpthread -lSDL2 -ldl -lz -lsqlite3
+
 
 ifeq ($(RELEASE),1)
 VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
@@ -43,34 +49,25 @@ endif
 
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
+SIM_VSRC_DIR = $(abspath ./src/test/vsrc/common)
+VCS_VFILES   += $(SIM_VSRC) $(shell find $(SIM_VSRC_DIR) -name "*.v")
 
-VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
+VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
 
-VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
+VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L -l vcs.log -top tb_top
+VCS_FLAGS += -fgp -lca -kdb +nospecify +notimingcheck -xprop
 # DiffTest
-VCS_FLAGS += +define+DIFFTEST
-# randomize all undefined signals (instead of using X)
-VCS_FLAGS += +vcs+initreg+random
-VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN
-VCS_FLAGS += +define+RANDOMIZE_INVALID_ASSIGN
-VCS_FLAGS += +define+RANDOMIZE_MEM_INIT
-VCS_FLAGS += +define+RANDOMIZE_REG_INIT
-# manually set RANDOMIZE_DELAY to avoid VCS from incorrect random initialize
-# NOTE: RANDOMIZE_DELAY must NOT be rounded to 0
-VCS_FLAGS += +define+RANDOMIZE_DELAY=1
-# SRAM lib defines
-VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
+VCS_FLAGS += +define+DIFFTEST +define+PRINTF_COND=1 +define+VCS
 # C++ flags
 VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
-# search build for other missing verilog files
-VCS_FLAGS += -y $(BUILD_DIR) +libext+.v
-# build files put into $(VCS_BUILD_DIR)
-VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
-$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
-	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
-
-vcs-clean:
-	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)
+SIM_FLIST := $(shell pwd)/sim_flist.f
+$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES) $(CFG_HEADERS)
+	$(shell if [ ! -e $(VCS_SIM_DIR)/rtl/comp ];then mkdir -p $(VCS_SIM_DIR)/rtl/comp; fi)
+	$(shell echo -f $(BUILD_DIR)/cpu_flist.f > $(SIM_FLIST))
+	$(shell find $(VCS_VSRC_DIR) -name "*.v" >> $(SIM_FLIST))
+	$(shell find $(SIM_VSRC_DIR) -name "*.v" -or -name "*.sv" >> $(SIM_FLIST))
+	cp $(SIM_FLIST) $(VCS_SIM_DIR)/comp
+	cd $(VCS_SIM_DIR)/comp && vcs $(VCS_FLAGS) -f $(SIM_FLIST) $(VCS_CXXFILES)
