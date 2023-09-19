@@ -503,6 +503,30 @@ object DifftestModule {
   }
 }
 
+private class Delayer[T <: Data](gen: T, n_cycles: Int) extends Module {
+  val i = IO(Input(gen.cloneType))
+  val o = IO(Output(gen.cloneType))
+
+  var r = WireInit(i)
+  for (_ <- 0 until n_cycles) {
+    r = RegNext(r)
+  }
+  o := r
+}
+
+object Delayer {
+  def apply[T <: Data](gen: T, n_cycles: Int): T = {
+    if (n_cycles > 0) {
+      val delayer = Module(new Delayer(gen, n_cycles))
+      delayer.i := gen
+      delayer.o
+    }
+    else {
+      gen
+    }
+  }
+}
+
 // Difftest emulator top
 
 // XiangShan log / perf ctrl, should be inited in SimTop IO
