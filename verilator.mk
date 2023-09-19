@@ -109,7 +109,7 @@ VEXTRA_FLAGS += --instr-count-dpi 1
 endif
 VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000)
 ifeq ($(VERILATOR_5_000),1)
-VEXTRA_FLAGS += --no-timing
+VEXTRA_FLAGS += --no-timing +define+VERILATOR_5
 endif
 
 # Verilator trace support
