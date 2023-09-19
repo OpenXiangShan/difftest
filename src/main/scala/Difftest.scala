@@ -457,7 +457,10 @@ object DifftestModule {
     difftestCpp += s"#define CPU_$cpu_s"
     difftestCpp += ""
 
-    val numCores = instances.filter(_._1.isUniqueIdentifier).length
+    val numCores = instances.count(_._1.isUniqueIdentifier)
+    difftestCpp += s"#define NUM_CORES $numCores"
+    difftestCpp += ""
+
     val uniqBundles = instances.groupBy(_._1.desiredModuleName)
     // Create cpp declaration for each bundle type
     uniqBundles.values.map(_.map(_._1)).foreach(bundles => {
