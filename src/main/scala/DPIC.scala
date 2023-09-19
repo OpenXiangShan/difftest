@@ -27,6 +27,7 @@ import scala.collection.mutable.ListBuffer
 class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   with HasExtModuleInline
   with DifftestModule[T] {
+  val clock = IO(Input(Clock()))
   val io = IO(Input(gen))
 
   def getDirectionString(data: Data): String = {
@@ -61,14 +62,14 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   val dpicFuncArgsWithClock: Seq[Seq[(String, Data)]] = {
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
-    io.elements.toSeq.reverse.map{ case (name, data) =>
+    Seq(("clock", clock)) +: io.elements.toSeq.reverse.map{ case (name, data) =>
       data match {
         case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
         case _ => Seq((s"io_$name", data))
       }
     }
   }
-  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.map(_.filterNot(_._1 == "io_clock"))
+  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.tail
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
       ((_: DifftestBundle) => true, Seq("io_coreid")),
@@ -123,7 +124,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
          |`ifndef SYNTHESIS
          |`ifdef DIFFTEST
          |$dpicDecl
-         |  always @(posedge io_clock) begin
+         |  always @(posedge clock) begin
          |    $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
          |  end
          |`endif
@@ -136,19 +137,28 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T) extends Module
+  with DifftestModule[T] {
+  val io = IO(Input(gen))
+
+  val dpic = Module(new DPIC(gen))
+  dpic.clock := clock
+  dpic.io := io
+}
+
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
-    val module = Module(new DPIC(gen))
-    if (!interfaces.map(_._1).contains(module.dpicFuncName)) {
-      val interface = (module.dpicFuncName, module.dpicFuncProto, module.dpicFunc)
+    val module = Module(new DummyDPICWrapper(gen))
+    val dpic = module.dpic
+    if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
+      val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
     if (delay > 0) {
       val difftest: T = Wire(module.io.cloneType)
       module.io := Delayer(difftest, delay)
-      module.io.clock  := difftest.clock
       module.io.coreid := difftest.coreid
       difftest
     }
