@@ -24,10 +24,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ListBuffer
 
-trait DifftestWithClock {
-  val clock  = Clock()
-}
-
 trait DifftestWithCoreid {
   val coreid = UInt(8.W)
 }
@@ -48,7 +44,6 @@ trait DifftestWithAddress { this: DifftestWithValid =>
 }
 
 abstract class DifftestBundle extends Bundle
-  with DifftestWithClock
   with DifftestWithCoreid {
   // Used to detect the number of cores. Must be used only by one Bundle.
   def isUniqueIdentifier: Boolean = false
