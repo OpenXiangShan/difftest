@@ -18,6 +18,7 @@ package difftest
 
 import chisel3._
 import chisel3.util._
+import difftest.batch.Batch
 import difftest.dpic.DPIC
 
 import java.nio.charset.StandardCharsets
@@ -417,6 +418,7 @@ object DifftestModule {
     val id = register(gen, style)
     val difftest: T = Wire(gen)
     val sink = style match {
+      case "batch" => Batch(gen)
       // By default, use the DPI-C style.
       case _ => DPIC(gen)
     }
@@ -436,8 +438,14 @@ object DifftestModule {
   }
 
   def hasDPIC: Boolean = instances.exists(_._2 == "dpic")
+  def hasBatch: Boolean = instances.exists(_._2 == "batch")
   def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
-    DPIC.collect()
+    if (hasDPIC) {
+      DPIC.collect()
+    }
+    if (hasBatch) {
+      Batch.collect()
+    }
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
