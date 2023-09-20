@@ -149,6 +149,7 @@ int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
   // sync lr/sc reg microarchitectural status to the REF
   if (dut.lrsc.valid) {
+    dut.lrsc.valid = 0;
     struct SyncState sync;
     sync.sc_fail = !dut.lrsc.success;
     proxy->uarchstatus_sync((uint64_t*)&sync);
