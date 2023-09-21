@@ -74,7 +74,7 @@ abstract class DifftestBundle extends Bundle
       case _ => true.B
     }
   }
-  def needUpdate: Bool = if (withValid) getValid else false.B
+  def needUpdate: Option[Bool] = if (withValid) Some(getValid) else None
   def isFlatten: Boolean = this.isInstanceOf[DifftestWithAddress] &&
     this.asInstanceOf[DifftestWithAddress].needFlatten
   def numFlattenElements: Int = this.asInstanceOf[DifftestWithAddress].numElements
@@ -188,7 +188,7 @@ class DiffTrapEvent extends DifftestBundle {
   val pc       = UInt(64.W)
 
   override val desiredCppName: String = "trap"
-  override def needUpdate: Bool = hasTrap || hasWFI
+  override def needUpdate: Option[Bool] = Some(hasTrap || hasWFI)
 }
 
 class DiffCSRState extends DifftestBundle {

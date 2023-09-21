@@ -157,7 +157,7 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
-  private val hasGlobalEnable: Boolean = true
+  private val hasGlobalEnable: Boolean = false
   private var enableBits = 0
 
   def apply[T <: DifftestBundle](gen: T): T = {
@@ -167,8 +167,8 @@ object DPIC {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-    if (!module.io.needUpdate.isLit || module.io.needUpdate.litValue == 1) {
-      BoringUtils.addSource(WireInit(module.io.needUpdate), s"dpic_global_enable_$enableBits")
+    if (module.io.needUpdate.isDefined) {
+      BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
       enableBits += 1
     }
     module.io
