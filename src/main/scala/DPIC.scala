@@ -167,7 +167,7 @@ object DPIC {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-    if (module.io.needUpdate.isDefined) {
+    if (hasGlobalEnable && module.io.needUpdate.isDefined) {
       BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
       enableBits += 1
     }
@@ -178,11 +178,13 @@ object DPIC {
     if (interfaces.isEmpty) {
       return
     }
-    val global_en = WireInit(0.U.asTypeOf(Vec(enableBits, Bool())))
-    for (i <- 0 until enableBits) {
-      BoringUtils.addSink(global_en(i), s"dpic_global_enable_$i")
+    if (hasGlobalEnable) {
+      val global_en = WireInit(0.U.asTypeOf(Vec(enableBits, Bool())))
+      for (i <- 0 until enableBits) {
+        BoringUtils.addSink(global_en(i), s"dpic_global_enable_$i")
+      }
+      BoringUtils.addSource(WireInit(global_en.asUInt.orR), "dpic_global_enable")
     }
-    BoringUtils.addSource(WireInit(global_en.asUInt.orR), "dpic_global_enable")
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
     interfaceCpp += "#define __DIFFTEST_DPIC_H__"
