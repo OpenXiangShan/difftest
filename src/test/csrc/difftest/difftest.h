@@ -20,6 +20,9 @@
 #include <vector>
 #include "common.h"
 #include "difftrace.h"
+#ifdef FUZZING
+#include "emu.h"
+#endif // FUZZING
 #include "refproxy.h"
 #include "golden.h"
 
@@ -329,6 +332,7 @@ protected:
   }
   inline bool in_disambiguation_state() {
     static bool was_found = false;
+#ifdef FUZZING
     // Only in fuzzing mode
     if (proxy->in_disambiguation_state()) {
       was_found = true;
@@ -338,6 +342,7 @@ protected:
       stats.exit_code = SimExitCode::ambiguous;
 #endif // FUZZER_LIB
     }
+#endif // FUZZING
     return was_found;
   }
 
