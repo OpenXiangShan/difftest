@@ -33,6 +33,18 @@ public:
 #define simstats_display(s, ...) \
   eprintf(ANSI_COLOR_GREEN s ANSI_COLOR_RESET, ##__VA_ARGS__)
 
+enum {
+  STATE_GOODTRAP = 0,
+  STATE_BADTRAP = 1,
+  STATE_ABORT = 2,
+  STATE_LIMIT_EXCEEDED = 3,
+  STATE_SIG = 4,
+  STATE_AMBIGUOUS = 5,
+  STATE_SIM_EXIT = 6,
+  STATE_FUZZ_COND = 7,
+  STATE_RUNNING = -1
+};
+
 enum class SimExitCode {
   good_trap,
   exceed_limit,
