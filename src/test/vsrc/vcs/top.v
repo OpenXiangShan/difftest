@@ -45,6 +45,8 @@ reg [31:0] max_cycles;
 initial begin
   clock = 0;
   reset = 1;
+
+`ifdef VCS
   // enable waveform
   if ($test$plusargs("dump-wave")) begin
     $value$plusargs("dump-wave=%s", wave_type);
@@ -63,6 +65,8 @@ initial begin
       $finish();
     end
   end
+`endif
+
   // log begin
   if ($test$plusargs("b")) begin
     $value$plusargs("b=%d", io_logCtrl_log_begin);
