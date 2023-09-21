@@ -18,6 +18,7 @@ package difftest.dpic
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.{ChiselAnnotation, DataMirror, ExtModule}
+import chisel3.util.experimental.BoringUtils
 import difftest._
 
 import java.nio.charset.StandardCharsets
@@ -28,6 +29,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   with HasExtModuleInline
   with DifftestModule[T] {
   val clock = IO(Input(Clock()))
+  val enable = IO(Input(Bool()))
   val io = IO(Input(gen))
 
   def getDirectionString(data: Data): String = {
@@ -60,16 +62,17 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   override def desiredName: String = gen.desiredModuleName
   val dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
   val dpicFuncArgsWithClock: Seq[Seq[(String, Data)]] = {
+    val common = Seq(Seq(("clock", clock)), Seq(("enable", enable)))
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
-    Seq(("clock", clock)) +: io.elements.toSeq.reverse.map{ case (name, data) =>
+    common ++ io.elements.toSeq.reverse.map{ case (name, data) =>
       data match {
         case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
         case _ => Seq((s"io_$name", data))
       }
     }
   }
-  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.tail
+  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
       ((_: DifftestBundle) => true, Seq("io_coreid")),
@@ -125,6 +128,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
          |`ifdef DIFFTEST
          |$dpicDecl
          |  always @(posedge clock) begin
+         |    if (enable)
          |    $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
          |  end
          |`endif
@@ -137,24 +141,35 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T) extends Module
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean) extends Module
   with DifftestModule[T] {
   val io = IO(Input(gen))
 
   val dpic = Module(new DPIC(gen))
   dpic.clock := clock
+  val enable = WireInit(true.B)
+  dpic.enable := enable
+  if (hasGlobalEnable) {
+    BoringUtils.addSink(enable, "dpic_global_enable")
+  }
   dpic.io := io
 }
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
+  private val hasGlobalEnable: Boolean = false
+  private var enableBits = 0
 
   def apply[T <: DifftestBundle](gen: T): T = {
-    val module = Module(new DummyDPICWrapper(gen))
+    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable))
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
+    }
+    if (hasGlobalEnable && module.io.needUpdate.isDefined) {
+      BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
+      enableBits += 1
     }
     module.io
   }
@@ -162,6 +177,13 @@ object DPIC {
   def collect(): Unit = {
     if (interfaces.isEmpty) {
       return
+    }
+    if (hasGlobalEnable) {
+      val global_en = WireInit(0.U.asTypeOf(Vec(enableBits, Bool())))
+      for (i <- 0 until enableBits) {
+        BoringUtils.addSink(global_en(i), s"dpic_global_enable_$i")
+      }
+      BoringUtils.addSource(WireInit(global_en.asUInt.orR), "dpic_global_enable")
     }
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
