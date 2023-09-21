@@ -182,8 +182,8 @@ public:
     auto cb = [func](uint64_t index, uint64_t value) {
       func(index * sizeof(uint64_t), &value, sizeof(uint64_t));
     };
-    for (const auto& [index, value] : ram) {
-      cb(index, value);
+    for (auto i = ram.begin(); i != ram.end(); i++) {
+      cb(i->first, i->second);
     }
     add_callback(cb);
   }
