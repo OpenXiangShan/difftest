@@ -30,6 +30,10 @@ CoDRAMsim3 *dram = NULL;
 
 SimMemory *simMemory = nullptr;
 
+void init_ram(const char *image, uint64_t ram_size) {
+  simMemory = new MmapMemory(image, ram_size);
+}
+
 #ifdef TLB_UNITTEST
 // Note: addpageSv39 only supports pmem base 0x80000000
 void addpageSv39() {
