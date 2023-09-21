@@ -40,9 +40,9 @@ extern "C" void set_flash_bin(char *s) {
   strcpy(flash_bin_file, s);
 }
 
+extern const char *difftest_ref_so;
 extern "C" void set_diff_ref_so(char *s) {
   printf("diff-test ref so:%s\n", s);
-  extern const char *difftest_ref_so;
   char* buf = (char *)malloc(256);
   strcpy(buf, s);
   difftest_ref_so = buf;
@@ -68,7 +68,7 @@ extern "C" void simv_init() {
   init_device();
   if (enable_difftest) {
     init_goldenmem();
-    init_nemuproxy(EMU_RAM_SIZE);
+    init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
   }
 }
 

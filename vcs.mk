@@ -14,16 +14,24 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-VCS_TARGET = simv
+VCS           = vcs
+VCS_TOP       = tb_top
+VCS_TARGET    = $(abspath $(BUILD_DIR)/simv)
+VCS_BUILD_DIR = $(abspath $(BUILD_DIR)/simv-compile)
 
-VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
-VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
-VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
-VCS_CXXFLAGS += -DNUM_CORES=$(NUM_CORES)
-VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
+VCS_CSRC_DIR   = $(abspath ./src/test/csrc/vcs)
+VCS_CONFIG_DIR = $(abspath ./config)
+
+VCS_CXXFILES  = $(SIM_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
+VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
+VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
+
+# DiffTest support
+ifneq ($(NO_DIFF), 1)
+VCS_FLAGS    += +define+DIFFTEST
+endif
 
 ifeq ($(RELEASE),1)
-VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
 endif
 
@@ -41,16 +49,20 @@ EXTRA += -P $(NOVAS)/novas.tab $(NOVAS)/pli.a
 endif
 endif
 
-VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
-VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
-
-VCS_BUILD_DIR  = $(abspath $(BUILD_DIR)/simv-compile)
-
+ifeq ($(VCS),verilator)
+VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH
+VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5
+VCS_FLAGS += -Mdir $(VCS_BUILD_DIR)  --compiler gcc
+VCS_CXXFLAGS += -std=c++20
+else
 VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
-# DiffTest
-VCS_FLAGS += +define+DIFFTEST
+VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR) -j200
 # randomize all undefined signals (instead of using X)
-VCS_FLAGS += +vcs+initreg+random
+VCS_FLAGS += +vcs+initreg+random +define+VCS
+VCS_CXXFLAGS += -std=c++11 -static
+endif
+
+VCS_FLAGS += -o $(VCS_TARGET)
 VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN
 VCS_FLAGS += +define+RANDOMIZE_INVALID_ASSIGN
 VCS_FLAGS += +define+RANDOMIZE_MEM_INIT
@@ -61,16 +73,21 @@ VCS_FLAGS += +define+RANDOMIZE_DELAY=1
 # SRAM lib defines
 VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
-VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
+VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)"
 # search build for other missing verilog files
 VCS_FLAGS += -y $(BUILD_DIR) +libext+.v
-# build files put into $(VCS_BUILD_DIR)
-VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
+VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
+VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
-	vcs $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+	$(VCS) $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+ifeq ($(VCS),verilator)
+	$(MAKE) -C $(VCS_BUILD_DIR) -f V$(VCS_TOP).mk CC=gcc-10 CXX=g++-10 LINK=g++-10
+endif
+
+simv: $(VCS_TARGET)
 
 vcs-clean:
 	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)
