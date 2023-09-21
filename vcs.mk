@@ -65,9 +65,9 @@ VCS_FLAGS += $(EXTRA)
 
 SIM_FLIST := $(shell pwd)/sim_flist.f
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES) $(CFG_HEADERS)
-	$(shell if [ ! -e $(VCS_SIM_DIR)/rtl/comp ];then mkdir -p $(VCS_SIM_DIR)/rtl/comp; fi)
+	$(shell if [ ! -e $(VCS_SIM_DIR)/comp ];then mkdir -p $(VCS_SIM_DIR)/comp; fi)
 	$(shell echo -f $(BUILD_DIR)/cpu_flist.f > $(SIM_FLIST))
 	$(shell find $(VCS_VSRC_DIR) -name "*.v" >> $(SIM_FLIST))
 	$(shell find $(SIM_VSRC_DIR) -name "*.v" -or -name "*.sv" >> $(SIM_FLIST))
-	cp $(SIM_FLIST) $(VCS_SIM_DIR)/comp
+	cp $(SIM_FLIST) $(VCS_SIM_DIR)/comp/
 	cd $(VCS_SIM_DIR)/comp && vcs $(VCS_FLAGS) -f $(SIM_FLIST) $(VCS_CXXFILES)

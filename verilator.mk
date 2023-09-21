@@ -112,13 +112,12 @@ endif
 # Verilator version check
 VERILATOR_VER_CMD = verilator --version | cut -f2 -d' ' | tr -d '.'
 VERILATOR_4_210 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 4210)
-ifeq ($(VERILATOR_4_210),1)
-EMU_CXXFLAGS += -DVERILATOR_4_210
-VEXTRA_FLAGS += --instr-count-dpi 1
-endif
 VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000)
 ifeq ($(VERILATOR_5_000),1)
 VEXTRA_FLAGS += --no-timing
+else
+EMU_CXXFLAGS += -DVERILATOR_4_210
+VEXTRA_FLAGS += --instr-count-dpi 1
 endif
 VEXTRA_FLAGS += +define+VERILATOR_$(shell $(VERILATOR_VER_CMD))
 
@@ -253,17 +252,10 @@ endif
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
 
-build_emu_local: $(EMU_MK)
+$(EMU_FINAL_TARGET): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
 	@echo "\n[g++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
-
-$(EMU_FINAL_TARGET): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
-ifeq ($(REMOTE),localhost)
-	@$(MAKE) build_emu_local SIMDIR=$(SIMDIR)
-else
-	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local SIMDIR=$(SIMDIR)'
-endif
 
 emu: $(EMU_FINAL_TARGET)
 
