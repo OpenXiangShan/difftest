@@ -16,6 +16,7 @@
 
 #include "difftest.h"
 #include "difftrace.h"
+#include "dut.h"
 #include "goldenmem.h"
 #include "ram.h"
 #include "flash.h"
