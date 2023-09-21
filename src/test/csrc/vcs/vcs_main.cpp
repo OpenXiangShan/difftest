@@ -61,7 +61,7 @@ extern "C" void set_max_cycles(long mc) {
 extern "C" void simv_init() {
   common_init("simv");
 
-  init_ram(bin_file);
+  init_ram(bin_file, DEFAULT_EMU_RAM_SIZE);
   init_flash(flash_bin_file);
 
   difftest_init();

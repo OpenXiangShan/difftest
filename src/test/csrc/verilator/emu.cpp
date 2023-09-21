@@ -364,7 +364,7 @@ Emulator::Emulator(int argc, const char *argv[]):
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
     }
     else {
-      simMemory = new MmapMemory(args.image, ram_size);
+      init_ram(args.image, ram_size);
     }
   }
 
