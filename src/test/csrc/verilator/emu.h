@@ -44,6 +44,7 @@ struct EmuArgs {
   uint64_t warmup_instr = -1;
   uint64_t stat_cycles = -1;
   uint64_t log_begin = 0, log_end = -1;
+  uint64_t overwrite_nbytes = 0xe00;
 #ifdef DEBUG_REFILL
   uint64_t track_instr = 0;
 #endif
@@ -55,6 +56,7 @@ struct EmuArgs {
   uint64_t ipc_times;
 #endif
   const char *image = nullptr;
+  const char *gcpt_restore = nullptr;
   const char *snapshot_path = nullptr;
   const char *wave_path = nullptr;
   const char *ram_size = nullptr;
