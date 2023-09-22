@@ -21,9 +21,11 @@ EMU_COMP_DIR  = $(EMU_SIM_DIR)/comp
 ifeq ($(SIMDIR), 1)
   EMU_FINAL_TARGET = $(EMU_COMP_DIR)/emu
   EMU_MK = $(EMU_COMP_DIR)/V$(EMU_TOP).mk
+  EMU_FINAL_COMP_DIR = $(EMU_COMP_DIR)
 else
   EMU_FINAL_TARGET = $(BUILD_DIR)/emu
   EMU_MK = $(BUILD_DIR)/emu-compile/V$(EMU_TOP).mk
+  EMU_FINAL_COMP_DIR = $(BUILD_DIR)/emu-compile
 endif
 
 EMU_CSRC_DIR   = $(abspath ./src/test/csrc/verilator)
@@ -219,6 +221,7 @@ VERILATOR_FLAGS =                   \
   +define+RANDOMIZE_MEM_INIT        \
   +define+RANDOMIZE_GARBAGE_ASSIGN  \
   +define+RANDOMIZE_DELAY=0         \
+  -Wno-UNOPTTHREADS                 \
   -Wno-STMTDLY -Wno-WIDTH           \
   --assert --x-assign unique        \
   --stats-vars                      \
@@ -244,9 +247,9 @@ endif
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator $(VERILATOR_FLAGS) -Mdir $(@D) $^ $(EMU_DEPS)
 ifneq ($(VERILATOR_5_000),1)
-	@find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
-	@find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
-	@find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
+	@find -L $(EMU_FINAL_COMP_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
+	@find -L $(EMU_FINAL_COMP_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
+	@find -L $(EMU_FINAL_COMP_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
 endif
 
 EMU_COMPILE_FILTER =
