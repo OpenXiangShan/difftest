@@ -84,7 +84,7 @@ static inline void print_help(const char *file) {
   printf("  -R, --ipc-interval=NUM     the interval insts of drawing IPC curve\n");
 #endif
   printf("  -X, --fork-interval=NUM    LightSSS snapshot interval (in seconds)\n");
-  printf("      --overwrite-nbytes=n   set valid bytes,but less than 0xf00,default value is 0x700\n");
+  printf("      --overwrite-nbytes=N   set valid bytes, but less than 0xf00, default: 0xe00\n");
   printf("      --force-dump-result    force dump performance counter result in the end\n");
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
@@ -375,8 +375,9 @@ Emulator::Emulator(int argc, const char *argv[]):
   }
 
   if (args.gcpt_restore) {
-    InputReader *reader=new FileReader(args.gcpt_restore);
-    int size=reader->read_all(simMemory->as_ptr(),args.overwrite_nbytes);
+    InputReader *reader = new FileReader(args.gcpt_restore);
+    int overwrite_size = reader->read_all(simMemory->as_ptr(), args.overwrite_nbytes);
+    Info("Overwrite %d bytes from file %s.\n", overwrite_size, args.gcpt_restore);
     delete reader;
   }
 
