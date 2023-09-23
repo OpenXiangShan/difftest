@@ -20,6 +20,7 @@
 #include "ram.h"
 #include "flash.h"
 #include "spikedasm.h"
+#include "refproxy.h"
 
 Difftest **difftest = NULL;
 
@@ -32,6 +33,10 @@ int difftest_init() {
 }
 
 int init_nemuproxy(size_t ramsize = 0) {
+#if DIFF_PROXY == SpikeProxy
+  // For Spike, only create one .so lib even for multicore
+  SpikeProxy::ref_init();
+#endif
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->update_nemuproxy(i, ramsize);
   }
@@ -225,7 +230,7 @@ void Difftest::do_exception() {
     guide.mtval = dut.csr.mtval;
     guide.stval = dut.csr.stval;
     guide.force_set_jump_target = false;
-    proxy->guided_exec(guide);
+    proxy->guided_exec(&guide);
   } else {
   #ifdef DEBUG_MODE_DIFF
     if(DEBUG_MEM_REGION(true, dut.event.exceptionPC)){

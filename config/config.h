@@ -42,10 +42,11 @@
 #define PMEM_BASE 0x80000000UL
 
 // first valid instruction's address, difftest starts from this instruction
+// TODO: Make it applicable for both Spike and NEMU
 #if defined(CPU_NUTSHELL)
 #define FIRST_INST_ADDRESS 0x80000000UL
 #elif defined(CPU_XIANGSHAN) || defined(CPU_ROCKET_CHIP)
-#define FIRST_INST_ADDRESS 0x10000000UL
+#define FIRST_INST_ADDRESS 0x80000000UL
 #endif
 
 // sdcard image to be used in simulation
