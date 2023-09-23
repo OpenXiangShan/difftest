@@ -94,7 +94,7 @@ public:
 
 #ifdef DEBUG_MODE_DIFF
 #define REF_DEBUG_MODE(f) \
-  f(debug_mem_sync, debug_mem_sync, void, uint64_t *, void *, size_t)
+  f(debug_mem_sync, debug_mem_sync, void, uint64_t, void *, size_t)
 #else
 #define REF_DEBUG_MODE(f)
 #endif
