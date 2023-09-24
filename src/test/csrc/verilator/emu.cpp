@@ -478,6 +478,7 @@ Emulator::~Emulator() {
     else {
       lightsss->do_clear();
     }
+    delete lightsss;
   }
 
   display_trapinfo();
