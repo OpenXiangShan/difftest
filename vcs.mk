@@ -57,7 +57,7 @@ VCS_SEARCH_DIR = $(abspath $(BUILD_DIR))
 VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L -l vcs.log -top tb_top
 VCS_FLAGS += -fgp -lca -kdb +nospecify +notimingcheck -xprop
 # DiffTest
-VCS_FLAGS += +define+DIFFTEST +define+PRINTF_COND=1 +define+VCS
+VCS_FLAGS += +define+DIFFTEST +define+PRINTF_COND=1 +define+VCS +define+SIM_TOP_MODULE_NAME=tb_top.sim
 # C++ flags
 VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)" -j200
 # enable fsdb dump
