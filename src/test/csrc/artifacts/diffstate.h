@@ -14,6 +14,17 @@ typedef struct {
   uint8_t  idtfr;
 } DifftestRefillEvent;
 
+#define CONFIG_DIFFTEST_VECCSRSTATE
+typedef struct {
+  uint64_t vstart;
+  uint64_t vxsat;
+  uint64_t vxrm;
+  uint64_t vcsr;
+  uint64_t vl;
+  uint64_t vtype;
+  uint64_t vlenb;
+} DifftestVecCSRState;
+
 #define CONFIG_DIFFTEST_LRSCEVENT
 typedef struct {
   uint8_t  valid;
@@ -45,32 +56,10 @@ typedef struct {
   uint64_t data;
 } DifftestFpWriteback;
 
-#define CONFIG_DIFFTEST_ARCHFPREGSTATE
+#define CONFIG_DIFFTEST_ARCHVECREGSTATE
 typedef struct {
-  uint64_t value[32];
-} DifftestArchFpRegState;
-
-#define CONFIG_DIFFTEST_CSRSTATE
-typedef struct {
-  uint64_t priviledgeMode;
-  uint64_t mstatus;
-  uint64_t sstatus;
-  uint64_t mepc;
-  uint64_t sepc;
-  uint64_t mtval;
-  uint64_t stval;
-  uint64_t mtvec;
-  uint64_t stvec;
-  uint64_t mcause;
-  uint64_t scause;
-  uint64_t satp;
-  uint64_t mip;
-  uint64_t mie;
-  uint64_t mscratch;
-  uint64_t sscratch;
-  uint64_t mideleg;
-  uint64_t medeleg;
-} DifftestCSRState;
+  uint64_t value[64];
+} DifftestArchVecRegState;
 
 #define CONFIG_DIFFTEST_DEBUGMODE
 typedef struct {
@@ -135,6 +124,38 @@ typedef struct {
   uint64_t pc;
 } DifftestRunaheadCommitEvent;
 
+#define CONFIG_DIFFTEST_ARCHINTREGSTATE
+typedef struct {
+  uint64_t value[32];
+} DifftestArchIntRegState;
+
+#define CONFIG_DIFFTEST_ARCHFPREGSTATE
+typedef struct {
+  uint64_t value[32];
+} DifftestArchFpRegState;
+
+#define CONFIG_DIFFTEST_CSRSTATE
+typedef struct {
+  uint64_t priviledgeMode;
+  uint64_t mstatus;
+  uint64_t sstatus;
+  uint64_t mepc;
+  uint64_t sepc;
+  uint64_t mtval;
+  uint64_t stval;
+  uint64_t mtvec;
+  uint64_t stvec;
+  uint64_t mcause;
+  uint64_t scause;
+  uint64_t satp;
+  uint64_t mip;
+  uint64_t mie;
+  uint64_t mscratch;
+  uint64_t sscratch;
+  uint64_t mideleg;
+  uint64_t medeleg;
+} DifftestCSRState;
+
 #define CONFIG_DIFFTEST_ARCHEVENT
 typedef struct {
   uint8_t  valid;
@@ -153,15 +174,12 @@ typedef struct {
   uint8_t  fuType;
 } DifftestLoadEvent;
 
-#define CONFIG_DIFFTEST_ARCHINTREGSTATE
-typedef struct {
-  uint64_t value[32];
-} DifftestArchIntRegState;
-
 typedef struct {
   DifftestArchIntRegState        regs_int;
   DifftestCSRState               csr;
   DifftestArchFpRegState         regs_fp;
+  DifftestArchVecRegState        regs_vec;
+  DifftestVecCSRState            vcsr;
   DifftestArchEvent              event;
   DifftestAtomicEvent            atomic;
   DifftestDebugMode              dmregs;

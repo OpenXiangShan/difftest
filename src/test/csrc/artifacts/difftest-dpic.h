@@ -60,6 +60,17 @@ extern "C" void v_difftest_DebugMode (
   uint64_t io_dscratch1
 );
 
+extern "C" void v_difftest_VecCSRState (
+  uint8_t  io_coreid,
+  uint64_t io_vstart,
+  uint64_t io_vxsat,
+  uint64_t io_vxrm,
+  uint64_t io_vcsr,
+  uint64_t io_vl,
+  uint64_t io_vtype,
+  uint64_t io_vlenb
+);
+
 extern "C" void v_difftest_AtomicEvent (
   uint8_t  io_coreid,
   uint8_t  io_valid,
@@ -227,6 +238,74 @@ extern "C" void v_difftest_ArchFpRegState (
   uint64_t io_value_29,
   uint64_t io_value_30,
   uint64_t io_value_31
+);
+
+extern "C" void v_difftest_ArchVecRegState (
+  uint8_t  io_coreid,
+  uint64_t io_value_0,
+  uint64_t io_value_1,
+  uint64_t io_value_2,
+  uint64_t io_value_3,
+  uint64_t io_value_4,
+  uint64_t io_value_5,
+  uint64_t io_value_6,
+  uint64_t io_value_7,
+  uint64_t io_value_8,
+  uint64_t io_value_9,
+  uint64_t io_value_10,
+  uint64_t io_value_11,
+  uint64_t io_value_12,
+  uint64_t io_value_13,
+  uint64_t io_value_14,
+  uint64_t io_value_15,
+  uint64_t io_value_16,
+  uint64_t io_value_17,
+  uint64_t io_value_18,
+  uint64_t io_value_19,
+  uint64_t io_value_20,
+  uint64_t io_value_21,
+  uint64_t io_value_22,
+  uint64_t io_value_23,
+  uint64_t io_value_24,
+  uint64_t io_value_25,
+  uint64_t io_value_26,
+  uint64_t io_value_27,
+  uint64_t io_value_28,
+  uint64_t io_value_29,
+  uint64_t io_value_30,
+  uint64_t io_value_31,
+  uint64_t io_value_32,
+  uint64_t io_value_33,
+  uint64_t io_value_34,
+  uint64_t io_value_35,
+  uint64_t io_value_36,
+  uint64_t io_value_37,
+  uint64_t io_value_38,
+  uint64_t io_value_39,
+  uint64_t io_value_40,
+  uint64_t io_value_41,
+  uint64_t io_value_42,
+  uint64_t io_value_43,
+  uint64_t io_value_44,
+  uint64_t io_value_45,
+  uint64_t io_value_46,
+  uint64_t io_value_47,
+  uint64_t io_value_48,
+  uint64_t io_value_49,
+  uint64_t io_value_50,
+  uint64_t io_value_51,
+  uint64_t io_value_52,
+  uint64_t io_value_53,
+  uint64_t io_value_54,
+  uint64_t io_value_55,
+  uint64_t io_value_56,
+  uint64_t io_value_57,
+  uint64_t io_value_58,
+  uint64_t io_value_59,
+  uint64_t io_value_60,
+  uint64_t io_value_61,
+  uint64_t io_value_62,
+  uint64_t io_value_63
 );
 
 extern "C" void v_difftest_FpWriteback (

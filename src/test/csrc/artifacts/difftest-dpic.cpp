@@ -119,6 +119,28 @@ extern "C" void v_difftest_DebugMode (
 }
 
 
+extern "C" void v_difftest_VecCSRState (
+  uint8_t  io_coreid,
+  uint64_t io_vstart,
+  uint64_t io_vxsat,
+  uint64_t io_vxrm,
+  uint64_t io_vcsr,
+  uint64_t io_vl,
+  uint64_t io_vtype,
+  uint64_t io_vlenb
+) {
+  if (difftest == NULL) return;
+  auto packet = &(difftest[io_coreid]->dut.vcsr);
+  packet->vstart = io_vstart;
+  packet->vxsat = io_vxsat;
+  packet->vxrm = io_vxrm;
+  packet->vcsr = io_vcsr;
+  packet->vl = io_vl;
+  packet->vtype = io_vtype;
+  packet->vlenb = io_vlenb;
+}
+
+
 extern "C" void v_difftest_AtomicEvent (
   uint8_t  io_coreid,
   uint8_t  io_valid,
@@ -460,6 +482,142 @@ extern "C" void v_difftest_ArchFpRegState (
   packet->value[29] = io_value_29;
   packet->value[30] = io_value_30;
   packet->value[31] = io_value_31;
+}
+
+
+extern "C" void v_difftest_ArchVecRegState (
+  uint8_t  io_coreid,
+  uint64_t io_value_0,
+  uint64_t io_value_1,
+  uint64_t io_value_2,
+  uint64_t io_value_3,
+  uint64_t io_value_4,
+  uint64_t io_value_5,
+  uint64_t io_value_6,
+  uint64_t io_value_7,
+  uint64_t io_value_8,
+  uint64_t io_value_9,
+  uint64_t io_value_10,
+  uint64_t io_value_11,
+  uint64_t io_value_12,
+  uint64_t io_value_13,
+  uint64_t io_value_14,
+  uint64_t io_value_15,
+  uint64_t io_value_16,
+  uint64_t io_value_17,
+  uint64_t io_value_18,
+  uint64_t io_value_19,
+  uint64_t io_value_20,
+  uint64_t io_value_21,
+  uint64_t io_value_22,
+  uint64_t io_value_23,
+  uint64_t io_value_24,
+  uint64_t io_value_25,
+  uint64_t io_value_26,
+  uint64_t io_value_27,
+  uint64_t io_value_28,
+  uint64_t io_value_29,
+  uint64_t io_value_30,
+  uint64_t io_value_31,
+  uint64_t io_value_32,
+  uint64_t io_value_33,
+  uint64_t io_value_34,
+  uint64_t io_value_35,
+  uint64_t io_value_36,
+  uint64_t io_value_37,
+  uint64_t io_value_38,
+  uint64_t io_value_39,
+  uint64_t io_value_40,
+  uint64_t io_value_41,
+  uint64_t io_value_42,
+  uint64_t io_value_43,
+  uint64_t io_value_44,
+  uint64_t io_value_45,
+  uint64_t io_value_46,
+  uint64_t io_value_47,
+  uint64_t io_value_48,
+  uint64_t io_value_49,
+  uint64_t io_value_50,
+  uint64_t io_value_51,
+  uint64_t io_value_52,
+  uint64_t io_value_53,
+  uint64_t io_value_54,
+  uint64_t io_value_55,
+  uint64_t io_value_56,
+  uint64_t io_value_57,
+  uint64_t io_value_58,
+  uint64_t io_value_59,
+  uint64_t io_value_60,
+  uint64_t io_value_61,
+  uint64_t io_value_62,
+  uint64_t io_value_63
+) {
+  if (difftest == NULL) return;
+  auto packet = &(difftest[io_coreid]->dut.regs_vec);
+  packet->value[0] = io_value_0;
+  packet->value[1] = io_value_1;
+  packet->value[2] = io_value_2;
+  packet->value[3] = io_value_3;
+  packet->value[4] = io_value_4;
+  packet->value[5] = io_value_5;
+  packet->value[6] = io_value_6;
+  packet->value[7] = io_value_7;
+  packet->value[8] = io_value_8;
+  packet->value[9] = io_value_9;
+  packet->value[10] = io_value_10;
+  packet->value[11] = io_value_11;
+  packet->value[12] = io_value_12;
+  packet->value[13] = io_value_13;
+  packet->value[14] = io_value_14;
+  packet->value[15] = io_value_15;
+  packet->value[16] = io_value_16;
+  packet->value[17] = io_value_17;
+  packet->value[18] = io_value_18;
+  packet->value[19] = io_value_19;
+  packet->value[20] = io_value_20;
+  packet->value[21] = io_value_21;
+  packet->value[22] = io_value_22;
+  packet->value[23] = io_value_23;
+  packet->value[24] = io_value_24;
+  packet->value[25] = io_value_25;
+  packet->value[26] = io_value_26;
+  packet->value[27] = io_value_27;
+  packet->value[28] = io_value_28;
+  packet->value[29] = io_value_29;
+  packet->value[30] = io_value_30;
+  packet->value[31] = io_value_31;
+  packet->value[32] = io_value_32;
+  packet->value[33] = io_value_33;
+  packet->value[34] = io_value_34;
+  packet->value[35] = io_value_35;
+  packet->value[36] = io_value_36;
+  packet->value[37] = io_value_37;
+  packet->value[38] = io_value_38;
+  packet->value[39] = io_value_39;
+  packet->value[40] = io_value_40;
+  packet->value[41] = io_value_41;
+  packet->value[42] = io_value_42;
+  packet->value[43] = io_value_43;
+  packet->value[44] = io_value_44;
+  packet->value[45] = io_value_45;
+  packet->value[46] = io_value_46;
+  packet->value[47] = io_value_47;
+  packet->value[48] = io_value_48;
+  packet->value[49] = io_value_49;
+  packet->value[50] = io_value_50;
+  packet->value[51] = io_value_51;
+  packet->value[52] = io_value_52;
+  packet->value[53] = io_value_53;
+  packet->value[54] = io_value_54;
+  packet->value[55] = io_value_55;
+  packet->value[56] = io_value_56;
+  packet->value[57] = io_value_57;
+  packet->value[58] = io_value_58;
+  packet->value[59] = io_value_59;
+  packet->value[60] = io_value_60;
+  packet->value[61] = io_value_61;
+  packet->value[62] = io_value_62;
+  packet->value[63] = io_value_63;
 }
 
 
