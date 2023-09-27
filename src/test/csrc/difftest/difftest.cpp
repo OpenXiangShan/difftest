@@ -77,6 +77,8 @@ Difftest::Difftest(int coreid) : id(coreid) {
   dut.trap.cycleCnt = 0;
   dut.trap.instrCnt = 0;
 
+  memset(&dut, 0, sizeof(dut));
+
 #ifdef CONFIG_DIFFTEST_INSTRCOVER
   memset(dut.icover, 0, sizeof(dut.icover));
 #endif // CONFIG_DIFFTEST_INSTRCOVER
