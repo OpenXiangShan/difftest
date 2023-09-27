@@ -146,12 +146,11 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
 
   val dpic = Module(new DPIC(gen))
   dpic.clock := clock
-  val enable = Wire(Bool())
-  enable := io.getValid
+  val enable = WireInit(true.B)
+  dpic.enable := io.getValid && enable
   if (hasGlobalEnable) {
     BoringUtils.addSink(enable, "dpic_global_enable")
   }
-  dpic.enable := enable
   dpic.io := io
 }
 
