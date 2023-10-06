@@ -35,8 +35,9 @@ object Batch {
     gen
   }
 
-  def collect(): BatchEndpoint = {
+  def collect(): Seq[String] = {
     Module(new BatchEndpoint(instances.toSeq))
+    Seq("CONFIG_DIFFTEST_BATCH")
   }
 }
 
