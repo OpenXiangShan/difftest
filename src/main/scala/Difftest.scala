@@ -410,6 +410,7 @@ trait DifftestModule[T <: DifftestBundle] {
 
 object DifftestModule {
   private val instances = ListBuffer.empty[(DifftestBundle, String)]
+  private val macros = ListBuffer.empty[String]
 
   def apply[T <: DifftestBundle](
     gen:      T,
@@ -443,10 +444,10 @@ object DifftestModule {
   def hasBatch: Boolean = instances.exists(_._2 == "batch")
   def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
     if (hasDPIC) {
-      DPIC.collect()
+      macros ++= DPIC.collect()
     }
     if (hasBatch) {
-      Batch.collect()
+      macros ++= Batch.collect()
     }
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
@@ -459,6 +460,9 @@ object DifftestModule {
     difftestCpp += "#define __DIFFSTATE_H__"
     difftestCpp += ""
     difftestCpp += "#include <cstdint>"
+    difftestCpp += ""
+
+    macros.foreach(m => difftestCpp += s"#define $m")
     difftestCpp += ""
 
     val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
