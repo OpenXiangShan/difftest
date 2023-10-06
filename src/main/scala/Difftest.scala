@@ -20,6 +20,7 @@ import chisel3._
 import chisel3.util._
 import difftest.batch.Batch
 import difftest.dpic.DPIC
+import difftest.merge.Merge
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
@@ -132,6 +133,12 @@ abstract class DifftestBundle extends Bundle
     cpp += s"} ${desiredModuleName};"
     cpp.mkString("\n")
   }
+
+  // returns Bool indicating whether `this` bundle can be merged with `base`
+  def supportsMerge(base: DifftestBundle): Bool = supportsBase
+  def supportsBase: Bool = if (withValid) !getValid else true.B
+  // returns a merged, right-value Bundle. Default: overriding `base` with `this`
+  def mergeWith(base: DifftestBundle): DifftestBundle = this
 }
 
 class DiffArchEvent extends DifftestBundle
@@ -176,6 +183,25 @@ class DiffInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
     special := Cat(isExit, isDelayedWb)
   }
   override val desiredCppName: String = "commit"
+
+  private val maxNumFused = 255
+  override def supportsMerge(base: DifftestBundle): Bool = {
+    val that = base.asInstanceOf[DiffInstrCommit]
+    val nextNFused = (nFused +& that.nFused) + 1.U
+    !valid || (!skip && (!that.valid || nextNFused <= maxNumFused.U) && !special.asUInt.orR)
+  }
+  override def supportsBase: Bool = {
+    !valid || (!skip && !special.asUInt.orR)
+  }
+  override def mergeWith(base: DifftestBundle): DifftestBundle = {
+    val that = base.asInstanceOf[DiffInstrCommit]
+    val merged = WireInit(Mux(valid, this, that))
+    merged.valid := valid || that.valid
+    when (valid && that.valid) {
+      merged.nFused := nFused + that.nFused + 1.U
+    }
+    merged
+  }
 }
 
 class DiffTrapEvent extends DifftestBundle {
@@ -189,6 +215,7 @@ class DiffTrapEvent extends DifftestBundle {
 
   override val desiredCppName: String = "trap"
   override def needUpdate: Option[Bool] = Some(hasTrap || hasWFI)
+  override def supportsBase: Bool = !hasTrap && !hasWFI
 }
 
 class DiffCSRState extends DifftestBundle {
@@ -230,6 +257,9 @@ class DiffIntWriteback(val numElements: Int = 32) extends DifftestBundle
   val data  = UInt(64.W)
   override val desiredCppName: String = "wb_int"
   override val needFlatten: Boolean = true
+  // TODO: We have a special and temporary fix for int writeback in Merge.scala
+  // It is only required for MMIO data synchronization for single-core co-sim
+  override def supportsBase: Bool = true.B
 }
 
 class DiffFpWriteback(numElements: Int = 32) extends DiffIntWriteback(numElements) {
@@ -311,6 +341,8 @@ class DiffLoadEvent extends DifftestBundle
   val opType = UInt(8.W)
   val fuType = UInt(8.W)
   override val desiredCppName: String = "load"
+  // TODO: currently we assume it can be dropped
+  override def supportsBase: Bool = true.B
 }
 
 class DiffAtomicEvent extends DifftestBundle
@@ -332,6 +364,8 @@ class DiffL1TLBEvent extends DifftestBundle
   val vpn = UInt(64.W)
   val ppn = UInt(64.W)
   override val desiredCppName: String = "l1tlb"
+  // TODO: currently we assume it can be dropped
+  override def supportsBase: Bool = true.B
 }
 
 class DiffL2TLBEvent extends DifftestBundle
@@ -346,6 +380,8 @@ class DiffL2TLBEvent extends DifftestBundle
   val level = UInt(8.W)
   val pf = Bool()
   override val desiredCppName: String = "l2tlb"
+  // TODO: currently we assume it can be dropped
+  override def supportsBase: Bool = true.B
 }
 
 class DiffRefillEvent extends DifftestBundle
@@ -356,6 +392,8 @@ class DiffRefillEvent extends DifftestBundle
   val data  = Vec(8, UInt(64.W))
   val idtfr = UInt(8.W) // identifier for flexible usage
   override val desiredCppName: String = "refill"
+  // TODO: currently we assume it can be dropped
+  override def supportsBase: Bool = true.B
 }
 
 class DiffLrScEvent extends DifftestBundle
@@ -425,7 +463,7 @@ object DifftestModule {
       // By default, use the DPI-C style.
       case _ => DPIC(gen)
     }
-    sink := Delayer(difftest, delay)
+    sink := Merge(Delayer(difftest, delay))
     sink.coreid := difftest.coreid
     if (dontCare) {
       difftest := DontCare
@@ -449,6 +487,7 @@ object DifftestModule {
     if (hasBatch) {
       macros ++= Batch.collect()
     }
+    macros ++= Merge.collect()
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
