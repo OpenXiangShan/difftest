@@ -252,12 +252,17 @@ public:
 protected:
   DiffTrace *difftrace = nullptr;
 
+#ifdef CONFIG_DIFFTEST_MERGE
+  const uint64_t timeout_scale = 256;
+#else
+  const uint64_t timeout_scale = 1;
+#endif // CONFIG_DIFFTEST_MERGE
 #if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
   const uint64_t firstCommit_limit = 1000;
-  const uint64_t stuck_limit = 500;
+  const uint64_t stuck_limit = 500 * timeout_scale;
 #elif defined(CPU_XIANGSHAN)
   const uint64_t firstCommit_limit = 15000;
-  const uint64_t stuck_limit = 15000;
+  const uint64_t stuck_limit = 15000 * timeout_scale;
 #endif
   const uint64_t delay_wb_limit = 80;
 
