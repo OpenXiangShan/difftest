@@ -788,6 +788,7 @@ int Difftest::update_delayed_writeback() {
     for (int i = 0; i < n; i++) {                                      \
       auto delay = dut.wb + i;                                         \
       if (delay->valid) {                                              \
+        delay->valid = false;                                          \
         if (!delayed[delay->address]) {                                \
           display();                                                   \
           Info("Delayed writeback at %s has already been committed\n", \
