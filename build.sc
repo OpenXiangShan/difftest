@@ -38,4 +38,6 @@ trait CommonDiffTest extends ScalaModule with SbtModule {
 
 object difftest extends CommonDiffTest {
   override def millSourcePath = os.pwd
+
+  object test extends SbtModuleTests with TestModule.ScalaTest
 }
