@@ -87,14 +87,14 @@ extern "C" void v_difftest_LrScEvent (
   uint8_t  io_success
 );
 
-extern "C" void v_difftest_StoreEvent (
-  uint8_t  io_coreid,
-  uint8_t  io_index,
-  uint8_t  io_valid,
-  uint64_t io_addr,
-  uint64_t io_data,
-  uint8_t  io_mask
-);
+//extern "C" void v_difftest_StoreEvent (
+//  uint8_t  io_coreid,
+//  uint8_t  io_index,
+//  uint8_t  io_valid,
+//  uint64_t io_addr,
+//  uint64_t io_data,
+//  uint8_t  io_mask
+//);
 
 extern "C" void v_difftest_SbufferEvent (
   uint8_t  io_coreid,

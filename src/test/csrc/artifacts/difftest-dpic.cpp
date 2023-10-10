@@ -177,23 +177,23 @@ extern "C" void v_difftest_LrScEvent (
 }
 
 
-extern "C" void v_difftest_StoreEvent (
-  uint8_t  io_coreid,
-  uint8_t  io_index,
-  uint8_t  io_valid,
-  uint64_t io_addr,
-  uint64_t io_data,
-  uint8_t  io_mask
-) {
-  if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.store[io_index]);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->addr = io_addr;
-    packet->data = io_data;
-    packet->mask = io_mask;
-  }
-}
+//extern "C" void v_difftest_StoreEvent (
+//  uint8_t  io_coreid,
+//  uint8_t  io_index,
+//  uint8_t  io_valid,
+//  uint64_t io_addr,
+//  uint64_t io_data,
+//  uint8_t  io_mask
+//) {
+//  if (difftest == NULL) return;
+//  auto packet = &(difftest[io_coreid]->dut.store[io_index]);
+//  packet->valid = io_valid;
+//  if (io_valid) {
+//    packet->addr = io_addr;
+//    packet->data = io_data;
+//    packet->mask = io_mask;
+//  }
+//}
 
 
 extern "C" void v_difftest_SbufferEvent (
