@@ -173,16 +173,19 @@ object DPIC {
     module.io
   }
 
-  def collect(): Seq[String] = {
+  def collect(): (Seq[String], Bool) = {
+    val step = WireInit(true.B)
     if (interfaces.isEmpty) {
-      return Seq()
+      return (Seq(),step)
     }
     if (hasGlobalEnable) {
       val global_en = WireInit(0.U.asTypeOf(Vec(enableBits, Bool())))
       for (i <- 0 until enableBits) {
         BoringUtils.addSink(global_en(i), s"dpic_global_enable_$i")
       }
-      BoringUtils.addSource(WireInit(global_en.asUInt.orR), "dpic_global_enable")
+      val enable = WireInit(global_en.asUInt.orR)
+      BoringUtils.addSource(enable, "dpic_global_enable")
+      step := enable
     }
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
@@ -211,6 +214,6 @@ object DPIC {
     val outputFile = outputDir + "/difftest-dpic.cpp"
     Files.write(Paths.get(outputFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
 
-    Seq("CONFIG_DIFFTEST_DPIC")
+    (Seq("CONFIG_DIFFTEST_DPIC"), step)
   }
 }

@@ -304,8 +304,12 @@ object DifftestModule {
   def hasDPIC: Boolean = instances.exists(_._2 == "dpic")
   def hasBatch: Boolean = instances.exists(_._2 == "batch")
   def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
+    val difftestStep = IO(Output(Bool()))
+    
     if (hasDPIC) {
-      macros ++= DPIC.collect()
+      val dpic_tuple = DPIC.collect()
+      macros ++= dpic_tuple._1
+      difftestStep := dpic_tuple._2
     }
     if (hasBatch) {
       macros ++= Batch.collect()
@@ -314,9 +318,6 @@ object DifftestModule {
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
-    
-    val difftestStep = IO(Output(Bool()))
-    difftestStep := true.B
   }
 
   def generateCppHeader(cpu: String, style: String): Unit = {
