@@ -6,7 +6,6 @@
 
 extern "C" void v_difftest_RefillEvent (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint8_t  io_index,
   uint64_t io_addr,
   uint64_t io_data_0,
@@ -22,7 +21,6 @@ extern "C" void v_difftest_RefillEvent (
 
 extern "C" void v_difftest_ArchEvent (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint32_t io_interrupt,
   uint32_t io_exception,
   uint64_t io_exceptionPC,
@@ -73,7 +71,6 @@ extern "C" void v_difftest_VecCSRState (
 
 extern "C" void v_difftest_AtomicEvent (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint64_t io_addr,
   uint64_t io_data,
   uint8_t  io_mask,
@@ -83,7 +80,6 @@ extern "C" void v_difftest_AtomicEvent (
 
 extern "C" void v_difftest_LrScEvent (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint8_t  io_success
 );
 
@@ -99,7 +95,6 @@ extern "C" void v_difftest_LrScEvent (
 extern "C" void v_difftest_SbufferEvent (
   uint8_t  io_coreid,
   uint8_t  io_index,
-  uint8_t  io_valid,
   uint64_t io_addr,
   uint8_t  io_data_0,
   uint8_t  io_data_1,
@@ -310,14 +305,12 @@ extern "C" void v_difftest_ArchVecRegState (
 
 extern "C" void v_difftest_FpWriteback (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint8_t  io_address,
   uint64_t io_data
 );
 
 extern "C" void v_difftest_IntWriteback (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint8_t  io_address,
   uint64_t io_data
 );
@@ -325,7 +318,6 @@ extern "C" void v_difftest_IntWriteback (
 extern "C" void v_difftest_InstrCommit (
   uint8_t  io_coreid,
   uint8_t  io_index,
-  uint8_t  io_valid,
   uint8_t  io_skip,
   uint8_t  io_isRVC,
   uint8_t  io_rfwen,
@@ -347,14 +339,12 @@ extern "C" void v_difftest_InstrCommit (
 extern "C" void v_difftest_RunaheadCommitEvent (
   uint8_t  io_coreid,
   uint8_t  io_index,
-  uint8_t  io_valid,
   uint64_t io_pc
 );
 
 extern "C" void v_difftest_LoadEvent (
   uint8_t  io_coreid,
   uint8_t  io_index,
-  uint8_t  io_valid,
   uint64_t io_paddr,
   uint8_t  io_opType,
   uint8_t  io_fuType
