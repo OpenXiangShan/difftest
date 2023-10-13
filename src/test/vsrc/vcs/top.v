@@ -125,7 +125,8 @@ SimTop sim(
   .io_uart_out_valid(io_uart_out_valid),
   .io_uart_out_ch(io_uart_out_ch),
   .io_uart_in_valid(io_uart_in_valid),
-  .io_uart_in_ch(io_uart_in_ch)
+  .io_uart_in_ch(io_uart_in_ch),
+  .difftestStep(difftestStep)
 );
 
 assign io_logCtrl_log_level = 0;
