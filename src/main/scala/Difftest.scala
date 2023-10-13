@@ -314,8 +314,9 @@ object DifftestModule {
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
-    val difftest = IO(Output(new DifftestTop))
-    difftest.step := true.B
+    
+    val difftestStep = IO(Output(Bool()))
+    difftestStep := true.B
   }
 
   def generateCppHeader(cpu: String, style: String): Unit = {
@@ -411,9 +412,7 @@ object Delayer {
 }
 
 // Difftest emulator top
-class DifftestTop extends Bundle {
-  val step = Bool()
-}
+
 // XiangShan log / perf ctrl, should be inited in SimTop IO
 // If not needed, just ingore these signals
 class PerfInfoIO extends Bundle {
