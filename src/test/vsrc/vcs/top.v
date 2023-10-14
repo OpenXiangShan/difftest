@@ -35,6 +35,7 @@ wire        io_uart_out_valid;
 wire [ 7:0] io_uart_out_ch;
 wire        io_uart_in_valid;
 wire [ 7:0] io_uart_in_ch;
+wire        difftest_step;
 
 string bin_file;
 string flash_bin_file;
@@ -125,7 +126,8 @@ SimTop sim(
   .io_uart_out_valid(io_uart_out_valid),
   .io_uart_out_ch(io_uart_out_ch),
   .io_uart_in_valid(io_uart_in_valid),
-  .io_uart_in_ch(io_uart_in_ch)
+  .io_uart_in_ch(io_uart_in_ch),
+  .difftest_step(difftest_step)
 );
 
 assign io_logCtrl_log_level = 0;
@@ -151,7 +153,7 @@ always @(posedge clock) begin
   end
 
   // check errors
-  if (!reset && has_init) begin
+  if (!reset && has_init && difftest_step) begin
     if (simv_step()) begin
       $finish();
     end

@@ -47,6 +47,8 @@ class DifftestTop extends Module {
   val difftest_runahead_event = DifftestModule(new DiffRunaheadEvent, dontCare = true)
   val difftest_runahead_commit_event = DifftestModule(new DiffRunaheadCommitEvent, dontCare = true)
   val difftest_runahead_redirect_event = DifftestModule(new DiffRunaheadRedirectEvent, dontCare = true)
+
+  DifftestModule.finish("demo")
 }
 
 object DifftestMain extends App {
