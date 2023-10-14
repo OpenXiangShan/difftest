@@ -305,7 +305,8 @@ object DifftestModule {
   def hasBatch: Boolean = instances.exists(_._2 == "batch")
   def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
     val difftest_step = IO(Output(Bool()))
-    
+    difftest_step := true.B
+
     if (hasDPIC) {
       val dpic_tuple = DPIC.collect()
       macros ++= dpic_tuple._1

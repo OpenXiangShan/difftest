@@ -166,7 +166,6 @@ object DPIC {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-
     if (hasGlobalEnable && module.io.needUpdate.isDefined) {
       BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
       enableBits += 1
