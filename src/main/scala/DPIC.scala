@@ -140,7 +140,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean) extends Module
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean, hasCollect: Boolean = true) extends Module
   with DifftestModule[T] {
   val io = IO(Input(gen))
 
@@ -148,7 +148,7 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
   dpic.clock := clock
   val enable = WireInit(true.B)
   dpic.enable := io.bits.getValid && enable
-  if (hasGlobalEnable) {
+  if (hasCollect && hasGlobalEnable) {
     BoringUtils.addSink(enable, "dpic_global_enable")
   }
   dpic.io := io
@@ -156,17 +156,18 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
-  private val hasGlobalEnable: Boolean = false
+  private val hasGlobalEnable: Boolean = true
   private var enableBits = 0
 
-  def apply[T <: DifftestBundle](gen: T): T = {
-    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable))
+  def apply[T <: DifftestBundle](gen: T, hasCollect: Boolean = true): T = {
+    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable, hasCollect))
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-    if (hasGlobalEnable && module.io.needUpdate.isDefined) {
+
+    if (hasCollect && hasGlobalEnable && module.io.needUpdate.isDefined) {
       BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
       enableBits += 1
     }

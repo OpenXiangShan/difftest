@@ -35,6 +35,7 @@ wire        io_uart_out_valid;
 wire [ 7:0] io_uart_out_ch;
 wire        io_uart_in_valid;
 wire [ 7:0] io_uart_in_ch;
+wire        difftestStep;
 
 string bin_file;
 string flash_bin_file;
