@@ -140,7 +140,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean, hasCollect: Boolean = true) extends Module
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean) extends Module
   with DifftestModule[T] {
   val io = IO(Input(gen))
 
@@ -148,7 +148,7 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
   dpic.clock := clock
   val enable = WireInit(true.B)
   dpic.enable := io.bits.getValid && enable
-  if (hasCollect && hasGlobalEnable) {
+  if (hasGlobalEnable) {
     BoringUtils.addSink(enable, "dpic_global_enable")
   }
   dpic.io := io
@@ -156,18 +156,18 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
-  private val hasGlobalEnable: Boolean = true
+  private val hasGlobalEnable: Boolean = false
   private var enableBits = 0
 
-  def apply[T <: DifftestBundle](gen: T, hasCollect: Boolean = true): T = {
-    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable, hasCollect))
+  def apply[T <: DifftestBundle](gen: T): T = {
+    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable))
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
 
-    if (hasCollect && hasGlobalEnable && module.io.needUpdate.isDefined) {
+    if (hasGlobalEnable && module.io.needUpdate.isDefined) {
       BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
       enableBits += 1
     }
@@ -177,7 +177,7 @@ object DPIC {
   def collect(): (Seq[String], Bool) = {
     val step = WireInit(true.B)
     if (interfaces.isEmpty) {
-      return (Seq(),step)
+      return (Seq(), step)
     }
     if (hasGlobalEnable) {
       val global_en = WireInit(0.U.asTypeOf(Vec(enableBits, Bool())))

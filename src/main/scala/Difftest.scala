@@ -274,18 +274,17 @@ object DifftestModule {
   private val macros = ListBuffer.empty[String]
 
   def apply[T <: DifftestBundle](
-    gen:        T,
-    style:      String  = "dpic",
-    dontCare:   Boolean = false,
-    delay:      Int     = 0,
-    hasCollect: Boolean = true,
+    gen:      T,
+    style:    String  = "dpic",
+    dontCare: Boolean = false,
+    delay:    Int     = 0,
   ): T = {
     val id = register(gen, style)
     val difftest: T = Wire(gen)
     val sink = style match {
       case "batch" => Batch(gen)
       // By default, use the DPI-C style.
-      case _ => DPIC(gen,hasCollect)
+      case _ => DPIC(gen)
     }
     sink := Merge(Delayer(difftest, delay))
     sink.coreid := difftest.coreid

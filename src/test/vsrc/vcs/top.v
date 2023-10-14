@@ -153,7 +153,7 @@ always @(posedge clock) begin
   end
 
   // check errors
-  if (!reset && has_init) begin
+  if (!reset && has_init && difftestStep) begin
     if (simv_step()) begin
       $finish();
     end
