@@ -792,7 +792,7 @@ int Emulator::tick() {
   dut_ptr->io_perfInfo_dump = 0;
 
 #ifndef CONFIG_NO_DIFFTEST
-  if (args.enable_diff) {
+  if (args.enable_diff && dut_ptr->difftest_step) {
     if (difftest_step()) {
       trapCode = STATE_ABORT;
       return trapCode;

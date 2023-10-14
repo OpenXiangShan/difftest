@@ -156,13 +156,15 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
-  private val hasGlobalEnable: Boolean = false
+  private val hasGlobalEnable: Boolean = true
   private var enableBits = 0
 
   val global_en = WireInit(0.U.asTypeOf(Vec(128, Bool())))
   dontTouch(global_en)
   if(hasGlobalEnable) {
+    val enable = WireInit(global_en.asUInt.orR)
     BoringUtils.addSource(WireInit(global_en.asUInt.orR), "dpic_global_enable")
+    step := enable
   }
 
   def apply[T <: DifftestBundle](gen: T): T = {
@@ -180,9 +182,10 @@ object DPIC {
     module.io
   }
 
-  def collect(): Seq[String] = {
+  def collect(): (Seq[String], Bool) = {
+    val step = WireInit(true.B)
     if (interfaces.isEmpty) {
-      return Seq()
+      return (Seq(), step)
     }
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
@@ -211,6 +214,6 @@ object DPIC {
     val outputFile = outputDir + "/difftest-dpic.cpp"
     Files.write(Paths.get(outputFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
 
-    Seq("CONFIG_DIFFTEST_DPIC")
+    (Seq("CONFIG_DIFFTEST_DPIC"), step)
   }
 }
