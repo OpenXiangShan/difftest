@@ -186,7 +186,6 @@ private:
 class Difftest {
 public:
   DiffTestState* dut;
-  int batch_size = 1;
 
   // Difftest public APIs for testbench
   // Its backend should be cross-platform (NEMU, Spike, ...)

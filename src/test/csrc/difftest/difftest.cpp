@@ -76,24 +76,14 @@ Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
 
   dut = (DiffTestState *)calloc(batch_size, sizeof(DiffTestState));
- 
-  dut->trap.cycleCnt = 0;
-  dut->trap.instrCnt = 0;
-
-  memset(dut, 0, batch_size * sizeof(DiffTestState));
-
-#ifdef CONFIG_DIFFTEST_INSTRCOVER
-  memset(dut->icover, 0, sizeof(dut->icover));
-#endif // CONFIG_DIFFTEST_INSTRCOVER
-#ifdef CONFIG_DIFFTEST_INSTRIMMCOVER
-  memset(dut->instr_imm_cover, 0, sizeof(dut->instr_imm_cover));
-#endif //CONFIG_DIFFTEST_INSTRIMMCOVER
 }
 
 Difftest::~Difftest() {
   delete state;
   delete difftrace;
-  if(dut) free(dut);
+  if (dut) {
+    free(dut);
+  } 
   if (proxy) {
     delete proxy;
   }
