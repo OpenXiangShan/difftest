@@ -23,7 +23,7 @@ import difftest._
 import scala.collection.mutable.ListBuffer
 
 object Merge {
-  private val isEffective: Boolean = false
+  val isEffective: Boolean = false
   private val instances = ListBuffer.empty[DifftestBundle]
 
   def apply[T <: DifftestBundle](gen: T): T = {
