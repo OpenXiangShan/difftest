@@ -185,7 +185,8 @@ private:
 
 class Difftest {
 public:
-  DiffTestState dut;
+  DiffTestState* dut;
+  int batch_size = 1;
 
   // Difftest public APIs for testbench
   // Its backend should be cross-platform (NEMU, Spike, ...)
@@ -199,10 +200,10 @@ public:
   int step();
   void update_nemuproxy(int, size_t);
   inline bool get_trap_valid() {
-    return dut.trap.hasTrap;
+    return dut->trap.hasTrap;
   }
   inline int get_trap_code() {
-    return dut.trap.code;
+    return dut->trap.code;
   }
   void display();
   void set_trace(const char *name, bool is_read) {
@@ -211,26 +212,26 @@ public:
   void trace() {
     if (difftrace) {
       if (difftrace->is_read)
-        difftrace->read_next(&dut);
+        difftrace->read_next(dut);
       else
-        difftrace->append(&dut);
+        difftrace->append(dut);
     }
   }
 
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
   // These functions generally do nothing but copy the information to core_state.
   inline DifftestTrapEvent *get_trap_event() {
-    return &(dut.trap);
+    return &(dut->trap);
   }
   uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-      is_fp ? dut.regs_fp.value + src :
+      is_fp ? dut->regs_fp.value + src :
 #endif
-      dut.regs_int.value + src;
+      dut->regs_int.value + src;
   }
   inline DiffTestState *get_dut() {
-    return &dut;
+    return dut;
   }
 
 #ifdef DEBUG_REFILL
@@ -294,29 +295,29 @@ protected:
   int do_golden_memory_update();
   inline uint64_t get_commit_data(int i) {
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-    if (dut.commit[i].fpwen) {
+    if (dut->commit[i].fpwen) {
       return
 #ifdef CONFIG_DIFFTEST_FPWRITEBACK
-        dut.wb_fp[dut.commit[i].wpdest].data;
+        dut->wb_fp[dut->commit[i].wpdest].data;
 #else
-        dut.regs_fp.value[dut.commit[i].wdest];
+        dut->regs_fp.value[dut->commit[i].wdest];
 #endif // CONFIG_DIFFTEST_FPWRITEBACK
     } else
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    if (dut.commit[i].vecwen) {
-      return dut.regs_vec.value[dut.commit[i].wdest];
+    if (dut->commit[i].vecwen) {
+      return dut->regs_vec.value[dut->commit[i].wdest];
     } else
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
     return
 #ifdef CONFIG_DIFFTEST_INTWRITEBACK
-      dut.wb_int[dut.commit[i].wpdest].data;
+      dut->wb_int[dut->commit[i].wpdest].data;
 #else
-      dut.regs_int.value[dut.commit[i].wdest];
+      dut->regs_int.value[dut->commit[i].wdest];
 #endif // CONFIG_DIFFTEST_INTWRITEBACK
   }
   inline bool has_wfi() {
-    return dut.trap.hasWFI;
+    return dut->trap.hasWFI;
   }
   inline bool in_disambiguation_state() {
     static bool was_found = false;
@@ -324,8 +325,8 @@ protected:
     // Only in fuzzing mode
     if (proxy->in_disambiguation_state()) {
       was_found = true;
-      dut.trap.hasTrap = 1;
-      dut.trap.code = STATE_AMBIGUOUS;
+      dut->trap.hasTrap = 1;
+      dut->trap.code = STATE_AMBIGUOUS;
 #ifdef FUZZER_LIB
       stats.exit_code = SimExitCode::ambiguous;
 #endif // FUZZER_LIB
