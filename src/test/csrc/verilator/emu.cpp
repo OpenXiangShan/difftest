@@ -640,11 +640,6 @@ inline void Emulator::single_cycle() {
 #endif
 
 end_single_cycle:
-#ifndef CONFIG_NO_DIFFTEST
-  if (args.trace_name) {
-    difftest_trace();
-  }
-#endif // CONFIG_NO_DIFFTEST
   cycles ++;
 }
 

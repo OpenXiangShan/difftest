@@ -81,9 +81,7 @@ Difftest::Difftest(int coreid) : id(coreid) {
 Difftest::~Difftest() {
   delete state;
   delete difftrace;
-  if (dut) {
-    free(dut);
-  } 
+  free(dut);
   if (proxy) {
     delete proxy;
   }
