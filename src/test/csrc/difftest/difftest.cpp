@@ -48,13 +48,19 @@ int difftest_state() {
   return -1;
 }
 
-int difftest_step() {
-  for (int i = 0; i < NUM_CORES; i++) {
-    int ret = difftest[i]->step();
-    if (ret) {
-      return ret;
-    }
+int difftest_step(int n) {
+  for (int t = 0; t < n; t++){
+    for (int i = 0; i < NUM_CORES; i++) {
+      int ret = difftest[i]->step();
+      if (ret) {
+        return ret;
+      }
+      if (t != n-1){
+        difftest[i]->dut++;
+      }
+    } 
   }
+
   return 0;
 }
 
@@ -62,6 +68,20 @@ void difftest_trace() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->trace();
   }
+}
+
+int difftest_trace_read() {
+  int trace_num = 0;
+  int trace_num_core0 = 0;
+  for (int i = 0; i < NUM_CORES; i++) {
+    trace_num = difftest[i]->trace_read();
+    if(i == 0) 
+      trace_num_core0 = trace_num;
+    else{
+      assert(trace_num == trace_num_core0);
+    }
+  }
+  return trace_num_core0;
 }
 
 void difftest_finish() {
@@ -75,13 +95,14 @@ void difftest_finish() {
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
 
-  dut = (DiffTestState *)calloc(batch_size, sizeof(DiffTestState));
+  dut_buffer = (DiffTestState *)calloc(max_batch_size, sizeof(DiffTestState));
+  dut = dut_buffer;
 }
 
 Difftest::~Difftest() {
   delete state;
   delete difftrace;
-  free(dut);
+  free(dut_buffer);
   if (proxy) {
     delete proxy;
   }

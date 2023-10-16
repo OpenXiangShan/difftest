@@ -7,8 +7,9 @@ class DiffTrace {
 public:
   char trace_name[32];
   bool is_read;
+  int max_batch_size;
 
-  DiffTrace(const char *trace_name, bool is_read, uint64_t buffer_size = 1024 * 1024);
+  DiffTrace(const char *trace_name, bool is_read, int max_batch_size, uint64_t buffer_size = 1024 * 1024);
   ~DiffTrace() {
     if (!is_read) {
       trace_file_next();
@@ -18,7 +19,7 @@ public:
     }
   }
   bool append(const DiffTestState *trace);
-  bool read_next(DiffTestState *trace);
+  int read_next(DiffTestState *trace);
 
 private:
   uint64_t buffer_size;

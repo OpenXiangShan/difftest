@@ -185,8 +185,9 @@ private:
 
 class Difftest {
 public:
+  DiffTestState* dut_buffer;
   DiffTestState* dut;
-  const int batch_size = 1;
+  const int max_batch_size = 32;
 
   // Difftest public APIs for testbench
   // Its backend should be cross-platform (NEMU, Spike, ...)
@@ -207,7 +208,7 @@ public:
   }
   void display();
   void set_trace(const char *name, bool is_read) {
-    difftrace = new DiffTrace(name, is_read);
+    difftrace = new DiffTrace(name, is_read, max_batch_size);
   }
   void trace() {
     if (difftrace) {
@@ -216,6 +217,12 @@ public:
       else
         difftrace->append(dut);
     }
+  }
+  int trace_read(){
+    if(difftrace)
+      return difftrace->read_next(dut_buffer);
+    else
+      return 0;
   }
 
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
@@ -349,10 +356,11 @@ protected:
 
 extern Difftest **difftest;
 int difftest_init();
-int difftest_step();
+int difftest_step(int n);
 int difftest_state();
 void difftest_finish();
 void difftest_trace();
+int difftest_trace_read();
 int init_nemuproxy(size_t);
 
 #endif

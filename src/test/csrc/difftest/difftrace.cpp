@@ -3,7 +3,7 @@
 
 #include "difftrace.h"
 
-DiffTrace::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_size)
+DiffTrace::DiffTrace(const char *_trace_name, bool is_read, int _max_batch_size, uint64_t _buffer_size)
   : is_read(is_read) {
   if (!is_read) {
     buffer_size = _buffer_size;
@@ -15,6 +15,7 @@ DiffTrace::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_siz
     exit(0);
   }
   strcpy(trace_name, _trace_name);
+  max_batch_size = _max_batch_size;
 }
 
 bool DiffTrace::append(const DiffTestState *trace) {
@@ -26,14 +27,19 @@ bool DiffTrace::append(const DiffTestState *trace) {
   return 0;
 }
 
-bool DiffTrace::read_next(DiffTestState *trace) {
+int DiffTrace::read_next(DiffTestState *trace) {
   if (!buffer || buffer_count == buffer_size) {
     trace_file_next();
   }
-  memcpy(trace, buffer + buffer_count, sizeof(DiffTestState));
-  buffer_count++;
+  int trace_num = 0;
+  if(max_batch_size < buffer_size - buffer_count)
+    trace_num = max_batch_size;
+  else
+    trace_num = buffer_size - buffer_count;
+  memcpy(trace, buffer + buffer_count, trace_num * sizeof(DiffTestState));
+  buffer_count += trace_num;
   // printf("%lu...\n", buffer_count);
-  return 0;
+  return trace_num;
 }
 
 

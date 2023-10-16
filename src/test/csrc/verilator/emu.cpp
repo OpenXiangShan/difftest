@@ -640,11 +640,6 @@ inline void Emulator::single_cycle() {
 #endif
 
 end_single_cycle:
-#ifndef CONFIG_NO_DIFFTEST
-  if (args.trace_name) {
-    difftest_trace();
-  }
-#endif // CONFIG_NO_DIFFTEST
   cycles ++;
 }
 
@@ -765,8 +760,14 @@ int Emulator::tick() {
   dut_ptr->io_perfInfo_dump = 0;
 
 #ifndef CONFIG_NO_DIFFTEST
-  if (args.enable_diff && dut_ptr->difftest_step) {
-    if (difftest_step()) {
+  // if (args.enable_diff && dut_ptr->difftest_step) {
+  if(args.enable_diff){
+    int batch_size;
+    if(args.trace_name && args.trace_is_read){
+      batch_size = difftest_trace_read();
+    }
+
+    if (difftest_step(batch_size)) {
       trapCode = STATE_ABORT;
       return trapCode;
     }
@@ -842,7 +843,9 @@ int Emulator::tick() {
       }
     }
   }
-
+  for(int i=0; i<NUM_CORES; i++){
+    difftest[i]->dut = difftest[i]->dut_buffer;
+  }
   return 0;
 }
 
