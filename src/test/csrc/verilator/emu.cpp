@@ -111,6 +111,9 @@ static inline void print_help(const char *file) {
   printf("      --dump-footprints=NAME dump memory access footprints to NAME\n");
   printf("      --as-footprints        load the image as memory access footprints\n");
   printf("      --dump-linearized=NAME dump the linearized footprints to NAME\n");
+#ifdef CONFIG_USE_SPARSEMM
+  printf("      --disable-spram        disable spram (spram support ELF file load)\n");
+#endif
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -145,6 +148,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "as-footprints",     0, NULL,  0  },
     { "dump-linearized",   1, NULL,  0  },
     { "dump-wave-full",    0, NULL,  0  },
+    { "disable-spram",     0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -216,6 +220,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
           case 20: args.image_as_footprints = true; continue;
           case 21: args.linearized_name = optarg; continue;
           case 22: args.enable_waveform = true; args.enable_waveform_full = true; continue;
+          case 23: args.enable_spram = false;continue;
         }
         // fall through
       default:
@@ -356,6 +361,19 @@ Emulator::Emulator(int argc, const char *argv[]):
   if (args.ram_size) {
     ram_size = parse_and_update_ramsize(args.ram_size);
   }
+
+#ifdef CONFIG_USE_SPARSEMM
+  if (args.enable_spram){
+    if(args.image_as_footprints || args.footprints_name){
+      Info("Hint: --dump-footprints and --as-footprints is conflict with spram, please use --disable-spram (disable ELF support)\n");
+      exit(0);
+    }
+    simMemory = new SparseMemory(args.image, ram_size);
+  }
+#else
+  args.enable_spram = false;
+#endif
+
   // footprints
   if (args.image_as_footprints) {
     if (args.linearized_name) {
@@ -366,7 +384,7 @@ Emulator::Emulator(int argc, const char *argv[]):
     }
   }
   // normal linear memory
-  else {
+  else if (!args.enable_spram){
     if (args.footprints_name) {
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
     }

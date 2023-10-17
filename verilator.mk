@@ -183,6 +183,12 @@ else
 EMU_LDFLAGS  += -lz
 endif
 
+# SparseMM
+ifeq ($(CONFIG_USE_SPARSEMM), 1)
+$(warning "NOTE: Sparse Memory is enable")
+EMU_CXXFLAGS += -DCONFIG_USE_SPARSEMM
+endif
+
 # Verilator
 WITH_SPIKE_DASM ?= 1
 ifeq ($(WITH_SPIKE_DASM),1)

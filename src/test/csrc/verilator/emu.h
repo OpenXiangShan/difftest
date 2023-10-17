@@ -78,6 +78,7 @@ struct EmuArgs {
   bool trace_is_read = true;
   bool dump_coverage = false;
   bool image_as_footprints = false;
+  bool enable_spram = true;
 };
 
 class Emulator final : public DUT {
