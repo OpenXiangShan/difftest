@@ -234,16 +234,77 @@ class DifftestMem2P(size: BigInt, lanes: Int, bits: Int) extends DifftestMem(siz
   }
 }
 
+class DifftestMemInitializer extends ExtModule with HasExtModuleInline {
+  setInline("DifftestMemInitializer.v",
+    """
+       |module DifftestMemInitializer();
+       |`ifndef SYNTHESIS
+       |`define TARGET SynthesizableDifftestMem.mem
+       |string bin_file;
+       |integer memory_image = 0, n_read = 0, byte_read = 1;
+       |byte data;
+       |initial begin
+       |  if ($test$plusargs("workload")) begin
+       |    $value$plusargs("workload=%s", bin_file);
+       |    memory_image = $fopen(bin_file, "rb");
+       |    if (memory_image == 0) begin
+       |      $display("Error: failed to open %s", bin_file);
+       |      $finish;
+       |    end
+       |    foreach (`TARGET[i]) begin
+       |      if (byte_read == 0) break;
+       |      for (integer j = 0; j < 8; j++) begin
+       |        byte_read = $fread(data, memory_image);
+       |        if (byte_read == 0) break;
+       |        n_read += 1;
+       |        `TARGET[i][j * 8 +: 8] = data;
+       |      end
+       |    end
+       |    $fclose(memory_image);
+       |    $display("%m: load %d bytes from %s.", n_read, bin_file);
+       |  end
+       |end
+       |`endif
+       |endmodule
+       |""".stripMargin)
+}
+
+class SynthesizableDifftestMem(size: BigInt, lanes: Int, bits: Int) extends DifftestMem(size, lanes, bits) {
+  val mem = Mem(size / 8, UInt(64.W))
+
+  for (i <- 0 until n_helper) {
+    val r_index = read.index * n_helper.U + i.U
+    read.data(i) := RegEnable(mem(r_index), read.valid)
+
+    val w_index = write.index * n_helper.U + i.U
+    when (write.valid) {
+      mem(w_index) := (write.data(i) & write.mask(i)) | (mem(w_index) & (~write.mask(i)).asUInt)
+    }
+  }
+
+  val initializer = Module(new DifftestMemInitializer)
+}
+
 object DifftestMem {
   def apply(size: BigInt, beatBytes: Int): DifftestMem = {
     apply(size, beatBytes, 8)
   }
 
-  def apply(size: BigInt, lanes: Int, bits: Int, singlePort: Boolean = true): DifftestMem = {
-    val mod = if (singlePort) {
-      Module(new DifftestMem1P(size, lanes, bits))
-    } else {
-      Module(new DifftestMem2P(size, lanes, bits))
+  def apply(size: BigInt, beatBytes: Int, synthesizable: Boolean): DifftestMem = {
+    apply(size, beatBytes, 8, synthesizable = synthesizable)
+  }
+
+  def apply(
+    size: BigInt,
+    lanes: Int,
+    bits: Int,
+    synthesizable: Boolean = false,
+    singlePort: Boolean = true,
+  ): DifftestMem = {
+    val mod = (synthesizable, singlePort) match {
+      case (true, _) => Module(new SynthesizableDifftestMem(size, lanes, bits))
+      case (false, true) => Module(new DifftestMem1P(size, lanes, bits))
+      case (false, false) => Module(new DifftestMem2P(size, lanes, bits))
     }
     mod.read        := DontCare
     mod.read.valid  := false.B
