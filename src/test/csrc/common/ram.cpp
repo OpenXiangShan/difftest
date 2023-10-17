@@ -300,12 +300,6 @@ extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
   return rdata;
 }
 
-extern "C" uint64_t ram_read_helper(uint8_t en, uint64_t rIdx) {
-  if (!en)
-    return 0;
-  return difftest_ram_read(rIdx);
-}
-
 extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask) {
   if (simMemory) {
     if (!simMemory->in_range_u64(wIdx)) {
@@ -316,18 +310,12 @@ extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask
   }
 }
 
-extern "C" void ram_write_helper(uint64_t wIdx, uint64_t wdata, uint64_t wmask, uint8_t wen) {
-  if (wen) {
-    difftest_ram_write(wIdx, wdata, wmask);
-  }
-}
-
 uint64_t pmem_read(uint64_t raddr) {
   if (raddr % sizeof(uint64_t)) {
     printf("Warning: pmem_read only supports 64-bit aligned memory access\n");
   }
   raddr -= PMEM_BASE;
-  return ram_read_helper(1, raddr / sizeof(uint64_t));
+  return difftest_ram_read(raddr / sizeof(uint64_t));
 }
 
 void pmem_write(uint64_t waddr, uint64_t wdata) {
@@ -335,7 +323,7 @@ void pmem_write(uint64_t waddr, uint64_t wdata) {
     printf("Warning: pmem_write only supports 64-bit aligned memory access\n");
   }
   waddr -= PMEM_BASE;
-  return ram_write_helper(waddr / sizeof(uint64_t), wdata, -1UL, 1);
+  return difftest_ram_write(waddr / sizeof(uint64_t), wdata, -1UL);
 }
 
 MmapMemoryWithFootprints::MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name)
