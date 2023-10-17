@@ -276,7 +276,7 @@ object DifftestModule {
 
   def apply[T <: DifftestBundle](
     gen:      T,
-    style:    String  = "dpic",
+    style:    String  = "batch",
     dontCare: Boolean = false,
     delay:    Int     = 0,
   ): T = {
@@ -306,9 +306,9 @@ object DifftestModule {
 
   def hasDPIC: Boolean = instances.exists(_._2 == "dpic")
   def hasBatch: Boolean = instances.exists(_._2 == "batch")
-  def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
-    val difftest_step = IO(Output(Bool()))
-    difftest_step := true.B
+  def finish(cpu: String, cppHeader: Option[String] = Some("batch")): Unit = {
+    val difftest_step = IO(Output(UInt()))
+    difftest_step := 0.U
 
     if (hasDPIC) {
       val dpic_tuple = DPIC.collect()
@@ -316,7 +316,9 @@ object DifftestModule {
       difftest_step := dpic_tuple._2
     }
     if (hasBatch) {
-      macros ++= Batch.collect()
+      val batch_tuple = Batch.collect()
+      macros ++= batch_tuple._1
+      difftest_step := batch_tuple._2
     }
     macros ++= Merge.collect()
     if (cppHeader.isDefined) {

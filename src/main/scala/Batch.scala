@@ -19,6 +19,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import difftest._
+import difftest.dpic.DPIC
 
 import scala.collection.mutable.ListBuffer
 
@@ -35,14 +36,15 @@ object Batch {
     gen
   }
 
-  def collect(): Seq[String] = {
-    Module(new BatchEndpoint(instances.toSeq))
-    Seq("CONFIG_DIFFTEST_BATCH")
+  def collect(): (Seq[String], UInt) = {
+    val endpoint = Module(new BatchEndpoint(instances.toSeq))
+    (Seq("CONFIG_DIFFTEST_BATCH"),endpoint.step)
   }
 }
 
 class BatchEndpoint(signals: Seq[DifftestBundle]) extends Module {
   val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
+
   for ((data, batch_id) <- in.zipWithIndex) {
     BoringUtils.addSink(data, s"batch_$batch_id")
   }
@@ -53,8 +55,22 @@ class BatchEndpoint(signals: Seq[DifftestBundle]) extends Module {
   batch_ptr := batch_ptr + 1.U
   batch_data(batch_ptr) := in
 
+  val step = IO(Output(UInt(log2Ceil(batch_size+1).W)))
+  step := 0.U
+  val enable = WireInit(false.B)
+
+  for(ptr <- 0 until batch_size){
+    for(id <- 0 until in.length){
+      DPIC(signals(id).cloneType, enable, ptr.asUInt(log2Ceil(batch_size).W)) := batch_data(ptr)(id)
+    }
+  }
+  DPIC.collect()
+  
   // Sync the data when batch is completed
   val do_batch_sync = batch_ptr === (batch_size - 1).U
+  enable := RegNext(do_batch_sync)
+  step := Mux(enable, batch_size.U, 0.U)
+
   // TODO: implement the sync logic for the batch data
   dontTouch(do_batch_sync)
   dontTouch(WireInit(batch_data(0)))

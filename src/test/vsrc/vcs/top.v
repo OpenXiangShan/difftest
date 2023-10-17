@@ -20,7 +20,7 @@ import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void set_max_cycles(int mc);
 import "DPI-C" function void simv_init();
-import "DPI-C" function int simv_step();
+import "DPI-C" function int simv_step(byte step);
 
 module tb_top();
 
@@ -35,7 +35,7 @@ wire        io_uart_out_valid;
 wire [ 7:0] io_uart_out_ch;
 wire        io_uart_in_valid;
 wire [ 7:0] io_uart_in_ch;
-wire        difftest_step;
+wire [ 8:0] difftest_step;
 
 string bin_file;
 string flash_bin_file;
@@ -153,8 +153,8 @@ always @(posedge clock) begin
   end
 
   // check errors
-  if (!reset && has_init && difftest_step) begin
-    if (simv_step()) begin
+  if (!reset && has_init && (|difftest_step)) begin
+    if (simv_step(step)) begin
       $finish();
     end
   end

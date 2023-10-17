@@ -210,19 +210,15 @@ public:
   void set_trace(const char *name, bool is_read) {
     difftrace = new DiffTrace(name, is_read, max_batch_size);
   }
-  void trace() {
-    if (difftrace) {
-      if (difftrace->is_read)
-        difftrace->read_next(dut);
-      else
-        difftrace->append(dut);
-    }
-  }
   int trace_read(){
-    if(difftrace)
+    if (difftrace)
       return difftrace->read_next(dut_buffer);
     else
       return 0;
+  }
+  void trace_write(){
+    if (difftrace)
+      difftrace->append(dut);
   }
 
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
@@ -356,11 +352,17 @@ protected:
 
 extern Difftest **difftest;
 int difftest_init();
-int difftest_step(int n);
+
+int difftest_batch(int batch_size, bool enable_diff);
+void difftest_set_dut(int offset);
+
+int difftest_step();
 int difftest_state();
 void difftest_finish();
-void difftest_trace();
+
 int difftest_trace_read();
+void difftest_trace_write(int n);
+
 int init_nemuproxy(size_t);
 
 #endif

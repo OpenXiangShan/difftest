@@ -48,26 +48,37 @@ int difftest_state() {
   return -1;
 }
 
-int difftest_step(int n) {
-  for (int t = 0; t < n; t++){
-    for (int i = 0; i < NUM_CORES; i++) {
-      int ret = difftest[i]->step();
-      if (ret) {
-        return ret;
+int difftest_batch(int batch_size, bool enable_diff){
+  int last_trap_code = STATE_RUNNING;
+  for(int offset = 0; offset < batch_size; offset++){
+    difftest_set_dut(offset);
+    if(enable_diff){
+      if(difftest_step()){
+        last_trap_code = STATE_ABORT;
+        return last_trap_code;
       }
-      if (t != n-1){
-        difftest[i]->dut++;
-      }
-    } 
+    }
+    last_trap_code = difftest_state();
+    if(last_trap_code != STATE_RUNNING)
+      return last_trap_code;
   }
-
-  return 0;
+  return last_trap_code;
 }
 
-void difftest_trace() {
+void difftest_set_dut(int offset){
   for (int i = 0; i < NUM_CORES; i++) {
-    difftest[i]->trace();
+    difftest[i]->dut = difftest[i]->dut_buffer + offset;
   }
+}
+
+int difftest_step() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    int ret = difftest[i]->step();
+    if (ret) {
+      return ret;
+    }
+  }
+  return 0;
 }
 
 int difftest_trace_read() {
@@ -82,6 +93,14 @@ int difftest_trace_read() {
     }
   }
   return trace_num_core0;
+}
+
+void difftest_trace_write(int n) {
+  for(int t = 0; t < n; t++){
+    for(int i = 0; i < NUM_CORES; i++) {
+      difftest[i]->trace_write();
+    }
+  }
 }
 
 void difftest_finish() {

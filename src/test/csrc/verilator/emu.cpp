@@ -752,7 +752,6 @@ int Emulator::tick() {
 #endif // CONFIG_NO_DIFFTEST
 
   single_cycle();
-
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles --;
 #endif // CONFIG_NO_DIFFTEST
@@ -760,20 +759,24 @@ int Emulator::tick() {
   dut_ptr->io_perfInfo_dump = 0;
 
 #ifndef CONFIG_NO_DIFFTEST
-  // if (args.enable_diff && dut_ptr->difftest_step) {
+  int batch_size = 0;
   if(args.enable_diff){
-    int batch_size;
     if(args.trace_name && args.trace_is_read){
       batch_size = difftest_trace_read();
     }
+    else 
+      batch_size = dut_ptr->difftest_step;
 
-    if (difftest_step(batch_size)) {
-      trapCode = STATE_ABORT;
-      return trapCode;
+    if(args.trace_name && !args.trace_is_read){
+      difftest_trace_write(batch_size);
     }
+
+  }
+  else{
+    batch_size = dut_ptr->difftest_step;
   }
 
-  trapCode = difftest_state();
+  trapCode = difftest_batch(batch_size, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
 #ifdef FUZZER_LIB
       if (trapCode == STATE_GOODTRAP) {
@@ -842,9 +845,6 @@ int Emulator::tick() {
         default: break;
       }
     }
-  }
-  for(int i=0; i<NUM_CORES; i++){
-    difftest[i]->dut = difftest[i]->dut_buffer;
   }
   return 0;
 }

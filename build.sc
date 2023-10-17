@@ -37,6 +37,8 @@ trait CommonDiffTest extends ScalaModule with SbtModule {
 }
 
 object difftest extends CommonDiffTest {
+  override def forkArgs = Seq("-Xmx10G")
+  
   override def millSourcePath = os.pwd
 
   object test extends SbtModuleTests with TestModule.ScalaTest

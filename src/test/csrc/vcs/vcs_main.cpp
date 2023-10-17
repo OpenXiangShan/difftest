@@ -72,7 +72,7 @@ extern "C" void simv_init() {
   }
 }
 
-extern "C" int simv_step() {
+extern "C" int simv_step(uint8_t step) {
   if (assert_count > 0) {
     return 1;
   }
@@ -83,7 +83,7 @@ extern "C" int simv_step() {
       eprintf(ANSI_COLOR_YELLOW "EXCEEDED MAX CYCLE:%d\n" ANSI_COLOR_RESET, max_cycles);
       return 1;
     }
-    cycles ++;
+    cycles += step;
   }
 
   if (difftest_state() != -1) {
@@ -99,7 +99,12 @@ extern "C" int simv_step() {
   }
 
   if (enable_difftest) {
-    return difftest_step();
+    for(int i=0; i< step; i++){
+      int ret = difftest_step();
+      if(ret)
+        return ret;
+    }
+    return 0;
   } else {
     return 0;
   }
