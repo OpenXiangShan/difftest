@@ -447,6 +447,7 @@ trait DifftestModule[T <: DifftestBundle] {
 }
 
 object DifftestModule {
+  private val enabled = true
   private val instances = ListBuffer.empty[(DifftestBundle, String)]
   private val macros = ListBuffer.empty[String]
 
@@ -456,15 +457,17 @@ object DifftestModule {
     dontCare: Boolean = false,
     delay:    Int     = 0,
   ): T = {
-    val id = register(gen, style)
     val difftest: T = Wire(gen)
-    val sink = style match {
-      case "batch" => Batch(gen)
-      // By default, use the DPI-C style.
-      case _ => DPIC(gen)
+    if (enabled) {
+      val id = register(gen, style)
+      val sink = style match {
+        case "batch" => Batch(gen)
+        // By default, use the DPI-C style.
+        case _ => DPIC(gen)
+      }
+      sink := Merge(Delayer(difftest, delay))
+      sink.coreid := difftest.coreid
     }
-    sink := Merge(Delayer(difftest, delay))
-    sink.coreid := difftest.coreid
     if (dontCare) {
       difftest := DontCare
     }
