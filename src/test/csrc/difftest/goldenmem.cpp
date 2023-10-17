@@ -64,12 +64,14 @@ void init_goldenmem() {
 }
 
 void goldenmem_finish() {
+#ifdef CONFIG_USE_SPARSEMM
   if (simMemory->get_type() == T_SparseMemory){
     sparse_mem_del(sparse_gd_mm);
-  }else{
-    munmap(pmem, pmem_size);
-    pmem = NULL;
   }
+#else
+  munmap(pmem, pmem_size);
+  pmem = NULL;
+#endif
 }
 
 void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len) {
