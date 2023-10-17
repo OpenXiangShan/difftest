@@ -6,7 +6,6 @@
 
 extern "C" void v_difftest_RefillEvent (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint8_t  io_index,
   uint64_t io_addr,
   uint64_t io_data_0,
@@ -21,25 +20,22 @@ extern "C" void v_difftest_RefillEvent (
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.refill[io_index]);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->addr = io_addr;
-    packet->data[0] = io_data_0;
-    packet->data[1] = io_data_1;
-    packet->data[2] = io_data_2;
-    packet->data[3] = io_data_3;
-    packet->data[4] = io_data_4;
-    packet->data[5] = io_data_5;
-    packet->data[6] = io_data_6;
-    packet->data[7] = io_data_7;
-    packet->idtfr = io_idtfr;
-  }
+  packet->valid = true;
+  packet->addr = io_addr;
+  packet->data[0] = io_data_0;
+  packet->data[1] = io_data_1;
+  packet->data[2] = io_data_2;
+  packet->data[3] = io_data_3;
+  packet->data[4] = io_data_4;
+  packet->data[5] = io_data_5;
+  packet->data[6] = io_data_6;
+  packet->data[7] = io_data_7;
+  packet->idtfr = io_idtfr;
 }
 
 
 extern "C" void v_difftest_ArchEvent (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint32_t io_interrupt,
   uint32_t io_exception,
   uint64_t io_exceptionPC,
@@ -47,13 +43,11 @@ extern "C" void v_difftest_ArchEvent (
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.event);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->interrupt = io_interrupt;
-    packet->exception = io_exception;
-    packet->exceptionPC = io_exceptionPC;
-    packet->exceptionInst = io_exceptionInst;
-  }
+  packet->valid = true;
+  packet->interrupt = io_interrupt;
+  packet->exception = io_exception;
+  packet->exceptionPC = io_exceptionPC;
+  packet->exceptionInst = io_exceptionInst;
 }
 
 
@@ -143,7 +137,6 @@ extern "C" void v_difftest_VecCSRState (
 
 extern "C" void v_difftest_AtomicEvent (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint64_t io_addr,
   uint64_t io_data,
   uint8_t  io_mask,
@@ -152,54 +145,48 @@ extern "C" void v_difftest_AtomicEvent (
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.atomic);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->addr = io_addr;
-    packet->data = io_data;
-    packet->mask = io_mask;
-    packet->fuop = io_fuop;
-    packet->out = io_out;
-  }
+  packet->valid = true;
+  packet->addr = io_addr;
+  packet->data = io_data;
+  packet->mask = io_mask;
+  packet->fuop = io_fuop;
+  packet->out = io_out;
 }
 
 
 extern "C" void v_difftest_LrScEvent (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint8_t  io_success
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.lrsc);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->success = io_success;
-  }
+  packet->valid = true;
+  packet->success = io_success;
 }
 
 
-extern "C" void v_difftest_StoreEvent (
-  uint8_t  io_coreid,
-  uint8_t  io_index,
-  uint8_t  io_valid,
-  uint64_t io_addr,
-  uint64_t io_data,
-  uint8_t  io_mask
-) {
-  if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.store[io_index]);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->addr = io_addr;
-    packet->data = io_data;
-    packet->mask = io_mask;
-  }
-}
+//extern "C" void v_difftest_StoreEvent (
+//  uint8_t  io_coreid,
+//  uint8_t  io_index,
+//  uint8_t  io_valid,
+//  uint64_t io_addr,
+//  uint64_t io_data,
+//  uint8_t  io_mask
+//) {
+//  if (difftest == NULL) return;
+//  auto packet = &(difftest[io_coreid]->dut.store[io_index]);
+//  packet->valid = true;
+//  if (io_valid) {
+//    packet->addr = io_addr;
+//    packet->data = io_data;
+//    packet->mask = io_mask;
+//  }
+//}
 
 
 extern "C" void v_difftest_SbufferEvent (
   uint8_t  io_coreid,
   uint8_t  io_index,
-  uint8_t  io_valid,
   uint64_t io_addr,
   uint8_t  io_data_0,
   uint8_t  io_data_1,
@@ -269,75 +256,73 @@ extern "C" void v_difftest_SbufferEvent (
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.sbuffer[io_index]);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->addr = io_addr;
-    packet->data[0] = io_data_0;
-    packet->data[1] = io_data_1;
-    packet->data[2] = io_data_2;
-    packet->data[3] = io_data_3;
-    packet->data[4] = io_data_4;
-    packet->data[5] = io_data_5;
-    packet->data[6] = io_data_6;
-    packet->data[7] = io_data_7;
-    packet->data[8] = io_data_8;
-    packet->data[9] = io_data_9;
-    packet->data[10] = io_data_10;
-    packet->data[11] = io_data_11;
-    packet->data[12] = io_data_12;
-    packet->data[13] = io_data_13;
-    packet->data[14] = io_data_14;
-    packet->data[15] = io_data_15;
-    packet->data[16] = io_data_16;
-    packet->data[17] = io_data_17;
-    packet->data[18] = io_data_18;
-    packet->data[19] = io_data_19;
-    packet->data[20] = io_data_20;
-    packet->data[21] = io_data_21;
-    packet->data[22] = io_data_22;
-    packet->data[23] = io_data_23;
-    packet->data[24] = io_data_24;
-    packet->data[25] = io_data_25;
-    packet->data[26] = io_data_26;
-    packet->data[27] = io_data_27;
-    packet->data[28] = io_data_28;
-    packet->data[29] = io_data_29;
-    packet->data[30] = io_data_30;
-    packet->data[31] = io_data_31;
-    packet->data[32] = io_data_32;
-    packet->data[33] = io_data_33;
-    packet->data[34] = io_data_34;
-    packet->data[35] = io_data_35;
-    packet->data[36] = io_data_36;
-    packet->data[37] = io_data_37;
-    packet->data[38] = io_data_38;
-    packet->data[39] = io_data_39;
-    packet->data[40] = io_data_40;
-    packet->data[41] = io_data_41;
-    packet->data[42] = io_data_42;
-    packet->data[43] = io_data_43;
-    packet->data[44] = io_data_44;
-    packet->data[45] = io_data_45;
-    packet->data[46] = io_data_46;
-    packet->data[47] = io_data_47;
-    packet->data[48] = io_data_48;
-    packet->data[49] = io_data_49;
-    packet->data[50] = io_data_50;
-    packet->data[51] = io_data_51;
-    packet->data[52] = io_data_52;
-    packet->data[53] = io_data_53;
-    packet->data[54] = io_data_54;
-    packet->data[55] = io_data_55;
-    packet->data[56] = io_data_56;
-    packet->data[57] = io_data_57;
-    packet->data[58] = io_data_58;
-    packet->data[59] = io_data_59;
-    packet->data[60] = io_data_60;
-    packet->data[61] = io_data_61;
-    packet->data[62] = io_data_62;
-    packet->data[63] = io_data_63;
-    packet->mask = io_mask;
-  }
+  packet->valid = true;
+  packet->addr = io_addr;
+  packet->data[0] = io_data_0;
+  packet->data[1] = io_data_1;
+  packet->data[2] = io_data_2;
+  packet->data[3] = io_data_3;
+  packet->data[4] = io_data_4;
+  packet->data[5] = io_data_5;
+  packet->data[6] = io_data_6;
+  packet->data[7] = io_data_7;
+  packet->data[8] = io_data_8;
+  packet->data[9] = io_data_9;
+  packet->data[10] = io_data_10;
+  packet->data[11] = io_data_11;
+  packet->data[12] = io_data_12;
+  packet->data[13] = io_data_13;
+  packet->data[14] = io_data_14;
+  packet->data[15] = io_data_15;
+  packet->data[16] = io_data_16;
+  packet->data[17] = io_data_17;
+  packet->data[18] = io_data_18;
+  packet->data[19] = io_data_19;
+  packet->data[20] = io_data_20;
+  packet->data[21] = io_data_21;
+  packet->data[22] = io_data_22;
+  packet->data[23] = io_data_23;
+  packet->data[24] = io_data_24;
+  packet->data[25] = io_data_25;
+  packet->data[26] = io_data_26;
+  packet->data[27] = io_data_27;
+  packet->data[28] = io_data_28;
+  packet->data[29] = io_data_29;
+  packet->data[30] = io_data_30;
+  packet->data[31] = io_data_31;
+  packet->data[32] = io_data_32;
+  packet->data[33] = io_data_33;
+  packet->data[34] = io_data_34;
+  packet->data[35] = io_data_35;
+  packet->data[36] = io_data_36;
+  packet->data[37] = io_data_37;
+  packet->data[38] = io_data_38;
+  packet->data[39] = io_data_39;
+  packet->data[40] = io_data_40;
+  packet->data[41] = io_data_41;
+  packet->data[42] = io_data_42;
+  packet->data[43] = io_data_43;
+  packet->data[44] = io_data_44;
+  packet->data[45] = io_data_45;
+  packet->data[46] = io_data_46;
+  packet->data[47] = io_data_47;
+  packet->data[48] = io_data_48;
+  packet->data[49] = io_data_49;
+  packet->data[50] = io_data_50;
+  packet->data[51] = io_data_51;
+  packet->data[52] = io_data_52;
+  packet->data[53] = io_data_53;
+  packet->data[54] = io_data_54;
+  packet->data[55] = io_data_55;
+  packet->data[56] = io_data_56;
+  packet->data[57] = io_data_57;
+  packet->data[58] = io_data_58;
+  packet->data[59] = io_data_59;
+  packet->data[60] = io_data_60;
+  packet->data[61] = io_data_61;
+  packet->data[62] = io_data_62;
+  packet->data[63] = io_data_63;
+  packet->mask = io_mask;
 }
 
 
@@ -623,36 +608,29 @@ extern "C" void v_difftest_ArchVecRegState (
 
 extern "C" void v_difftest_FpWriteback (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint8_t  io_address,
   uint64_t io_data
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.wb_fp[io_address]);
-  if (io_valid) {
-    packet->data = io_data;
-  }
+  packet->data = io_data;
 }
 
 
 extern "C" void v_difftest_IntWriteback (
   uint8_t  io_coreid,
-  uint8_t  io_valid,
   uint8_t  io_address,
   uint64_t io_data
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.wb_int[io_address]);
-  if (io_valid) {
-    packet->data = io_data;
-  }
+  packet->data = io_data;
 }
 
 
 extern "C" void v_difftest_InstrCommit (
   uint8_t  io_coreid,
   uint8_t  io_index,
-  uint8_t  io_valid,
   uint8_t  io_skip,
   uint8_t  io_isRVC,
   uint8_t  io_rfwen,
@@ -672,59 +650,51 @@ extern "C" void v_difftest_InstrCommit (
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.commit[io_index]);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->skip = io_skip;
-    packet->isRVC = io_isRVC;
-    packet->rfwen = io_rfwen;
-    packet->fpwen = io_fpwen;
-    packet->vecwen = io_vecwen;
-    packet->wpdest = io_wpdest;
-    packet->wdest = io_wdest;
-    packet->pc = io_pc;
-    packet->instr = io_instr;
-    packet->robIdx = io_robIdx;
-    packet->lqIdx = io_lqIdx;
-    packet->sqIdx = io_sqIdx;
-    packet->isLoad = io_isLoad;
-    packet->isStore = io_isStore;
-    packet->nFused = io_nFused;
-    packet->special = io_special;
-  }
+  packet->valid = true;
+  packet->skip = io_skip;
+  packet->isRVC = io_isRVC;
+  packet->rfwen = io_rfwen;
+  packet->fpwen = io_fpwen;
+  packet->vecwen = io_vecwen;
+  packet->wpdest = io_wpdest;
+  packet->wdest = io_wdest;
+  packet->pc = io_pc;
+  packet->instr = io_instr;
+  packet->robIdx = io_robIdx;
+  packet->lqIdx = io_lqIdx;
+  packet->sqIdx = io_sqIdx;
+  packet->isLoad = io_isLoad;
+  packet->isStore = io_isStore;
+  packet->nFused = io_nFused;
+  packet->special = io_special;
 }
 
 
 extern "C" void v_difftest_RunaheadCommitEvent (
   uint8_t  io_coreid,
   uint8_t  io_index,
-  uint8_t  io_valid,
   uint64_t io_pc
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.runahead_commit[io_index]);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->pc = io_pc;
-  }
+  packet->valid = true;
+  packet->pc = io_pc;
 }
 
 
 extern "C" void v_difftest_LoadEvent (
   uint8_t  io_coreid,
   uint8_t  io_index,
-  uint8_t  io_valid,
   uint64_t io_paddr,
   uint8_t  io_opType,
   uint8_t  io_fuType
 ) {
   if (difftest == NULL) return;
   auto packet = &(difftest[io_coreid]->dut.load[io_index]);
-  packet->valid = io_valid;
-  if (io_valid) {
-    packet->paddr = io_paddr;
-    packet->opType = io_opType;
-    packet->fuType = io_fuType;
-  }
+  packet->valid = true;
+  packet->paddr = io_paddr;
+  packet->opType = io_opType;
+  packet->fuType = io_fuType;
 }
 
 

@@ -496,6 +496,7 @@ Emulator::~Emulator() {
     else {
       lightsss->do_clear();
     }
+    delete lightsss;
   }
 
   display_trapinfo();
@@ -601,7 +602,7 @@ inline void Emulator::single_cycle() {
 
 #if VM_TRACE == 1
   if (args.enable_waveform) {
-#ifndef CONFIG_NO_DIFFTEST
+#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
     uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
 #else
     static uint64_t cycle = -1UL;
@@ -640,7 +641,7 @@ inline void Emulator::single_cycle() {
 
 #if VM_TRACE == 1
   if (args.enable_waveform && args.enable_waveform_full) {
-#ifndef CONFIG_NO_DIFFTEST
+#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
     uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
 #else
     static uint64_t cycle = -1UL;

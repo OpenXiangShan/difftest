@@ -31,14 +31,14 @@ typedef struct {
   uint8_t  success;
 } DifftestLrScEvent;
 
-#define CONFIG_DIFFTEST_STOREEVENT
-#define CONFIG_DIFF_STORE_WIDTH 2
-typedef struct {
-  uint8_t  valid;
-  uint64_t addr;
-  uint64_t data;
-  uint8_t  mask;
-} DifftestStoreEvent;
+//#define CONFIG_DIFFTEST_STOREEVENT
+//#define CONFIG_DIFF_STORE_WIDTH 2
+//typedef struct {
+//  uint8_t  valid;
+//  uint64_t addr;
+//  uint64_t data;
+//  uint8_t  mask;
+//} DifftestStoreEvent;
 
 #define CONFIG_DIFFTEST_ATOMICEVENT
 typedef struct {
@@ -191,7 +191,7 @@ typedef struct {
   DifftestRefillEvent            refill[3];
   DifftestRunaheadCommitEvent    runahead_commit[6];
   DifftestSbufferEvent           sbuffer[2];
-  DifftestStoreEvent             store[2];
+//  DifftestStoreEvent             store[2];
   DifftestTrapEvent              trap;
 } DiffTestState;
 
