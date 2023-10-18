@@ -86,8 +86,8 @@ public:
                   "Must pass the derived type as the template argument!");
   }
   ~RefProxy() {
-    if (static_cast<DerivedT&>(*this).ref_close) {
-      static_cast<DerivedT&>(*this).ref_close();
+    if (derived.ref_close) {
+      derived.ref_close();
     }
   }
 
@@ -113,7 +113,7 @@ public:
   }
 
   inline void sync(bool is_from_dut = false) {
-    static_cast<DerivedT&>(*this).ref_regcpy(&regs_int, is_from_dut, is_from_dut);
+    derived.ref_regcpy(&regs_int, is_from_dut, is_from_dut);
   }
 
   void regcpy(DiffTestState *dut) {
@@ -129,7 +129,7 @@ public:
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
     memcpy(&vcsr, &dut->vcsr, sizeof(vcsr));
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
-    static_cast<DerivedT &>(*this).ref_regcpy(&regs_int, DUT_TO_REF, false);
+    derived.ref_regcpy(&regs_int, DUT_TO_REF, false);
   };
 
   int compare(DiffTestState *dut) {
@@ -191,13 +191,13 @@ public:
       PROXY_COMPARE_AND_DISPLAY(vcsr, regs_name_vec_csr)
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
     } else {
-      static_cast<DerivedT &>(*this).ref_reg_display();
+      derived.ref_reg_display();
     }
   };
 
   inline void skip_one(bool isRVC, bool wen, uint32_t wdest, uint64_t wdata) {
-    if (static_cast<DerivedT&>(*this).ref_skip_one) {
-      static_cast<DerivedT&>(*this).ref_skip_one(isRVC, wen, wdest, wdata);
+    if (derived.ref_skip_one) {
+      derived.ref_skip_one(isRVC, wen, wdest, wdata);
     }
     else {
       sync();
@@ -211,11 +211,11 @@ public:
   }
 
   inline void guided_exec(struct ExecutionGuide &guide) {
-    return static_cast<DerivedT&>(*this).ref_guided_exec ? static_cast<DerivedT&>(*this).ref_guided_exec(&guide) : static_cast<DerivedT&>(*this).ref_exec(1);
+    return derived.ref_guided_exec ? derived.ref_guided_exec(&guide) : derived.ref_exec(1);
   }
 
   virtual inline bool in_disambiguation_state() {
-    return static_cast<DerivedT&>(*this).disambiguation_state ? static_cast<DerivedT&>(*this).disambiguation_state() : false;
+    return derived.disambiguation_state ? derived.disambiguation_state() : false;
   }
 
   inline void set_debug(bool enabled = false) {
@@ -229,10 +229,12 @@ public:
   }
 
 private:
+  DerivedT& derived = static_cast<DerivedT&>(*this);
+
   RefProxyConfig config;
 
   inline void sync_config() {
-    static_cast<DerivedT&>(*this).update_config(&config);
+    derived.update_config(&config);
   }
 
   bool do_csr_waive(DiffTestState *dut) {
