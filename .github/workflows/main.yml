@@ -143,6 +143,19 @@ jobs:
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --dump-footprints microbench.bin
             ./build/emu -e 0 -i microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --as-footprints
 
+      - name: Difftest with Batch
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            sed -i 's/style:    String  = "dpic"/style:    String  = "batch"/' difftest/src/main/scala/Difftest.scala
+            sed -i 's/cppHeader: Option\[String\] = Some("dpic")/cppHeader: Option\[String\] = Some("batch")/' difftest/src/main/scala/Difftest.scala
+            make emu
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
+            cd difftest && git restore src
+
       - name: Difftest with Global DPI-C Enable
         run: |
             cd $GITHUB_WORKSPACE/../xs-env

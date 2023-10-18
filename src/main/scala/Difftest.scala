@@ -276,7 +276,7 @@ object DifftestModule {
 
   def apply[T <: DifftestBundle](
     gen:      T,
-    style:    String  = "batch",
+    style:    String  = "dpic",
     dontCare: Boolean = false,
     delay:    Int     = 0,
   ): T = {
@@ -306,7 +306,7 @@ object DifftestModule {
 
   def hasDPIC: Boolean = instances.exists(_._2 == "dpic")
   def hasBatch: Boolean = instances.exists(_._2 == "batch")
-  def finish(cpu: String, cppHeader: Option[String] = Some("batch")): Unit = {
+  def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
     val difftest_step = IO(Output(UInt()))
     difftest_step := 0.U
 

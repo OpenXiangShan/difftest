@@ -149,10 +149,12 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
 
   val dpic = Module(new DPIC(gen))
   dpic.clock := clock
-  dpic.enable := io.bits.getValid && enable
+  
+  val global_enable = WireInit(true.B)
   if (hasGlobalEnable) {
-    BoringUtils.addSink(enable, "dpic_global_enable")
+    BoringUtils.addSink(global_enable, "dpic_global_enable")
   }
+  dpic.enable := io.bits.getValid && enable && global_enable
   dpic.io := io
   dpic.idx := idx
 }
@@ -179,7 +181,7 @@ object DPIC {
   }
 
   def collect(): (Seq[String], UInt) = {
-    val step = WireInit(0.U)
+    val step = WireInit(1.U)
     if (interfaces.isEmpty) {
       return (Seq(), step)
     }

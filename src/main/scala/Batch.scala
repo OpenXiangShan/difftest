@@ -52,8 +52,11 @@ class BatchEndpoint(signals: Seq[DifftestBundle]) extends Module {
   val batch_size = 32
   val batch_data = Mem(batch_size, in.cloneType)
   val batch_ptr = RegInit(0.U(log2Ceil(batch_size).W))
-  batch_ptr := batch_ptr + 1.U
-  batch_data(batch_ptr) := in
+  val global_enable = VecInit(in.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
+  when(global_enable){
+    batch_ptr := batch_ptr + 1.U
+    batch_data(batch_ptr) := in
+  }
 
   val step = IO(Output(UInt(log2Ceil(batch_size+1).W)))
   step := 0.U
@@ -67,7 +70,7 @@ class BatchEndpoint(signals: Seq[DifftestBundle]) extends Module {
   DPIC.collect()
   
   // Sync the data when batch is completed
-  val do_batch_sync = batch_ptr === (batch_size - 1).U
+  val do_batch_sync = batch_ptr === (batch_size - 1).U && global_enable
   enable := RegNext(do_batch_sync)
   step := Mux(enable, batch_size.U, 0.U)
 
