@@ -211,7 +211,11 @@ public:
   }
 
   inline void guided_exec(struct ExecutionGuide &guide) {
-    return derived.ref_guided_exec ? derived.ref_guided_exec(&guide) : derived.ref_exec(1);
+  #if defined (SELECTEDSpike)
+    derived.ref_guided_exec(&guide);
+  #else
+    derived.ref_guided_exec ? derived.ref_guided_exec(&guide) : derived.ref_exec(1);
+  #endif
   }
 
   virtual inline bool in_disambiguation_state() {
@@ -373,7 +377,7 @@ public:
   void (*ref_set_mhartid)(int) = nullptr;
   void ref_put_gmaddr(void *addr);
   void (*ref_skip_one)(bool, bool, uint32_t, uint64_t) = nullptr;
-  void guided_exec(void *disambiguate_para); // implemented
+  void ref_guided_exec(void *disambiguate_para); // implemented
   int (*disambiguation_state)() = nullptr;
   
   
