@@ -108,6 +108,9 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   // returns Bool indicating whether `this` bundle can be merged with `base`
   def supportsMerge(base: DifftestBundle): Bool = supportsBase
   def supportsBase: Bool = if (hasValid) !getValid else true.B
+  // returns a Seq indicating the merge dependencies. Default: empty
+  // Only when one of the dependencies is valid, this bundle is merged.
+  val mergeDependency: Seq[String] = Seq()
   // returns a merged, right-value Bundle. Default: overriding `base` with `this`
   def mergeWith(base: DifftestBundle): DifftestBundle = this
 }
@@ -153,6 +156,7 @@ class DiffTrapEvent extends TrapEvent with DifftestBundle {
 class DiffCSRState extends CSRState with DifftestBundle {
   override val desiredCppName: String = "csr"
   override val desiredOffset: Int = 1
+  override val mergeDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
