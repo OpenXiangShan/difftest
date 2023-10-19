@@ -20,7 +20,8 @@ import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void set_max_cycles(int mc);
 import "DPI-C" function void simv_init();
-import "DPI-C" function int simv_step(byte step);
+import "DPI-C" function int simv_step();
+import "DPI-C" function int simv_batch(int step);
 
 module tb_top();
 
@@ -154,7 +155,7 @@ always @(posedge clock) begin
 
   // check errors
   if (!reset && has_init && (|difftest_step)) begin
-    if (simv_step(difftest_step)) begin
+    if (simv_batch(difftest_step)) begin
       $finish();
     end
   end
