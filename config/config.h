@@ -45,7 +45,11 @@
 #if defined(CPU_NUTSHELL)
 #define FIRST_INST_ADDRESS 0x80000000UL
 #elif defined(CPU_XIANGSHAN) || defined(CPU_ROCKET_CHIP)
+#if defined(SELECTEDSpike)
+#define FIRST_INST_ADDRESS 0x80000000UL
+#else
 #define FIRST_INST_ADDRESS 0x10000000UL
+#endif
 #endif
 
 // sdcard image to be used in simulation
