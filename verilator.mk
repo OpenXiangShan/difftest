@@ -95,7 +95,7 @@ ifneq ($(wildcard $(REF)),)
 EMU_CXXFLAGS += -DREF_PROXY=LinkedProxy -DLINKED_REFPROXY_LIB=\\\"$(REF)\\\"
 EMU_LDFLAGS  += $(REF)
 else
-EMU_CXXFLAGS += -DREF_PROXY=$(REF)Proxy
+EMU_CXXFLAGS += -DREF_PROXY=$(REF)Proxy -DSELECTED$(REF)
 REF_HOME_VAR = $(shell echo $(REF)_HOME | tr a-z A-Z)
 ifneq ($(origin $(REF_HOME_VAR)), undefined)
 EMU_CXXFLAGS += -DREF_HOME=\\\"$(shell echo $$$(REF_HOME_VAR))\\\"

@@ -355,7 +355,7 @@ void SpikeProxy::ref_put_gmaddr(void *addr)
 {
   sim_put_gmaddr(addr);
 }
-void SpikeProxy::guided_exec(void *disambiguate_para)
+void SpikeProxy::ref_guided_exec(void *disambiguate_para)
 {
   sim_guided_exec(coreid, disambiguate_para);
 }
