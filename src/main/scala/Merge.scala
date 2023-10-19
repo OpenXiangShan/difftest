@@ -83,8 +83,23 @@ class MergeEndpoint(bundles: Seq[DifftestBundle]) extends Module {
   val should_tick = !supportsMerge || !supportsBase || tick_first_commit
   out := Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles)))
 
-  for ((i, s) <- in.zip(state)) {
-    s := Mux(should_tick, i, i.mergeWith(s))
+  // Sometimes, the bundle may have merge dependencies.
+  val do_merge = WireInit(VecInit.fill(in.length)(true.B))
+  in.zip(do_merge).foreach{ case (i, do_m) =>
+    if (i.mergeDependency.nonEmpty) {
+      do_m := VecInit(in.filter(b => i.mergeDependency.contains(b.desiredCppName)).map(bundle => {
+        // Only if the corresponding bundle is valid, we update this bundle
+        bundle.coreid === i.coreid && bundle.asInstanceOf[DifftestBaseBundle].getValid
+      }).toSeq).asUInt.orR
+    }
+  }
+
+  for (((i, d), s) <- in.zip(do_merge).zip(state)) {
+      when (should_tick) {
+        s := i
+      }.elsewhen (d) {
+        s := i.mergeWith(s)
+      }
   }
 
   // Special fix for int writeback. Work for single-core only.
