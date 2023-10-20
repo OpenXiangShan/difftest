@@ -84,7 +84,7 @@ VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 	$(VCS) $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 ifeq ($(VCS),verilator)
-	$(MAKE) -C $(VCS_BUILD_DIR) -f V$(VCS_TOP).mk CC=gcc-10 CXX=g++-10 LINK=g++-10
+	$(MAKE) -s -C $(VCS_BUILD_DIR) -f V$(VCS_TOP).mk CC=gcc-10 CXX=g++-10 LINK=g++-10
 endif
 
 simv: $(VCS_TARGET)
