@@ -17,7 +17,6 @@
 #include <signal.h>
 #include <locale.h>
 #include "common.h"
-#include <sys/resource.h>
 
 int assert_count = 0;
 int signal_num = 0;
@@ -55,13 +54,6 @@ uint32_t uptime(void) {
 static char mybuf[BUFSIZ];
 
 void common_init(const char *program_name) {
-  // set stack size
-  struct rlimit rlim;
-  getrlimit(RLIMIT_STACK, &rlim);
-  rlim.rlim_cur = STACK_SIZE;
-  if (setrlimit(RLIMIT_STACK, &rlim)) {
-    printf("[warning] cannot set stack size\n");
-  }
   // set emu_path
   emu_path = program_name;
 

@@ -34,6 +34,7 @@
 #ifdef ENABLE_IPC
 #include <sys/stat.h>
 #endif
+#include <sys/resource.h>
 #include "ram.h"
 #include "compress.h"
 #include "lightsss.h"
@@ -301,6 +302,13 @@ Emulator::Emulator(int argc, const char *argv[]):
   dut_ptr(new VSimTop),
   cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime())
 {
+  // set stack size
+  struct rlimit rlim;
+  getrlimit(RLIMIT_STACK, &rlim);
+  rlim.rlim_cur = EMU_STACK_SIZE;
+  if (setrlimit(RLIMIT_STACK, &rlim)) {
+    printf("[warning] cannot set stack size\n");
+  }
   // junk, link for verilator
   get_sc_time_stamp = [this]() -> double {
     return get_cycles();
