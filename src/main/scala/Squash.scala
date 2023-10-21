@@ -16,6 +16,7 @@
 package difftest.squash
 
 import chisel3._
+import chisel3.experimental.ExtModule
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import difftest._
@@ -79,8 +80,12 @@ class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
   val supportsSquashBaseVec = VecInit(state.map(_.supportsSquashBase).toSeq)
   val supportsSquashBase = supportsSquashBaseVec.asUInt.andR
 
+  val control = Module(new SquashControl)
+  control.clock := clock
+  control.reset := reset
+
   // Submit the pending non-squashable events immediately.
-  val should_tick = !supportsSquash || !supportsSquashBase || tick_first_commit
+  val should_tick = !control.enable || !supportsSquash || !supportsSquashBase || tick_first_commit
   out := Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles)))
 
   // Sometimes, the bundle may have squash dependencies.
@@ -125,4 +130,56 @@ class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
       }
     }
   }
+}
+
+class SquashControl extends ExtModule with HasExtModuleInline {
+  val clock = IO(Input(Clock()))
+  val reset = IO(Input(Reset()))
+  val enable = IO(Output(Bool()))
+
+  setInline("SquashControl.v",
+    """
+      |module SquashControl(
+      |  input clock,
+      |  input reset,
+      |  output reg enable
+      |);
+      |
+      |initial begin
+      |  enable = 1'b1;
+      |end
+      |
+      |// For the C/C++ interface
+      |export "DPI-C" task set_squash_enable;
+      |task set_squash_enable(int en);
+      |  enable = en;
+      |endtask
+      |
+      |// For the simulation argument +squash_cycles=N
+      |reg [63:0] squash_cycles;
+      |initial begin
+      |  squash_cycles = 0;
+      |  if ($test$plusargs("squash-cycles")) begin
+      |    $value$plusargs("squash-cycles=%d", squash_cycles);
+      |    $display("set squash cycles: %d", squash_cycles);
+      |  end
+      |end
+      |
+      |reg [63:0] n_cycles;
+      |always @(posedge clock) begin
+      |  if (reset) begin
+      |    n_cycles <= 64'h0;
+      |  end
+      |  else begin
+      |    n_cycles <= n_cycles + 64'h1;
+      |    if (squash_cycles > 0 && n_cycles >= squash_cycles) begin
+      |      enable = 0;
+      |    end
+      |  end
+      |end
+      |
+      |
+      |endmodule;
+      |""".stripMargin
+  )
 }
