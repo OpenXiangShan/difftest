@@ -55,6 +55,9 @@ class BatchEndpoint(signals: Seq[DifftestBundle]) extends Module {
   val global_enable = VecInit(in.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
   when(global_enable){
     batch_ptr := batch_ptr + 1.U
+    when(batch_ptr === (batch_size - 1).U){
+      batch_ptr := 0.U
+    }
     batch_data(batch_ptr) := in
   }
 
@@ -72,7 +75,7 @@ class BatchEndpoint(signals: Seq[DifftestBundle]) extends Module {
   // Sync the data when batch is completed
   val do_batch_sync = batch_ptr === (batch_size - 1).U && global_enable
   enable := RegNext(do_batch_sync)
-  step := Mux(enable, batch_size.U, 0.U)
+  step := RegNext(Mux(enable, batch_size.U, 0.U))
 
   // TODO: implement the sync logic for the batch data
   dontTouch(do_batch_sync)

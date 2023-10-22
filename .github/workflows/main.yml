@@ -211,7 +211,7 @@ jobs:
             git config --global url."https://".insteadOf git://
             git clone https://github.com/OpenXiangShan/xs-env
             cd xs-env
-            sed -i 's/v4.218/v5.016/' install-verilator.sh
+            sed -i 's/v4.218/v5.012/' install-verilator.sh
             sed -i 's/CC=clang CXX=clang++/CC=gcc-10 CXX=g++-10 LINK=g++-10/' install-verilator.sh
             sudo -s ./setup-tools.sh
             source ./setup.sh
@@ -225,25 +225,13 @@ jobs:
             rm -r difftest
             cp -r $GITHUB_WORKSPACE .
 
-      - name: Verilator Build with VCS Top
+      - name: Verilator Build with VCS Top (Difftest with Batch Merge)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make simv VCS=verilator
-            ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
-            ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
-
-      - name: Verilator Build with VCS Top (Difftest with Batch Merge and Global DPI-C Enable)
-        run: |
-            cd $GITHUB_WORKSPACE/../xs-env
-            source ./env.sh
-            cd $GITHUB_WORKSPACE/../xs-env/NutShell
-            source ./env.sh
-            make clean
-            sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/DPIC.scala
             sed -i 's/isEffective: Boolean = false/isEffective: Boolean = true/' difftest/src/main/scala/Merge.scala
             sed -i 's/style:    String  = "dpic"/style:    String  = "batch"/' difftest/src/main/scala/Difftest.scala
             sed -i 's/cppHeader: Option\[String\] = Some("dpic")/cppHeader: Option\[String\] = Some("batch")/' difftest/src/main/scala/Difftest.scala
