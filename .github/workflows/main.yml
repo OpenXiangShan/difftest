@@ -204,7 +204,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Prepare environment with Verilator v5.016
+      - name: Prepare environment with Verilator v5.012
         run: |
             cd $GITHUB_WORKSPACE/..
             git config --global url."https://github.com/".insteadOf git@github.com:
@@ -232,7 +232,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            sed -i 's/isEffective: Boolean = false/isEffective: Boolean = true/' difftest/src/main/scala/Merge.scala
+            sed -i 's/isEffective: Boolean = false/isEffective: Boolean = true/' difftest/src/main/scala/Squash.scala
             sed -i 's/style:    String  = "dpic"/style:    String  = "batch"/' difftest/src/main/scala/Difftest.scala
             sed -i 's/cppHeader: Option\[String\] = Some("dpic")/cppHeader: Option\[String\] = Some("batch")/' difftest/src/main/scala/Difftest.scala
             make simv VCS=verilator
