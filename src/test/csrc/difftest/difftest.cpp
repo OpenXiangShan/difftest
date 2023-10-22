@@ -21,6 +21,9 @@
 #include "ram.h"
 #include "flash.h"
 #include "spikedasm.h"
+#ifdef CONFIG_DIFFTEST_SQUASH
+#include "svdpi.h"
+#endif // CONFIG_DIFFTEST_SQUASH
 
 Difftest **difftest = NULL;
 
@@ -110,6 +113,19 @@ void difftest_finish() {
   delete[] difftest;
   difftest = NULL;
 }
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+extern "C" void set_squash_enable(int enable);
+void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.SquashEndpoint.control") {
+  auto scope = svGetScopeFromName(scope_name);
+  if (scope == NULL) {
+    printf("Error: Could not retrieve scope with name '%s'\n", scope_name);
+    assert(scope);
+  }
+  svSetScope(scope);
+  set_squash_enable(rand());
+}
+#endif // CONFIG_DIFFTEST_SQUASH
 
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();

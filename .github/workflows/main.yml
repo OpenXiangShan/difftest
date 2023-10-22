@@ -168,7 +168,7 @@ jobs:
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
 
-      - name: Difftest with Merge and Global DPI-C Enable
+      - name: Difftest with Squash and Global DPI-C Enable
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
@@ -176,7 +176,7 @@ jobs:
             source ./env.sh
             make clean
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/DPIC.scala
-            sed -i 's/isEffective: Boolean = false/isEffective: Boolean = true/' difftest/src/main/scala/Merge.scala
+            sed -i 's/isEffective: Boolean = false/isEffective: Boolean = true/' difftest/src/main/scala/Squash.scala
             make emu
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
