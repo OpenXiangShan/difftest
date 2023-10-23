@@ -186,6 +186,8 @@ private:
 class Difftest {
 public:
   DiffTestState* dut;
+  int dut_select = 0;
+  DiffTestState* dut_ways[2];
   const int batch_size = 1;
 
   // Difftest public APIs for testbench

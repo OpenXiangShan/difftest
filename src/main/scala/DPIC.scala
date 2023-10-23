@@ -30,6 +30,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   with DifftestModule[T] {
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
+  val select = IO(Input(Bool()))
   val io = IO(Input(gen))
 
   def getDirectionString(data: Data): String = {
@@ -62,7 +63,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   override def desiredName: String = gen.desiredModuleName
   val dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
   val modPorts: Seq[Seq[(String, Data)]] = {
-    val common = Seq(Seq(("clock", clock)), Seq(("enable", enable)))
+    val common = Seq(Seq(("clock", clock)), Seq(("enable", enable)), Seq(("select", select)))
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
     common ++ io.elements.toSeq.reverse.map{ case (name, data) =>
@@ -78,7 +79,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
-      ((_: DifftestBundle) => true, Seq("io_coreid")),
+      ((_: DifftestBundle) => true, Seq("io_coreid", "select")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
@@ -97,7 +98,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
        |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
   val dpicFunc: String = {
-    val packet = s"difftest[io_coreid]->dut->${gen.desiredCppName}"
+    val packet = s"difftest[io_coreid]->dut_ways[select]->${gen.desiredCppName}"
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
        |$dpicFuncProto {
@@ -151,6 +152,12 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
   if (hasGlobalEnable) {
     BoringUtils.addSink(enable, "dpic_global_enable")
   }
+
+  val select = RegInit(false.B)
+  when(enable) {
+    select := !select
+  }
+  dpic.select := select
   dpic.io := io
 }
 
@@ -185,7 +192,7 @@ object DPIC {
       }
       val enable = WireInit(global_en.asUInt.orR)
       BoringUtils.addSource(enable, "dpic_global_enable")
-      step := enable
+      step := RegNext(enable)
     }
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
