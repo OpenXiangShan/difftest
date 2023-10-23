@@ -27,6 +27,18 @@ VCS_CXXFLAGS += -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_DASM_DIR) -I$(PLUGIN_INC_DIR)
 VCS_CXXFLAGS += -DNUM_CORES=$(NUM_CORES)
 VCS_LDFLAGS  += -Wl,--no-as-needed -lpthread -lSDL2 -ldl -lz -lsqlite3
 
+ifneq ($(REF),)
+ifneq ($(wildcard $(REF)),)
+VCS_CXXFLAGS += -DREF_PROXY=LinkedProxy -DLINKED_REFPROXY_LIB=\\\"$(REF)\\\"
+VCS_LDFLAGS  += $(REF)
+else
+VCS_CXXFLAGS += -DREF_PROXY=$(REF)Proxy -DSELECTED$(REF)
+REF_HOME_VAR = $(shell echo $(REF)_HOME | tr a-z A-Z)
+ifneq ($(origin $(REF_HOME_VAR)), undefined)
+VCS_CXXFLAGS += -DREF_HOME=\\\"$(shell echo $$$(REF_HOME_VAR))\\\"
+endif
+endif
+endif
 
 ifeq ($(RELEASE),1)
 VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
