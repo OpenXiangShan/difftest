@@ -193,6 +193,10 @@ object DPIC {
          |private:
          |  DiffTestState buffer;
          |public:
+         |  DPICBuffer(){
+         |    memset(&buffer, 0, sizeof(buffer));
+         |  }
+         |  ~DPICBuffer();
          |  inline DiffTestState* get() {
          |    return &buffer;
          |  }
@@ -222,9 +226,6 @@ object DPIC {
       s"""
          |void diffstate_buffer_init(){
          |  diffstate_buffer = new DPICBuffer[NUM_CORES];
-         |}
-         |void diffstate_buffer_free(){
-         |  delete diffstate_buffer;
          |}
       """.stripMargin
     interfaceCpp.clear()

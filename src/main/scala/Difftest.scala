@@ -397,7 +397,6 @@ object DifftestModule {
          |extern DiffStateBuffer* diffstate_buffer;
          |
          |extern void diffstate_buffer_init();
-         |extern void diffstate_buffer_free();
          |""".stripMargin
 
     difftestCpp += class_def

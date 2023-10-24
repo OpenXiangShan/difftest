@@ -71,7 +71,6 @@ void difftest_trace() {
 }
 
 void difftest_finish() {
-  diffstate_buffer_free();
   for (int i = 0; i < NUM_CORES; i++) {
     delete difftest[i];
   }
