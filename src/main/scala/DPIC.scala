@@ -193,6 +193,9 @@ object DPIC {
          |private:
          |  DiffTestState buffer;
          |public:
+         |  DPICBuffer() {
+         |    memset(&buffer, 0, sizeof(buffer));
+         |  }
          |  inline DiffTestState* get() {
          |    return &buffer;
          |  }
@@ -220,11 +223,11 @@ object DPIC {
 
     val diff_func =
       s"""
-         |void diffstate_buffer_init(){
+         |void diffstate_buffer_init() {
          |  diffstate_buffer = new DPICBuffer[NUM_CORES];
          |}
-         |void diffstate_buffer_free(){
-         |  delete diffstate_buffer;
+         |void diffstate_buffer_free() {
+         |  delete[] diffstate_buffer;
          |}
       """.stripMargin
     interfaceCpp.clear()
