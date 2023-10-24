@@ -28,9 +28,11 @@
 Difftest **difftest = NULL;
 
 int difftest_init() {
+  diffstate_buffer_init();
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
+    difftest[i]->dut = diffstate_buffer[i].get();
   }
   return 0;
 }
@@ -53,6 +55,7 @@ int difftest_state() {
 
 int difftest_step() {
   for (int i = 0; i < NUM_CORES; i++) {
+    difftest[i]->dut = diffstate_buffer[i].next();
     int ret = difftest[i]->step();
     if (ret) {
       return ret;
@@ -90,19 +93,25 @@ void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.Squash
 
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
+<<<<<<< HEAD
 
   for(int i = 0; i < 2; i++ ){
     dut_ways[i] = (DiffTestState *)calloc(batch_size, sizeof(DiffTestState));
   }
   dut = dut_ways[dut_select];
+=======
+>>>>>>> mv-dut-init
 }
 
 Difftest::~Difftest() {
   delete state;
   delete difftrace;
+<<<<<<< HEAD
   for(int i = 0; i < 2; i++ ){
     free(dut_ways[i]);
   }
+=======
+>>>>>>> mv-dut-init
   if (proxy) {
     delete proxy;
   }

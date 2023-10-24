@@ -386,6 +386,20 @@ object DifftestModule {
     difftestCpp += "} DiffTestState;"
     difftestCpp += ""
 
+    val class_def =
+      s"""
+         |class DiffStateBuffer {
+         |public:
+         |  virtual DiffTestState* get() = 0;
+         |  virtual DiffTestState* next() = 0;
+         |};
+         |
+         |extern DiffStateBuffer* diffstate_buffer;
+         |
+         |extern void diffstate_buffer_init();
+         |""".stripMargin
+
+    difftestCpp += class_def
     difftestCpp += "#endif // __DIFFSTATE_H__"
     difftestCpp += ""
 
