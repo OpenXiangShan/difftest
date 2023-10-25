@@ -97,11 +97,11 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
        |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
   val dpicFunc: String = {
-    val packet = s"difftest[io_coreid]->dut->${gen.desiredCppName}"
+    val packet = s"DUT_BUF(io_coreid)->${gen.desiredCppName}"
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
        |$dpicFuncProto {
-       |  if (difftest == NULL) return;
+       |  if (diffstate_buffer == NULL) return;
        |  auto packet = &($packet$index);
        |  ${dpicFuncAssigns.mkString("\n  ")}
        |}
@@ -187,12 +187,31 @@ object DPIC {
       BoringUtils.addSource(enable, "dpic_global_enable")
       step := enable
     }
+    val class_def =
+      s"""
+         |class DPICBuffer : public DiffStateBuffer {
+         |private:
+         |  DiffTestState buffer;
+         |public:
+         |  DPICBuffer() {
+         |    memset(&buffer, 0, sizeof(buffer));
+         |  }
+         |  inline DiffTestState* get() {
+         |    return &buffer;
+         |  }
+         |  inline DiffTestState* next() {
+         |    return &buffer;
+         |  }
+         |};
+         |""".stripMargin
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
     interfaceCpp += "#define __DIFFTEST_DPIC_H__"
     interfaceCpp += ""
     interfaceCpp += "#include <cstdint>"
+    interfaceCpp += "#include \"diffstate.h\""
     interfaceCpp += ""
+    interfaceCpp += class_def
     interfaceCpp += interfaces.map(_._2 + ";").mkString("\n")
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
@@ -202,11 +221,24 @@ object DPIC {
     val outputHeaderFile = outputDir + "/difftest-dpic.h"
     Files.write(Paths.get(outputHeaderFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
 
+    val diff_func =
+      s"""
+         |void diffstate_buffer_init() {
+         |  diffstate_buffer = new DPICBuffer[NUM_CORES];
+         |}
+         |void diffstate_buffer_free() {
+         |  delete[] diffstate_buffer;
+         |}
+      """.stripMargin
     interfaceCpp.clear()
     interfaceCpp += "#ifndef CONFIG_NO_DIFFTEST"
     interfaceCpp += ""
     interfaceCpp += "#include \"difftest.h\""
     interfaceCpp += "#include \"difftest-dpic.h\""
+    interfaceCpp += ""
+    interfaceCpp += "DiffStateBuffer* diffstate_buffer;"
+    interfaceCpp += "#define DUT_BUF(core_id) (diffstate_buffer[core_id].get())"
+    interfaceCpp += diff_func;
     interfaceCpp += interfaces.map(_._3).mkString("")
     interfaceCpp += ""
     interfaceCpp += "#endif // CONFIG_NO_DIFFTEST"
