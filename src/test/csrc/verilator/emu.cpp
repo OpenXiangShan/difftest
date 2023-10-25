@@ -77,6 +77,8 @@ static inline void print_help(const char *file) {
   printf("  -r, --gcpt-restore=FILE    overwrite gcptrestore img with this image file\n");
   printf("  -b, --log-begin=NUM        display log from NUM th cycle\n");
   printf("  -e, --log-end=NUM          stop display log at NUM th cycle\n");
+  printf("  -B, --log-begin-instr=NUM  display log from NUM th instruction\n");
+  printf("  -E, --log-end-instr=NUM    stop display log at NUM th instruction\n");
 #ifdef DEBUG_REFILL
   printf("  -T, --track-instr=ADDR     track refill action concerning ADDR\n");
 #endif
@@ -160,6 +162,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "gcpt-restore",      1, NULL, 'r' },
     { "log-begin",         1, NULL, 'b' },
     { "log-end",           1, NULL, 'e' },
+    { "log-begin-instr",   1, NULL, 'B' },
+    { "log-end-instr",     1, NULL, 'E' },
     { "flash",             1, NULL, 'F' },
     { "help",              0, NULL, 'h' },
     { 0,                   0, NULL,  0  }
@@ -167,7 +171,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:X:I:T:R:W:hi:r:m:b:e:F:", long_options, &long_index)) != -1) {
+          "-s:C:X:I:T:R:W:hi:r:m:b:e:B:E:F:", long_options, &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -260,8 +264,14 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'r': args.gcpt_restore = optarg; break;
       case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
+      case 'B': args.log_begin_instr = atoll_strict(optarg, "log-begin-instr");  break;
+      case 'E': args.log_end_instr = atoll_strict(optarg, "log-end-instr"); break;
       case 'F': args.flash_bin = optarg; break;
     }
+  }
+
+  if (args.log_begin_instr != -1) {
+    args.log_begin = -1;
   }
 
   if(args.image == NULL) {
@@ -724,6 +734,16 @@ int Emulator::tick() {
       dut_ptr->io_perfInfo_clean = 1;
       dut_ptr->io_perfInfo_dump = 1;
       args.warmup_instr = -1;
+    }
+    if (trap->instrCnt >= args.log_begin_instr) {
+      dut_ptr->io_logCtrl_log_begin = cycles;
+      args.log_begin = cycles;
+      args.log_begin_instr = -1;
+    }
+    if (trap->instrCnt >= args.log_end_instr) {
+      dut_ptr->io_logCtrl_log_end = cycles;
+      args.log_end = cycles;
+      args.log_end_instr = -1;
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
       dut_ptr->io_perfInfo_clean = 1;
