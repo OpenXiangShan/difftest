@@ -32,7 +32,7 @@ int difftest_init() {
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
-    difftest[i]->dut = diffstate_buffer[i].get();
+    difftest[i]->dut = diffstate_buffer[i].get(0);
   }
   return 0;
 }
@@ -109,8 +109,6 @@ void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
 }
 
 int Difftest::step() {
-  dut = dut_ways[dut_select];
-  dut_select = (dut_select + 1) % 2;
   progress = false;
   ticks++;
 

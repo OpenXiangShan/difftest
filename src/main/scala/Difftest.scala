@@ -391,7 +391,7 @@ object DifftestModule {
          |class DiffStateBuffer {
          |public:
          |  virtual ~DiffStateBuffer() {}
-         |  virtual DiffTestState* get() = 0;
+         |  virtual DiffTestState* get(int pos) = 0;
          |  virtual DiffTestState* next() = 0;
          |};
          |

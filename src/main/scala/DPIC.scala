@@ -20,7 +20,6 @@ import chisel3.util._
 import chisel3.experimental.{ChiselAnnotation, DataMirror, ExtModule}
 import chisel3.util.experimental.BoringUtils
 import difftest._
-// import difftest.dpic.DPIC.diffstate_select
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
@@ -32,9 +31,7 @@ class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtMod
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
   val io = IO(Input(gen))
-  if(diffstateSelect){
-    val select = IO(Input(Bool()))
-  }
+  val select = Option.when(diffstateSelect)(IO(Input(Bool())))
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -66,7 +63,7 @@ class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtMod
   override def desiredName: String = gen.desiredModuleName
   val dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
   val modPorts: Seq[Seq[(String, Data)]] = {
-    val common = Seq(Seq(("clock", clock)), Seq(("enable", enable)), Seq(("select", select)))
+    val common = Seq(Seq(("clock", clock)), Seq(("enable", enable))) ++ Seq(if(diffstateSelect) Seq(("select", select.get)) else Seq())
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
     common ++ io.elements.toSeq.reverse.map{ case (name, data) =>
@@ -82,7 +79,7 @@ class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtMod
   val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
-      ((_: DifftestBundle) => true, Seq("io_coreid", "select")),
+      ((_: DifftestBundle) => true, Seq("io_coreid") ++ (if(diffstateSelect) Seq("select") else Seq())),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
@@ -101,7 +98,8 @@ class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtMod
        |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
   val dpicFunc: String = {
-    val packet = s"DUT_BUF(io_coreid)->${gen.desiredCppName}"
+    val dut_pos = if (diffstateSelect) "select" else "0"
+    val packet = s"DUT_BUF(io_coreid,$dut_pos)->${gen.desiredCppName}"
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
        |$dpicFuncProto {
@@ -161,7 +159,7 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
     when(global_enable) {
     select := !select
     }
-    dpic.select := select
+    dpic.select.get := select
   }
 
   dpic.io := io
@@ -169,7 +167,7 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
-  private val diffstateSelect: Boolean = true
+  private val diffstateSelect: Boolean = false
   private val hasGlobalEnable: Boolean = false
   private var enableBits = 0
 
@@ -201,20 +199,24 @@ object DPIC {
       BoringUtils.addSource(global_enable, "dpic_global_enable")
       step := RegNext(global_enable)
     }
+    val buf_len = if (diffstateSelect) 2 else 1
     val class_def =
       s"""
          |class DPICBuffer : public DiffStateBuffer {
          |private:
-         |  DiffTestState buffer;
+         |  DiffTestState buffer[$buf_len];
+         |  int read_ptr = 0;
          |public:
          |  DPICBuffer() {
          |    memset(&buffer, 0, sizeof(buffer));
          |  }
-         |  inline DiffTestState* get() {
-         |    return &buffer;
+         |  inline DiffTestState* get(int pos) {
+         |    return buffer+pos;
          |  }
          |  inline DiffTestState* next() {
-         |    return &buffer;
+         |    DiffTestState* ret = buffer+read_ptr;
+         |    read_ptr = (read_ptr + 1) % $buf_len;
+         |    return ret;
          |  }
          |};
          |""".stripMargin
@@ -251,7 +253,7 @@ object DPIC {
     interfaceCpp += "#include \"difftest-dpic.h\""
     interfaceCpp += ""
     interfaceCpp += "DiffStateBuffer* diffstate_buffer;"
-    interfaceCpp += "#define DUT_BUF(core_id) (diffstate_buffer[core_id].get())"
+    interfaceCpp += "#define DUT_BUF(core_id,pos) (diffstate_buffer[core_id].get(pos))"
     interfaceCpp += diff_func;
     interfaceCpp += interfaces.map(_._3).mkString("")
     interfaceCpp += ""
