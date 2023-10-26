@@ -71,6 +71,7 @@ void difftest_trace() {
 }
 
 void difftest_finish() {
+  diffstate_buffer_free();
   for (int i = 0; i < NUM_CORES; i++) {
     delete difftest[i];
   }
@@ -93,25 +94,11 @@ void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.Squash
 
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
-<<<<<<< HEAD
-
-  for(int i = 0; i < 2; i++ ){
-    dut_ways[i] = (DiffTestState *)calloc(batch_size, sizeof(DiffTestState));
-  }
-  dut = dut_ways[dut_select];
-=======
->>>>>>> mv-dut-init
 }
 
 Difftest::~Difftest() {
   delete state;
   delete difftrace;
-<<<<<<< HEAD
-  for(int i = 0; i < 2; i++ ){
-    free(dut_ways[i]);
-  }
-=======
->>>>>>> mv-dut-init
   if (proxy) {
     delete proxy;
   }

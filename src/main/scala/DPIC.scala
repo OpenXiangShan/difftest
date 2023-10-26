@@ -20,18 +20,21 @@ import chisel3.util._
 import chisel3.experimental.{ChiselAnnotation, DataMirror, ExtModule}
 import chisel3.util.experimental.BoringUtils
 import difftest._
+// import difftest.dpic.DPIC.diffstate_select
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ListBuffer
 
-class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
+class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtModule
   with HasExtModuleInline
   with DifftestModule[T] {
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
-  val select = IO(Input(Bool()))
   val io = IO(Input(gen))
+  if(diffstateSelect){
+    val select = IO(Input(Bool()))
+  }
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -98,11 +101,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
        |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
   val dpicFunc: String = {
-<<<<<<< HEAD
-    val packet = s"difftest[io_coreid]->dut_ways[select]->${gen.desiredCppName}"
-=======
     val packet = s"DUT_BUF(io_coreid)->${gen.desiredCppName}"
->>>>>>> mv-dut-init
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
        |$dpicFuncProto {
@@ -145,33 +144,37 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean) extends Module
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean, diffstateSelect: Boolean) extends Module
   with DifftestModule[T] {
   val io = IO(Input(gen))
 
-  val dpic = Module(new DPIC(gen))
+  val dpic = Module(new DPIC(gen, diffstateSelect))
   dpic.clock := clock
-  val enable = WireInit(true.B)
-  dpic.enable := io.bits.getValid && enable
+  val global_enable = WireInit(true.B)
+  dpic.enable := io.bits.getValid && global_enable
   if (hasGlobalEnable) {
-    BoringUtils.addSink(enable, "dpic_global_enable")
+    BoringUtils.addSink(global_enable, "dpic_global_enable")
   }
 
-  val select = RegInit(false.B)
-  when(enable) {
+  if (diffstateSelect){
+    val select = RegInit(false.B)
+    when(global_enable) {
     select := !select
+    }
+    dpic.select := select
   }
-  dpic.select := select
+
   dpic.io := io
 }
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
+  private val diffstateSelect: Boolean = true
   private val hasGlobalEnable: Boolean = false
   private var enableBits = 0
 
   def apply[T <: DifftestBundle](gen: T): T = {
-    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable))
+    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable, diffstateSelect))
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
@@ -194,9 +197,9 @@ object DPIC {
       for (i <- 0 until enableBits) {
         BoringUtils.addSink(global_en(i), s"dpic_global_enable_$i")
       }
-      val enable = WireInit(global_en.asUInt.orR)
-      BoringUtils.addSource(enable, "dpic_global_enable")
-      step := RegNext(enable)
+      val global_enable = WireInit(global_en.asUInt.orR)
+      BoringUtils.addSource(global_enable, "dpic_global_enable")
+      step := RegNext(global_enable)
     }
     val class_def =
       s"""
@@ -204,10 +207,9 @@ object DPIC {
          |private:
          |  DiffTestState buffer;
          |public:
-         |  DPICBuffer(){
+         |  DPICBuffer() {
          |    memset(&buffer, 0, sizeof(buffer));
          |  }
-         |  ~DPICBuffer();
          |  inline DiffTestState* get() {
          |    return &buffer;
          |  }
@@ -235,8 +237,11 @@ object DPIC {
 
     val diff_func =
       s"""
-         |void diffstate_buffer_init(){
+         |void diffstate_buffer_init() {
          |  diffstate_buffer = new DPICBuffer[NUM_CORES];
+         |}
+         |void diffstate_buffer_free() {
+         |  delete[] diffstate_buffer;
          |}
       """.stripMargin
     interfaceCpp.clear()

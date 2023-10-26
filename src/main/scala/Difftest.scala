@@ -390,6 +390,7 @@ object DifftestModule {
       s"""
          |class DiffStateBuffer {
          |public:
+         |  virtual ~DiffStateBuffer() {}
          |  virtual DiffTestState* get() = 0;
          |  virtual DiffTestState* next() = 0;
          |};
@@ -397,6 +398,7 @@ object DifftestModule {
          |extern DiffStateBuffer* diffstate_buffer;
          |
          |extern void diffstate_buffer_init();
+         |extern void diffstate_buffer_free();
          |""".stripMargin
 
     difftestCpp += class_def
