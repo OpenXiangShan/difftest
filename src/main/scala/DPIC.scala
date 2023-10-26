@@ -197,7 +197,7 @@ object DPIC {
       }
       val global_enable = WireInit(global_en.asUInt.orR)
       BoringUtils.addSource(global_enable, "dpic_global_enable")
-      step := RegNext(global_enable)
+      step := global_enable
     }
     val buf_len = if (diffstateSelect) 2 else 1
     val class_def =

@@ -139,6 +139,17 @@ always @(posedge clock) begin
   end
 end
 
+reg difftest_step_delay;
+always @(posedge clock) begin
+  if (reset) begin
+    difftest_step_delay <= 1'b0;
+  end
+  else begin
+    difftest_step_delay <= difftest_step;
+  end
+end
+
+
 reg [63:0] n_cycles;
 always @(posedge clock) begin
   if (reset) begin
@@ -157,7 +168,7 @@ always @(posedge clock) begin
     if (!n_cycles) begin
       simv_init();
     end
-    else if (difftest_step) begin
+    else if (difftest_step_delay) begin
       // check errors
       if (simv_step()) begin
         $display("DIFFTEST FAILED at cycle %d", n_cycles);
