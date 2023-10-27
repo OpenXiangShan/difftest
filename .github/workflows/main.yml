@@ -168,7 +168,7 @@ jobs:
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
 
-      - name: Difftest with Squash and Global DPI-C Enable
+      - name: Difftest with Squash and Global Enable
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
@@ -177,6 +177,20 @@ jobs:
             make clean
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/isEffective: Boolean = false/isEffective: Boolean = true/' difftest/src/main/scala/Squash.scala
+            make emu
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
+            cd difftest && git restore src
+
+      - name: Difftest with Squash Batch and Global Enable
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            sed -i 's/isEffective: Boolean = false/isEffective: Boolean = true/' difftest/src/main/scala/Squash.scala
+            sed -i 's/isBatch        : Boolean = false/isBatch        : Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
             make emu
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
@@ -204,14 +218,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Prepare environment with Verilator v5.016
+      - name: Prepare environment with Verilator v5.012
         run: |
             cd $GITHUB_WORKSPACE/..
             git config --global url."https://github.com/".insteadOf git@github.com:
             git config --global url."https://".insteadOf git://
             git clone https://github.com/OpenXiangShan/xs-env
             cd xs-env
-            sed -i 's/v4.218/v5.016/' install-verilator.sh
+            sed -i 's/v4.218/v5.012/' install-verilator.sh
             sed -i 's/CC=clang CXX=clang++/CC=gcc-10 CXX=g++-10 LINK=g++-10/' install-verilator.sh
             sudo -s ./setup-tools.sh
             source ./setup.sh
@@ -225,19 +239,19 @@ jobs:
             rm -r difftest
             cp -r $GITHUB_WORKSPACE .
 
-            - name: Verilator Build with VCS Top (with Select)
-            run: |
-                cd $GITHUB_WORKSPACE/../xs-env
-                source ./env.sh
-                cd $GITHUB_WORKSPACE/../xs-env/NutShell
-                source ./env.sh
-                make clean
-                sed -i 's/diffstateSelect: Boolean = false/diffstateSelect: Boolean = true/' difftest/src/main/scala/Gateway.scala
-                make simv VCS=verilator
-                ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
-                ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
+      - name: Verilator Build with VCS Top (with Select)
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            sed -i 's/diffstateSelect: Boolean = false/diffstateSelect: Boolean = true/' difftest/src/main/scala/Gateway.scala
+            make simv VCS=verilator
+            ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
+            ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
-      - name: Verilator Build with VCS Top (with Squash Batch Enable)
+      - name: Verilator Build with VCS Top (with Squash Batch and Global Enable)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
