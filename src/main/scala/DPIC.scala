@@ -20,6 +20,7 @@ import chisel3.util._
 import chisel3.experimental.{ChiselAnnotation, DataMirror, ExtModule}
 import chisel3.util.experimental.BoringUtils
 import difftest._
+import difftest.gateway.GatewayConfig
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
@@ -140,52 +141,34 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean) extends Module
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T) extends Module
   with DifftestModule[T] {
   val io = IO(Input(gen))
+  val enable = IO(Input(Bool()))
 
   val dpic = Module(new DPIC(gen))
   dpic.clock := clock
-  val enable = WireInit(true.B)
   dpic.enable := io.bits.getValid && enable
-  if (hasGlobalEnable) {
-    BoringUtils.addSink(enable, "dpic_global_enable")
-  }
   dpic.io := io
 }
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
-  private val hasGlobalEnable: Boolean = false
-  private var enableBits = 0
 
-  def apply[T <: DifftestBundle](gen: T): T = {
-    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable))
+  def apply[T <: DifftestBundle](gen: T, enable: Bool): T = {
+    val module = Module(new DummyDPICWrapper(gen))
+    module.enable := enable
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-    if (hasGlobalEnable && module.io.needUpdate.isDefined) {
-      BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
-      enableBits += 1
-    }
     module.io
   }
 
-  def collect(): (Seq[String], Bool) = {
-    val step = WireInit(true.B)
+  def collect(): Seq[String] = {
     if (interfaces.isEmpty) {
-      return (Seq(), step)
-    }
-    if (hasGlobalEnable) {
-      val global_en = WireInit(0.U.asTypeOf(Vec(enableBits, Bool())))
-      for (i <- 0 until enableBits) {
-        BoringUtils.addSink(global_en(i), s"dpic_global_enable_$i")
-      }
-      val enable = WireInit(global_en.asUInt.orR)
-      BoringUtils.addSource(enable, "dpic_global_enable")
-      step := enable
+      return Seq()
     }
     val class_def =
       s"""
@@ -246,6 +229,6 @@ object DPIC {
     val outputFile = outputDir + "/difftest-dpic.cpp"
     Files.write(Paths.get(outputFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
 
-    (Seq("CONFIG_DIFFTEST_DPIC"), step)
+    Seq("CONFIG_DIFFTEST_DPIC")
   }
 }
