@@ -46,9 +46,9 @@ object Gateway {
     gen
   }
 
-  def collect(): (Seq[String], UInt, String) = {
+  def collect(): (Seq[String], UInt) = {
     val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
-    (endpoint.macros, endpoint.step, config.style)
+    (endpoint.macros, endpoint.step)
   }
 }
 
