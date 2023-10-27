@@ -20,18 +20,19 @@ import chisel3.util._
 import chisel3.experimental.{ChiselAnnotation, DataMirror, ExtModule}
 import chisel3.util.experimental.BoringUtils
 import difftest._
+import difftest.gateway.{GatewayConfig, GatewayBundle}
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ListBuffer
 
-class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtModule
+class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   with HasExtModuleInline
   with DifftestModule[T] {
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
   val io = IO(Input(gen))
-  val select = Option.when(diffstateSelect)(IO(Input(Bool())))
+  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -63,7 +64,10 @@ class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtMod
   override def desiredName: String = gen.desiredModuleName
   val dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
   val modPorts: Seq[Seq[(String, Data)]] = {
-    val common = Seq(Seq(("clock", clock)), Seq(("enable", enable))) ++ Seq(if(diffstateSelect) Seq(("select", select.get)) else Seq())
+    var common = Seq(Seq(("clock", clock)), Seq(("enable", enable)))
+    if (config.diffStateSelect) {
+      common ++= Seq(Seq(("select", select.get)))
+    }
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
     common ++ io.elements.toSeq.reverse.map{ case (name, data) =>
@@ -76,10 +80,14 @@ class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtMod
   val dpicFuncArgsWithClock = if (gen.bits.hasValid) {
     modPorts.filterNot(p => p.length == 1 && p.head._1 == "io_valid")
   } else modPorts
-  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
+  val dpicDropNum = {
+    if (config.diffStateSelect) 3
+    else 2
+  }
+  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(dpicDropNum)
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
-      ((_: DifftestBundle) => true, Seq("io_coreid") ++ (if(diffstateSelect) Seq("select") else Seq())),
+      ((_: DifftestBundle) => true, Seq("io_coreid")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
@@ -98,7 +106,10 @@ class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtMod
        |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
   val dpicFunc: String = {
-    val dut_pos = if (diffstateSelect) "select" else "0"
+    val dut_pos = {
+      if (config.diffStateSelect) "select"
+      else "0"
+    }
     val packet = s"DUT_BUF(io_coreid,$dut_pos)->${gen.desiredCppName}"
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
@@ -142,64 +153,47 @@ class DPIC[T <: DifftestBundle](gen: T, diffstateSelect: Boolean) extends ExtMod
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boolean, diffstateSelect: Boolean) extends Module
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends Module
   with DifftestModule[T] {
   val io = IO(Input(gen))
+  val enable = IO(Input(Bool()))
+  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
 
-  val dpic = Module(new DPIC(gen, diffstateSelect))
+  val dpic = Module(new DPIC(gen, config))
   dpic.clock := clock
-  val global_enable = WireInit(true.B)
-  dpic.enable := io.bits.getValid && global_enable
-  if (hasGlobalEnable) {
-    BoringUtils.addSink(global_enable, "dpic_global_enable")
+  dpic.enable := io.bits.getValid && enable
+  if (config.diffStateSelect) {
+    dpic.select.get := select.get
   }
-
-  if (diffstateSelect){
-    val select = RegInit(false.B)
-    when(global_enable) {
-    select := !select
-    }
-    dpic.select.get := select
-  }
-
   dpic.io := io
 }
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
-  private val diffstateSelect: Boolean = false
-  private val hasGlobalEnable: Boolean = false
-  private var enableBits = 0
 
-  def apply[T <: DifftestBundle](gen: T): T = {
-    val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable, diffstateSelect))
+  def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): T = {
+    val module = Module(new DummyDPICWrapper(gen, config))
+    module.enable := port.enable
+    if (config.diffStateSelect) {
+      module.select.get := port.select.get
+    }
+
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-    if (hasGlobalEnable && module.io.needUpdate.isDefined) {
-      BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
-      enableBits += 1
-    }
     module.io
   }
 
-  def collect(): (Seq[String], Bool) = {
-    val step = WireInit(true.B)
+  def collect(config: GatewayConfig): Seq[String] = {
     if (interfaces.isEmpty) {
-      return (Seq(), step)
+      return Seq()
     }
-    if (hasGlobalEnable) {
-      val global_en = WireInit(0.U.asTypeOf(Vec(enableBits, Bool())))
-      for (i <- 0 until enableBits) {
-        BoringUtils.addSink(global_en(i), s"dpic_global_enable_$i")
-      }
-      val global_enable = WireInit(global_en.asUInt.orR)
-      BoringUtils.addSource(global_enable, "dpic_global_enable")
-      step := global_enable
+    val buf_len = {
+      if (config.diffStateSelect) 2
+      else 1
     }
-    val buf_len = if (diffstateSelect) 2 else 1
     val class_def =
       s"""
          |class DPICBuffer : public DiffStateBuffer {
@@ -262,6 +256,6 @@ object DPIC {
     val outputFile = outputDir + "/difftest-dpic.cpp"
     Files.write(Paths.get(outputFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
 
-    (Seq("CONFIG_DIFFTEST_DPIC"), step)
+    Seq("CONFIG_DIFFTEST_DPIC")
   }
 }
