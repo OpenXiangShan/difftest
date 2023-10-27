@@ -768,23 +768,25 @@ int Emulator::tick() {
 
 #ifndef CONFIG_NO_DIFFTEST
   int step = 0;
-  if(args.enable_diff){
-    if(args.trace_name && args.trace_is_read){
-      step = difftest_trace_read();
-    }
-    else
-      step = dut_ptr->difftest_step;
-
-    if(args.trace_name && !args.trace_is_read){
-      difftest_trace_write(step);
-    }
-
+  if (args.trace_name && args.trace_is_read) {
+    step = 1;
+    difftest_trace_read();
   }
-  else{
+  else {
     step = dut_ptr->difftest_step;
   }
 
-  trapCode = difftest_nstep(step);
+  if (args.trace_name && !args.trace_is_read) {
+    difftest_trace_write(step);
+  }
+
+  if (args.enable_diff) {
+    trapCode = difftest_nstep(step);
+  }
+  else {
+    trapCode = difftest_state();
+  }
+
   if (trapCode != STATE_RUNNING) {
 #ifdef FUZZER_LIB
       if (trapCode == STATE_GOODTRAP) {

@@ -78,24 +78,15 @@ int difftest_step() {
   return 0;
 }
 
-int difftest_trace_read() {
-  int trace_size_core0 = 0;
+void difftest_trace_read() {
   for (int i = 0; i < NUM_CORES; i++) {
-    int trace_size = difftest[i]->trace_read();
-    if(i == 0)
-      trace_size_core0 = trace_size;
-    else{
-      assert(trace_size == trace_size_core0);
-    }
+    difftest[i]->trace_read();
   }
-  return trace_size_core0;
 }
 
-void difftest_trace_write(int n) {
-  for(int t = 0; t < n; t++){
-    for(int i = 0; i < NUM_CORES; i++) {
-      difftest[i]->trace_write();
-    }
+void difftest_trace_write(int step) {
+  for(int i = 0; i < NUM_CORES; i++) {
+    difftest[i]->trace_write(step);
   }
 }
 

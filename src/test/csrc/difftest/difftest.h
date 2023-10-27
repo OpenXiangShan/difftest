@@ -208,15 +208,17 @@ public:
   void set_trace(const char *name, bool is_read) {
     difftrace = new DiffTrace(name, is_read);
   }
-  int trace_read(){
-    if (difftrace)
-      return difftrace->read_next();
-    else
-      return 0;
+  void trace_read(){
+    if (difftrace) {
+      difftrace->read_next(dut);
+    }
   }
-  void trace_write(){
-    if (difftrace)
-      difftrace->append(dut);
+  void trace_write(int step){
+    if (difftrace){
+      for (int i = 0; i < step; i++) {
+        difftrace->append(diffstate_buffer[id].get(i));
+      }
+    }
   }
 
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
@@ -356,8 +358,8 @@ int difftest_step();
 int difftest_state();
 void difftest_finish();
 
-int difftest_trace_read();
-void difftest_trace_write(int n);
+void difftest_trace_read();
+void difftest_trace_write(int step);
 
 int init_nemuproxy(size_t);
 

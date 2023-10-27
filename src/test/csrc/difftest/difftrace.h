@@ -18,7 +18,7 @@ public:
     }
   }
   bool append(const DiffTestState *trace);
-  int read_next(DiffTestState *trace);
+  bool read_next(DiffTestState *trace);
 
 private:
   uint64_t buffer_size;

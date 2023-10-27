@@ -26,19 +26,14 @@ bool DiffTrace::append(const DiffTestState *trace) {
   return 0;
 }
 
-int DiffTrace::read_next(DiffTestState *trace) {
+bool DiffTrace::read_next(DiffTestState *trace) {
   if (!buffer || buffer_count == buffer_size) {
     trace_file_next();
   }
-  int trace_num = 0;
-  if(max_batch_size < buffer_size - buffer_count)
-    trace_num = max_batch_size;
-  else
-    trace_num = buffer_size - buffer_count;
-  memcpy(trace, buffer + buffer_count, trace_num * sizeof(DiffTestState));
-  buffer_count += trace_num;
+  memcpy(trace, buffer + buffer_count, sizeof(DiffTestState));
+  buffer_count++;
   // printf("%lu...\n", buffer_count);
-  return trace_num;
+  return 0;
 }
 
 
