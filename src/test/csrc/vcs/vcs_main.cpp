@@ -90,11 +90,10 @@ extern "C" int simv_step() {
   }
 }
 
-extern "C" int simv_batch(uint8_t step) {
-  for(int offset = 0; offset < step; offset++) {
-    difftest_set_dut(offset);
+extern "C" int simv_nstep(uint8_t step) {
+  for(int i = 0; i < step; i++) {
     int ret = simv_step();
-    if(ret) 
+    if(ret)
       return ret;
   }
   return 0;

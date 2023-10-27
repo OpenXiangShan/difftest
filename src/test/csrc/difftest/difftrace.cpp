@@ -3,7 +3,7 @@
 
 #include "difftrace.h"
 
-DiffTrace::DiffTrace(const char *_trace_name, bool is_read, int _max_batch_size, uint64_t _buffer_size)
+DiffTrace::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_size)
   : is_read(is_read) {
   if (!is_read) {
     buffer_size = _buffer_size;
@@ -15,7 +15,6 @@ DiffTrace::DiffTrace(const char *_trace_name, bool is_read, int _max_batch_size,
     exit(0);
   }
   strcpy(trace_name, _trace_name);
-  max_batch_size = _max_batch_size;
 }
 
 bool DiffTrace::append(const DiffTestState *trace) {

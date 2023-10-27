@@ -185,9 +185,7 @@ private:
 
 class Difftest {
 public:
-  DiffTestState* dut_buffer;
   DiffTestState* dut;
-  const int max_batch_size = 32;
 
   // Difftest public APIs for testbench
   // Its backend should be cross-platform (NEMU, Spike, ...)
@@ -208,11 +206,11 @@ public:
   }
   void display();
   void set_trace(const char *name, bool is_read) {
-    difftrace = new DiffTrace(name, is_read, max_batch_size);
+    difftrace = new DiffTrace(name, is_read);
   }
   int trace_read(){
     if (difftrace)
-      return difftrace->read_next(dut_buffer);
+      return difftrace->read_next();
     else
       return 0;
   }
@@ -353,9 +351,7 @@ protected:
 extern Difftest **difftest;
 int difftest_init();
 
-int difftest_batch(int batch_size, bool enable_diff);
-void difftest_set_dut(int offset);
-
+int difftest_nstep(int step);
 int difftest_step();
 int difftest_state();
 void difftest_finish();

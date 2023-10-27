@@ -767,24 +767,24 @@ int Emulator::tick() {
   dut_ptr->io_perfInfo_dump = 0;
 
 #ifndef CONFIG_NO_DIFFTEST
-  int batch_size = 0;
+  int step = 0;
   if(args.enable_diff){
     if(args.trace_name && args.trace_is_read){
-      batch_size = difftest_trace_read();
+      step = difftest_trace_read();
     }
-    else 
-      batch_size = dut_ptr->difftest_step;
+    else
+      step = dut_ptr->difftest_step;
 
     if(args.trace_name && !args.trace_is_read){
-      difftest_trace_write(batch_size);
+      difftest_trace_write(step);
     }
 
   }
   else{
-    batch_size = dut_ptr->difftest_step;
+    step = dut_ptr->difftest_step;
   }
 
-  trapCode = difftest_batch(batch_size, args.enable_diff);
+  trapCode = difftest_nstep(step);
   if (trapCode != STATE_RUNNING) {
 #ifdef FUZZER_LIB
       if (trapCode == STATE_GOODTRAP) {
@@ -1090,7 +1090,7 @@ void Emulator::fork_child_init() {
   // See verilator/test_regress/t/t_wrapper_clone.cpp:48 to avoid leaks.
   dut_ptr->atClone();
 #else
-// #error Please use Verilator v5.016 or newer versions.
+#error Please use Verilator v5.016 or newer versions.
 #endif // check VERILATOR_VERSION_INTEGER values
 #elif EMU_THREAD > 1 // VERILATOR_VERSION_INTEGER not defined
 #ifdef VERILATOR_4_210 // v4.210 <= version < 4.220

@@ -28,9 +28,11 @@
 Difftest **difftest = NULL;
 
 int difftest_init() {
+  diffstate_buffer_init();
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
+    difftest[i]->dut = diffstate_buffer[i].get(0);
   }
   return 0;
 }
@@ -51,15 +53,12 @@ int difftest_state() {
   return -1;
 }
 
-int difftest_batch(int batch_size, bool enable_diff){
+int difftest_nstep(int step){
   int last_trap_code = STATE_RUNNING;
-  for(int offset = 0; offset < batch_size; offset++){
-    difftest_set_dut(offset);
-    if(enable_diff){
-      if(difftest_step()){
-        last_trap_code = STATE_ABORT;
-        return last_trap_code;
-      }
+  for(int i = 0; i < step; i++){
+    if(difftest_step()){
+      last_trap_code = STATE_ABORT;
+      return last_trap_code;
     }
     last_trap_code = difftest_state();
     if(last_trap_code != STATE_RUNNING)
@@ -68,14 +67,9 @@ int difftest_batch(int batch_size, bool enable_diff){
   return last_trap_code;
 }
 
-void difftest_set_dut(int offset){
-  for (int i = 0; i < NUM_CORES; i++) {
-    difftest[i]->dut = difftest[i]->dut_buffer + offset;
-  }
-}
-
 int difftest_step() {
   for (int i = 0; i < NUM_CORES; i++) {
+    difftest[i]->dut = diffstate_buffer[i].next();
     int ret = difftest[i]->step();
     if (ret) {
       return ret;
@@ -85,17 +79,16 @@ int difftest_step() {
 }
 
 int difftest_trace_read() {
-  int trace_num = 0;
-  int trace_num_core0 = 0;
+  int trace_size_core0 = 0;
   for (int i = 0; i < NUM_CORES; i++) {
-    trace_num = difftest[i]->trace_read();
-    if(i == 0) 
-      trace_num_core0 = trace_num;
+    int trace_size = difftest[i]->trace_read();
+    if(i == 0)
+      trace_size_core0 = trace_size;
     else{
-      assert(trace_num == trace_num_core0);
+      assert(trace_size == trace_size_core0);
     }
   }
-  return trace_num_core0;
+  return trace_size_core0;
 }
 
 void difftest_trace_write(int n) {
@@ -107,6 +100,7 @@ void difftest_trace_write(int n) {
 }
 
 void difftest_finish() {
+  diffstate_buffer_free();
   for (int i = 0; i < NUM_CORES; i++) {
     delete difftest[i];
   }
@@ -129,15 +123,11 @@ void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.Squash
 
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
-
-  dut_buffer = (DiffTestState *)calloc(max_batch_size, sizeof(DiffTestState));
-  dut = dut_buffer;
 }
 
 Difftest::~Difftest() {
   delete state;
   delete difftrace;
-  free(dut_buffer);
   if (proxy) {
     delete proxy;
   }
