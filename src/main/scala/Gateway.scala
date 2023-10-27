@@ -59,6 +59,33 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   }
   val out = WireInit(in)
 
+  if (config.diffStateSelect) {
+    // Special fix for int writeback. Work for single-core only
+    if (in.exists(_.desiredCppName == "wb_int")) {
+      require(signals.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
+      val writebacks = in.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
+      val numPhyRegs = writebacks.head.numElements
+      val wb_int = Reg(Vec(numPhyRegs, UInt(64.W)))
+      for (wb <- writebacks) {
+        when(wb.valid) {
+          wb_int(wb.address) := wb.data
+        }
+      }
+
+      val commits = in.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit])
+      val num_skip = PopCount(commits.map(c => c.valid && c.skip))
+      assert(num_skip <= 1.U, p"num_skip $num_skip is larger than one. Squash not supported yet")
+      val wb_for_skip = out.filter(_.desiredCppName == "wb_int").head.asInstanceOf[DiffIntWriteback]
+      for (c <- commits) {
+        when(c.valid && c.skip) {
+          wb_for_skip.valid := true.B
+          wb_for_skip.address := c.wpdest
+          wb_for_skip.data := wb_int(c.wpdest)
+        }
+      }
+    }
+  }
+  
   val port = Wire(new GatewayBundle(config))
 
   val global_enable = WireInit(true.B)
