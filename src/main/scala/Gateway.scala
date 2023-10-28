@@ -81,11 +81,16 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
           wb_for_skip.valid := true.B
           wb_for_skip.address := c.wpdest
           wb_for_skip.data := wb_int(c.wpdest)
+          for(wb <- writebacks) {
+            when(wb.valid && wb.address === c.wpdest) {
+              wb_for_skip.data := wb.data
+            }
+          }
         }
       }
     }
   }
-  
+
   val port = Wire(new GatewayBundle(config))
 
   val global_enable = WireInit(true.B)
@@ -132,6 +137,6 @@ object GatewaySink{
 }
 
 class GatewayBundle(config: GatewayConfig) extends Bundle {
-  var enable = Bool()
+  val enable = Bool()
   val select = Option.when(config.diffStateSelect)(Bool())
 }

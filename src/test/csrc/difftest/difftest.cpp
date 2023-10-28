@@ -111,7 +111,6 @@ void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
 int Difftest::step() {
   progress = false;
   ticks++;
-
   if (check_timeout()) {
     return 1;
   }

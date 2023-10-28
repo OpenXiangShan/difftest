@@ -80,14 +80,11 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   val dpicFuncArgsWithClock = if (gen.bits.hasValid) {
     modPorts.filterNot(p => p.length == 1 && p.head._1 == "io_valid")
   } else modPorts
-  val dpicDropNum = {
-    if (config.diffStateSelect) 3
-    else 2
-  }
-  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(dpicDropNum)
+  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
       ((_: DifftestBundle) => true, Seq("io_coreid")),
+      ((_: DifftestBundle) => config.diffStateSelect, Seq("select")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
@@ -202,7 +199,7 @@ object DPIC {
          |  int read_ptr = 0;
          |public:
          |  DPICBuffer() {
-         |    memset(&buffer, 0, sizeof(buffer));
+         |    memset(buffer, 0, sizeof(buffer));
          |  }
          |  inline DiffTestState* get(int pos) {
          |    return buffer+pos;
