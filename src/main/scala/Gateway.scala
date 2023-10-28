@@ -81,12 +81,18 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
           wb_for_skip.valid := true.B
           wb_for_skip.address := c.wpdest
           wb_for_skip.data := wb_int(c.wpdest)
+          for (wb <- writebacks) {
+            when(wb.valid && wb.address === c.wpdest) {
+              wb_for_skip.data := wb.data
+            }
+          }
         }
       }
     }
   }
-  
-  val port = Wire(new GatewayBundle(config))
+
+  val port_num = if (config.isBatch) config.batchSize else 1
+  val ports = Seq.fill(port_num)(Wire(new GatewayBundle(config)))
 
   val global_enable = WireInit(true.B)
   if(config.hasGlobalEnable) {
@@ -95,7 +101,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 
   val batch_data = Option.when(config.isBatch)(Mem(config.batchSize, in.cloneType))
   val enable = WireInit(false.B)
-  if (config.isBatch) {
+  if(config.isBatch) {
     val batch_ptr = RegInit(0.U(log2Ceil(config.batchSize).W))
     when(global_enable) {
       batch_ptr := batch_ptr + 1.U
@@ -110,14 +116,14 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   else{
     enable := global_enable
   }
-  port.enable := enable
+  ports.foreach(port => port.enable := enable)
 
   if(config.diffStateSelect) {
     val select = RegInit(false.B)
     when(global_enable) {
       select := !select
     }
-    port.select.get := select
+    ports.foreach(port => port.select.get := select)
   }
 
   val step_width = if (config.isBatch) log2Ceil(config.batchSize+1) else 1
@@ -125,16 +131,17 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   val step = IO(Output(UInt(step_width.W)))
   step := Mux(enable, upper, 0.U)
 
-  for(id <- 0 until in.length){
-    if (config.isBatch) {
-      for(ptr <- 0 until config.batchSize){
-        val batch_port = WireInit(port)
-        batch_port.batch_idx.get := ptr.asUInt(log2Ceil(config.batchSize).W)
-        GatewaySink(in(id).cloneType, config, port) := batch_data.get(ptr)(id)
+  if (config.isBatch) {
+    for (ptr <- 0 until config.batchSize) {
+      ports(ptr).batch_idx.get := ptr.asUInt(log2Ceil(config.batchSize).W)
+      for(id <- 0 until in.length) {
+        GatewaySink(in(id).cloneType, config, ports(ptr)) := batch_data.get(ptr)(id)
       }
     }
-    else {
-      GatewaySink(in(id).cloneType, config, port) := out(id)
+  }
+  else {
+    for(id <- 0 until in.length){
+      GatewaySink(in(id).cloneType, config, ports.head) := out(id)
     }
   }
 
@@ -160,7 +167,7 @@ object GatewaySink{
 }
 
 class GatewayBundle(config: GatewayConfig) extends Bundle {
-  var enable = Bool()
+  val enable = Bool()
   val select = Option.when(config.diffStateSelect)(Bool())
-  val batch_idx = Option.when(config.isBatch)(UInt())
+  val batch_idx = Option.when(config.isBatch)(UInt(log2Ceil(config.batchSize).W))
 }

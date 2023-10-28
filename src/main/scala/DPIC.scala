@@ -33,7 +33,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   val enable = IO(Input(Bool()))
   val io = IO(Input(gen))
   val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
-  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt())))
+  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -84,14 +84,13 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   val dpicFuncArgsWithClock = if (gen.bits.hasValid) {
     modPorts.filterNot(p => p.length == 1 && p.head._1 == "io_valid")
   } else modPorts
-  val dpicDropNum = {
-    if (config.diffStateSelect || config.isBatch) 3
-    else 2
-  }
-  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(dpicDropNum)
+  val dpicDropNum = 2
+  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
       ((_: DifftestBundle) => true, Seq("io_coreid")),
+      ((_: DifftestBundle) => config.diffStateSelect, Seq("select")),
+      ((_: DifftestBundle) => config.isBatch, Seq("batch_idx")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
@@ -163,7 +162,7 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfi
   val io = IO(Input(gen))
   val enable = IO(Input(Bool()))
   val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
-  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt())))
+  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
 
   val dpic = Module(new DPIC(gen, config))
   dpic.clock := clock
@@ -215,7 +214,7 @@ object DPIC {
          |  int read_ptr = 0;
          |public:
          |  DPICBuffer() {
-         |    memset(&buffer, 0, sizeof(buffer));
+         |    memset(buffer, 0, sizeof(buffer));
          |  }
          |  inline DiffTestState* get(int pos) {
          |    return buffer+pos;
