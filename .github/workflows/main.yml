@@ -217,14 +217,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Prepare environment with Verilator v5.016
+      - name: Prepare environment with Verilator v5.012
         run: |
             cd $GITHUB_WORKSPACE/..
             git config --global url."https://github.com/".insteadOf git@github.com:
             git config --global url."https://".insteadOf git://
             git clone https://github.com/OpenXiangShan/xs-env
             cd xs-env
-            sed -i 's/v4.218/v5.016/' install-verilator.sh
+            sed -i 's/v4.218/v5.012/' install-verilator.sh
             sed -i 's/CC=clang CXX=clang++/CC=gcc-10 CXX=g++-10 LINK=g++-10/' install-verilator.sh
             sudo -s ./setup-tools.sh
             source ./setup.sh
