@@ -359,6 +359,7 @@ ucli.key
 stack.info*
 *.vpd
 *.bin
+*.f
 
 !ready-to-run/*
 
