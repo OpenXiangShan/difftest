@@ -595,7 +595,7 @@ inline void Emulator::single_cycle() {
 
 #if VM_TRACE == 1
   if (args.enable_waveform) {
-#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
+#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_SQUASH)
     uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
 #else
     static uint64_t cycle = -1UL;
