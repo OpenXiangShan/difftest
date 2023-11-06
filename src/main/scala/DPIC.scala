@@ -135,6 +135,14 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
          |""".stripMargin
     // (2) module definition
     val modPortsString = modPorts.flatten.map(i => getModArgString(i._1, i._2)).mkString(",\n  ")
+    // Initial for Palladium GFIFO
+    val gfifoInitial = if(config.PalladiumGFIFO)
+      s"""
+         |`ifdef PALLADIUM_GFIFO
+         |initial $$ixc_ctrl("gfifo", "$dpicFuncName");
+         |`endif
+         |""".stripMargin
+      else ""
     val modDef =
       s"""
          |module $desiredName(
@@ -142,6 +150,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
          |);
          |`ifndef SYNTHESIS
          |`ifdef DIFFTEST
+         |$gfifoInitial
          |$dpicDecl
          |  always @(posedge clock) begin
          |    if (enable)

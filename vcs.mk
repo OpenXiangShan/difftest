@@ -28,7 +28,7 @@ VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
 # DiffTest support
 ifneq ($(NO_DIFF), 1)
-VCS_FLAGS    += +define+DIFFTEST
+VCS_FLAGS    += +define+DIFFTEST +define+PALLADIUM_GFIFO
 endif
 
 ifeq ($(RELEASE),1)

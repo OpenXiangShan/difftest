@@ -28,7 +28,8 @@ case class GatewayConfig(
                         hasGlobalEnable: Boolean = false,
                         diffStateSelect: Boolean = false,
                         isBatch        : Boolean = false,
-                        batchSize      : Int     = 32
+                        batchSize      : Int     = 32,
+                        PalladiumGFIFO : Boolean = true,
                         )
 
 object Gateway {
