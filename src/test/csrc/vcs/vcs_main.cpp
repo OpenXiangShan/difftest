@@ -89,3 +89,12 @@ extern "C" int simv_step() {
     return 0;
   }
 }
+
+extern "C" int simv_nstep(uint8_t step) {
+  for(int i = 0; i < step; i++) {
+    int ret = simv_step();
+    if(ret)
+      return ret;
+  }
+  return 0;
+}

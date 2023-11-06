@@ -17,8 +17,7 @@
 package difftest
 
 import chisel3._
-import difftest.batch.Batch
-import difftest.dpic.DPIC
+import difftest.gateway.Gateway
 import difftest.squash.Squash
 
 import java.nio.charset.StandardCharsets
@@ -287,11 +286,7 @@ object DifftestModule {
     val difftest: T = Wire(gen)
     if (enabled) {
       val id = register(gen, style)
-      val sink = style match {
-        case "batch" => Batch(gen)
-        // By default, use the DPI-C style.
-        case _ => DPIC(gen)
-      }
+      val sink = Gateway(gen, style)
       sink := Squash(Delayer(difftest, delay))
       sink.coreid := difftest.coreid
     }
@@ -308,20 +303,14 @@ object DifftestModule {
     id
   }
 
-  def hasDPIC: Boolean = instances.exists(_._2 == "dpic")
-  def hasBatch: Boolean = instances.exists(_._2 == "batch")
   def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
-    val difftest_step = IO(Output(Bool()))
-    difftest_step := true.B
+    val difftest_step = IO(Output(UInt()))
+    difftest_step := 0.U
 
-    if (hasDPIC) {
-      val dpic_tuple = DPIC.collect()
-      macros ++= dpic_tuple._1
-      difftest_step := dpic_tuple._2
-    }
-    if (hasBatch) {
-      macros ++= Batch.collect()
-    }
+    val gateway_tuple = Gateway.collect()
+    macros ++= gateway_tuple._1
+    difftest_step := gateway_tuple._2
+
     macros ++= Squash.collect()
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
@@ -391,7 +380,7 @@ object DifftestModule {
          |class DiffStateBuffer {
          |public:
          |  virtual ~DiffStateBuffer() {}
-         |  virtual DiffTestState* get() = 0;
+         |  virtual DiffTestState* get(int pos) = 0;
          |  virtual DiffTestState* next() = 0;
          |};
          |

@@ -32,7 +32,7 @@ int difftest_init() {
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
-    difftest[i]->dut = diffstate_buffer[i].get();
+    difftest[i]->dut = diffstate_buffer[i].get(0);
   }
   return 0;
 }
@@ -53,6 +53,20 @@ int difftest_state() {
   return -1;
 }
 
+int difftest_nstep(int step){
+  int last_trap_code = STATE_RUNNING;
+  for(int i = 0; i < step; i++){
+    if(difftest_step()){
+      last_trap_code = STATE_ABORT;
+      return last_trap_code;
+    }
+    last_trap_code = difftest_state();
+    if(last_trap_code != STATE_RUNNING)
+      return last_trap_code;
+  }
+  return last_trap_code;
+}
+
 int difftest_step() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->dut = diffstate_buffer[i].next();
@@ -64,9 +78,15 @@ int difftest_step() {
   return 0;
 }
 
-void difftest_trace() {
+void difftest_trace_read() {
   for (int i = 0; i < NUM_CORES; i++) {
-    difftest[i]->trace();
+    difftest[i]->trace_read();
+  }
+}
+
+void difftest_trace_write(int step) {
+  for(int i = 0; i < NUM_CORES; i++) {
+    difftest[i]->trace_write(step);
   }
 }
 
