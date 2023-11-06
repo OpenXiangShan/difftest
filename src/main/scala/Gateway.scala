@@ -147,7 +147,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 
   var macros = GatewaySink.collect(config)
   if (config.isBatch) {
-    macros ++= Seq("CONFIG_DIFFTEST_BATCH")
+    macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
   }
 }
 
