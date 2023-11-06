@@ -157,29 +157,29 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends Module
-  with DifftestModule[T] {
-  val io = IO(Input(gen))
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends Module {
+  val io = IO(Input(UInt(gen.getWidth.W)))
   val enable = IO(Input(Bool()))
   val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
   val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
 
+  val unpack = io.asTypeOf(gen)
   val dpic = Module(new DPIC(gen, config))
   dpic.clock := clock
-  dpic.enable := io.bits.getValid && enable
+  dpic.enable := unpack.bits.getValid && enable
   if (config.diffStateSelect) {
     dpic.select.get := select.get
   }
   if (config.isBatch) {
     dpic.batch_idx.get := batch_idx.get
   }
-  dpic.io := io
+  dpic.io := unpack
 }
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
 
-  def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): T = {
+  def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): UInt = {
     val module = Module(new DummyDPICWrapper(gen, config))
     module.enable := port.enable
     if (config.diffStateSelect) {

@@ -41,7 +41,8 @@ object Gateway {
   }
 
   def register[T <: DifftestBundle](gen: T): T = {
-    BoringUtils.addSource(gen, s"gateway_${instances.length}")
+    val gen_pack = WireInit(gen.asUInt)
+    BoringUtils.addSource(gen_pack, s"gateway_${instances.length}")
     instances += gen
     gen
   }
@@ -54,15 +55,18 @@ object Gateway {
 
 class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
-  for ((data, id) <- in.zipWithIndex) {
+  val in_pack = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
+  for ((data, id) <- in_pack.zipWithIndex) {
     BoringUtils.addSink(data, s"gateway_$id")
+    in(id) := data.asTypeOf(in(id).cloneType)
   }
   val out = WireInit(in)
+  val out_pack = WireInit(in_pack)
 
   if (config.diffStateSelect || config.isBatch) {
     // Special fix for int writeback. Work for single-core only
     if (in.exists(_.desiredCppName == "wb_int")) {
-      require(signals.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
+      require(in.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
       val writebacks = in.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
       val numPhyRegs = writebacks.head.numElements
       val wb_int = Reg(Vec(numPhyRegs, UInt(64.W)))
@@ -88,6 +92,10 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
           }
         }
       }
+
+      for ((data, id) <- out_pack.zipWithIndex) {
+        data := out(id).asUInt
+      }
     }
   }
 
@@ -99,7 +107,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     global_enable := VecInit(in.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
   }
 
-  val batch_data = Option.when(config.isBatch)(Mem(config.batchSize, in.cloneType))
+  val batch_data = Option.when(config.isBatch)(Mem(config.batchSize, in_pack.cloneType))
   val enable = WireInit(false.B)
   if(config.isBatch) {
     val batch_ptr = RegInit(0.U(log2Ceil(config.batchSize).W))
@@ -108,7 +116,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
       when(batch_ptr === (config.batchSize - 1).U) {
         batch_ptr := 0.U
       }
-      batch_data.get(batch_ptr) := out
+      batch_data.get(batch_ptr) := out_pack
     }
     val do_batch_sync = batch_ptr === (config.batchSize - 1).U && global_enable
     enable := RegNext(do_batch_sync)
@@ -141,7 +149,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   }
   else {
     for(id <- 0 until in.length){
-      GatewaySink(in(id).cloneType, config, ports.head) := out(id)
+      GatewaySink(in(id).cloneType, config, ports.head) := out_pack(id)
     }
   }
 
@@ -153,7 +161,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 
 
 object GatewaySink{
-  def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): T = {
+  def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): UInt = {
     config.style match {
       case "dpic" => DPIC(gen, config, port)
     }
