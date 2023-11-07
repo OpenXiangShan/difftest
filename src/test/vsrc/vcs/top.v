@@ -135,9 +135,14 @@ assign io_uart_in_ch = 8'hff;
 
 always @(posedge clock) begin
   if (!reset && io_uart_out_valid) begin
-    if(io_uart_out_ch[7] == 1'b1) $finish();
-    $fwrite(32'h8000_0001, "%c", io_uart_out_ch);
-    $fflush();
+    if(io_uart_out_ch[7] == 0) begin
+      $fwrite(32'h8000_0001, "%c", io_uart_out_ch);
+      $fflush();
+    end
+    else begin
+      $display("\033[32mHIT GOOD TRAP!\033[0m");
+      $finish;
+    end
   end
 end
 
