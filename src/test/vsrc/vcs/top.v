@@ -13,14 +13,17 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void simv_init();
 import "DPI-C" function int simv_step();
+`ifdef PALLADIUM_GFIFO
+import "DPI-C" function void simv_nstep_gfifo(int step);
+`else
 import "DPI-C" function int simv_nstep(int step);
+`endif // PALLADIUM_GFIFO
 
 module tb_top();
 
@@ -48,6 +51,10 @@ reg [63:0] max_cycles;
 initial begin
   clock = 0;
   reset = 1;
+
+`ifdef PALLADIUM_GFIFO
+  $ixc_ctrl("gfifo", "simv_nstep_gfifo");
+`endif // PALLADIUM_GFIFO
 
 `ifdef VCS
   // enable waveform
@@ -152,6 +159,12 @@ always @(posedge clock) begin
   end
 end
 
+`ifdef PALLADIUM_GFIFO
+wire simv_result;
+GfifoControl gfifo(
+  .simv_result(simv_result)
+);
+`endif
 
 reg [63:0] n_cycles;
 always @(posedge clock) begin
@@ -171,6 +184,15 @@ always @(posedge clock) begin
     if (!n_cycles) begin
       simv_init();
     end
+`ifdef PALLADIUM_GFIFO
+    else if (simv_result) begin
+        $display("DIFFTEST FAILED at cycle %d", n_cycles);
+        $finish();
+    end
+    else if (|difftest_step_delay) begin
+      simv_nstep_gfifo(difftest_step_delay);
+    end
+`else
     else if (|difftest_step_delay) begin
       // check errors
       if (simv_nstep(difftest_step_delay)) begin
@@ -178,6 +200,7 @@ always @(posedge clock) begin
         $finish();
       end
     end
+`endif // PALLADIUM_GFIFO
   end
 end
 

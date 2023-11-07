@@ -158,6 +158,9 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   if (config.isBatch) {
     macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
   }
+  if (config.PalladiumGFIFO) {
+    macros ++= Seq("PALLADIUM_GFIFO")
+  }
 }
 
 
