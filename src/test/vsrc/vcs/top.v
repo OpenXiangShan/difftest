@@ -13,6 +13,9 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
+
+module tb_top();
+
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
@@ -24,8 +27,6 @@ import "DPI-C" function void simv_nstep_gfifo(int step);
 `else
 import "DPI-C" function int simv_nstep(int step);
 `endif // PALLADIUM_GFIFO
-
-module tb_top();
 
 `define STEP_WIDTH 8
 
@@ -48,13 +49,13 @@ string wave_type;
 string diff_ref_so;
 reg [63:0] max_cycles;
 
+`ifdef PALLADIUM_GFIFO
+initial $ixc_ctrl("gfifo", "simv_nstep_gfifo");
+`endif // PALLADIUM_GFIFO
+
 initial begin
   clock = 0;
   reset = 1;
-
-`ifdef PALLADIUM_GFIFO
-  $ixc_ctrl("gfifo", "simv_nstep_gfifo");
-`endif // PALLADIUM_GFIFO
 
 `ifdef VCS
   // enable waveform

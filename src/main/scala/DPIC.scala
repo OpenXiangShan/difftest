@@ -150,8 +150,8 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
          |);
          |`ifndef SYNTHESIS
          |`ifdef DIFFTEST
-         |$gfifoInitial
          |$dpicDecl
+         |$gfifoInitial
          |  always @(posedge clock) begin
          |    if (enable)
          |    $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
