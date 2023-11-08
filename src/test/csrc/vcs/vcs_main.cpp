@@ -22,9 +22,7 @@
 #include "ram.h"
 #include "flash.h"
 #include "refproxy.h"
-#ifdef PALLADIUM_GFIFO
-#include "svdpi.h"
-#endif // PALLADIUM_GFIFO
+
 static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
@@ -102,21 +100,17 @@ extern "C" int simv_nstep(uint8_t step) {
 }
 
 #ifdef PALLADIUM_GFIFO
-extern "C" void set_simv_result(int res);
-void simv_set(int result, const char *scope_name = "TOP.tb_top.gfifo") {
-  auto scope = svGetScopeFromName(scope_name);
-  if (scope == NULL) {
-    printf("Error: Could not retrieve scope with name '%s'\n", scope_name);
-    assert(scope);
-  }
-  svSetScope(scope);
-  set_simv_result(result);
-}
+static int simv_result = 0;
 extern "C" void simv_nstep_gfifo(uint8_t step) {
+  if (simv_result)
+    return;
   for(int i = 0; i < step; i++) {
     int ret = simv_step();
     if(ret)
-      simv_set(ret);
+      simv_result = ret;
   }
+}
+extern "C" int simv_result_fetch() {
+  return simv_result;
 }
 #endif // PALLADIUM_GFIFO
