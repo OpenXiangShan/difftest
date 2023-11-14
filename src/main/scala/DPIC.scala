@@ -136,13 +136,12 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
     // (2) module definition
     val modPortsString = modPorts.flatten.map(i => getModArgString(i._1, i._2)).mkString(",\n  ")
     // Initial for Palladium GFIFO
-    val gfifoInitial = if(config.PalladiumGFIFO)
+    val gfifoInitial =
       s"""
          |`ifdef PALLADIUM_GFIFO
          |initial $$ixc_ctrl("gfifo", "$dpicFuncName");
          |`endif
          |""".stripMargin
-      else ""
     val modDef =
       s"""
          |module $desiredName(

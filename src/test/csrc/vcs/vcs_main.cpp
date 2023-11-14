@@ -104,9 +104,9 @@ static int simv_result = 0;
 extern "C" void simv_nstep_gfifo(uint8_t step) {
   if (simv_result)
     return;
-  for(int i = 0; i < step; i++) {
+  for (int i = 0; i < step; i++) {
     int ret = simv_step();
-    if(ret)
+    if (ret)
       simv_result = ret;
   }
 }
