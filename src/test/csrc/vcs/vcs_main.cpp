@@ -90,18 +90,9 @@ extern "C" int simv_step() {
   }
 }
 
-extern "C" int simv_nstep(uint8_t step) {
-  for(int i = 0; i < step; i++) {
-    int ret = simv_step();
-    if(ret)
-      return ret;
-  }
-  return 0;
-}
-
 #ifdef PALLADIUM
 static int simv_result = 0;
-extern "C" void simv_nstep_gfifo(uint8_t step) {
+extern "C" void simv_nstep(uint8_t step) {
   if (simv_result)
     return;
   for (int i = 0; i < step; i++) {
@@ -112,5 +103,14 @@ extern "C" void simv_nstep_gfifo(uint8_t step) {
 }
 extern "C" int simv_result_fetch() {
   return simv_result;
+}
+#else
+extern "C" int simv_nstep(uint8_t step) {
+  for(int i = 0; i < step; i++) {
+    int ret = simv_step();
+    if(ret)
+      return ret;
+  }
+  return 0;
 }
 #endif // PALLADIUM

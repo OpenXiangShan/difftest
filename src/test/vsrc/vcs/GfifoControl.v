@@ -10,9 +10,9 @@ module GfifoControl(
 );
 
 import "DPI-C" function int simv_result_fetch();
-import "DPI-C" function void simv_nstep_gfifo(int step);
+import "DPI-C" function void simv_nstep(int step);
 
-initial $ixc_ctrl("gfifo", "simv_nstep_gfifo");
+initial $ixc_ctrl("gfifo", "simv_nstep");
 
 reg [63:0] fetch_cycles;
 initial fetch_cycles = 4999;
@@ -35,7 +35,7 @@ always @(posedge clock) begin
     end
 
     if ((~simv_result) && (|step)) begin
-      simv_nstep_gfifo(step);
+      simv_nstep(step);
     end
   end
 end
