@@ -183,12 +183,12 @@ class L1TLBEvent extends DifftestBaseBundle with HasValid {
 }
 
 class L2TLBEvent extends DifftestBaseBundle with HasValid {
-  val valididx = Vec(8, Bool())
+  val valididx = Vec(4, Bool())
   val satp = UInt(64.W)
   val vpn = UInt(64.W)
-  val ppn = Vec(8, UInt(64.W))
-  val perm = UInt(8.W)
-  val level = UInt(8.W)
+  val ppn = Vec(4, UInt(64.W))
+  val perm = UInt(4.W)
+  val level = UInt(4.W)
   val pf = Bool()
 }
 

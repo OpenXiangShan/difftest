@@ -587,7 +587,7 @@ int Difftest::do_l2tlb_check() {
       continue;
     }
     dut->l2tlb[i].valid = 0;
-    for (int j = 0; j < 8; j++) {
+    for (int j = 0; j < 4; j++) {
       if (dut->l2tlb[i].valididx[j]) {
         PTE pte;
         uint64_t pg_base = dut->l2tlb[i].satp << 12;
