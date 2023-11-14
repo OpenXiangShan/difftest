@@ -99,7 +99,7 @@ extern "C" int simv_nstep(uint8_t step) {
   return 0;
 }
 
-#ifdef PALLADIUM_GFIFO
+#ifdef PALLADIUM
 static int simv_result = 0;
 extern "C" void simv_nstep_gfifo(uint8_t step) {
   if (simv_result)
@@ -113,4 +113,4 @@ extern "C" void simv_nstep_gfifo(uint8_t step) {
 extern "C" int simv_result_fetch() {
   return simv_result;
 }
-#endif // PALLADIUM_GFIFO
+#endif // PALLADIUM

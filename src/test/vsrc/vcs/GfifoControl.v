@@ -1,4 +1,4 @@
-`ifdef PALLADIUM_GFIFO
+`ifdef PALLADIUM
 
 `define STEP_WIDTH 8
 
@@ -41,4 +41,4 @@ always @(posedge clock) begin
 end
 
 endmodule;
-`endif // PALLADIUM_GFIFO
+`endif // PALLADIUM

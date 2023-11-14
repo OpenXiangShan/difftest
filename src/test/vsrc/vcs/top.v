@@ -23,9 +23,9 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void simv_init();
-`ifndef PALLADIUM_GFIFO
+`ifndef PALLADIUM
 import "DPI-C" function int simv_nstep(int step);
-`endif // PALLADIUM_GFIFO
+`endif // PALLADIUM
 
 reg         clock;
 reg         reset;
@@ -45,7 +45,6 @@ string flash_bin_file;
 string wave_type;
 string diff_ref_so;
 reg [63:0] max_cycles;
-
 
 initial begin
   clock = 0;
@@ -154,7 +153,7 @@ always @(posedge clock) begin
   end
 end
 
-`ifdef PALLADIUM_GFIFO
+`ifdef PALLADIUM
 wire simv_result;
 GfifoControl gfifo(
   .clock(clock),
@@ -182,7 +181,7 @@ always @(posedge clock) begin
     if (!n_cycles) begin
       simv_init();
     end
-`ifdef PALLADIUM_GFIFO
+`ifdef PALLADIUM
     else if (simv_result) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
       $finish();
@@ -195,7 +194,7 @@ always @(posedge clock) begin
         $finish();
       end
     end
-`endif // PALLADIUM_GFIFO
+`endif // PALLADIUM
   end
 end
 
