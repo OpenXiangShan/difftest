@@ -31,10 +31,6 @@ ifneq ($(NO_DIFF), 1)
 VCS_FLAGS    += +define+DIFFTEST
 endif
 
-ifeq ($(PLD), 1)
-VCS_FLAGS 	 += +define+PALLADIUM_GFIFO
-endif
-
 ifeq ($(RELEASE),1)
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
 endif
