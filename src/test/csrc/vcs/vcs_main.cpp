@@ -96,9 +96,11 @@ extern "C" int simv_step() {
     switch (trapCode) {
       case 0:
         eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP\n" ANSI_COLOR_RESET);
+        printf("simulation result::PASS\n");
         break;
       default:
         eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
+	printf("simulation result::FAIL\n");
     }
     return trapCode + 1;
   }

@@ -80,7 +80,10 @@ CFG_HEADERS = $(shell find $(CFG_DIR) -name "*.h")
 
 SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
 
+
+ifndef TOP_VER_SIMULATOR_VCS
 include verilator.mk
+endif
 include vcs.mk
 
 clean: vcs-clean

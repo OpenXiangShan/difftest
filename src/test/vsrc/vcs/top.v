@@ -22,6 +22,11 @@ import "DPI-C" function void set_max_cycles(int mc);
 import "DPI-C" function void simv_init();
 import "DPI-C" function int simv_step();
 
+`ifdef NANHUV3_FUNCOV
+	`include "./../../dcov/focv_include.sv"
+`endif
+
+
 module tb_top();
 
 reg         clock;
@@ -132,6 +137,11 @@ assign io_logCtrl_log_level = 0;
 assign io_perfInfo_clean = 0;
 assign io_perfInfo_dump = 0;
 assign io_uart_in_ch = 8'hff;
+
+`ifdef NANHUV3_FUNCOV
+	`include "./../../fcov/fcov_connect.sv"
+`endif
+
 
 always @(posedge clock) begin
   if (!reset && io_uart_out_valid) begin

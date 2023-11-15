@@ -51,6 +51,17 @@ $(warning "NOTE: Sparse Memory is enable")
 VCS_CXXFLAGS += -DCONFIG_USE_SPARSEMM
 endif
 
+ifeq ($(FCOV),on)
+	VCS_FLAGS += +define+NANHUV3_FUNCOV
+	VCS_FLAGS += $(FCOV_OPT)
+endif
+
+VCS_FLAGS += -cm_dir $(VCS_SIM_DIR)/comp/simv
+
+ifeq ($(CCOV), on)
+	VCS_FLAGS += -cm_dir $(VCS_SIM_DIR)/comp/simv
+endif
+
 # if fsdb is considered
 # CONSIDER_FSDB ?= 0
 ifeq ($(CONSIDER_FSDB),1)

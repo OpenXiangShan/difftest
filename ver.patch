@@ -1,0 +1,81 @@
+diff --git a/Makefile b/Makefile
+index 54fd541a..754f7361 100644
+--- a/Makefile
++++ b/Makefile
+@@ -80,7 +80,10 @@ CFG_HEADERS = $(shell find $(CFG_DIR) -name "*.h")
+ 
+ SIM_VSRC = $(shell find ./src/test/vsrc/common -name "*.v" -or -name "*.sv")
+ 
++
++ifndef TOP_VER_SIMULATOR_VCS
+ include verilator.mk
++endif
+ include vcs.mk
+ 
+ clean: vcs-clean
+diff --git a/src/test/csrc/vcs/vcs_main.cpp b/src/test/csrc/vcs/vcs_main.cpp
+index c66c866f..1837a546 100644
+--- a/src/test/csrc/vcs/vcs_main.cpp
++++ b/src/test/csrc/vcs/vcs_main.cpp
+@@ -96,9 +96,11 @@ extern "C" int simv_step() {
+     switch (trapCode) {
+       case 0:
+         eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP\n" ANSI_COLOR_RESET);
++        printf("simulation result::PASS\n");
+         break;
+       default:
+         eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
++	printf("simulation result::FAIL\n");
+     }
+     return trapCode + 1;
+   }
+diff --git a/src/test/vsrc/vcs/top.v b/src/test/vsrc/vcs/top.v
+index cf2b3974..6980d901 100644
+--- a/src/test/vsrc/vcs/top.v
++++ b/src/test/vsrc/vcs/top.v
+@@ -22,6 +22,11 @@ import "DPI-C" function void set_max_cycles(int mc);
+ import "DPI-C" function void simv_init();
+ import "DPI-C" function int simv_step();
+ 
++`ifdef NANHUV3_FUNCOV
++	`include "./../../dcov/focv_include.sv"
++`endif
++
++
+ module tb_top();
+ 
+ reg         clock;
+@@ -133,6 +138,11 @@ assign io_perfInfo_clean = 0;
+ assign io_perfInfo_dump = 0;
+ assign io_uart_in_ch = 8'hff;
+ 
++`ifdef NANHUV3_FUNCOV
++	`include "./../../fcov/fcov_connect.sv"
++`endif
++
++
+ always @(posedge clock) begin
+   if (!reset && io_uart_out_valid) begin
+     if(io_uart_out_ch[7] == 0) begin
+diff --git a/vcs.mk b/vcs.mk
+index f94c4c55..1be29027 100644
+--- a/vcs.mk
++++ b/vcs.mk
+@@ -51,6 +51,17 @@ $(warning "NOTE: Sparse Memory is enable")
+ VCS_CXXFLAGS += -DCONFIG_USE_SPARSEMM
+ endif
+ 
++ifeq ($(FCOV),on)
++	VCS_FLAGS += +define+NANHUV3_FUNCOV
++	VCS_FLAGS += $(FCOV_OPT)
++endif
++
++VCS_FLAGS += -cm_dir $(VCS_SIM_DIR)/comp/simv
++
++ifeq ($(CCOV), on)
++	VCS_FLAGS += -cm_dir $(VCS_SIM_DIR)/comp/simv
++endif
++
+ # if fsdb is considered
+ # CONSIDER_FSDB ?= 0
+ ifeq ($(CONSIDER_FSDB),1)
