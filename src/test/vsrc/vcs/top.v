@@ -14,17 +14,18 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+`define STEP_WIDTH 8
+
+module tb_top();
+
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void simv_init();
-import "DPI-C" function int simv_step();
+`ifndef PALLADIUM
 import "DPI-C" function int simv_nstep(int step);
-
-module tb_top();
-
-`define STEP_WIDTH 8
+`endif // PALLADIUM
 
 reg         clock;
 reg         reset;
@@ -152,6 +153,15 @@ always @(posedge clock) begin
   end
 end
 
+`ifdef PALLADIUM
+wire simv_result;
+GfifoControl gfifo(
+  .clock(clock),
+  .reset(reset),
+  .step(difftest_step_delay),
+  .simv_result(simv_result)
+);
+`endif
 
 reg [63:0] n_cycles;
 always @(posedge clock) begin
@@ -171,6 +181,12 @@ always @(posedge clock) begin
     if (!n_cycles) begin
       simv_init();
     end
+`ifdef PALLADIUM
+    else if (simv_result) begin
+      $display("DIFFTEST FAILED at cycle %d", n_cycles);
+      $finish();
+    end
+`else
     else if (|difftest_step_delay) begin
       // check errors
       if (simv_nstep(difftest_step_delay)) begin
@@ -178,6 +194,7 @@ always @(posedge clock) begin
         $finish();
       end
     end
+`endif // PALLADIUM
   end
 end
 
