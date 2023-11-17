@@ -98,9 +98,9 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 
   val out = WireInit(fix)
   if (config.isSquash) {
-    for ((data,id) <- out.zipWithIndex) {
-      data := Squash(fix(id))
-    }
+    val squash = Squash(fix.toSeq.map(_.cloneType))
+    squash.in := fix
+    out := squash.out
   }
 
   val out_pack = WireInit(in_pack)

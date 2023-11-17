@@ -101,7 +101,7 @@ void difftest_finish() {
 
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_enable(int enable);
-void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.SquashEndpoint.control") {
+void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.GatewayEndpoint.SquashEndpoint.control") {
   auto scope = svGetScopeFromName(scope_name);
   if (scope == NULL) {
     printf("Error: Could not retrieve scope with name '%s'\n", scope_name);

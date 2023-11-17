@@ -26,35 +26,19 @@ import scala.collection.mutable.ListBuffer
 object Squash {
   private val instances = ListBuffer.empty[DifftestBundle]
 
-  def apply[T <: DifftestBundle](gen: T): T = {
-    register(gen, WireInit(0.U.asTypeOf(gen)))
-  }
-
-  def register[T <: DifftestBundle](original: T, squashed: T): T = {
-    // There seems to be a bug in WiringUtils when original is some IO of Module.
-    // We manually add a Wire for the source to avoid the WiringException.
-    BoringUtils.addSource(WireInit(original), s"squash_in_${instances.length}")
-    BoringUtils.addSink(squashed, s"squash_out_${instances.length}")
-    instances += original.cloneType
-    squashed
+  def apply[T <: Seq[DifftestBundle]](bundles: T): SquashEndpoint = {
+    val module = Module(new SquashEndpoint(bundles))
+    module
   }
 
   def collect(): Seq[String] = {
-    Module(new SquashEndpoint(instances.toSeq))
     Seq("CONFIG_DIFFTEST_SQUASH")
   }
 }
 
 class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
-  val in = WireInit(0.U.asTypeOf(MixedVec(bundles)))
-  for ((data, i) <- in.zipWithIndex) {
-    BoringUtils.addSink(data, s"squash_in_$i")
-  }
-
-  val out = Wire(MixedVec(bundles))
-  for ((data, i) <- out.zipWithIndex) {
-    BoringUtils.addSource(data, s"squash_out_$i")
-  }
+  val in = IO(Input(MixedVec(bundles)))
+  val out = IO(Output(MixedVec(bundles)))
 
   val state = RegInit(0.U.asTypeOf(MixedVec(bundles)))
 
