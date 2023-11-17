@@ -24,11 +24,10 @@ import difftest._
 import scala.collection.mutable.ListBuffer
 
 object Squash {
-  private val isEffective: Boolean = false
   private val instances = ListBuffer.empty[DifftestBundle]
 
   def apply[T <: DifftestBundle](gen: T): T = {
-    if (isEffective) register(gen, WireInit(0.U.asTypeOf(gen))) else gen
+    register(gen, WireInit(0.U.asTypeOf(gen)))
   }
 
   def register[T <: DifftestBundle](original: T, squashed: T): T = {
@@ -41,13 +40,8 @@ object Squash {
   }
 
   def collect(): Seq[String] = {
-    if (isEffective) {
-      Module(new SquashEndpoint(instances.toSeq))
-      Seq("CONFIG_DIFFTEST_SQUASH")
-    }
-    else {
-      Seq()
-    }
+    Module(new SquashEndpoint(instances.toSeq))
+    Seq("CONFIG_DIFFTEST_SQUASH")
   }
 }
 
@@ -105,30 +99,6 @@ class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
       }.elsewhen (d) {
         s := i.squash(s)
       }
-  }
-
-  // Special fix for int writeback. Work for single-core only.
-  if (bundles.exists(_.desiredCppName == "wb_int")) {
-    require(bundles.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
-    val writebacks = in.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
-    val numPhyRegs = writebacks.head.numElements
-    val wb_int = Reg(Vec(numPhyRegs, UInt(64.W)))
-    for (wb <- writebacks) {
-      when (wb.valid) {
-        wb_int(wb.address) := wb.data
-      }
-    }
-    val commits = out.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit])
-    val num_skip = PopCount(commits.map(c => c.valid && c.skip))
-    assert(num_skip <= 1.U, p"num_skip $num_skip is larger than one. Squash not supported yet")
-    val wb_for_skip = out.filter(_.desiredCppName == "wb_int").head.asInstanceOf[DiffIntWriteback]
-    for (c <- commits) {
-      when (c.valid && c.skip) {
-        wb_for_skip.valid := true.B
-        wb_for_skip.address := c.wpdest
-        wb_for_skip.data := wb_int(c.wpdest)
-      }
-    }
   }
 }
 
