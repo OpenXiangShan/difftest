@@ -28,6 +28,7 @@ case class GatewayConfig(
                         style          : String  = "dpic",
                         hasGlobalEnable: Boolean = false,
                         isSquash       : Boolean = true,
+                        squashSize     : Int     = 256,
                         diffStateSelect: Boolean = false,
                         isBatch        : Boolean = false,
                         batchSize      : Int     = 32
@@ -96,8 +97,16 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
   }
 
+  //set SquashSize
+  val maxNumFused = WireInit(0.U)
+  val commits = fix.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit])
+  for (c <- commits) {
+    c.maxNumFused := maxNumFused
+  }
+
   val out = WireInit(fix)
   if (config.isSquash) {
+    maxNumFused := (config.squashSize - 1).U
     val squash = Squash(fix.toSeq.map(_.cloneType))
     squash.in := fix
     out := squash.out

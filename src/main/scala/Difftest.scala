@@ -119,11 +119,11 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs)
 {
   override val desiredCppName: String = "commit"
 
-  private val maxNumFused = 255
+  val maxNumFused = UInt(8.W)
   override def supportsSquash(base: DifftestBundle): Bool = {
     val that = base.asInstanceOf[DiffInstrCommit]
     val nextNFused = (nFused +& that.nFused) + 1.U
-    !valid || (!skip && (!that.valid || nextNFused <= maxNumFused.U) && !special.asUInt.orR)
+    !valid || (!skip && (!that.valid || nextNFused <= maxNumFused) && !special.asUInt.orR)
   }
   override def supportsSquashBase: Bool = {
     !valid || (!skip && !special.asUInt.orR)
