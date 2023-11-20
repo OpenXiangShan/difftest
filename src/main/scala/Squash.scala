@@ -65,10 +65,10 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Modu
   // Submit the pending non-squashable events immediately.
   val should_tick = !control.enable || !supportsSquash || !supportsSquashBase || tick_first_commit
 
-  val unsquash_buffer = Mem(squashSize, in.cloneType)
-  val unsquash_ptr = RegInit(0.U(log2Ceil(squashSize).W))
+  val replay_buffer = Mem(squashSize, in.cloneType)
+  val replay_ptr = RegInit(0.U(log2Ceil(squashSize).W))
 
-  out := Mux(control.unsquash, unsquash_buffer(unsquash_ptr), Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles))))
+  out := Mux(control.replay, replay_buffer(replay_ptr), Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles))))
 
   // Sometimes, the bundle may have squash dependencies.
   val do_squash = WireInit(VecInit.fill(in.length)(true.B))
@@ -82,14 +82,14 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Modu
   }
 
   when(RegNext(should_tick)) {
-    unsquash_ptr := 0.U
+    replay_ptr := 0.U
   }.elsewhen(RegNext(do_squash.asUInt.orR)) {
-    unsquash_ptr := unsquash_ptr + 1.U
-    when (unsquash_ptr === (squashSize - 1).U) {
-      unsquash_ptr := 0.U
+    replay_ptr := replay_ptr + 1.U
+    when (replay_ptr === (squashSize - 1).U) {
+      replay_ptr := 0.U
     }
   }
-  unsquash_buffer(unsquash_ptr) := RegNext(RegNext(in))
+  replay_buffer(replay_ptr) := RegNext(RegNext(in))
 
   for (((i, d), s) <- in.zip(do_squash).zip(state)) {
       when (should_tick) {
@@ -104,7 +104,7 @@ class SquashControl extends ExtModule with HasExtModuleInline {
   val clock = IO(Input(Clock()))
   val reset = IO(Input(Reset()))
   val enable = IO(Output(Bool()))
-  val unsquash = IO(Output(Bool()))
+  val replay = IO(Output(Bool()))
 
   setInline("SquashControl.v",
     """
@@ -112,12 +112,15 @@ class SquashControl extends ExtModule with HasExtModuleInline {
       |  input clock,
       |  input reset,
       |  output reg enable,
-      |  output reg unsquash
+      |  output reg replay
       |);
       |
+      |import "DPI-C" context function void set_squash_scope();
+      |
       |initial begin
+      |  set_squash_scope();
       |  enable = 1'b1;
-      |  unsquash = 1'b0;
+      |  replay = 1'b0;
       |end
       |
       |// For the C/C++ interface
@@ -125,9 +128,9 @@ class SquashControl extends ExtModule with HasExtModuleInline {
       |task set_squash_enable(int en);
       |  enable = en;
       |endtask
-      |export "DPI-C" task set_unsquash;
-      |task set_unsquash();
-      |  unsquash = 1'b1;
+      |export "DPI-C" task set_squash_replay;
+      |task set_squash_replay();
+      |  replay = 1'b1;
       |endtask
       |
       |// For the simulation argument +squash_cycles=N

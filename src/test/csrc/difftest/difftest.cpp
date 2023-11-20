@@ -100,26 +100,29 @@ void difftest_finish() {
 }
 
 #ifdef CONFIG_DIFFTEST_SQUASH
+svScope squashScope;
+void set_squash_scope() {
+  squashScope = svGetScope();
+}
+
 extern "C" void set_squash_enable(int enable);
-void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.GatewayEndpoint.SquashEndpoint.control") {
-  auto scope = svGetScopeFromName(scope_name);
-  if (scope == NULL) {
-    printf("Error: Could not retrieve scope with name '%s'\n", scope_name);
-    assert(scope);
+void difftest_squash_enable(int enable) {
+  if (squashScope == NULL) {
+    printf("Error: Could not retrieve scope, set first\n");
+    assert(squashScope);
   }
-  svSetScope(scope);
+  svSetScope(squashScope);
   set_squash_enable(rand());
 }
 
-extern "C" void set_unsquash();
-void difftest_unsquash_set(const char *scope_name = "TOP.SimTop.GatewayEndpoint.SquashEndpoint.control") {
-  auto scope = svGetScopeFromName(scope_name);
-  if (scope == NULL) {
-    printf("Error: Could not retrieve scope with name '%s'\n", scope_name);
-    assert(scope);
+extern "C" void set_squash_replay();
+void difftest_squash_replay() {
+  if (squashScope == NULL) {
+    printf("Error: Could not retrieve scope, set first\n");
+    assert(squashScope);
   }
-  svSetScope(scope);
-  set_unsquash();
+  svSetScope(squashScope);
+  set_squash_replay();
 }
 #endif // CONFIG_DIFFTEST_SQUASH
 
