@@ -98,7 +98,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   }
 
   // returns Bool indicating whether `this` bundle can be squashed with `base`
-  def supportsSquash(base: DifftestBundle): Bool = supportsSquashBase
+  def supportsSquash(base: DifftestBundle, maxNumFused: Int): Bool = supportsSquashBase
   def supportsSquashBase: Bool = if (hasValid) !getValid else true.B
   // returns a Seq indicating the squash dependencies. Default: empty
   // Only when one of the dependencies is valid, this bundle is squashed.
@@ -119,11 +119,10 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs)
 {
   override val desiredCppName: String = "commit"
 
-  val maxNumFused = UInt(8.W)
-  override def supportsSquash(base: DifftestBundle): Bool = {
+  override def supportsSquash(base: DifftestBundle, maxNumFused: Int): Bool = {
     val that = base.asInstanceOf[DiffInstrCommit]
     val nextNFused = (nFused +& that.nFused) + 1.U
-    !valid || (!skip && (!that.valid || nextNFused <= maxNumFused) && !special.asUInt.orR)
+    !valid || (!skip && (!that.valid || nextNFused <= maxNumFused.U) && !special.asUInt.orR)
   }
   override def supportsSquashBase: Bool = {
     !valid || (!skip && !special.asUInt.orR)

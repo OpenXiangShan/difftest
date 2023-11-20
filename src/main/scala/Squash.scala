@@ -51,7 +51,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Modu
   val tick_first_commit = isInitialEvent && hasValidCommitEvent
 
   // If one of the bundles cannot be squashed, the others are not squashed as well.
-  val supportsSquashVec = VecInit(in.zip(state).map{ case (i, s) => i.supportsSquash(s) }.toSeq)
+  val supportsSquashVec = VecInit(in.zip(state).map{ case (i, s) => i.supportsSquash(s, squashSize - 1) }.toSeq)
   val supportsSquash = supportsSquashVec.asUInt.andR
 
   // If one of the bundles cannot be the new base, the others are not as well.
