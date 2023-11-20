@@ -110,6 +110,17 @@ void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.Gatewa
   svSetScope(scope);
   set_squash_enable(rand());
 }
+
+extern "C" void set_unsquash();
+void difftest_unsquash_set(const char *scope_name = "TOP.SimTop.GatewayEndpoint.SquashEndpoint.control") {
+  auto scope = svGetScopeFromName(scope_name);
+  if (scope == NULL) {
+    printf("Error: Could not retrieve scope with name '%s'\n", scope_name);
+    assert(scope);
+  }
+  svSetScope(scope);
+  set_unsquash();
+}
 #endif // CONFIG_DIFFTEST_SQUASH
 
 Difftest::Difftest(int coreid) : id(coreid) {

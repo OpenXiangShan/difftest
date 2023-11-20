@@ -26,8 +26,8 @@ import scala.collection.mutable.ListBuffer
 object Squash {
   private val instances = ListBuffer.empty[DifftestBundle]
 
-  def apply[T <: Seq[DifftestBundle]](bundles: T): SquashEndpoint = {
-    val module = Module(new SquashEndpoint(bundles))
+  def apply[T <: Seq[DifftestBundle]](bundles: T, squashSize: Int): SquashEndpoint = {
+    val module = Module(new SquashEndpoint(bundles, squashSize))
     module
   }
 
@@ -36,7 +36,7 @@ object Squash {
   }
 }
 
-class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
+class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val out = IO(Output(MixedVec(bundles)))
 
@@ -64,7 +64,11 @@ class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
 
   // Submit the pending non-squashable events immediately.
   val should_tick = !control.enable || !supportsSquash || !supportsSquashBase || tick_first_commit
-  out := Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles)))
+
+  val unsquash_buffer = Mem(squashSize, in.cloneType)
+  val unsquash_ptr = RegInit(0.U(log2Ceil(squashSize).W))
+
+  out := Mux(control.unsquash, unsquash_buffer(unsquash_ptr), Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles))))
 
   // Sometimes, the bundle may have squash dependencies.
   val do_squash = WireInit(VecInit.fill(in.length)(true.B))
@@ -76,6 +80,16 @@ class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
       }).toSeq).asUInt.orR
     }
   }
+
+  when(RegNext(should_tick)) {
+    unsquash_ptr := 0.U
+  }.elsewhen(RegNext(do_squash.asUInt.orR)) {
+    unsquash_ptr := unsquash_ptr + 1.U
+    when (unsquash_ptr === (squashSize - 1).U) {
+      unsquash_ptr := 0.U
+    }
+  }
+  unsquash_buffer(unsquash_ptr) := RegNext(RegNext(in))
 
   for (((i, d), s) <- in.zip(do_squash).zip(state)) {
       when (should_tick) {
@@ -90,23 +104,30 @@ class SquashControl extends ExtModule with HasExtModuleInline {
   val clock = IO(Input(Clock()))
   val reset = IO(Input(Reset()))
   val enable = IO(Output(Bool()))
+  val unsquash = IO(Output(Bool()))
 
   setInline("SquashControl.v",
     """
       |module SquashControl(
       |  input clock,
       |  input reset,
-      |  output reg enable
+      |  output reg enable,
+      |  output reg unsquash
       |);
       |
       |initial begin
       |  enable = 1'b1;
+      |  unsquash = 1'b0;
       |end
       |
       |// For the C/C++ interface
       |export "DPI-C" task set_squash_enable;
       |task set_squash_enable(int en);
       |  enable = en;
+      |endtask
+      |export "DPI-C" task set_unsquash;
+      |task set_unsquash();
+      |  unsquash = 1'b1;
       |endtask
       |
       |// For the simulation argument +squash_cycles=N

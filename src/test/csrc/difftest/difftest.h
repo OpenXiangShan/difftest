@@ -370,6 +370,7 @@ int init_nemuproxy(size_t);
 
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void difftest_squash_set(int enable, const char *scope_name);
+extern "C" void difftest_unsquash_set(const char *scope_name);
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #endif

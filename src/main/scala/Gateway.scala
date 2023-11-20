@@ -97,7 +97,6 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
   }
 
-  //set SquashSize
   val maxNumFused = WireInit(0.U)
   val commits = fix.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit])
   for (c <- commits) {
@@ -107,7 +106,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   val out = WireInit(fix)
   if (config.isSquash) {
     maxNumFused := (config.squashSize - 1).U
-    val squash = Squash(fix.toSeq.map(_.cloneType))
+    val squash = Squash(fix.toSeq.map(_.cloneType), config.squashSize)
     squash.in := fix
     out := squash.out
   }
