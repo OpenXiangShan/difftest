@@ -49,6 +49,9 @@ int difftest_state() {
     if (difftest[i]->get_trap_valid()) {
       return difftest[i]->get_trap_code();
     }
+    if (difftest[i]->proxy && difftest[i]->proxy->get_status()) {
+      return difftest[i]->proxy->get_status();
+    }
   }
   return -1;
 }
@@ -242,7 +245,7 @@ int Difftest::step() {
     return 1;
   }
 
-  return proxy->get_status();
+  return 0;
 }
 
 void Difftest::do_interrupt() {
