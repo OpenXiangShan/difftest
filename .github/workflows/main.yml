@@ -77,6 +77,14 @@ jobs:
             source ./env.sh
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
 
+      - name: Basic Difftest without Image
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            ./build/emu -b 0 -e 0 --no-diff -C 10000
+
       - name: Difftest with Snapshot
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
