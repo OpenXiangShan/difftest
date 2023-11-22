@@ -969,6 +969,9 @@ void Emulator::display_trapinfo() {
       case STATE_SIG:
         eprintf(ANSI_COLOR_YELLOW "SOME SIGNAL STOPS THE PROGRAM at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
         break;
+      case STATE_SIM_EXIT:
+        eprintf(ANSI_COLOR_YELLOW "EXIT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
+        break;
       default:
         eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n", trapCode);
     }
