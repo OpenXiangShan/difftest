@@ -105,6 +105,7 @@ public:
   REF_DEBUG_MODE(f)
 
 #define REF_OPTIONAL(f)                                                       \
+  f(ref_status, difftest_status, int, )                                       \
   f(ref_close, difftest_close, void, )                                        \
   f(ref_set_ramsize, difftest_set_ramsize, void, size_t)                      \
   f(ref_set_mhartid, difftest_set_mhartid, void, int)                         \
@@ -202,6 +203,10 @@ public:
   inline void set_illegal_mem_access(bool ignored = false) {
     config.ignore_illegal_mem_access = ignored;
     sync_config();
+  }
+
+  inline int get_status() {
+    return ref_status ? ref_status() : 0;
   }
 
 private:

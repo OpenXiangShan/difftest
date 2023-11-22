@@ -242,7 +242,7 @@ int Difftest::step() {
     return 1;
   }
 
-  return 0;
+  return proxy->get_status();
 }
 
 void Difftest::do_interrupt() {
