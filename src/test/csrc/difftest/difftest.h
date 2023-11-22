@@ -286,7 +286,7 @@ protected:
 #else
   const uint64_t timeout_scale = 1;
 #endif // CONFIG_DIFFTEST_SQUASH
-#if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
+#if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP) || defined(CPU_PIPER)
   const uint64_t firstCommit_limit = 1000 * commit_storage;
   const uint64_t stuck_limit = 500 * timeout_scale * commit_storage;
 #elif defined(CPU_XIANGSHAN)

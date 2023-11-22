@@ -26,6 +26,7 @@
 #if defined(CPU_NUTSHELL)
 #elif defined(CPU_XIANGSHAN)
 #elif defined(CPU_ROCKET_CHIP)
+#elif defined(CPU_PIPER)
 #else
 // This is the default CPU
 #define CPU_NUTSHELL
@@ -46,6 +47,8 @@
 #define FIRST_INST_ADDRESS 0x80000000UL
 #elif defined(CPU_XIANGSHAN) || defined(CPU_ROCKET_CHIP)
 #define FIRST_INST_ADDRESS 0x10000000UL
+#elif defined(CPU_PIPER)
+#define FIRST_INST_ADDRESS 0x30000000UL
 #endif
 
 // sdcard image to be used in simulation
@@ -58,6 +61,8 @@
 
 #if defined(CPU_ROCKET_CHIP)
 #define DEFAULT_EMU_FLASH_SIZE 0x10000UL
+#elif defined(CPU_PIPER)
+#define DEFAULT_EMU_FLASH_SIZE (4 * 1024 * 1024UL) // 4 MB
 #else
 #define DEFAULT_EMU_FLASH_SIZE (32 * 1024UL) // 4 MB
 #endif
