@@ -265,10 +265,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     }
   }
 
-  if(args.image == NULL) {
-    print_help(argv[0]);
-    Info("Hint: --image=IMAGE_FILE must be given\n");
-    exit(0);
+  if (args.image == NULL) {
+    Info("Hint: --image=IMAGE_FILE is not specified. Use /dev/zero instead.\n");
+    args.image = "/dev/zero";
   }
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
