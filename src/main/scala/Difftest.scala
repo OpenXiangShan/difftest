@@ -407,7 +407,7 @@ private class Delayer[T <: Data](gen: T, n_cycles: Int) extends Module {
 
   var r = WireInit(i)
   for (_ <- 0 until n_cycles) {
-    r = RegNext(r)
+    r = RegNext(r, 0.U.asTypeOf(gen))
   }
   o := r
 }
