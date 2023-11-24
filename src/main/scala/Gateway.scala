@@ -30,6 +30,9 @@ case class GatewayConfig(
                         isBatch        : Boolean = false,
                         batchSize      : Int     = 32
                         )
+{
+  def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch
+}
 
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
@@ -37,7 +40,15 @@ object Gateway {
 
   def apply[T <: DifftestBundle](gen: T, style: String): T = {
     config = GatewayConfig(style = style)
-    register(WireInit(0.U.asTypeOf(gen)))
+    if (config.needEndpoint)
+      register(WireInit(0.U.asTypeOf(gen)))
+    else {
+      val port = Wire(new GatewayBundle(config))
+      port.enable := true.B
+      val bundle = WireInit(0.U.asTypeOf(gen))
+      GatewaySink(gen, config, port) := bundle.asUInt
+      bundle
+    }
   }
 
   def register[T <: DifftestBundle](gen: T): T = {
@@ -48,8 +59,13 @@ object Gateway {
   }
 
   def collect(): (Seq[String], UInt) = {
-    val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
-    (endpoint.macros, endpoint.step)
+    if (config.needEndpoint) {
+      val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
+      (endpoint.macros, endpoint.step)
+    }
+    else {
+      (GatewaySink.collect(config), 1.U)
+    }
   }
 }
 
