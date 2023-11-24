@@ -20,14 +20,15 @@ import chisel3.experimental.ExtModule
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import difftest._
+import difftest.gateway.GatewayConfig
 
 import scala.collection.mutable.ListBuffer
 
 object Squash {
   private val instances = ListBuffer.empty[DifftestBundle]
 
-  def apply[T <: Seq[DifftestBundle]](bundles: T, squashSize: Int): SquashEndpoint = {
-    val module = Module(new SquashEndpoint(bundles, squashSize))
+  def apply[T <: Seq[DifftestBundle]](bundles: T, config: GatewayConfig): SquashEndpoint = {
+    val module = Module(new SquashEndpoint(bundles, config))
     module
   }
 
@@ -36,9 +37,10 @@ object Squash {
   }
 }
 
-class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Module {
+class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val out = IO(Output(MixedVec(bundles)))
+  val idx = IO(Output(UInt(8.W)))
 
   val state = RegInit(0.U.asTypeOf(MixedVec(bundles)))
 
@@ -51,7 +53,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Modu
   val tick_first_commit = isInitialEvent && hasValidCommitEvent
 
   // If one of the bundles cannot be squashed, the others are not squashed as well.
-  val supportsSquashVec = VecInit(in.zip(state).map{ case (i, s) => i.supportsSquash(s, squashSize - 1) }.toSeq)
+  val supportsSquashVec = VecInit(in.zip(state).map{ case (i, s) => i.supportsSquash(s, config.squashSize - 1) }.toSeq)
   val supportsSquash = supportsSquashVec.asUInt.andR
 
   // If one of the bundles cannot be the new base, the others are not as well.
@@ -65,10 +67,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Modu
   // Submit the pending non-squashable events immediately.
   val should_tick = !control.enable || !supportsSquash || !supportsSquashBase || tick_first_commit
 
-  val replay_buffer = Mem(squashSize, in.cloneType)
-  val replay_ptr = RegInit(0.U(log2Ceil(squashSize).W))
-
-  out := Mux(control.replay, replay_buffer(replay_ptr), Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles))))
+  val squashed = Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles)))
 
   // Sometimes, the bundle may have squash dependencies.
   val do_squash = WireInit(VecInit.fill(in.length)(true.B))
@@ -81,16 +80,6 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Modu
     }
   }
 
-  when(RegNext(should_tick)) {
-    replay_ptr := 0.U
-  }.elsewhen(RegNext(do_squash.asUInt.orR)) {
-    replay_ptr := replay_ptr + 1.U
-    when (replay_ptr === (squashSize - 1).U) {
-      replay_ptr := 0.U
-    }
-  }
-  replay_buffer(replay_ptr) := RegNext(RegNext(in))
-
   for (((i, d), s) <- in.zip(do_squash).zip(state)) {
       when (should_tick) {
         s := i
@@ -98,6 +87,47 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], squashSize: Int) extends Modu
         s := i.squash(s)
       }
   }
+
+  if (config.squashReplay) {
+    val replay_data = Mem(config.replaySize, in.cloneType)
+    val replay_wptr = RegInit(0.U(log2Ceil(config.replaySize).W))
+    val replay_rptr = RegInit(0.U(log2Ceil(config.replaySize).W))
+    val replay_table = Mem(config.replaySize, replay_rptr.cloneType)
+
+    // Maybe every state is non-squashable, preventing two replayable instructions have the same idx
+    val squash_idx = RegInit(0.U(log2Ceil(config.replaySize).W))
+
+    when (should_tick & !control.replay) {
+      val next_squash_idx = Mux(squash_idx === (config.replaySize - 1).U, 0.U, squash_idx + 1.U)
+      replay_table(next_squash_idx) := replay_wptr
+      squash_idx := next_squash_idx
+    }
+    when ((should_tick || do_squash.asUInt.orR) && !control.replay) {
+      replay_data(replay_wptr) := in
+      replay_wptr := replay_wptr + 1.U
+      when (replay_wptr === (config.replaySize - 1).U) {
+        replay_wptr := 0.U
+      }
+    }
+    val in_replay = RegInit(false.B)
+    when (control.replay) {
+      when (!in_replay) {
+        in_replay := true.B
+        replay_rptr := replay_table(control.replay_idx)
+      }.otherwise {
+        replay_rptr := replay_rptr + 1.U
+        when (replay_rptr === (config.replaySize - 1).U) {
+          replay_rptr := 0.U
+        }
+      }
+    }
+    idx := Mux(control.replay && in_replay, control.replay_idx, squash_idx)
+    out := Mux(control.replay, replay_data(replay_rptr), squashed)
+  }
+  else {
+    out := squashed
+  }
+
 }
 
 class SquashControl extends ExtModule with HasExtModuleInline {
@@ -105,6 +135,7 @@ class SquashControl extends ExtModule with HasExtModuleInline {
   val reset = IO(Input(Reset()))
   val enable = IO(Output(Bool()))
   val replay = IO(Output(Bool()))
+  val replay_idx = IO(Output(UInt(8.W)))
 
   setInline("SquashControl.v",
     """
@@ -112,7 +143,8 @@ class SquashControl extends ExtModule with HasExtModuleInline {
       |  input clock,
       |  input reset,
       |  output reg enable,
-      |  output reg replay
+      |  output reg replay,
+      |  output reg [7:0] replay_idx
       |);
       |
       |import "DPI-C" context function void set_squash_scope();
@@ -121,6 +153,7 @@ class SquashControl extends ExtModule with HasExtModuleInline {
       |  set_squash_scope();
       |  enable = 1'b1;
       |  replay = 1'b0;
+      |  replay_idx = 8'b0;
       |end
       |
       |// For the C/C++ interface
@@ -129,8 +162,9 @@ class SquashControl extends ExtModule with HasExtModuleInline {
       |  enable = en;
       |endtask
       |export "DPI-C" task set_squash_replay;
-      |task set_squash_replay();
+      |task set_squash_replay(int idx);
       |  replay = 1'b1;
+      |  replay_idx = idx;
       |endtask
       |
       |// For the simulation argument +squash_cycles=N

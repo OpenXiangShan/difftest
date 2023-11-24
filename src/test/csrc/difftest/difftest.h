@@ -186,6 +186,7 @@ private:
 class Difftest {
 public:
   DiffTestState* dut;
+  int squash_idx;
 
   // Difftest public APIs for testbench
   // Its backend should be cross-platform (NEMU, Spike, ...)
@@ -353,6 +354,21 @@ protected:
   int apply_delayed_writeback();
 
   void raise_trap(int trapCode);
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+  bool isSquash;
+  bool inReplay = false;
+  int replay_idx;
+
+  DiffState *state_ss = NULL;
+  REF_PROXY *proxy_ss = NULL;
+  uint64_t squash_csr_buf[4096];
+  long squash_memsize;
+  char *squash_membuf;
+  bool squash_check();
+  void squash_snapshot();
+  void squash_replay();
+#endif // CONFIG_DIFFTEST_SQUASH
 };
 
 extern Difftest **difftest;
@@ -371,7 +387,7 @@ int init_nemuproxy(size_t);
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_scope();
 extern "C" void difftest_squash_enable(int enable);
-extern "C" void difftest_squash_replay();
+extern "C" void difftest_squash_replay(int idx);
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #endif

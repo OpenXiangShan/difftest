@@ -165,6 +165,51 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
+class DifftestControl(config: GatewayConfig) extends ExtModule with HasExtModuleInline {
+  val clock = IO(Input(Clock()))
+  val enable = IO(Input(Bool()))
+  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
+  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
+  val squash_idx = Option.when(config.isSquash)(IO(Input(UInt(8.W))))
+
+  val dpicFuncName: String = "v_difftest_Control"
+  val dpicFuncProto: String =
+    s"""
+       |extern "C" void $dpicFuncName (
+       |  uint8_t  select,
+       |  uint8_t  squash_idx
+       |)""".stripMargin
+  val dpicFunc: String =
+    s"""
+       |$dpicFuncProto {
+       |  if (diffstate_buffer == NULL) return;
+       |  *(diffstate_buffer[0].get_idx(select)) = squash_idx;
+       |}
+       |""".stripMargin
+
+  setInline("DifftestControl.v",
+    """
+      |module DifftestControl(
+      |  input clock,
+      |  input enable,
+      |  input select,
+      |  input [7:0] squash_idx
+      |);
+      |
+      |import "DPI-C" function void v_difftest_Control(
+      |  input       bit select,
+      |  input      byte squash_idx
+      |);
+      |
+      |  always @(posedge clock) begin
+      |    if (enable)
+      |    v_difftest_Control (select, squash_idx);
+      |  end
+      |endmodule;
+      |""".stripMargin
+  )
+}
+
 private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends Module {
   val io = IO(Input(UInt(gen.getWidth.W)))
   val enable = IO(Input(Bool()))
@@ -182,6 +227,26 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfi
     dpic.batch_idx.get := batch_idx.get
   }
   dpic.io := unpack
+}
+
+private class DummyDPICControl(config: GatewayConfig) extends Module {
+  val enable = IO(Input(Bool()))
+  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
+  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
+  val squash_idx = Option.when(config.isSquash)(IO(Input(UInt(8.W))))
+
+  val control = Module(new DifftestControl(config))
+  control.clock := clock
+  control.enable := enable
+  if (config.diffStateSelect) {
+    control.select.get := select.get
+  }
+  if (config.isBatch) {
+    control.batch_idx.get := batch_idx.get
+  }
+  if (config.isSquash) {
+    control.squash_idx.get := squash_idx.get
+  }
 }
 
 object DPIC {
@@ -205,10 +270,24 @@ object DPIC {
     module.io
   }
 
-  def collect(config: GatewayConfig): Seq[String] = {
+  def collect(config: GatewayConfig, port: GatewayBundle): Seq[String] = {
     if (interfaces.isEmpty) {
       return Seq()
     }
+    val module = Module(new DummyDPICControl(config))
+    module.enable := port.enable
+    if (config.diffStateSelect) {
+      module.select.get := port.select.get
+    }
+    if (config.isBatch) {
+      module.batch_idx.get := port.batch_idx.get
+    }
+    if (config.isSquash) {
+      module.squash_idx.get := port.squash_idx.get
+    }
+    val interface = (module.control.dpicFuncName, module.control.dpicFuncProto, module.control.dpicFunc)
+    interfaces += interface
+
     val buf_len = {
       if (config.diffStateSelect) 2
       else if (config.isBatch) config.batchSize
@@ -218,6 +297,7 @@ object DPIC {
       s"""
          |class DPICBuffer : public DiffStateBuffer {
          |private:
+         |  int squash_idx[$buf_len];
          |  DiffTestState buffer[$buf_len];
          |  int read_ptr = 0;
          |public:
@@ -231,6 +311,12 @@ object DPIC {
          |    DiffTestState* ret = buffer+read_ptr;
          |    read_ptr = (read_ptr + 1) % $buf_len;
          |    return ret;
+         |  }
+         |  inline int* get_idx(int pos) {
+         |    return squash_idx+pos;
+         |  }
+         |  inline int* next_idx() {
+         |    return squash_idx+read_ptr;
          |  }
          |};
          |""".stripMargin

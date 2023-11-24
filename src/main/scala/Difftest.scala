@@ -379,6 +379,8 @@ object DifftestModule {
          |  virtual ~DiffStateBuffer() {}
          |  virtual DiffTestState* get(int pos) = 0;
          |  virtual DiffTestState* next() = 0;
+         |  virtual int* get_idx(int pos) = 0;
+         |  virtual int* next_idx() = 0 ;
          |};
          |
          |extern DiffStateBuffer* diffstate_buffer;

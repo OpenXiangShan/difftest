@@ -26,14 +26,21 @@ import scala.collection.mutable.ListBuffer
 
 case class GatewayConfig(
                         style          : String  = "dpic",
-                        hasGlobalEnable: Boolean = false,
-                        isSquash       : Boolean = false,
+                        hasGlobalEnable: Boolean = true,
+                        isSquash       : Boolean = true,
                         squashSize     : Int     = 256,
-                        diffStateSelect: Boolean = false,
+                        squashReplay   : Boolean = true,
+                        replaySize     : Int     = 256,
+                        diffStateSelect: Boolean = true,
                         isBatch        : Boolean = false,
                         batchSize      : Int     = 32
                         )
-
+{
+  if(squashReplay) {
+    require(hasGlobalEnable && isSquash && !isBatch)
+    require(replaySize >= squashSize)
+  }
+}
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
   private var config    = GatewayConfig()
@@ -97,20 +104,21 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
   }
 
+  val port_num = if (config.isBatch) config.batchSize else 1
+  val ports = Seq.fill(port_num)(Wire(new GatewayBundle(config)))
+
   val out = WireInit(fix)
   if (config.isSquash) {
-    val squash = Squash(fix.toSeq.map(_.cloneType), config.squashSize)
+    val squash = Squash(fix.toSeq.map(_.cloneType), config)
     squash.in := fix
     out := squash.out
+    ports.foreach(port => port.squash_idx.get := squash.idx)
   }
 
   val out_pack = WireInit(in_pack)
   for ((data, id) <- out_pack.zipWithIndex) {
     data := out(id).asUInt
   }
-
-  val port_num = if (config.isBatch) config.batchSize else 1
-  val ports = Seq.fill(port_num)(Wire(new GatewayBundle(config)))
 
   val global_enable = WireInit(true.B)
   if(config.hasGlobalEnable) {
@@ -163,7 +171,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
   }
 
-  var macros = GatewaySink.collect(config)
+  var macros = GatewaySink.collect(config, ports.head)
   if (config.isBatch) {
     macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
   }
@@ -180,9 +188,9 @@ object GatewaySink{
     }
   }
 
-  def collect(config: GatewayConfig): Seq[String] = {
+  def collect(config: GatewayConfig, port: GatewayBundle): Seq[String] = {
     config.style match {
-      case "dpic" => DPIC.collect(config)
+      case "dpic" => DPIC.collect(config, port)
     }
   }
 }
@@ -191,4 +199,5 @@ class GatewayBundle(config: GatewayConfig) extends Bundle {
   val enable = Bool()
   val select = Option.when(config.diffStateSelect)(Bool())
   val batch_idx = Option.when(config.isBatch)(UInt(log2Ceil(config.batchSize).W))
+  val squash_idx = Option.when(config.isSquash)(UInt(8.W))
 }
