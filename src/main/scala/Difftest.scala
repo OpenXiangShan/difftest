@@ -303,18 +303,30 @@ object DifftestModule {
     id
   }
 
-  def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
-    val difftest_step = IO(Output(UInt()))
-    difftest_step := 0.U
+  def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): DifftestTopIO = {
+    val difftest = IO(new DifftestTopIO)
+
+    difftest.step := 0.U
 
     val gateway_tuple = Gateway.collect()
     macros ++= gateway_tuple._1
-    difftest_step := gateway_tuple._2
+    difftest.step := gateway_tuple._2
 
     macros ++= Squash.collect()
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
+
+    val timer = RegInit(0.U(64.W)).suggestName("timer")
+    timer := timer + 1.U
+    dontTouch(timer)
+
+    val log_enable = difftest.logCtrl.enable(timer).suggestName("log_enable")
+    dontTouch(log_enable)
+
+    difftest.uart := DontCare
+
+    difftest
   }
 
   def generateCppHeader(cpu: String, style: String): Unit = {
@@ -425,18 +437,29 @@ object Delayer {
   }
 }
 
-// Difftest emulator top
+// Difftest emulator top. Will be created by DifftestModule.finish
+class DifftestTopIO extends Bundle {
+  val step = Output(UInt())
+  val perfCtrl = new PerfCtrlIO
+  val logCtrl = new LogCtrlIO
+  val uart = new UARTIO
+}
 
-// XiangShan log / perf ctrl, should be inited in SimTop IO
-// If not needed, just ingore these signals
-class PerfInfoIO extends Bundle {
+class PerfCtrlIO extends Bundle {
   val clean = Input(Bool())
   val dump = Input(Bool())
 }
 
 class LogCtrlIO extends Bundle {
-  val log_begin, log_end = Input(UInt(64.W))
-  val log_level = Input(UInt(64.W)) // a cpp uint
+  val begin = Input(UInt(64.W))
+  val end = Input(UInt(64.W))
+  val level = Input(UInt(64.W)) // a cpp uint
+
+  def enable(timer: UInt): Bool = {
+    val en = WireInit(false.B)
+    en := timer >= begin && timer < end
+    en
+  }
 }
 
 // UART IO, if needed, should be inited in SimTop IO
