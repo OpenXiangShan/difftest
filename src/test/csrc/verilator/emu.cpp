@@ -400,8 +400,8 @@ Emulator::Emulator(int argc, const char *argv[]):
 #endif
 
   // set log time range and log level
-  dut_ptr->io_logCtrl_log_begin = args.log_begin;
-  dut_ptr->io_logCtrl_log_end = args.log_end;
+  dut_ptr->difftest_logCtrl_begin = args.log_begin;
+  dut_ptr->difftest_logCtrl_end = args.log_end;
 
 #ifndef CONFIG_NO_DIFFTEST
   // init difftest
@@ -616,13 +616,13 @@ inline void Emulator::single_cycle() {
   dramsim3_step();
 #endif
 
-  if (dut_ptr->io_uart_out_valid) {
-    printf("%c", dut_ptr->io_uart_out_ch);
+  if (dut_ptr->difftest_uart_out_valid) {
+    printf("%c", dut_ptr->difftest_uart_out_ch);
     fflush(stdout);
   }
-  if (dut_ptr->io_uart_in_valid) {
+  if (dut_ptr->difftest_uart_in_valid) {
     extern uint8_t uart_getc();
-    dut_ptr->io_uart_in_ch = uart_getc();
+    dut_ptr->difftest_uart_in_ch = uart_getc();
   }
 
   dut_ptr->clock = 0;
@@ -723,13 +723,13 @@ int Emulator::tick() {
     auto trap = difftest[i]->get_trap_event();
     if (trap->instrCnt >= args.warmup_instr) {
       Info("Warmup finished. The performance counters will be dumped and then reset.\n");
-      dut_ptr->io_perfInfo_clean = 1;
-      dut_ptr->io_perfInfo_dump = 1;
+      dut_ptr->difftest_perfCtrl_clean = 1;
+      dut_ptr->difftest_perfCtrl_dump = 1;
       args.warmup_instr = -1;
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
-      dut_ptr->io_perfInfo_clean = 1;
-      dut_ptr->io_perfInfo_dump = 1;
+      dut_ptr->difftest_perfCtrl_clean = 1;
+      dut_ptr->difftest_perfCtrl_dump = 1;
     }
 #ifdef ENABLE_IPC
     if (trap->instrCnt >= args.ipc_times * args.ipc_interval && args.ipc_last_instr < args.ipc_times * args.ipc_interval) {
@@ -762,8 +762,8 @@ int Emulator::tick() {
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles --;
 #endif // CONFIG_NO_DIFFTEST
-  dut_ptr->io_perfInfo_clean = 0;
-  dut_ptr->io_perfInfo_dump = 0;
+  dut_ptr->difftest_perfCtrl_clean = 0;
+  dut_ptr->difftest_perfCtrl_dump = 0;
 
 #ifndef CONFIG_NO_DIFFTEST
   int step = 0;
@@ -946,9 +946,9 @@ inline void Emulator::save_coverage(time_t t) {
 #endif
 
 void Emulator::trigger_stat_dump() {
-  dut_ptr->io_perfInfo_dump = 1;
+  dut_ptr->difftest_perfCtrl_dump = 1;
   if(get_args().force_dump_result) {
-    dut_ptr->io_logCtrl_log_end = -1;
+    dut_ptr->difftest_logCtrl_end = -1;
   }
   single_cycle();
 }
