@@ -34,19 +34,9 @@ trait DifftestWithIndex {
   val index = UInt(8.W)
 }
 
-trait DifftestWithValid {
-  val valid = Bool()
-}
+sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: DifftestBaseBundle =>
+  def bits: DifftestBaseBundle = this
 
-trait DifftestWithAddress { this: DifftestWithValid =>
-  val numElements: Int
-  val needFlatten: Boolean = false
-
-  val address = UInt(log2Ceil(numElements).W)
-}
-
-abstract class DifftestBundle extends Bundle
-  with DifftestWithCoreid {
   // Used to detect the number of cores. Must be used only by one Bundle.
   def isUniqueIdentifier: Boolean = false
   // A desired offset in the C++ struct can be specified.
@@ -68,17 +58,10 @@ abstract class DifftestBundle extends Bundle
     }
   }
 
-  def withValid: Boolean = this.isInstanceOf[DifftestWithValid]
-  def getValid: Bool = {
-    this match {
-      case b: DifftestWithValid => b.valid
-      case _ => true.B
-    }
-  }
-  def needUpdate: Option[Bool] = if (withValid) Some(getValid) else None
-  def isFlatten: Boolean = this.isInstanceOf[DifftestWithAddress] &&
-    this.asInstanceOf[DifftestWithAddress].needFlatten
-  def numFlattenElements: Int = this.asInstanceOf[DifftestWithAddress].numElements
+  def needUpdate: Option[Bool] = if (hasValid) Some(getValid) else None
+
+  protected val needFlatten: Boolean = false
+  def isFlatten: Boolean = hasAddress && this.needFlatten
 
   // Elements without clock, coreid, and index.
   def diffElements: Seq[(String, Seq[UInt])] = {
@@ -96,18 +79,6 @@ abstract class DifftestBundle extends Bundle
   // Sizes of the DiffTest elements.
   private def diffSizes(round: Int): Seq[Seq[Int]] = {
     diffElements.map(_._2.map(u => (u.getWidth + round - 1) / round))
-  }
-
-  def diffBytes(aligned: Int = 8): Seq[UInt] = {
-    val sizes = diffSizes(aligned)
-    diffElements.map(_._2).zip(sizes).flatMap{ case (elem, size) =>
-      elem.zip(size).flatMap { case (e, s) =>
-        (0 until s).map(i => {
-          val msb = Seq(i * aligned + aligned - 1, e.getWidth - 1).min
-          e(msb, i * aligned)
-        })
-      }
-    }
   }
 
   // Size of this DiffTest Bundle.
@@ -136,52 +107,21 @@ abstract class DifftestBundle extends Bundle
 
   // returns Bool indicating whether `this` bundle can be merged with `base`
   def supportsMerge(base: DifftestBundle): Bool = supportsBase
-  def supportsBase: Bool = if (withValid) !getValid else true.B
+  def supportsBase: Bool = if (hasValid) !getValid else true.B
   // returns a merged, right-value Bundle. Default: overriding `base` with `this`
   def mergeWith(base: DifftestBundle): DifftestBundle = this
 }
 
-class DiffArchEvent extends DifftestBundle
-  with DifftestWithValid
-{
-  val interrupt     = UInt(32.W)
-  val exception     = UInt(32.W)
-  val exceptionPC   = UInt(64.W)
-  val exceptionInst = UInt(32.W)
-
+class DiffArchEvent extends ArchEvent with DifftestBundle {
   // DiffArchEvent must be instantiated once for each core.
   override def isUniqueIdentifier: Boolean = true
   override val desiredCppName: String = "event"
 }
 
-class DiffInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
+class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs)
+  with DifftestBundle
   with DifftestWithIndex
-  with DifftestWithValid
 {
-  val skip     = Bool()
-  val isRVC    = Bool()
-  val rfwen    = Bool()
-  val fpwen    = Bool()
-  val vecwen   = Bool()
-  val wpdest   = UInt(log2Ceil(numPhyRegs).W)
-  val wdest    = UInt(8.W)
-
-  val pc       = UInt(64.W)
-  val instr    = UInt(32.W)
-  val robIdx   = UInt(10.W)
-  val lqIdx    = UInt(7.W)
-  val sqIdx    = UInt(7.W)
-  val isLoad   = Bool()
-  val isStore  = Bool()
-  val nFused   = UInt(8.W)
-  val special  = UInt(8.W)
-
-  def setSpecial(
-    isDelayedWb: Bool = false.B,
-    isExit: Bool = false.B,
-  ): Unit = {
-    special := Cat(isExit, isDelayedWb)
-  }
   override val desiredCppName: String = "commit"
 
   private val maxNumFused = 255
@@ -204,242 +144,115 @@ class DiffInstrCommit(numPhyRegs: Int = 32) extends DifftestBundle
   }
 }
 
-class DiffTrapEvent extends DifftestBundle {
-  val hasTrap  = Bool()
-  val cycleCnt = UInt(64.W)
-  val instrCnt = UInt(64.W)
-  val hasWFI   = Bool()
-
-  val code     = UInt(3.W)
-  val pc       = UInt(64.W)
-
+class DiffTrapEvent extends TrapEvent with DifftestBundle {
   override val desiredCppName: String = "trap"
   override def needUpdate: Option[Bool] = Some(hasTrap || hasWFI)
   override def supportsBase: Bool = !hasTrap && !hasWFI
 }
 
-class DiffCSRState extends DifftestBundle {
-  val priviledgeMode = UInt(64.W)
-  val mstatus = UInt(64.W)
-  val sstatus = UInt(64.W)
-  val mepc = UInt(64.W)
-  val sepc = UInt(64.W)
-  val mtval = UInt(64.W)
-  val stval = UInt(64.W)
-  val mtvec = UInt(64.W)
-  val stvec = UInt(64.W)
-  val mcause = UInt(64.W)
-  val scause = UInt(64.W)
-  val satp = UInt(64.W)
-  val mip = UInt(64.W)
-  val mie = UInt(64.W)
-  val mscratch = UInt(64.W)
-  val sscratch = UInt(64.W)
-  val mideleg = UInt(64.W)
-  val medeleg = UInt(64.W)
+class DiffCSRState extends CSRState with DifftestBundle {
   override val desiredCppName: String = "csr"
   override val desiredOffset: Int = 1
 }
 
-class DiffDebugMode extends DifftestBundle {
-  val debugMode = Bool()
-  val dcsr = UInt(64.W)
-  val dpc = UInt(64.W)
-  val dscratch0 = UInt(64.W)
-  val dscratch1 = UInt(64.W)
+class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
   override val desiredCppName: String = "dmregs"
 }
 
-class DiffIntWriteback(val numElements: Int = 32) extends DifftestBundle
-  with DifftestWithValid
-  with DifftestWithAddress
-{
-  val data  = UInt(64.W)
+class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
   override val desiredCppName: String = "wb_int"
-  override val needFlatten: Boolean = true
+  override protected val needFlatten: Boolean = true
   // TODO: We have a special and temporary fix for int writeback in Merge.scala
   // It is only required for MMIO data synchronization for single-core co-sim
   override def supportsBase: Bool = true.B
 }
 
-class DiffFpWriteback(numElements: Int = 32) extends DiffIntWriteback(numElements) {
+class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
   override val desiredCppName: String = "wb_fp"
 }
 
-class DiffArchIntRegState extends DifftestBundle {
-  val value = Vec(32, UInt(64.W))
+class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "regs_int"
   override val desiredOffset: Int = 0
 }
 
-abstract class DiffArchDelayedUpdate(val numElements: Int = 32) extends DifftestBundle
+abstract class DiffArchDelayedUpdate(numRegs: Int) extends ArchDelayedUpdate(numRegs)
+  with DifftestBundle
   with DifftestWithIndex
-  with DifftestWithValid
-  with DifftestWithAddress
-{
-  val data = UInt(64.W)
-  val nack = Bool()
-}
 
-class DiffArchIntDelayedUpdate extends DiffArchDelayedUpdate {
+class DiffArchIntDelayedUpdate extends DiffArchDelayedUpdate(32) {
   override val desiredCppName: String = "regs_int_delayed"
 }
 
-class DiffArchFpDelayedUpdate extends DiffArchDelayedUpdate {
+class DiffArchFpDelayedUpdate extends DiffArchDelayedUpdate(32) {
   override val desiredCppName: String = "regs_fp_delayed"
 }
 
-class DiffArchFpRegState extends DifftestBundle {
-  val value = Vec(32, UInt(64.W))
+class DiffArchFpRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "regs_fp"
   override val desiredOffset: Int = 2
 }
 
-class DiffArchVecRegState extends DifftestBundle {
-  val value = Vec(64, UInt(64.W))
+class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
   override val desiredCppName: String = "regs_vec"
   override val desiredOffset: Int = 4
 }
 
-class DiffVecCSRState extends DifftestBundle {
-  val vstart = UInt(64.W)
-  val vxsat  = UInt(64.W)
-  val vxrm   = UInt(64.W)
-  val vcsr   = UInt(64.W)
-  val vl     = UInt(64.W)
-  val vtype  = UInt(64.W)
-  val vlenb  = UInt(64.W)
+class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val desiredCppName: String = "vcsr"
   override val desiredOffset: Int = 5
 }
 
-class DiffSbufferEvent extends DifftestBundle
-  with DifftestWithIndex
-  with DifftestWithValid
-{
-  val addr = UInt(64.W)
-  val data = Vec(64, UInt(8.W))
-  val mask = UInt(64.W)
+class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
 }
 
-class DiffStoreEvent extends DifftestBundle
-  with DifftestWithIndex
-  with DifftestWithValid
-{
-  val addr   = UInt(64.W)
-  val data   = UInt(64.W)
-  val mask   = UInt(8.W)
+class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "store"
 }
 
-class DiffLoadEvent extends DifftestBundle
-  with DifftestWithIndex
-  with DifftestWithValid
-{
-  val paddr  = UInt(64.W)
-  val opType = UInt(8.W)
-  val fuType = UInt(8.W)
+class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "load"
   // TODO: currently we assume it can be dropped
   override def supportsBase: Bool = true.B
 }
 
-class DiffAtomicEvent extends DifftestBundle
-  with DifftestWithValid
-{
-  val addr = UInt(64.W)
-  val data = UInt(64.W)
-  val mask = UInt(8.W)
-  val fuop = UInt(8.W)
-  val out  = UInt(64.W)
+class DiffAtomicEvent extends AtomicEvent with DifftestBundle {
   override val desiredCppName: String = "atomic"
 }
 
-class DiffL1TLBEvent extends DifftestBundle
-  with DifftestWithValid
-  with DifftestWithIndex
-{
-  val satp = UInt(64.W)
-  val vpn = UInt(64.W)
-  val ppn = UInt(64.W)
+class DiffL1TLBEvent extends L1TLBEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "l1tlb"
   // TODO: currently we assume it can be dropped
   override def supportsBase: Bool = true.B
 }
 
-class DiffL2TLBEvent extends DifftestBundle
-  with DifftestWithValid
-  with DifftestWithIndex
-{
-  val valididx = Vec(8, Bool())
-  val satp = UInt(64.W)
-  val vpn = UInt(64.W)
-  val ppn = Vec(8, UInt(64.W))
-  val perm = UInt(8.W)
-  val level = UInt(8.W)
-  val pf = Bool()
+class DiffL2TLBEvent extends L2TLBEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "l2tlb"
   // TODO: currently we assume it can be dropped
   override def supportsBase: Bool = true.B
 }
 
-class DiffRefillEvent extends DifftestBundle
-  with DifftestWithValid
-  with DifftestWithIndex
-{
-  val addr  = UInt(64.W)
-  val data  = Vec(8, UInt(64.W))
-  val idtfr = UInt(8.W) // identifier for flexible usage
+class DiffRefillEvent extends RefillEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "refill"
   // TODO: currently we assume it can be dropped
   override def supportsBase: Bool = true.B
 }
 
-class DiffLrScEvent extends DifftestBundle
-  with DifftestWithValid
-{
-  val success = Bool()
+class DiffLrScEvent extends ScEvent with DifftestBundle {
   override val desiredCppName: String = "lrsc"
 }
 
-class DiffRunaheadEvent extends DifftestBundle
-  with DifftestWithIndex
-  with DifftestWithValid
-{
-  val branch        = Bool()
-  val may_replay    = Bool()
-  val pc            = UInt(64.W)
-  val checkpoint_id = UInt(64.W)
+class DiffRunaheadEvent extends RunaheadEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "runahead"
 }
 
-class DiffRunaheadCommitEvent extends DifftestBundle
-  with DifftestWithIndex
-  with DifftestWithValid
-{
-  val pc            = UInt(64.W)
+class DiffRunaheadCommitEvent extends RunaheadCommitEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "runahead_commit"
 }
 
-class DiffRunaheadRedirectEvent extends DifftestBundle
-  with DifftestWithValid
-{
-  val pc            = UInt(64.W) // for debug only
-  val target_pc     = UInt(64.W) // for debug only
-  val checkpoint_id = UInt(64.W)
+class DiffRunaheadRedirectEvent extends RunaheadRedirectEvent with DifftestBundle {
   override val desiredCppName: String = "runahead_redirect"
-}
-
-class DiffCoverage(
-  val desiredCppName: String,
-  val numElements: Int
-) extends DifftestBundle
-  with DifftestWithValid
-  with DifftestWithAddress
-{
-  val covered = Bool()
-  override val needFlatten: Boolean = true
 }
 
 trait DifftestModule[T <: DifftestBundle] {
@@ -535,7 +348,7 @@ object DifftestModule {
       }
       if (bundleType.isFlatten) {
         val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
-        difftestCpp += s"#define $configWidthName ${bundleType.numFlattenElements}"
+        difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
       }
       difftestCpp += bundleType.toCppDeclaration
       difftestCpp += ""
@@ -548,7 +361,7 @@ object DifftestModule {
       val instanceName = bundleType.desiredCppName
       val cppIsArray = bundleType.isInstanceOf[DifftestWithIndex] || bundleType.isFlatten
       val nInstances = cppInstances.length
-      val instanceCount = if (bundleType.isFlatten) bundleType.numFlattenElements else nInstances / numCores
+      val instanceCount = if (bundleType.isFlatten) bundleType.bits.getNumElements else nInstances / numCores
       require(nInstances % numCores == 0, s"Cores seem to have different # of ${instanceName}")
       require(cppIsArray || nInstances == numCores, s"# of ${instanceName} should not be ${nInstances}")
       val arrayWidth = if (cppIsArray) s"[$instanceCount]" else ""
