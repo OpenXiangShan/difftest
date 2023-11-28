@@ -159,14 +159,6 @@ object DPIC {
   private val hasGlobalEnable: Boolean = true
   private var enableBits = 0
 
-  val global_en = WireInit(0.U.asTypeOf(Vec(128, Bool())))
-  dontTouch(global_en)
-  if(hasGlobalEnable) {
-    val enable = WireInit(global_en.asUInt.orR)
-    BoringUtils.addSource(WireInit(global_en.asUInt.orR), "dpic_global_enable")
-    step := enable
-  }
-
   def apply[T <: DifftestBundle](gen: T): T = {
     val module = Module(new DummyDPICWrapper(gen, hasGlobalEnable))
     val dpic = module.dpic
@@ -176,7 +168,6 @@ object DPIC {
     }
     if (hasGlobalEnable && module.io.needUpdate.isDefined) {
       BoringUtils.addSource(WireInit(module.io.needUpdate.get), s"dpic_global_enable_$enableBits")
-      BoringUtils.addSink(global_en(enableBits), s"dpic_global_enable_$enableBits")
       enableBits += 1
     }
     module.io
@@ -187,6 +178,16 @@ object DPIC {
     if (interfaces.isEmpty) {
       return (Seq(), step)
     }
+    if (hasGlobalEnable) {
+      val global_en = WireInit(0.U.asTypeOf(Vec(enableBits, Bool())))
+      val enable = WireInit(global_en.asUInt.orR)
+      for (i <- 0 until enableBits) {
+        BoringUtils.addSink(global_en(i), s"dpic_global_enable_$i")
+      }
+      BoringUtils.addSource(WireInit(global_en.asUInt.orR), "dpic_global_enable")
+      step := enable
+    }
+
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
     interfaceCpp += "#define __DIFFTEST_DPIC_H__"
