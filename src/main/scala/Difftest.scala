@@ -17,7 +17,6 @@
 package difftest
 
 import chisel3._
-import chisel3.util._
 import difftest.batch.Batch
 import difftest.dpic.DPIC
 import difftest.squash.Squash
@@ -80,11 +79,6 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   private def diffSizes(round: Int): Seq[Seq[Int]] = {
     diffElements.map(_._2.map(u => (u.getWidth + round - 1) / round))
   }
-
-  // Size of this DiffTest Bundle.
-  def size(round: Int): Int = diffSizes(round).map(_.sum).sum
-  // Byte size of this DiffTest Bundle.
-  def byteSize: Int = size(8)
 
   def toCppDeclMacro: String = {
     val macroName = s"CONFIG_DIFFTEST_${desiredModuleName.toUpperCase.replace("DIFFTEST", "")}"
@@ -207,15 +201,21 @@ class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val desiredOffset: Int = 5
 }
 
-class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
+class DiffSbufferEvent extends SbufferEvent with DifftestBundle
+  with DifftestWithIndex
+{
   override val desiredCppName: String = "sbuffer"
 }
 
-class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithIndex {
+class DiffStoreEvent extends StoreEvent with DifftestBundle
+  with DifftestWithIndex
+{
   override val desiredCppName: String = "store"
 }
 
-class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex {
+class DiffLoadEvent extends LoadEvent with DifftestBundle
+  with DifftestWithIndex
+{
   override val desiredCppName: String = "load"
   // TODO: currently we assume it can be dropped
   override def supportsSquashBase: Bool = true.B
@@ -225,19 +225,25 @@ class DiffAtomicEvent extends AtomicEvent with DifftestBundle {
   override val desiredCppName: String = "atomic"
 }
 
-class DiffL1TLBEvent extends L1TLBEvent with DifftestBundle with DifftestWithIndex {
+class DiffL1TLBEvent extends L1TLBEvent with DifftestBundle
+  with DifftestWithIndex
+{
   override val desiredCppName: String = "l1tlb"
   // TODO: currently we assume it can be dropped
   override def supportsSquashBase: Bool = true.B
 }
 
-class DiffL2TLBEvent extends L2TLBEvent with DifftestBundle with DifftestWithIndex {
+class DiffL2TLBEvent extends L2TLBEvent with DifftestBundle
+  with DifftestWithIndex
+{
   override val desiredCppName: String = "l2tlb"
   // TODO: currently we assume it can be dropped
   override def supportsSquashBase: Bool = true.B
 }
 
-class DiffRefillEvent extends RefillEvent with DifftestBundle with DifftestWithIndex {
+class DiffRefillEvent extends RefillEvent with DifftestBundle
+  with DifftestWithIndex
+{
   override val desiredCppName: String = "refill"
   // TODO: currently we assume it can be dropped
   override def supportsSquashBase: Bool = true.B
@@ -247,11 +253,15 @@ class DiffLrScEvent extends ScEvent with DifftestBundle {
   override val desiredCppName: String = "lrsc"
 }
 
-class DiffRunaheadEvent extends RunaheadEvent with DifftestBundle with DifftestWithIndex {
+class DiffRunaheadEvent extends RunaheadEvent with DifftestBundle
+  with DifftestWithIndex
+{
   override val desiredCppName: String = "runahead"
 }
 
-class DiffRunaheadCommitEvent extends RunaheadCommitEvent with DifftestBundle with DifftestWithIndex {
+class DiffRunaheadCommitEvent extends RunaheadCommitEvent with DifftestBundle
+  with DifftestWithIndex
+{
   override val desiredCppName: String = "runahead_commit"
 }
 
