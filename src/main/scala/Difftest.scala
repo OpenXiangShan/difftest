@@ -346,8 +346,10 @@ object DifftestModule {
     val headerInstances = instances.filter(_._2 == style)
 
     val numCores = headerInstances.count(_._1.isUniqueIdentifier)
-    difftestCpp += s"#define NUM_CORES $numCores"
-    difftestCpp += ""
+    if (headerInstances.nonEmpty) {
+      difftestCpp += s"#define NUM_CORES $numCores"
+      difftestCpp += ""
+    }
 
     val uniqBundles = headerInstances.groupBy(_._1.desiredModuleName)
     // Create cpp declaration for each bundle type

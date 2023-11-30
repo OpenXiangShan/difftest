@@ -187,7 +187,6 @@ object DPIC {
       BoringUtils.addSource(enable, "dpic_global_enable")
       step := enable
     }
-
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
     interfaceCpp += "#define __DIFFTEST_DPIC_H__"

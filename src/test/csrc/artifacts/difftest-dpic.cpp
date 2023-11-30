@@ -19,7 +19,7 @@ extern "C" void v_difftest_RefillEvent (
   uint8_t  io_idtfr
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.refill[io_index]);
+  auto packet = &(difftest[io_coreid]->dut->refill[io_index]);
   packet->valid = true;
   packet->addr = io_addr;
   packet->data[0] = io_data_0;
@@ -42,7 +42,7 @@ extern "C" void v_difftest_ArchEvent (
   uint32_t io_exceptionInst
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.event);
+  auto packet = &(difftest[io_coreid]->dut->event);
   packet->valid = true;
   packet->interrupt = io_interrupt;
   packet->exception = io_exception;
@@ -73,7 +73,7 @@ extern "C" void v_difftest_CSRState (
   uint64_t io_medeleg
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.csr);
+  auto packet = &(difftest[io_coreid]->dut->csr);
   packet->priviledgeMode = io_priviledgeMode;
   packet->mstatus = io_mstatus;
   packet->sstatus = io_sstatus;
@@ -104,7 +104,7 @@ extern "C" void v_difftest_DebugMode (
   uint64_t io_dscratch1
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.dmregs);
+  auto packet = &(difftest[io_coreid]->dut->dmregs);
   packet->debugMode = io_debugMode;
   packet->dcsr = io_dcsr;
   packet->dpc = io_dpc;
@@ -124,7 +124,7 @@ extern "C" void v_difftest_VecCSRState (
   uint64_t io_vlenb
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.vcsr);
+  auto packet = &(difftest[io_coreid]->dut->vcsr);
   packet->vstart = io_vstart;
   packet->vxsat = io_vxsat;
   packet->vxrm = io_vxrm;
@@ -144,7 +144,7 @@ extern "C" void v_difftest_AtomicEvent (
   uint64_t io_out
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.atomic);
+  auto packet = &(difftest[io_coreid]->dut->atomic);
   packet->valid = true;
   packet->addr = io_addr;
   packet->data = io_data;
@@ -159,7 +159,7 @@ extern "C" void v_difftest_LrScEvent (
   uint8_t  io_success
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.lrsc);
+  auto packet = &(difftest[io_coreid]->dut->lrsc);
   packet->valid = true;
   packet->success = io_success;
 }
@@ -174,7 +174,7 @@ extern "C" void v_difftest_LrScEvent (
 //  uint8_t  io_mask
 //) {
 //  if (difftest == NULL) return;
-//  auto packet = &(difftest[io_coreid]->dut.store[io_index]);
+//  auto packet = &(difftest[io_coreid]->dut->store[io_index]);
 //  packet->valid = true;
 //  if (io_valid) {
 //    packet->addr = io_addr;
@@ -255,7 +255,7 @@ extern "C" void v_difftest_SbufferEvent (
   uint64_t io_mask
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.sbuffer[io_index]);
+  auto packet = &(difftest[io_coreid]->dut->sbuffer[io_index]);
   packet->valid = true;
   packet->addr = io_addr;
   packet->data[0] = io_data_0;
@@ -362,7 +362,7 @@ extern "C" void v_difftest_ArchIntRegState (
   uint64_t io_value_31
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.regs_int);
+  auto packet = &(difftest[io_coreid]->dut->regs_int);
   packet->value[0] = io_value_0;
   packet->value[1] = io_value_1;
   packet->value[2] = io_value_2;
@@ -434,7 +434,7 @@ extern "C" void v_difftest_ArchFpRegState (
   uint64_t io_value_31
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.regs_fp);
+  auto packet = &(difftest[io_coreid]->dut->regs_fp);
   packet->value[0] = io_value_0;
   packet->value[1] = io_value_1;
   packet->value[2] = io_value_2;
@@ -538,7 +538,7 @@ extern "C" void v_difftest_ArchVecRegState (
   uint64_t io_value_63
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.regs_vec);
+  auto packet = &(difftest[io_coreid]->dut->regs_vec);
   packet->value[0] = io_value_0;
   packet->value[1] = io_value_1;
   packet->value[2] = io_value_2;
@@ -612,7 +612,7 @@ extern "C" void v_difftest_FpWriteback (
   uint64_t io_data
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.wb_fp[io_address]);
+  auto packet = &(difftest[io_coreid]->dut->wb_fp[io_address]);
   packet->data = io_data;
 }
 
@@ -623,7 +623,7 @@ extern "C" void v_difftest_IntWriteback (
   uint64_t io_data
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.wb_int[io_address]);
+  auto packet = &(difftest[io_coreid]->dut->wb_int[io_address]);
   packet->data = io_data;
 }
 
@@ -649,7 +649,7 @@ extern "C" void v_difftest_InstrCommit (
   uint8_t  io_special
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.commit[io_index]);
+  auto packet = &(difftest[io_coreid]->dut->commit[io_index]);
   packet->valid = true;
   packet->skip = io_skip;
   packet->isRVC = io_isRVC;
@@ -676,7 +676,7 @@ extern "C" void v_difftest_RunaheadCommitEvent (
   uint64_t io_pc
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.runahead_commit[io_index]);
+  auto packet = &(difftest[io_coreid]->dut->runahead_commit[io_index]);
   packet->valid = true;
   packet->pc = io_pc;
 }
@@ -690,7 +690,7 @@ extern "C" void v_difftest_LoadEvent (
   uint8_t  io_fuType
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.load[io_index]);
+  auto packet = &(difftest[io_coreid]->dut->load[io_index]);
   packet->valid = true;
   packet->paddr = io_paddr;
   packet->opType = io_opType;
@@ -708,7 +708,7 @@ extern "C" void v_difftest_TrapEvent (
   uint64_t io_pc
 ) {
   if (difftest == NULL) return;
-  auto packet = &(difftest[io_coreid]->dut.trap);
+  auto packet = &(difftest[io_coreid]->dut->trap);
   packet->hasTrap = io_hasTrap;
   packet->cycleCnt = io_cycleCnt;
   packet->instrCnt = io_instrCnt;
