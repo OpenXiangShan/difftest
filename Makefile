@@ -38,7 +38,7 @@ sim-verilog: $(SIM_TOP_V)
 
 # generate difftest files for non-chisel design.
 difftest_verilog:
-	mill difftest.runMain difftest.DifftestMain -td $(BUILD_DIR)
+	mill difftest.test.runMain difftest.DifftestMain -td $(BUILD_DIR)
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
