@@ -106,7 +106,11 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
       replay_table(next_squash_idx) := replay_wptr
       squash_idx := next_squash_idx
     }
-    when ((should_tick || do_squash.asUInt.orR) && !control.replay.get) {
+    val needStore = WireInit(true.B)
+    if (config.hasGlobalEnable) {
+      needStore := VecInit(in.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
+    }
+    when ((should_tick || do_squash.asUInt.orR) && needStore && !control.replay.get) {
       replay_data(replay_wptr) := in
       replay_wptr := replay_wptr + 1.U
       when (replay_wptr === (config.replaySize - 1).U) {
