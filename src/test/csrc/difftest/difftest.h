@@ -355,7 +355,7 @@ protected:
 
   void raise_trap(int trapCode);
 
-#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
   bool isSquash;
   bool inReplay = false;
   int replay_idx;
@@ -368,7 +368,7 @@ protected:
   bool squash_check();
   void squash_snapshot();
   void squash_replay();
-#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 };
 
 extern Difftest **difftest;
@@ -387,7 +387,9 @@ int init_nemuproxy(size_t);
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_scope();
 extern "C" void difftest_squash_enable(int enable);
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
 extern "C" void difftest_squash_replay(int idx);
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #endif

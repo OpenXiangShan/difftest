@@ -112,7 +112,9 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     val squash = Squash(fix.toSeq.map(_.cloneType), config)
     squash.in := fix
     out := squash.out
-    ports.foreach(port => port.squash_idx.get := squash.idx)
+    if (config.squashReplay) {
+      ports.foreach(port => port.squash_idx.get := squash.idx.get)
+    }
   }
 
   val out_pack = WireInit(in_pack)
@@ -176,7 +178,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
   }
   if (config.isSquash) {
-    macros ++= Squash.collect()
+    macros ++= Squash.collect(config)
   }
 }
 
@@ -199,5 +201,5 @@ class GatewayBundle(config: GatewayConfig) extends Bundle {
   val enable = Bool()
   val select = Option.when(config.diffStateSelect)(Bool())
   val batch_idx = Option.when(config.isBatch)(UInt(log2Ceil(config.batchSize).W))
-  val squash_idx = Option.when(config.isSquash)(UInt(8.W))
+  val squash_idx = Option.when(config.squashReplay)(UInt(8.W))
 }

@@ -116,6 +116,7 @@ void difftest_squash_enable(int enable) {
   set_squash_enable(rand());
 }
 
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
 extern "C" void set_squash_replay(int idx);
 void difftest_squash_replay(int idx) {
   if (squashScope == NULL) {
@@ -125,13 +126,14 @@ void difftest_squash_replay(int idx) {
   svSetScope(squashScope);
   set_squash_replay(idx);
 }
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 #endif // CONFIG_DIFFTEST_SQUASH
 
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
-#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
   state_ss = (DiffState*)malloc(sizeof(DiffState));
-#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 }
 
 Difftest::~Difftest() {
@@ -140,24 +142,24 @@ Difftest::~Difftest() {
   if (proxy) {
     delete proxy;
   }
-#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
   free(state_ss);
   if (proxy_ss) {
     free(proxy_ss);
   }
-#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 }
 
 void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   proxy = new REF_PROXY(coreid, ram_size);
-#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
   proxy_ss = (REF_PROXY*)malloc(sizeof(REF_PROXY));
   squash_memsize = ram_size;
   squash_membuf = (char *)malloc(squash_memsize);
-#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 }
 
-#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
 bool Difftest::squash_check() {
   int nFused_all = 0;
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH && dut->commit[i].valid; i++) {
@@ -182,12 +184,12 @@ void Difftest::squash_replay() {
   proxy->ref_memcpy(PMEM_BASE, squash_membuf, squash_memsize, DUT_TO_REF);
   difftest_squash_replay(squash_idx);
 }
-#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 
 int Difftest::step() {
   progress = false;
   ticks++;
-#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
   if(inReplay && squash_idx != replay_idx) {
     return 0;
   }
@@ -195,7 +197,7 @@ int Difftest::step() {
   if(isSquash) {
     squash_snapshot();
   }
-#endif
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 
   if (check_timeout()) {
     return 1;
@@ -299,12 +301,12 @@ int Difftest::step() {
       return 0;
     }
 #endif
-#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
     if (isSquash) {
       squash_replay();
       return 0;
     }
-#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
     display();
     proxy->display(dut);
 #ifdef FUZZER_LIB
