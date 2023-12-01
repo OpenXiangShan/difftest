@@ -64,7 +64,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
   val state = RegInit(0.U.asTypeOf(MixedVec(bundles)))
 
   // Mark the initial commit events as non-squashable for initial state synchronization.
-  val hasValidCommitEvent = VecInit(state.filter(_.desiredCppName == "commit").map(_.bits.getValid).toSeq).asUInt.orR
+  val hasValidCommitEvent = VecInit(state.filter(_.desiredCppName == "commit").map(_.getValid).toSeq).asUInt.orR
   val isInitialEvent = RegInit(true.B)
   when (isInitialEvent && hasValidCommitEvent) {
     isInitialEvent := false.B
@@ -89,7 +89,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
     if (i.squashDependency.nonEmpty) {
       do_m := VecInit(in.filter(b => i.squashDependency.contains(b.desiredCppName)).map(bundle => {
         // Only if the corresponding bundle is valid, we update this bundle
-        bundle.coreid === i.coreid && bundle.asInstanceOf[DifftestBaseBundle].getValid
+        bundle.coreid === i.coreid && bundle.getValid
       }).toSeq).asUInt.orR
     }
   }

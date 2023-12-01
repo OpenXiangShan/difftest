@@ -72,7 +72,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
       }
     }
   }
-  val dpicFuncArgsWithClock = if (gen.bits.hasValid) {
+  val dpicFuncArgsWithClock = if (gen.withValid) {
     modPorts.filterNot(p => p.length == 1 && p.head._1 == "io_valid")
   } else modPorts
   val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
@@ -88,7 +88,7 @@ class DPIC[T <: DifftestBundle](gen: T) extends ExtModule
       else r.map(x => x.slice(0, x.lastIndexOf('_')) + s"[${x.split('_').last}]")
     )
     val body = lhs.zip(rhs.flatten).map{ case (l, r) => s"packet->$l = $r;" }
-    val validAssign = if (!gen.bits.hasValid || gen.isFlatten) Seq() else Seq("packet->valid = true;")
+    val validAssign = if (!gen.withValid || gen.isFlatten) Seq() else Seq("packet->valid = true;")
     validAssign ++ body
   }
   val dpicFuncProto: String =
@@ -147,7 +147,7 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, hasGlobalEnable: Boo
   val dpic = Module(new DPIC(gen))
   dpic.clock := clock
   val enable = WireInit(true.B)
-  dpic.enable := io.bits.getValid && enable
+  dpic.enable := io.getValid && enable
   if (hasGlobalEnable) {
     BoringUtils.addSink(enable, "dpic_global_enable")
   }
