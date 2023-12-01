@@ -17,7 +17,7 @@ package difftest.dpic
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.{ChiselAnnotation, DataMirror, ExtModule}
+import chisel3.experimental.{ChiselAnnotation, ExtModule}
 import chisel3.util.experimental.BoringUtils
 import difftest._
 import difftest.gateway.{GatewayConfig, GatewayBundle}
@@ -26,18 +26,12 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ListBuffer
 
-class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
-  with HasExtModuleInline
-  with DifftestModule[T] {
+abstract class DPICBase(port: GatewayBundle, config: GatewayConfig) extends ExtModule
+  with HasExtModuleInline {
   val clock = IO(Input(Clock()))
-  val enable = IO(Input(Bool()))
-  val io = IO(Input(gen))
-  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
-  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
-
-  def getDirectionString(data: Data): String = {
-    if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
-  }
+  val enable = IO(Input(port.enable))
+  val select = Option.when(config.diffStateSelect)(IO(Input(port.select.get)))
+  val batch_idx = Option.when(config.isBatch)(IO(Input(port.batch_idx.get)))
 
   def getDPICArgString(argName: String, data: Data, isC: Boolean): String = {
     val typeString = data.getWidth match {
@@ -51,75 +45,46 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
       f"$typeString%-8s $argName"
     }
     else {
-      val directionString = getDirectionString(data)
-      f"$directionString $typeString%8s $argName"
+      f"input $typeString%8s $argName"
     }
   }
 
   def getModArgString(argName: String, data: Data): String = {
     val widthString = if (data.getWidth == 1) "      " else f"[${data.getWidth - 1}%2d:0]"
-    val argString = Seq(getDirectionString(data), widthString, s"$argName")
+    val argString = Seq("input ", widthString, s"$argName")
     argString.mkString(" ")
   }
 
-  override def desiredName: String = gen.desiredModuleName
-  val dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
-  val modPorts: Seq[Seq[(String, Data)]] = {
-    var common = Seq(Seq(("clock", clock)), Seq(("enable", enable)))
+  def desiredName: String
+  def dpicFuncName: String
+  def modPorts: Seq[Seq[(String, Data)]] = {
+    val common = ListBuffer(Seq(("clock", clock)), Seq(("enable", port.enable)))
     if (config.diffStateSelect) {
-      common ++= Seq(Seq(("select", select.get)))
+      common += Seq(("select", port.select.get))
     }
     if (config.isBatch) {
-      common ++= Seq(Seq(("batch_idx", batch_idx.get)))
+      common += Seq(("batch_idx", port.batch_idx.get))
     }
-    // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
-    // This is different from BlackBoxes.
-    common ++ io.elements.toSeq.reverse.map{ case (name, data) =>
-      data match {
-        case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
-        case _ => Seq((s"io_$name", data))
-      }
-    }
+    common.toSeq
   }
-  val dpicFuncArgsWithClock = if (gen.bits.hasValid) {
-    modPorts.filterNot(p => p.length == 1 && p.head._1 == "io_valid")
-  } else modPorts
-  val dpicDropNum = 2
-  val dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
-  val dpicFuncAssigns: Seq[String] = {
-    val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
-      ((_: DifftestBundle) => true, Seq("io_coreid")),
-      ((_: DifftestBundle) => config.diffStateSelect, Seq("select")),
-      ((_: DifftestBundle) => config.isBatch, Seq("batch_idx")),
-      ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
-      ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
-    )
-    val rhs = dpicFuncArgs.map(_.map(_._1).filterNot(s => filters.exists(f => f._1(gen) && f._2.contains(s))))
-    val lhs = rhs.map(_.map(_.replace("io_", ""))).flatMap(r =>
-      if (r.length == 1) r
-      else r.map(x => x.slice(0, x.lastIndexOf('_')) + s"[${x.split('_').last}]")
-    )
-    val body = lhs.zip(rhs.flatten).map{ case (l, r) => s"packet->$l = $r;" }
-    val validAssign = if (!gen.bits.hasValid || gen.isFlatten) Seq() else Seq("packet->valid = true;")
-    validAssign ++ body
+  def dpicFuncArgsWithClock: Seq[Seq[(String, Data)]] = modPorts
+  def dpicFuncArgs: Seq[Seq[(String, Data)]] = dpicFuncArgsWithClock.drop(2)
+
+  def dutPos: String = {
+    if (config.diffStateSelect) "select"
+    else if (config.isBatch) "batch_idx"
+    else "0"
   }
-  val dpicFuncProto: String =
+  def dpicFuncAssigns: Seq[String]
+  def dpicFuncProto: String =
     s"""
        |extern "C" void $dpicFuncName (
        |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
-  val dpicFunc: String = {
-    val dut_pos = {
-      if (config.diffStateSelect) "select"
-      else if (config.isBatch) "batch_idx"
-      else "0"
-    }
-    val packet = s"DUT_BUF(io_coreid,$dut_pos)->${gen.desiredCppName}"
-    val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
+  def dpicFunc: String = {
     s"""
        |$dpicFuncProto {
        |  if (diffstate_buffer == NULL) return;
-       |  auto packet = &($packet$index);
        |  ${dpicFuncAssigns.mkString("\n  ")}
        |}
        |""".stripMargin
@@ -165,59 +130,86 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   setInline(s"$desiredName.v", moduleBody)
 }
 
-class DifftestControl(config: GatewayConfig) extends ExtModule with HasExtModuleInline {
-  val clock = IO(Input(Clock()))
-  val enable = IO(Input(Bool()))
-  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
-  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
-  val squash_idx = Option.when(config.isSquash)(IO(Input(UInt(8.W))))
+class DPIC[T <: DifftestBundle](gen: T, port: GatewayBundle, config: GatewayConfig) extends DPICBase(port, config)
+  with DifftestModule[T] {
+  val io = IO(Input(gen))
+  override def desiredName: String = gen.desiredModuleName
+  override def dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
 
-  val dpicFuncName: String = "v_difftest_Control"
-  val dpicFuncProto: String =
-    s"""
-       |extern "C" void $dpicFuncName (
-       |  uint8_t  select,
-       |  uint8_t  squash_idx
-       |)""".stripMargin
-  val dpicFunc: String =
-    s"""
-       |$dpicFuncProto {
-       |  if (diffstate_buffer == NULL) return;
-       |  *(diffstate_buffer[0].get_idx(select)) = squash_idx;
-       |}
-       |""".stripMargin
+  // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
+  // This is different from BlackBoxes.
+  override def modPorts: Seq[Seq[(String, Data)]] = super.modPorts ++ gen.elements.toSeq.reverse.map { case (name, data) =>
+      data match {
+        case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
+        case _ => Seq((s"io_$name", data))
+      }
+  }
 
-  setInline("DifftestControl.v",
-    """
-      |module DifftestControl(
-      |  input clock,
-      |  input enable,
-      |  input select,
-      |  input [7:0] squash_idx
-      |);
-      |
-      |import "DPI-C" function void v_difftest_Control(
-      |  input       bit select,
-      |  input      byte squash_idx
-      |);
-      |
-      |  always @(posedge clock) begin
-      |    if (enable)
-      |    v_difftest_Control (select, squash_idx);
-      |  end
-      |endmodule;
-      |""".stripMargin
-  )
+  override def dpicFuncArgsWithClock: Seq[Seq[(String, Data)]] = {
+    if (gen.bits.hasValid) {
+      modPorts.filterNot(p => p.length == 1 && p.head._1 == "io_valid")
+    } else modPorts
+  }
+
+  override def dpicFuncAssigns: Seq[String] = {
+    val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
+      ((_: DifftestBundle) => true, Seq("io_coreid")),
+      ((_: DifftestBundle) => config.diffStateSelect, Seq("select")),
+      ((_: DifftestBundle) => config.isBatch, Seq("batch_idx")),
+      ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
+      ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
+    )
+    val rhs = dpicFuncArgs.map(_.map(_._1).filterNot(s => filters.exists(f => f._1(gen) && f._2.contains(s))))
+    val lhs = rhs.map(_.map(_.replace("io_", ""))).flatMap(r =>
+      if (r.length == 1) r
+      else r.map(x => x.slice(0, x.lastIndexOf('_')) + s"[${x.split('_').last}]")
+    )
+    val body = lhs.zip(rhs.flatten).map { case (l, r) => s"packet->$l = $r;" }
+    val validAssign = if (!gen.bits.hasValid || gen.isFlatten) Seq() else Seq("packet->valid = true;")
+
+    val packet = s"DUT_BUF(io_coreid,$dutPos)->${gen.desiredCppName}"
+    val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
+    val head = Seq(s"auto packet = &($packet$index);")
+
+    head ++ validAssign ++ body
+  }
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends Module {
+class DPICControl(coreid: UInt, port: GatewayBundle, config: GatewayConfig) extends DPICBase(port, config) {
+  val squash_idx = Option.when(config.squashReplay)(IO(Input(port.squash_idx.get)))
+  val io_coreid = IO(Input(coreid))
+
+  override def desiredName: String = "DifftestControl"
+  override def dpicFuncName: String = "v_difftest_Control"
+  override def modPorts: Seq[Seq[(String, Data)]] = {
+    val ports = ListBuffer.empty[Seq[(String, Data)]]
+    ports ++= super.modPorts
+    if (config.squashReplay) {
+      ports += Seq(("squash_idx", port.squash_idx.get))
+    }
+    ports += Seq(("io_coreid", coreid))
+    ports.toSeq
+  }
+
+  override def dpicFuncAssigns: Seq[String] = {
+    val assigns = ListBuffer.empty[String]
+    if (config.squashReplay) {
+      assigns += s"*(diffstate_buffer[io_coreid].get_idx($dutPos)) = squash_idx;"
+    }
+    assigns.toSeq
+  }
+}
+
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T, port: GatewayBundle, config: GatewayConfig) extends Module {
+  val interfaces = ListBuffer.empty[(String, String, String)]
+
   val io = IO(Input(UInt(gen.getWidth.W)))
-  val enable = IO(Input(Bool()))
-  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
-  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
+  val enable = IO(Input(port.enable))
+  val select = Option.when(config.diffStateSelect)(IO(Input(port.select.get)))
+  val batch_idx = Option.when(config.isBatch)(IO(Input(port.batch_idx.get)))
 
   val unpack = io.asTypeOf(gen)
-  val dpic = Module(new DPIC(gen, config))
+  val dpic = Module(new DPIC(gen, port, config))
   dpic.clock := clock
   dpic.enable := unpack.bits.getValid && enable
   if (config.diffStateSelect) {
@@ -227,25 +219,25 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfi
     dpic.batch_idx.get := batch_idx.get
   }
   dpic.io := unpack
-}
+  interfaces += ((dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc))
 
-private class DummyDPICControl(config: GatewayConfig) extends Module {
-  val enable = IO(Input(Bool()))
-  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
-  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
-  val squash_idx = Option.when(config.isSquash)(IO(Input(UInt(8.W))))
-
-  val control = Module(new DifftestControl(config))
-  control.clock := clock
-  control.enable := enable
-  if (config.diffStateSelect) {
-    control.select.get := select.get
-  }
-  if (config.isBatch) {
-    control.batch_idx.get := batch_idx.get
-  }
-  if (config.isSquash) {
-    control.squash_idx.get := squash_idx.get
+  val hasControl = gen.isUniqueIdentifier && config.needControl
+  val squash_idx = Option.when(hasControl)(IO(Input(port.squash_idx.get)))
+  if (hasControl) {
+    val control = Module(new DPICControl(gen.coreid, port, config))
+    control.clock := clock
+    control.enable := enable
+    control.io_coreid := unpack.coreid
+    if (config.diffStateSelect) {
+      control.select.get := select.get
+    }
+    if (config.isBatch) {
+      control.batch_idx.get := batch_idx.get
+    }
+    if (config.squashReplay) {
+      control.squash_idx.get := squash_idx.get
+    }
+    interfaces += ((control.dpicFuncName, control.dpicFuncProto, control.dpicFunc))
   }
 }
 
@@ -253,7 +245,7 @@ object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
 
   def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): UInt = {
-    val module = Module(new DummyDPICWrapper(gen, config))
+    val module = Module(new DummyDPICWrapper(gen, port.cloneType, config))
     module.enable := port.enable
     if (config.diffStateSelect) {
       module.select.get := port.select.get
@@ -261,11 +253,16 @@ object DPIC {
     if (config.isBatch) {
       module.batch_idx.get := port.batch_idx.get
     }
+    if (module.hasControl) {
+      if (config.squashReplay) {
+        module.squash_idx.get := port.squash_idx.get
+      }
+    }
 
-    val dpic = module.dpic
-    if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
-      val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
-      interfaces += interface
+    for(ifs <- module.interfaces) {
+      if (!interfaces.map(_._1).contains(ifs._1)) {
+        interfaces += ifs
+      }
     }
     module.io
   }
@@ -274,19 +271,6 @@ object DPIC {
     if (interfaces.isEmpty) {
       return Seq()
     }
-    val module = Module(new DummyDPICControl(config))
-    module.enable := port.enable
-    if (config.diffStateSelect) {
-      module.select.get := port.select.get
-    }
-    if (config.isBatch) {
-      module.batch_idx.get := port.batch_idx.get
-    }
-    if (config.isSquash) {
-      module.squash_idx.get := port.squash_idx.get
-    }
-    val interface = (module.control.dpicFuncName, module.control.dpicFuncProto, module.control.dpicFunc)
-    interfaces += interface
 
     val buf_len = {
       if (config.diffStateSelect) 2

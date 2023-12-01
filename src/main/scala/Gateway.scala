@@ -36,10 +36,8 @@ case class GatewayConfig(
                         batchSize      : Int     = 32
                         )
 {
-  if(squashReplay) {
-    require(hasGlobalEnable && isSquash && !isBatch)
-    require(replaySize >= squashSize)
-  }
+  if(squashReplay) require(replaySize >= squashSize)
+  def needControl: Boolean = squashReplay
 }
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
