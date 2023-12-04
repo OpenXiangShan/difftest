@@ -44,7 +44,7 @@ object Squash {
 class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val out = IO(Output(MixedVec(bundles)))
-  val idx = Option.when(config.diffStateSelect)(IO(Output(UInt(log2Ceil(config.replaySize).W))))
+  val idx = Option.when(config.squashReplay)(IO(Output(UInt(log2Ceil(config.replaySize).W))))
 
   val state = RegInit(0.U.asTypeOf(MixedVec(bundles)))
 
