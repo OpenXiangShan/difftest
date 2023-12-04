@@ -84,7 +84,7 @@ abstract class DPICBase(port: GatewayBundle, config: GatewayConfig) extends ExtM
   def dpicFunc: String = {
     s"""
        |$dpicFuncProto {
-       |  if (diffstate_buffer[io_coreid] == NULL) return;
+       |  if (io_coreid >= NUM_CORES || diffstate_buffer[io_coreid] == NULL) return;
        |  ${dpicFuncAssigns.mkString("\n  ")}
        |}
        |""".stripMargin
