@@ -43,6 +43,8 @@ case class GatewayConfig(
 
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
+  private val macros    = ListBuffer.empty[String]
+  private val classDecl = ListBuffer.empty[String]
   private var config    = GatewayConfig()
 
   def apply[T <: DifftestBundle](gen: T, style: String): T = {
@@ -65,14 +67,20 @@ object Gateway {
     gen
   }
 
-  def collect(): (Seq[String], UInt) = {
+  def collect(): (Seq[String], Seq[String], UInt) = {
+    val step = WireInit(true.B)
     if (config.needEndpoint) {
       val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
-      (endpoint.macros, endpoint.step)
+      macros ++= endpoint.macros
+      classDecl ++= endpoint.classDecl
+      step := endpoint.step
     }
     else {
-      (GatewaySink.collect(config), 1.U)
+      val tuple = GatewaySink.collect(config)
+      macros ++= tuple._1
+      classDecl ++= tuple._2
     }
+    (macros.toSeq, classDecl.toSeq, step)
   }
 }
 
@@ -186,7 +194,11 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
   }
 
-  var macros = GatewaySink.collect(config)
+  val macros = ListBuffer.empty[String]
+  val classDecl = ListBuffer.empty[String]
+  val tuple = GatewaySink.collect(config)
+  macros ++= tuple._1
+  classDecl ++= tuple._2
   if (config.isBatch) {
     macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
   }
@@ -203,7 +215,7 @@ object GatewaySink{
     }
   }
 
-  def collect(config: GatewayConfig): Seq[String] = {
+  def collect(config: GatewayConfig): (Seq[String], Seq[String]) = {
     config.style match {
       case "dpic" => DPIC.collect(config)
     }

@@ -32,7 +32,7 @@ int difftest_init() {
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
-    difftest[i]->dut = diffstate_buffer[i]->get(0);
+    difftest[i]->dut = diffstate_buffer[i]->get_state(0);
   }
   return 0;
 }
@@ -72,8 +72,10 @@ int difftest_nstep(int step){
 
 int difftest_step() {
   for (int i = 0; i < NUM_CORES; i++) {
-    difftest[i]->squash_idx = *(diffstate_buffer[i]->next_idx());
-    difftest[i]->dut = diffstate_buffer[i]->next();
+    difftest[i]->dut = diffstate_buffer[i]->next_state();
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+    difftest[i]->squash_idx = *(diffstate_buffer[i]->next_squash_idx());
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
     int ret = difftest[i]->step();
     if (ret) {
       return ret;

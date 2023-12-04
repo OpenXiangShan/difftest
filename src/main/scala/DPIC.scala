@@ -167,7 +167,7 @@ class DPIC[T <: DifftestBundle](gen: T, port: GatewayBundle, config: GatewayConf
     val body = lhs.zip(rhs.flatten).map { case (l, r) => s"packet->$l = $r;" }
     val validAssign = if (!gen.bits.hasValid || gen.isFlatten) Seq() else Seq("packet->valid = true;")
 
-    val packet = s"DUT_BUF(io_coreid,$dutPos)->${gen.desiredCppName}"
+    val packet = s"DIFF_STATE(io_coreid,$dutPos)->${gen.desiredCppName}"
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     val head = Seq(s"auto packet = &($packet$index);")
 
@@ -194,7 +194,7 @@ class DPICControl(coreid: UInt, port: GatewayBundle, config: GatewayConfig) exte
   override def dpicFuncAssigns: Seq[String] = {
     val assigns = ListBuffer.empty[String]
     if (config.squashReplay) {
-      assigns += s"*(diffstate_buffer[io_coreid]->get_idx($dutPos)) = squash_idx;"
+      assigns += s"*(DIFF_SQUASH_IDX(io_coreid,$dutPos)) = squash_idx;"
     }
     assigns.toSeq
   }
@@ -267,50 +267,87 @@ object DPIC {
     module.io
   }
 
-  def collect(config: GatewayConfig): Seq[String] = {
+  def collect(config: GatewayConfig): (Seq[String], Seq[String]) = {
     if (interfaces.isEmpty) {
-      return Seq()
+      return (Seq(), Seq())
+    }
+
+    val vClassFunc = ListBuffer.empty[String]
+    val DPICClassCrt = ListBuffer.empty[String]
+    val DPICClassInit = ListBuffer.empty[String]
+    val DPICClassFunc = ListBuffer.empty[String]
+    val classMacro = ListBuffer.empty[String]
+
+    val classMember = ListBuffer("state")
+    if (config.squashReplay) {
+      classMember += "squash_idx"
     }
     val buf_len = {
       if (config.diffStateSelect) 2
       else if (config.isBatch) config.batchSize
       else 1
     }
-    val class_def =
+
+    def memberHandle(name: String): Unit = {
+      val mtype = name match {
+        case "state" => "DiffTestState"
+        case "squash_idx" => "int"
+      }
+      vClassFunc += s"virtual $mtype* get_$name(int pos) = 0;"
+      vClassFunc += s"virtual $mtype* next_$name() = 0;"
+      DPICClassCrt += s"$mtype $name[$buf_len];"
+      DPICClassCrt += s"int ${name}_rptr = 0;"
+      DPICClassInit += s"memset($name, 0, sizeof($name));"
+      DPICClassFunc +=
+        s"""
+           |inline $mtype* get_$name(int pos) {
+           |  return $name + pos;
+           |}""".stripMargin
+      DPICClassFunc +=
+        s"""inline $mtype* next_$name() {
+           |  $mtype* ret = $name + ${name}_rptr;
+           |  ${name}_rptr = (${name}_rptr + 1) % $buf_len;
+           |  return ret;
+           |}""".stripMargin
+      classMacro += s"#define DIFF_${name.toUpperCase}(core_id,pos) (diffstate_buffer[core_id]->get_$name(pos))"
+    }
+
+    classMember.foreach(m => memberHandle(m))
+
+    val vClassDecl =
+      s"""
+         |class DiffStateBuffer {
+         |public:
+         |  virtual ~DiffStateBuffer() {}
+         |  ${vClassFunc.mkString("\n  ")}
+         |};
+         |
+         |extern DiffStateBuffer* diffstate_buffer[];
+         |
+         |extern void diffstate_buffer_init();
+         |extern void diffstate_buffer_free();
+         |""".stripMargin
+    val DPICClassDecl =
       s"""
          |class DPICBuffer : public DiffStateBuffer {
          |private:
-         |  int squash_idx[$buf_len];
-         |  DiffTestState buffer[$buf_len];
-         |  int read_ptr = 0;
+         |${DPICClassCrt.mkString("\n")}
+         |
          |public:
-         |  DPICBuffer() {
-         |    memset(buffer, 0, sizeof(buffer));
-         |  }
-         |  inline DiffTestState* get(int pos) {
-         |    return buffer+pos;
-         |  }
-         |  inline DiffTestState* next() {
-         |    DiffTestState* ret = buffer+read_ptr;
-         |    read_ptr = (read_ptr + 1) % $buf_len;
-         |    return ret;
-         |  }
-         |  inline int* get_idx(int pos) {
-         |    return squash_idx+pos;
-         |  }
-         |  inline int* next_idx() {
-         |    return squash_idx+read_ptr;
-         |  }
+         |DPICBuffer() {
+         |  ${DPICClassInit.mkString("\n  ")}
+         |}
+         |${DPICClassFunc.mkString("\n")}
          |};
          |""".stripMargin
+
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
     interfaceCpp += "#define __DIFFTEST_DPIC_H__"
     interfaceCpp += ""
     interfaceCpp += "#include <cstdint>"
     interfaceCpp += "#include \"diffstate.h\""
-    interfaceCpp += ""
-    interfaceCpp += class_def
+    interfaceCpp += DPICClassDecl
     interfaceCpp += interfaces.map(_._2 + ";").mkString("\n")
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
@@ -340,8 +377,8 @@ object DPIC {
     interfaceCpp += "#include \"difftest-dpic.h\""
     interfaceCpp += ""
     interfaceCpp += "DiffStateBuffer* diffstate_buffer[NUM_CORES];"
-    interfaceCpp += "#define DUT_BUF(core_id,pos) (diffstate_buffer[core_id]->get(pos))"
-    interfaceCpp += diff_func;
+    interfaceCpp += classMacro.mkString("\n")
+    interfaceCpp += diff_func
     interfaceCpp += interfaces.map(_._3).mkString("")
     interfaceCpp += ""
     interfaceCpp += "#endif // CONFIG_NO_DIFFTEST"
@@ -349,6 +386,6 @@ object DPIC {
     val outputFile = outputDir + "/difftest-dpic.cpp"
     Files.write(Paths.get(outputFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
 
-    Seq("CONFIG_DIFFTEST_DPIC")
+    (Seq("CONFIG_DIFFTEST_DPIC"), Seq(vClassDecl))
   }
 }

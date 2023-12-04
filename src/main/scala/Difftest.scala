@@ -274,6 +274,7 @@ object DifftestModule {
   private val enabled = true
   private val instances = ListBuffer.empty[(DifftestBundle, String)]
   private val macros = ListBuffer.empty[String]
+  private val classDecl = ListBuffer.empty[String]
 
   def apply[T <: DifftestBundle](
     gen:      T,
@@ -306,9 +307,10 @@ object DifftestModule {
 
     difftest.step := 0.U
 
-    val gateway_tuple = Gateway.collect()
-    macros ++= gateway_tuple._1
-    difftest.step := gateway_tuple._2
+    val gateway = Gateway.collect()
+    macros ++= gateway._1
+    classDecl ++= gateway._2
+    difftest.step := gateway._3
 
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
@@ -384,24 +386,7 @@ object DifftestModule {
     difftestCpp += "} DiffTestState;"
     difftestCpp += ""
 
-    val class_def =
-      s"""
-         |class DiffStateBuffer {
-         |public:
-         |  virtual ~DiffStateBuffer() {}
-         |  virtual DiffTestState* get(int pos) = 0;
-         |  virtual DiffTestState* next() = 0;
-         |  virtual int* get_idx(int pos) = 0;
-         |  virtual int* next_idx() = 0 ;
-         |};
-         |
-         |extern DiffStateBuffer* diffstate_buffer[];
-         |
-         |extern void diffstate_buffer_init();
-         |extern void diffstate_buffer_free();
-         |""".stripMargin
-
-    difftestCpp += class_def
+    difftestCpp ++= classDecl
     difftestCpp += "#endif // __DIFFSTATE_H__"
     difftestCpp += ""
 
