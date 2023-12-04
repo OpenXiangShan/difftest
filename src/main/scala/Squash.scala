@@ -149,11 +149,13 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
       |  output reg replay,
       |  output reg [${log2Ceil(config.replaySize)-1}:0] replay_idx,
       |""".stripMargin
+      else ""
   val replay_init = if (config.squashReplay)
     s"""
       |  replay = 1'b0;
       |  replay_idx = ${log2Ceil(config.replaySize)}'b0;
       |""".stripMargin
+      else ""
   val replay_task = if (config.squashReplay)
     """
       |export "DPI-C" task set_squash_replay;
@@ -162,6 +164,7 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
       |  replay_idx = idx;
       |endtask
       |""".stripMargin
+      else ""
 
   setInline("SquashControl.v",
     s"""
