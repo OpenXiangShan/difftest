@@ -1104,7 +1104,7 @@ void Emulator::fork_child_init() {
   // See verilator/test_regress/t/t_wrapper_clone.cpp:48 to avoid leaks.
   dut_ptr->atClone();
 #else
-// #error Please use Verilator v5.016 or newer versions.
+#error Please use Verilator v5.016 or newer versions.
 #endif // check VERILATOR_VERSION_INTEGER values
 #elif EMU_THREAD > 1 // VERILATOR_VERSION_INTEGER not defined
 #ifdef VERILATOR_4_210 // v4.210 <= version < 4.220
