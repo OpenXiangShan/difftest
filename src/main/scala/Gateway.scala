@@ -68,7 +68,7 @@ object Gateway {
   }
 
   def collect(): (Seq[String], Seq[String], UInt) = {
-    val step = WireInit(true.B)
+    val step = WireInit(1.U)
     if (config.needEndpoint) {
       val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
       macros ++= endpoint.macros
