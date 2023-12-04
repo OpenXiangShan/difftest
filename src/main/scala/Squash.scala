@@ -70,7 +70,6 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
 
   // Submit the pending non-squashable events immediately.
   val should_tick = !control.enable || !supportsSquash || !supportsSquashBase || tick_first_commit
-
   val squashed = Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles)))
 
   // Sometimes, the bundle may have squash dependencies.

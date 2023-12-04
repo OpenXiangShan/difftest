@@ -84,7 +84,7 @@ abstract class DPICBase(port: GatewayBundle, config: GatewayConfig) extends ExtM
   def dpicFunc: String = {
     s"""
        |$dpicFuncProto {
-       |  if (diffstate_buffer == NULL) return;
+       |  if (diffstate_buffer[io_coreid] == NULL) return;
        |  ${dpicFuncAssigns.mkString("\n  ")}
        |}
        |""".stripMargin
@@ -194,7 +194,7 @@ class DPICControl(coreid: UInt, port: GatewayBundle, config: GatewayConfig) exte
   override def dpicFuncAssigns: Seq[String] = {
     val assigns = ListBuffer.empty[String]
     if (config.squashReplay) {
-      assigns += s"*(diffstate_buffer[io_coreid].get_idx($dutPos)) = squash_idx;"
+      assigns += s"*(diffstate_buffer[io_coreid]->get_idx($dutPos)) = squash_idx;"
     }
     assigns.toSeq
   }
@@ -267,11 +267,10 @@ object DPIC {
     module.io
   }
 
-  def collect(config: GatewayConfig, port: GatewayBundle): Seq[String] = {
+  def collect(config: GatewayConfig): Seq[String] = {
     if (interfaces.isEmpty) {
       return Seq()
     }
-
     val buf_len = {
       if (config.diffStateSelect) 2
       else if (config.isBatch) config.batchSize
@@ -324,10 +323,14 @@ object DPIC {
     val diff_func =
       s"""
          |void diffstate_buffer_init() {
-         |  diffstate_buffer = new DPICBuffer[NUM_CORES];
+         |  for (int i = 0; i < NUM_CORES; i++) {
+         |    diffstate_buffer[i] = new DPICBuffer;
+         |  }
          |}
          |void diffstate_buffer_free() {
-         |  delete[] diffstate_buffer;
+         |  for (int i = 0; i < NUM_CORES; i++) {
+         |    delete diffstate_buffer[i];
+         |  }
          |}
       """.stripMargin
     interfaceCpp.clear()
@@ -336,8 +339,8 @@ object DPIC {
     interfaceCpp += "#include \"difftest.h\""
     interfaceCpp += "#include \"difftest-dpic.h\""
     interfaceCpp += ""
-    interfaceCpp += "DiffStateBuffer* diffstate_buffer;"
-    interfaceCpp += "#define DUT_BUF(core_id,pos) (diffstate_buffer[core_id].get(pos))"
+    interfaceCpp += "DiffStateBuffer* diffstate_buffer[NUM_CORES];"
+    interfaceCpp += "#define DUT_BUF(core_id,pos) (diffstate_buffer[core_id]->get(pos))"
     interfaceCpp += diff_func;
     interfaceCpp += interfaces.map(_._3).mkString("")
     interfaceCpp += ""

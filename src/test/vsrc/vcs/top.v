@@ -29,15 +29,15 @@ import "DPI-C" function int simv_nstep(int step);
 
 reg         clock;
 reg         reset;
-reg  [63:0] io_logCtrl_log_begin;
-reg  [63:0] io_logCtrl_log_end;
-wire [63:0] io_logCtrl_log_level;
-wire        io_perfInfo_clean;
-wire        io_perfInfo_dump;
-wire        io_uart_out_valid;
-wire [ 7:0] io_uart_out_ch;
-wire        io_uart_in_valid;
-wire [ 7:0] io_uart_in_ch;
+reg  [63:0] difftest_logCtrl_begin;
+reg  [63:0] difftest_logCtrl_end;
+wire [63:0] difftest_logCtrl_level;
+wire        difftest_perfCtrl_clean;
+wire        difftest_perfCtrl_dump;
+wire        difftest_uart_out_valid;
+wire [ 7:0] difftest_uart_out_ch;
+wire        difftest_uart_in_valid;
+wire [ 7:0] difftest_uart_in_ch;
 wire [`STEP_WIDTH - 1:0] difftest_step;
 
 string bin_file;
@@ -73,17 +73,17 @@ initial begin
 
   // log begin
   if ($test$plusargs("b")) begin
-    $value$plusargs("b=%d", io_logCtrl_log_begin);
+    $value$plusargs("b=%d", difftest_logCtrl_begin);
   end
   else begin
-    io_logCtrl_log_begin = 0;
+    difftest_logCtrl_begin = 0;
   end
   // log end
   if ($test$plusargs("e")) begin
-    $value$plusargs("e=%d", io_logCtrl_log_end);
+    $value$plusargs("e=%d", difftest_logCtrl_end);
   end
   else begin
-    io_logCtrl_log_end = 0;
+    difftest_logCtrl_end = 0;
   end
   // workload: bin file
   if ($test$plusargs("workload")) begin
@@ -119,26 +119,26 @@ always #1 clock <= ~clock;
 SimTop sim(
   .clock(clock),
   .reset(reset),
-  .io_logCtrl_log_begin(io_logCtrl_log_begin),
-  .io_logCtrl_log_end(io_logCtrl_log_end),
-  .io_logCtrl_log_level(io_logCtrl_log_level),
-  .io_perfInfo_clean(io_perfInfo_clean),
-  .io_perfInfo_dump(io_perfInfo_dump),
-  .io_uart_out_valid(io_uart_out_valid),
-  .io_uart_out_ch(io_uart_out_ch),
-  .io_uart_in_valid(io_uart_in_valid),
-  .io_uart_in_ch(io_uart_in_ch),
+  .difftest_logCtrl_begin(difftest_logCtrl_begin),
+  .difftest_logCtrl_end(difftest_logCtrl_end),
+  .difftest_logCtrl_level(difftest_logCtrl_level),
+  .difftest_perfCtrl_clean(difftest_perfCtrl_clean),
+  .difftest_perfCtrl_dump(difftest_perfCtrl_dump),
+  .difftest_uart_out_valid(difftest_uart_out_valid),
+  .difftest_uart_out_ch(difftest_uart_out_ch),
+  .difftest_uart_in_valid(difftest_uart_in_valid),
+  .difftest_uart_in_ch(difftest_uart_in_ch),
   .difftest_step(difftest_step)
 );
 
-assign io_logCtrl_log_level = 0;
-assign io_perfInfo_clean = 0;
-assign io_perfInfo_dump = 0;
-assign io_uart_in_ch = 8'hff;
+assign difftest_logCtrl_level = 0;
+assign difftest_perfCtrl_clean = 0;
+assign difftest_perfCtrl_dump = 0;
+assign difftest_uart_in_ch = 8'hff;
 
 always @(posedge clock) begin
-  if (!reset && io_uart_out_valid) begin
-    $fwrite(32'h8000_0001, "%c", io_uart_out_ch);
+  if (!reset && difftest_uart_out_valid) begin
+    $fwrite(32'h8000_0001, "%c", difftest_uart_out_ch);
     $fflush();
   end
 end

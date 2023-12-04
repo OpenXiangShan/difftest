@@ -62,9 +62,20 @@ difftest.wdest  := io.wb.rfDest
 difftest.wpdest := io.wb.rfDest
 ```
 
-3. Generate verilog files for simulation.
+3. Call `val difftesst = DifftestModule.finish(cpu: String)` at the top module whose name should be `SimTop`. The variable name `difftest` must be used to ensure DiffTest could capture the input signals.
 
-4. `make emu` and start simulating & debugging!
+An optional UART input/output can be connected to DiffTest. DiffTest will automatically DontCare it internally.
+
+```scala
+val difftest = DifftestModule.finish("Demo")
+
+// Optional UART connections. Remove this line if UART is not needed.
+difftest.uart <> mmio.io.uart
+```
+
+4. Generate verilog files for simulation.
+
+5. `make emu` and start simulating & debugging!
 
 We provide example designs, including:
 - [XiangShan](https://github.com/OpenXiangShan/XiangShan)
@@ -103,8 +114,10 @@ coherence via RefillTest.
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 * `LogCtrlIO`
-* `PerfInfoIO`
+* `PerfCtrlIO`
 * `UARTIO`
+
+These IOs can be used along with the controller wrapper at `src/main/scala/common/LogPerfControl.scala`.
 
 For compatibility on different platforms, the CPU should access a C++ memory via
 DPI-C interfaces. This memory will be initialized in C++.

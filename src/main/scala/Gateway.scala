@@ -36,16 +36,26 @@ case class GatewayConfig(
                         batchSize      : Int     = 32
                         )
 {
-  if(squashReplay) require(replaySize >= squashSize)
+  if(squashReplay) require(isSquash && replaySize >= squashSize)
   def needControl: Boolean = squashReplay
+  def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch || isSquash
 }
+
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
   private var config    = GatewayConfig()
 
   def apply[T <: DifftestBundle](gen: T, style: String): T = {
     config = GatewayConfig(style = style)
-    register(WireInit(0.U.asTypeOf(gen)))
+    if (config.needEndpoint)
+      register(WireInit(0.U.asTypeOf(gen)))
+    else {
+      val port = Wire(new GatewayBundle(config))
+      port.enable := true.B
+      val bundle = WireInit(0.U.asTypeOf(gen))
+      GatewaySink(gen, config, port) := bundle.asUInt
+      bundle
+    }
   }
 
   def register[T <: DifftestBundle](gen: T): T = {
@@ -56,8 +66,13 @@ object Gateway {
   }
 
   def collect(): (Seq[String], UInt) = {
-    val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
-    (endpoint.macros, endpoint.step)
+    if (config.needEndpoint) {
+      val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
+      (endpoint.macros, endpoint.step)
+    }
+    else {
+      (GatewaySink.collect(config), 1.U)
+    }
   }
 }
 
@@ -171,7 +186,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
   }
 
-  var macros = GatewaySink.collect(config, ports.head)
+  var macros = GatewaySink.collect(config)
   if (config.isBatch) {
     macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
   }
@@ -188,9 +203,9 @@ object GatewaySink{
     }
   }
 
-  def collect(config: GatewayConfig, port: GatewayBundle): Seq[String] = {
+  def collect(config: GatewayConfig): Seq[String] = {
     config.style match {
-      case "dpic" => DPIC.collect(config, port)
+      case "dpic" => DPIC.collect(config)
     }
   }
 }
@@ -199,5 +214,5 @@ class GatewayBundle(config: GatewayConfig) extends Bundle {
   val enable = Bool()
   val select = Option.when(config.diffStateSelect)(Bool())
   val batch_idx = Option.when(config.isBatch)(UInt(log2Ceil(config.batchSize).W))
-  val squash_idx = Option.when(config.squashReplay)(UInt(8.W))
+  val squash_idx = Option.when(config.squashReplay)(UInt(log2Ceil(config.replaySize).W))
 }

@@ -217,7 +217,7 @@ public:
   void trace_write(int step){
     if (difftrace){
       for (int i = 0; i < step; i++) {
-        difftrace->append(diffstate_buffer[id].get(i));
+        difftrace->append(diffstate_buffer[id]->get(i));
       }
     }
   }
