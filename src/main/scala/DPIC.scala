@@ -32,8 +32,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
   val io = IO(Input(gen))
-  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
-  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
+  val dut_pos = Option.when(config.hasDutPos)(IO(Input(UInt(config.dutPosWidth.W))))
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -65,16 +64,13 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   override def desiredName: String = gen.desiredModuleName
   val dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
   val modPorts: Seq[Seq[(String, Data)]] = {
-    var common = Seq(Seq(("clock", clock)), Seq(("enable", enable)))
-    if (config.diffStateSelect) {
-      common ++= Seq(Seq(("select", select.get)))
-    }
-    if (config.isBatch) {
-      common ++= Seq(Seq(("batch_idx", batch_idx.get)))
+    val common = ListBuffer(Seq(("clock", clock)), Seq(("enable", enable)))
+    if (config.hasDutPos) {
+      common += Seq(("dut_pos", dut_pos.get))
     }
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
-    common ++ io.elements.toSeq.reverse.map{ case (name, data) =>
+    common.toSeq ++ io.elements.toSeq.reverse.map{ case (name, data) =>
       data match {
         case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
         case _ => Seq((s"io_$name", data))
@@ -89,8 +85,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
       ((_: DifftestBundle) => true, Seq("io_coreid")),
-      ((_: DifftestBundle) => config.diffStateSelect, Seq("select")),
-      ((_: DifftestBundle) => config.isBatch, Seq("batch_idx")),
+      ((_: DifftestBundle) => config.hasDutPos, Seq("dut_pos")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
@@ -109,11 +104,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
        |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
   val dpicFunc: String = {
-    val dut_pos = {
-      if (config.diffStateSelect) "select"
-      else if (config.isBatch) "batch_idx"
-      else "0"
-    }
+    val dut_pos = if (config.hasDutPos) "dut_pos" else "0"
     val packet = s"DUT_BUF(io_coreid,$dut_pos)->${gen.desiredCppName}"
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
@@ -168,19 +159,13 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
 private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends Module {
   val io = IO(Input(UInt(gen.getWidth.W)))
   val enable = IO(Input(Bool()))
-  val select = Option.when(config.diffStateSelect)(IO(Input(Bool())))
-  val batch_idx = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
+  val dut_pos = Option.when(config.hasDutPos)(IO(Input(UInt(config.dutPosWidth.W))))
 
   val unpack = io.asTypeOf(gen)
   val dpic = Module(new DPIC(gen, config))
   dpic.clock := clock
   dpic.enable := unpack.bits.getValid && enable
-  if (config.diffStateSelect) {
-    dpic.select.get := select.get
-  }
-  if (config.isBatch) {
-    dpic.batch_idx.get := batch_idx.get
-  }
+  if (config.hasDutPos) dpic.dut_pos.get := dut_pos.get
   dpic.io := unpack
 }
 
@@ -190,12 +175,7 @@ object DPIC {
   def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): UInt = {
     val module = Module(new DummyDPICWrapper(gen, config))
     module.enable := port.enable
-    if (config.diffStateSelect) {
-      module.select.get := port.select.get
-    }
-    if (config.isBatch) {
-      module.batch_idx.get := port.batch_idx.get
-    }
+    if (config.hasDutPos) module.dut_pos.get := port.dut_pos.get
 
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
@@ -209,11 +189,7 @@ object DPIC {
     if (interfaces.isEmpty) {
       return Seq()
     }
-    val buf_len = {
-      if (config.diffStateSelect) 2
-      else if (config.isBatch) config.batchSize
-      else 1
-    }
+    val buf_len = config.dutBufLen
     val class_def =
       s"""
          |class DPICBuffer : public DiffStateBuffer {

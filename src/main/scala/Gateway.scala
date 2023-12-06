@@ -31,6 +31,10 @@ case class GatewayConfig(
                         batchSize      : Int     = 32
                         )
 {
+  require(!(diffStateSelect && isBatch))
+  def hasDutPos: Boolean = diffStateSelect || isBatch
+  def dutBufLen: Int = if (isBatch) batchSize else if (diffStateSelect) 2 else 1
+  def dutPosWidth: Int = log2Ceil(dutBufLen)
   def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch
 }
 
@@ -79,7 +83,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   val out = WireInit(in)
   val out_pack = WireInit(in_pack)
 
-  if (config.diffStateSelect || config.isBatch) {
+  if (config.hasDutPos) {
     // Special fix for int writeback. Work for single-core only
     if (in.exists(_.desiredCppName == "wb_int")) {
       require(in.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
@@ -147,7 +151,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     when(global_enable) {
       select := !select
     }
-    ports.foreach(port => port.select.get := select)
+    ports.foreach(port => port.dut_pos.get := select.asUInt)
   }
 
   val step_width = if (config.isBatch) log2Ceil(config.batchSize+1) else 1
@@ -157,7 +161,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 
   if (config.isBatch) {
     for (ptr <- 0 until config.batchSize) {
-      ports(ptr).batch_idx.get := ptr.asUInt(log2Ceil(config.batchSize).W)
+      ports(ptr).dut_pos.get := ptr.asUInt
       for(id <- 0 until in.length) {
         GatewaySink(in(id).cloneType, config, ports(ptr)) := batch_data.get(ptr)(id)
       }
@@ -192,6 +196,5 @@ object GatewaySink{
 
 class GatewayBundle(config: GatewayConfig) extends Bundle {
   val enable = Bool()
-  val select = Option.when(config.diffStateSelect)(Bool())
-  val batch_idx = Option.when(config.isBatch)(UInt(log2Ceil(config.batchSize).W))
+  val dut_pos = Option.when(config.hasDutPos)(UInt(config.dutPosWidth.W))
 }
