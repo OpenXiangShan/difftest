@@ -189,12 +189,19 @@ object DPIC {
     if (interfaces.isEmpty) {
       return Seq()
     }
-    val buf_len = config.dutBufLen
-    val class_def =
+
+    val interfaceCpp = ListBuffer.empty[String]
+    interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
+    interfaceCpp += "#define __DIFFTEST_DPIC_H__"
+    interfaceCpp += ""
+    interfaceCpp += "#include <cstdint>"
+    interfaceCpp += "#include \"diffstate.h\""
+    interfaceCpp += ""
+    interfaceCpp +=
       s"""
          |class DPICBuffer : public DiffStateBuffer {
          |private:
-         |  DiffTestState buffer[$buf_len];
+         |  DiffTestState buffer[${config.dutBufLen}];
          |  int read_ptr = 0;
          |public:
          |  DPICBuffer() {
@@ -205,19 +212,11 @@ object DPIC {
          |  }
          |  inline DiffTestState* next() {
          |    DiffTestState* ret = buffer+read_ptr;
-         |    read_ptr = (read_ptr + 1) % $buf_len;
+         |    read_ptr = (read_ptr + 1) % ${config.dutBufLen};
          |    return ret;
          |  }
          |};
          |""".stripMargin
-    val interfaceCpp = ListBuffer.empty[String]
-    interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
-    interfaceCpp += "#define __DIFFTEST_DPIC_H__"
-    interfaceCpp += ""
-    interfaceCpp += "#include <cstdint>"
-    interfaceCpp += "#include \"diffstate.h\""
-    interfaceCpp += ""
-    interfaceCpp += class_def
     interfaceCpp += interfaces.map(_._2 + ";").mkString("\n")
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
@@ -227,8 +226,17 @@ object DPIC {
     val outputHeaderFile = outputDir + "/difftest-dpic.h"
     Files.write(Paths.get(outputHeaderFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
 
-    val diff_func =
+    interfaceCpp.clear()
+    interfaceCpp += "#ifndef CONFIG_NO_DIFFTEST"
+    interfaceCpp += ""
+    interfaceCpp += "#include \"difftest.h\""
+    interfaceCpp += "#include \"difftest-dpic.h\""
+    interfaceCpp += ""
+    interfaceCpp +=
       s"""
+         |DiffStateBuffer* diffstate_buffer[NUM_CORES];
+         |#define DUT_BUF(core_id,pos) (diffstate_buffer[core_id]->get(pos))
+         |
          |void diffstate_buffer_init() {
          |  for (int i = 0; i < NUM_CORES; i++) {
          |    diffstate_buffer[i] = new DPICBuffer;
@@ -240,15 +248,6 @@ object DPIC {
          |  }
          |}
       """.stripMargin
-    interfaceCpp.clear()
-    interfaceCpp += "#ifndef CONFIG_NO_DIFFTEST"
-    interfaceCpp += ""
-    interfaceCpp += "#include \"difftest.h\""
-    interfaceCpp += "#include \"difftest-dpic.h\""
-    interfaceCpp += ""
-    interfaceCpp += "DiffStateBuffer* diffstate_buffer[NUM_CORES];"
-    interfaceCpp += "#define DUT_BUF(core_id,pos) (diffstate_buffer[core_id]->get(pos))"
-    interfaceCpp += diff_func;
     interfaceCpp += interfaces.map(_._3).mkString("")
     interfaceCpp += ""
     interfaceCpp += "#endif // CONFIG_NO_DIFFTEST"
