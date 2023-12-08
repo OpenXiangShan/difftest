@@ -20,12 +20,14 @@ import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import difftest._
 import difftest.dpic.DPIC
+import difftest.squash.Squash
 
 import scala.collection.mutable.ListBuffer
 
 case class GatewayConfig(
                         style          : String  = "dpic",
                         hasGlobalEnable: Boolean = false,
+                        isSquash       : Boolean = false,
                         diffStateSelect: Boolean = false,
                         isBatch        : Boolean = false,
                         batchSize      : Int     = 32
@@ -80,10 +82,9 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     BoringUtils.addSink(data, s"gateway_$id")
     in(id) := data.asTypeOf(in(id).cloneType)
   }
-  val out = WireInit(in)
-  val out_pack = WireInit(in_pack)
 
-  if (config.hasDutPos) {
+  val share_wbint = WireInit(in)
+  if (config.hasDutPos || config.isSquash) {
     // Special fix for int writeback. Work for single-core only
     if (in.exists(_.desiredCppName == "wb_int")) {
       require(in.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
@@ -99,7 +100,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
       val commits = in.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit])
       val num_skip = PopCount(commits.map(c => c.valid && c.skip))
       assert(num_skip <= 1.U, p"num_skip $num_skip is larger than one. Squash not supported yet")
-      val wb_for_skip = out.filter(_.desiredCppName == "wb_int").head.asInstanceOf[DiffIntWriteback]
+      val wb_for_skip = share_wbint.filter(_.desiredCppName == "wb_int").head.asInstanceOf[DiffIntWriteback]
       for (c <- commits) {
         when(c.valid && c.skip) {
           wb_for_skip.valid := true.B
@@ -112,11 +113,19 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
           }
         }
       }
-
-      for ((data, id) <- out_pack.zipWithIndex) {
-        data := out(id).asUInt
-      }
     }
+  }
+
+  val out = WireInit(share_wbint)
+  if (config.isSquash) {
+    val squash = Squash(share_wbint.toSeq.map(_.cloneType))
+    squash.in := share_wbint
+    out := squash.out
+  }
+
+  val out_pack = WireInit(in_pack)
+  for ((data, id) <- out_pack.zipWithIndex) {
+    data := out(id).asUInt
   }
 
   val port_num = if (config.isBatch) config.batchSize else 1
@@ -124,10 +133,10 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 
   val global_enable = WireInit(true.B)
   if(config.hasGlobalEnable) {
-    global_enable := VecInit(in.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
+    global_enable := VecInit(out.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
   }
 
-  val batch_data = Option.when(config.isBatch)(Mem(config.batchSize, in_pack.cloneType))
+  val batch_data = Option.when(config.isBatch)(Mem(config.batchSize, out_pack.cloneType))
   val enable = WireInit(false.B)
   if(config.isBatch) {
     val batch_ptr = RegInit(0.U(log2Ceil(config.batchSize).W))
@@ -162,20 +171,23 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   if (config.isBatch) {
     for (ptr <- 0 until config.batchSize) {
       ports(ptr).dut_pos.get := ptr.asUInt
-      for(id <- 0 until in.length) {
-        GatewaySink(in(id).cloneType, config, ports(ptr)) := batch_data.get(ptr)(id)
+      for(id <- 0 until out.length) {
+        GatewaySink(out(id).cloneType, config, ports(ptr)) := batch_data.get(ptr)(id)
       }
     }
   }
   else {
-    for(id <- 0 until in.length){
-      GatewaySink(in(id).cloneType, config, ports.head) := out_pack(id)
+    for(id <- 0 until out.length){
+      GatewaySink(out(id).cloneType, config, ports.head) := out_pack(id)
     }
   }
 
   var macros = GatewaySink.collect(config)
   if (config.isBatch) {
     macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
+  }
+  if (config.isSquash) {
+    macros ++= Squash.collect()
   }
 }
 

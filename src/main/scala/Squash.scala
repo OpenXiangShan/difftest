@@ -24,43 +24,21 @@ import difftest._
 import scala.collection.mutable.ListBuffer
 
 object Squash {
-  private val isEffective: Boolean = false
   private val instances = ListBuffer.empty[DifftestBundle]
 
-  def apply[T <: DifftestBundle](gen: T): T = {
-    if (isEffective) register(gen, WireInit(0.U.asTypeOf(gen))) else gen
-  }
-
-  def register[T <: DifftestBundle](original: T, squashed: T): T = {
-    // There seems to be a bug in WiringUtils when original is some IO of Module.
-    // We manually add a Wire for the source to avoid the WiringException.
-    BoringUtils.addSource(WireInit(original), s"squash_in_${instances.length}")
-    BoringUtils.addSink(squashed, s"squash_out_${instances.length}")
-    instances += original.cloneType
-    squashed
+  def apply[T <: Seq[DifftestBundle]](bundles: T): SquashEndpoint = {
+    val module = Module(new SquashEndpoint(bundles))
+    module
   }
 
   def collect(): Seq[String] = {
-    if (isEffective) {
-      Module(new SquashEndpoint(instances.toSeq))
-      Seq("CONFIG_DIFFTEST_SQUASH")
-    }
-    else {
-      Seq()
-    }
+    Seq("CONFIG_DIFFTEST_SQUASH")
   }
 }
 
 class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
-  val in = WireInit(0.U.asTypeOf(MixedVec(bundles)))
-  for ((data, i) <- in.zipWithIndex) {
-    BoringUtils.addSink(data, s"squash_in_$i")
-  }
-
-  val out = Wire(MixedVec(bundles))
-  for ((data, i) <- out.zipWithIndex) {
-    BoringUtils.addSource(data, s"squash_out_$i")
-  }
+  val in = IO(Input(MixedVec(bundles)))
+  val out = IO(Output(MixedVec(bundles)))
 
   val state = RegInit(0.U.asTypeOf(MixedVec(bundles)))
 
@@ -106,30 +84,6 @@ class SquashEndpoint(bundles: Seq[DifftestBundle]) extends Module {
         s := i.squash(s)
       }
   }
-
-  // Special fix for int writeback. Work for single-core only.
-  if (bundles.exists(_.desiredCppName == "wb_int")) {
-    require(bundles.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
-    val writebacks = in.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
-    val numPhyRegs = writebacks.head.numElements
-    val wb_int = Reg(Vec(numPhyRegs, UInt(64.W)))
-    for (wb <- writebacks) {
-      when (wb.valid) {
-        wb_int(wb.address) := wb.data
-      }
-    }
-    val commits = out.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit])
-    val num_skip = PopCount(commits.map(c => c.valid && c.skip))
-    assert(num_skip <= 1.U, p"num_skip $num_skip is larger than one. Squash not supported yet")
-    val wb_for_skip = out.filter(_.desiredCppName == "wb_int").head.asInstanceOf[DiffIntWriteback]
-    for (c <- commits) {
-      when (c.valid && c.skip) {
-        wb_for_skip.valid := true.B
-        wb_for_skip.address := c.wpdest
-        wb_for_skip.data := wb_int(c.wpdest)
-      }
-    }
-  }
 }
 
 class SquashControl extends ExtModule with HasExtModuleInline {
@@ -145,7 +99,10 @@ class SquashControl extends ExtModule with HasExtModuleInline {
       |  output reg enable
       |);
       |
+      |import "DPI-C" context function void set_squash_scope();
+      |
       |initial begin
+      |  set_squash_scope();
       |  enable = 1'b1;
       |end
       |

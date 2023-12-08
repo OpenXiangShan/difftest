@@ -103,15 +103,19 @@ void difftest_finish() {
 }
 
 #ifdef CONFIG_DIFFTEST_SQUASH
+svScope squashScope;
+void set_squash_scope() {
+  squashScope = svGetScope();
+}
+
 extern "C" void set_squash_enable(int enable);
-void difftest_squash_set(int enable, const char *scope_name = "TOP.SimTop.SquashEndpoint.control") {
-  auto scope = svGetScopeFromName(scope_name);
-  if (scope == NULL) {
-    printf("Error: Could not retrieve scope with name '%s'\n", scope_name);
-    assert(scope);
+void difftest_squash_enable(int enable) {
+  if (squashScope == NULL) {
+    printf("Error: Could not retrieve squash scope, set first\n");
+    assert(squashScope);
   }
-  svSetScope(scope);
-  set_squash_enable(rand());
+  svSetScope(squashScope);
+  set_squash_enable(enable);
 }
 #endif // CONFIG_DIFFTEST_SQUASH
 

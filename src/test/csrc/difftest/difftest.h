@@ -369,7 +369,8 @@ void difftest_trace_write(int step);
 int init_nemuproxy(size_t);
 
 #ifdef CONFIG_DIFFTEST_SQUASH
-extern "C" void difftest_squash_set(int enable, const char *scope_name);
+extern "C" void set_squash_scope();
+extern "C" void difftest_squash_enable(int enable);
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #endif
