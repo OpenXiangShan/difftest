@@ -18,7 +18,6 @@ package difftest
 
 import chisel3._
 import difftest.gateway.Gateway
-import difftest.squash.Squash
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
@@ -287,7 +286,7 @@ object DifftestModule {
     if (enabled) {
       val id = register(gen, style)
       val sink = Gateway(gen, style)
-      sink := Squash(Delayer(difftest, delay))
+      sink := Delayer(difftest, delay)
       sink.coreid := difftest.coreid
     }
     if (dontCare) {
@@ -312,7 +311,6 @@ object DifftestModule {
     macros ++= gateway_tuple._1
     difftest.step := gateway_tuple._2
 
-    macros ++= Squash.collect()
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
