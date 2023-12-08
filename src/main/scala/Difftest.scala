@@ -387,7 +387,7 @@ object DifftestModule {
     difftestCpp += "} DiffTestState;"
     difftestCpp += ""
 
-    val class_def =
+    difftestCpp +=
       s"""
          |class DiffStateBuffer {
          |public:
@@ -401,8 +401,6 @@ object DifftestModule {
          |extern void diffstate_buffer_init();
          |extern void diffstate_buffer_free();
          |""".stripMargin
-
-    difftestCpp += class_def
     difftestCpp += "#endif // __DIFFSTATE_H__"
     difftestCpp += ""
 
