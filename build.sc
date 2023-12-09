@@ -20,23 +20,28 @@ import publish._
 
 object ivys {
   val scala = "2.13.10"
-  val chisel3 = ivy"edu.berkeley.cs::chisel3:3.5.6"
-  val chisel3Plugin = ivy"edu.berkeley.cs:::chisel3-plugin:3.5.6"
-  val scalatest = ivy"org.scalatest::scalatest:3.2.2"
+  val chiselCrossVersions = Map(
+    "3.5.6" -> (ivy"edu.berkeley.cs::chisel3:3.5.6", ivy"edu.berkeley.cs:::chisel3-plugin:3.5.6"),
+    "3.6.0" -> (ivy"edu.berkeley.cs::chisel3:3.6.0", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.0"),
+    "6.0.0-M3" -> (ivy"org.chipsalliance::chisel:6.0.0-M3", ivy"org.chipsalliance:::chisel-plugin:6.0.0-M3"),
+  )
 }
 
-trait CommonDiffTest extends ScalaModule with SbtModule {
+trait CommonDiffTest extends ScalaModule with SbtModule with Cross.Module[String] {
+
   override def scalaVersion = ivys.scala
 
-  override def scalacPluginIvyDeps = Agg(ivys.chisel3Plugin)
+  override def scalacPluginIvyDeps = Agg(ivys.chiselCrossVersions(crossValue)._2)
 
   override def scalacOptions = Seq("-Ymacro-annotations") ++
-    Seq("-Xfatal-warnings", "-feature", "-deprecation", "-language:reflectiveCalls")
+    Seq("-feature", "-language:reflectiveCalls")
 
-  override def ivyDeps = Agg(ivys.chisel3)
+  override def ivyDeps = Agg(ivys.chiselCrossVersions(crossValue)._1)
 }
 
 object difftest extends CommonDiffTest {
+  def crossValue: String = "3.5.6"
+
   override def millSourcePath = os.pwd
 
   object test extends SbtModuleTests with TestModule.ScalaTest
