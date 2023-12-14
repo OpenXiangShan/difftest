@@ -137,8 +137,12 @@ public:
   void record_group(uint64_t pc, uint64_t count) {
     retire_group_pc_queue [retire_group_pointer] = pc;
     retire_group_cnt_queue[retire_group_pointer] = count;
+    retire_instr_cntsum += count;
     retire_group_pointer = (retire_group_pointer + 1) % DEBUG_GROUP_TRACE_SIZE;
   };
+  uint64_t read_group_cnt() {
+    return retire_instr_cntsum;
+  }
   void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip, bool delayed,
       uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore) {
     push_back_trace(new InstrTrace(pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
@@ -159,7 +163,7 @@ private:
   int retire_group_pointer = 0;
   uint64_t retire_group_pc_queue[DEBUG_GROUP_TRACE_SIZE] = {0};
   uint32_t retire_group_cnt_queue[DEBUG_GROUP_TRACE_SIZE] = {0};
-
+  uint64_t retire_instr_cntsum = 0;
   const static int DEBUG_INST_TRACE_SIZE = 32;
   int retire_inst_pointer = 0;
   std::vector<CommitTrace*>commit_trace;
@@ -217,7 +221,9 @@ public:
         difftrace->append(dut);
     }
   }
-
+  inline int get_instr_sum() {
+    return state->read_group_cnt();
+  }
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
   // These functions generally do nothing but copy the information to core_state.
   inline DifftestTrapEvent *get_trap_event() {
@@ -354,5 +360,5 @@ int difftest_state();
 void difftest_finish();
 void difftest_trace();
 int init_nemuproxy(size_t);
-
+int difftest_commit_sum(char core_id);
 #endif

@@ -58,6 +58,13 @@ int difftest_step() {
   return 0;
 }
 
+int difftest_commit_sum(char core_id) {
+  if (core_id < NUM_CORES)
+    return difftest[core_id]->get_instr_sum();
+  else 
+    return 0;
+}
+
 void difftest_trace() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->trace();
@@ -71,7 +78,9 @@ void difftest_finish() {
   delete[] difftest;
   difftest = NULL;
 }
-
+int difftest_commit_count() {
+  return get_instr_sum();
+}
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
 
@@ -849,6 +858,7 @@ void Difftest::display() {
   fflush(stdout);
   proxy->ref_reg_display();
   printf("priviledgeMode: %lu\n", dut->csr.priviledgeMode);
+  printf("instr countsum : %ld\n", get_instr_sum());
 }
 
 void CommitTrace::display(bool use_spike) {

@@ -19,6 +19,7 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void set_max_cycles(int mc);
+import "DPI-C" function void set_max_instrs(int mc);
 import "DPI-C" function void simv_init();
 import "DPI-C" function int simv_step();
 
@@ -42,7 +43,7 @@ string flash_bin_file;
 string wave_type;
 string diff_ref_so;
 reg [31:0] max_cycles;
-
+reg [63:0] max_instrs;
 initial begin
   clock = 0;
   reset = 1;
@@ -110,6 +111,15 @@ initial begin
     max_cycles = 0;
   end
 
+  // set checkpoint const
+  if ($test$plusargs("gcpt-maxnum")) begin
+    $value$plusargs("gcpt-maxnum=%ld", max_instrs);
+    set_max_instrs(max_instrs);
+  end
+  else begin
+    max_instrs = 0;
+  end
+
   // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
   #100 reset = 0;
 end
@@ -143,9 +153,12 @@ always @(posedge clock) begin
 end
 
 reg has_init;
+reg [63:0]cycles;
 always @(posedge clock) begin
+  cycles = cycles + 1;
   if (reset) begin
     has_init <= 1'b0;
+    cycles   <= 64'b0;
   end
   else if (!has_init) begin
     simv_init();
@@ -154,7 +167,15 @@ always @(posedge clock) begin
 
   // check errors
   if (!reset && has_init && difftest_step) begin
-    if (simv_step()) begin
+    int trap = simv_step();
+    if (trap) begin
+      if (trap == 9) begin
+        $display("checkpoint reached the maximum count point");
+        $display("CPI = %d",cycles / max_instrs);
+      end
+      io_perfInfo_dump <= 1'b1;
+      delay #50;
+      io_perfInfo_dump <= 1'b0;
       $finish();
     end
   end

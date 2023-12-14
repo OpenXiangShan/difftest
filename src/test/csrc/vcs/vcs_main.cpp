@@ -28,7 +28,7 @@ static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
 static bool enable_difftest = true;
 static int max_cycles = 0;
-
+static int max_instrs = 0;
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
   strcpy(bin_file, s);
@@ -58,6 +58,11 @@ extern "C" void set_max_cycles(long mc) {
   max_cycles = mc;
 }
 
+extern "C" void set_max_instrs(long mc) {
+  printf("max instrs:%d\n",mc);
+  max_instrs = mc;
+}
+
 extern "C" void simv_init() {
   common_init("simv");
 
@@ -84,6 +89,12 @@ extern "C" int simv_step() {
       return 1;
     }
     cycles ++;
+  }
+
+  if (max_instrs != 0) { // 0 for no limit
+    if(max_instrs < difftest_commit_sum(0)) {
+      return 9;
+    }
   }
 
   if (difftest_state() != -1) {
