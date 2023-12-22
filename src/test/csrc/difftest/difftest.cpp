@@ -78,9 +78,7 @@ void difftest_finish() {
   delete[] difftest;
   difftest = NULL;
 }
-int difftest_commit_count() {
-  return get_instr_sum();
-}
+
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
 

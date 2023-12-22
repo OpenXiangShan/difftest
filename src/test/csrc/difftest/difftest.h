@@ -221,7 +221,7 @@ public:
         difftrace->append(dut);
     }
   }
-  inline int get_instr_sum() {
+  inline uint64_t get_instr_sum() {
     return state->read_group_cnt();
   }
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)

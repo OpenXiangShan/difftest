@@ -161,6 +161,7 @@ end
 
 reg has_init;
 reg [63:0]cycles;
+reg [31:0]trap;
 always @(posedge clock) begin
   cycles = cycles + 1;
   if (reset) begin
@@ -174,7 +175,7 @@ always @(posedge clock) begin
 
   // check errors
   if (!reset && has_init && difftest_step) begin
-    int trap = simv_step();
+    trap <= simv_step();
     if (trap) begin
       if (max_instrs !=0 && trap == 0xff) begin
         $display("checkpoint reached the maximum count point");
