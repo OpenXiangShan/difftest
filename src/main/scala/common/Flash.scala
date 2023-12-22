@@ -31,11 +31,13 @@ class FlashHelper extends ExtModule with HasExtModuleInline {
 
   setInline("FlashHelper.v",
     s"""
+       |`ifndef SYNTHESIS
        |import "DPI-C" function void flash_read
        |(
        |  input int addr,
        |  output longint data
        |);
+       |`endif // SYNTHESIS
        |
        |module FlashHelper (
        |  input clock,
@@ -44,9 +46,11 @@ class FlashHelper extends ExtModule with HasExtModuleInline {
        |  output reg [63:0] r_data
        |);
        |
+       |`ifndef SYNTHESIS
        |  always @(posedge clock) begin
        |    if (r_en) flash_read(r_addr, r_data);
        |  end
+       |`endif // SYNTHESIS
        |
        |endmodule
      """.stripMargin)
