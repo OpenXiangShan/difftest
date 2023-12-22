@@ -129,7 +129,7 @@ protected:
   }
 
 public:
-  MmapMemory(const char *image, uint64_t n_bytes);
+  MmapMemory(const char *image, uint64_t n_bytes, const char *gcpt_bin = nullptr);
   virtual ~MmapMemory();
   void clone(std::function<void(void*, uint64_t)> func, bool skip_zero = false) {
     uint64_t n_bytes = skip_zero ? img_size : get_size();
@@ -203,7 +203,7 @@ public:
 
 extern SimMemory *simMemory;
 // This is to initialize the common mmap RAM
-void init_ram(const char *image, uint64_t n_bytes);
+void init_ram(const char *image, uint64_t n_bytes, const char *gcpt_bin = nullptr);
 
 #ifdef WITH_DRAMSIM3
 

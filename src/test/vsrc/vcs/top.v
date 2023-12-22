@@ -16,6 +16,7 @@
 
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
+import "DPI-C" function void set_gcpt_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void set_max_cycles(int mc);
@@ -40,6 +41,7 @@ wire        difftest_step;
 
 string bin_file;
 string flash_bin_file;
+string gcpt_bin_file;
 string wave_type;
 string diff_ref_so;
 reg [31:0] max_cycles;
@@ -92,6 +94,11 @@ initial begin
   if ($test$plusargs("flash")) begin
     $value$plusargs("flash=%s", flash_bin_file);
     set_flash_bin(flash_bin_file);
+  end
+  // override gcpt :bin file
+  if ($test$plusargs("gcpt-bin")) begin
+    $value$plusargs("gcpt-bin=%s", flash_bin_file);
+    set_gcpt_bin(gcpt_bin_file);
   end
   // diff-test golden model: nemu-so
   if ($test$plusargs("diff")) begin
@@ -169,7 +176,7 @@ always @(posedge clock) begin
   if (!reset && has_init && difftest_step) begin
     int trap = simv_step();
     if (trap) begin
-      if (trap == 9) begin
+      if (max_instrs !=0 && trap == 0xff) begin
         $display("checkpoint reached the maximum count point");
         $display("CPI = %d",cycles / max_instrs);
       end
