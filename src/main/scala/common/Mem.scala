@@ -100,14 +100,18 @@ class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort {
 
   setInline("MemRHelper.v",
     s"""
+       |`ifndef SYNTHESIS
        |$r_dpic
+       |`endif // SYNTHESIS
        |module MemRHelper(
        |  $r_if
        |  input clock
        |);
+       |`ifndef SYNTHESIS
        |  always @(posedge clock) begin
        |    $r_func
        |  end
+       |`endif // SYNTHESIS
        |endmodule
      """.stripMargin)
 }
@@ -117,15 +121,19 @@ class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort {
 
   setInline("MemWHelper.v",
     s"""
+       |`ifndef SYNTHESIS
        |$w_dpic
+       |`endif // SYNTHESIS
        |module MemWHelper(
        |  $w_if
        |  input clock
        |);
+       |`ifndef SYNTHESIS
        |  always @(posedge clock) begin
        |   $w_func
        |  end
        |endmodule
+       |`endif // SYNTHESIS
      """.stripMargin)
 }
 
@@ -135,20 +143,24 @@ class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort wit
 
   setInline("MemRWHelper.v",
     s"""
+       |`ifndef SYNTHESIS
        |$r_dpic
        |$w_dpic
+       |`endif // SYNTHESIS
        |module MemRWHelper(
        |  $r_if
        |  $w_if
        |  input enable,
        |  input clock
        |);
+       |`ifndef SYNTHESIS
        |  always @(posedge clock) begin
        |    if (enable) begin
        |      $r_func
        |      $w_func
        |    end
        |  end
+       |`endif // SYNTHESIS
        |endmodule
      """.stripMargin)
 }
