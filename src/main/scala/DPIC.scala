@@ -109,7 +109,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
        |$dpicFuncProto {
-       |  if (diffstate_buffer[io_coreid] == NULL) return;
+       |  if (!diffstate_buffer) return;
        |  auto packet = &($packet$index);
        |  ${dpicFuncAssigns.mkString("\n  ")}
        |}
@@ -234,10 +234,11 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp +=
       s"""
-         |DiffStateBuffer* diffstate_buffer[NUM_CORES];
+         |DiffStateBuffer** diffstate_buffer = nullptr;
          |#define DUT_BUF(core_id,pos) (diffstate_buffer[core_id]->get(pos))
          |
          |void diffstate_buffer_init() {
+         |  diffstate_buffer = new DiffStateBuffer*[NUM_CORES];
          |  for (int i = 0; i < NUM_CORES; i++) {
          |    diffstate_buffer[i] = new DPICBuffer;
          |  }
@@ -246,6 +247,7 @@ object DPIC {
          |  for (int i = 0; i < NUM_CORES; i++) {
          |    delete diffstate_buffer[i];
          |  }
+         |  delete[] diffstate_buffer;
          |}
       """.stripMargin
     interfaceCpp += interfaces.map(_._3).mkString("")
