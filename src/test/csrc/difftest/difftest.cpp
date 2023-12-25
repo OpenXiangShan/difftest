@@ -611,24 +611,33 @@ int Difftest::do_refill_check(int cacheid) {
   static uint64_t last_valid_addr = 0;
   char buf[512];
   uint64_t realpaddr = dut_refill->addr;
-  dut_refill->addr = dut_refill->addr - dut_refill->addr % 64;
+
+  int data_len;
+  // the valid size (32 byte) of icache is half of cacheline
+  if ((cacheid == 4) || (cacheid == 5)) {
+    data_len = 4;
+    dut_refill->addr = dut_refill->addr - dut_refill->addr % 32;
+  } else {
+    data_len = 8;
+    dut_refill->addr = dut_refill->addr - dut_refill->addr % 64;
+  }
   if (dut_refill->addr != last_valid_addr) {
     last_valid_addr = dut_refill->addr;
     if(!in_pmem(dut_refill->addr)){
       // speculated illegal mem access should be ignored
       return 0;
     }
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < data_len; i++) {
       read_goldenmem(dut_refill->addr + i*8, &buf, 8);
       if (dut_refill->data[i] != *((uint64_t*)buf)) {
         printf("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n",cacheid, dut_refill->idtfr, realpaddr);
         printf("addr: %lx\nGold: ", dut_refill->addr);
-        for (int j = 0; j < 8; j++) {
+        for (int j = 0; j < data_len; j++) {
           read_goldenmem(dut_refill->addr + j*8, &buf, 8);
           printf("%016lx", *((uint64_t*)buf));
         }
         printf("\nCore: ");
-        for (int j = 0; j < 8; j++) {
+        for (int j = 0; j < data_len; j++) {
           printf("%016lx", dut_refill->data[j]);
         }
         printf("\n");
