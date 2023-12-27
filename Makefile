@@ -25,7 +25,8 @@ NUM_CORES  ?= 1
 BUILD_DIR  = $(DESIGN_DIR)/build
 
 RTL_DIR = $(BUILD_DIR)/rtl
-SIM_TOP_V  = $(RTL_DIR)/$(SIM_TOP).v
+RTL_SUFFIX ?= v
+SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
 
 DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
 SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)
