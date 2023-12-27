@@ -221,4 +221,5 @@ class RunaheadRedirectEvent extends DifftestBaseBundle with HasValid {
 }
 
 class TraceInfo(val config: GatewayConfig) extends DifftestBaseBundle {
+  val squash_idx = Option.when(config.squashReplay)(UInt(log2Ceil(config.replaySize).W))
 }

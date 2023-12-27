@@ -28,17 +28,20 @@ case class GatewayConfig(
                         style          : String  = "dpic",
                         hasGlobalEnable: Boolean = false,
                         isSquash       : Boolean = false,
+                        squashReplay   : Boolean = false,
+                        replaySize     : Int     = 256,
                         diffStateSelect: Boolean = false,
                         isBatch        : Boolean = false,
                         batchSize      : Int     = 32
                         )
 {
   require(!(diffStateSelect && isBatch))
+  if (squashReplay) require(isSquash)
   def hasDutPos: Boolean = diffStateSelect || isBatch
   def dutBufLen: Int = if (isBatch) batchSize else if (diffStateSelect) 2 else 1
   def dutPosWidth: Int = log2Ceil(dutBufLen)
-  def needTraceInfo: Boolean = false
-  def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch
+  def needTraceInfo: Boolean = squashReplay
+  def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch || isSquash
 }
 
 object Gateway {
@@ -124,10 +127,14 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   }
 
   val squashed = WireInit(share_wbint)
+  val squash_idx = Option.when(config.squashReplay)(WireInit(0.U(log2Ceil(config.replaySize).W)))
   if (config.isSquash) {
-    val squash = Squash(share_wbint.toSeq.map(_.cloneType))
+    val squash = Squash(share_wbint.toSeq.map(_.cloneType), config)
     squash.in := share_wbint
     squashed := squash.out
+    if (config.squashReplay) {
+      squash_idx.get := squash.idx.get
+    }
   }
 
   val signalsWithInfo = ListBuffer.empty[DifftestBundle]
@@ -140,6 +147,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
     val traceinfo = out.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
     traceinfo.coreid := out.filter(_.isUniqueIdentifier).head.coreid
+    traceinfo.squash_idx.get := squash_idx.get
   }
   else {
     out := squashed
@@ -209,7 +217,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
   }
   if (config.isSquash) {
-    macros ++= Squash.collect()
+    macros ++= Squash.collect(config)
   }
 
   val extraInstances = ListBuffer.empty[(DifftestBundle, String)]
