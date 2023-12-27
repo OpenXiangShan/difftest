@@ -75,7 +75,7 @@ VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
 VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)"
 # search build for other missing verilog files
-VCS_FLAGS += -y $(BUILD_DIR) +libext+.v
+VCS_FLAGS += -y $(RTL_DIR) +libext+.v
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 

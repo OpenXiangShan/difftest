@@ -23,7 +23,9 @@ DESIGN_DIR ?= $(NOOP_HOME)
 NUM_CORES  ?= 1
 
 BUILD_DIR  = $(DESIGN_DIR)/build
-SIM_TOP_V  = $(BUILD_DIR)/$(SIM_TOP).v
+
+RTL_DIR = $(BUILD_DIR)/rtl
+SIM_TOP_V  = $(RTL_DIR)/$(SIM_TOP).v
 
 DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
 SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)
@@ -37,7 +39,7 @@ sim-verilog: $(SIM_TOP_V)
 
 # generate difftest files for non-chisel design.
 difftest_verilog:
-	mill difftest.test.runMain difftest.DifftestMain -td $(BUILD_DIR)
+	mill difftest.test.runMain difftest.DifftestMain -td $(RTL_DIR)
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
