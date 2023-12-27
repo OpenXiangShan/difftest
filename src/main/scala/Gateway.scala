@@ -37,6 +37,7 @@ case class GatewayConfig(
   def hasDutPos: Boolean = diffStateSelect || isBatch
   def dutBufLen: Int = if (isBatch) batchSize else if (diffStateSelect) 2 else 1
   def dutPosWidth: Int = log2Ceil(dutBufLen)
+  def needTraceInfo: Boolean = false
   def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch
 }
 
@@ -64,14 +65,20 @@ object Gateway {
     gen
   }
 
-  def collect(): (Seq[String], UInt) = {
+  def collect(): (Seq[String], Seq[(DifftestBundle, String)], UInt) = {
+    val macros = ListBuffer.empty[String]
+    val extraInstances = ListBuffer.empty[(DifftestBundle, String)]
+    val step = WireInit(1.U)
     if (config.needEndpoint) {
       val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
-      (endpoint.macros, endpoint.step)
+      macros ++= endpoint.macros
+      extraInstances ++= endpoint.extraInstances
+      step := endpoint.step
     }
     else {
-      (GatewaySink.collect(config), 1.U)
+      macros ++= GatewaySink.collect(config)
     }
+    (macros.toSeq, extraInstances.toSeq, step)
   }
 }
 
@@ -116,14 +123,29 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
   }
 
-  val out = WireInit(share_wbint)
+  val squashed = WireInit(share_wbint)
   if (config.isSquash) {
     val squash = Squash(share_wbint.toSeq.map(_.cloneType))
     squash.in := share_wbint
-    out := squash.out
+    squashed := squash.out
   }
 
-  val out_pack = WireInit(in_pack)
+  val signalsWithInfo = ListBuffer.empty[DifftestBundle]
+  signalsWithInfo ++= signals
+  if (config.needTraceInfo) signalsWithInfo += new DiffTraceInfo(config)
+  val out = WireInit(0.U.asTypeOf(MixedVec(signalsWithInfo.toSeq.map(_.cloneType))))
+  if (config.needTraceInfo) {
+    for ((data, id) <- squashed.zipWithIndex) {
+      out(id) := data
+    }
+    val traceinfo = out.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
+    traceinfo.coreid := out.filter(_.isUniqueIdentifier).head.coreid
+  }
+  else {
+    out := squashed
+  }
+
+  val out_pack = WireInit(0.U.asTypeOf(MixedVec(signalsWithInfo.toSeq.map(gen => UInt(gen.getWidth.W)))))
   for ((data, id) <- out_pack.zipWithIndex) {
     data := out(id).asUInt
   }
@@ -188,6 +210,11 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   }
   if (config.isSquash) {
     macros ++= Squash.collect()
+  }
+
+  val extraInstances = ListBuffer.empty[(DifftestBundle, String)]
+  if (config.needTraceInfo) {
+    extraInstances += ((signalsWithInfo.filter(_.desiredCppName == "trace_info").head, config.style))
   }
 }
 
