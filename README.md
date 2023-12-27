@@ -16,25 +16,26 @@ make difftest_verilog NOOP_HOME=$(pwd)
 
 1. Add this submodule to your design.
 
-In Git `.gitmodules`:
-```
-[submodule "difftest"]
-	path = difftest
-	url = https://github.com/OpenXiangShan/difftest.git
+In your Git project:
+```bash
+git submodule add https://github.com/OpenXiangShan/difftest.git
 ```
 
 In Mill `build.sc`:
 ```scala
-object difftestDep extends difftest.build.CommonDiffTest with PublishModule {
+import $file.difftest.build
+
+// We recommend using a fixed Chisel version.
+object difftest extends millbuild.difftest.build.CommonDiffTest {
+  def crossValue: String = "3.5.6"
+
   override def millSourcePath = os.pwd / "difftest"
+}
 
-  override def pomSettings = T {
-    your_design.pomSettings()
-  }
-
-  override def publishVersion = T {
-    your_design.publishVersion()
-  }
+// This is for advanced users only. All supported Chisel versions are listed in `build.sc`.
+// To pass a cross value to difftest:
+object difftest extends Cross[millbuild.difftest.build.CommonDiffTest](chiselVersions) {
+  override def millSourcePath = os.pwd / "difftest"
 }
 ```
 
@@ -49,9 +50,6 @@ emu: sim-verilog
 import difftest._
 
 val difftest = DifftestModule(new DiffInstrCommit, delay = 1, dontCare = true)
-difftest.clock  := clock
-difftest.coreid := 0.U
-difftest.index  := 0.U
 difftest.valid  := io.in.valid
 difftest.pc     := SignExt(io.in.bits.decode.cf.pc, AddrBits)
 difftest.instr  := io.in.bits.decode.cf.instr
@@ -62,9 +60,20 @@ difftest.wdest  := io.wb.rfDest
 difftest.wpdest := io.wb.rfDest
 ```
 
-3. Generate verilog files for simulation.
+3. Call `val difftesst = DifftestModule.finish(cpu: String)` at the top module whose name should be `SimTop`. The variable name `difftest` must be used to ensure DiffTest could capture the input signals.
 
-4. `make emu` and start simulating & debugging!
+An optional UART input/output can be connected to DiffTest. DiffTest will automatically DontCare it internally.
+
+```scala
+val difftest = DifftestModule.finish("Demo")
+
+// Optional UART connections. Remove this line if UART is not needed.
+difftest.uart <> mmio.io.uart
+```
+
+4. Generate verilog files for simulation.
+
+5. `make emu` and start simulating & debugging!
 
 We provide example designs, including:
 - [XiangShan](https://github.com/OpenXiangShan/XiangShan)
@@ -103,8 +112,10 @@ coherence via RefillTest.
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 * `LogCtrlIO`
-* `PerfInfoIO`
+* `PerfCtrlIO`
 * `UARTIO`
+
+These IOs can be used along with the controller wrapper at `src/main/scala/common/LogPerfControl.scala`.
 
 For compatibility on different platforms, the CPU should access a C++ memory via
 DPI-C interfaces. This memory will be initialized in C++.

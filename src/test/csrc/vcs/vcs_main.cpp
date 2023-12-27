@@ -29,8 +29,10 @@ static char *flash_bin_file = NULL;
 static char *gcpt_bin_file = NULL;
 static bool enable_overr_gcpt = false;
 static bool enable_difftest = true;
+
 static int max_cycles = 0;
 static int max_instrs = 0;
+
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
@@ -62,6 +64,7 @@ extern "C" void set_no_diff() {
   printf("disable diff-test\n");
   enable_difftest = false;
 }
+
 
 extern "C" void set_max_cycles(long mc) {
   printf("max cycles:%d\n", mc);
@@ -97,6 +100,7 @@ extern "C" int simv_step() {
     return 1;
   }
 
+
   static int cycles = 0;
   if (max_cycles != 0) { // 0 for no limit
     if (cycles >= max_cycles) {
@@ -111,6 +115,7 @@ extern "C" int simv_step() {
       return 0xff;
     }
   }
+
 
   if (difftest_state() != -1) {
     int trapCode = difftest_state();
@@ -130,3 +135,28 @@ extern "C" int simv_step() {
     return 0;
   }
 }
+
+#ifdef PALLADIUM
+static int simv_result = 0;
+extern "C" void simv_nstep(uint8_t step) {
+  if (simv_result)
+    return;
+  for (int i = 0; i < step; i++) {
+    int ret = simv_step();
+    if (ret)
+      simv_result = ret;
+  }
+}
+extern "C" int simv_result_fetch() {
+  return simv_result;
+}
+#else
+extern "C" int simv_nstep(uint8_t step) {
+  for(int i = 0; i < step; i++) {
+    int ret = simv_step();
+    if(ret)
+      return ret;
+  }
+  return 0;
+}
+#endif // PALLADIUM

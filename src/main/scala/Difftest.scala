@@ -17,9 +17,7 @@
 package difftest
 
 import chisel3._
-import difftest.batch.Batch
-import difftest.dpic.DPIC
-import difftest.merge.Merge
+import difftest.gateway.{Gateway, GatewayConfig}
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
@@ -99,11 +97,14 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     cpp.mkString("\n")
   }
 
-  // returns Bool indicating whether `this` bundle can be merged with `base`
-  def supportsMerge(base: DifftestBundle): Bool = supportsBase
-  def supportsBase: Bool = if (hasValid) !getValid else true.B
-  // returns a merged, right-value Bundle. Default: overriding `base` with `this`
-  def mergeWith(base: DifftestBundle): DifftestBundle = this
+  // returns Bool indicating whether `this` bundle can be squashed with `base`
+  def supportsSquash(base: DifftestBundle): Bool = supportsSquashBase
+  def supportsSquashBase: Bool = if (hasValid) !getValid else true.B
+  // returns a Seq indicating the squash dependencies. Default: empty
+  // Only when one of the dependencies is valid, this bundle is squashed.
+  val squashDependency: Seq[String] = Seq()
+  // returns a squashed, right-value Bundle. Default: overriding `base` with `this`
+  def squash(base: DifftestBundle): DifftestBundle = this
 }
 
 class DiffArchEvent extends ArchEvent with DifftestBundle {
@@ -119,34 +120,35 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs)
   override val desiredCppName: String = "commit"
 
   private val maxNumFused = 255
-  override def supportsMerge(base: DifftestBundle): Bool = {
+  override def supportsSquash(base: DifftestBundle): Bool = {
     val that = base.asInstanceOf[DiffInstrCommit]
     val nextNFused = (nFused +& that.nFused) + 1.U
     !valid || (!skip && (!that.valid || nextNFused <= maxNumFused.U) && !special.asUInt.orR)
   }
-  override def supportsBase: Bool = {
+  override def supportsSquashBase: Bool = {
     !valid || (!skip && !special.asUInt.orR)
   }
-  override def mergeWith(base: DifftestBundle): DifftestBundle = {
+  override def squash(base: DifftestBundle): DifftestBundle = {
     val that = base.asInstanceOf[DiffInstrCommit]
-    val merged = WireInit(Mux(valid, this, that))
-    merged.valid := valid || that.valid
+    val squashed = WireInit(Mux(valid, this, that))
+    squashed.valid := valid || that.valid
     when (valid && that.valid) {
-      merged.nFused := nFused + that.nFused + 1.U
+      squashed.nFused := nFused + that.nFused + 1.U
     }
-    merged
+    squashed
   }
 }
 
 class DiffTrapEvent extends TrapEvent with DifftestBundle {
   override val desiredCppName: String = "trap"
   override def needUpdate: Option[Bool] = Some(hasTrap || hasWFI)
-  override def supportsBase: Bool = !hasTrap && !hasWFI
+  override def supportsSquashBase: Bool = !hasTrap && !hasWFI
 }
 
 class DiffCSRState extends CSRState with DifftestBundle {
   override val desiredCppName: String = "csr"
   override val desiredOffset: Int = 1
+  override val squashDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
@@ -156,9 +158,9 @@ class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
 class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
   override val desiredCppName: String = "wb_int"
   override protected val needFlatten: Boolean = true
-  // TODO: We have a special and temporary fix for int writeback in Merge.scala
+  // TODO: We have a special and temporary fix for int writeback in Squash.scala
   // It is only required for MMIO data synchronization for single-core co-sim
-  override def supportsBase: Bool = true.B
+  override def supportsSquashBase: Bool = true.B
 }
 
 class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
@@ -214,7 +216,7 @@ class DiffLoadEvent extends LoadEvent with DifftestBundle
 {
   override val desiredCppName: String = "load"
   // TODO: currently we assume it can be dropped
-  override def supportsBase: Bool = true.B
+  override def supportsSquashBase: Bool = true.B
 }
 
 class DiffAtomicEvent extends AtomicEvent with DifftestBundle {
@@ -226,7 +228,7 @@ class DiffL1TLBEvent extends L1TLBEvent with DifftestBundle
 {
   override val desiredCppName: String = "l1tlb"
   // TODO: currently we assume it can be dropped
-  override def supportsBase: Bool = true.B
+  override def supportsSquashBase: Bool = true.B
 }
 
 class DiffL2TLBEvent extends L2TLBEvent with DifftestBundle
@@ -234,7 +236,7 @@ class DiffL2TLBEvent extends L2TLBEvent with DifftestBundle
 {
   override val desiredCppName: String = "l2tlb"
   // TODO: currently we assume it can be dropped
-  override def supportsBase: Bool = true.B
+  override def supportsSquashBase: Bool = true.B
 }
 
 class DiffRefillEvent extends RefillEvent with DifftestBundle
@@ -242,7 +244,7 @@ class DiffRefillEvent extends RefillEvent with DifftestBundle
 {
   override val desiredCppName: String = "refill"
   // TODO: currently we assume it can be dropped
-  override def supportsBase: Bool = true.B
+  override def supportsSquashBase: Bool = true.B
 }
 
 class DiffLrScEvent extends ScEvent with DifftestBundle {
@@ -265,6 +267,10 @@ class DiffRunaheadRedirectEvent extends RunaheadRedirectEvent with DifftestBundl
   override val desiredCppName: String = "runahead_redirect"
 }
 
+class DiffTraceInfo(config: GatewayConfig) extends TraceInfo(config) with DifftestBundle {
+  override val desiredCppName: String = "trace_info"
+}
+
 trait DifftestModule[T <: DifftestBundle] {
   val io: T
 }
@@ -283,12 +289,8 @@ object DifftestModule {
     val difftest: T = Wire(gen)
     if (enabled) {
       val id = register(gen, style)
-      val sink = style match {
-        case "batch" => Batch(gen)
-        // By default, use the DPI-C style.
-        case _ => DPIC(gen)
-      }
-      sink := Merge(Delayer(difftest, delay))
+      val sink = Gateway(gen, style)
+      sink := Delayer(difftest, delay)
       sink.coreid := difftest.coreid
     }
     if (dontCare) {
@@ -304,24 +306,30 @@ object DifftestModule {
     id
   }
 
-  def hasDPIC: Boolean = instances.exists(_._2 == "dpic")
-  def hasBatch: Boolean = instances.exists(_._2 == "batch")
-  def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): Unit = {
-    val difftest_step = IO(Output(Bool()))
-    difftest_step := true.B
+  def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): DifftestTopIO = {
+    val difftest = IO(new DifftestTopIO)
 
-    if (hasDPIC) {
-      val dpic_tuple = DPIC.collect()
-      macros ++= dpic_tuple._1
-      difftest_step := dpic_tuple._2
-    }
-    if (hasBatch) {
-      macros ++= Batch.collect()
-    }
-    macros ++= Merge.collect()
+    difftest.step := 0.U
+
+    val gateway = Gateway.collect()
+    macros ++= gateway._1
+    instances ++= gateway._2
+    difftest.step := gateway._3
+
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
+
+    val timer = RegInit(0.U(64.W)).suggestName("timer")
+    timer := timer + 1.U
+    dontTouch(timer)
+
+    val log_enable = difftest.logCtrl.enable(timer).suggestName("log_enable")
+    dontTouch(log_enable)
+
+    difftest.uart := DontCare
+
+    difftest
   }
 
   def generateCppHeader(cpu: String, style: String): Unit = {
@@ -382,6 +390,20 @@ object DifftestModule {
     difftestCpp += "} DiffTestState;"
     difftestCpp += ""
 
+    difftestCpp +=
+      s"""
+         |class DiffStateBuffer {
+         |public:
+         |  virtual ~DiffStateBuffer() {}
+         |  virtual DiffTestState* get(int pos) = 0;
+         |  virtual DiffTestState* next() = 0;
+         |};
+         |
+         |extern DiffStateBuffer** diffstate_buffer;
+         |
+         |extern void diffstate_buffer_init();
+         |extern void diffstate_buffer_free();
+         |""".stripMargin
     difftestCpp += "#endif // __DIFFSTATE_H__"
     difftestCpp += ""
 
@@ -398,7 +420,7 @@ private class Delayer[T <: Data](gen: T, n_cycles: Int) extends Module {
 
   var r = WireInit(i)
   for (_ <- 0 until n_cycles) {
-    r = RegNext(r)
+    r = RegNext(r, 0.U.asTypeOf(gen))
   }
   o := r
 }
@@ -416,18 +438,29 @@ object Delayer {
   }
 }
 
-// Difftest emulator top
+// Difftest emulator top. Will be created by DifftestModule.finish
+class DifftestTopIO extends Bundle {
+  val step = Output(UInt())
+  val perfCtrl = new PerfCtrlIO
+  val logCtrl = new LogCtrlIO
+  val uart = new UARTIO
+}
 
-// XiangShan log / perf ctrl, should be inited in SimTop IO
-// If not needed, just ingore these signals
-class PerfInfoIO extends Bundle {
+class PerfCtrlIO extends Bundle {
   val clean = Input(Bool())
   val dump = Input(Bool())
 }
 
 class LogCtrlIO extends Bundle {
-  val log_begin, log_end = Input(UInt(64.W))
-  val log_level = Input(UInt(64.W)) // a cpp uint
+  val begin = Input(UInt(64.W))
+  val end = Input(UInt(64.W))
+  val level = Input(UInt(64.W)) // a cpp uint
+
+  def enable(timer: UInt): Bool = {
+    val en = WireInit(false.B)
+    en := timer >= begin && timer < end
+    en
+  }
 }
 
 // UART IO, if needed, should be inited in SimTop IO

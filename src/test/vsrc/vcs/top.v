@@ -14,6 +14,10 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+`define STEP_WIDTH 8
+
+module tb_top();
+
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_gcpt_bin(string bin);
@@ -22,30 +26,32 @@ import "DPI-C" function void set_no_diff();
 import "DPI-C" function void set_max_cycles(int mc);
 import "DPI-C" function void set_max_instrs(int mc);
 import "DPI-C" function void simv_init();
-import "DPI-C" function int simv_step();
-
-module tb_top();
+`ifndef PALLADIUM
+import "DPI-C" function int simv_nstep(int step);
+`endif // PALLADIUM
 
 reg         clock;
 reg         reset;
-reg  [63:0] io_logCtrl_log_begin;
-reg  [63:0] io_logCtrl_log_end;
-wire [63:0] io_logCtrl_log_level;
-wire        io_perfInfo_clean;
-wire        io_perfInfo_dump;
-wire        io_uart_out_valid;
-wire [ 7:0] io_uart_out_ch;
-wire        io_uart_in_valid;
-wire [ 7:0] io_uart_in_ch;
-wire        difftest_step;
+reg  [63:0] difftest_logCtrl_begin;
+reg  [63:0] difftest_logCtrl_end;
+wire [63:0] difftest_logCtrl_level;
+wire        difftest_perfCtrl_clean;
+wire        difftest_perfCtrl_dump;
+wire        difftest_uart_out_valid;
+wire [ 7:0] difftest_uart_out_ch;
+wire        difftest_uart_in_valid;
+wire [ 7:0] difftest_uart_in_ch;
+wire [`STEP_WIDTH - 1:0] difftest_step;
 
 string bin_file;
 string flash_bin_file;
 string gcpt_bin_file;
 string wave_type;
 string diff_ref_so;
-reg [31:0] max_cycles;
+
 reg [63:0] max_instrs;
+reg [63:0] max_cycles;
+
 initial begin
   clock = 0;
   reset = 1;
@@ -73,17 +79,17 @@ initial begin
 
   // log begin
   if ($test$plusargs("b")) begin
-    $value$plusargs("b=%d", io_logCtrl_log_begin);
+    $value$plusargs("b=%d", difftest_logCtrl_begin);
   end
   else begin
-    io_logCtrl_log_begin = 0;
+    difftest_logCtrl_begin = 0;
   end
   // log end
   if ($test$plusargs("e")) begin
-    $value$plusargs("e=%d", io_logCtrl_log_end);
+    $value$plusargs("e=%d", difftest_logCtrl_end);
   end
   else begin
-    io_logCtrl_log_end = 0;
+    difftest_logCtrl_end = 0;
   end
   // workload: bin file
   if ($test$plusargs("workload")) begin
@@ -110,12 +116,10 @@ initial begin
     set_no_diff();
   end
   // max cycles to execute, no limit for default
+  max_cycles = 0;
   if ($test$plusargs("max-cycles")) begin
     $value$plusargs("max-cycles=%d", max_cycles);
-    set_max_cycles(max_cycles);
-  end
-  else begin
-    max_cycles = 0;
+    $display("set max cycles: %d", max_cycles);
   end
 
   // set checkpoint const
@@ -135,43 +139,48 @@ always #1 clock <= ~clock;
 SimTop sim(
   .clock(clock),
   .reset(reset),
-  .io_logCtrl_log_begin(io_logCtrl_log_begin),
-  .io_logCtrl_log_end(io_logCtrl_log_end),
-  .io_logCtrl_log_level(io_logCtrl_log_level),
-  .io_perfInfo_clean(io_perfInfo_clean),
-  .io_perfInfo_dump(io_perfInfo_dump),
-  .io_uart_out_valid(io_uart_out_valid),
-  .io_uart_out_ch(io_uart_out_ch),
-  .io_uart_in_valid(io_uart_in_valid),
-  .io_uart_in_ch(io_uart_in_ch),
+  .difftest_logCtrl_begin(difftest_logCtrl_begin),
+  .difftest_logCtrl_end(difftest_logCtrl_end),
+  .difftest_logCtrl_level(difftest_logCtrl_level),
+  .difftest_perfCtrl_clean(difftest_perfCtrl_clean),
+  .difftest_perfCtrl_dump(difftest_perfCtrl_dump),
+  .difftest_uart_out_valid(difftest_uart_out_valid),
+  .difftest_uart_out_ch(difftest_uart_out_ch),
+  .difftest_uart_in_valid(difftest_uart_in_valid),
+  .difftest_uart_in_ch(difftest_uart_in_ch),
   .difftest_step(difftest_step)
 );
 
-assign io_logCtrl_log_level = 0;
-assign io_perfInfo_clean = 0;
-assign io_perfInfo_dump = 0;
-assign io_uart_in_ch = 8'hff;
+assign difftest_logCtrl_level = 0;
+assign difftest_perfCtrl_clean = 0;
+assign difftest_perfCtrl_dump = 0;
+assign difftest_uart_in_ch = 8'hff;
 
 always @(posedge clock) begin
-  if (!reset && io_uart_out_valid) begin
-    $fwrite(32'h8000_0001, "%c", io_uart_out_ch);
+  if (!reset && difftest_uart_out_valid) begin
+    $fwrite(32'h8000_0001, "%c", difftest_uart_out_ch);
     $fflush();
   end
 end
 
+
 reg has_init;
 reg [63:0]cycles;
 reg [31:0]trap;
+reg [`STEP_WIDTH - 1:0] difftest_step_delay;
+
 always @(posedge clock) begin
   cycles = cycles + 1;
   if (reset) begin
     has_init <= 1'b0;
     cycles   <= 64'b0;
+    difftest_step_delay <= 0;
   end
-  else if (!has_init) begin
-    simv_init();
-    has_init <= 1'b1;
+  else begin
+    difftest_step_delay <= difftest_step;
   end
+end
+
 
   // check errors
   if (!reset && has_init && difftest_step) begin
@@ -184,10 +193,50 @@ always @(posedge clock) begin
       io_perfInfo_dump <= 1'b1;
       delay #50;
       io_perfInfo_dump <= 1'b0;
+
+`ifdef PALLADIUM
+wire simv_result;
+GfifoControl gfifo(
+  .clock(clock),
+  .reset(reset),
+  .step(difftest_step_delay),
+  .simv_result(simv_result)
+);
+`endif
+
+reg [63:0] n_cycles;
+always @(posedge clock) begin
+  if (reset) begin
+    n_cycles <= 64'h0;
+  end
+  else begin
+    n_cycles <= n_cycles + 64'h1;
+
+    // max cycles
+    if (max_cycles > 0 && n_cycles >= max_cycles) begin
+      $display("EXCEEDED MAX CYCLE: %d", max_cycles);
       $finish();
     end
-  end
 
+    // difftest
+    if (!n_cycles) begin
+      simv_init();
+    end
+`ifdef PALLADIUM
+    else if (simv_result) begin
+      $display("DIFFTEST FAILED at cycle %d", n_cycles);
+      $finish();
+    end
+`else
+    else if (|difftest_step_delay) begin
+      // check errors
+      if (simv_nstep(difftest_step_delay)) begin
+        $display("DIFFTEST FAILED at cycle %d", n_cycles);
+        $finish();
+      end
+    end
+`endif // PALLADIUM
+  end
 end
 
 endmodule

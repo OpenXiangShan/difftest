@@ -17,6 +17,7 @@ package difftest
 
 import chisel3._
 import chisel3.util._
+import difftest.gateway.GatewayConfig
 
 sealed trait HasValid {
   val valid = Bool()
@@ -217,4 +218,7 @@ class RunaheadRedirectEvent extends DifftestBaseBundle with HasValid {
   val pc = UInt(64.W) // for debug only
   val target_pc = UInt(64.W) // for debug only
   val checkpoint_id = UInt(64.W)
+}
+
+class TraceInfo(val config: GatewayConfig) extends DifftestBaseBundle {
 }

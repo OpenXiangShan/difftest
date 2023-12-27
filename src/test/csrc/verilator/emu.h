@@ -135,7 +135,7 @@ public:
 #ifdef FUZZING
     return !(trapCode == STATE_ABORT);
 #else
-    return trapCode == STATE_GOODTRAP || trapCode == STATE_LIMIT_EXCEEDED;
+    return trapCode == STATE_GOODTRAP || trapCode == STATE_LIMIT_EXCEEDED || trapCode == STATE_SIM_EXIT;
 #endif
   };
   int get_trapcode() { return trapCode; }
