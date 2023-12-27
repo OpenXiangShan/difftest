@@ -117,10 +117,25 @@ void difftest_squash_enable(int enable) {
   svSetScope(squashScope);
   set_squash_enable(enable);
 }
+
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+extern "C" void set_squash_replay(int idx);
+void difftest_squash_replay(int idx) {
+  if (squashScope == NULL) {
+    printf("Error: Could not retrieve squash scope, set first\n");
+    assert(squashScope);
+  }
+  svSetScope(squashScope);
+  set_squash_replay(idx);
+}
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 #endif // CONFIG_DIFFTEST_SQUASH
 
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+  state_ss = (DiffState*)malloc(sizeof(DiffState));
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 }
 
 Difftest::~Difftest() {
@@ -129,15 +144,65 @@ Difftest::~Difftest() {
   if (proxy) {
     delete proxy;
   }
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+  free(state_ss);
+  if (proxy_ss) {
+    free(proxy_ss);
+  }
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 }
 
 void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   proxy = new REF_PROXY(coreid, ram_size);
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+  proxy_ss = (REF_PROXY*)malloc(sizeof(REF_PROXY));
+  squash_memsize = ram_size;
+  squash_membuf = (char *)malloc(squash_memsize);
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 }
+
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+bool Difftest::squash_check() {
+  int nFused_all = 0;
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH && dut->commit[i].valid; i++) {
+    nFused_all += dut->commit[i].nFused;
+  }
+  return nFused_all != 0;
+}
+
+void Difftest::squash_snapshot() {
+  memcpy(state_ss, state, sizeof(DiffState));
+  memcpy(proxy_ss, proxy, sizeof(REF_PROXY));
+  proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
+  proxy->ref_memcpy(PMEM_BASE, squash_membuf, squash_memsize, REF_TO_DUT);
+}
+
+void Difftest::squash_replay() {
+  inReplay = true;
+  replay_idx = squash_idx;
+  memcpy(state, state_ss, sizeof(DiffState));
+  memcpy(proxy, proxy_ss, sizeof(REF_PROXY));
+  proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);
+  proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
+  proxy->ref_memcpy(PMEM_BASE, squash_membuf, squash_memsize, DUT_TO_REF);
+  difftest_squash_replay(replay_idx);
+}
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 
 int Difftest::step() {
   progress = false;
   ticks++;
+
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+  squash_idx = dut->trace_info.squash_idx;
+  if (inReplay && squash_idx != replay_idx) {
+    return 0;
+  }
+  isSquash = squash_check();
+  if (isSquash) {
+    squash_snapshot();
+  }
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 
   if (check_timeout()) {
     return 1;
@@ -241,6 +306,12 @@ int Difftest::step() {
       return 0;
     }
 #endif
+#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+    if (isSquash) {
+      squash_replay();
+      return 0;
+    }
+#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
     display();
     proxy->display(dut);
 #ifdef FUZZER_LIB
