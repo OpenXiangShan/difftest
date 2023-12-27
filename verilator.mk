@@ -103,13 +103,14 @@ VERILATOR_FLAGS =                   \
   --stats-vars                      \
   --output-split 30000              \
   --output-split-cfuncs 30000       \
-  -I$(BUILD_DIR)                    \
+  -I$(RTL_DIR)                      \
   -CFLAGS "$(EMU_CXXFLAGS)"         \
   -LDFLAGS "$(EMU_LDFLAGS)"         \
   -o $(abspath $(EMU))              \
   $(VEXTRA_FLAGS)
 
-EMU_MK    := $(BUILD_DIR)/emu-compile/V$(EMU_TOP).mk
+EMU_DIR = $(BUILD_DIR)/emu-compile
+EMU_MK  = $(EMU_DIR)/V$(EMU_TOP).mk
 EMU_DEPS  := $(SIM_VSRC) $(EMU_CXXFILES)
 EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
                $(shell find $(SIM_CSRC_DIR) -name "*.h")     \
@@ -117,16 +118,16 @@ EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
 
 $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 ifeq ($(EMU_COVERAGE),1)
-	@python3 ./scripts/coverage/vtransform.py $(BUILD_DIR)
+	@python3 ./scripts/coverage/vtransform.py $(RTL_DIR)
 endif
 	@mkdir -p $(@D)
 	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator $(VERILATOR_FLAGS) -Mdir $(@D) $^ $(EMU_DEPS)
 ifneq ($(VERILATOR_5_000),1)
-	@find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/private/public/g'
-	@find -L $(BUILD_DIR) -name "VSimTop.h" | xargs sed -i 's/const vlSymsp/vlSymsp/g'
-	@find -L $(BUILD_DIR) -name "VSimTop__Syms.h" | xargs sed -i 's/VlThreadPool\* const/VlThreadPool*/g'
+	@sed -i 's/private/public/g' $(EMU_DIR)/VSimTop.h
+	@sed -i 's/const vlSymsp/vlSymsp/g' $(EMU_DIR)/VSimTop.h
+	@sed -i 's/VlThreadPool\* const/VlThreadPool*/g' $(EMU_DIR)/VSimTop__Syms.h
 endif
 
 EMU_COMPILE_FILTER =
