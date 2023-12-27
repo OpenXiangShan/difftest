@@ -30,8 +30,8 @@ CoDRAMsim3 *dram = NULL;
 
 SimMemory *simMemory = nullptr;
 
-void init_ram(const char *image, uint64_t ram_size) {
-  simMemory = new MmapMemory(image, ram_size);
+void init_ram(const char *image, uint64_t ram_size, const char *gcpt_bin) {
+  simMemory = new MmapMemory(image, ram_size, gcpt_bin);
 }
 
 #ifdef TLB_UNITTEST
@@ -243,7 +243,7 @@ void SimMemory::display_stats() {
 #endif // FUZZING
 }
 
-MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes) {
+MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, const char *gcpt_bin) : SimMemory(n_bytes) {
   // initialize memory using Linux mmap
   ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {
@@ -272,6 +272,15 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes)
   if (isGzFile(image)) {
     Info("Gzip file detected and loading image from extracted gz file\n");
     img_size = readFromGz(ram, image, memory_size, LOAD_RAM);
+
+    // Override gcpt restore
+    if (gcpt_bin != nullptr) {
+      InputReader *reader = new FileReader(gcpt_bin);
+      int overwrite_size  = reader->read_all(ram, GCPT_RESTORE_SIZE);;
+      Info("Overwrite %d bytes from file %s.\n", overwrite_size, gcpt_bin);
+      delete reader;
+    }
+
     assert(img_size >= 0);
   }
   else {

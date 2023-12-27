@@ -26,7 +26,13 @@
 static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
+static char *gcpt_bin_file = NULL;
+static bool enable_overr_gcpt = false;
 static bool enable_difftest = true;
+
+static int max_cycles = 0;
+static int max_instrs = 0;
+
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
@@ -37,6 +43,13 @@ extern "C" void set_flash_bin(char *s) {
   printf("flash image:%s\n",s);
   flash_bin_file = (char *)malloc(256);
   strcpy(flash_bin_file, s);
+}
+
+extern "C" void set_gcpt_bin(char *s) {
+  printf("gcpt image:%s\n",s);
+  enable_overr_gcpt = true;
+  gcpt_bin_file = (char *)malloc(256);
+  strcpy(gcpt_bin_file, s);
 }
 
 extern const char *difftest_ref_so;
@@ -52,10 +65,26 @@ extern "C" void set_no_diff() {
   enable_difftest = false;
 }
 
+
+extern "C" void set_max_cycles(long mc) {
+  printf("max cycles:%d\n", mc);
+  max_cycles = mc;
+}
+
+extern "C" void set_max_instrs(long mc) {
+  printf("max instrs:%d\n",mc);
+  max_instrs = mc;
+}
+
 extern "C" void simv_init() {
   common_init("simv");
+  if (enable_overr_gcpt) {
+    init_ram(bin_file, DEFAULT_EMU_RAM_SIZE, gcpt_bin_file);
+  } 
+  else {
+    init_ram(bin_file, DEFAULT_EMU_RAM_SIZE);
+  }
 
-  init_ram(bin_file, DEFAULT_EMU_RAM_SIZE);
   init_flash(flash_bin_file);
 
   difftest_init();
@@ -70,6 +99,23 @@ extern "C" int simv_step() {
   if (assert_count > 0) {
     return 1;
   }
+
+
+  static int cycles = 0;
+  if (max_cycles != 0) { // 0 for no limit
+    if (cycles >= max_cycles) {
+      eprintf(ANSI_COLOR_YELLOW "EXCEEDED MAX CYCLE:%d\n" ANSI_COLOR_RESET, max_cycles);
+      return 1;
+    }
+    cycles ++;
+  }
+
+  if (max_instrs != 0) { // 0 for no limit
+    if(max_instrs < difftest_commit_sum(0)) {
+      return 0xff;
+    }
+  }
+
 
   if (difftest_state() != -1) {
     int trapCode = difftest_state();

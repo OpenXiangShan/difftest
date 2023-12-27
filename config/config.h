@@ -37,6 +37,7 @@
 
 // emulated memory size (Byte)
 #define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
+#define GCPT_RESTORE_SIZE 0x700
 
 // physical memory base address
 #define PMEM_BASE 0x80000000UL
