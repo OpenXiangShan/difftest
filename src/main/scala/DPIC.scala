@@ -16,9 +16,8 @@
 package difftest.dpic
 
 import chisel3._
+import chisel3.experimental.{DataMirror, ExtModule}
 import chisel3.util._
-import chisel3.experimental.{ChiselAnnotation, DataMirror, ExtModule}
-import chisel3.util.experimental.BoringUtils
 import difftest._
 import difftest.gateway.{GatewayConfig, GatewayBundle}
 

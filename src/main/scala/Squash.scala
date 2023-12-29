@@ -18,7 +18,6 @@ package difftest.squash
 import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util._
-import chisel3.util.experimental.BoringUtils
 import difftest._
 import difftest.gateway.GatewayConfig
 

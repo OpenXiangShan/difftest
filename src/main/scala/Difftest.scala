@@ -17,6 +17,7 @@
 package difftest
 
 import chisel3._
+import difftest.common.DifftestWiring
 import difftest.gateway.{Gateway, GatewayConfig}
 
 import java.nio.charset.StandardCharsets
@@ -277,6 +278,7 @@ trait DifftestModule[T <: DifftestBundle] {
 
 object DifftestModule {
   private val enabled = true
+  private val allowExtraTopIOs = false
   private val instances = ListBuffer.empty[(DifftestBundle, String)]
   private val macros = ListBuffer.empty[String]
 
@@ -328,6 +330,18 @@ object DifftestModule {
     dontTouch(log_enable)
 
     difftest.uart := DontCare
+
+    if (allowExtraTopIOs && DifftestWiring.hasPending) {
+      for ((isSource, data, name) <- DifftestWiring.createPendingWires()) {
+        val direction_s = if (isSource) "input" else "output"
+        val dataType = chiselTypeOf(data)
+        println(s"[DiffTest] Creating extra top-level IOs: direction($direction_s), name($name), dataType($dataType)")
+        val io = IO(if (isSource) Input(dataType) else Output(dataType))
+        io.suggestName(name)
+        io <> data
+      }
+    }
+    require(DifftestWiring.isEmpty, s"pending wires left: ${DifftestWiring.getPending}")
 
     difftest
   }
