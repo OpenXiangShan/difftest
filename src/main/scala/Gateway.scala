@@ -17,8 +17,8 @@ package difftest.gateway
 
 import chisel3._
 import chisel3.util._
-import chisel3.util.experimental.BoringUtils
 import difftest._
+import difftest.common.DifftestWiring
 import difftest.dpic.DPIC
 import difftest.squash.Squash
 
@@ -63,7 +63,7 @@ object Gateway {
 
   def register[T <: DifftestBundle](gen: T): T = {
     val gen_pack = WireInit(gen.asUInt)
-    BoringUtils.addSource(gen_pack, s"gateway_${instances.length}")
+    DifftestWiring.addSource(gen_pack, s"gateway_${instances.length}")
     instances += gen
     gen
   }
@@ -89,7 +89,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
   val in_pack = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
   for ((data, id) <- in_pack.zipWithIndex) {
-    BoringUtils.addSink(data, s"gateway_$id")
+    DifftestWiring.addSink(data, s"gateway_$id")
     in(id) := data.asTypeOf(in(id).cloneType)
   }
 
