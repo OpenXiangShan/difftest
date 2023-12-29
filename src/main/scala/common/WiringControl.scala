@@ -62,29 +62,46 @@ object DifftestWiring {
     })
   }
 
-  def addSource(data: Data, name: String): Unit = {
+  def addSource(data: Data, name: String): Data = {
     getWire(data, name).setSource()
     WiringControl.addSource(data, name)
+    data
   }
 
-  def addSink(data: Data, name: String): Unit = {
+  def addSink(data: Data, name: String): Data = {
     getWire(data, name).addSink()
     WiringControl.addSink(data, name)
+    data
   }
 
   def isEmpty: Boolean = !hasPending
   def hasPending: Boolean = wires.exists(_.isPending)
   def getPending: Seq[(Boolean, Data, String)] = wires.flatMap(_.toPendingTuple).toSeq
-  def createPendingWires(): Seq[(Boolean, Data, String)] = {
+
+  def createPendingWires(): Seq[Data] = {
     getPending.map{ case (isSource, dataType, name) =>
-      val target = WireInit(0.U.asTypeOf(dataType))
+      val target = WireInit(0.U.asTypeOf(dataType)).suggestName(name)
       if (isSource) {
         addSource(target, name)
       }
       else {
         addSink(target, name)
       }
-      (isSource, target, name)
+    }
+  }
+
+  def createExtraIOs(flipped: Boolean = false): Seq[Data] = {
+    getPending.map{ case (isSource, dataType, name) =>
+      def do_direction(dt: Data): Data = if (isSource) Input(dt) else Output(dt)
+      def do_flip(dt: Data): Data = if (flipped) Flipped(dt) else dt
+      IO(do_flip(do_direction(dataType))).suggestName(name)
+    }
+  }
+
+  def createAndConnectExtraIOs(): Seq[Data] = {
+    createExtraIOs().zip(createPendingWires()).map{ case (io, wire) =>
+      io <> wire
+      io
     }
   }
 }
