@@ -19,6 +19,59 @@ import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util._
 
+trait HasMemInit { this: ExtModule =>
+  val mem_init =
+    """
+      |`ifdef SYNTHESIS
+      |  // 1536MB memory
+      |  `define RAM_SIZE (1536 * 1024 * 1024)
+      |
+      |  // memory array
+      |  reg [63:0] memory [0 : `RAM_SIZE/8 - 1];
+      |
+      |`ifdef MEMORY_IMAGE
+      |  integer memory_image, n_read;
+      |  reg [7:0] word [7:0];
+      |  // Create string-type MEMORY_IMAGE
+      |  `define STRINGIFY(x) `"x`"
+      |  `define MEMORY_IMAGE_S `STRINGIFY(`MEMORY_IMAGE)
+      |`endif // MEMORY_IMAGE
+      |
+      |  initial begin
+      |    for (integer i = 0; i < `RAM_SIZE/8; i++) begin
+      |      memory[i] = 64'h0;
+      |    end
+      |`ifdef MEMORY_IMAGE
+      |    memory_image = $fopen(`MEMORY_IMAGE_S, "rb");
+      |    for (integer j = 0; j < `RAM_SIZE/8; j++) begin
+      |      if (!$feof(memory_image)) begin
+      |        n_read = $fread(word, memory_image);
+      |        if (n_read < 8) begin
+      |          for (integer k = n_read; k < 8; k++) begin
+      |            word[k] = 8'h0;
+      |          end
+      |        end
+      |        memory[j] = {word[7],word[6],word[5],word[4],word[3],word[2],word[1],word[0]};
+      |      end else begin
+      |        $display("memory[0]:%h",memory[0]);
+      |        break;
+      |      end
+      |    end
+      |    $fclose(memory_image);
+      |    if (!n_read) begin
+      |      $fatal(1, "Memory: cannot load image from %s.", `MEMORY_IMAGE_S);
+      |    end
+      |    else begin
+      |      $display("Memory: load %d bytes from %s.", n_read, `MEMORY_IMAGE_S);
+      |    end
+      |`else
+      |    $fatal(1, "You must specify the MEMORY_IMAGE macro.");
+      |`endif // MEMORY_IMAGE
+      |  end
+      |`endif // SYNTHESIS
+      |""".stripMargin
+}
+
 trait HasReadPort { this: ExtModule =>
   val r = IO(new Bundle {
     val enable = Input(Bool())
@@ -28,7 +81,9 @@ trait HasReadPort { this: ExtModule =>
 
   val r_dpic =
     """
+      |`ifndef SYNTHESIS
       |import "DPI-C" function longint difftest_ram_read(input longint rIdx);
+      |`endif // SYNTHESIS
       |""".stripMargin
 
   val r_if =
@@ -40,9 +95,15 @@ trait HasReadPort { this: ExtModule =>
 
   val r_func =
     """
+      |`ifndef SYNTHESIS
       |if (r_enable) begin
       |  r_data <= difftest_ram_read(r_index);
       |end
+      |`else
+      |if (r_enable) begin
+      |  r_data <= memory[r_index];
+      |end
+      |`endif // SYNTHESIS
       |""".stripMargin
 
   def read(enable: Bool, index: UInt): UInt = {
@@ -63,12 +124,14 @@ trait HasWritePort { this: ExtModule =>
 
   val w_dpic =
     """
+      |`ifndef SYNTHESIS
       |import "DPI-C" function void difftest_ram_write
       |(
       |  input  longint index,
       |  input  longint data,
       |  input  longint mask
       |);
+      |`endif // SYNTHESIS
       |""".stripMargin
 
   val w_if =
@@ -81,9 +144,15 @@ trait HasWritePort { this: ExtModule =>
 
   val w_func =
     """
+      |`ifndef SYNTHESIS
       |if (w_enable) begin
       |  difftest_ram_write(w_index, w_data, w_mask);
       |end
+      |`else
+      |if (w_enable) begin
+      |  memory[w_index] <= (w_data & w_mask) | (memory[w_index] & ~w_mask);
+      |end
+      |`endif // SYNTHESIS
       |""".stripMargin
 
   def write(enable: Bool, index: UInt, data: UInt, mask: UInt): HasWritePort = {
@@ -95,72 +164,63 @@ trait HasWritePort { this: ExtModule =>
   }
 }
 
-class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort {
+class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort with HasMemInit {
   val clock  = IO(Input(Clock()))
 
   setInline("MemRHelper.v",
     s"""
-       |`ifndef SYNTHESIS
        |$r_dpic
-       |`endif // SYNTHESIS
        |module MemRHelper(
        |  $r_if
        |  input clock
        |);
-       |`ifndef SYNTHESIS
+       |  $mem_init
        |  always @(posedge clock) begin
        |    $r_func
        |  end
-       |`endif // SYNTHESIS
        |endmodule
      """.stripMargin)
 }
 
-class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort {
+class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort with HasMemInit {
   val clock  = IO(Input(Clock()))
 
   setInline("MemWHelper.v",
     s"""
-       |`ifndef SYNTHESIS
        |$w_dpic
-       |`endif // SYNTHESIS
        |module MemWHelper(
        |  $w_if
        |  input clock
        |);
-       |`ifndef SYNTHESIS
+       |  $mem_init
        |  always @(posedge clock) begin
        |   $w_func
        |  end
        |endmodule
-       |`endif // SYNTHESIS
      """.stripMargin)
 }
 
-class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort with HasWritePort {
+class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort with HasWritePort with HasMemInit {
   val clock  = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
 
   setInline("MemRWHelper.v",
     s"""
-       |`ifndef SYNTHESIS
        |$r_dpic
        |$w_dpic
-       |`endif // SYNTHESIS
        |module MemRWHelper(
        |  $r_if
        |  $w_if
        |  input enable,
        |  input clock
        |);
-       |`ifndef SYNTHESIS
+       |  $mem_init
        |  always @(posedge clock) begin
        |    if (enable) begin
        |      $r_func
        |      $w_func
        |    end
        |  end
-       |`endif // SYNTHESIS
        |endmodule
      """.stripMargin)
 }
