@@ -134,7 +134,7 @@ initial begin
   #100 reset = 0;
 end
 `else
-reg [7:0] counter;
+reg [7:0] reset_counter;
 initial reset_counter = 0;
 always @(posedge clock) begin
   reset_counter <= reset_counter + 8'd1;
