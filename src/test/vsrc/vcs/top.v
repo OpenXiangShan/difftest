@@ -18,6 +18,7 @@
 
 module tb_top();
 
+`ifndef TB_NO_DPIC
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
@@ -26,6 +27,7 @@ import "DPI-C" function void simv_init();
 `ifndef PALLADIUM
 import "DPI-C" function int simv_nstep(int step);
 `endif // PALLADIUM
+`endif // TB_NO_DPIC
 
 `ifdef PALLADIUM
   `ifdef SYNTHESIS
@@ -97,6 +99,7 @@ initial begin
   else begin
     difftest_logCtrl_end = 0;
   end
+`ifndef TB_NO_DPIC
   // workload: bin file
   if ($test$plusargs("workload")) begin
     $value$plusargs("workload=%s", bin_file);
@@ -116,6 +119,7 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
+`endif // TB_NO_DPIC
   // max cycles to execute, no limit for default
   max_cycles = 0;
   if ($test$plusargs("max-cycles")) begin
@@ -171,6 +175,7 @@ always @(posedge clock) begin
   end
 end
 
+`ifndef TB_NO_DPIC
 reg [`STEP_WIDTH - 1:0] difftest_step_delay;
 always @(posedge clock) begin
   if (reset) begin
@@ -189,7 +194,8 @@ GfifoControl gfifo(
   .step(difftest_step_delay),
   .simv_result(simv_result)
 );
-`endif
+`endif // PALLADIUM
+`endif // TB_NO_DPIC
 
 reg [63:0] n_cycles;
 always @(posedge clock) begin
@@ -205,6 +211,7 @@ always @(posedge clock) begin
       $finish();
     end
 
+`ifndef TB_NO_DPIC
     // difftest
     if (!n_cycles) begin
       simv_init();
@@ -223,6 +230,7 @@ always @(posedge clock) begin
       end
     end
 `endif // PALLADIUM
+`endif // TB_NO_DPIC
   end
 end
 
