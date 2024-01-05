@@ -83,6 +83,12 @@ module SimJTAG #(
          end // if (enable && init_done_sticky)
       end // else: !if(reset || r_reset)
    end // always @ (posedge clock)
+`else
+   assign jtag_TCK   = 1'b0;
+   assign jtag_TMS   = 1'b0;
+   assign jtag_TDI   = 1'b0;
+   assign jtag_TRSTn = 1'b1;
+   assign exit       = 32'b0;
 `endif // SYNTHESIS
 
 endmodule
