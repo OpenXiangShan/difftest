@@ -28,16 +28,6 @@ RTL_DIR = $(BUILD_DIR)/rtl
 RTL_SUFFIX ?= v
 SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
 
-DIFF_SCALA_FILE = $(shell find ./src/main/scala -name '*.scala')
-SCALA_FILE = $(shell find $(DESIGN_DIR)/src/main/scala -name '*.scala' 2>/dev/null)
-
-# generate SimTop.v
-$(SIM_TOP_V): $(DIFF_SCALA_FILE) $(SCALA_FILE)
-	$(MAKE) -C $(DESIGN_DIR) sim-verilog
-
-# build simulation top verilog
-sim-verilog: $(SIM_TOP_V)
-
 # generate difftest files for non-chisel design.
 difftest_verilog:
 	mill difftest.test.runMain difftest.DifftestMain -td $(RTL_DIR)
