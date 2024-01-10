@@ -253,11 +253,11 @@ public:
 protected:
   DiffTrace *difftrace = nullptr;
 
-#ifdef CONFIG_DIFFTEST_MERGE
+#ifdef CONFIG_DIFFTEST_SQUASH
   const uint64_t timeout_scale = 256;
 #else
   const uint64_t timeout_scale = 1;
-#endif // CONFIG_DIFFTEST_MERGE
+#endif // CONFIG_DIFFTEST_SQUASH
 #if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
   const uint64_t firstCommit_limit = 1000;
   const uint64_t stuck_limit = 500 * timeout_scale;
@@ -354,5 +354,9 @@ int difftest_state();
 void difftest_finish();
 void difftest_trace();
 int init_nemuproxy(size_t);
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+extern "C" void difftest_squash_set(int enable, const char *scope_name);
+#endif // CONFIG_DIFFTEST_SQUASH
 
 #endif

@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #define CPU_XIANGSHAN
+#define CONFIG_DIFFTEST_SQUASH
 
 #define CONFIG_DIFFTEST_REFILLEVENT
 #define CONFIG_DIFF_REFILL_WIDTH 3
