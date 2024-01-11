@@ -1,8 +1,8 @@
-`ifdef PALLADIUM
+`ifdef TB_ASYNC
 
 `define STEP_WIDTH 8
 
-module GfifoControl(
+module AsyncControl(
   input clock,
   input reset,
   input [`STEP_WIDTH - 1:0] step,
@@ -12,7 +12,9 @@ module GfifoControl(
 import "DPI-C" function int simv_result_fetch();
 import "DPI-C" function void simv_nstep(int step);
 
+`ifdef PALLADIUM
 initial $ixc_ctrl("gfifo", "simv_nstep");
+`endif // PALLADIUM
 
 reg [63:0] fetch_cycles;
 initial fetch_cycles = 4999;
@@ -41,4 +43,4 @@ always @(posedge clock) begin
 end
 
 endmodule;
-`endif // PALLADIUM
+`endif // TB_ASYNC
