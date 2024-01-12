@@ -183,8 +183,9 @@ endif
 
 include verilator.mk
 include vcs.mk
+include palladium.mk
 
-clean: vcs-clean
+clean: vcs-clean pldm-clean
 	rm -rf $(BUILD_DIR)
 
 .PHONY: sim-verilog emu difftest_verilog clean
