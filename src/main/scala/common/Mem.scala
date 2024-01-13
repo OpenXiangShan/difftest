@@ -29,45 +29,30 @@ trait HasMemInit { this: ExtModule =>
       |  // memory array
       |  reg [63:0] memory [0 : `RAM_SIZE/8 - 1];
       |
-      |`ifdef MEMORY_IMAGE
-      |  integer memory_image, n_read;
-      |  reg [7:0] word [7:0];
-      |  // Create string-type MEMORY_IMAGE
-      |  `define STRINGIFY(x) `"x`"
-      |  `define MEMORY_IMAGE_S `STRINGIFY(`MEMORY_IMAGE)
-      |`endif // MEMORY_IMAGE
-      |
+      |  string bin_file;
+      |  integer memory_image = 0, n_read = 0, byte_read = 1;
+      |  byte data;
       |  initial begin
-      |    for (integer i = 0; i < `RAM_SIZE/8; i++) begin
-      |      memory[i] = 64'h0;
+      |    if ($test$plusargs("workload")) begin
+      |      $value$plusargs("workload=%s", bin_file);
+      |      memory_image = $fopen(bin_file, "rb");
+      |    if (memory_image == 0) begin
+      |      $display("Error: failed to open %s", bin_file);
+      |      $finish;
       |    end
-      |`ifdef MEMORY_IMAGE
-      |    memory_image = $fopen(`MEMORY_IMAGE_S, "rb");
-      |    for (integer j = 0; j < `RAM_SIZE/8; j++) begin
-      |      if (!$feof(memory_image)) begin
-      |        n_read = $fread(word, memory_image);
-      |        if (n_read < 8) begin
-      |          for (integer k = n_read; k < 8; k++) begin
-      |            word[k] = 8'h0;
-      |          end
-      |        end
-      |        memory[j] = {word[7],word[6],word[5],word[4],word[3],word[2],word[1],word[0]};
-      |      end else begin
-      |        $display("memory[0]:%h",memory[0]);
-      |        break;
+      |    foreach (memory[i]) begin
+      |      if (byte_read == 0) break;
+      |      for (integer j = 0; j < 8; j++) begin
+      |        byte_read = $fread(data, memory_image);
+      |        if (byte_read == 0) break;
+      |        n_read += 1;
+      |        memory[i][j * 8 +: 8] = data;
       |      end
       |    end
       |    $fclose(memory_image);
-      |    if (!n_read) begin
-      |      $fatal(1, "Memory: cannot load image from %s.", `MEMORY_IMAGE_S);
-      |    end
-      |    else begin
-      |      $display("Memory: load %d bytes from %s.", n_read, `MEMORY_IMAGE_S);
-      |    end
-      |`else
-      |    $fatal(1, "You must specify the MEMORY_IMAGE macro.");
-      |`endif // MEMORY_IMAGE
+      |    $display("%m: load %d bytes from %s.", n_read, bin_file);
       |  end
+      |end
       |`endif // SYNTHESIS
       |""".stripMargin
 }

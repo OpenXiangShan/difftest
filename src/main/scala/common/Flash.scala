@@ -30,7 +30,7 @@ class FlashHelper extends ExtModule with HasExtModuleInline {
   val r = IO(new DifftestFlashRead)
 
   setInline("FlashHelper.v",
-    s"""
+    """
        |`ifndef SYNTHESIS
        |import "DPI-C" function void flash_read
        |(
@@ -61,45 +61,44 @@ class FlashHelper extends ExtModule with HasExtModuleInline {
        |    end
        |  end
        |
-       |`ifdef FLASH_IMAGE
-       |  integer flash_image, n_read;
-       |  // Create string-type FLASH_IMAGE
-       |  `define STRINGIFY(x) `"x`"
-       |  `define FLASH_IMAGE_S `STRINGIFY(`FLASH_IMAGE)
-       |`else
-       |  reg [7:0] flash_initval [0:11];
-       |`endif // FLASH_IMAGE
+       |  string  bin_file;
+       |  integer flash_image = 0, n_read = 0, byte_read = 0;
+       |  byte data;
+       |  reg [7:0] flash_initval [0:11]; // Use when flash is not specified
        |
        |  initial begin
        |    for (integer i = 0; i < `FLASH_SIZE; i++) begin
        |      flash_mem[i] = 8'h0;
        |    end
-       |`ifdef FLASH_IMAGE
-       |    flash_image = $$fopen(`FLASH_IMAGE_S, "rb");
-       |    n_read = $$fread(flash_mem, flash_image);
-       |    $$fclose(flash_image);
-       |    if (!n_read) begin
-       |      $$fatal(1, "Flash: cannot load image from %s.", `FLASH_IMAGE_S);
+       |    if ($test$plusargs("flash")) begin
+       |      $value$plusargs("flash=%s", bin_file);
+       |      flash_image = $fopen(bin_file, "rb");
+       |      if (flash_image == 0) begin
+       |        $display("Error: failed to open %s", bin_file);
+       |      end
+       |      for (integer i = 0; i < `FLASH_SIZE; i++) begin
+       |        byte_read = $fread(data, flash_image);
+       |        if (byte_read == 0) break;
+       |        n_read += 1;
+       |        flash_mem[i] = data;
+       |      end
+       |      $fclose(flash_image);
+       |      $display("Flash: load %d bytes from %s.", n_read, bin_file);
        |    end
        |    else begin
-       |      $$display("Flash: load %d bytes from %s.", n_read, `FLASH_IMAGE_S);
-       |    end
-       |`else
-       |    `ifdef NANHU
+       |      /** no specified flash_path, use defualt 3 instructions **/
+       |      // addiw   t0,zero,1
+       |      // slli    to,to,  0x1f
+       |      // jr      t0
        |      // Used for pc = 0x8000_0000
        |      // flash_mem[0] = 64'h01f292930010029b
        |      // flash_mem[1] = 64'h00028067
-       |    flash_initval = '{8'h9b, 8'h02, 8'h10, 8'h00, 8'h93, 8'h92, 8'hf2, 8'h01, 8'h67, 8'h80, 8'h02, 8'h00};
-       |    `else
-       |      // Used for pc = 0x20_0000_0000
-       |    flash_initval = '{8'h9b, 8'h02, 8'h10, 8'h00, 8'h93, 8'h92, 8'h52, 8'h02, 8'h67, 8'h80, 8'h02, 8'h00};
-       |    `endif // NANHU
-       |    for (integer i = 0; i < 12; i = i + 1) begin
-       |        flash_mem[i] = flash_initval[i];
+       |      flash_initval = '{8'h9b, 8'h02, 8'h10, 8'h00, 8'h93, 8'h92, 8'hf2, 8'h01, 8'h67, 8'h80, 8'h02, 8'h00};
+       |      for (integer i = 0; i < 12; i = i + 1) begin
+       |          flash_mem[i] = flash_initval[i];
+       |      end
        |    end
-       |`endif // FLASH_IMAGE
        |  end
-       |
        |`endif // SYNTHESIS
        |
        |endmodule
