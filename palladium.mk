@@ -1,9 +1,8 @@
 PLDM_TB_TOP  		 = tb_top
-PLDM_TOP_MODULE 	 = SimTop
+PLDM_TOP_MODULE 	 = $(SIM_TOP)
 
 PLDM_BUILD_DIR 		 = $(abspath $(BUILD_DIR)/pldm-compile)
 PLDM_CC_OBJ_DIR	 	 = $(abspath $(PLDM_BUILD_DIR)/cc_obj)
-PLDM_SCRIPTS_DIR 	 = $(abspath ./scripts/palladium)
 
 # Macro Flags
 PLDM_MACRO_FLAGS  	 = +define+TOP_MODULE=$(PLDM_TOP_MODULE)
@@ -41,12 +40,7 @@ IXCOM_FLAGS    	+= +dut+$(PLDM_CLOCK) $(PLDM_CLOCK_SRC)
 endif
 
 # Other Args
-AXIS_HOME 	 = /nfs/tools/Cadence/IXCOM22.04.s003/share/vxe
-ifndef AXIS_HOME
-$(error AXIS_HOME is not set)
-else
-IXCOM_FLAGS 	+= -v $(AXIS_HOME)/etc/ixcom/IXCclkgen.sv
-endif
+IXCOM_FLAGS 	+= -v $(PLDM_IXCOM)/IXCclkgen.sv
 IXCOM_FLAGS 	+= +iscdisp+Rob +iscdisp+tb_top +iscdisp+MemRWHelper
 ifneq ($(RELEASE_WITH_ASSERT), 1)
 IXCOM_FLAGS 	+= +rtlCommentPragma +tran_relax -relativeIXCDIR -rtlNameForGenerate
