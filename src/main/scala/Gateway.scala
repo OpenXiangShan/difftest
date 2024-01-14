@@ -30,18 +30,19 @@ case class GatewayConfig(
                         isSquash       : Boolean = false,
                         squashReplay   : Boolean = false,
                         replaySize     : Int     = 256,
-                        diffStateSelect: Boolean = false,
+                        delayedStep    : Boolean = false,
                         isBatch        : Boolean = false,
                         batchSize      : Int     = 32
                         )
 {
-  require(!(diffStateSelect && isBatch))
   if (squashReplay) require(isSquash)
-  def hasDutPos: Boolean = diffStateSelect || isBatch
-  def dutBufLen: Int = if (isBatch) batchSize else if (diffStateSelect) 2 else 1
+  def maxStep: Int = if (isBatch) batchSize else 1
+  def stepWidth: Int = log2Ceil(maxStep + 1)
+  def hasDutPos: Boolean = delayedStep || isBatch
+  def dutBufLen: Int = if (delayedStep) maxStep + 1 else maxStep
   def dutPosWidth: Int = log2Ceil(dutBufLen)
   def needTraceInfo: Boolean = squashReplay
-  def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch || isSquash
+  def needEndpoint: Boolean = hasGlobalEnable || delayedStep || isBatch || isSquash
 }
 
 object Gateway {
@@ -158,58 +159,46 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     data := out(id).asUInt
   }
 
-  val port_num = if (config.isBatch) config.batchSize else 1
-  val ports = Seq.fill(port_num)(Wire(new GatewayBundle(config)))
+  val port = Wire(new GatewayBundle(config))
 
   val global_enable = WireInit(true.B)
   if(config.hasGlobalEnable) {
     global_enable := VecInit(out.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
   }
+  port.enable := global_enable
 
-  val batch_data = Option.when(config.isBatch)(Mem(config.batchSize, out_pack.cloneType))
-  val enable = WireInit(false.B)
-  if(config.isBatch) {
-    val batch_ptr = RegInit(0.U(log2Ceil(config.batchSize).W))
-    when(global_enable) {
-      batch_ptr := batch_ptr + 1.U
-      when(batch_ptr === (config.batchSize - 1).U) {
-        batch_ptr := 0.U
-      }
-      batch_data.get(batch_ptr) := out_pack
-    }
-    val do_batch_sync = batch_ptr === (config.batchSize - 1).U && global_enable
-    enable := RegNext(do_batch_sync)
-  }
-  else{
-    enable := global_enable
-  }
-  ports.foreach(port => port.enable := enable)
-
-  if(config.diffStateSelect) {
-    val select = RegInit(false.B)
-    when(global_enable) {
-      select := !select
-    }
-    ports.foreach(port => port.dut_pos.get := select.asUInt)
-  }
-
-  val step_width = if (config.isBatch) log2Ceil(config.batchSize+1) else 1
-  val upper = if(config.isBatch) config.batchSize.U else 1.U
-  val step = IO(Output(UInt(step_width.W)))
-  step := Mux(enable, upper, 0.U)
-
-  if (config.isBatch) {
-    for (ptr <- 0 until config.batchSize) {
-      ports(ptr).dut_pos.get := ptr.asUInt
-      for(id <- 0 until out.length) {
-        GatewaySink(out(id).cloneType, config, ports(ptr)) := batch_data.get(ptr)(id)
+  if(config.hasDutPos) {
+    val pos = RegInit(0.U(config.dutPosWidth.W))
+    when (global_enable) {
+      pos := pos + 1.U
+      when (pos === (config.dutBufLen - 1).U) {
+        pos := 0.U
       }
     }
+    port.dut_pos.get := pos
+  }
+
+  val step = IO(Output(UInt(config.stepWidth.W)))
+  val step_org = WireInit(0.U(config.stepWidth.W))
+  val step_cnter = RegInit(0.U(config.stepWidth.W))
+  val step_cond = WireInit(true.B)
+  // Currently we set step when cnter reach maxStep
+  step_cond := step_cnter === (config.maxStep - 1).U && global_enable
+  when (step_cond) {
+    step_cnter := 0.U
+  }.elsewhen (global_enable) {
+    step_cnter := step_cnter + 1.U
+  }
+  step_org := Mux(step_cond, config.maxStep.U, 0.U)
+  if (config.delayedStep) {
+    step := RegNext(step_org)
   }
   else {
-    for(id <- 0 until out.length){
-      GatewaySink(out(id).cloneType, config, ports.head) := out_pack(id)
-    }
+    step := step_org
+  }
+
+  for(id <- 0 until out.length){
+    GatewaySink(out(id).cloneType, config, port) := out_pack(id)
   }
 
   var macros = GatewaySink.collect(config)
