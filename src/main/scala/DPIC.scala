@@ -128,9 +128,11 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
     // Initial for Palladium GFIFO
     val gfifoInitial =
       s"""
+         |`ifdef TB_DPIC_NONBLOCK
          |`ifdef PALLADIUM
          |initial $$ixc_ctrl("gfifo", "$dpicFuncName");
          |`endif
+         |`endif // TB_DPIC_NONBLOCK
          |""".stripMargin
     val modDef =
       s"""
