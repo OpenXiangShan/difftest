@@ -90,7 +90,7 @@ extern "C" int simv_step() {
   }
 }
 
-#ifdef PALLADIUM
+#ifdef TB_DEFERRED_RESULT
 static int simv_result = 0;
 extern "C" void simv_nstep(uint8_t step) {
   if (simv_result)
@@ -113,4 +113,4 @@ extern "C" int simv_nstep(uint8_t step) {
   }
   return 0;
 }
-#endif // PALLADIUM
+#endif // TB_DEFERRED_RESULT

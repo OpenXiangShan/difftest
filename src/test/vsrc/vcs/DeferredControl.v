@@ -1,8 +1,11 @@
-`ifdef TB_ASYNC
+`ifdef TB_DPIC_NONBLOCK
+  `define TB_DEFERRED_RESULT
+`endif
 
 `define STEP_WIDTH 8
 
-module AsyncControl(
+`ifdef TB_DEFERRED_RESULT
+module DeferredControl(
   input clock,
   input reset,
   input [`STEP_WIDTH - 1:0] step,
@@ -12,9 +15,11 @@ module AsyncControl(
 import "DPI-C" function int simv_result_fetch();
 import "DPI-C" function void simv_nstep(int step);
 
+`ifdef TB_DPIC_NONBLOCK
 `ifdef PALLADIUM
 initial $ixc_ctrl("gfifo", "simv_nstep");
 `endif // PALLADIUM
+`endif TB_DPIC_NONBLOCK
 
 reg [63:0] fetch_cycles;
 initial fetch_cycles = 4999;
@@ -43,4 +48,4 @@ always @(posedge clock) begin
 end
 
 endmodule;
-`endif // TB_ASYNC
+`endif // TB_DEFERRED_RESULT
