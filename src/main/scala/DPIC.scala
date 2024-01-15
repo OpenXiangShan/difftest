@@ -20,6 +20,7 @@ import chisel3.experimental.{DataMirror, ExtModule}
 import chisel3.util._
 import difftest._
 import difftest.gateway.{GatewayConfig, GatewayBundle}
+import difftest.DifftestModule.streamToFile
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
@@ -128,14 +129,15 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
     // Initial for Palladium GFIFO
     val gfifoInitial =
       s"""
-         |`ifdef TB_DPIC_NONBLOCK
+         |`ifdef CONFIG_DIFFTEST_NONBLOCK
          |`ifdef PALLADIUM
          |initial $$ixc_ctrl("gfifo", "$dpicFuncName");
          |`endif
-         |`endif // TB_DPIC_NONBLOCK
+         |`endif // CONFIG_DIFFTEST_NONBLOCK
          |""".stripMargin
     val modDef =
       s"""
+         |`include "DifftestMacros.v"
          |module $desiredName(
          |  $modPortsString
          |);
@@ -186,9 +188,9 @@ object DPIC {
     module.io
   }
 
-  def collect(config: GatewayConfig): Seq[String] = {
+  def collect(): Unit = {
     if (interfaces.isEmpty) {
-      return Seq()
+      return
     }
 
     val interfaceCpp = ListBuffer.empty[String]
@@ -199,10 +201,10 @@ object DPIC {
     interfaceCpp += "#include \"diffstate.h\""
     interfaceCpp += ""
     interfaceCpp +=
-      s"""
+      """
          |class DPICBuffer : public DiffStateBuffer {
          |private:
-         |  DiffTestState buffer[${config.dutBufLen}];
+         |  DiffTestState buffer[CONFIG_DIFFTEST_BUFLEN];
          |  int read_ptr = 0;
          |public:
          |  DPICBuffer() {
@@ -213,7 +215,7 @@ object DPIC {
          |  }
          |  inline DiffTestState* next() {
          |    DiffTestState* ret = buffer+read_ptr;
-         |    read_ptr = (read_ptr + 1) % ${config.dutBufLen};
+         |    read_ptr = (read_ptr + 1) % CONFIG_DIFFTEST_BUFLEN;
          |    return ret;
          |  }
          |};
@@ -222,10 +224,7 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
     interfaceCpp += ""
-    val outputDir = sys.env("NOOP_HOME") + "/build/generated-src"
-    Files.createDirectories(Paths.get(outputDir))
-    val outputHeaderFile = outputDir + "/difftest-dpic.h"
-    Files.write(Paths.get(outputHeaderFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
+    streamToFile(interfaceCpp, "difftest-dpic.h")
 
     interfaceCpp.clear()
     interfaceCpp += "#ifndef CONFIG_NO_DIFFTEST"
@@ -255,9 +254,6 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#endif // CONFIG_NO_DIFFTEST"
     interfaceCpp += ""
-    val outputFile = outputDir + "/difftest-dpic.cpp"
-    Files.write(Paths.get(outputFile), interfaceCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
-
-    Seq("CONFIG_DIFFTEST_DPIC")
+    streamToFile(interfaceCpp, "difftest-dpic.cpp")
   }
 }

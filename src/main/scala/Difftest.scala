@@ -279,7 +279,8 @@ trait DifftestModule[T <: DifftestBundle] {
 object DifftestModule {
   private val enabled = true
   private val instances = ListBuffer.empty[(DifftestBundle, String)]
-  private val macros = ListBuffer.empty[String]
+  private val cppMacros = ListBuffer.empty[String]
+  private val vMacros = ListBuffer.empty[String]
 
   def apply[T <: DifftestBundle](
     gen:      T,
@@ -313,13 +314,15 @@ object DifftestModule {
     difftest.step := 0.U
 
     val gateway = Gateway.collect()
-    macros ++= gateway._1
-    instances ++= gateway._2
-    difftest.step := gateway._3
+    cppMacros ++= gateway._1
+    vMacros ++= gateway._2
+    instances ++= gateway._3
+    difftest.step := gateway._4
 
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
+    generateVeriogHeader()
 
     val timer = RegInit(0.U(64.W)).suggestName("timer")
     timer := timer + 1.U
@@ -343,7 +346,7 @@ object DifftestModule {
     difftestCpp += "#include <cstdint>"
     difftestCpp += ""
 
-    macros.foreach(m => difftestCpp += s"#define $m")
+    cppMacros.foreach(m => difftestCpp += s"#define $m")
     difftestCpp += ""
 
     val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
@@ -409,11 +412,20 @@ object DifftestModule {
          |""".stripMargin
     difftestCpp += "#endif // __DIFFSTATE_H__"
     difftestCpp += ""
+    streamToFile(difftestCpp, "diffstate.h")
+  }
 
-    val outputDir = sys.env("NOOP_HOME") + "/build/generated-src"
+  def generateVeriogHeader(): Unit = {
+    val difftestVeriog = ListBuffer.empty[String]
+    vMacros.foreach(m => difftestVeriog += s"`define $m")
+    streamToFile(difftestVeriog, "DifftestMacros.v")
+  }
+
+  def streamToFile(fileStream: ListBuffer[String], fileName: String) {
+    val outputDir = sys.env("NOOP_HOME") + "/build/generated-src/"
     Files.createDirectories(Paths.get(outputDir))
-    val outputFile = outputDir + "/diffstate.h"
-    Files.write(Paths.get(outputFile), difftestCpp.mkString("\n").getBytes(StandardCharsets.UTF_8))
+    val outputFile = outputDir + fileName
+    Files.write(Paths.get(outputFile), fileStream.mkString("\n").getBytes(StandardCharsets.UTF_8))
   }
 }
 
