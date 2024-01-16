@@ -181,6 +181,11 @@ SIM_CXXFLAGS += -DLLVM_COVER
 SIM_LDFLAGS  += -fsanitize-coverage=trace-pc-guard -fsanitize-coverage=pc-table
 endif
 
+# Do not allow compiler warnings
+ifeq ($(CXX_NO_WARNING),1)
+SIM_CXXFLAGS += -Werror
+endif
+
 include verilator.mk
 include vcs.mk
 include palladium.mk
