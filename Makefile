@@ -59,8 +59,12 @@ REMOTE ?= localhost
 SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
 SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
 
+# artifacet-src
+ARTI_CSRC_DIR = $(abspath ./src/test/csrc/artifacts)
+ARTI_CXXFILES = $(shell find $(ARTI_CSRC_DIR) -name "chisel_db.cpp")
+
 # generated-src
-GEN_CSRC_DIR = $(abspath ./src/test/csrc/artifacts)
+GEN_CSRC_DIR = $(BUILD_DIR)/generated-src
 GEN_CXXFILES = $(shell find $(GEN_CSRC_DIR) -name "*.cpp")
 
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)

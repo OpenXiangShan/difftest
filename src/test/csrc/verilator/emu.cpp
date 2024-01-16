@@ -602,7 +602,7 @@ inline void Emulator::single_cycle() {
 
 #if VM_TRACE == 1
   if (args.enable_waveform) {
-#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
+#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_SQUASH)
     uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
 #else
     static uint64_t cycle = -1UL;
@@ -641,7 +641,7 @@ inline void Emulator::single_cycle() {
 
 #if VM_TRACE == 1
   if (args.enable_waveform && args.enable_waveform_full) {
-#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
+#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_SQUASH)
     uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
 #else
     static uint64_t cycle = -1UL;
@@ -655,11 +655,6 @@ inline void Emulator::single_cycle() {
 #endif
 
 end_single_cycle:
-#ifndef CONFIG_NO_DIFFTEST
-  if (args.trace_name) {
-    difftest_trace();
-  }
-#endif // CONFIG_NO_DIFFTEST
   cycles ++;
 }
 
@@ -792,14 +787,27 @@ int Emulator::tick() {
   dut_ptr->io_perfInfo_dump = 0;
 
 #ifndef CONFIG_NO_DIFFTEST
-  if (args.enable_diff && dut_ptr->difftest_step) {
-    if (difftest_step()) {
-      trapCode = STATE_ABORT;
-      return trapCode;
-    }
+
+  int step = 0;
+  if (args.trace_name && args.trace_is_read) {
+    step = 1;
+    difftest_trace_read();
+  }
+  else {
+    step = dut_ptr->difftest_step;
   }
 
-  trapCode = difftest_state();
+  if (args.trace_name && !args.trace_is_read) {
+    difftest_trace_write(step);
+  }
+
+  if (args.enable_diff) {
+    trapCode = difftest_nstep(step);
+  }
+  else {
+    trapCode = difftest_state();
+  }
+
   if (trapCode != STATE_RUNNING) {
 #ifdef FUZZER_LIB
       if (trapCode == STATE_GOODTRAP) {
@@ -869,7 +877,6 @@ int Emulator::tick() {
       }
     }
   }
-
   return 0;
 }
 

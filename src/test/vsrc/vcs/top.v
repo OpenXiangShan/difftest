@@ -14,19 +14,22 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-import "DPI-C" function void set_bin_file(string bin);
-import "DPI-C" function void set_flash_bin(string bin);
-import "DPI-C" function void set_diff_ref_so(string diff_so);
-import "DPI-C" function void set_no_diff();
-import "DPI-C" function void simv_init();
-import "DPI-C" function int simv_step();
+`define STEP_WIDTH 8
 
 `ifdef NANHUV3_FUNCOV
 	`include "./../../dcov/focv_include.sv"
 `endif
 
-
 module tb_top();
+
+import "DPI-C" function void set_bin_file(string bin);
+import "DPI-C" function void set_flash_bin(string bin);
+import "DPI-C" function void set_diff_ref_so(string diff_so);
+import "DPI-C" function void set_no_diff();
+import "DPI-C" function void simv_init();
+`ifndef PALLADIUM
+import "DPI-C" function int simv_nstep(int step);
+`endif // PALLADIUM
 
 reg         clock;
 reg         reset;
@@ -39,7 +42,7 @@ wire        io_uart_out_valid;
 wire [ 7:0] io_uart_out_ch;
 wire        io_uart_in_valid;
 wire [ 7:0] io_uart_in_ch;
-wire        difftest_step;
+wire [`STEP_WIDTH - 1:0] difftest_step;
 
 string bin_file;
 string flash_bin_file;
@@ -155,6 +158,26 @@ always @(posedge clock) begin
   end
 end
 
+reg [`STEP_WIDTH - 1:0] difftest_step_delay;
+always @(posedge clock) begin
+  if (reset) begin
+    difftest_step_delay <= 0;
+  end
+  else begin
+    difftest_step_delay <= difftest_step;
+  end
+end
+
+`ifdef PALLADIUM
+wire simv_result;
+GfifoControl gfifo(
+  .clock(clock),
+  .reset(reset),
+  .step(difftest_step_delay),
+  .simv_result(simv_result)
+);
+`endif
+
 reg [63:0] n_cycles;
 always @(posedge clock) begin
   if (reset) begin
@@ -173,13 +196,20 @@ always @(posedge clock) begin
     if (!n_cycles) begin
       simv_init();
     end
-    else if (difftest_step) begin
+`ifdef PALLADIUM
+    else if (simv_result) begin
+      $display("DIFFTEST FAILED at cycle %d", n_cycles);
+      $finish();
+    end
+`else
+    else if (|difftest_step_delay) begin
       // check errors
-      if (simv_step()) begin
+      if (simv_nstep(difftest_step_delay)) begin
         $display("DIFFTEST FAILED at cycle %d", n_cycles);
         $finish();
       end
     end
+`endif // PALLADIUM
   end
 end
 

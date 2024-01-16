@@ -24,7 +24,7 @@ import difftest._
 import scala.collection.mutable.ListBuffer
 
 object Squash {
-  private val isEffective: Boolean = true
+  private val isEffective: Boolean = false
   private val instances = ListBuffer.empty[DifftestBundle]
 
   def apply[T <: DifftestBundle](gen: T): T = {

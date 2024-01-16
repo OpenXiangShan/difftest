@@ -186,7 +186,6 @@ private:
 class Difftest {
 public:
   DiffTestState* dut;
-  const int batch_size = 1;
 
   // Difftest public APIs for testbench
   // Its backend should be cross-platform (NEMU, Spike, ...)
@@ -209,12 +208,16 @@ public:
   void set_trace(const char *name, bool is_read) {
     difftrace = new DiffTrace(name, is_read);
   }
-  void trace() {
+  void trace_read(){
     if (difftrace) {
-      if (difftrace->is_read)
-        difftrace->read_next(dut);
-      else
-        difftrace->append(dut);
+      difftrace->read_next(dut);
+    }
+  }
+  void trace_write(int step){
+    if (difftrace){
+      for (int i = 0; i < step; i++) {
+        difftrace->append(diffstate_buffer[id]->get(i));
+      }
     }
   }
 
@@ -253,17 +256,24 @@ public:
 protected:
   DiffTrace *difftrace = nullptr;
 
+#ifdef CONFIG_DIFFTEST_BATCH
+  const uint64_t commit_storage = DIFFTEST_BATCH_SIZE;
+#else
+  const uint64_t commit_storage = 1;
+#endif // CONFIG_DIFFTEST_BATCH
+
 #ifdef CONFIG_DIFFTEST_SQUASH
   const uint64_t timeout_scale = 256;
 #else
   const uint64_t timeout_scale = 1;
 #endif // CONFIG_DIFFTEST_SQUASH
+
 #if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
-  const uint64_t firstCommit_limit = 1000;
-  const uint64_t stuck_limit = 500 * timeout_scale;
+  const uint64_t firstCommit_limit = 1000 * commit_storage;
+  const uint64_t stuck_limit = 500 * timeout_scale * commit_storage;
 #elif defined(CPU_XIANGSHAN)
-  const uint64_t firstCommit_limit = 15000;
-  const uint64_t stuck_limit = 15000 * timeout_scale;
+  const uint64_t firstCommit_limit = 15000 * commit_storage;
+  const uint64_t stuck_limit = 15000 * timeout_scale * commit_storage;
 #endif
   const uint64_t delay_wb_limit = 80;
 
@@ -349,10 +359,12 @@ protected:
 
 extern Difftest **difftest;
 int difftest_init();
+int difftest_nstep(int step);
 int difftest_step();
 int difftest_state();
 void difftest_finish();
-void difftest_trace();
+void difftest_trace_read();
+void difftest_trace_write(int step);
 int init_nemuproxy(size_t);
 
 #ifdef CONFIG_DIFFTEST_SQUASH
