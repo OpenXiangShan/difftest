@@ -61,7 +61,7 @@ IXCOM_FLAGS   	+= -F $(PLDM_VFILELIST)
 ifneq ($(RELEASE_WITH_ASSERT), 1)
 VLAN_FLAGS 	 = -64 -sv
 VLAN_FLAGS 	+= $(addprefix -incdir , $(PLDM_VSRC_DIR))
-VLAN_FLAGS	 += -vtimescale 1ns/1ns
+VLAN_FLAGS	+= -vtimescale 1ns/1ns
 VLAN_FLAGS 	+= $(PLDM_MACRO_FLAGS)
 VLAN_FLAGS 	+= -F $(PLDM_VFILELIST)
 endif
@@ -73,10 +73,10 @@ DPILIB_EMU    	 = $(PLDM_BUILD_DIR)/libdpi_emu.so
 PLDM_CSRC_DIR 	 = $(abspath ./src/test/csrc/vcs)
 PLDM_CXXFILES 	 = $(SIM_CXXFILES) $(shell find $(PLDM_CSRC_DIR) -name "*.cpp")
 PLDM_CXXFLAGS 	 = -m64 -c -fPIC -g -std=c++11 -I$(PLDM_IXCOM) -I$(PLDM_SIMTOOL)
-PLDM_CXXFLAGS 	 = $(SIM_CXXFLAGS) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES) -DTB_DEFERRED_RESULT
+PLDM_CXXFLAGS 	+= $(SIM_CXXFLAGS) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES) -DTB_DEFERRED_RESULT
 
 # XMSIM Flags
-XMSIM_FLAGS 	 = --xmsim -64 +xcprof -profile
+XMSIM_FLAGS 	 = --xmsim -64 +xcprof -profile -PROFTHREAD
 ifneq ($(RELEASE_WITH_ASSERT), 1)
 XMSIM_FLAGS 	+= -sv_lib ${DPILIB_EMU}
 endif
