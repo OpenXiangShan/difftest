@@ -10,7 +10,7 @@ on:
 
 jobs:
   test-difftest-main:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v2
 
@@ -24,7 +24,7 @@ jobs:
           make difftest_verilog NOOP_HOME=$GITHUB_WORKSPACE
 
   test-difftest-nutshell:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v2
@@ -220,20 +220,18 @@ jobs:
             ./build/fuzzer -v -- ./ready-to-run/microbench.bin -e 0
 
   test-difftest-vcs:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v2
 
-      - name: Prepare environment with Verilator v5.012
+      - name: Prepare environment
         run: |
             cd $GITHUB_WORKSPACE/..
             git config --global url."https://github.com/".insteadOf git@github.com:
             git config --global url."https://".insteadOf git://
             git clone https://github.com/OpenXiangShan/xs-env
             cd xs-env
-            sed -i 's/v4.218/v5.012/' install-verilator.sh
-            sed -i 's/CC=clang CXX=clang++/CC=gcc-10 CXX=g++-10 LINK=g++-10/' install-verilator.sh
             sudo -s ./setup-tools.sh
             source ./setup.sh
 
