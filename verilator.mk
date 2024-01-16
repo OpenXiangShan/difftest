@@ -151,8 +151,8 @@ COVERAGE_DATA ?= $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.dat")
 COVERAGE_DIR  ?= $(DESIGN_DIR)/$(basename $(notdir $(COVERAGE_DATA)))
 coverage:
 	@verilator_coverage --annotate $(COVERAGE_DIR) --annotate-min 1 $(COVERAGE_DATA)
-	@python3 scripts/coverage/coverage.py $(COVERAGE_DIR)/$(SIM_TOP).v $(COVERAGE_DIR)/$(SIM_TOP)_annotated.v
-	@python3 scripts/coverage/statistics.py $(COVERAGE_DIR)/$(SIM_TOP)_annotated.v > $(COVERAGE_DIR)/coverage_$(SIM_TOP).log
+	@python3 scripts/coverage/coverage.py $(COVERAGE_DIR)
+	@python3 scripts/coverage/statistics.py $(COVERAGE_DIR) > $(COVERAGE_DIR)/coverage_$(SIM_TOP).log
 	@mv $(COVERAGE_DATA) $(COVERAGE_DIR)
 
 .PHONY: build_emu_local

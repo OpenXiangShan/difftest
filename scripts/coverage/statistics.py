@@ -18,10 +18,10 @@
 #***************************************************************************************
 
 
-import sys
-import re
-import copy
+import os
 import pprint
+import re
+import sys
 
 LINE_COVERRED = "LINE_COVERRED"
 NOT_LINE_COVERRED = "NOT_LINE_COVERRED"
@@ -49,11 +49,14 @@ def check_one_hot(l):
             cnt += 1
     return cnt <= 1
 
-def get_lines(input_file):
+def get_lines(input_dir):
     lines = []
-    with open(input_file) as f:
-        for line in f:
-            lines.append(line)
+    for filename in os.listdir(input_dir):
+        if filename.endswith('_annotated.v') or filename.endswith('_annotated.sv'):
+            input_file = os.path.join(input_dir, filename)
+            with open(input_file) as f:
+                for line in f:
+                    lines.append(line)
     return lines
 
 def get_line_annotation(lines):
@@ -277,11 +280,11 @@ def print_tree_coverage(tree_coverage):
             dfs(module, 0)
 
 if __name__ == "__main__":
-    assert len(sys.argv) == 2, "Expect input_file"
-    input_file = sys.argv[1]
+    assert len(sys.argv) == 2, "Expect input_dir"
+    input_dir = sys.argv[1]
     pp = pprint.PrettyPrinter(indent=4)
 
-    lines = get_lines(input_file)
+    lines = get_lines(input_dir)
     # print("lines:")
     # pp.pprint(lines)
 
