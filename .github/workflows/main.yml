@@ -29,6 +29,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Enable -Werror for EMU Build
+        run: |
+          echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
+
       - name: Prepare environment
         run: |
             cd $GITHUB_WORKSPACE/..
@@ -224,6 +228,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+
+      - name: Enable -Werror for EMU Build
+        run: |
+          echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
 
       - name: Prepare environment
         run: |
