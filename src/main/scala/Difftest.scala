@@ -199,6 +199,7 @@ class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val desiredCppName: String = "vcsr"
   override val desiredOffset: Int = 5
+  override val squashDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle
