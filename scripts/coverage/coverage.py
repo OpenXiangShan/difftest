@@ -17,14 +17,12 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-import sys
+import os
 import re
-import copy
+import sys
 
-if __name__ == "__main__":
-    assert len(sys.argv) == 3, "Expect input_file and output_file"
-    input_file = sys.argv[1]
-    output_file = sys.argv[2]
+
+def annotate(input_file, output_file):
     lines = []
     line_count = 0
     synthesis_nest_level = 0
@@ -109,3 +107,14 @@ if __name__ == "__main__":
     with open(output_file, "w") as f:
         for line in lines:
             f.write(line)
+
+if __name__ == "__main__":
+    assert len(sys.argv) == 2, "Expect input_dir (also used as output_dir)"
+    input_dir = sys.argv[1]
+    for filename in os.listdir(input_dir):
+        if filename.endswith('.v') or filename.endswith('.sv'):
+            input_file = os.path.join(input_dir, filename)
+            names = filename.split(".")
+            output_filename = ".".join(names[:-1]) + "_annotated." + names[-1]
+            output_file = os.path.join(input_dir, output_filename)
+            annotate(input_file, output_file)
