@@ -21,11 +21,7 @@ import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
 
-import scala.collection.mutable.ListBuffer
-
 object Squash {
-  private val instances = ListBuffer.empty[DifftestBundle]
-
   def apply[T <: Seq[DifftestBundle]](bundles: T, config: GatewayConfig): SquashEndpoint = {
     val module = Module(new SquashEndpoint(bundles, config))
     module
