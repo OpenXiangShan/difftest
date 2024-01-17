@@ -13,7 +13,7 @@ PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_DELAY=0
 ifeq ($(RELEASE_WITH_ASSERT), 1)
 PLDM_MACRO_FLAGS 	+= +define+SYNTHESIS +define+TB_NO_DPIC
 else
-PLDM_MACRO_FLAGS 	+= +define+DIFFTEST
+PLDM_MACRO_FLAGS 	+= +define+DIFFTEST +define+DISABLE_DIFFTEST_RAM_DPIC +define+DISABLE_SIMJTAG_DPIC
 endif
 PLDM_MACRO_FLAGS 	+= $(PLDM_EXTRA_MACRO)
 
@@ -27,7 +27,7 @@ endif
 
 # Compiler Args
 IXCOM_FLAGS 	+= -xecompile compilerOptions=$(PLDM_SCRIPTS_DIR)/compilerOptions.qel
-IXCOM_FLAGS 	+= +tb_import_systf+fwrite +tb_import_systf+fflush
+IXCOM_FLAGS 	+= +gfifoDisp+tb_top
 IXCOM_FLAGS 	+= $(addprefix -incdir , $(PLDM_VSRC_DIR))
 IXCOM_FLAGS 	+= $(PLDM_MACRO_FLAGS)
 IXCOM_FLAGS 	+= +dut+$(PLDM_TB_TOP)
@@ -40,7 +40,6 @@ endif
 
 # Other Args
 IXCOM_FLAGS 	+= -v $(PLDM_IXCOM)/IXCclkgen.sv
-IXCOM_FLAGS 	+= +iscdisp+tb_top
 ifneq ($(RELEASE_WITH_ASSERT), 1)
 IXCOM_FLAGS 	+= +rtlCommentPragma +tran_relax -relativeIXCDIR -rtlNameForGenerate
 endif

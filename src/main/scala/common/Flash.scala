@@ -52,7 +52,7 @@ class FlashHelper extends ExtModule with HasExtModuleInline {
        |  end
        |`else
        |`ifdef PALLADIUM
-       |  initial $ixc_ctrl("tb_import", "display");
+       |  initial $ixc_ctrl("tb_import", "$display");
        |`endif // PALLADIUM
        |  // 1K entries. 8KB size.
        |  `define FLASH_SIZE (8 * 1024)

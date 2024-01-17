@@ -22,9 +22,9 @@ import chisel3.util._
 trait HasMemInit { this: ExtModule =>
   val mem_init =
     """
-      |`ifdef SYNTHESIS
+      |`ifdef DISABLE_DIFFTEST_RAM_DPIC
       |`ifdef PALLADIUM
-      |  initial $ixc_ctrl("tb_import", "display");
+      |  initial $ixc_ctrl("tb_import", "$display");
       |`endif // PALLADIUM
       |  // 1536MB memory
       |  `define RAM_SIZE (1536 * 1024 * 1024)
@@ -56,7 +56,7 @@ trait HasMemInit { this: ExtModule =>
       |    $display("%m: load %d bytes from %s.", n_read, bin_file);
       |  end
       |end
-      |`endif // SYNTHESIS
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 }
 
@@ -69,9 +69,9 @@ trait HasReadPort { this: ExtModule =>
 
   val r_dpic =
     """
-      |`ifndef SYNTHESIS
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
       |import "DPI-C" function longint difftest_ram_read(input longint rIdx);
-      |`endif // SYNTHESIS
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
   val r_if =
@@ -83,7 +83,7 @@ trait HasReadPort { this: ExtModule =>
 
   val r_func =
     """
-      |`ifndef SYNTHESIS
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
       |if (r_enable) begin
       |  r_data <= difftest_ram_read(r_index);
       |end
@@ -91,7 +91,7 @@ trait HasReadPort { this: ExtModule =>
       |if (r_enable) begin
       |  r_data <= memory[r_index];
       |end
-      |`endif // SYNTHESIS
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
   def read(enable: Bool, index: UInt): UInt = {
@@ -112,14 +112,14 @@ trait HasWritePort { this: ExtModule =>
 
   val w_dpic =
     """
-      |`ifndef SYNTHESIS
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
       |import "DPI-C" function void difftest_ram_write
       |(
       |  input  longint index,
       |  input  longint data,
       |  input  longint mask
       |);
-      |`endif // SYNTHESIS
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
   val w_if =
@@ -132,7 +132,7 @@ trait HasWritePort { this: ExtModule =>
 
   val w_func =
     """
-      |`ifndef SYNTHESIS
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
       |if (w_enable) begin
       |  difftest_ram_write(w_index, w_data, w_mask);
       |end
@@ -140,7 +140,7 @@ trait HasWritePort { this: ExtModule =>
       |if (w_enable) begin
       |  memory[w_index] <= (w_data & w_mask) | (memory[w_index] & ~w_mask);
       |end
-      |`endif // SYNTHESIS
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
   def write(enable: Bool, index: UInt, data: UInt, mask: UInt): HasWritePort = {
@@ -157,6 +157,9 @@ class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort with
 
   setInline("MemRHelper.v",
     s"""
+       |`ifdef SYNTHESIS
+       |  `define DISABLE_DIFFTEST_RAM_DPIC
+       |`endif
        |$r_dpic
        |module MemRHelper(
        |  $r_if
@@ -175,6 +178,9 @@ class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort wit
 
   setInline("MemWHelper.v",
     s"""
+       |`ifdef SYNTHESIS
+       |  `define DISABLE_DIFFTEST_RAM_DPIC
+       |`endif
        |$w_dpic
        |module MemWHelper(
        |  $w_if
@@ -194,6 +200,9 @@ class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort wit
 
   setInline("MemRWHelper.v",
     s"""
+       |`ifdef SYNTHESIS
+       |  `define DISABLE_DIFFTEST_RAM_DPIC
+       |`endif
        |$r_dpic
        |$w_dpic
        |module MemRWHelper(

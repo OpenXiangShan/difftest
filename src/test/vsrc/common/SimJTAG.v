@@ -1,6 +1,9 @@
 // See LICENSE.SiFive for license details.
 //VCS coverage exclude_file
-`ifndef SYNTHESIS
+`ifdef SYNTHESIS
+    `define DISABLE_SIMJTAG_DPIC
+`endif // SYNTHESIS
+`ifndef DISABLE_SIMJTAG_DPIC
 import "DPI-C" function int jtag_tick
 (
  output bit jtag_TCK,
@@ -10,7 +13,7 @@ import "DPI-C" function int jtag_tick
 
  input bit  jtag_TDO
 );
-`endif // SYNTHESIS
+`endif // DISABLE_SIMJTAG_DPIC
 
 module SimJTAG #(
                  parameter TICK_DELAY = 50
@@ -33,7 +36,7 @@ module SimJTAG #(
                    output [31:0] exit
                    );
 
-`ifndef SYNTHESIS
+`ifndef DISABLE_SIMJTAG_DPIC
    `ifdef PALLADIUM
    initial $ixc_ctrl("map_delays");
    `endif
@@ -92,6 +95,6 @@ module SimJTAG #(
    assign jtag_TDI   = 1'b0;
    assign jtag_TRSTn = 1'b1;
    assign exit       = 32'b0;
-`endif // SYNTHESIS
+`endif // DISABLE_SIMJTAG_DPIC
 
 endmodule
