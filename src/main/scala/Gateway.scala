@@ -243,12 +243,14 @@ object GatewaySink{
   def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): UInt = {
     config.style match {
       case "dpic" => DPIC(gen, config, port)
+      case _ => DPIC(gen, config, port) // Default: DPI-C
     }
   }
 
   def collect(config: GatewayConfig): Unit = {
     config.style match {
       case "dpic" => DPIC.collect()
+      case _ => DPIC.collect() // Default: DPI-C
     }
   }
 }

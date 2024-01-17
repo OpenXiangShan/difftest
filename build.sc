@@ -21,9 +21,10 @@ import publish._
 object ivys {
   val scala = "2.13.10"
   val chiselCrossVersions = Map(
-    "3.5.6" -> (ivy"edu.berkeley.cs::chisel3:3.5.6", ivy"edu.berkeley.cs:::chisel3-plugin:3.5.6"),
     "3.6.0" -> (ivy"edu.berkeley.cs::chisel3:3.6.0", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.0"),
     "6.0.0-M3" -> (ivy"org.chipsalliance::chisel:6.0.0-M3", ivy"org.chipsalliance:::chisel-plugin:6.0.0-M3"),
+    "6.0.0-RC1" -> (ivy"org.chipsalliance::chisel:6.0.0-RC1", ivy"org.chipsalliance:::chisel-plugin:6.0.0-RC1"),
+    "6.0.0-RC2" -> (ivy"org.chipsalliance::chisel:6.0.0-RC2", ivy"org.chipsalliance:::chisel-plugin:6.0.0-RC2"),
   )
 }
 
@@ -39,10 +40,23 @@ trait CommonDiffTest extends ScalaModule with SbtModule with Cross.Module[String
   override def ivyDeps = Agg(ivys.chiselCrossVersions(crossValue)._1)
 }
 
+object design extends Cross[DiffTestModule](ivys.chiselCrossVersions.keys.toSeq)
+
+trait DiffTestModule extends CommonDiffTest {
+
+  override def millSourcePath = os.pwd
+
+  override def scalacOptions = super.scalacOptions() ++
+    Seq("-Xfatal-warnings", "-deprecation:false", "-unchecked", "-Xlint")
+
+}
+
 object difftest extends CommonDiffTest {
-  def crossValue: String = "3.5.6"
+
+  def crossValue: String = "3.6.0"
 
   override def millSourcePath = os.pwd
 
   object test extends SbtModuleTests with TestModule.ScalaTest
+
 }

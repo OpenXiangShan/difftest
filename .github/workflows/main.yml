@@ -19,6 +19,13 @@ jobs:
           sudo curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.1/0.11.1 > /usr/local/bin/mill
           chmod +x /usr/local/bin/mill
 
+      - name: Compile
+        run: |
+          mill -i design[3.6.0].compile
+          mill -i design[6.0.0-M3].compile
+          mill -i design[6.0.0-RC1].compile
+          mill -i design[6.0.0-RC2].compile
+
       - name: Generate Verilog
         run: |
           make difftest_verilog NOOP_HOME=$GITHUB_WORKSPACE

@@ -290,7 +290,7 @@ object DifftestModule {
   ): T = {
     val difftest: T = Wire(gen)
     if (enabled) {
-      val id = register(gen, style)
+      register(gen, style)
       val sink = Gateway(gen, style)
       sink := Delayer(difftest, delay)
       sink.coreid := difftest.coreid
