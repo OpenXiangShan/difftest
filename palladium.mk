@@ -7,8 +7,6 @@ PLDM_CC_OBJ_DIR	 	 = $(abspath $(PLDM_BUILD_DIR)/cc_obj)
 # Macro Flags
 PLDM_MACRO_FLAGS  	 = +define+TOP_MODULE=$(PLDM_TOP_MODULE)
 PLDM_MACRO_FLAGS 	+= +define+PALLADIUM
-PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_GARBAGE_ASSIGN
-PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_INVALID_ASSIGN
 PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_MEM_INIT
 PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_REG_INIT
 PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_DELAY=0
@@ -24,7 +22,7 @@ IXCOM_FLAGS  	 = -clean -64 -ua +sv +ignoreSimVerCheck +xe_alt_xlm
 ifeq ($(RELEASE_WITH_ASSERT), 1)
 IXCOM_FLAGS 	+= +1xua
 else
-IXCOM_FLAGS 	+= +iscDelay+tb_top +iscDelay+SimJTAG -enableLargeSizeMem
+IXCOM_FLAGS 	+= +iscDelay+tb_top -enableLargeSizeMem
 endif
 
 # Compiler Args
@@ -41,7 +39,7 @@ endif
 
 # Other Args
 IXCOM_FLAGS 	+= -v $(PLDM_IXCOM)/IXCclkgen.sv
-IXCOM_FLAGS 	+= +iscdisp+Rob +iscdisp+tb_top +iscdisp+MemRWHelper
+IXCOM_FLAGS 	+= +iscdisp+tb_top
 ifneq ($(RELEASE_WITH_ASSERT), 1)
 IXCOM_FLAGS 	+= +rtlCommentPragma +tran_relax -relativeIXCDIR -rtlNameForGenerate
 endif

@@ -23,6 +23,9 @@ trait HasMemInit { this: ExtModule =>
   val mem_init =
     """
       |`ifdef SYNTHESIS
+      |`ifdef PALLADIUM
+      |  initial $ixc_ctrl("tb_import", "display");
+      |`endif // PALLADIUM
       |  // 1536MB memory
       |  `define RAM_SIZE (1536 * 1024 * 1024)
       |

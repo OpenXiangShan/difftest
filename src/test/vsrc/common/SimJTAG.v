@@ -34,6 +34,9 @@ module SimJTAG #(
                    );
 
 `ifndef SYNTHESIS
+   `ifdef PALLADIUM
+   initial $ixc_ctrl("map_delays");
+   `endif
    reg [31:0]                    tickCounterReg;
    wire [31:0]                   tickCounterNxt;
 
