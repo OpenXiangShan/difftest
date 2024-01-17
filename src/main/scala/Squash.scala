@@ -30,12 +30,6 @@ object Squash {
     val module = Module(new SquashEndpoint(bundles, config))
     module
   }
-
-  def collect(config: GatewayConfig): Seq[String] = {
-    var macros = Seq("CONFIG_DIFFTEST_SQUASH")
-    if (config.squashReplay) macros ++= Seq("CONFIG_DIFFTEST_SQUASH_REPLAY")
-    macros
-  }
 }
 
 class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
@@ -168,6 +162,7 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
 
   setInline("SquashControl.v",
     s"""
+      |`include "DifftestMacros.v"
       |module SquashControl(
       |  input clock,
       |  input reset,

@@ -32,7 +32,8 @@ case class GatewayConfig(
                         replaySize     : Int     = 256,
                         diffStateSelect: Boolean = false,
                         isBatch        : Boolean = false,
-                        batchSize      : Int     = 32
+                        batchSize      : Int     = 32,
+                        isNonBlock     : Boolean = false,
                         )
 {
   require(!(diffStateSelect && isBatch))
@@ -40,8 +41,29 @@ case class GatewayConfig(
   def hasDutPos: Boolean = diffStateSelect || isBatch
   def dutBufLen: Int = if (isBatch) batchSize else if (diffStateSelect) 2 else 1
   def dutPosWidth: Int = log2Ceil(dutBufLen)
+  def maxStep: Int = if (isBatch) batchSize else 1
+  def stepWidth: Int = log2Ceil(maxStep + 1)
+  def hasDeferredResult: Boolean = isNonBlock
   def needTraceInfo: Boolean = squashReplay
   def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch || isSquash
+  // Macros Generation for Cpp and Verilog
+  def cppMacros: Seq[String] = {
+    val macros = ListBuffer.empty[String]
+    macros += s"CONFIG_DIFFTEST_${style.toUpperCase}"
+    macros += s"CONFIG_DIFFTEST_BUFLEN ${dutBufLen}"
+    if (isBatch) macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${batchSize}")
+    if (isSquash) macros += "CONFIG_DIFFTEST_SQUASH"
+    if (squashReplay) macros += "CONFIG_DIFFTEST_SQUASH_REPLAY"
+    if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
+    macros.toSeq
+  }
+  def vMacros: Seq[String] = {
+    val macros = ListBuffer.empty[String]
+    macros += s"CONFIG_DIFFTEST_STEPWIDTH ${stepWidth}"
+    if (isNonBlock) macros += "CONFIG_DIFFTEST_NONBLOCK"
+    if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
+    macros.toSeq
+  }
 }
 
 object Gateway {
@@ -68,20 +90,18 @@ object Gateway {
     gen
   }
 
-  def collect(): (Seq[String], Seq[(DifftestBundle, String)], UInt) = {
-    val macros = ListBuffer.empty[String]
+  def collect(): (Seq[String], Seq[String], Seq[(DifftestBundle, String)], UInt) = {
     val extraInstances = ListBuffer.empty[(DifftestBundle, String)]
     val step = WireInit(1.U)
     if (config.needEndpoint) {
       val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
-      macros ++= endpoint.macros
       extraInstances ++= endpoint.extraInstances
       step := endpoint.step
     }
     else {
-      macros ++= GatewaySink.collect(config)
+      GatewaySink.collect(config)
     }
-    (macros.toSeq, extraInstances.toSeq, step)
+    (config.cppMacros, config.vMacros, extraInstances.toSeq, step)
   }
 }
 
@@ -193,10 +213,8 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     ports.foreach(port => port.dut_pos.get := select.asUInt)
   }
 
-  val step_width = if (config.isBatch) log2Ceil(config.batchSize+1) else 1
-  val upper = if(config.isBatch) config.batchSize.U else 1.U
-  val step = IO(Output(UInt(step_width.W)))
-  step := Mux(enable, upper, 0.U)
+  val step = IO(Output(UInt(config.stepWidth.W)))
+  step := Mux(enable, config.maxStep.U, 0.U)
 
   if (config.isBatch) {
     for (ptr <- 0 until config.batchSize) {
@@ -212,13 +230,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
   }
 
-  var macros = GatewaySink.collect(config)
-  if (config.isBatch) {
-    macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${config.batchSize}")
-  }
-  if (config.isSquash) {
-    macros ++= Squash.collect(config)
-  }
+  GatewaySink.collect(config)
 
   val extraInstances = ListBuffer.empty[(DifftestBundle, String)]
   if (config.needTraceInfo) {
@@ -234,9 +246,9 @@ object GatewaySink{
     }
   }
 
-  def collect(config: GatewayConfig): Seq[String] = {
+  def collect(config: GatewayConfig): Unit = {
     config.style match {
-      case "dpic" => DPIC.collect(config)
+      case "dpic" => DPIC.collect()
     }
   }
 }

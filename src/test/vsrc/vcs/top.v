@@ -13,11 +13,8 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-`ifdef TB_DPIC_NONBLOCK
-  `define TB_DEFERRED_RESULT
-`endif
-`define STEP_WIDTH 8
 
+`include "DifftestMacros.v"
 module tb_top();
 
 `ifndef TB_NO_DPIC
@@ -26,9 +23,9 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void simv_init();
-`ifndef TB_DEFERRED_RESULT
+`ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
 import "DPI-C" function int simv_nstep(int step);
-`endif // TB_DEFERRED_RESULT
+`endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
 
 `ifdef PALLADIUM
@@ -52,7 +49,7 @@ wire        difftest_uart_out_valid;
 wire [ 7:0] difftest_uart_out_ch;
 wire        difftest_uart_in_valid;
 wire [ 7:0] difftest_uart_in_ch;
-wire [`STEP_WIDTH - 1:0] difftest_step;
+wire [`CONFIG_DIFFTEST_STEPWIDTH - 1:0] difftest_step;
 
 string bin_file;
 string flash_bin_file;
@@ -178,7 +175,7 @@ always @(posedge clock) begin
 end
 
 `ifndef TB_NO_DPIC
-reg [`STEP_WIDTH - 1:0] difftest_step_delay;
+reg [`CONFIG_DIFFTEST_STEPWIDTH - 1:0] difftest_step_delay;
 always @(posedge clock) begin
   if (reset) begin
     difftest_step_delay <= 0;
@@ -188,7 +185,7 @@ always @(posedge clock) begin
   end
 end
 
-`ifdef TB_DEFERRED_RESULT
+`ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 wire simv_result;
 DeferredControl deferred(
   .clock(clock),
@@ -196,7 +193,7 @@ DeferredControl deferred(
   .step(difftest_step_delay),
   .simv_result(simv_result)
 );
-`endif // TB_DEFERRED_RESULT
+`endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
 
 reg [63:0] n_cycles;
@@ -218,7 +215,7 @@ always @(posedge clock) begin
     if (!n_cycles) begin
       simv_init();
     end
-`ifdef TB_DEFERRED_RESULT
+`ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
     else if (simv_result) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
       $finish();
@@ -231,7 +228,7 @@ always @(posedge clock) begin
         $finish();
       end
     end
-`endif // TB_DEFERRED_RESULT
+`endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
   end
 end

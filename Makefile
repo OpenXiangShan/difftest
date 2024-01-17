@@ -64,6 +64,7 @@ PLUGIN_CSRC_DIR = $(abspath ./src/test/csrc/plugin)
 PLUGIN_INC_DIR  = $(abspath $(PLUGIN_CSRC_DIR)/include)
 SIM_CXXFLAGS   += -I$(PLUGIN_INC_DIR)
 
+GEN_VSRC_DIR = $(BUILD_DIR)/generated-src
 VSRC_DIR   = $(abspath ./src/test/vsrc/common)
 SIM_VSRC = $(shell find $(VSRC_DIR) -name "*.v" -or -name "*.sv")
 

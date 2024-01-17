@@ -104,6 +104,7 @@ VERILATOR_FLAGS =                   \
   --output-split 30000              \
   --output-split-cfuncs 30000       \
   -I$(RTL_DIR)                      \
+  -I$(GEN_VSRC_DIR)		    \
   -CFLAGS "$(EMU_CXXFLAGS)"         \
   -LDFLAGS "$(EMU_LDFLAGS)"         \
   -o $(abspath $(EMU))              \

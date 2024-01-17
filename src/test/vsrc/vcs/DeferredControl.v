@@ -1,25 +1,20 @@
-`ifdef TB_DPIC_NONBLOCK
-  `define TB_DEFERRED_RESULT
-`endif
-
-`define STEP_WIDTH 8
-
-`ifdef TB_DEFERRED_RESULT
+`include "DifftestMacros.v"
+`ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 module DeferredControl(
   input clock,
   input reset,
-  input [`STEP_WIDTH - 1:0] step,
+  input [`CONFIG_DIFFTEST_STEPWIDTH - 1:0] step,
   output reg simv_result
 );
 
 import "DPI-C" function int simv_result_fetch();
 import "DPI-C" function void simv_nstep(int step);
 
-`ifdef TB_DPIC_NONBLOCK
+`ifdef CONFIG_DIFFTEST_NONBLOCK
 `ifdef PALLADIUM
 initial $ixc_ctrl("gfifo", "simv_nstep");
 `endif // PALLADIUM
-`endif TB_DPIC_NONBLOCK
+`endif // CONFIG_DIFFTEST_NONBLOCK
 
 reg [63:0] fetch_cycles;
 initial fetch_cycles = 4999;
@@ -48,4 +43,4 @@ always @(posedge clock) begin
 end
 
 endmodule;
-`endif // TB_DEFERRED_RESULT
+`endif // CONFIG_DIFFTEST_DEFERRED_RESULT

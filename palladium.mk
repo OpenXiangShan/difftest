@@ -13,7 +13,7 @@ PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_DELAY=0
 ifeq ($(RELEASE_WITH_ASSERT), 1)
 PLDM_MACRO_FLAGS 	+= +define+SYNTHESIS +define+TB_NO_DPIC
 else
-PLDM_MACRO_FLAGS 	+= +define+DIFFTEST +define+TB_DPIC_NONBLOCK
+PLDM_MACRO_FLAGS 	+= +define+DIFFTEST
 endif
 PLDM_MACRO_FLAGS 	+= $(PLDM_EXTRA_MACRO)
 
@@ -28,6 +28,7 @@ endif
 # Compiler Args
 IXCOM_FLAGS 	+= -xecompile compilerOptions=$(PLDM_SCRIPTS_DIR)/compilerOptions.qel
 IXCOM_FLAGS 	+= +tb_import_systf+fwrite +tb_import_systf+fflush
+IXCOM_FLAGS 	+= $(addprefix -incdir , $(PLDM_VSRC_DIR))
 IXCOM_FLAGS 	+= $(PLDM_MACRO_FLAGS)
 IXCOM_FLAGS 	+= +dut+$(PLDM_TB_TOP)
 ifeq ($(RELEASE_WITH_ASSERT), 1)
@@ -46,7 +47,7 @@ endif
 IXCOM_FLAGS 	+= +tfconfig+$(PLDM_SCRIPTS_DIR)/argConfigs.qel
 
 # Verilog Files
-PLDM_VSRC_DIR  	 = $(RTL_DIR)
+PLDM_VSRC_DIR  	 = $(RTL_DIR) $(GEN_VSRC_DIR)
 ifeq ($(RELEASE_WITH_ASSERT), 1)
 PLDM_VSRC_DIR 	+= $(abspath ./src/test/vsrc/vcs) $(abspath ./src/test/vsrc/common/SimJTAG.v)
 else
@@ -71,7 +72,7 @@ DPILIB_EMU    	 = $(PLDM_BUILD_DIR)/libdpi_emu.so
 PLDM_CSRC_DIR 	 = $(abspath ./src/test/csrc/vcs)
 PLDM_CXXFILES 	 = $(SIM_CXXFILES) $(shell find $(PLDM_CSRC_DIR) -name "*.cpp")
 PLDM_CXXFLAGS 	 = -m64 -c -fPIC -g -std=c++11 -I$(PLDM_IXCOM) -I$(PLDM_SIMTOOL)
-PLDM_CXXFLAGS 	+= $(SIM_CXXFLAGS) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES) -DTB_DEFERRED_RESULT
+PLDM_CXXFLAGS 	+= $(SIM_CXXFLAGS) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
 
 # XMSIM Flags
 XMSIM_FLAGS 	 = --xmsim -64 +xcprof -profile -PROFTHREAD
