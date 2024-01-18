@@ -390,7 +390,7 @@ void difftest_trace_write(int step);
 
 int init_nemuproxy(size_t);
 
-int difftest_commit_sum(char core_id);
+uint64_t difftest_commit_sum(char core_id);
 
 
 #ifdef CONFIG_DIFFTEST_SQUASH

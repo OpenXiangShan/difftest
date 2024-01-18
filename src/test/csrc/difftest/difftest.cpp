@@ -47,6 +47,7 @@ int init_nemuproxy(size_t ramsize = 0) {
 int difftest_state() {
   for (int i = 0; i < NUM_CORES; i++) {
     if (difftest[i]->get_trap_valid()) {
+      printf("inst count %ld", difftest_commit_sum(i));
       return difftest[i]->get_trap_code();
     }
     if (difftest[i]->proxy && difftest[i]->proxy->get_status()) {
@@ -82,7 +83,7 @@ int difftest_step() {
 }
 
 
-int difftest_commit_sum(char core_id) {
+uint64_t difftest_commit_sum(char core_id) {
   if (core_id < NUM_CORES)
     return difftest[core_id]->get_instr_sum();
   else 

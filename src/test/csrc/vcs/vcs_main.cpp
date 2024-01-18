@@ -71,6 +71,15 @@ extern "C" void set_max_cycles(long mc) {
   max_cycles = mc;
 }
 
+extern "C" void get_ipc(long cycles) {
+  uint64_t now_cycles = (uint64_t)cycles;
+  uint64_t now_instrs = difftest_commit_sum(0);// Take the first core as the standard for now
+  double CPI = (double)now_cycles / now_instrs;
+  double IPC = (double)now_instrs / now_cycles;
+  printf("this simpoint CPI = %lf, IPC = %lf, Instrcount %ld, Cycle %ld\n",
+   CPI, IPC, now_instrs, now_cycles);
+}
+
 extern "C" void set_max_instrs(long mc) {
   printf("max instrs:%d\n",mc);
   max_instrs = mc;
@@ -136,7 +145,7 @@ extern "C" int simv_step() {
   }
 }
 
-#ifdef TB_DEFERRED_RESULT
+#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 static int simv_result = 0;
 extern "C" void simv_nstep(uint8_t step) {
   if (simv_result)
