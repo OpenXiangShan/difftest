@@ -22,6 +22,9 @@
 #include "ram.h"
 #include "flash.h"
 #include "refproxy.h"
+#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
+#include "svdpi.h"
+#endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
 static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
@@ -90,19 +93,37 @@ extern "C" int simv_step() {
   }
 }
 
-#ifdef TB_DEFERRED_RESULT
+#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
+svScope deferredResultScope;
+extern "C" void set_deferred_result_scope();
+void set_deferred_result_scope() {
+  deferredResultScope = svGetScope();
+}
+
+extern "C" void set_deferred_result();
+void difftest_deferred_result() {
+  if (deferredResultScope == NULL) {
+    printf("Error: Could not retrieve deferred result scope, set first\n");
+    assert(deferredResultScope);
+  }
+  svSetScope(deferredResultScope);
+  set_deferred_result();
+}
+
 static int simv_result = 0;
 extern "C" void simv_nstep(uint8_t step) {
   if (simv_result)
     return;
   for (int i = 0; i < step; i++) {
     int ret = simv_step();
-    if (ret)
-      simv_result = ret;
+    if (ret) {
+        simv_result = ret;
+        break;
+    }
   }
-}
-extern "C" int simv_result_fetch() {
-  return simv_result;
+  if (simv_result) {
+    difftest_deferred_result();
+  }
 }
 #else
 extern "C" int simv_nstep(uint8_t step) {
@@ -113,4 +134,4 @@ extern "C" int simv_nstep(uint8_t step) {
   }
   return 0;
 }
-#endif // TB_DEFERRED_RESULT
+#endif // CONFIG_DIFFTEST_DEFERRED_RESULT
