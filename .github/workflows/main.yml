@@ -22,9 +22,7 @@ jobs:
       - name: Compile
         run: |
           mill -i design[3.6.0].compile
-          mill -i design[6.0.0-M3].compile
-          mill -i design[6.0.0-RC1].compile
-          mill -i design[6.0.0-RC2].compile
+          mill -i design[6.0.0].compile
 
       - name: Generate Verilog
         run: |
