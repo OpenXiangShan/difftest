@@ -23,7 +23,6 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_gcpt_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
-import "DPI-C" function void set_max_cycles(int mc);
 import "DPI-C" function void set_max_instrs(int mc);
 import "DPI-C" function void get_ipc(longint cycles);
 import "DPI-C" function void simv_init();
@@ -218,6 +217,7 @@ DeferredControl deferred(
 
 reg [63:0] n_cycles;
 reg exit;
+reg trap;
 always @(posedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;

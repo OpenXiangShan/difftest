@@ -65,10 +65,12 @@ extern "C" void set_no_diff() {
   enable_difftest = false;
 }
 
-
 extern "C" void set_max_cycles(long mc) {
-  printf("max cycles:%d\n", mc);
   max_cycles = mc;
+}
+
+extern "C" void set_max_instrs(long mc) {
+  max_instrs = mc;
 }
 
 extern "C" void get_ipc(long cycles) {
@@ -78,11 +80,6 @@ extern "C" void get_ipc(long cycles) {
   double IPC = (double)now_instrs / now_cycles;
   printf("this simpoint CPI = %lf, IPC = %lf, Instrcount %ld, Cycle %ld\n",
    CPI, IPC, now_instrs, now_cycles);
-}
-
-extern "C" void set_max_instrs(long mc) {
-  printf("max instrs:%d\n",mc);
-  max_instrs = mc;
 }
 
 extern "C" void simv_init() {

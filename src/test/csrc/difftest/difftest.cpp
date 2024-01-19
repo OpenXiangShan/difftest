@@ -47,7 +47,6 @@ int init_nemuproxy(size_t ramsize = 0) {
 int difftest_state() {
   for (int i = 0; i < NUM_CORES; i++) {
     if (difftest[i]->get_trap_valid()) {
-      printf("inst count %ld", difftest_commit_sum(i));
       return difftest[i]->get_trap_code();
     }
     if (difftest[i]->proxy && difftest[i]->proxy->get_status()) {
@@ -973,7 +972,6 @@ void Difftest::display() {
   fflush(stdout);
   proxy->ref_reg_display();
   printf("priviledgeMode: %lu\n", dut->csr.priviledgeMode);
-  printf("instr countsum : %ld\n", get_instr_sum());
 }
 
 void CommitTrace::display(bool use_spike) {
