@@ -25,7 +25,7 @@ class LogPerfControl extends Bundle {
   val dump = Bool()
 }
 
-class LogPerfHelper extends BlackBox with HasBlackBoxInline {
+private class LogPerfHelper extends BlackBox with HasBlackBoxInline {
   val io = IO(Output(new LogPerfControl))
 
   val verilog =
@@ -56,5 +56,10 @@ class LogPerfHelper extends BlackBox with HasBlackBoxInline {
 object LogPerfControl {
   def apply(): LogPerfControl = {
     Module(new LogPerfHelper).io
+  }
+
+  private val instances = scala.collection.mutable.ListBuffer.empty[LogPerfControl]
+  def reuse(checker: LogPerfControl => Boolean): LogPerfControl = {
+    instances.find(checker).getOrElse(instances.addOne(apply()).last)
   }
 }
