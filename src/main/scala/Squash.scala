@@ -96,7 +96,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
     // ignore useless unsquashed data when hasGlobalEnable
     val needStore = WireInit(true.B)
     if (config.hasGlobalEnable) {
-      needStore := VecInit(in.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
+      needStore := VecInit(in.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
     }
     when ((should_tick || do_squash.asUInt.orR) && needStore && !control.replay.get) {
       replay_data(replay_ptr) := in

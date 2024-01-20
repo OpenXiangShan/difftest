@@ -56,8 +56,6 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     }
   }
 
-  def needUpdate: Option[Bool] = if (hasValid) Some(getValid) else None
-
   protected val needFlatten: Boolean = false
   def isFlatten: Boolean = hasAddress && this.needFlatten
 
@@ -142,7 +140,6 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs)
 
 class DiffTrapEvent extends TrapEvent with DifftestBundle {
   override val desiredCppName: String = "trap"
-  override def needUpdate: Option[Bool] = Some(hasTrap || hasWFI)
   override def supportsSquashBase: Bool = !hasTrap && !hasWFI
 }
 
