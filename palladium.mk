@@ -10,7 +10,7 @@ PLDM_MACRO_FLAGS 	+= +define+PALLADIUM
 PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_MEM_INIT
 PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_REG_INIT
 PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_DELAY=0
-ifeq ($(RELEASE_WITH_ASSERT), 1)
+ifeq ($(SYNTHESIS), 1)
 PLDM_MACRO_FLAGS 	+= +define+SYNTHESIS +define+TB_NO_DPIC
 else
 PLDM_MACRO_FLAGS 	+= +define+DIFFTEST +define+DISABLE_DIFFTEST_RAM_DPIC +define+DISABLE_SIMJTAG_DPIC
@@ -19,7 +19,7 @@ PLDM_MACRO_FLAGS 	+= $(PLDM_EXTRA_MACRO)
 
 # UA Args
 IXCOM_FLAGS  	 = -clean -64 -ua +sv +ignoreSimVerCheck +xe_alt_xlm
-ifeq ($(RELEASE_WITH_ASSERT), 1)
+ifeq ($(SYNTHESIS), 1)
 IXCOM_FLAGS 	+= +1xua
 else
 IXCOM_FLAGS 	+= +iscDelay+tb_top -enableLargeSizeMem
@@ -31,7 +31,7 @@ IXCOM_FLAGS 	+= +gfifoDisp+tb_top
 IXCOM_FLAGS 	+= $(addprefix -incdir , $(PLDM_VSRC_DIR))
 IXCOM_FLAGS 	+= $(PLDM_MACRO_FLAGS)
 IXCOM_FLAGS 	+= +dut+$(PLDM_TB_TOP)
-ifeq ($(RELEASE_WITH_ASSERT), 1)
+ifeq ($(SYNTHESIS), 1)
 PLDM_CLOCK	 = clock_gen
 PLDM_CLOCK_DEF 	 = $(PLDM_SCRIPTS_DIR)/$(PLDM_CLOCK).xel
 PLDM_CLOCK_SRC 	 = $(PLDM_BUILD_DIR)/$(PLDM_CLOCK).sv
@@ -40,14 +40,14 @@ endif
 
 # Other Args
 IXCOM_FLAGS 	+= -v $(PLDM_IXCOM)/IXCclkgen.sv
-ifneq ($(RELEASE_WITH_ASSERT), 1)
+ifneq ($(SYNTHESIS), 1)
 IXCOM_FLAGS 	+= +rtlCommentPragma +tran_relax -relativeIXCDIR -rtlNameForGenerate
 endif
 IXCOM_FLAGS 	+= +tfconfig+$(PLDM_SCRIPTS_DIR)/argConfigs.qel
 
 # Verilog Files
 PLDM_VSRC_DIR  	 = $(RTL_DIR) $(GEN_VSRC_DIR)
-ifeq ($(RELEASE_WITH_ASSERT), 1)
+ifeq ($(SYNTHESIS), 1)
 PLDM_VSRC_DIR 	+= $(abspath ./src/test/vsrc/vcs) $(abspath ./src/test/vsrc/common/SimJTAG.v)
 else
 PLDM_VSRC_DIR 	+= $(abspath ./src/test/vsrc)
@@ -56,7 +56,7 @@ PLDM_VFILELIST 	 = $(PLDM_BUILD_DIR)/vfiles.f
 IXCOM_FLAGS   	+= -F $(PLDM_VFILELIST)
 
 # VLAN Flags
-ifneq ($(RELEASE_WITH_ASSERT), 1)
+ifneq ($(SYNTHESIS), 1)
 VLAN_FLAGS 	 = -64 -sv
 VLAN_FLAGS 	+= $(addprefix -incdir , $(PLDM_VSRC_DIR))
 VLAN_FLAGS	+= -vtimescale 1ns/1ns
@@ -75,7 +75,7 @@ PLDM_CXXFLAGS 	+= $(SIM_CXXFLAGS) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
 
 # XMSIM Flags
 XMSIM_FLAGS 	 = --xmsim -64 +xcprof -profile -PROFTHREAD
-ifneq ($(RELEASE_WITH_ASSERT), 1)
+ifneq ($(SYNTHESIS), 1)
 XMSIM_FLAGS 	+= -sv_lib ${DPILIB_EMU}
 endif
 XMSIM_FLAGS 	+= $(PLDM_EXTRA_ARGS)
@@ -94,7 +94,7 @@ $(PLDM_CLOCK_SRC): $(PLDM_CLOCK_DEF)
 	ixclkgen -input $(PLDM_CLOCK_DEF) -output $(PLDM_CLOCK_SRC) -module $(PLDM_CLOCK) -hierarchy "$(PLDM_TB_TOP)."
 
 
-ifeq ($(RELEASE_WITH_ASSERT), 1)
+ifeq ($(SYNTHESIS), 1)
 pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(PLDM_CLOCK_SRC)
 	cd $(PLDM_BUILD_DIR) 					&& \
 	ixcom $(IXCOM_FLAGS) -l $(PLDM_BUILD_DIR)/ixcom.log
