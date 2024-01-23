@@ -183,7 +183,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 
   val global_enable = WireInit(true.B)
   if(config.hasGlobalEnable) {
-    global_enable := VecInit(out.filter(_.needUpdate.isDefined).map(_.needUpdate.get).toSeq).asUInt.orR
+    global_enable := VecInit(out.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
   }
 
   val batch_data = Option.when(config.isBatch)(Mem(config.batchSize, out_pack.cloneType))
@@ -243,12 +243,14 @@ object GatewaySink{
   def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): UInt = {
     config.style match {
       case "dpic" => DPIC(gen, config, port)
+      case _ => DPIC(gen, config, port) // Default: DPI-C
     }
   }
 
   def collect(config: GatewayConfig): Unit = {
     config.style match {
       case "dpic" => DPIC.collect()
+      case _ => DPIC.collect() // Default: DPI-C
     }
   }
 }

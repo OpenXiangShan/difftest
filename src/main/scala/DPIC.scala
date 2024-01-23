@@ -16,14 +16,13 @@
 package difftest.dpic
 
 import chisel3._
-import chisel3.experimental.{DataMirror, ExtModule}
+import chisel3.experimental.ExtModule
+import chisel3.reflect.DataMirror
 import chisel3.util._
-import difftest._
-import difftest.gateway.{GatewayConfig, GatewayBundle}
 import difftest.DifftestModule.streamToFile
+import difftest._
+import difftest.gateway.{GatewayBundle, GatewayConfig}
 
-import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ListBuffer
 
 class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
