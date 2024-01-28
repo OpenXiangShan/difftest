@@ -52,7 +52,5 @@ class DifftestTop extends Module {
 }
 
 object DifftestMain extends App {
-  (new ChiselStage).execute(args, Seq(
-      ChiselGeneratorAnnotation(() => new DifftestTop))
-  )
+  (new ChiselStage).execute(args, Seq(ChiselGeneratorAnnotation(() => new DifftestTop)))
 }

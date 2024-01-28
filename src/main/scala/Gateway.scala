@@ -25,17 +25,16 @@ import difftest.squash.Squash
 import scala.collection.mutable.ListBuffer
 
 case class GatewayConfig(
-                        style          : String  = "dpic",
-                        hasGlobalEnable: Boolean = false,
-                        isSquash       : Boolean = false,
-                        squashReplay   : Boolean = false,
-                        replaySize     : Int     = 256,
-                        diffStateSelect: Boolean = false,
-                        isBatch        : Boolean = false,
-                        batchSize      : Int     = 32,
-                        isNonBlock     : Boolean = false,
-                        )
-{
+  style: String = "dpic",
+  hasGlobalEnable: Boolean = false,
+  isSquash: Boolean = false,
+  squashReplay: Boolean = false,
+  replaySize: Int = 256,
+  diffStateSelect: Boolean = false,
+  isBatch: Boolean = false,
+  batchSize: Int = 32,
+  isNonBlock: Boolean = false
+) {
   require(!(diffStateSelect && isBatch))
   if (squashReplay) require(isSquash)
   def hasDutPos: Boolean = diffStateSelect || isBatch
@@ -70,12 +69,12 @@ case class GatewayResult(
   cppMacros: Seq[String] = Seq(),
   vMacros: Seq[String] = Seq(),
   instances: Seq[(DifftestBundle, String)] = Seq(),
-  step: Option[UInt] = None,
+  step: Option[UInt] = None
 )
 
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
-  private var config    = GatewayConfig()
+  private var config = GatewayConfig()
 
   def apply[T <: DifftestBundle](gen: T, style: String): T = {
     config = GatewayConfig(style = style)
@@ -104,15 +103,14 @@ object Gateway {
         cppMacros = config.cppMacros,
         vMacros = config.vMacros,
         instances = endpoint.extraInstances.toSeq,
-        step = Some(endpoint.step),
+        step = Some(endpoint.step)
       )
-    }
-    else {
+    } else {
       GatewaySink.collect(config)
       GatewayResult(
         cppMacros = config.cppMacros,
         vMacros = config.vMacros,
-        step = Some(1.U),
+        step = Some(1.U)
       )
     }
   }
@@ -181,8 +179,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     val traceinfo = out.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
     traceinfo.coreid := out.filter(_.isUniqueIdentifier).head.coreid
     traceinfo.squash_idx.get := squash_idx.get
-  }
-  else {
+  } else {
     out := squashed
   }
 
@@ -195,13 +192,13 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   val ports = Seq.fill(port_num)(Wire(new GatewayBundle(config)))
 
   val global_enable = WireInit(true.B)
-  if(config.hasGlobalEnable) {
+  if (config.hasGlobalEnable) {
     global_enable := VecInit(out.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
   }
 
   val batch_data = Option.when(config.isBatch)(Mem(config.batchSize, out_pack.cloneType))
   val enable = WireInit(false.B)
-  if(config.isBatch) {
+  if (config.isBatch) {
     val batch_ptr = RegInit(0.U(log2Ceil(config.batchSize).W))
     when(global_enable) {
       batch_ptr := batch_ptr + 1.U
@@ -212,13 +209,12 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     }
     val do_batch_sync = batch_ptr === (config.batchSize - 1).U && global_enable
     enable := RegNext(do_batch_sync)
-  }
-  else{
+  } else {
     enable := global_enable
   }
   ports.foreach(port => port.enable := enable)
 
-  if(config.diffStateSelect) {
+  if (config.diffStateSelect) {
     val select = RegInit(false.B)
     when(global_enable) {
       select := !select
@@ -232,13 +228,12 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   if (config.isBatch) {
     for (ptr <- 0 until config.batchSize) {
       ports(ptr).dut_pos.get := ptr.asUInt
-      for(id <- 0 until out.length) {
+      for (id <- 0 until out.length) {
         GatewaySink(out(id).cloneType, config, ports(ptr)) := batch_data.get(ptr)(id)
       }
     }
-  }
-  else {
-    for(id <- 0 until out.length){
+  } else {
+    for (id <- 0 until out.length) {
       GatewaySink(out(id).cloneType, config, ports.head) := out_pack(id)
     }
   }
@@ -251,19 +246,18 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   }
 }
 
-
-object GatewaySink{
+object GatewaySink {
   def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): UInt = {
     config.style match {
       case "dpic" => DPIC(gen, config, port)
-      case _ => DPIC(gen, config, port) // Default: DPI-C
+      case _      => DPIC(gen, config, port) // Default: DPI-C
     }
   }
 
   def collect(config: GatewayConfig): Unit = {
     config.style match {
       case "dpic" => DPIC.collect()
-      case _ => DPIC.collect() // Default: DPI-C
+      case _      => DPIC.collect() // Default: DPI-C
     }
   }
 }

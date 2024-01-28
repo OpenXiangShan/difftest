@@ -52,7 +52,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   def getIndex: Option[UInt] = {
     this match {
       case b: DifftestWithIndex => Some(b.index)
-      case _ => None
+      case _                    => None
     }
   }
 
@@ -63,11 +63,12 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   def diffElements: Seq[(String, Seq[UInt])] = {
     val filteredElements = Seq("clock", "coreid", "index")
     val raw = elements.toSeq.reverse.filterNot(e => filteredElements.contains(e._1))
-    raw.map{ case (s, data) =>
+    raw.map { case (s, data) =>
       data match {
         case v: Vec[_] => (s, Some(v.asInstanceOf[Vec[UInt]]))
-        case u: UInt => (s, Some(Seq(u)))
-        case _ => println(s"Unknown type: ($s, $data)")
+        case u: UInt   => (s, Some(Seq(u)))
+        case _ =>
+          println(s"Unknown type: ($s, $data)")
           (s, None)
       }
     }.map(x => (x._1, x._2.get))
@@ -112,10 +113,7 @@ class DiffArchEvent extends ArchEvent with DifftestBundle {
   override val desiredCppName: String = "event"
 }
 
-class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs)
-  with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "commit"
 
   private val maxNumFused = 255
@@ -131,7 +129,7 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs)
     val that = base.asInstanceOf[DiffInstrCommit]
     val squashed = WireInit(Mux(valid, this, that))
     squashed.valid := valid || that.valid
-    when (valid && that.valid) {
+    when(valid && that.valid) {
       squashed.nFused := nFused + that.nFused + 1.U
     }
     squashed
@@ -170,7 +168,8 @@ class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredOffset: Int = 0
 }
 
-abstract class DiffArchDelayedUpdate(numRegs: Int) extends ArchDelayedUpdate(numRegs)
+abstract class DiffArchDelayedUpdate(numRegs: Int)
+  extends ArchDelayedUpdate(numRegs)
   with DifftestBundle
   with DifftestWithIndex
 
@@ -197,21 +196,15 @@ class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val desiredOffset: Int = 5
 }
 
-class DiffSbufferEvent extends SbufferEvent with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
 }
 
-class DiffStoreEvent extends StoreEvent with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "store"
 }
 
-class DiffLoadEvent extends LoadEvent with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "load"
   // TODO: currently we assume it can be dropped
   override def supportsSquashBase: Bool = true.B
@@ -221,25 +214,19 @@ class DiffAtomicEvent extends AtomicEvent with DifftestBundle {
   override val desiredCppName: String = "atomic"
 }
 
-class DiffL1TLBEvent extends L1TLBEvent with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffL1TLBEvent extends L1TLBEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "l1tlb"
   // TODO: currently we assume it can be dropped
   override def supportsSquashBase: Bool = true.B
 }
 
-class DiffL2TLBEvent extends L2TLBEvent with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffL2TLBEvent extends L2TLBEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "l2tlb"
   // TODO: currently we assume it can be dropped
   override def supportsSquashBase: Bool = true.B
 }
 
-class DiffRefillEvent extends RefillEvent with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffRefillEvent extends RefillEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "refill"
   // TODO: currently we assume it can be dropped
   override def supportsSquashBase: Bool = true.B
@@ -249,15 +236,11 @@ class DiffLrScEvent extends ScEvent with DifftestBundle {
   override val desiredCppName: String = "lrsc"
 }
 
-class DiffRunaheadEvent extends RunaheadEvent with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffRunaheadEvent extends RunaheadEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "runahead"
 }
 
-class DiffRunaheadCommitEvent extends RunaheadEvent with DifftestBundle
-  with DifftestWithIndex
-{
+class DiffRunaheadCommitEvent extends RunaheadEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "runahead_commit"
 }
 
@@ -280,10 +263,10 @@ object DifftestModule {
   private val vMacros = ListBuffer.empty[String]
 
   def apply[T <: DifftestBundle](
-    gen:      T,
-    style:    String  = "dpic",
+    gen: T,
+    style: String = "dpic",
     dontCare: Boolean = false,
-    delay:    Int     = 0,
+    delay: Int = 0
   ): T = {
     val difftest: T = Wire(gen)
     if (enabled) {
@@ -318,8 +301,7 @@ object DifftestModule {
 
     if (enabled) {
       createTopIOs(gateway.step.getOrElse(0.U))
-    }
-    else {
+    } else {
       WireInit(0.U.asTypeOf(new DifftestTopIO))
     }
   }
@@ -368,22 +350,24 @@ object DifftestModule {
 
     val uniqBundles = headerInstances.groupBy(_._1.desiredModuleName)
     // Create cpp declaration for each bundle type
-    uniqBundles.values.map(_.map(_._1)).foreach(bundles => {
-      val bundleType = bundles.head
-      difftestCpp += bundleType.toCppDeclMacro
-      val macroName = bundleType.desiredCppName.toUpperCase
-      if (bundleType.isInstanceOf[DifftestWithIndex]) {
-        val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
-        require(bundles.length % numCores == 0, s"Cores seem to have different # of ${macroName}")
-        difftestCpp += s"#define $configWidthName ${bundles.length / numCores}"
-      }
-      if (bundleType.isFlatten) {
-        val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
-        difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
-      }
-      difftestCpp += bundleType.toCppDeclaration
-      difftestCpp += ""
-    })
+    uniqBundles.values
+      .map(_.map(_._1))
+      .foreach(bundles => {
+        val bundleType = bundles.head
+        difftestCpp += bundleType.toCppDeclMacro
+        val macroName = bundleType.desiredCppName.toUpperCase
+        if (bundleType.isInstanceOf[DifftestWithIndex]) {
+          val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
+          require(bundles.length % numCores == 0, s"Cores seem to have different # of ${macroName}")
+          difftestCpp += s"#define $configWidthName ${bundles.length / numCores}"
+        }
+        if (bundleType.isFlatten) {
+          val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
+          difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
+        }
+        difftestCpp += bundleType.toCppDeclaration
+        difftestCpp += ""
+      })
 
     // create top-level difftest struct
     difftestCpp += "typedef struct {"
@@ -451,8 +435,7 @@ object Delayer {
       val delayer = Module(new Delayer(gen, n_cycles))
       delayer.i := gen
       delayer.o
-    }
-    else {
+    } else {
       gen
     }
   }
