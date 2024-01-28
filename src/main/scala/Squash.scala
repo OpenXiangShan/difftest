@@ -22,16 +22,16 @@ import difftest._
 import difftest.gateway.GatewayConfig
 
 object Squash {
-  def apply[T <: Seq[DifftestBundle]](bundles: T, config: GatewayConfig): SquashEndpoint = {
-    val module = Module(new SquashEndpoint(bundles, config))
-    module
+  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[DifftestBundle] = {
+    val module = Module(new SquashEndpoint(bundles.toSeq.map(_.cloneType), config))
+    module.in := bundles
+    module.out
   }
 }
 
 class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val out = IO(Output(MixedVec(bundles)))
-  val idx = Option.when(config.squashReplay)(IO(Output(UInt(log2Ceil(config.replaySize).W))))
 
   val state = RegInit(0.U.asTypeOf(MixedVec(bundles)))
 
@@ -123,8 +123,9 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
         }
       }
     }
-    idx.get := Mux(in_replay, control.replay_idx.get, squash_idx)
     out := Mux(in_replay, replay_data(replay_ptr), squashed)
+    val info = out.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
+    info.squash_idx.get := Mux(in_replay, control.replay_idx.get, squash_idx)
   } else {
     out := squashed
   }
