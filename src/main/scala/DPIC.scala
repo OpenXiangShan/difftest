@@ -21,7 +21,7 @@ import chisel3.reflect.DataMirror
 import chisel3.util._
 import difftest.DifftestModule.streamToFile
 import difftest._
-import difftest.gateway.{GatewayBundle, GatewayConfig}
+import difftest.gateway.{GatewayConfig, GatewaySink, GatewayBatchSink}
 
 import scala.collection.mutable.ListBuffer
 
@@ -32,7 +32,8 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
   val io = IO(Input(gen))
-  val dut_pos = Option.when(config.hasDutPos)(IO(Input(UInt(config.dutPosWidth.W))))
+  val dut_zone = Option.when(config.hasDutZone)(IO(Input(UInt(config.dutZoneWidth.W))))
+  val dut_pos = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -64,7 +65,10 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
   val dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
   val modPorts: Seq[Seq[(String, Data)]] = {
     val common = ListBuffer(Seq(("clock", clock)), Seq(("enable", enable)))
-    if (config.hasDutPos) {
+    if (config.hasDutZone) {
+      common += Seq(("dut_zone", dut_zone.get))
+    }
+    if (config.isBatch) {
       common += Seq(("dut_pos", dut_pos.get))
     }
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
@@ -84,7 +88,8 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
   val dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
       ((_: DifftestBundle) => true, Seq("io_coreid")),
-      ((_: DifftestBundle) => config.hasDutPos, Seq("dut_pos")),
+      ((_: DifftestBundle) => config.hasDutZone, Seq("dut_zone")),
+      ((_: DifftestBundle) => config.isBatch, Seq("dut_pos")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address"))
     )
@@ -105,8 +110,9 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
        |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
   val dpicFunc: String = {
-    val dut_pos = if (config.hasDutPos) "dut_pos" else "0"
-    val packet = s"DUT_BUF(io_coreid,$dut_pos)->${gen.desiredCppName}"
+    val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
+    val dut_pos = if (config.isBatch) "dut_pos" else "0"
+    val packet = s"DUT_BUF(io_coreid,$dut_zone,$dut_pos)->${gen.desiredCppName}"
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
        |$dpicFuncProto {
@@ -160,33 +166,49 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends Module {
-  val io = IO(Input(UInt(gen.getWidth.W)))
-  val enable = IO(Input(Bool()))
-  val dut_pos = Option.when(config.hasDutPos)(IO(Input(UInt(config.dutPosWidth.W))))
-
-  val unpack = io.asTypeOf(gen)
+private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends GatewaySink(gen, config) {
   val dpic = Module(new DPIC(gen, config))
   dpic.clock := clock
-  dpic.enable := unpack.bits.getValid && enable
-  if (config.hasDutPos) dpic.dut_pos.get := dut_pos.get
-  dpic.io := unpack
+  dpic.enable := io.bits.getValid && enable
+  dpic.io := io
+  if (config.hasDutZone) dpic.dut_zone.get := dut_zone.get
+}
+
+private class DummyDPICBatchWrapper[T <: Seq[DifftestBundle]](bundles: T, config: GatewayConfig) extends GatewayBatchSink(bundles, config) {
+  val interfaces = ListBuffer.empty[(String, String, String)]
+  for ((group, ifo) <- io.zip(info)) {
+    for (gen <- group) {
+      val dpic = Module(new DPIC(gen.cloneType, config))
+      dpic.clock := clock
+      dpic.enable := gen.bits.getValid && enable
+      dpic.io := gen
+      if (config.hasDutZone) dpic.dut_zone.get := dut_zone.get
+      dpic.dut_pos.get := ifo
+      if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
+        val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
+        interfaces += interface
+      }
+    }
+  }
 }
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
 
-  def apply[T <: DifftestBundle](gen: T, config: GatewayConfig, port: GatewayBundle): UInt = {
+  def apply[T <: DifftestBundle](gen: T, config: GatewayConfig): GatewaySink[T] = {
     val module = Module(new DummyDPICWrapper(gen, config))
-    module.enable := port.enable
-    if (config.hasDutPos) module.dut_pos.get := port.dut_pos.get
-
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-    module.io
+    module
+  }
+
+  def batch[T <: Seq[DifftestBundle]](bundles: T, config: GatewayConfig): GatewayBatchSink[T] = {
+    val module = Module(new DummyDPICBatchWrapper(bundles, config))
+    interfaces ++= module.interfaces.toSeq
+    module
   }
 
   def collect(): Unit = {
@@ -205,19 +227,29 @@ object DPIC {
       """
         |class DPICBuffer : public DiffStateBuffer {
         |private:
-        |  DiffTestState buffer[CONFIG_DIFFTEST_BUFLEN];
+        |  DiffTestState buffer[CONFIG_DIFFTEST_ZONESIZE][CONFIG_DIFFTEST_BUFLEN];
         |  int read_ptr = 0;
+        |  int zone_ptr = 0;
+        |  bool init = true;
         |public:
         |  DPICBuffer() {
         |    memset(buffer, 0, sizeof(buffer));
         |  }
-        |  inline DiffTestState* get(int pos) {
-        |    return buffer+pos;
+        |  inline DiffTestState* get(int zone, int pos) {
+        |    return buffer[zone]+pos;
         |  }
         |  inline DiffTestState* next() {
-        |    DiffTestState* ret = buffer+read_ptr;
-        |    read_ptr = (read_ptr + 1) % CONFIG_DIFFTEST_BUFLEN;
+        |    DiffTestState* ret = buffer[zone_ptr]+read_ptr;
+        |    read_ptr = read_ptr + 1;
         |    return ret;
+        |  }
+        |  inline void switch_zone() {
+        |    if (init) {
+        |      init = false;
+        |      return;
+        |    }
+        |    zone_ptr = (zone_ptr + 1) % CONFIG_DIFFTEST_ZONESIZE;
+        |    read_ptr = 0;
         |  }
         |};
         |""".stripMargin
@@ -236,7 +268,7 @@ object DPIC {
     interfaceCpp +=
       s"""
          |DiffStateBuffer** diffstate_buffer = nullptr;
-         |#define DUT_BUF(core_id,pos) (diffstate_buffer[core_id]->get(pos))
+         |#define DUT_BUF(core_id,zone,pos) (diffstate_buffer[core_id]->get(zone,pos))
          |
          |void diffstate_buffer_init() {
          |  diffstate_buffer = new DiffStateBuffer*[NUM_CORES];

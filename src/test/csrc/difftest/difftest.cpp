@@ -32,7 +32,7 @@ int difftest_init() {
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
-    difftest[i]->dut = diffstate_buffer[i]->get(0);
+    difftest[i]->dut = diffstate_buffer[i]->get(0, 0);
   }
   return 0;
 }
@@ -58,6 +58,7 @@ int difftest_state() {
 
 int difftest_nstep(int step){
   int last_trap_code = STATE_RUNNING;
+  difftest_switch_zone();
   for(int i = 0; i < step; i++){
     if(difftest_step()){
       last_trap_code = STATE_ABORT;
@@ -70,6 +71,11 @@ int difftest_nstep(int step){
   return last_trap_code;
 }
 
+void difftest_switch_zone() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    diffstate_buffer[i]->switch_zone();
+  }
+}
 int difftest_step() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->dut = diffstate_buffer[i]->next();
