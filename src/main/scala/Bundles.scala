@@ -63,7 +63,7 @@ class ArchEvent extends DifftestBaseBundle with HasValid {
   val exceptionInst = UInt(32.W)
 }
 
-class InstrCommit(val numPhyRegs: Int) extends DifftestBaseBundle with HasValid {
+class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasValid {
   val skip = Bool()
   val isRVC = Bool()
   val rfwen = Bool()
@@ -126,6 +126,12 @@ class CSRState extends DifftestBaseBundle {
   val sscratch = UInt(64.W)
   val mideleg = UInt(64.W)
   val medeleg = UInt(64.W)
+
+  def toSeq: Seq[UInt] = getElements.map(_.asUInt)
+  def names: Seq[String] = elements.keys.toSeq
+
+  def ===(that: CSRState): Bool = VecInit(toSeq.zip(that.toSeq).map(v => v._1 === v._2)).asUInt.andR
+  def =/=(that: CSRState): Bool = VecInit(toSeq.zip(that.toSeq).map(v => v._1 =/= v._2)).asUInt.orR
 }
 
 class DebugModeCSRState extends DifftestBaseBundle {
@@ -142,10 +148,33 @@ class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasVal
 
 class ArchIntRegState extends DifftestBaseBundle {
   val value = Vec(32, UInt(64.W))
+
+  def apply(i: UInt): UInt = value(i(4, 0))
+  def apply(i: Int): UInt = value(i)
+
+  def toSeq: Seq[UInt] = value
+  def names: Seq[String] = Seq(
+    "$0", "ra", "sp",  "gp",  "tp", "t0", "t1", "t2",
+    "s0", "s1", "a0",  "a1",  "a2", "a3", "a4", "a5",
+    "a6", "a7", "s2",  "s3",  "s4", "s5", "s6", "s7",
+    "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"
+  )
+
+  def ===(that: ArchIntRegState): Bool = {
+    VecInit(value.zip(that.value).map(v => v._1 === v._2)).asUInt.andR
+  }
+  def =/=(that: ArchIntRegState): Bool = {
+    VecInit(value.zip(that.value).map(v => v._1 =/= v._2)).asUInt.orR
+  }
 }
 
-class ArchFpRegState extends DifftestBaseBundle {
-  val value = Vec(32, UInt(64.W))
+class ArchFpRegState extends ArchIntRegState {
+  override def names: Seq[String] = Seq(
+    "ft0", "ft1", "ft2",  "ft3",  "ft4", "ft5", "ft6",  "ft7",
+    "fs0", "fs1", "fa0",  "fa1",  "fa2", "fa3", "fa4",  "fa5",
+    "fa6", "fa7", "fs2",  "fs3",  "fs4", "fs5", "fs6",  "fs7",
+    "fs8", "fs9", "fs10", "fs11", "ft8", "ft9", "ft10", "ft11"
+  )
 }
 
 class ArchVecRegState extends DifftestBaseBundle {
