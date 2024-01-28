@@ -31,10 +31,11 @@ sealed trait HasAddress { this: HasValid =>
 
 sealed trait DifftestBaseBundle extends Bundle {
   def hasValid: Boolean = this.isInstanceOf[HasValid]
-  def getValid: Bool = {
+  def getValid: Bool = getValidOption.getOrElse(true.B)
+  def getValidOption: Option[Bool] = {
     this match {
-      case b: HasValid => b.valid
-      case _ => true.B
+      case b: HasValid => Some(b.valid)
+      case _ => None
     }
   }
 
