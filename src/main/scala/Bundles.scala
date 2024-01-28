@@ -35,7 +35,7 @@ sealed trait DifftestBaseBundle extends Bundle {
   def getValidOption: Option[Bool] = {
     this match {
       case b: HasValid => Some(b.valid)
-      case _ => None
+      case _           => None
     }
   }
 
@@ -51,7 +51,7 @@ sealed trait DifftestBaseBundle extends Bundle {
   def getNumElements: Int = {
     this match {
       case b: HasAddress => b.numElements
-      case _ => 0
+      case _             => 0
     }
   }
 }
@@ -84,7 +84,7 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
 
   def setSpecial(
     isDelayedWb: Bool = false.B,
-    isExit: Bool = false.B,
+    isExit: Bool = false.B
   ): Unit = {
     special := Cat(isExit, isDelayedWb)
   }
@@ -143,7 +143,7 @@ class DebugModeCSRState extends DifftestBaseBundle {
 }
 
 class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
-  val data  = UInt(64.W)
+  val data = UInt(64.W)
 }
 
 class ArchIntRegState extends DifftestBaseBundle {
@@ -154,10 +154,8 @@ class ArchIntRegState extends DifftestBaseBundle {
 
   def toSeq: Seq[UInt] = value
   def names: Seq[String] = Seq(
-    "$0", "ra", "sp",  "gp",  "tp", "t0", "t1", "t2",
-    "s0", "s1", "a0",  "a1",  "a2", "a3", "a4", "a5",
-    "a6", "a7", "s2",  "s3",  "s4", "s5", "s6", "s7",
-    "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"
+    "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "s2",
+    "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"
   )
 
   def ===(that: ArchIntRegState): Bool = {
@@ -170,10 +168,8 @@ class ArchIntRegState extends DifftestBaseBundle {
 
 class ArchFpRegState extends ArchIntRegState {
   override def names: Seq[String] = Seq(
-    "ft0", "ft1", "ft2",  "ft3",  "ft4", "ft5", "ft6",  "ft7",
-    "fs0", "fs1", "fa0",  "fa1",  "fa2", "fa3", "fa4",  "fa5",
-    "fa6", "fa7", "fs2",  "fs3",  "fs4", "fs5", "fs6",  "fs7",
-    "fs8", "fs9", "fs10", "fs11", "ft8", "ft9", "ft10", "ft11"
+    "ft0", "ft1", "ft2", "ft3", "ft4", "ft5", "ft6", "ft7", "fs0", "fs1", "fa0", "fa1", "fa2", "fa3", "fa4", "fa5",
+    "fa6", "fa7", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7", "fs8", "fs9", "fs10", "fs11", "ft8", "ft9", "ft10", "ft11"
   )
 }
 

@@ -14,9 +14,7 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-ifndef NOOP_HOME
-$(error NOOP_HOME is not set)
-endif
+NOOP_HOME  ?= $(abspath .)
 
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
@@ -194,4 +192,7 @@ include palladium.mk
 clean: vcs-clean pldm-clean
 	rm -rf $(BUILD_DIR)
 
-.PHONY: sim-verilog emu difftest_verilog clean
+format:
+	mill -i mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
+
+.PHONY: sim-verilog emu difftest_verilog clean format

@@ -25,7 +25,8 @@ import difftest.gateway.{GatewayBundle, GatewayConfig}
 
 import scala.collection.mutable.ListBuffer
 
-class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
+class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
+  extends ExtModule
   with HasExtModuleInline
   with DifftestModule[T] {
   val clock = IO(Input(Clock()))
@@ -39,16 +40,15 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
 
   def getDPICArgString(argName: String, data: Data, isC: Boolean): String = {
     val typeString = data.getWidth match {
-      case 1                                  => if (isC) "uint8_t"  else "bit"
-      case width if width > 1  && width <= 8  => if (isC) "uint8_t"  else "byte"
-      case width if width > 8  && width <= 32 => if (isC) "uint32_t" else "int"
+      case 1                                  => if (isC) "uint8_t" else "bit"
+      case width if width > 1 && width <= 8   => if (isC) "uint8_t" else "byte"
+      case width if width > 8 && width <= 32  => if (isC) "uint32_t" else "int"
       case width if width > 32 && width <= 64 => if (isC) "uint64_t" else "longint"
-      case _ => s"unsupported io type of width ${data.getWidth}!!\n"
+      case _                                  => s"unsupported io type of width ${data.getWidth}!!\n"
     }
     if (isC) {
       f"$typeString%-8s $argName"
-    }
-    else {
+    } else {
       val directionString = getDirectionString(data)
       f"$directionString $typeString%8s $argName"
     }
@@ -69,10 +69,10 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
     }
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
-    common.toSeq ++ io.elements.toSeq.reverse.map{ case (name, data) =>
+    common.toSeq ++ io.elements.toSeq.reverse.map { case (name, data) =>
       data match {
         case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
-        case _ => Seq((s"io_$name", data))
+        case _           => Seq((s"io_$name", data))
       }
     }
   }
@@ -86,14 +86,16 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
       ((_: DifftestBundle) => true, Seq("io_coreid")),
       ((_: DifftestBundle) => config.hasDutPos, Seq("dut_pos")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
-      ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
+      ((x: DifftestBundle) => x.isFlatten, Seq("io_address"))
     )
     val rhs = dpicFuncArgs.map(_.map(_._1).filterNot(s => filters.exists(f => f._1(gen) && f._2.contains(s))))
-    val lhs = rhs.map(_.map(_.replace("io_", ""))).flatMap(r =>
-      if (r.length == 1) r
-      else r.map(x => x.slice(0, x.lastIndexOf('_')) + s"[${x.split('_').last}]")
-    )
-    val body = lhs.zip(rhs.flatten).map{ case (l, r) => s"packet->$l = $r;" }
+    val lhs = rhs
+      .map(_.map(_.replace("io_", "")))
+      .flatMap(r =>
+        if (r.length == 1) r
+        else r.map(x => x.slice(0, x.lastIndexOf('_')) + s"[${x.split('_').last}]")
+      )
+    val body = lhs.zip(rhs.flatten).map { case (l, r) => s"packet->$l = $r;" }
     val validAssign = if (!gen.bits.hasValid || gen.isFlatten) Seq() else Seq("packet->valid = true;")
     validAssign ++ body
   }
@@ -117,7 +119,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends ExtModule
 
   val moduleBody: String = {
     val dpicDecl =
-    // (1) DPI-C function prototype
+      // (1) DPI-C function prototype
       s"""
          |import "DPI-C" function void $dpicFuncName (
          |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, false)).mkString(",\n  ")}
@@ -201,24 +203,24 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp +=
       """
-         |class DPICBuffer : public DiffStateBuffer {
-         |private:
-         |  DiffTestState buffer[CONFIG_DIFFTEST_BUFLEN];
-         |  int read_ptr = 0;
-         |public:
-         |  DPICBuffer() {
-         |    memset(buffer, 0, sizeof(buffer));
-         |  }
-         |  inline DiffTestState* get(int pos) {
-         |    return buffer+pos;
-         |  }
-         |  inline DiffTestState* next() {
-         |    DiffTestState* ret = buffer+read_ptr;
-         |    read_ptr = (read_ptr + 1) % CONFIG_DIFFTEST_BUFLEN;
-         |    return ret;
-         |  }
-         |};
-         |""".stripMargin
+        |class DPICBuffer : public DiffStateBuffer {
+        |private:
+        |  DiffTestState buffer[CONFIG_DIFFTEST_BUFLEN];
+        |  int read_ptr = 0;
+        |public:
+        |  DPICBuffer() {
+        |    memset(buffer, 0, sizeof(buffer));
+        |  }
+        |  inline DiffTestState* get(int pos) {
+        |    return buffer+pos;
+        |  }
+        |  inline DiffTestState* next() {
+        |    DiffTestState* ret = buffer+read_ptr;
+        |    read_ptr = (read_ptr + 1) % CONFIG_DIFFTEST_BUFLEN;
+        |    return ret;
+        |  }
+        |};
+        |""".stripMargin
     interfaceCpp += interfaces.map(_._2 + ";").mkString("\n")
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"

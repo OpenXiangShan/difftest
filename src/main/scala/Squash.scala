@@ -38,13 +38,13 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   // Mark the initial commit events as non-squashable for initial state synchronization.
   val hasValidCommitEvent = VecInit(state.filter(_.desiredCppName == "commit").map(_.bits.getValid).toSeq).asUInt.orR
   val isInitialEvent = RegInit(true.B)
-  when (isInitialEvent && hasValidCommitEvent) {
+  when(isInitialEvent && hasValidCommitEvent) {
     isInitialEvent := false.B
   }
   val tick_first_commit = isInitialEvent && hasValidCommitEvent
 
   // If one of the bundles cannot be squashed, the others are not squashed as well.
-  val supportsSquashVec = VecInit(in.zip(state).map{ case (i, s) => i.supportsSquash(s) }.toSeq)
+  val supportsSquashVec = VecInit(in.zip(state).map { case (i, s) => i.supportsSquash(s) }.toSeq)
   val supportsSquash = supportsSquashVec.asUInt.andR
 
   // If one of the bundles cannot be the new base, the others are not as well.
@@ -61,21 +61,25 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
 
   // Sometimes, the bundle may have squash dependencies.
   val do_squash = WireInit(VecInit.fill(in.length)(true.B))
-  in.zip(do_squash).foreach{ case (i, do_m) =>
+  in.zip(do_squash).foreach { case (i, do_m) =>
     if (i.squashDependency.nonEmpty) {
-      do_m := VecInit(in.filter(b => i.squashDependency.contains(b.desiredCppName)).map(bundle => {
-        // Only if the corresponding bundle is valid, we update this bundle
-        bundle.coreid === i.coreid && bundle.asInstanceOf[DifftestBaseBundle].getValid
-      }).toSeq).asUInt.orR
+      do_m := VecInit(
+        in.filter(b => i.squashDependency.contains(b.desiredCppName))
+          .map(bundle => {
+            // Only if the corresponding bundle is valid, we update this bundle
+            bundle.coreid === i.coreid && bundle.asInstanceOf[DifftestBaseBundle].getValid
+          })
+          .toSeq
+      ).asUInt.orR
     }
   }
 
   for (((i, d), s) <- in.zip(do_squash).zip(state)) {
-      when (should_tick) {
-        s := i
-      }.elsewhen (d) {
-        s := i.squash(s)
-      }
+    when(should_tick) {
+      s := i
+    }.elsewhen(d) {
+      s := i.squash(s)
+    }
   }
 
   if (config.squashReplay) {
@@ -87,7 +91,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
     val squash_idx = RegInit(0.U(log2Ceil(config.replaySize).W))
 
     // write
-    when (should_tick & !control.replay.get) {
+    when(should_tick & !control.replay.get) {
       // record position of first unsquashed data
       val next_squash_idx = Mux(squash_idx === (config.replaySize - 1).U, 0.U, squash_idx + 1.U)
       replay_table(next_squash_idx) := replay_ptr
@@ -98,31 +102,30 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
     if (config.hasGlobalEnable) {
       needStore := VecInit(in.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
     }
-    when ((should_tick || do_squash.asUInt.orR) && needStore && !control.replay.get) {
+    when((should_tick || do_squash.asUInt.orR) && needStore && !control.replay.get) {
       replay_data(replay_ptr) := in
       replay_ptr := replay_ptr + 1.U
-      when (replay_ptr === (config.replaySize - 1).U) {
+      when(replay_ptr === (config.replaySize - 1).U) {
         replay_ptr := 0.U
       }
     }
 
     // read
     val in_replay = RegInit(false.B) // indicates ptr in correct replay pos
-    when (control.replay.get) {
-      when (!in_replay) {
+    when(control.replay.get) {
+      when(!in_replay) {
         in_replay := true.B
         replay_ptr := replay_table(control.replay_idx.get) // position of first corresponding unsquashed data
       }.otherwise {
         replay_ptr := replay_ptr + 1.U
-        when (replay_ptr === (config.replaySize - 1).U) {
+        when(replay_ptr === (config.replaySize - 1).U) {
           replay_ptr := 0.U
         }
       }
     }
     idx.get := Mux(in_replay, control.replay_idx.get, squash_idx)
     out := Mux(in_replay, replay_data(replay_ptr), squashed)
-  }
-  else {
+  } else {
     out := squashed
   }
 }
@@ -134,77 +137,81 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
   val replay = Option.when(config.squashReplay)(IO(Output(Bool())))
   val replay_idx = Option.when(config.squashReplay)(IO(Output(UInt(log2Ceil(config.replaySize).W))))
 
-  val replay_port = if (config.squashReplay)
-    s"""
-       |  output reg replay,
-       |  output reg [${log2Ceil(config.replaySize) - 1}:0] replay_idx,
-       |""".stripMargin
+  val replay_port =
+    if (config.squashReplay)
+      s"""
+         |  output reg replay,
+         |  output reg [${log2Ceil(config.replaySize) - 1}:0] replay_idx,
+         |""".stripMargin
     else ""
-  val replay_init = if (config.squashReplay)
-    s"""
-       |  replay = 1'b0;
-       |  replay_idx = ${log2Ceil(config.replaySize)}'b0;
-       |""".stripMargin
+  val replay_init =
+    if (config.squashReplay)
+      s"""
+         |  replay = 1'b0;
+         |  replay_idx = ${log2Ceil(config.replaySize)}'b0;
+         |""".stripMargin
     else ""
-  val replay_task = if (config.squashReplay)
-    """
-      |export "DPI-C" task set_squash_replay;
-      |task set_squash_replay(int idx);
-      |  replay = 1'b1;
-      |  replay_idx = idx;
-      |endtask
-      |""".stripMargin
+  val replay_task =
+    if (config.squashReplay)
+      """
+        |export "DPI-C" task set_squash_replay;
+        |task set_squash_replay(int idx);
+        |  replay = 1'b1;
+        |  replay_idx = idx;
+        |endtask
+        |""".stripMargin
     else ""
 
-  setInline("SquashControl.v",
+  setInline(
+    "SquashControl.v",
     s"""
-      |`include "DifftestMacros.v"
-      |module SquashControl(
-      |  input clock,
-      |  input reset,
-      |$replay_port
-      |  output reg enable
-      |);
-      |
-      |import "DPI-C" context function void set_squash_scope();
-      |
-      |initial begin
-      |  set_squash_scope();
-      |  enable = 1'b1;
-      |$replay_init
-      |end
-      |
-      |// For the C/C++ interface
-      |export "DPI-C" task set_squash_enable;
-      |task set_squash_enable(int en);
-      |  enable = en;
-      |endtask
-      |$replay_task
-      |
-      |// For the simulation argument +squash_cycles=N
-      |reg [63:0] squash_cycles;
-      |initial begin
-      |  if ($$test$$plusargs("squash-cycles")) begin
-      |    $$value$$plusargs("squash-cycles=%d", squash_cycles);
-      |    $$display("set squash cycles: %d", squash_cycles);
-      |  end
-      |end
-      |
-      |reg [63:0] n_cycles;
-      |always @(posedge clock) begin
-      |  if (reset) begin
-      |    n_cycles <= 64'h0;
-      |  end
-      |  else begin
-      |    n_cycles <= n_cycles + 64'h1;
-      |    if (squash_cycles > 0 && n_cycles >= squash_cycles) begin
-      |      enable = 0;
-      |    end
-      |  end
-      |end
-      |
-      |
-      |endmodule;
-      |""".stripMargin
+       |`include "DifftestMacros.v"
+       |module SquashControl(
+       |  input clock,
+       |  input reset,
+       |$replay_port
+       |  output reg enable
+       |);
+       |
+       |import "DPI-C" context function void set_squash_scope();
+       |
+       |initial begin
+       |  set_squash_scope();
+       |  enable = 1'b1;
+       |$replay_init
+       |end
+       |
+       |// For the C/C++ interface
+       |export "DPI-C" task set_squash_enable;
+       |task set_squash_enable(int en);
+       |  enable = en;
+       |endtask
+       |$replay_task
+       |
+       |// For the simulation argument +squash_cycles=N
+       |reg [63:0] squash_cycles;
+       |initial begin
+       |  if ($$test$$plusargs("squash-cycles")) begin
+       |    $$value$$plusargs("squash-cycles=%d", squash_cycles);
+       |    $$display("set squash cycles: %d", squash_cycles);
+       |  end
+       |end
+       |
+       |reg [63:0] n_cycles;
+       |always @(posedge clock) begin
+       |  if (reset) begin
+       |    n_cycles <= 64'h0;
+       |  end
+       |  else begin
+       |    n_cycles <= n_cycles + 64'h1;
+       |    if (squash_cycles > 0 && n_cycles >= squash_cycles) begin
+       |      enable = 0;
+       |    end
+       |  end
+       |end
+       |
+       |
+       |endmodule;
+       |""".stripMargin
   )
 }
