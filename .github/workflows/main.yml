@@ -26,7 +26,7 @@ jobs:
 
       - name: Generate Verilog
         run: |
-          make difftest_verilog NOOP_HOME=$GITHUB_WORKSPACE
+          make difftest_verilog
 
   test-difftest-nutshell:
     runs-on: ubuntu-22.04

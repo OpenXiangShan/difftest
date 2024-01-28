@@ -1,0 +1,33 @@
+name: format
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  scalafmt:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Mill Installation
+        run: |
+          sudo curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.1/0.11.1 > /usr/local/bin/mill
+          chmod +x /usr/local/bin/mill
+
+      - name: Scala Formatter
+        run: |
+          make format
+
+      - name: Commit and Push
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name github-actions
+            git config user.email github-actions@github.com
+            git add .
+            git commit -m "make format"
+            git push
+          fi
