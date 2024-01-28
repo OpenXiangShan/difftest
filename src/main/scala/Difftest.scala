@@ -306,20 +306,28 @@ object DifftestModule {
   }
 
   def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): DifftestTopIO = {
-    val difftest = IO(new DifftestTopIO)
-
-    difftest.step := 0.U
-
     val gateway = Gateway.collect()
-    cppMacros ++= gateway._1
-    vMacros ++= gateway._2
-    instances ++= gateway._3
-    difftest.step := gateway._4
+    cppMacros ++= gateway.cppMacros
+    vMacros ++= gateway.vMacros
+    instances ++= gateway.instances
 
     if (cppHeader.isDefined) {
       generateCppHeader(cpu, cppHeader.get)
     }
     generateVeriogHeader()
+
+    if (enabled) {
+      createTopIOs(gateway.step.getOrElse(0.U))
+    }
+    else {
+      WireInit(0.U.asTypeOf(new DifftestTopIO))
+    }
+  }
+
+  def createTopIOs(step: UInt): DifftestTopIO = {
+    val difftest = IO(new DifftestTopIO)
+
+    difftest.step := step
 
     val timer = RegInit(0.U(64.W)).suggestName("timer")
     timer := timer + 1.U
@@ -452,7 +460,7 @@ object Delayer {
 
 // Difftest emulator top. Will be created by DifftestModule.finish
 class DifftestTopIO extends Bundle {
-  val step = Output(UInt())
+  val step = Output(UInt(64.W))
   val perfCtrl = new PerfCtrlIO
   val logCtrl = new LogCtrlIO
   val uart = new UARTIO

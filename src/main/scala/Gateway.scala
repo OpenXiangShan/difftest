@@ -66,6 +66,13 @@ case class GatewayConfig(
   }
 }
 
+case class GatewayResult(
+  cppMacros: Seq[String] = Seq(),
+  vMacros: Seq[String] = Seq(),
+  instances: Seq[(DifftestBundle, String)] = Seq(),
+  step: Option[UInt] = None,
+)
+
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
   private var config    = GatewayConfig()
@@ -90,18 +97,24 @@ object Gateway {
     gen
   }
 
-  def collect(): (Seq[String], Seq[String], Seq[(DifftestBundle, String)], UInt) = {
-    val extraInstances = ListBuffer.empty[(DifftestBundle, String)]
-    val step = WireInit(1.U)
+  def collect(): GatewayResult = {
     if (config.needEndpoint) {
       val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
-      extraInstances ++= endpoint.extraInstances
-      step := endpoint.step
+      GatewayResult(
+        cppMacros = config.cppMacros,
+        vMacros = config.vMacros,
+        instances = endpoint.extraInstances.toSeq,
+        step = Some(endpoint.step),
+      )
     }
     else {
       GatewaySink.collect(config)
+      GatewayResult(
+        cppMacros = config.cppMacros,
+        vMacros = config.vMacros,
+        step = Some(1.U),
+      )
     }
-    (config.cppMacros, config.vMacros, extraInstances.toSeq, step)
   }
 }
 
