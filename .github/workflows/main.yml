@@ -31,6 +31,8 @@ jobs:
   test-difftest-nutshell:
     runs-on: ubuntu-22.04
 
+    needs: test-difftest-main
+
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +66,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu NO_DIFF=1 EMU_TRACE=1
+            make emu NO_DIFF=1 EMU_TRACE=1 -j2
             ./build/emu -b 0 -e 100 -i ./ready-to-run/microbench.bin --dump-wave -C 10000
             ./build/emu -b 0 -e 100 -i ./ready-to-run/microbench.bin --dump-wave-full -C 10000
 
@@ -75,7 +77,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu
+            make emu -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --no-diff
 
       - name: Basic Difftest
@@ -101,7 +103,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_SNAPSHOT=1
+            make emu EMU_SNAPSHOT=1 -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
 
       - name: Difftest with Trace
@@ -111,7 +113,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_TRACE=1
+            make emu EMU_TRACE=1 -j2
             ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave --diff ./ready-to-run/riscv64-nemu-interpreter-so
             ./build/emu -b 10 -e 12 -i ./ready-to-run/microbench.bin --dump-wave-full --diff ./ready-to-run/riscv64-nemu-interpreter-so
 
@@ -122,7 +124,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu EMU_THREADS=2
+            make emu EMU_THREADS=2 -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
 
       - name: Difftest with Verilator Coverage
@@ -133,7 +135,7 @@ jobs:
             source ./env.sh
             make clean
             rm -rf *.coverage
-            make emu EMU_COVERAGE=1
+            make emu EMU_COVERAGE=1 -j2
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so -C 10000 --dump-coverage
             make -C difftest coverage
             ls -lh *.coverage
@@ -145,7 +147,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu
+            make emu -j2
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --dump-difftrace microbench
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --load-difftrace microbench
 
@@ -156,7 +158,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu
+            make emu -j2
             ./build/emu -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --dump-footprints microbench.bin
             ./build/emu -e 0 -i microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --as-footprints
 
@@ -168,7 +170,7 @@ jobs:
             source ./env.sh
             make clean
             sed -i 's/isBatch        : Boolean = false/isBatch        : Boolean = true/' difftest/src/main/scala/Gateway.scala
-            make emu
+            make emu -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
 
@@ -180,7 +182,7 @@ jobs:
             source ./env.sh
             make clean
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
-            make emu
+            make emu -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
 
@@ -193,7 +195,7 @@ jobs:
             make clean
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/isSquash       : Boolean = false/isSquash       : Boolean = true/' difftest/src/main/scala/Gateway.scala
-            make emu
+            make emu -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
 
@@ -207,9 +209,40 @@ jobs:
             sed -i 's/isSquash       : Boolean = false/isSquash       : Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/isBatch        : Boolean = false/isBatch        : Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
-            make emu
+            make emu -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
+
+  test-difftest-fuzzing:
+    runs-on: ubuntu-22.04
+
+    needs: test-difftest-main
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable -Werror for EMU Build
+        run: |
+          echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
+
+      - name: Prepare environment
+        run: |
+            cd $GITHUB_WORKSPACE/..
+            git config --global url."https://github.com/".insteadOf git@github.com:
+            git config --global url."https://".insteadOf git://
+            git clone https://github.com/OpenXiangShan/xs-env
+            cd xs-env
+            sudo -s ./setup-tools.sh
+            source ./setup.sh
+
+      - name: Prepare NutShell
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            rm -r NutShell
+            git clone -b dev-difftest --single-branch https://github.com/OSCPU/NutShell.git
+            cd NutShell && git submodule update --init
+            rm -r difftest
+            cp -r $GITHUB_WORKSPACE .
 
       - name: Difftest with Coverage-Guided Fuzzer
         run: |
@@ -225,11 +258,13 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1
+            make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1 -j2
             ./build/fuzzer -v -- ./ready-to-run/microbench.bin -e 0
 
   test-difftest-vcs:
     runs-on: ubuntu-22.04
+
+    needs: test-difftest-main
 
     steps:
       - uses: actions/checkout@v4
@@ -265,7 +300,7 @@ jobs:
             source ./env.sh
             make clean
             sed -i 's/diffstateSelect: Boolean = false/diffstateSelect: Boolean = true/' difftest/src/main/scala/Gateway.scala
-            make simv VCS=verilator
+            make simv VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
@@ -279,6 +314,6 @@ jobs:
             sed -i 's/isSquash       : Boolean = false/isSquash       : Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/isBatch        : Boolean = false/isBatch        : Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
-            make simv VCS=verilator
+            make simv VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
