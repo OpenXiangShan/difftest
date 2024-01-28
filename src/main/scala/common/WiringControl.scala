@@ -62,13 +62,13 @@ object DifftestWiring {
     })
   }
 
-  def addSource(data: Data, name: String): Data = {
+  def addSource[T <: Data](data: T, name: String): T = {
     getWire(data, name).setSource()
     WiringControl.addSource(data, name)
     data
   }
 
-  def addSink(data: Data, name: String): Data = {
+  def addSink[T <: Data](data: T, name: String): T = {
     getWire(data, name).addSink()
     WiringControl.addSink(data, name)
     data
