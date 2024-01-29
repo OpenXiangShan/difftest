@@ -148,7 +148,7 @@ def get_coverage_statistics(line_annotations, start, end):
 def get_modules(lines):
     modules = {}
 
-    module_pattern = re.compile("module (\w+)\(")
+    module_pattern = re.compile("module (\w+)\s*\(")
     endmodule_pattern = re.compile("endmodule")
     submodule_pattern = re.compile("(\w+) (\w+) \( // @\[\w+.scala \d+:\d+\]")
 
