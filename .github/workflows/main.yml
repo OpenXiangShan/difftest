@@ -169,7 +169,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            sed -i 's/isBatch        : Boolean = false/isBatch        : Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/isBatch: Boolean = false/isBatch: Boolean = true/' difftest/src/main/scala/Gateway.scala
             make emu -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
@@ -194,7 +194,7 @@ jobs:
             source ./env.sh
             make clean
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
-            sed -i 's/isSquash       : Boolean = false/isSquash       : Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/isSquash: Boolean = false/isSquash: Boolean = true/' difftest/src/main/scala/Gateway.scala
             make emu -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
@@ -206,8 +206,8 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            sed -i 's/isSquash       : Boolean = false/isSquash       : Boolean = true/' difftest/src/main/scala/Gateway.scala
-            sed -i 's/isBatch        : Boolean = false/isBatch        : Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/isSquash: Boolean = false/isSquash: Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/isBatch: Boolean = false/isBatch: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
             make emu -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
@@ -311,8 +311,8 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            sed -i 's/isSquash       : Boolean = false/isSquash       : Boolean = true/' difftest/src/main/scala/Gateway.scala
-            sed -i 's/isBatch        : Boolean = false/isBatch        : Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/isSquash: Boolean = false/isSquash: Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/isBatch: Boolean = false/isBatch: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
             make simv VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
