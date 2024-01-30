@@ -114,6 +114,7 @@ static int simv_result = 0;
 extern "C" void simv_nstep(uint8_t step) {
   if (simv_result)
     return;
+  difftest_switch_zone();
   for (int i = 0; i < step; i++) {
     int ret = simv_step();
     if (ret) {
@@ -127,6 +128,7 @@ extern "C" void simv_nstep(uint8_t step) {
 }
 #else
 extern "C" int simv_nstep(uint8_t step) {
+  difftest_switch_zone();
   for(int i = 0; i < step; i++) {
     int ret = simv_step();
     if(ret)

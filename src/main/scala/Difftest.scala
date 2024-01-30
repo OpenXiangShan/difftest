@@ -390,8 +390,9 @@ object DifftestModule {
          |class DiffStateBuffer {
          |public:
          |  virtual ~DiffStateBuffer() {}
-         |  virtual DiffTestState* get(int pos) = 0;
+         |  virtual DiffTestState* get(int zone, int index) = 0;
          |  virtual DiffTestState* next() = 0;
+         |  virtual void switch_zone() = 0;
          |};
          |
          |extern DiffStateBuffer** diffstate_buffer;
