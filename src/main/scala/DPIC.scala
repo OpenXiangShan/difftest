@@ -21,7 +21,7 @@ import chisel3.reflect.DataMirror
 import chisel3.util._
 import difftest.DifftestModule.streamToFile
 import difftest._
-import difftest.gateway.{GatewayBatchBundle, GatewayBundle, GatewayConfig}
+import difftest.gateway.{GatewayBatchBundle, GatewayBundle, GatewayConfig, GatewayResult}
 
 import scala.collection.mutable.ListBuffer
 
@@ -209,9 +209,9 @@ object DPIC {
     interfaces ++= module.interfaces.toSeq
   }
 
-  def collect(): Unit = {
+  def collect(): GatewayResult = {
     if (interfaces.isEmpty) {
-      return
+      return GatewayResult()
     }
 
     val interfaceCpp = ListBuffer.empty[String]
@@ -286,5 +286,10 @@ object DPIC {
     interfaceCpp += "#endif // CONFIG_NO_DIFFTEST"
     interfaceCpp += ""
     streamToFile(interfaceCpp, "difftest-dpic.cpp")
+
+    GatewayResult(
+      cppMacros = Seq("CONFIG_DIFFTEST_DPIC"),
+      step = Some(1.U),
+    )
   }
 }
