@@ -213,6 +213,6 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |
        |
        |endmodule;
-       |""".stripMargin
+       |""".stripMargin,
   )
 }

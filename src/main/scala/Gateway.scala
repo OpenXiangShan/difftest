@@ -34,7 +34,7 @@ case class GatewayConfig(
   diffStateSelect: Boolean = false,
   isBatch: Boolean = false,
   batchSize: Int = 32,
-  isNonBlock: Boolean = false
+  isNonBlock: Boolean = false,
 ) {
   if (squashReplay) require(isSquash)
   def hasDutZone: Boolean = diffStateSelect
@@ -72,7 +72,7 @@ case class GatewayResult(
   cppMacros: Seq[String] = Seq(),
   vMacros: Seq[String] = Seq(),
   instances: Seq[(DifftestBundle, String)] = Seq(),
-  step: Option[UInt] = None
+  step: Option[UInt] = None,
 )
 
 object Gateway {
@@ -107,14 +107,14 @@ object Gateway {
         cppMacros = config.cppMacros,
         vMacros = config.vMacros,
         instances = endpoint.instances,
-        step = Some(endpoint.step)
+        step = Some(endpoint.step),
       )
     } else {
       GatewaySink.collect(config)
       GatewayResult(
         cppMacros = config.cppMacros,
         vMacros = config.vMacros,
-        step = Some(1.U)
+        step = Some(1.U),
       )
     }
   }
