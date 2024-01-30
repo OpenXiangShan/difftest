@@ -170,7 +170,7 @@ class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort with
        |    $r_func
        |  end
        |endmodule
-     """.stripMargin
+     """.stripMargin,
   )
 }
 
@@ -193,7 +193,7 @@ class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort wit
        |   $w_func
        |  end
        |endmodule
-     """.stripMargin
+     """.stripMargin,
   )
 }
 
@@ -223,7 +223,7 @@ class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort wit
        |    end
        |  end
        |endmodule
-     """.stripMargin
+     """.stripMargin,
   )
 }
 
@@ -277,11 +277,11 @@ class DifftestMem1P(size: BigInt, lanes: Int, bits: Int) extends DifftestMem(siz
       enable = write.valid,
       index = write.index * n_helper.U + i.U,
       data = write.data(i),
-      mask = write.mask(i)
+      mask = write.mask(i),
     )
     h.read(
       enable = read.valid,
-      index = read.index * n_helper.U + i.U
+      index = read.index * n_helper.U + i.U,
     )
   }
 }
@@ -292,7 +292,7 @@ class DifftestMem2P(size: BigInt, lanes: Int, bits: Int) extends DifftestMem(siz
     h.clock := clock
     h.read(
       enable = !reset.asBool && read.valid,
-      index = read.index * n_helper.U + i.U
+      index = read.index * n_helper.U + i.U,
     )
   }
 
@@ -303,7 +303,7 @@ class DifftestMem2P(size: BigInt, lanes: Int, bits: Int) extends DifftestMem(siz
       enable = !reset.asBool && write.valid,
       index = write.index * n_helper.U + i.U,
       data = write.data(i),
-      mask = write.mask(i)
+      mask = write.mask(i),
     )
   }
 }
@@ -341,7 +341,7 @@ class DifftestMemInitializer extends ExtModule with HasExtModuleInline {
       |end
       |`endif
       |endmodule
-      |""".stripMargin
+      |""".stripMargin,
   )
 }
 
@@ -375,7 +375,7 @@ object DifftestMem {
     lanes: Int,
     bits: Int,
     synthesizable: Boolean = false,
-    singlePort: Boolean = true
+    singlePort: Boolean = true,
   ): DifftestMem = {
     val mod = (synthesizable, singlePort) match {
       case (true, _)      => Module(new SynthesizableDifftestMem(size, lanes, bits))

@@ -87,7 +87,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
       ((_: DifftestBundle) => config.hasDutZone, Seq("dut_zone")),
       ((_: DifftestBundle) => config.isBatch, Seq("dut_index")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
-      ((x: DifftestBundle) => x.isFlatten, Seq("io_address"))
+      ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
     val rhs = dpicFuncArgs.map(_.map(_._1).filterNot(s => filters.exists(f => f._1(gen) && f._2.contains(s))))
     val lhs = rhs

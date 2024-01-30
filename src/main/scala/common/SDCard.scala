@@ -56,7 +56,7 @@ class SDCardHelper extends ExtModule with HasExtModuleInline {
        |`endif // SYNTHESIS
        |
        |endmodule
-     """.stripMargin
+     """.stripMargin,
   )
 }
 

@@ -266,7 +266,7 @@ object DifftestModule {
     gen: T,
     style: String = "dpic",
     dontCare: Boolean = false,
-    delay: Int = 0
+    delay: Int = 0,
   ): T = {
     val difftest: T = Wire(gen)
     if (enabled) {
