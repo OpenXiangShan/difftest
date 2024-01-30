@@ -18,10 +18,10 @@ package difftest.gateway
 import chisel3._
 import chisel3.util._
 import difftest._
+import difftest.batch.Batch
 import difftest.common.DifftestWiring
 import difftest.dpic.DPIC
 import difftest.squash.Squash
-import difftest.batch.Batch
 
 import scala.collection.mutable.ListBuffer
 
@@ -73,7 +73,16 @@ case class GatewayResult(
   vMacros: Seq[String] = Seq(),
   instances: Seq[(DifftestBundle, String)] = Seq(),
   step: Option[UInt] = None,
-)
+) {
+  def +(that: GatewayResult): GatewayResult = {
+    GatewayResult(
+      cppMacros = cppMacros ++ that.cppMacros,
+      vMacros = vMacros ++ that.vMacros,
+      instances = instances ++ that.instances,
+      step = if (step.isDefined) step else that.step,
+    )
+  }
+}
 
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
@@ -101,22 +110,19 @@ object Gateway {
   }
 
   def collect(): GatewayResult = {
-    if (config.needEndpoint) {
+    val sink = if (config.needEndpoint) {
       val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
       GatewayResult(
-        cppMacros = config.cppMacros,
-        vMacros = config.vMacros,
         instances = endpoint.instances,
         step = Some(endpoint.step),
       )
     } else {
       GatewaySink.collect(config)
-      GatewayResult(
-        cppMacros = config.cppMacros,
-        vMacros = config.vMacros,
-        step = Some(1.U),
-      )
     }
+    sink + GatewayResult(
+      cppMacros = config.cppMacros,
+      vMacros = config.vMacros,
+    )
   }
 }
 
@@ -192,7 +198,7 @@ object GatewaySink {
     }
   }
 
-  def collect(config: GatewayConfig): Unit = {
+  def collect(config: GatewayConfig): GatewayResult = {
     config.style match {
       case "dpic" => DPIC.collect()
       case _      => DPIC.collect() // Default: DPI-C
