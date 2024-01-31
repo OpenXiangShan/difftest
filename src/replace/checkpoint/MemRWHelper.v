@@ -21,8 +21,9 @@ input  [63:0] w_mask,
 );
 string bin_file;
 string gcpt_bin_file;
-`define RAM_SIZE_BYTE (8 * 1024 * 1024 * 1024)
-`define RAM_SIZE_BITS_1G (1 * 1024 * 1024 * 1024)/8
+string mem_record_file;
+`define RAM_SIZE_BYTE (8 * 1024 * 1024 * 1024)// 8G
+`define RAM_SIZE_BITS_1G (1 * 1024 * 1024 * 1024)/8// 1G
 `define RAM_SIZE_BITS_2G `RAM_SIZE_BITS_1G * 2
 `define RAM_SIZE_BITS_3G `RAM_SIZE_BITS_1G * 3
 `define RAM_SIZE_BITS_4G `RAM_SIZE_BITS_1G * 4
@@ -64,7 +65,12 @@ string gcpt_bin_file;
     end
   end
 
-  integer i;
+  `define MEM_BLOACK_SIZE (32 * 1024 * 1024) / 8 // 32MB
+  integer memory_record_file = 0, byte_read = 1;
+  string  file_line;
+  integer memory_load_base = 0, memory_record_en = 0, memory_load_addr = 0;
+  integer i, j;
+  integer mem_record;
   initial begin
   // workload: bin file
   if ($test$plusargs("workload")) begin
@@ -77,23 +83,79 @@ string gcpt_bin_file;
     ram_set_gcpt_bin(gcpt_bin_file);
   end
   init_ram(`RAM_SIZE_BYTE);
-
-  for (i=0;i < `RAM_SIZE_BITS_1G; i ++) begin
-    ram_read_data(i , memory_1[i]);
+  if ($test$plusargs("mem-record")) begin // use checkpoint compression
+    $value$plusargs("mem-record=%s", mem_record_file);
+    memory_record_en = 1;
+  end else begin
+    $display("not set mem-record file");
   end
 
-  for (i=0;i < `RAM_SIZE_BITS_1G; i ++) begin
-    ram_read_data(i + `RAM_SIZE_BITS_1G,memory_2[i]);
+  if(memory_record_en == 1) begin
+    memory_record_file = $fopen(mem_record_file, "r+");
+
+    if (memory_record_file == 0) begin
+      $display("Error: failed to open %s", memory_record_file);
+      $finish;
+    end
+
+    while (byte_read != -1) begin
+      byte_read = $fgets(file_line,memory_record_file);
+      if (byte_read==0) break;
+      $sscanf(file_line, "%d", mem_record); // get mem block
+
+      $display("mem load block %d bloack size %d", mem_record, `MEM_BLOACK_SIZE);
+      memory_load_base = mem_record * `MEM_BLOACK_SIZE;
+      if ((memory_load_base >= 'd0) && (memory_load_base < `RAM_SIZE_BITS_1G)) begin
+        $display("mem load mem1 %x", memory_load_base);
+        for (j = 0;j < `MEM_BLOACK_SIZE; j ++) begin
+          memory_load_addr = memory_load_base  + j;
+          ram_read_data(memory_load_addr, memory_1[memory_load_addr]);
+        end
+      end
+      else if((memory_load_base >= `RAM_SIZE_BITS_1G) && (memory_load_base < `RAM_SIZE_BITS_2G)) begin
+        $display("mem load mem2 %x", memory_load_base);
+        for (j = 0;j < `MEM_BLOACK_SIZE; j ++) begin
+          memory_load_addr = memory_load_base + j;
+          ram_read_data(memory_load_addr, memory_2[memory_load_addr - `RAM_SIZE_BITS_1G]);
+        end 
+      end
+      else if((memory_load_base >= `RAM_SIZE_BITS_2G) && (memory_load_base < `RAM_SIZE_BITS_3G)) begin
+        $display("mem load mem3 %x", memory_load_base);
+        for (j = 0;j < `MEM_BLOACK_SIZE; j ++) begin
+          memory_load_addr = memory_load_base + j;
+          ram_read_data(memory_load_addr, memory_3[memory_load_addr - `RAM_SIZE_BITS_2G]);
+        end 
+      end
+      else if((memory_load_base >= `RAM_SIZE_BITS_3G) && (memory_load_base < `RAM_SIZE_BITS_4G)) begin
+        $display("mem load mem4 %x", memory_load_base);
+        for (j = 0;j < `MEM_BLOACK_SIZE; j ++) begin
+          memory_load_addr = memory_load_base + j;
+          ram_read_data(memory_load_addr, memory_4[memory_load_addr - `RAM_SIZE_BITS_3G]);
+        end 
+      end
+
+    end
+
+    $fclose(memory_record_file);
+
+  end
+  else begin // all init
+    for (i = 0;i < `RAM_SIZE_BITS_1G; i ++) begin
+      ram_read_data(i , memory_1[i]);
+    end
+
+    for (i = 0;i < `RAM_SIZE_BITS_1G; i ++) begin
+      ram_read_data(i + `RAM_SIZE_BITS_1G, memory_2[i]);
+    end
+
+    for (i = 0;i < `RAM_SIZE_BITS_1G; i ++) begin
+      ram_read_data(i + `RAM_SIZE_BITS_2G, memory_3[i]);
+    end
+
+    for (i = 0;i < `RAM_SIZE_BITS_1G; i ++) begin
+      ram_read_data(i + `RAM_SIZE_BITS_3G, memory_4[i]);
+    end
   end
 
-  for (i=0;i < `RAM_SIZE_BITS_1G; i ++) begin
-    ram_read_data(i + `RAM_SIZE_BITS_2G,memory_3[i]);
-  end
-
-  for (i=0;i < `RAM_SIZE_BITS_1G; i ++) begin
-    ram_read_data(i + `RAM_SIZE_BITS_3G,memory_4[i]);
-  end
-
-  end
+  end // end init
 endmodule
-     
