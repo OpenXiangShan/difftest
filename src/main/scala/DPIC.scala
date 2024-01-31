@@ -131,16 +131,15 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
     val modPortsString = modPorts.flatten.map(i => getModArgString(i._1, i._2)).mkString(",\n  ")
     // Initial for Palladium GFIFO
     val gfifoInitial =
-      s"""
-         |`ifdef CONFIG_DIFFTEST_NONBLOCK
-         |`ifdef PALLADIUM
-         |initial $$ixc_ctrl("gfifo", "$dpicFuncName");
-         |`endif
-         |`endif // CONFIG_DIFFTEST_NONBLOCK
-         |""".stripMargin
+      if (config.isNonBlock)
+        s"""
+           |`ifdef PALLADIUM
+           |initial $$ixc_ctrl("gfifo", "$dpicFuncName");
+           |`endif
+           |""".stripMargin
+      else ""
     val modDef =
       s"""
-         |`include "DifftestMacros.v"
          |module $desiredName(
          |  $modPortsString
          |);
