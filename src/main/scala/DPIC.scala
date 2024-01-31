@@ -273,11 +273,13 @@ object DPIC {
          |    diffstate_buffer[i] = new DPICBuffer;
          |  }
          |}
+         |
          |void diffstate_buffer_free() {
          |  for (int i = 0; i < NUM_CORES; i++) {
          |    delete diffstate_buffer[i];
          |  }
          |  delete[] diffstate_buffer;
+         |  diffstate_buffer = nullptr;
          |}
       """.stripMargin
     interfaceCpp += interfaces.map(_._3).mkString("")
