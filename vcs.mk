@@ -50,7 +50,7 @@ endif
 endif
 
 ifeq ($(VCS),verilator)
-VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH
+VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH --max-num-width 150000
 VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5
 VCS_FLAGS += -Mdir $(VCS_BUILD_DIR)  --compiler gcc
 VCS_CXXFLAGS += -std=c++20

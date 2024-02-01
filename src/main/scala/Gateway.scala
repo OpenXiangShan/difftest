@@ -18,10 +18,10 @@ package difftest.gateway
 import chisel3._
 import chisel3.util._
 import difftest._
-import difftest.batch.Batch
 import difftest.common.DifftestWiring
 import difftest.dpic.DPIC
 import difftest.squash.Squash
+import difftest.batch.{Batch, BatchOutput}
 
 import scala.collection.mutable.ListBuffer
 
@@ -150,17 +150,18 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   val zoneControl = Option.when(config.hasDutZone)(Module(new ZoneControl(config)))
   val step = IO(Output(UInt(config.stepWidth.W)))
   if (config.isBatch) {
-    val batch = Batch(squashed, config)
+    val template = Batch.getTemplate(squashed)
+    val batch = Batch(template, squashed, config)
     step := RegNext(batch.step, 0.U)
     if (config.hasDutZone) zoneControl.get.enable := batch.enable
 
-    val bundle = Wire(new GatewayBatchBundle(squashed.toSeq.map(_.cloneType), config))
+    val bundle = Wire(new GatewayBatchBundle(batch.cloneType, config))
     bundle.enable := batch.enable
     if (config.hasDutZone) bundle.dut_zone.get := zoneControl.get.dut_zone
     bundle.data := batch.data
     bundle.info := batch.info
 
-    GatewaySink.batch(squashed, bundle, config)
+    GatewaySink.batch(template, bundle, config)
   } else {
     val squashed_enable = WireInit(true.B)
     if (config.hasGlobalEnable) {
@@ -191,7 +192,7 @@ object GatewaySink {
     }
   }
 
-  def batch(template: MixedVec[DifftestBundle], bundle: GatewayBatchBundle, config: GatewayConfig): Unit = {
+  def batch(template: Seq[DifftestBundle], bundle: GatewayBatchBundle, config: GatewayConfig): Unit = {
     config.style match {
       case "dpic" => DPIC.batch(template, bundle, config)
       case _      => DPIC.batch(template, bundle, config) // Default: DPI-C
@@ -215,9 +216,9 @@ class GatewayBundle(gen: DifftestBundle, config: GatewayConfig) extends GatewayB
   val data = gen
 }
 
-class GatewayBatchBundle(bundles: Seq[DifftestBundle], config: GatewayConfig) extends GatewayBaseBundle(config) {
-  val data = Vec(config.batchSize, MixedVec(bundles))
-  val info = Vec(config.batchSize, UInt(log2Ceil(config.batchSize).W))
+class GatewayBatchBundle(bundle: BatchOutput, config: GatewayConfig) extends GatewayBaseBundle(config) {
+  val data = bundle.data
+  val info = bundle.info
 }
 
 object Preprocess {

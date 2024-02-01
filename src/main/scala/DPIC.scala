@@ -33,7 +33,6 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
   val enable = IO(Input(Bool()))
   val io = IO(Input(gen))
   val dut_zone = Option.when(config.hasDutZone)(IO(Input(UInt(config.dutZoneWidth.W))))
-  val dut_index = Option.when(config.isBatch)(IO(Input(UInt(log2Ceil(config.batchSize).W))))
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -66,7 +65,6 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
   val modPorts: Seq[Seq[(String, Data)]] = {
     val common = ListBuffer(Seq(("clock", clock)), Seq(("enable", enable)))
     if (config.hasDutZone) common += Seq(("dut_zone", dut_zone.get))
-    if (config.isBatch) common += Seq(("dut_index", dut_index.get))
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
     // This is different from BlackBoxes.
     common.toSeq ++ io.elements.toSeq.reverse.map { case (name, data) =>
@@ -85,7 +83,6 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
       ((_: DifftestBundle) => true, Seq("io_coreid")),
       ((_: DifftestBundle) => config.hasDutZone, Seq("dut_zone")),
-      ((_: DifftestBundle) => config.isBatch, Seq("dut_index")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
@@ -107,8 +104,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
        |)""".stripMargin
   val dpicFunc: String = {
     val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
-    val dut_index = if (config.isBatch) "dut_index" else "0"
-    val packet = s"DUT_BUF(io_coreid, $dut_zone, $dut_index)->${gen.desiredCppName}"
+    val packet = s"DUT_BUF(io_coreid, $dut_zone, 0)->${gen.desiredCppName}"
     val index = if (gen.isIndexed) "[io_index]" else if (gen.isFlatten) "[io_address]" else ""
     s"""
        |$dpicFuncProto {
@@ -161,6 +157,185 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig)
   setInline(s"$desiredName.v", moduleBody)
 }
 
+class DPICBatch[T <: Seq[DifftestBundle]](template: T, bundle: GatewayBatchBundle, config: GatewayConfig)
+  extends ExtModule
+  with HasExtModuleInline {
+  val clock = IO(Input(Clock()))
+  val io = IO(Input(bundle))
+
+  def getModArgString(argName: String, data: Data): String = {
+    val widthString = if (data.getWidth == 1) "      " else f"[${data.getWidth - 1}%2d:0]"
+    s"input $widthString $argName"
+  }
+
+  def getDPICArgString(argName: String, data: Data, isC: Boolean): String = {
+    if (data.getWidth <= 8) {
+      if (isC) s"uint8_t $argName" else s"input byte $argName"
+    } else {
+      if (isC) s"const svBitVecVal $argName[${data.getWidth / 32}]" else s"input bit[${data.getWidth - 1}:0] $argName"
+    }
+  }
+
+  def getDPICBundleUnpack(gen: DifftestBundle): String = {
+    val unpack = ListBuffer.empty[String]
+    def byteCnt(data: Data): Int = (data.getWidth + (8 - data.getWidth % 8) % 8) / 8
+    case class ArgPair(name: String, width: Int, offset: Int, isVec: Boolean)
+    val argsWithWidthOffset: Seq[ArgPair] = {
+      val list = ListBuffer.empty[ArgPair]
+      var offset: Int = 0
+      for ((name, data) <- gen.elements.toSeq.reverse) {
+        if (name != "valid") {
+          data match {
+            case vec: Vec[_] => {
+              for ((v, i) <- vec.zipWithIndex) {
+                list += ArgPair(s"${name}_$i", byteCnt(v), offset, true)
+                offset += byteCnt(v)
+              }
+            }
+            case d: Data => {
+              list += ArgPair(name, byteCnt(d), offset, false)
+              offset += byteCnt(d)
+            }
+          }
+        }
+      }
+      list.toSeq
+    }
+    def varAssign(pair: ArgPair, prefix: String): String = {
+      val rhs = (0 until pair.width).map { i =>
+        val appendOffset = if (i != 0) s" << ${8 * i}" else ""
+        s"(uint${pair.width * 8}_t)data[offset + ${pair.offset + i}]$appendOffset"
+      }.mkString(" |\n        ")
+      val lhs = (pair.name, pair.isVec) match {
+        case (x, true)  => x.slice(0, x.lastIndexOf('_')) + s"[${x.split('_').last}]"
+        case (x, false) => x
+      }
+      s"$prefix$lhs = $rhs;"
+    }
+    val filterIn = ListBuffer("coreid")
+    val index = if (gen.isIndexed) {
+      filterIn += "index"
+      "[index]"
+    } else if (gen.isFlatten) {
+      filterIn += "address"
+      "[address]"
+    } else {
+      ""
+    }
+    unpack ++= argsWithWidthOffset.filter(p => filterIn.contains(p.name)).map(p => varAssign(p, ""))
+    val dut_zone = if (config.hasDutZone) "io_dut_zone" else "0"
+    val packet = s"DUT_BUF(coreid, $dut_zone, dut_index)->${gen.desiredCppName}"
+    unpack += s"auto packet = &($packet$index);"
+    if (gen.bits.hasValid && !gen.isFlatten) unpack += "packet->valid = true;"
+    val filterOut = Seq("coreid", "index", "address", "valid")
+    unpack ++= argsWithWidthOffset.filterNot(p => filterOut.contains(p.name)).map(p => varAssign(p, "packet->"))
+    unpack.toSeq.mkString("\n      ")
+  }
+
+  override def desiredName: String = "DifftestBatch"
+  val dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
+  val dpicFuncArgs: Seq[(String, Data)] = {
+    val common = Seq(("io_data", io.data), ("io_info", io.info))
+    if (config.hasDutZone) common ++ Seq(("io_dut_zone", io.dut_zone.get)) else common
+  }
+  val dpicFuncProto: String =
+    s"""
+       |extern "C" void $dpicFuncName (
+       |  ${dpicFuncArgs.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
+       |)""".stripMargin
+  val dpicFunc: String = {
+    val byteUnpack = dpicFuncArgs
+      .filter(_._2.getWidth > 8)
+      .map { case (name, data) =>
+        val array = name.replace("io_", "")
+        s"""
+           |  static uint8_t $array[${data.getWidth / 8}];
+           |  for (int i = 0; i < ${data.getWidth / 32}; i++) {
+           |    $array[i * 4] = (uint8_t)($name[i] & 0xFF);
+           |    $array[i * 4 + 1] = (uint8_t)(($name[i] >> 8) & 0xFF);
+           |    $array[i * 4 + 2] = (uint8_t)(($name[i] >> 16) & 0xFF);
+           |    $array[i * 4 + 3] = (uint8_t)(($name[i] >> 24) & 0xFF);
+           |  }
+           |""".stripMargin
+      }
+      .mkString("")
+    val bundleEnum = template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchInterval", "BatchFinish")
+    val bundleAssign = template.zipWithIndex.map { case (t, idx) =>
+      s"""
+         |    else if (id == ${bundleEnum(idx)}) {
+         |      ${getDPICBundleUnpack(t)}
+         |    }
+        """.stripMargin
+    }.mkString("")
+    val infoLen = io.info.getWidth / 8
+    s"""
+       |enum DifftestBundle {
+       |  ${bundleEnum.mkString(",\n  ")}
+       |};
+       |$dpicFuncProto {
+       |  if (!diffstate_buffer) return;
+       |  uint64_t offset = 0;
+       |  uint32_t dut_index = 0;
+       |$byteUnpack
+       |  for (int i = 0; i < $infoLen; i+=3) {
+       |    uint8_t id = (uint8_t)info[i+2];
+       |    uint16_t len = (uint16_t)info[i+1] << 8 | (uint16_t)info[i];
+       |    uint32_t coreid, index, address;
+       |    if (id == BatchFinish) {
+       |      break;
+       |    }
+       |    else if (id == BatchInterval && i != 0) {
+       |      dut_index ++;
+       |      continue;
+       |    }
+       |    $bundleAssign
+       |    offset += len;
+       |  }
+       |}
+       |""".stripMargin
+  }
+
+  val modPorts: Seq[(String, Data)] = {
+    Seq(("clock", clock)) ++ io.elements.toSeq.reverse.map { case (name, data) => (s"io_$name", data) }
+  }
+  val moduleBody: String = {
+    val dpicDecl =
+      s"""
+         |import "DPI-C" function void $dpicFuncName (
+         |  ${dpicFuncArgs.map(arg => getDPICArgString(arg._1, arg._2, false)).mkString(",\n  ")}
+         |);
+         |""".stripMargin
+    val gfifoInitial =
+      if (config.isNonBlock)
+        s"""
+           |`ifdef PALLADIUM
+           |initial $$ixc_ctrl("gfifo", "$dpicFuncName");
+           |`endif
+           |""".stripMargin
+      else ""
+    val modPortsString = modPorts.map(i => getModArgString(i._1, i._2)).mkString(",\n  ")
+    s"""
+       |`include "DifftestMacros.v"
+       |module $desiredName(
+       |  $modPortsString
+       |);
+       |`ifndef SYNTHESIS
+       |`ifdef DIFFTEST
+       |$dpicDecl
+       |$gfifoInitial
+       |  always @(posedge clock) begin
+       |    if (io_enable)
+       |      $dpicFuncName (${dpicFuncArgs.map(_._1).mkString(", ")});
+       |  end
+       |`endif
+       |`endif
+       |endmodule
+       |""".stripMargin
+  }
+
+  setInline(s"$desiredName.v", moduleBody)
+}
+
 private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfig) extends Module {
   val io = IO(Input(new GatewayBundle(gen, config)))
   val dpic = Module(new DPIC(gen, config))
@@ -170,23 +345,15 @@ private class DummyDPICWrapper[T <: DifftestBundle](gen: T, config: GatewayConfi
   if (config.hasDutZone) dpic.dut_zone.get := io.dut_zone.get
 }
 
-private class DummyDPICBatchWrapper[T <: Seq[DifftestBundle]](bundles: T, config: GatewayConfig) extends Module {
-  val io = IO(Input(new GatewayBatchBundle(bundles, config)))
-  val interfaces = ListBuffer.empty[(String, String, String)]
-  for ((group, ifo) <- io.data.zip(io.info)) {
-    for (gen <- group) {
-      val dpic = Module(new DPIC(gen.cloneType, config))
-      dpic.clock := clock
-      dpic.enable := gen.bits.getValid && io.enable
-      dpic.io := gen
-      if (config.hasDutZone) dpic.dut_zone.get := io.dut_zone.get
-      dpic.dut_index.get := ifo
-      if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
-        val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
-        interfaces += interface
-      }
-    }
-  }
+private class DummyDPICBatchWrapper[T <: Seq[DifftestBundle]](
+  template: T,
+  bundle: GatewayBatchBundle,
+  config: GatewayConfig,
+) extends Module {
+  val io = IO(Input(bundle))
+  val dpic = Module(new DPICBatch(template, bundle, config))
+  dpic.clock := clock
+  dpic.io := io
 }
 
 object DPIC {
@@ -202,10 +369,11 @@ object DPIC {
     }
   }
 
-  def batch(template: MixedVec[DifftestBundle], bundle: GatewayBatchBundle, config: GatewayConfig): Unit = {
-    val module = Module(new DummyDPICBatchWrapper(template.toSeq.map(_.cloneType), config))
+  def batch(template: Seq[DifftestBundle], bundle: GatewayBatchBundle, config: GatewayConfig): Unit = {
+    val module = Module(new DummyDPICBatchWrapper(template.map(_.cloneType), bundle.cloneType, config))
     module.io := bundle
-    interfaces ++= module.interfaces.toSeq
+    val dpic = module.dpic
+    interfaces += ((dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc))
   }
 
   def collect(): GatewayResult = {
@@ -219,6 +387,9 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#include <cstdint>"
     interfaceCpp += "#include \"diffstate.h\""
+    interfaceCpp += "#ifdef CONFIG_DIFFTEST_BATCH"
+    interfaceCpp += "#include \"svdpi.h\""
+    interfaceCpp += "#endif // CONFIG_DIFFTEST_BATCH"
     interfaceCpp += ""
     interfaceCpp +=
       """
