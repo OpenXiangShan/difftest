@@ -70,6 +70,9 @@ PLDM_SIMTOOL  	 = $(shell cds_root xrun)/tools/include
 PLDM_IXCOM 	 = $(shell cds_root ixcom)/share/uxe/etc/ixcom
 DPILIB_EMU    	 = $(PLDM_BUILD_DIR)/libdpi_emu.so
 PLDM_CSRC_DIR 	 = $(abspath ./src/test/csrc/vcs)
+ifeq ($(RUN_CKPT), 1)
+PLDM_CSRC_DIR 	+= $(abspath ./src/test/csrc/checkpoint)
+endif
 PLDM_CXXFILES 	 = $(SIM_CXXFILES) $(shell find $(PLDM_CSRC_DIR) -name "*.cpp")
 PLDM_CXXFLAGS 	 = -m64 -c -fPIC -g -std=c++11 -I$(PLDM_IXCOM) -I$(PLDM_SIMTOOL)
 PLDM_CXXFLAGS 	+= $(SIM_CXXFLAGS) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
@@ -89,6 +92,9 @@ $(PLDM_CC_OBJ_DIR):
 	mkdir -p $(PLDM_CC_OBJ_DIR)
 
 $(PLDM_VFILELIST):
+ifeq ($(RUN_CKPT), 1)
+	cp -i './src/replace/checkpoint/MemRWHelper.v' '../build/rtl'
+endif
 	find $(PLDM_VSRC_DIR) -name "*.v" -or -name "*.sv" >> $(PLDM_VFILELIST)
 
 $(PLDM_CLOCK_SRC): $(PLDM_CLOCK_DEF)
