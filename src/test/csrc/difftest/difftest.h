@@ -204,7 +204,10 @@ public:
   inline int get_trap_code() {
     return dut->trap.code;
   }
+
   void display();
+  void display_stats();
+
   void set_trace(const char *name, bool is_read) {
     difftrace = new DiffTrace(name, is_read);
   }
