@@ -532,7 +532,7 @@ Emulator::~Emulator() {
 
   Info(ANSI_COLOR_BLUE "Seed=%d Guest cycle spent: %'" PRIu64
       " (this will be different from cycleCnt if emu loads a snapshot)\n" ANSI_COLOR_RESET, args.seed, cycles);
-  printf(ANSI_COLOR_BLUE "Host time spent: %'dms\n" ANSI_COLOR_RESET, elapsed_time);
+  Info(ANSI_COLOR_BLUE "Host time spent: %'dms\n" ANSI_COLOR_RESET, elapsed_time);
 
   if (args.enable_jtag) {
     delete jtag;
@@ -957,11 +957,7 @@ void Emulator::display_trapinfo() {
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     printf("Core %d: ", i);
-    auto trap = difftest[i]->get_trap_event();
-    uint64_t pc = trap->pc;
-    uint64_t instrCnt = trap->instrCnt;
-    uint64_t cycleCnt = trap->cycleCnt;
-
+    uint64_t pc = difftest[i]->get_trap_event()->pc;
     switch (trapCode) {
       case STATE_GOODTRAP:
         eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
@@ -985,9 +981,8 @@ void Emulator::display_trapinfo() {
         eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n", trapCode);
     }
 
-    double ipc = (double)instrCnt / cycleCnt;
-    eprintf(ANSI_COLOR_MAGENTA "instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
-        instrCnt, cycleCnt, ipc);
+    difftest[i]->display_stats();
+
   #ifdef TRACE_INFLIGHT_MEM_INST
     runahead[i]->memdep_watcher->print_pred_matrix();
   #endif

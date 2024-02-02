@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cassert>
 #include <cerrno>
+#include <cinttypes>
 #include <sys/time.h>
 #include <unistd.h>
 
