@@ -151,7 +151,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   val step = IO(Output(UInt(config.stepWidth.W)))
   if (config.isBatch) {
     val batch = Batch(squashed, config)
-    step := batch.step
+    step := RegNext(batch.step, 0.U)
     if (config.hasDutZone) zoneControl.get.enable := batch.enable
 
     val bundle = Wire(new GatewayBatchBundle(squashed.toSeq.map(_.cloneType), config))
@@ -166,7 +166,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     if (config.hasGlobalEnable) {
       squashed_enable := VecInit(squashed.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
     }
-    step := Mux(squashed_enable, 1.U, 0.U)
+    step := RegNext(squashed_enable, 0.U)
     if (config.hasDutZone) zoneControl.get.enable := squashed_enable
 
     for (id <- 0 until squashed.length) {
