@@ -32,7 +32,6 @@ class BatchOutput(dataWidth: Int, infoWidth: Int, config: GatewayConfig) extends
 
 class BatchInfo extends Bundle {
   val id = UInt(8.W)
-  val len = UInt(16.W)
 }
 
 object Batch {
@@ -58,12 +57,12 @@ class BatchEndpoint(template: Seq[DifftestBundle], bundles: Seq[DifftestBundle],
 
   def bundleAlign(bundle: DifftestBundle): UInt = {
     def byteAlign(data: Data): UInt = {
-      val width: Int = data.getWidth + (8 - data.getWidth % 8) % 8
+      val width: Int = (data.getWidth + 7) / 8 * 8
       data.asTypeOf(UInt(width.W))
     }
     val element = ListBuffer.empty[UInt]
     bundle.elements.toSeq.reverse.foreach { case (name, data) =>
-      if (name != "valid") {
+      if (!(bundle.isFlatten && name == "valid")) {
         data match {
           case vec: Vec[_] => element ++= vec.map(byteAlign(_))
           case data: Data  => element += byteAlign(data)
@@ -91,13 +90,12 @@ class BatchEndpoint(template: Seq[DifftestBundle], bundles: Seq[DifftestBundle],
     Delayer(gen.bits.getValid & global_enable, i)
   }.toSeq)
 
-  // Maxixum 4000 byte packed. Now we set maxium of data byte as 3000, info as 900
-  val MaxDataByteLen = 3600
+  val MaxDataByteLen = 3900
   val MaxDataByteWidth = log2Ceil(MaxDataByteLen)
   val MaxDataBitLen = MaxDataByteLen * 8
   val infoWidth = (new BatchInfo).getWidth
   // Append BatchInterval and BatchFinish Info
-  val MaxInfoByteLen = math.min((config.batchSize * (bundleNum + 1) + 1) * (infoWidth / 8), 300)
+  val MaxInfoByteLen = math.min((config.batchSize * (bundleNum + 1) + 1) * (infoWidth / 8), 90)
   val MaxInfoByteWidth = log2Ceil(MaxInfoByteLen)
   val MaxInfoBitLen = MaxInfoByteLen * 8
 
@@ -110,7 +108,6 @@ class BatchEndpoint(template: Seq[DifftestBundle], bundles: Seq[DifftestBundle],
     val data_len = (aligned_data(idx).getWidth / 8).U
     val info = Wire(new BatchInfo)
     info.id := getBundleID(in(idx).desiredModuleName).U
-    info.len := data_len
     if (idx == 0) {
       data_vec(idx) := Mux(delayed_valid(idx), delayed_data(idx), 0.U)
       info_vec(idx) := Mux(delayed_valid(idx), info.asUInt, 0.U)
@@ -124,8 +121,8 @@ class BatchEndpoint(template: Seq[DifftestBundle], bundles: Seq[DifftestBundle],
     }
   }
 
-  val BatchInterval = WireInit(0.U.asTypeOf(new BatchInfo))
-  val BatchFinish = WireInit(0.U.asTypeOf(new BatchInfo))
+  val BatchInterval = Wire(new BatchInfo)
+  val BatchFinish = Wire(new BatchInfo)
   BatchInterval.id := template.length.U
   BatchFinish.id := (template.length + 1).U
   val step_data = WireInit(data_vec(bundleNum - 1))

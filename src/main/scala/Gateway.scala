@@ -72,6 +72,7 @@ case class GatewayResult(
   cppMacros: Seq[String] = Seq(),
   vMacros: Seq[String] = Seq(),
   instances: Seq[(DifftestBundle, String)] = Seq(),
+  structPacked: Option[Boolean] = None,
   step: Option[UInt] = None,
 ) {
   def +(that: GatewayResult): GatewayResult = {
@@ -79,6 +80,7 @@ case class GatewayResult(
       cppMacros = cppMacros ++ that.cppMacros,
       vMacros = vMacros ++ that.vMacros,
       instances = instances ++ that.instances,
+      structPacked = if (structPacked.isDefined) structPacked else that.structPacked,
       step = if (step.isDefined) step else that.step,
     )
   }
@@ -114,6 +116,7 @@ object Gateway {
       val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
       GatewayResult(
         instances = endpoint.instances,
+        structPacked = Some(config.isBatch),
         step = Some(endpoint.step),
       )
     } else {

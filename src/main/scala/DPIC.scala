@@ -178,22 +178,22 @@ class DPICBatch[T <: Seq[DifftestBundle]](template: T, bundle: GatewayBatchBundl
 
   def getDPICBundleUnpack(gen: DifftestBundle): String = {
     val unpack = ListBuffer.empty[String]
-    def byteCnt(data: Data): Int = (data.getWidth + (8 - data.getWidth % 8) % 8) / 8
-    case class ArgPair(name: String, width: Int, offset: Int, isVec: Boolean)
-    val argsWithWidthOffset: Seq[ArgPair] = {
+    def byteCnt(data: Data): Int = (data.getWidth + 7) / 8
+    case class ArgPair(name: String, width: Int, offset: Int)
+    def getBundleArgs(gen: DifftestBundle): Seq[ArgPair] = {
       val list = ListBuffer.empty[ArgPair]
       var offset: Int = 0
       for ((name, data) <- gen.elements.toSeq.reverse) {
-        if (name != "valid") {
+        if (!(gen.isFlatten && name == "valid")) {
           data match {
             case vec: Vec[_] => {
               for ((v, i) <- vec.zipWithIndex) {
-                list += ArgPair(s"${name}_$i", byteCnt(v), offset, true)
+                list += ArgPair(s"${name}_$i", byteCnt(v), offset)
                 offset += byteCnt(v)
               }
             }
             case d: Data => {
-              list += ArgPair(name, byteCnt(d), offset, false)
+              list += ArgPair(name, byteCnt(d), offset)
               offset += byteCnt(d)
             }
           }
@@ -201,34 +201,22 @@ class DPICBatch[T <: Seq[DifftestBundle]](template: T, bundle: GatewayBatchBundl
       }
       list.toSeq
     }
-    def varAssign(pair: ArgPair, prefix: String): String = {
-      val rhs = (0 until pair.width).map { i =>
-        val appendOffset = if (i != 0) s" << ${8 * i}" else ""
-        s"(uint${pair.width * 8}_t)data[offset + ${pair.offset + i}]$appendOffset"
-      }.mkString(" |\n        ")
-      val lhs = (pair.name, pair.isVec) match {
-        case (x, true)  => x.slice(0, x.lastIndexOf('_')) + s"[${x.split('_').last}]"
-        case (x, false) => x
-      }
-      s"$prefix$lhs = $rhs;"
-    }
-    val filterIn = ListBuffer("coreid")
-    val index = if (gen.isIndexed) {
-      filterIn += "index"
-      "[index]"
-    } else if (gen.isFlatten) {
-      filterIn += "address"
-      "[address]"
-    } else {
-      ""
-    }
-    unpack ++= argsWithWidthOffset.filter(p => filterIn.contains(p.name)).map(p => varAssign(p, ""))
+
+    // Note: filterArgs will not in struct defined, but at the beginning or the end of Bundle
+    val bundleArgs = getBundleArgs(gen)
+    val filterArgs = Seq("coreid", "index", "address")
+    unpack ++= bundleArgs.filter(p => filterArgs.contains(p.name)).map(p => s"${p.name} = data[${p.offset}];")
     val dut_zone = if (config.hasDutZone) "io_dut_zone" else "0"
     val packet = s"DUT_BUF(coreid, $dut_zone, dut_index)->${gen.desiredCppName}"
+    val index = if (gen.isIndexed) "[index]" else if (gen.isFlatten) "[address]" else ""
     unpack += s"auto packet = &($packet$index);"
-    if (gen.bits.hasValid && !gen.isFlatten) unpack += "packet->valid = true;"
-    val filterOut = Seq("coreid", "index", "address", "valid")
-    unpack ++= argsWithWidthOffset.filterNot(p => filterOut.contains(p.name)).map(p => varAssign(p, "packet->"))
+    val packedArgs = bundleArgs.filterNot(p => filterArgs.contains(p.name))
+    val ptrOffset: String = packedArgs.head.offset match {
+      case 0 => ""
+      case n => s" + $n"
+    }
+    unpack += s"memcpy(packet, data$ptrOffset, sizeof(${gen.desiredModuleName}));"
+    unpack += s"data += ${bundleArgs.map(_.width).sum};"
     unpack.toSeq.mkString("\n      ")
   }
 
@@ -244,52 +232,41 @@ class DPICBatch[T <: Seq[DifftestBundle]](template: T, bundle: GatewayBatchBundl
        |  ${dpicFuncArgs.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
        |)""".stripMargin
   val dpicFunc: String = {
-    val byteUnpack = dpicFuncArgs
-      .filter(_._2.getWidth > 8)
-      .map { case (name, data) =>
-        val array = name.replace("io_", "")
-        s"""
-           |  static uint8_t $array[${data.getWidth / 8}];
-           |  for (int i = 0; i < ${data.getWidth / 32}; i++) {
-           |    $array[i * 4] = (uint8_t)($name[i] & 0xFF);
-           |    $array[i * 4 + 1] = (uint8_t)(($name[i] >> 8) & 0xFF);
-           |    $array[i * 4 + 2] = (uint8_t)(($name[i] >> 16) & 0xFF);
-           |    $array[i * 4 + 3] = (uint8_t)(($name[i] >> 24) & 0xFF);
-           |  }
-           |""".stripMargin
-      }
-      .mkString("")
     val bundleEnum = template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchInterval", "BatchFinish")
-    val bundleAssign = template.zipWithIndex.map { case (t, idx) =>
-      s"""
-         |    else if (id == ${bundleEnum(idx)}) {
-         |      ${getDPICBundleUnpack(t)}
-         |    }
+    val bundleAssign =
+      (Seq(s"""
+              |    if (id == BatchFinish) {
+              |      break;
+              |    }
+              |    else if (id == BatchInterval && i != 0) {
+              |      dut_index ++;
+              |      continue;
+              |    }
+              |""".stripMargin)
+        ++ template.zipWithIndex.map { case (t, idx) =>
+          s"""
+             |    else if (id == ${bundleEnum(idx)}) {
+             |      ${getDPICBundleUnpack(t)}
+             |    }
         """.stripMargin
-    }.mkString("")
+        }).mkString("")
+
     val infoLen = io.info.getWidth / 8
     s"""
-       |enum DifftestBundle {
+       |enum DifftestBundleType {
        |  ${bundleEnum.mkString(",\n  ")}
        |};
        |$dpicFuncProto {
        |  if (!diffstate_buffer) return;
        |  uint64_t offset = 0;
        |  uint32_t dut_index = 0;
-       |$byteUnpack
-       |  for (int i = 0; i < $infoLen; i+=3) {
-       |    uint8_t id = (uint8_t)info[i+2];
-       |    uint16_t len = (uint16_t)info[i+1] << 8 | (uint16_t)info[i];
+       |  static uint8_t info[$infoLen];
+       |  memcpy(info, io_info, $infoLen * sizeof(uint8_t));
+       |  uint8_t* data = (uint8_t*)io_data;
+       |  for (int i = 0; i < $infoLen; i++) {
+       |    uint8_t id = info[i];
        |    uint32_t coreid, index, address;
-       |    if (id == BatchFinish) {
-       |      break;
-       |    }
-       |    else if (id == BatchInterval && i != 0) {
-       |      dut_index ++;
-       |      continue;
-       |    }
        |    $bundleAssign
-       |    offset += len;
        |  }
        |}
        |""".stripMargin
