@@ -1,6 +1,7 @@
 PLDM_TB_TOP  		 = tb_top
 PLDM_TOP_MODULE 	 = $(SIM_TOP)
 
+PLDM_SCRIPTS_DIR 	 = $(abspath ./scripts/palladium)
 PLDM_BUILD_DIR 		 = $(abspath $(BUILD_DIR)/pldm-compile)
 PLDM_CC_OBJ_DIR	 	 = $(abspath $(PLDM_BUILD_DIR)/cc_obj)
 
