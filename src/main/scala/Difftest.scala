@@ -262,7 +262,6 @@ object DifftestModule {
   private val instances = ListBuffer.empty[(DifftestBundle, String)]
   private val cppMacros = ListBuffer.empty[String]
   private val vMacros = ListBuffer.empty[String]
-  private var structPacked = false
 
   def apply[T <: DifftestBundle](
     gen: T,
@@ -295,10 +294,9 @@ object DifftestModule {
     cppMacros ++= gateway.cppMacros
     vMacros ++= gateway.vMacros
     instances ++= gateway.instances
-    structPacked = gateway.structPacked.getOrElse(false)
 
     if (cppHeader.isDefined) {
-      generateCppHeader(cpu, cppHeader.get)
+      generateCppHeader(cpu, cppHeader.get, gateway.structPacked.getOrElse(false))
     }
     generateVeriogHeader()
 
@@ -328,7 +326,7 @@ object DifftestModule {
     difftest
   }
 
-  def generateCppHeader(cpu: String, style: String): Unit = {
+  def generateCppHeader(cpu: String, style: String, structPacked: Boolean): Unit = {
     val difftestCpp = ListBuffer.empty[String]
     difftestCpp += "#ifndef __DIFFSTATE_H__"
     difftestCpp += "#define __DIFFSTATE_H__"

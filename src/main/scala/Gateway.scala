@@ -21,7 +21,7 @@ import difftest._
 import difftest.common.DifftestWiring
 import difftest.dpic.DPIC
 import difftest.squash.Squash
-import difftest.batch.{Batch, BatchOutput}
+import difftest.batch.{Batch, BatchIO}
 
 import scala.collection.mutable.ListBuffer
 
@@ -96,10 +96,9 @@ object Gateway {
       register(WireInit(0.U.asTypeOf(gen)))
     } else {
       val signal = WireInit(0.U.asTypeOf(gen))
-      val bundle = Wire(new GatewayBundle(gen, config))
-      bundle.enable := true.B
-      bundle.data := signal
-      GatewaySink(bundle, config)
+      val control = Wire(new GatewaySinkControl(config))
+      control.enable := true.B
+      GatewaySink(control, signal, config)
       signal
     }
   }
@@ -152,34 +151,33 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 
   val zoneControl = Option.when(config.hasDutZone)(Module(new ZoneControl(config)))
   val step = IO(Output(UInt(config.stepWidth.W)))
+  val control = Wire(new GatewaySinkControl(config))
+
   if (config.isBatch) {
     val template = Batch.getTemplate(squashed)
     val batch = Batch(template, squashed, config)
     step := RegNext(batch.step, 0.U)
-    if (config.hasDutZone) zoneControl.get.enable := batch.enable
+    control.enable := batch.enable
+    if (config.hasDutZone) {
+      zoneControl.get.enable := batch.enable
+      control.dut_zone.get := zoneControl.get.dut_zone
+    }
 
-    val bundle = Wire(new GatewayBatchBundle(batch.cloneType, config))
-    bundle.enable := batch.enable
-    if (config.hasDutZone) bundle.dut_zone.get := zoneControl.get.dut_zone
-    bundle.data := batch.data
-    bundle.info := batch.info
-
-    GatewaySink.batch(template, bundle, config)
+    GatewaySink.batch(template, control, batch.io, config)
   } else {
     val squashed_enable = WireInit(true.B)
     if (config.hasGlobalEnable) {
       squashed_enable := VecInit(squashed.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
     }
     step := RegNext(squashed_enable, 0.U)
-    if (config.hasDutZone) zoneControl.get.enable := squashed_enable
+    control.enable := squashed_enable
+    if (config.hasDutZone) {
+      zoneControl.get.enable := squashed_enable
+      control.dut_zone.get := zoneControl.get.dut_zone
+    }
 
     for (id <- 0 until squashed.length) {
-      val bundle = Wire(new GatewayBundle(squashed(id).cloneType, config))
-      bundle.enable := squashed_enable
-      if (config.hasDutZone) bundle.dut_zone.get := zoneControl.get.dut_zone
-      bundle.data := squashed(id)
-
-      GatewaySink(bundle, config)
+      GatewaySink(control, squashed(id), config)
     }
   }
 
@@ -188,17 +186,17 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
 }
 
 object GatewaySink {
-  def apply(bundle: GatewayBundle, config: GatewayConfig): Unit = {
+  def apply(control: GatewaySinkControl, io: DifftestBundle, config: GatewayConfig): Unit = {
     config.style match {
-      case "dpic" => DPIC(bundle, config)
-      case _      => DPIC(bundle, config) // Default: DPI-C
+      case "dpic" => DPIC(control, io, config)
+      case _      => DPIC(control, io, config) // Default: DPI-C
     }
   }
 
-  def batch(template: Seq[DifftestBundle], bundle: GatewayBatchBundle, config: GatewayConfig): Unit = {
+  def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
     config.style match {
-      case "dpic" => DPIC.batch(template, bundle, config)
-      case _      => DPIC.batch(template, bundle, config) // Default: DPI-C
+      case "dpic" => DPIC.batch(template, control, io, config)
+      case _      => DPIC.batch(template, control, io, config) // Default: DPI-C
     }
   }
 
@@ -210,18 +208,9 @@ object GatewaySink {
   }
 }
 
-class GatewayBaseBundle(config: GatewayConfig) extends Bundle {
+class GatewaySinkControl(config: GatewayConfig) extends Bundle {
   val enable = Bool()
   val dut_zone = Option.when(config.hasDutZone)(UInt(config.dutZoneWidth.W))
-}
-
-class GatewayBundle(gen: DifftestBundle, config: GatewayConfig) extends GatewayBaseBundle(config) {
-  val data = gen
-}
-
-class GatewayBatchBundle(bundle: BatchOutput, config: GatewayConfig) extends GatewayBaseBundle(config) {
-  val data = bundle.data
-  val info = bundle.info
 }
 
 object Preprocess {

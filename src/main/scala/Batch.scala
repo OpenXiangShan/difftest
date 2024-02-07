@@ -19,13 +19,14 @@ import chisel3._
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
-import difftest.Delayer
 
-import scala.collection.mutable.ListBuffer
+class BatchIO(dataType: UInt, infoType: UInt) extends Bundle {
+  val data = dataType
+  val info = infoType
+}
 
-class BatchOutput(dataWidth: Int, infoWidth: Int, config: GatewayConfig) extends Bundle {
-  val data = UInt(dataWidth.W)
-  val info = UInt(infoWidth.W)
+class BatchOutput(data: UInt, info: UInt, config: GatewayConfig) extends Bundle {
+  val io = new BatchIO(chiselTypeOf(data), chiselTypeOf(info))
   val enable = Bool()
   val step = UInt(config.stepWidth.W)
 }
@@ -36,19 +37,13 @@ class BatchInfo extends Bundle {
 
 object Batch {
   def apply(template: Seq[DifftestBundle], bundles: MixedVec[DifftestBundle], config: GatewayConfig): BatchOutput = {
-    val module = Module(new BatchEndpoint(template, bundles.toSeq.map(_.cloneType), config))
+    val module = Module(new BatchEndpoint(template, chiselTypeOf(bundles).toSeq, config))
     module.in := bundles
     module.out
   }
 
   def getTemplate(bundles: MixedVec[DifftestBundle]): Seq[DifftestBundle] = {
-    val template = ListBuffer.empty[DifftestBundle]
-    for (gen <- bundles) {
-      if (!template.exists(_.desiredModuleName == gen.desiredModuleName)) {
-        template += gen
-      }
-    }
-    template.toSeq
+    chiselTypeOf(bundles).groupBy(_.desiredModuleName).values.map(_.head).toSeq
   }
 }
 
@@ -60,20 +55,20 @@ class BatchEndpoint(template: Seq[DifftestBundle], bundles: Seq[DifftestBundle],
       val width: Int = (data.getWidth + 7) / 8 * 8
       data.asTypeOf(UInt(width.W))
     }
-    val element = ListBuffer.empty[UInt]
-    bundle.elements.toSeq.reverse.foreach { case (name, data) =>
-      if (!(bundle.isFlatten && name == "valid")) {
-        data match {
-          case vec: Vec[_] => element ++= vec.map(byteAlign(_))
-          case data: Data  => element += byteAlign(data)
+    MixedVecInit(
+      bundle.elements.toSeq.reverse
+        .filterNot(bundle.isFlatten && _._1 == "valid")
+        .flatMap { case (_, data) =>
+          data match {
+            case vec: Vec[_] => vec.map(byteAlign(_))
+            case _           => Seq(byteAlign(data))
+          }
         }
-      }
-    }
-    MixedVecInit(element.toSeq).asUInt
+    ).asUInt
   }
 
   def getBundleID(name: String): Int = {
-    template.zipWithIndex.filter { case (gen, idx) => gen.desiredModuleName == name }.head._2
+    template.zipWithIndex.filter(_._1.desiredModuleName == name).head._2
   }
 
   val aligned_data = MixedVecInit(in.map(i => bundleAlign(i)).toSeq)
@@ -155,9 +150,9 @@ class BatchEndpoint(template: Seq[DifftestBundle], bundles: Seq[DifftestBundle],
     }
   }
 
-  val out = IO(Output(new BatchOutput(state_data.getWidth, state_info.getWidth, config)))
-  out.data := state_data
-  out.info := state_info | BatchFinish.asUInt << (state_info_len << 3)
+  val out = IO(Output(new BatchOutput(state_data, state_info, config)))
+  out.io.data := state_data
+  out.io.info := state_info | BatchFinish.asUInt << (state_info_len << 3)
   out.enable := should_tick
   out.step := Mux(out.enable, state_step_cnt, 0.U)
 }
