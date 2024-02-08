@@ -320,7 +320,7 @@ jobs:
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
-      - name: Verilator Build with VCS Top (with Squash Batch and Global Enable)
+      - name: Verilator Build with VCS Top (with Squash Select Batch and Global Enable)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
@@ -328,6 +328,7 @@ jobs:
             source ./env.sh
             make clean
             sed -i 's/isSquash: Boolean = false/isSquash: Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/diffstateSelect: Boolean = false/diffstateSelect: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/isBatch: Boolean = false/isBatch: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
             make simv VCS=verilator -j2

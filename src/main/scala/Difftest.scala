@@ -82,9 +82,10 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     val macroName = s"CONFIG_DIFFTEST_${desiredModuleName.toUpperCase.replace("DIFFTEST", "")}"
     s"#define $macroName"
   }
-  def toCppDeclaration: String = {
+  def toCppDeclaration(packed: Boolean): String = {
     val cpp = ListBuffer.empty[String]
-    cpp += "typedef struct {"
+    val attribute = if (packed) "__attribute__((packed))" else ""
+    cpp += s"typedef struct $attribute {"
     for (((name, elem), size) <- diffElements.zip(diffSizes(8))) {
       val isRemoved = isFlatten && Seq("valid", "address").contains(name)
       if (!isRemoved) {
@@ -295,7 +296,7 @@ object DifftestModule {
     instances ++= gateway.instances
 
     if (cppHeader.isDefined) {
-      generateCppHeader(cpu, cppHeader.get)
+      generateCppHeader(cpu, cppHeader.get, gateway.structPacked.getOrElse(false))
     }
     generateVeriogHeader()
 
@@ -325,7 +326,7 @@ object DifftestModule {
     difftest
   }
 
-  def generateCppHeader(cpu: String, style: String): Unit = {
+  def generateCppHeader(cpu: String, style: String, structPacked: Boolean): Unit = {
     val difftestCpp = ListBuffer.empty[String]
     difftestCpp += "#ifndef __DIFFSTATE_H__"
     difftestCpp += "#define __DIFFSTATE_H__"
@@ -365,7 +366,7 @@ object DifftestModule {
           val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
           difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
         }
-        difftestCpp += bundleType.toCppDeclaration
+        difftestCpp += bundleType.toCppDeclaration(structPacked)
         difftestCpp += ""
       })
 
