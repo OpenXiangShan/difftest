@@ -1,0 +1,19 @@
+emulatorConfiguration -add "host $env(PLDM_HOST)" {boards *}
+
+###########################
+# compilerOption
+###########################
+# compilerOption -add {visionMode FV}
+
+
+###########################
+# precompileOption
+###########################
+precompileOption -add noReset1X
+precompileOption -add keepSourceless
+
+###########################
+# compileFindOptions
+###########################
+set    compileScript "compileFind -all -max_trials 3 -crit_paths 100 -names_crit"
+append compileScript ";userData -dump all ud.dump"
