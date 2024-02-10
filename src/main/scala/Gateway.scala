@@ -31,13 +31,12 @@ case class GatewayConfig(
   isSquash: Boolean = false,
   squashReplay: Boolean = false,
   replaySize: Int = 256,
-  diffStateSelect: Boolean = false,
+  hasDutZone: Boolean = false,
   isBatch: Boolean = false,
   batchSize: Int = 32,
   isNonBlock: Boolean = false,
 ) {
   if (squashReplay) require(isSquash)
-  def hasDutZone: Boolean = diffStateSelect
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
   def dutBufLen: Int = if (isBatch) batchSize else 1
@@ -45,7 +44,7 @@ case class GatewayConfig(
   def stepWidth: Int = log2Ceil(maxStep + 1)
   def hasDeferredResult: Boolean = isNonBlock
   def needTraceInfo: Boolean = squashReplay
-  def needEndpoint: Boolean = hasGlobalEnable || diffStateSelect || isBatch || isSquash
+  def needEndpoint: Boolean = hasGlobalEnable || hasDutZone || isBatch || isSquash
   def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo
   // Macros Generation for Cpp and Verilog
   def cppMacros: Seq[String] = {
