@@ -368,8 +368,6 @@ protected:
   DiffState *state_ss = NULL;
   REF_PROXY *proxy_ss = NULL;
   uint64_t squash_csr_buf[4096];
-  long squash_memsize;
-  char *squash_membuf;
   bool squash_check();
   void squash_snapshot();
   void squash_replay();

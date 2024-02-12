@@ -70,6 +70,7 @@ class RefProxyConfig {
 public:
   bool ignore_illegal_mem_access = false;
   bool debug_difftest = false;
+  bool enable_store_log = false;
 };
 
 #define REF_BASE(f)                                                           \
@@ -92,6 +93,14 @@ public:
 #define REF_RUN_AHEAD(f)
 #endif
 
+#ifdef ENABLE_STORE_LOG
+#define REF_STORE_LOG(f) \
+  f(ref_store_log_reset, difftest_store_log_reset, void, )                    \
+  f(ref_store_log_restore, difftest_store_log_restore, void, )
+#else
+#define REF_STORE_LOG(f)
+#endif
+
 #ifdef DEBUG_MODE_DIFF
 #define REF_DEBUG_MODE(f) \
   f(debug_mem_sync, debug_mem_sync, void, uint64_t, void *, size_t)
@@ -102,6 +111,7 @@ public:
 #define REF_ALL(f) \
   REF_BASE(f)       \
   REF_RUN_AHEAD(f)  \
+  REF_STORE_LOG(f)  \
   REF_DEBUG_MODE(f)
 
 #define REF_OPTIONAL(f)                                                       \
@@ -204,6 +214,13 @@ public:
     config.ignore_illegal_mem_access = ignored;
     sync_config();
   }
+
+#ifdef ENABLE_STORE_LOG
+  inline void set_store_log(bool enable = false) {
+    config.enable_store_log = enable;
+    sync_config();
+  }
+#endif // ENABLE_STORE_LOG
 
   inline int get_status() {
     return ref_status ? ref_status() : 0;
