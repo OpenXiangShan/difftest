@@ -18,6 +18,9 @@
 
 #include "common.h"
 #include "flash.h"
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 
 static uint64_t *flash_base;
 static long flash_bin_size = 0;
@@ -29,6 +32,10 @@ char *get_flash_path() { return flash_path;  }
 long get_flash_size() { return flash_bin_size; }
 
 extern "C" void flash_read(uint32_t addr, uint64_t *data) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_flash_read] ++;
+  difftest_bytes[perf_flash_read] += 12;
+#endif // CONFIG_DIFFTEST_PERFCNT
   if (!flash_base) {
     return;
   }

@@ -25,6 +25,9 @@
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 
 static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
@@ -76,12 +79,17 @@ extern "C" int simv_step() {
 
   if (difftest_state() != -1) {
     int trapCode = difftest_state();
-    switch (trapCode) {
-      case 0:
-        eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP\n" ANSI_COLOR_RESET);
-        break;
-      default:
-        eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
+    for (int i = 0; i < NUM_CORES; i++) {
+      printf("Core %d: ", i);
+      uint64_t pc = difftest[i]->get_trap_event()->pc;
+      switch (trapCode) {
+        case 0:
+          eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
+          break;
+        default:
+          eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
+      }
+      difftest[i]->display_stats();
     }
     return trapCode + 1;
   }
@@ -112,6 +120,10 @@ void difftest_deferred_result() {
 
 static int simv_result = 0;
 extern "C" void simv_nstep(uint8_t step) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_simv_nstep] ++;
+  difftest_bytes[perf_simv_nstep] += 1;
+#endif // CONFIG_DIFFTEST_PERFCNT
   if (simv_result)
     return;
   difftest_switch_zone();
@@ -123,16 +135,23 @@ extern "C" void simv_nstep(uint8_t step) {
     }
   }
   if (simv_result) {
+    difftest_finish();
     difftest_deferred_result();
   }
 }
 #else
 extern "C" int simv_nstep(uint8_t step) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_simv_nstep] ++;
+  difftest_bytes[perf_simv_nstep] += 1;
+#endif // CONFIG_DIFFTEST_PERFCNT
   difftest_switch_zone();
   for(int i = 0; i < step; i++) {
     int ret = simv_step();
-    if(ret)
+    if(ret) {
+      difftest_finish();
       return ret;
+    }
   }
   return 0;
 }

@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include "remote_bitbang.h"
 #include "common.h"
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 
 remote_bitbang_t* jtag;
 bool enable_simjtag;
@@ -15,6 +18,10 @@ extern "C" int jtag_tick
  unsigned char jtag_TDO
 )
 {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_jtag_tick] ++;
+  difftest_bytes[perf_jtag_tick] += 5;
+#endif // CONFIG_DIFFTEST_PERFCNT
   if (!enable_simjtag) return 0;
   if (!jtag) {
     // TODO: Pass in real port number

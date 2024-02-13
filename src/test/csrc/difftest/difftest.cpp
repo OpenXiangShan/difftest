@@ -24,10 +24,16 @@
 #ifdef CONFIG_DIFFTEST_SQUASH
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 
 Difftest **difftest = NULL;
 
 int difftest_init() {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_perfcnt_init();
+#endif // CONFIG_DIFFTEST_PERFCNT
   diffstate_buffer_init();
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
@@ -100,6 +106,9 @@ void difftest_trace_write(int step) {
 }
 
 void difftest_finish() {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_perfcnt_finish();
+#endif // CONFIG_DIFFTEST_PERFCNT
   diffstate_buffer_free();
   for (int i = 0; i < NUM_CORES; i++) {
     delete difftest[i];

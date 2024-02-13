@@ -19,8 +19,15 @@
 #ifndef CONFIG_NO_DIFFTEST
 #include <goldenmem.h>
 #endif // CONFIG_NO_DIFFTEST
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 
 extern "C" uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_t *level) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_pte_helper] ++;
+  difftest_bytes[perf_pte_helper] += 25;
+#endif // CONFIG_DIFFTEST_PERFCNT
   uint64_t pg_base = satp << 12, pte_addr;
   PTE *pte_p = (PTE *)pte;
   for (*level = 0; *level < 3; (*level)++) {
@@ -62,6 +69,10 @@ enum {
 #define GET_UPPER32(data)   ((data) >> 32)
 
 extern "C" uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_amo_helper] ++;
+  difftest_bytes[perf_amo_helper] += 18;
+#endif // CONFIG_DIFFTEST_PERFCNT
   if (addr % 8 == 4 && mask == 0xf0) {
     addr -= 4;
   }
