@@ -58,11 +58,11 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
     argString.mkString(" ")
   }
 
-  protected val commonPorts: Seq[(String, Data)] = {
-    val common = Seq(("clock", clock), ("enable", enable))
-    if (config.hasDutZone) common ++ Seq(("dut_zone", dut_zone.get)) else common
+  protected val commonPorts = Seq(("clock", clock), ("enable", enable))
+  def modPorts: Seq[Seq[(String, Data)]] = {
+    val ports = if (config.hasDutZone) commonPorts ++ Seq(("dut_zone", dut_zone.get)) else commonPorts
+    ports.map(Seq(_))
   }
-  def modPorts: Seq[Seq[(String, Data)]] = commonPorts.map(Seq(_))
 
   def desiredName: String
   def dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
@@ -149,7 +149,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
 
   override def dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
-      ((_: DifftestBundle) => true, Seq("io_coreid")),
+      ((_: DifftestBundle) => true, Seq("io_coreid", "dut_zone")),
       ((x: DifftestBundle) => x.isIndexed, Seq("io_index")),
       ((x: DifftestBundle) => x.isFlatten, Seq("io_address")),
     )
