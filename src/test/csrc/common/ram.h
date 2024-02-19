@@ -204,6 +204,7 @@ public:
 extern SimMemory *simMemory;
 // This is to initialize the common mmap RAM
 void init_ram(const char *image, uint64_t n_bytes, const char *gcpt_bin = nullptr);
+void finish_ram();
 
 #ifdef WITH_DRAMSIM3
 

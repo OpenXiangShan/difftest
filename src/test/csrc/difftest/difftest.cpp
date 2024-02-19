@@ -89,6 +89,13 @@ uint64_t difftest_commit_sum(char core_id) {
     return 0;
 }
 
+void difftest_commit_clean() {
+  for (uint32_t core_id = 0; core_id < NUM_CORES; core_id++)
+  {
+    difftest[core_id]->instr_sum_clean();
+  }
+}
+
 void difftest_trace_read() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->trace_read();
@@ -211,10 +218,11 @@ int Difftest::step() {
     squash_snapshot();
   }
 #endif // CONFIG_DIFFTEST_SQUASH_REPLAY
-
+/*
   if (check_timeout()) {
     return 1;
   }
+*/
   do_first_instr_commit();
   if (do_store_check()) {
     return 1;

@@ -143,6 +143,9 @@ public:
   uint64_t read_group_cnt() {
     return retire_instr_cntsum;
   }
+  void read_group_clean() {
+    retire_instr_cntsum = 0;
+  }
   void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip, bool delayed,
       uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore) {
     push_back_trace(new InstrTrace(pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
@@ -226,6 +229,9 @@ public:
   }
   inline uint64_t get_instr_sum() {
     return state->read_group_cnt();
+  }
+  inline void instr_sum_clean() {
+    state->read_group_clean();
   }
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
   // These functions generally do nothing but copy the information to core_state.
@@ -391,7 +397,7 @@ void difftest_trace_write(int step);
 int init_nemuproxy(size_t);
 
 uint64_t difftest_commit_sum(char core_id);
-
+void difftest_commit_clean();
 
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_scope();

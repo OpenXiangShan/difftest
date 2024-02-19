@@ -29,6 +29,10 @@ import "DPI-C" function void simv_init();
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
 import "DPI-C" function int simv_nstep(int step);
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+`ifdef PALLADIUM
+import "DPI-C" function void difftest_checkpoint_list(string path);
+import "DPI-C" function byte difftest_ram_reload();
+`endif // PALLADIUM
 `endif // TB_NO_DPIC
 
 `ifdef PALLADIUM
@@ -59,9 +63,12 @@ string flash_bin_file;
 string gcpt_bin_file;
 string wave_type;
 string diff_ref_so;
+string ckpt_list;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
+reg ckpt_list_en;
+reg xs_rst_en;
 
 initial begin
 `ifndef WIRE_CLK
@@ -129,6 +136,13 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
+  // set checkpoint run list
+  if ($test$plusargs("ckpt-list")) begin
+    $value$plusargs("ckpt-list=%s", ckpt_list);
+    difftest_checkpoint_list(ckpt_list);
+    ckpt_list_en = 1;
+  end
+
 `endif // TB_NO_DPIC
   // max cycles to execute, no limit for default
   max_cycles = 0;
@@ -136,7 +150,7 @@ initial begin
     $value$plusargs("max-cycles=%d", max_cycles);
     $display("set max cycles: %d", max_cycles);
   end
-    // set checkpoint const
+  // set checkpoint const
   if ($test$plusargs("max-instrs")) begin
     $value$plusargs("max-instrs=%d", max_instrs);
     set_max_instrs(max_instrs);
@@ -155,9 +169,19 @@ end
 reg [7:0] reset_counter;
 initial reset_counter = 0;
 always @(posedge clock) begin
-  reset_counter <= reset_counter + 8'd1;
-  if (reset && (reset_counter == 8'd100)) begin
-    reset <= 1'b0;
+  if (xs_rst_en) begin
+    reset_counter <= 8'd0;
+    reset         <= 1'b1;
+    $display("soft rst CPU core");
+  end else begin
+    if (reset && (reset_counter == 8'd100)) begin
+      reset <= 1'b0;
+      $display("rst unlock");
+    end else if (reset) begin
+      reset_counter <= reset_counter + 8'd1;
+    end else begin
+      reset_counter <= reset_counter;
+    end
   end
 end
 `endif // PALLADIUM
@@ -222,8 +246,9 @@ always @(posedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;
     exit     <= 1'b0;
+    trap     <= 1'b0;
   end
-  else begin
+  else if (!exit) begin
     n_cycles <= n_cycles + 64'h1;
 
     // max cycles
@@ -263,10 +288,23 @@ end
 
 
 always @(posedge clock)begin
-  if (exit) begin
-    get_ipc(n_cycles);
-    // need more performance counter export
-    $finish();
+  if (reset) begin
+    xs_rst_en <= 1'b0;
+  end
+  else begin
+    if (!xs_rst_en & exit == 1'b1) begin
+      get_ipc(n_cycles);    // need more performance counter export
+      if (ckpt_list_en == 1'b1) begin
+        if(difftest_ram_reload() == 8'd1) begin // run checkpoint end
+          $finish();
+        end else begin
+          xs_rst_en <= 1'b1;
+        end
+      end else begin
+        $display("not use ckpt list");
+        $finish();
+      end
+    end
   end
 end
 

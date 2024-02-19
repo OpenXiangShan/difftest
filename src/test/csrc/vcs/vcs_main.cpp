@@ -27,6 +27,7 @@ static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
 static char *gcpt_bin_file = NULL;
+static char *checkpoint_list_path = NULL;
 static bool enable_overr_gcpt = false;
 static bool enable_difftest = true;
 
@@ -60,6 +61,12 @@ extern "C" void set_diff_ref_so(char *s) {
   difftest_ref_so = buf;
 }
 
+extern "C" void difftest_checkpoint_list (char * path) {
+  checkpoint_list_path = (char *)malloc(256);
+  strcpy(checkpoint_list_path,path);
+  printf("set ckpt path %s \n",checkpoint_list_path);
+}
+
 extern "C" void set_no_diff() {
   printf("disable diff-test\n");
   enable_difftest = false;
@@ -80,6 +87,9 @@ extern "C" void get_ipc(long cycles) {
   double IPC = (double)now_instrs / now_cycles;
   printf("this simpoint CPI = %lf, IPC = %lf, Instrcount %ld, Cycle %ld\n",
    CPI, IPC, now_instrs, now_cycles);
+
+  difftest_commit_clean();
+  difftest_finish();
 }
 
 extern "C" void simv_init() {
@@ -166,3 +176,53 @@ extern "C" int simv_nstep(uint8_t step) {
   return 0;
 }
 #endif // TB_DEFERRED_RESULT
+
+static uint32_t checkpoint_list_head = 0;
+extern "C" char difftest_ram_reload() {
+  assert(checkpoint_list_path);
+
+  FILE * list = fopen(checkpoint_list_path,"r");
+  char file_name[256];
+  if (list == nullptr) {
+    printf("Can't open list file '%s'", checkpoint_list_path);
+    assert(0);
+  }
+  if (feof(list)) {
+    printf("the list no more gz \n");
+    return 1;  
+  }
+  for (size_t i = 0; i < checkpoint_list_head; i++)
+  {
+    fgets(file_name,256,list);
+    if (feof(list)) {
+      printf("the list no more gz \n");
+      return 1;  
+    }
+  }
+  fgets(file_name,256,list);
+	int line_len = strlen(file_name);
+	if ('\n' == file_name[line_len - 1]) {
+		file_name[line_len - 1] = '\0';
+	}
+  char * str = strrchr(file_name, '/');
+  if (str != NULL) str ++;
+
+  int idx,max;
+  if (sscanf(str,"_%d_0.%d_.gz",&idx,&max) == 2) {
+    max_instrs = max;
+  } else {
+    printf("get max instrs error \n");
+    assert(0);
+  }
+
+  checkpoint_list_head = checkpoint_list_head + 1;
+
+  fclose(list);
+
+  finish_ram();
+
+  strcpy(bin_file, file_name);
+  simv_result = 0;
+
+  return 0;
+}
