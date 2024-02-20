@@ -135,8 +135,7 @@ SIM_LDFLAGS  += -lz
 endif
 
 # ZSTD image support
-IMAGE_ZSTD_COMPRESS ?= 1
-ifeq ($(IMAGE_ZSTD_COMPRESS),0)
+ifneq ($(NO_ZSTD_COMPRESSION),)
 SIM_CXXFLAGS += -DNO_ZSTD_COMPRESSION
 else
 SIM_LDFLAGS  += -lzstd

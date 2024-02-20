@@ -149,7 +149,7 @@ long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_
   // Only load from RAM need check
   if (load_type == LOAD_RAM && (buf_size % chunk_size) != 0) {
     printf("buf_size must be divisible by chunk_size\n");
-    assert(0);
+    return -1;
   }
 
   fd = open(file_name, O_RDONLY);
@@ -237,8 +237,6 @@ long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_
     delete [] temp_page;
     return -1;
   }
-
-  // printf("Read %lu bytes from gz stream in total\n", curr_size);
 
   ZSTD_freeDStream(dstream);
   delete [] compress_file_buffer;
