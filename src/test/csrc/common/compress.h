@@ -22,6 +22,10 @@
 #ifndef NO_GZ_COMPRESSION
 #include <zlib.h>
 #endif
+#ifndef NO_ZSTD_COMPRESSION
+#include <zstd.h>
+#include <fcntl.h>
+#endif
 #include <sys/time.h>
 
 #define LOAD_SNAPSHOT 0
@@ -34,5 +38,8 @@ long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size);
 long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_type);
 
 void nonzero_large_memcpy(const void* __restrict dest, const void* __restrict src, size_t n);
+
+bool isZstdFile(const char *filename);
+long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_type);
 
 #endif

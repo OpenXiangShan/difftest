@@ -274,6 +274,11 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes)
     img_size = readFromGz(ram, image, memory_size, LOAD_RAM);
     assert(img_size >= 0);
   }
+  else if(isZstdFile(image)) {
+    Info("Zstd file detected and loading image from extracted zstd file\n");
+    img_size = readFromZstd(ram, image, memory_size, LOAD_RAM);
+    assert(img_size >= 0);
+  }
   else {
     InputReader *reader = createInputReader(image);
     img_size = reader->read_all(ram, memory_size);

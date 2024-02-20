@@ -134,6 +134,13 @@ else
 SIM_LDFLAGS  += -lz
 endif
 
+# ZSTD image support
+ifneq ($(NO_ZSTD_COMPRESSION),)
+SIM_CXXFLAGS += -DNO_ZSTD_COMPRESSION
+else
+SIM_LDFLAGS  += -lzstd
+endif
+
 # spike-dasm plugin
 WITH_SPIKE_DASM ?= 1
 ifeq ($(WITH_SPIKE_DASM),1)
