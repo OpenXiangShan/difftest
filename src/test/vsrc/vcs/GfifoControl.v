@@ -1,4 +1,5 @@
 `ifdef PALLADIUM
+`ifdef DIFFTEST_DEFERRED_RESULT
 
 `define STEP_WIDTH 8
 
@@ -41,4 +42,5 @@ always @(posedge clock) begin
 end
 
 endmodule;
+`endif // DIFFTEST_DEFERRED_RESULT
 `endif // PALLADIUM

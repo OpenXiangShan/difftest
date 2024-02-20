@@ -19,6 +19,47 @@ import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util._
 
+trait HasMemInit { this: ExtModule =>
+  val mem_init =
+    """
+      |`ifdef DISABLE_DIFFTEST_RAM_DPIC
+      |`ifdef PALLADIUM
+      |  initial $ixc_ctrl("tb_import", "$display");
+      |`endif // PALLADIUM
+      |  // 1536MB memory
+      |  `define RAM_SIZE (1536 * 1024 * 1024)
+      |
+      |  // memory array
+      |  reg [63:0] memory [0 : `RAM_SIZE/8 - 1];
+      |
+      |  string bin_file;
+      |  integer memory_image = 0, n_read = 0, byte_read = 1;
+      |  byte data;
+      |  initial begin
+      |    if ($test$plusargs("workload")) begin
+      |      $value$plusargs("workload=%s", bin_file);
+      |      memory_image = $fopen(bin_file, "rb");
+      |    if (memory_image == 0) begin
+      |      $display("Error: failed to open %s", bin_file);
+      |      $finish;
+      |    end
+      |    foreach (memory[i]) begin
+      |      if (byte_read == 0) break;
+      |      for (integer j = 0; j < 8; j++) begin
+      |        byte_read = $fread(data, memory_image);
+      |        if (byte_read == 0) break;
+      |        n_read += 1;
+      |        memory[i][j * 8 +: 8] = data;
+      |      end
+      |    end
+      |    $fclose(memory_image);
+      |    $display("%m: load %d bytes from %s.", n_read, bin_file);
+      |  end
+      |end
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
+      |""".stripMargin
+}
+
 trait HasReadPort { this: ExtModule =>
   val r = IO(new Bundle {
     val enable = Input(Bool())
@@ -28,7 +69,9 @@ trait HasReadPort { this: ExtModule =>
 
   val r_dpic =
     """
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
       |import "DPI-C" function longint difftest_ram_read(input longint rIdx);
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
   val r_if =
@@ -40,9 +83,15 @@ trait HasReadPort { this: ExtModule =>
 
   val r_func =
     """
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
       |if (r_enable) begin
       |  r_data <= difftest_ram_read(r_index);
       |end
+      |`else
+      |if (r_enable) begin
+      |  r_data <= memory[r_index];
+      |end
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
   def read(enable: Bool, index: UInt): UInt = {
@@ -63,12 +112,14 @@ trait HasWritePort { this: ExtModule =>
 
   val w_dpic =
     """
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
       |import "DPI-C" function void difftest_ram_write
       |(
       |  input  longint index,
       |  input  longint data,
       |  input  longint mask
       |);
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
   val w_if =
@@ -81,9 +132,15 @@ trait HasWritePort { this: ExtModule =>
 
   val w_func =
     """
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
       |if (w_enable) begin
       |  difftest_ram_write(w_index, w_data, w_mask);
       |end
+      |`else
+      |if (w_enable) begin
+      |  memory[w_index] <= (w_data & w_mask) | (memory[w_index] & ~w_mask);
+      |end
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
   def write(enable: Bool, index: UInt, data: UInt, mask: UInt): HasWritePort = {
@@ -95,16 +152,20 @@ trait HasWritePort { this: ExtModule =>
   }
 }
 
-class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort {
+class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort with HasMemInit {
   val clock  = IO(Input(Clock()))
 
   setInline("MemRHelper.v",
     s"""
+       |`ifdef SYNTHESIS
+       |  `define DISABLE_DIFFTEST_RAM_DPIC
+       |`endif
        |$r_dpic
        |module MemRHelper(
        |  $r_if
        |  input clock
        |);
+       |  $mem_init
        |  always @(posedge clock) begin
        |    $r_func
        |  end
@@ -112,16 +173,20 @@ class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort {
      """.stripMargin)
 }
 
-class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort {
+class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort with HasMemInit {
   val clock  = IO(Input(Clock()))
 
   setInline("MemWHelper.v",
     s"""
+       |`ifdef SYNTHESIS
+       |  `define DISABLE_DIFFTEST_RAM_DPIC
+       |`endif
        |$w_dpic
        |module MemWHelper(
        |  $w_if
        |  input clock
        |);
+       |  $mem_init
        |  always @(posedge clock) begin
        |   $w_func
        |  end
@@ -129,12 +194,15 @@ class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort {
      """.stripMargin)
 }
 
-class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort with HasWritePort {
+class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort with HasWritePort with HasMemInit {
   val clock  = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
 
   setInline("MemRWHelper.v",
     s"""
+       |`ifdef SYNTHESIS
+       |  `define DISABLE_DIFFTEST_RAM_DPIC
+       |`endif
        |$r_dpic
        |$w_dpic
        |module MemRWHelper(
@@ -143,6 +211,7 @@ class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort wit
        |  input enable,
        |  input clock
        |);
+       |  $mem_init
        |  always @(posedge clock) begin
        |    if (enable) begin
        |      $r_func
