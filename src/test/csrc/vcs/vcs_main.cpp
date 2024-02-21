@@ -34,6 +34,9 @@ static bool enable_difftest = true;
 static int max_cycles = 0;
 static int max_instrs = 0;
 
+static int checkpoint_reset (char * file_path);
+static char *checkpoint_affiliation = NULL;
+static uint32_t checkpoin_idx = 0;
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
@@ -89,7 +92,8 @@ extern "C" void get_ipc(long cycles) {
    CPI, IPC, now_instrs, now_cycles);
 
   difftest_commit_clean();
-  difftest_finish();
+
+  printf("diff finish\n");
 }
 
 extern "C" void simv_init() {
@@ -127,7 +131,9 @@ extern "C" int simv_step() {
   }
 
   if (max_instrs != 0) { // 0 for no limit
-    if(max_instrs < difftest_commit_sum(0)) {
+    auto trap = difftest[0]->get_trap_event();
+    if(max_instrs < trap->instrCnt) {
+      eprintf(ANSI_COLOR_GREEN "checkpoint reach the operating limit exit\n" ANSI_COLOR_RESET);
       return 0xff;
     }
   }
@@ -177,7 +183,7 @@ extern "C" int simv_nstep(uint8_t step) {
 }
 #endif // TB_DEFERRED_RESULT
 
-static uint32_t checkpoint_list_head = 0;
+static uint32_t checkpoint_list_head = 1;
 extern "C" char difftest_ram_reload() {
   assert(checkpoint_list_path);
 
@@ -188,41 +194,76 @@ extern "C" char difftest_ram_reload() {
     assert(0);
   }
   if (feof(list)) {
-    printf("the list no more gz \n");
+    printf("the list no more checkpoint \n");
     return 1;  
   }
   for (size_t i = 0; i < checkpoint_list_head; i++)
   {
+    memset(file_name,0,strlen(file_name));
     fgets(file_name,256,list);
     if (feof(list)) {
-      printf("the list no more gz \n");
+      printf("the list no more checkpoint \n");
       return 1;  
     }
   }
+
+  memset(file_name,0,strlen(file_name));
   fgets(file_name,256,list);
+
+  if (checkpoint_reset(file_name) == 1) {
+    return 1;
+  }
+  printf("ckpt reset\n");
+  checkpoint_list_head = checkpoint_list_head + 1;
+
+  fclose(list);
+  //finish_ram();
+  difftest_finish();
+  simv_result = 0;
+
+  return 0;
+}
+
+static int checkpoint_reset (char * file_name) {
+  printf("reset file name %s \n",file_name);
 	int line_len = strlen(file_name);
+  char str_temp1[256];
+  char str_temp2[256];
 	if ('\n' == file_name[line_len - 1]) {
 		file_name[line_len - 1] = '\0';
 	}
-  char * str = strrchr(file_name, '/');
-  if (str != NULL) str ++;
+  char * str1 = strrchr(file_name, '/');
+  if (str1 != NULL)
+    str1 ++;
+  else 
+    return 1;
 
-  int idx,max;
-  if (sscanf(str,"_%d_0.%d_.gz",&idx,&max) == 2) {
-    max_instrs = max;
-  } else {
+  if (sscanf(str1,"_%d_0.%d_.gz",&checkpoin_idx,&max_instrs) != 2) {
     printf("get max instrs error \n");
     assert(0);
   }
 
-  checkpoint_list_head = checkpoint_list_head + 1;
+  int str_len1 = strlen(str1);
+  line_len = strlen(file_name);
+  strncpy(str_temp1,file_name,(line_len - str_len1 - 1));
+  char *str2 = strrchr(str_temp1, '/');
+  if (str2 != NULL)
+    str2 ++;
+  else
+    return 1;
 
-  fclose(list);
+  str_len1 = strlen(str_temp1);
+  int str_len2 = strlen(str2);
+  strncpy(str_temp2,str_temp1,(str_len1 - str_len2 - 1));
+  printf("str_temp2 %s \n",str_temp2);
 
-  finish_ram();
+  char *str3 = strrchr(str_temp2, '/');
+  if (str3 != NULL)
+    str3 ++;
+  else
+    return 1;
+  printf("checkpoint affiliation %s \n",str3);
 
   strcpy(bin_file, file_name);
-  simv_result = 0;
-
   return 0;
 }
