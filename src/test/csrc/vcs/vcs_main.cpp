@@ -33,6 +33,7 @@ static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
 static bool enable_difftest = true;
+static uint64_t max_instrs = 0;
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
@@ -43,6 +44,10 @@ extern "C" void set_flash_bin(char *s) {
   printf("flash image:%s\n",s);
   flash_bin_file = (char *)malloc(256);
   strcpy(flash_bin_file, s);
+}
+
+extern "C" void set_max_instrs(uint64_t mc) {
+  max_instrs = mc;
 }
 
 extern const char *difftest_ref_so;
@@ -92,6 +97,14 @@ extern "C" int simv_step() {
       difftest[i]->display_stats();
     }
     return trapCode + 1;
+  }
+
+  if (max_instrs != 0) { // 0 for no limit
+    auto trap = difftest[0]->get_trap_event();
+    if(max_instrs < trap->instrCnt) {
+      eprintf(ANSI_COLOR_GREEN "EXCEEDED MAX INSTR: %ld\n" ANSI_COLOR_RESET,max_instrs);
+      return 3;// STATE_LIMIT_EXCEEDED
+    }
   }
 
   if (enable_difftest) {
