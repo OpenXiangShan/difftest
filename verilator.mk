@@ -101,7 +101,6 @@ VERILATOR_FLAGS =                   \
   -Wno-STMTDLY -Wno-WIDTH           \
   --max-num-width 150000            \
   --assert --x-assign unique        \
-  --stats-vars                      \
   --output-split 30000              \
   --output-split-cfuncs 30000       \
   -I$(RTL_DIR)                      \
