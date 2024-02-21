@@ -66,6 +66,7 @@ extern "C" void set_diff_ref_so(char *s) {
 
 extern "C" void difftest_checkpoint_list (char * path) {
   checkpoint_list_path = (char *)malloc(256);
+  checkpoint_affiliation = (char *)malloc(32);
   strcpy(checkpoint_list_path,path);
   printf("set ckpt path %s \n",checkpoint_list_path);
 }
@@ -183,41 +184,34 @@ extern "C" int simv_nstep(uint8_t step) {
 }
 #endif // TB_DEFERRED_RESULT
 
-static uint32_t checkpoint_list_head = 1;
+static uint64_t checkpoint_list_head = 0;
 extern "C" char difftest_ram_reload() {
   assert(checkpoint_list_path);
 
-  FILE * list = fopen(checkpoint_list_path,"r");
-  char file_name[256];
-  if (list == nullptr) {
-    printf("Can't open list file '%s'", checkpoint_list_path);
-    assert(0);
+  FILE * fp = fopen(checkpoint_list_path,"r");
+  char file_name[128] = {0};
+  if (fp == nullptr) {
+    printf("Can't open fp file '%s'", checkpoint_list_path);
+    return 1;
   }
-  if (feof(list)) {
-    printf("the list no more checkpoint \n");
+  if (feof(fp)) {
+    printf("the fp no more checkpoint \n");
     return 1;  
   }
-  for (size_t i = 0; i < checkpoint_list_head; i++)
-  {
-    memset(file_name,0,strlen(file_name));
-    fgets(file_name,256,list);
-    if (feof(list)) {
-      printf("the list no more checkpoint \n");
-      return 1;  
-    }
+
+  fseek(fp, checkpoint_list_head, SEEK_SET);
+
+  if (fgets(file_name, 128, fp) == NULL) {
+    return 1;
   }
 
-  memset(file_name,0,strlen(file_name));
-  fgets(file_name,256,list);
+  checkpoint_list_head = checkpoint_list_head + strlen(file_name);
 
   if (checkpoint_reset(file_name) == 1) {
     return 1;
   }
-  printf("ckpt reset\n");
-  checkpoint_list_head = checkpoint_list_head + 1;
 
-  fclose(list);
-  //finish_ram();
+  fclose(fp);
   difftest_finish();
   simv_result = 0;
 
@@ -225,10 +219,9 @@ extern "C" char difftest_ram_reload() {
 }
 
 static int checkpoint_reset (char * file_name) {
-  printf("reset file name %s \n",file_name);
 	int line_len = strlen(file_name);
-  char str_temp1[256];
-  char str_temp2[256];
+  char str_temp1[128] = {0};
+  char str_temp2[128] = {0};
 	if ('\n' == file_name[line_len - 1]) {
 		file_name[line_len - 1] = '\0';
 	}
@@ -238,14 +231,14 @@ static int checkpoint_reset (char * file_name) {
   else 
     return 1;
 
-  if (sscanf(str1,"_%d_0.%d_.gz",&checkpoin_idx,&max_instrs) != 2) {
+  if (sscanf(str1,"_%d_0.%d_.gz", &checkpoin_idx, &max_instrs) != 2) {
     printf("get max instrs error \n");
     assert(0);
   }
 
   int str_len1 = strlen(str1);
   line_len = strlen(file_name);
-  strncpy(str_temp1,file_name,(line_len - str_len1 - 1));
+  strncpy(str_temp1, file_name, (line_len - str_len1 - 1));
   char *str2 = strrchr(str_temp1, '/');
   if (str2 != NULL)
     str2 ++;
@@ -254,16 +247,16 @@ static int checkpoint_reset (char * file_name) {
 
   str_len1 = strlen(str_temp1);
   int str_len2 = strlen(str2);
-  strncpy(str_temp2,str_temp1,(str_len1 - str_len2 - 1));
-  printf("str_temp2 %s \n",str_temp2);
+  strncpy(str_temp2, str_temp1, (str_len1 - str_len2 - 1));
 
   char *str3 = strrchr(str_temp2, '/');
   if (str3 != NULL)
     str3 ++;
   else
     return 1;
-  printf("checkpoint affiliation %s \n",str3);
+  printf("checkpoint affiliation %s \n", str3);
 
+  strcpy(checkpoint_affiliation, str3);
   strcpy(bin_file, file_name);
   return 0;
 }

@@ -33,9 +33,7 @@ SimMemory *simMemory = nullptr;
 void init_ram(const char *image, uint64_t ram_size, const char *gcpt_bin) {
   simMemory = new MmapMemory(image, ram_size, gcpt_bin);
 }
-void finish_ram() {
-  simMemory->~SimMemory();
-}
+
 #ifdef TLB_UNITTEST
 // Note: addpageSv39 only supports pmem base 0x80000000
 void addpageSv39() {
@@ -283,7 +281,10 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, const char *gcpt_bin
       delete reader;
     }
 
-    assert(img_size >= 0);
+  } 
+  else if(isZstdFile(image)) {
+    Info("Zstd file detected and loading image from extracted zstd file\n");
+    img_size = readFromZstd(ram, image, memory_size, LOAD_RAM);
   }
   else {
     InputReader *reader = createInputReader(image);
