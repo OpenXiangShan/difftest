@@ -20,6 +20,9 @@
 #include "common.h"
 #include "ram.h"
 #include "compress.h"
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 
 // #define TLB_UNITTEST
 
@@ -298,6 +301,10 @@ MmapMemory::~MmapMemory() {
 }
 
 extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_difftest_ram_read] ++;
+  difftest_bytes[perf_difftest_ram_read] += 8;
+#endif // CONFIG_DIFFTEST_PERFCNT
   if (!simMemory)
     return 0;
   rIdx %= simMemory->get_size() / sizeof(uint64_t);
@@ -306,6 +313,10 @@ extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
 }
 
 extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_difftest_ram_write] ++;
+  difftest_bytes[perf_difftest_ram_write] += 24;
+#endif // CONFIG_DIFFTEST_PERFCNT
   if (simMemory) {
     if (!simMemory->in_range_u64(wIdx)) {
       printf("ERROR: ram wIdx = 0x%lx out of bound!\n", wIdx);

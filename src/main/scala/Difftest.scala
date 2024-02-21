@@ -401,6 +401,12 @@ object DifftestModule {
          |extern void diffstate_buffer_init();
          |extern void diffstate_buffer_free();
          |""".stripMargin
+    difftestCpp +=
+      s"""
+         |#ifdef CONFIG_DIFFTEST_PERFCNT
+         |void diffstate_perfcnt_finish(long long msec);
+         |#endif // CONFIG_DIFFTEST_PERFCNT
+         |""".stripMargin
     difftestCpp += "#endif // __DIFFSTATE_H__"
     difftestCpp += ""
     streamToFile(difftestCpp, "diffstate.h")

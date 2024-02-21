@@ -16,6 +16,9 @@
 
 #include "common.h"
 
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 #ifdef SHOW_SCREEN
 #include <SDL2/SDL.h>
 
@@ -31,12 +34,19 @@ static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 
 extern "C" void put_pixel(uint32_t pixel) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_put_pixel] ++;
+  difftest_bytes[perf_put_pixel] += 4;
+#endif // CONFIG_DIFFTEST_PERFCNT
   static int i = 0;
   vmem[i++] = pixel;
   if (i >= 800 * 600) i = 0;
 }
 
 extern "C" void vmem_sync(void) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_vmem_sync] ++;
+#endif // CONFIG_DIFFTEST_PERFCNT
   SDL_UpdateTexture(texture, NULL, vmem, SCREEN_W * sizeof(uint32_t));
   SDL_RenderClear(renderer);
   SDL_RenderCopy(renderer, texture, NULL, NULL);

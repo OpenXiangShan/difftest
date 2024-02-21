@@ -81,10 +81,21 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
     s"auto packet = &($packet$index);"
   }
   def dpicFuncAssigns: Seq[String]
+  def perfCnt: String = {
+    val name = "perf_" + dpicFuncName
+    s"""
+       |#ifdef CONFIG_DIFFTEST_PERFCNT
+       |  dpic_calls[$name] ++;
+       |  dpic_bytes[$name] += ${dpicFuncArgs.flatten.map(_._2.getWidth / 8).sum};
+       |#endif // CONFIG_DIFFTEST_PERFCNT
+       |""".stripMargin
+  }
+
   def dpicFunc: String =
     s"""
        |$dpicFuncProto {
        |  if (!diffstate_buffer) return;
+       |$perfCnt
        |  ${dpicFuncAssigns.mkString("\n  ")}
        |}
        |""".stripMargin
@@ -308,6 +319,9 @@ object DPIC {
     interfaceCpp += "#ifdef CONFIG_DIFFTEST_BATCH"
     interfaceCpp += "#include \"svdpi.h\""
     interfaceCpp += "#endif // CONFIG_DIFFTEST_BATCH"
+    interfaceCpp += "#ifdef CONFIG_DIFFTEST_PERFCNT"
+    interfaceCpp += "#include \"perf.h\""
+    interfaceCpp += "#endif // CONFIG_DIFFTEST_PERFCNT"
     interfaceCpp += ""
     interfaceCpp +=
       """
@@ -339,6 +353,15 @@ object DPIC {
         |  }
         |};
         |""".stripMargin
+    interfaceCpp +=
+      s"""
+         |#ifdef CONFIG_DIFFTEST_PERFCNT
+         |enum DIFFSTATE_PERF {
+         |  ${(interfaces.map("perf_" + _._1) ++ Seq("DIFFSTATE_PERF_NUM")).mkString(",\n  ")}
+         |};
+         |long long dpic_calls[DIFFSTATE_PERF_NUM] = {0}, dpic_bytes[DIFFSTATE_PERF_NUM] = {0};
+         |#endif // CONFIG_DIFFTEST_PERFCNT
+         |""".stripMargin
     interfaceCpp += interfaces.map(_._2 + ";").mkString("\n")
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
@@ -371,6 +394,23 @@ object DPIC {
          |  diffstate_buffer = nullptr;
          |}
       """.stripMargin
+    interfaceCpp +=
+      s"""
+         |#ifdef CONFIG_DIFFTEST_PERFCNT
+         |void diffstate_perfcnt_finish(long long msec) {
+         |  long long calls_sum = 0, bytes_sum = 0;
+         |  const char *dpic_name[DIFFSTATE_PERF_NUM] = {
+         |    ${interfaces.map("\"" + _._1 + "\"").mkString(",\n    ")}
+         |  };
+         |  for (int i = 0; i < DIFFSTATE_PERF_NUM; i++) {
+         |    calls_sum += dpic_calls[i];
+         |    bytes_sum += dpic_bytes[i];
+         |    difftest_perfcnt_print(dpic_name[i], dpic_calls[i], dpic_bytes[i], msec);
+         |  }
+         |  difftest_perfcnt_print(\"DIFFSTATE_SUM\", calls_sum, bytes_sum, msec);
+         |}
+         |#endif // CONFIG_DIFFTEST_PERFCNT
+         |""".stripMargin
     interfaceCpp += interfaces.map(_._3).mkString("")
     interfaceCpp += ""
     interfaceCpp += "#endif // CONFIG_NO_DIFFTEST"
