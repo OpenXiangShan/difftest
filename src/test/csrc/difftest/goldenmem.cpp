@@ -97,6 +97,44 @@ static inline void pmem_write(uint64_t addr, word_t data, int len) {
   }
 }
 
+// Golden Memory Store Log
+#ifdef ENABLE_STORE_LOG
+#define GOLDENMEM_STORE_LOG_SIZE 1024
+struct store_log {
+  uint64_t addr;
+  word_t org_data;
+} goldenmem_store_log_buf[GOLDENMEM_STORE_LOG_SIZE];
+
+bool goldenmem_store_log_enable = false;
+int goldenmem_store_log_ptr = 0;
+
+void goldenmem_set_store_log(bool enable) {
+  goldenmem_store_log_enable = enable;
+}
+
+void goldenmem_store_log_reset() {
+  goldenmem_store_log_ptr = 0;
+}
+
+void pmem_record_store(uint64_t addr) {
+  if (goldenmem_store_log_enable) {
+    // align to 8 byte
+    addr = (addr >> 3) << 3;
+    word_t rdata = pmem_read(addr, 8);
+    goldenmem_store_log_buf[goldenmem_store_log_ptr].addr = addr;
+    goldenmem_store_log_buf[goldenmem_store_log_ptr].org_data = rdata;
+    ++goldenmem_store_log_ptr;
+    if (goldenmem_store_log_ptr >= GOLDENMEM_STORE_LOG_SIZE) assert(0);
+  }
+}
+
+void goldenmem_store_log_restore() {
+  for (int i = goldenmem_store_log_ptr - 1; i >= 0; i--) {
+    pmem_write(goldenmem_store_log_buf[i].addr, goldenmem_store_log_buf[i].org_data, 8);
+  }
+}
+#endif // ENABLE_STORE_LOG
+
 /* Memory accessing interfaces */
 
 inline word_t paddr_read(uint64_t addr, int len) {
@@ -109,6 +147,10 @@ inline word_t paddr_read(uint64_t addr, int len) {
 }
 
 inline void paddr_write(uint64_t addr, word_t data, int len) {
-  if (in_pmem(addr)) pmem_write(addr, data, len);
-  else panic("write not in pmem!");
+  if (in_pmem(addr)) {
+#ifdef ENABLE_STORE_LOG
+    if (goldenmem_store_log_enable) pmem_record_store(addr);
+#endif // ENABLE_STORE_LOG
+    pmem_write(addr, data, len);
+  } else panic("write not in pmem!");
 }

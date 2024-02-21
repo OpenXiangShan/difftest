@@ -113,7 +113,7 @@ extern unsigned long EMU_FLASH_SIZE;
 // whether to check l2tlb response
 // #define DEBUG_L2TLB
 
-// whether to enable REF record origin data of memory and restore
+// whether to enable REF/GoldenMemory record origin data of memory and restore
 #ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
 #define ENABLE_STORE_LOG
 #endif // CONFIG_DIFFTEST_SQUASH_REPLAY
@@ -156,7 +156,6 @@ extern unsigned long EMU_FLASH_SIZE;
 #ifndef DEBUG_MEM_BASE
 #define DEBUG_MEM_BASE 0x38020000
 #endif
-
 
 // -----------------------------------------------------------------------
 // Do not touch

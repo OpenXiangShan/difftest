@@ -366,7 +366,8 @@ protected:
   int replay_idx;
 
   DiffState *state_ss = NULL;
-  REF_PROXY *proxy_ss = NULL;
+  int proxy_reg_size = 0;
+  uint8_t *proxy_reg_ss = NULL;
   uint64_t squash_csr_buf[4096];
   bool squash_check();
   void squash_snapshot();

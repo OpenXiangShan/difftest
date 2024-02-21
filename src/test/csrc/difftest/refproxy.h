@@ -222,6 +222,20 @@ public:
   }
 #endif // ENABLE_STORE_LOG
 
+  inline int get_reg_size() {
+    return sizeof(DifftestArchIntRegState) + sizeof(DifftestCSRState) + sizeof(uint64_t)
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
+    + sizeof(DifftestArchFpRegState)
+#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+    + sizeof(DifftestArchVecRegState)
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+#ifdef CONFIG_DIFFTEST_VECCSRSTATE
+    + sizeof(DifftestVecCSRState)
+#endif // CONFIG_DIFFTEST_VECCSRSTATE
+    ;
+  }
+
   inline int get_status() {
     return ref_status ? ref_status() : 0;
   }
