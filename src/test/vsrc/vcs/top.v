@@ -221,6 +221,8 @@ DeferredControl deferred(
   .step(difftest_step),
   .simv_result(simv_result)
 );
+`else
+reg [31:0] tarp;
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
 
@@ -257,9 +259,16 @@ always @(posedge clock) begin
 `else
     else if (|difftest_step) begin
       // check errors
-      if (simv_nstep(difftest_step)) begin
-        $display("DIFFTEST FAILED at cycle %d", n_cycles);
-        $finish();
+      if (tarp) begin
+        if (tarp == STATE_LIMIT_EXCEEDED && workload_list_en == 1'b1)begin
+          soft_rst_en <= 1'b1;
+        end
+        else begin
+          $display("DIFFTEST FAILED at cycle %d", n_cycles);
+          $finish();
+        end
+      end else begin
+        tarp <= simv_nstep(difftest_step);
       end
     end
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
