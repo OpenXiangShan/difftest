@@ -37,9 +37,8 @@ static char *flash_bin_file = NULL;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 
-static int checkpoint_reset (char * file_name);
-static char *checkpoint_list_path = NULL;
-static uint32_t checkpoin_idx = 0;
+static int ram_path_reset(char *file_name);
+static char *work_load_list_path = NULL;
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
@@ -64,10 +63,10 @@ extern "C" void set_diff_ref_so(char *s) {
   difftest_ref_so = buf;
 }
 
-extern "C" void difftest_checkpoint_list (char * path) {
-  checkpoint_list_path = (char *)malloc(256);
-  strcpy(checkpoint_list_path,path);
-  printf("set checkpoint list path %s \n",checkpoint_list_path);
+extern "C" void difftest_workload_list(char * path) {
+  work_load_list_path = (char *)malloc(256);
+  strcpy(work_load_list_path, path);
+  printf("set checkpoint list path %s \n", work_load_list_path);
 }
 
 extern "C" void set_no_diff() {
@@ -159,7 +158,7 @@ extern "C" void simv_nstep(uint8_t step) {
         break;
     }
   }
-  if (simv_result && checkpoint_list_path == NULL) {
+  if (simv_result && work_load_list_path == NULL) {
     difftest_finish();
     difftest_deferred_result();
   }
@@ -174,7 +173,7 @@ extern "C" int simv_nstep(uint8_t step) {
   for(int i = 0; i < step; i++) {
     int ret = simv_step();
     if(ret) {
-      if (checkpoint_list_path == NULL) {
+      if (work_load_list_path == NULL) {
         difftest_finish();
       }
       return ret;
@@ -184,18 +183,18 @@ extern "C" int simv_nstep(uint8_t step) {
 }
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
-static uint64_t checkpoint_list_head = 0;
+static uint64_t work_load_list_head = 0;
 extern "C" char difftest_ram_reload() {
-  assert(checkpoint_list_path);
+  assert(work_load_list_path);
 
-  FILE * fp = fopen(checkpoint_list_path,"r");
+  FILE * fp = fopen(work_load_list_path, "r");
   char file_name[128] = {0};
   if (fp == nullptr) {
-    printf("Can't open fp file '%s'", checkpoint_list_path);
+    printf("Can't open fp file '%s'", work_load_list_path);
     return 1;
   }
 
-  fseek(fp, checkpoint_list_head, SEEK_SET);
+  fseek(fp, work_load_list_head, SEEK_SET);
 
   if (feof(fp)) {
     printf("the fp no more checkpoint \n");
@@ -205,9 +204,9 @@ extern "C" char difftest_ram_reload() {
     return 1;
   }
 
-  checkpoint_list_head = checkpoint_list_head + strlen(file_name);
+  work_load_list_head = work_load_list_head + strlen(file_name);
 
-  if (checkpoint_reset(file_name)) {
+  if (ram_path_reset(file_name)) {
     return 1;
   }
 
@@ -219,23 +218,21 @@ extern "C" char difftest_ram_reload() {
   return 0;
 }
 
-static int checkpoint_reset (char * file_name) {
+static int ram_path_reset(char *file_name) {
 	int line_len = strlen(file_name);
+
+  if(file_name[0] == '\0') {
+    return 1;
+  }
 
 	if ('\n' == file_name[line_len - 1]) {
 		file_name[line_len - 1] = '\0';
 	}
-  char * str1 = strrchr(file_name, '/');
-  if (str1 != NULL)
-    str1 ++;
-  else 
-    return 1;
 
-  if (sscanf(str1,"_%d_0.%ld_.gz", &checkpoin_idx, &max_instrs) != 2) {
-    printf("get max instrs error \n");
-    assert(0);
+  if (sscanf(file_name, "%s %ld", bin_file, &max_instrs) != 2) {
+    printf("no more work load\n");
+    return 1;
   }
 
-  strcpy(bin_file, file_name);
   return 0;
 }

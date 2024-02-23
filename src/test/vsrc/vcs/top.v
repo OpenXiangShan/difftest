@@ -24,7 +24,7 @@ import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
-import "DPI-C" function void difftest_checkpoint_list(string path);
+import "DPI-C" function void difftest_workload_list(string path);
 import "DPI-C" function byte difftest_ram_reload();
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
 import "DPI-C" function int simv_nstep(int step);
@@ -60,13 +60,13 @@ string bin_file;
 string flash_bin_file;
 string wave_type;
 string diff_ref_so;
-string ckpt_list;
+string workload_list;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
 
-reg ckpt_list_en;
-reg xs_rst_en;
+reg workload_list_en;
+reg soft_rst_en;
 
 initial begin
 `ifndef WIRE_CLK
@@ -129,11 +129,11 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
-  // set checkpoint run list
-  if ($test$plusargs("ckpt-list")) begin
-    $value$plusargs("ckpt-list=%s", ckpt_list);
-    difftest_checkpoint_list(ckpt_list);
-    ckpt_list_en = 1;
+  // set workload run list
+  if ($test$plusargs("workload-list")) begin
+    $value$plusargs("workload-list=%s", workload_list);
+    difftest_workload_list(workload_list);
+    workload_list_en = 1;
   end
 `endif // TB_NO_DPIC
   // max cycles to execute, no limit for default
@@ -158,7 +158,7 @@ end
 reg [7:0] reset_counter;
 initial reset_counter = 0;
 always @(posedge clock) begin
-  if (xs_rst_en) begin
+  if (soft_rst_en) begin
     reset_counter <= 8'd0;
     reset         <= 1'b1;
     $display("soft rst CPU core");
@@ -224,9 +224,9 @@ reg [63:0] n_cycles;
 always @(posedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;
-    xs_rst_en<= 1'b0;
+    soft_rst_en<= 1'b0;
   end
-  else if(!xs_rst_en) begin
+  else if(!soft_rst_en) begin
     n_cycles <= n_cycles + 64'h1;
 
     // max cycles
@@ -243,8 +243,8 @@ always @(posedge clock) begin
 `ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
     else if (simv_result) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
-      if (simv_result == STATE_LIMIT_EXCEEDED && ckpt_list_en == 1'b1)begin
-        xs_rst_en <= 1'b1;
+      if (simv_result == STATE_LIMIT_EXCEEDED && workload_list_en == 1'b1)begin
+        soft_rst_en <= 1'b1;
       end 
       else begin
         $finish();
@@ -266,7 +266,7 @@ end
 `ifndef TB_NO_DPIC
 //soft rst
 always @(posedge clock)begin
-  if (!reset & xs_rst_en) begin
+  if (!reset & soft_rst_en) begin
     if(difftest_ram_reload() == 8'd1) begin
       $display("run checkpoint end");
       $finish();
