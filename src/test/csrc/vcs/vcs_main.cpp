@@ -32,9 +32,10 @@ static bool enable_overr_gcpt = false;
 static bool enable_difftest = true;
 
 static int max_cycles = 0;
-static int max_instrs = 0;
+static uint64_t max_instrs = 0;
 
 static int checkpoint_reset (char * file_path);
+static int checkpoint_char_len(char * dest,char *src);
 static char *checkpoint_affiliation = NULL;
 static uint32_t checkpoin_idx = 0;
 
@@ -85,16 +86,16 @@ extern "C" void set_max_instrs(long mc) {
 }
 
 extern "C" void get_ipc(long cycles) {
-  uint64_t now_cycles = (uint64_t)cycles;
-  uint64_t now_instrs = difftest_commit_sum(0);// Take the first core as the standard for now
-  double CPI = (double)now_cycles / now_instrs;
-  double IPC = (double)now_instrs / now_cycles;
-  printf("this simpoint CPI = %lf, IPC = %lf, Instrcount %ld, Cycle %ld\n",
-   CPI, IPC, now_instrs, now_cycles);
+  // uint64_t now_cycles = (uint64_t)cycles;
+  // uint64_t now_instrs = difftest_commit_sum(0);// Take the first core as the standard for now
+  // double CPI = (double)now_cycles / now_instrs;
+  // double IPC = (double)now_instrs / now_cycles;
+  // printf("this simpoint CPI = %lf, IPC = %lf, Instrcount %ld, Cycle %ld\n",
+  //  CPI, IPC, now_instrs, now_cycles);
 
-  difftest_commit_clean();
+  // difftest_commit_clean();
 
-  printf("diff finish\n");
+  // printf("diff finish\n");
 }
 
 extern "C" void simv_init() {
@@ -166,8 +167,12 @@ extern "C" void simv_nstep(uint8_t step) {
     return;
   for (int i = 0; i < step; i++) {
     int ret = simv_step();
-    if (ret)
+    if (ret) {
       simv_result = ret;
+      if (checkpoint_list_path == NULL) {
+        difftest_finish();
+      }
+    }
   }
 }
 extern "C" int simv_result_fetch() {
@@ -189,7 +194,7 @@ extern "C" char difftest_ram_reload() {
   assert(checkpoint_list_path);
 
   FILE * fp = fopen(checkpoint_list_path,"r");
-  char file_name[128] = {0};
+  char file_name[256] = {0};
   if (fp == nullptr) {
     printf("Can't open fp file '%s'", checkpoint_list_path);
     return 1;
@@ -201,7 +206,7 @@ extern "C" char difftest_ram_reload() {
 
   fseek(fp, checkpoint_list_head, SEEK_SET);
 
-  if (fgets(file_name, 128, fp) == NULL) {
+  if (fgets(file_name, 256, fp) == NULL) {
     return 1;
   }
 
@@ -220,43 +225,25 @@ extern "C" char difftest_ram_reload() {
 
 static int checkpoint_reset (char * file_name) {
 	int line_len = strlen(file_name);
-  char str_temp1[128] = {0};
-  char str_temp2[128] = {0};
+  if(file_name[0] == '\0')
+    return 1;
+
 	if ('\n' == file_name[line_len - 1]) {
 		file_name[line_len - 1] = '\0';
 	}
-  char * str1 = strrchr(file_name, '/');
-  if (str1 != NULL)
-    str1 ++;
-  else 
-    return 1;
 
-  if (sscanf(str1,"_%d_0.%d_.gz", &checkpoin_idx, &max_instrs) != 2) {
-    printf("get max instrs error \n");
-    assert(0);
+  if (sscanf(file_name, "%s %ld", &bin_file, &max_instrs) != 2) {
+    printf("no more work load");
+    return 1;
   }
 
-  int str_len1 = strlen(str1);
-  line_len = strlen(file_name);
-  strncpy(str_temp1, file_name, (line_len - str_len1 - 1));
-  char *str2 = strrchr(str_temp1, '/');
-  if (str2 != NULL)
-    str2 ++;
-  else
-    return 1;
-
-  str_len1 = strlen(str_temp1);
-  int str_len2 = strlen(str2);
-  strncpy(str_temp2, str_temp1, (str_len1 - str_len2 - 1));
-
-  char *str3 = strrchr(str_temp2, '/');
-  if (str3 != NULL)
-    str3 ++;
-  else
-    return 1;
-  printf("checkpoint affiliation %s \n", str3);
-
-  strcpy(checkpoint_affiliation, str3);
-  strcpy(bin_file, file_name);
   return 0;
+}
+
+static int checkpoint_char_len(char * dest,char *src) {
+  dest = strrchr(src,'/');
+  if (dest == NULL)
+    return -1;
+  else
+  return strlen(dest);
 }

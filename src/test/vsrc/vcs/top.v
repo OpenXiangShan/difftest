@@ -173,7 +173,8 @@ always @(posedge clock) begin
     reset_counter <= 8'd0;
     reset         <= 1'b1;
     $display("soft rst CPU core");
-  end else begin
+  end 
+  else begin
     if (reset && (reset_counter == 8'd100)) begin
       reset <= 1'b0;
       $display("rst unlock");
@@ -240,15 +241,14 @@ DeferredControl deferred(
 `endif // TB_NO_DPIC
 
 reg [63:0] n_cycles;
-reg exit;
 reg trap;
 always @(posedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;
-    exit     <= 1'b0;
+    xs_rst_en<= 1'b0;
     trap     <= 1'b0;
   end
-  else if (!exit) begin
+  else if(!xs_rst_en) begin
     n_cycles <= n_cycles + 64'h1;
 
     // max cycles
@@ -261,24 +261,26 @@ always @(posedge clock) begin
     // difftest
     if (!n_cycles) begin
       simv_init();
+      $display("simv init");
     end
 `ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
     else if (simv_result) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
-      exit <= 1'b1;
+      xs_rst_en <= ckpt_list_en;
     end
 `else
     else if (|difftest_step_delay) begin
       // check errors
-      trap <= simv_nstep(difftest_step_delay);
       if (trap) begin
-        if (trap == 'hff) begin
+        if (trap == 'hff && ckpt_list_en == 1'b1) begin
           $display("GCPT runing reached the maximum count point");
-          exit <= 1'b1;
+          xs_rst_en <= 1'b1;
         end else begin
           $display("DIFFTEST FAILED at cycle %d", n_cycles);
           $finish();
         end
+      end else begin
+        trap <= simv_nstep(difftest_step_delay);
       end
     end
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
@@ -288,22 +290,16 @@ end
 
 
 always @(posedge clock)begin
-  if (reset) begin
-    xs_rst_en <= 1'b0;
-  end
-  else begin
-    if (!xs_rst_en & exit == 1'b1) begin
-      get_ipc(n_cycles);    // need more performance counter export
-      if (ckpt_list_en == 1'b1) begin
-        if(difftest_ram_reload() == 8'd1) begin // run checkpoint end
-          $finish();
-        end else begin
-          xs_rst_en <= 1'b1;
-        end
-      end else begin
-        $display("not use ckpt list");
+  if (!reset & xs_rst_en) begin
+    if (ckpt_list_en == 1'b1) begin
+      if(difftest_ram_reload() == 8'd1) begin
+        $display("run checkpoint end");
         $finish();
       end
+    end
+    else begin
+      $display("not use ckpt list");
+      $finish();
     end
   end
 end
