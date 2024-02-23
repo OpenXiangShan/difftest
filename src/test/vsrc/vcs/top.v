@@ -24,10 +24,14 @@ import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
+import "DPI-C" function void difftest_checkpoint_list(string path);
+import "DPI-C" function byte difftest_ram_reload();
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
 import "DPI-C" function int simv_nstep(int step);
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
+
+localparam  STATE_LIMIT_EXCEEDED = 3;
 
 `ifdef PALLADIUM
   `ifdef SYNTHESIS
@@ -56,8 +60,13 @@ string bin_file;
 string flash_bin_file;
 string wave_type;
 string diff_ref_so;
+string ckpt_list;
+
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
+
+reg ckpt_list_en;
+reg xs_rst_en;
 
 initial begin
 `ifndef WIRE_CLK
@@ -120,6 +129,12 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
+  // set checkpoint run list
+  if ($test$plusargs("ckpt-list")) begin
+    $value$plusargs("ckpt-list=%s", ckpt_list);
+    difftest_checkpoint_list(ckpt_list);
+    ckpt_list_en = 1;
+  end
 `endif // TB_NO_DPIC
   // max cycles to execute, no limit for default
   max_cycles = 0;
@@ -143,9 +158,21 @@ end
 reg [7:0] reset_counter;
 initial reset_counter = 0;
 always @(posedge clock) begin
-  reset_counter <= reset_counter + 8'd1;
-  if (reset && (reset_counter == 8'd100)) begin
-    reset <= 1'b0;
+  if (xs_rst_en) begin
+    reset_counter <= 8'd0;
+    reset         <= 1'b1;
+    $display("soft rst CPU core");
+  end 
+  else begin
+    if (reset && (reset_counter == 8'd100)) begin
+      reset <= 1'b0;
+    end 
+    else if (reset) begin
+      reset_counter <= reset_counter + 8'd1;
+    end 
+    else begin
+      reset_counter <= reset_counter;
+    end
   end
 end
 `endif // PALLADIUM
@@ -197,8 +224,9 @@ reg [63:0] n_cycles;
 always @(posedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;
+    xs_rst_en<= 1'b0;
   end
-  else begin
+  else if(!xs_rst_en) begin
     n_cycles <= n_cycles + 64'h1;
 
     // max cycles
@@ -215,7 +243,12 @@ always @(posedge clock) begin
 `ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
     else if (simv_result) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
-      $finish();
+      if (simv_result == STATE_LIMIT_EXCEEDED && ckpt_list_en == 1'b1)begin
+        xs_rst_en <= 1'b1;
+      end 
+      else begin
+        $finish();
+      end
     end
 `else
     else if (|difftest_step) begin
@@ -229,5 +262,17 @@ always @(posedge clock) begin
 `endif // TB_NO_DPIC
   end
 end
+
+`ifndef TB_NO_DPIC
+//soft rst
+always @(posedge clock)begin
+  if (!reset & xs_rst_en) begin
+    if(difftest_ram_reload() == 8'd1) begin
+      $display("run checkpoint end");
+      $finish();
+    end
+  end
+end
+`endif
 
 endmodule

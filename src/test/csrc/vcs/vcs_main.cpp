@@ -29,11 +29,17 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
+#define STATE_LIMIT_EXCEEDED 3
+
 static bool has_reset = false;
 static char bin_file[256] = "ram.bin";
 static char *flash_bin_file = NULL;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
+
+static int checkpoint_reset (char * file_name);
+static char *checkpoint_list_path = NULL;
+static uint32_t checkpoin_idx = 0;
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
@@ -56,6 +62,12 @@ extern "C" void set_diff_ref_so(char *s) {
   char* buf = (char *)malloc(256);
   strcpy(buf, s);
   difftest_ref_so = buf;
+}
+
+extern "C" void difftest_checkpoint_list (char * path) {
+  checkpoint_list_path = (char *)malloc(256);
+  strcpy(checkpoint_list_path,path);
+  printf("set checkpoint list path %s \n",checkpoint_list_path);
 }
 
 extern "C" void set_no_diff() {
@@ -103,7 +115,7 @@ extern "C" int simv_step() {
     auto trap = difftest[0]->get_trap_event();
     if(max_instrs < trap->instrCnt) {
       eprintf(ANSI_COLOR_GREEN "EXCEEDED MAX INSTR: %ld\n" ANSI_COLOR_RESET,max_instrs);
-      return 3;// STATE_LIMIT_EXCEEDED
+      return STATE_LIMIT_EXCEEDED;
     }
   }
 
@@ -147,7 +159,7 @@ extern "C" void simv_nstep(uint8_t step) {
         break;
     }
   }
-  if (simv_result) {
+  if (simv_result && checkpoint_list_path == NULL) {
     difftest_finish();
     difftest_deferred_result();
   }
@@ -162,10 +174,68 @@ extern "C" int simv_nstep(uint8_t step) {
   for(int i = 0; i < step; i++) {
     int ret = simv_step();
     if(ret) {
-      difftest_finish();
+      if (checkpoint_list_path == NULL) {
+        difftest_finish();
+      }
       return ret;
     }
   }
   return 0;
 }
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+
+static uint64_t checkpoint_list_head = 0;
+extern "C" char difftest_ram_reload() {
+  assert(checkpoint_list_path);
+
+  FILE * fp = fopen(checkpoint_list_path,"r");
+  char file_name[128] = {0};
+  if (fp == nullptr) {
+    printf("Can't open fp file '%s'", checkpoint_list_path);
+    return 1;
+  }
+
+  fseek(fp, checkpoint_list_head, SEEK_SET);
+
+  if (feof(fp)) {
+    printf("the fp no more checkpoint \n");
+    return 1;  
+  }
+  if (fgets(file_name, 128, fp) == NULL) {
+    return 1;
+  }
+
+  checkpoint_list_head = checkpoint_list_head + strlen(file_name);
+
+  if (checkpoint_reset(file_name)) {
+    return 1;
+  }
+
+  fclose(fp);
+  difftest_finish();
+#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
+  simv_result = 0;
+#endif
+  return 0;
+}
+
+static int checkpoint_reset (char * file_name) {
+	int line_len = strlen(file_name);
+
+	if ('\n' == file_name[line_len - 1]) {
+		file_name[line_len - 1] = '\0';
+	}
+  char * str1 = strrchr(file_name, '/');
+  if (str1 != NULL)
+    str1 ++;
+  else 
+    return 1;
+
+  if (sscanf(str1,"_%d_0.%ld_.gz", &checkpoin_idx, &max_instrs) != 2) {
+    printf("get max instrs error \n");
+    assert(0);
+  }
+
+  strcpy(bin_file, file_name);
+  return 0;
+}
