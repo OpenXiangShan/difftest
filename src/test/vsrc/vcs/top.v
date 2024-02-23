@@ -24,8 +24,8 @@ import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
-import "DPI-C" function void difftest_workload_list(string path);
-import "DPI-C" function byte difftest_ram_reload();
+import "DPI-C" function void set_workload_list(string path);
+import "DPI-C" function byte ram_reload();
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
 import "DPI-C" function int simv_nstep(int step);
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
@@ -132,7 +132,11 @@ initial begin
   // set workload run list
   if ($test$plusargs("workload-list")) begin
     $value$plusargs("workload-list=%s", workload_list);
-    difftest_workload_list(workload_list);
+    set_workload_list(workload_list);
+    if(ram_reload() == 8'd1) begin
+      $display("run work list start faild");
+      $finish();
+    end
     workload_list_en = 1;
   end
 `endif // TB_NO_DPIC
@@ -267,8 +271,8 @@ end
 //soft rst
 always @(posedge clock)begin
   if (!reset & soft_rst_en) begin
-    if(difftest_ram_reload() == 8'd1) begin
-      $display("run checkpoint end");
+    if(ram_reload() == 8'd1) begin
+      $display("run work-load list end");
       $finish();
     end
   end

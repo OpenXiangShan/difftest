@@ -106,6 +106,9 @@ void difftest_trace_write(int step) {
 }
 
 void difftest_finish() {
+  if (difftest == NULL) {
+    return;
+  }
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_perfcnt_finish();
 #endif // CONFIG_DIFFTEST_PERFCNT

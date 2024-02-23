@@ -63,7 +63,7 @@ extern "C" void set_diff_ref_so(char *s) {
   difftest_ref_so = buf;
 }
 
-extern "C" void difftest_workload_list(char * path) {
+extern "C" void set_workload_list(char *path) {
   work_load_list_path = (char *)malloc(256);
   strcpy(work_load_list_path, path);
   printf("set checkpoint list path %s \n", work_load_list_path);
@@ -184,7 +184,7 @@ extern "C" int simv_nstep(uint8_t step) {
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
 static uint64_t work_load_list_head = 0;
-extern "C" char difftest_ram_reload() {
+extern "C" char ram_reload() {
   assert(work_load_list_path);
 
   FILE * fp = fopen(work_load_list_path, "r");
