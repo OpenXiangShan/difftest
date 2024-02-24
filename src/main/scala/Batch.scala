@@ -85,12 +85,12 @@ class BatchEndpoint(template: Seq[DifftestBundle], bundles: Seq[DifftestBundle],
     Delayer(gen.bits.getValid & global_enable, i)
   }.toSeq)
 
-  val MaxDataByteLen = 3900
+  val MaxDataByteLen = config.batchArgByteLen._1
   val MaxDataByteWidth = log2Ceil(MaxDataByteLen)
   val MaxDataBitLen = MaxDataByteLen * 8
   val infoWidth = (new BatchInfo).getWidth
   // Append BatchInterval and BatchFinish Info
-  val MaxInfoByteLen = math.min((config.batchSize * (bundleNum + 1) + 1) * (infoWidth / 8), 90)
+  val MaxInfoByteLen = math.min((config.batchSize * (bundleNum + 1) + 1) * (infoWidth / 8), config.batchArgByteLen._2)
   val MaxInfoByteWidth = log2Ceil(MaxInfoByteLen)
   val MaxInfoBitLen = MaxInfoByteLen * 8
 
