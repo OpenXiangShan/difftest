@@ -337,13 +337,16 @@ jobs:
 
       - name: Verilator Build with VCS Top (with workload list)
         run : |
-            echo "./ready-to-run/microbench.bin,10000" > list.txt
-            echo "./ready-to-run/linux.bin,20000" >> list.txt
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
+            touch ./ready-to-run/list.txt
+            chmod 777 ./ready-to-run/list.txt
+            echo "$(pwd)/ready-to-run/microbench.bin 10000" > ./ready-to-run/list.txt
+            echo "$(pwd)/ready-to-run/linux.bin 20000" >> ./ready-to-run/list.txt
+            cat ./ready-to-run/list.txt
             make simv DIFFTEST_PERFCNT=1 VCS=verilator -j2
-            ./build/simv +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so +workload-list=list.txt
-            rm -rf list.txt
+            ./build/simv +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so +workload-list=$(pwd)/ready-to-run/list.txt
+            rm -rf ./ready-to-run/list.txt
