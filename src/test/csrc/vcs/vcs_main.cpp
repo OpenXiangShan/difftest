@@ -37,7 +37,7 @@ static char *flash_bin_file = NULL;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 
-static int ram_path_reset(char *file_name);
+static char ram_path_reset(char *file_name);
 static char *work_load_list_path = NULL;
 
 extern "C" void set_bin_file(char *s) {
@@ -114,6 +114,7 @@ extern "C" int simv_step() {
     auto trap = difftest[0]->get_trap_event();
     if(max_instrs < trap->instrCnt) {
       eprintf(ANSI_COLOR_GREEN "EXCEEDED MAX INSTR: %ld\n" ANSI_COLOR_RESET,max_instrs);
+      difftest[0]->display_stats();
       return STATE_LIMIT_EXCEEDED;
     }
   }
@@ -206,19 +207,15 @@ extern "C" char ram_reload() {
 
   work_load_list_head = work_load_list_head + strlen(file_name);
 
-  if (ram_path_reset(file_name)) {
-    return 1;
-  }
-
   fclose(fp);
   difftest_finish();
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
   simv_result = 0;
 #endif
-  return 0;
+  return ram_path_reset(file_name);
 }
 
-static int ram_path_reset(char *file_name) {
+static char ram_path_reset(char *file_name) {
 	int line_len = strlen(file_name);
 
   if(file_name[0] == '\0') {
@@ -232,6 +229,8 @@ static int ram_path_reset(char *file_name) {
   if (sscanf(file_name, "%s %ld", bin_file, &max_instrs) != 2) {
     printf("no more work load\n");
     return 1;
+  } else {
+    printf("soft rst image file %s\n", bin_file);
   }
 
   return 0;

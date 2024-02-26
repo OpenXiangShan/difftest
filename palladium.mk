@@ -18,6 +18,10 @@ PLDM_MACRO_FLAGS 	+= +define+DIFFTEST +define+DISABLE_DIFFTEST_RAM_DPIC +define+
 endif
 PLDM_MACRO_FLAGS 	+= $(PLDM_EXTRA_MACRO)
 
+ifeq ($(SOFT_RST),1)
+PLDM_MACRO_FLAGS  	+= +define+ENABLE_CORE_SOFT_RST
+endif
+
 # UA Args
 IXCOM_FLAGS  	 = -clean -64 -ua +sv +ignoreSimVerCheck +xe_alt_xlm
 ifeq ($(SYNTHESIS), 1)

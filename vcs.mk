@@ -35,6 +35,11 @@ ifeq ($(RELEASE),1)
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
 endif
 
+# core soft rst
+ifeq ($(SOFT_RST),1)
+VCS_FLAGS    += +define+ENABLE_CORE_SOFT_RST
+endif
+
 # if fsdb is considered
 # CONSIDER_FSDB ?= 0
 ifeq ($(CONSIDER_FSDB),1)
