@@ -43,11 +43,6 @@ static const char *regs_name_csr[] = {
   "mtvec",
   "stvec", "mcause", "scause", "satp", "mip", "mie",
   "mscratch", "sscratch", "mideleg", "medeleg",
-#ifdef RVN_DIFF
-  "ustatus", "ucause", "uepc",
-  "uscratch", "utval", "utvec",
-  "sedeleg", "sideleg",
-#endif  // RVN_DIFF
 #ifdef DASICS_DIFF
   "dsmcfg", "dsmbound0", "dsmbound1",
   "dumcfg", "dumbound0", "dumbound1",
