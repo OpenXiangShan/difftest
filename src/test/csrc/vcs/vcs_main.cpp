@@ -80,12 +80,13 @@ int switch_workload() {
     if (fscanf(fp, "%s %d", name, &num) == 2) {
       set_bin_file(name);
       set_max_instrs(num);
-    } else {
-      printf("Unknown workload list format\n");
+    }
+    else if (feof(fp)) {
+      printf("Workload list is completed\n");
       return 1;
     }
-    if (feof(fp)) {
-      printf("Workload list is completed\n");
+    else {
+      printf("Unknown workload list format\n");
       return 1;
     }
   } else {
