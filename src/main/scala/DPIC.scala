@@ -397,6 +397,12 @@ object DPIC {
     interfaceCpp +=
       s"""
          |#ifdef CONFIG_DIFFTEST_PERFCNT
+         |void diffstate_perfcnt_init() {
+         |  for (int i = 0; i < DIFFSTATE_PERF_NUM; i++) {
+         |    dpic_calls[i] = 0;
+         |    dpic_bytes[i] = 0;
+         |  }
+         |}
          |void diffstate_perfcnt_finish(long long msec) {
          |  long long calls_sum = 0, bytes_sum = 0;
          |  const char *dpic_name[DIFFSTATE_PERF_NUM] = {

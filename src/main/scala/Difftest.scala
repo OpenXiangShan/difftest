@@ -404,6 +404,7 @@ object DifftestModule {
     difftestCpp +=
       s"""
          |#ifdef CONFIG_DIFFTEST_PERFCNT
+         |void diffstate_perfcnt_init();
          |void diffstate_perfcnt_finish(long long msec);
          |#endif // CONFIG_DIFFTEST_PERFCNT
          |""".stripMargin

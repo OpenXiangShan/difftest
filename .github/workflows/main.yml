@@ -335,18 +335,15 @@ jobs:
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
-      - name: Verilator Build with VCS Top (with workload list)
+      - name: Verilator Build with VCS Top (with workload-list)
         run : |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            touch ./ready-to-run/list.txt
-            chmod 777 ./ready-to-run/list.txt
-            echo "$(pwd)/ready-to-run/microbench.bin 10000" > ./ready-to-run/list.txt
-            echo "$(pwd)/ready-to-run/linux.bin 20000" >> ./ready-to-run/list.txt
-            echo "$(pwd)/ready-to-run/microbench.bin 12345" >> ./ready-to-run/list.txt
-            make simv VCS=verilator SOFT_RST=1 -j2
-            ./build/simv +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so +workload-list=$(pwd)/ready-to-run/list.txt
+            echo "./ready-to-run/microbench.bin 10000" > list.txt
+            echo "./ready-to-run/linux.bin 20000" >> list.txt
+            make simv VCS=verilator WORKLOAD_LIST=1 -j2
+            ./build/simv +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so +workload-list=./list.txt
             rm -rf ./ready-to-run/list.txt

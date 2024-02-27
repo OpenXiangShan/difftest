@@ -22,18 +22,18 @@ import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
-import "DPI-C" function void simv_init();
+import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
-`ifdef ENABLE_CORE_SOFT_RST
+`ifdef ENABLE_WORKLOAD_SWITCH
 import "DPI-C" function void set_workload_list(string path);
-import "DPI-C" function byte ram_reload();
-`endif // ENABLE_CORE_SOFT_RST
+`endif // ENABLE_WORKLOAD_SWITCH
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
-import "DPI-C" function int simv_nstep(int step);
+import "DPI-C" function byte simv_nstep(byte step);
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
 
-localparam  STATE_LIMIT_EXCEEDED = 3;
+`define SIMV_DONE     8'h1
+`define SIMV_FAIL     8'h2
 
 `ifdef PALLADIUM
   `ifdef SYNTHESIS
@@ -64,15 +64,18 @@ string wave_type;
 string diff_ref_so;
 string workload_list;
 
+`ifdef ENABLE_WORKLOAD_SWITCH
+wire workload_switch;
+`endif // ENABLE_WORKLOAD_SWITCH
+
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
-
-reg soft_rst_en;
 
 initial begin
 `ifndef WIRE_CLK
   clock = 0;
 `endif // WIRE_CLK
+
   reset = 1;
 `ifdef VCS
   // enable waveform
@@ -129,21 +132,17 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
-`ifdef ENABLE_CORE_SOFT_RST
-  // set workload run list
+`ifdef ENABLE_WORKLOAD_SWITCH
+  // set workload list
   if ($test$plusargs("workload-list")) begin
     $value$plusargs("workload-list=%s", workload_list);
     set_workload_list(workload_list);
-    if(ram_reload() == 8'd1) begin
-      $display("run work list start faild");
-      $finish();
-    end
   end
   else begin
-    $display("soft reset is enabled but the workload list is not set");
+    $display("workload switch is enabled but the workload list is not set");
     $finish();
   end
-`endif // ENABLE_CORE_SOFT_RST
+`endif // ENABLE_WORKLOAD_SWITCH
 `endif // TB_NO_DPIC
   // max cycles to execute, no limit for default
   max_cycles = 0;
@@ -159,8 +158,13 @@ initial begin
 end
 
 // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
-`ifndef PALLADIUM
-`ifndef ENABLE_CORE_SOFT_RST
+`ifdef PALLADIUM
+  `define RESET_COUNTER
+`elsif ENABLE_WORKLOAD_SWITCH
+  `define RESET_COUNTER
+`endif
+
+`ifndef RESET_COUNTER
 initial begin
   #100 reset = 0;
 end
@@ -168,46 +172,22 @@ end
 reg [7:0] reset_counter;
 initial reset_counter = 0;
 always @(posedge clock) begin
-  if (soft_rst_en) begin
+`ifdef ENABLE_WORKLOAD_SWITCH
+  if (workload_switch) begin
     reset_counter <= 8'd0;
     reset         <= 1'b1;
-    $display("soft rst CPU core");
-  end 
-  else begin
+    $display("workload switch");
+  end
+  else
+`endif // ENABLE_WORKLOAD_SWITCH
+  begin
+    reset_counter <= reset_counter + 8'd1;
     if (reset && (reset_counter == 8'd100)) begin
       reset <= 1'b0;
-    end 
-    else if (reset) begin
-      reset_counter <= reset_counter + 8'd1;
-    end 
-    else begin
-      reset_counter <= reset_counter;
     end
   end
 end
-`endif // ENABLE_CORE_SOFT_RST
-`else
-reg [7:0] reset_counter;
-initial reset_counter = 0;
-always @(posedge clock) begin
-  if (soft_rst_en) begin
-    reset_counter <= 8'd0;
-    reset         <= 1'b1;
-    $display("soft rst CPU core");
-  end 
-  else begin
-    if (reset && (reset_counter == 8'd100)) begin
-      reset <= 1'b0;
-    end 
-    else if (reset) begin
-      reset_counter <= reset_counter + 8'd1;
-    end 
-    else begin
-      reset_counter <= reset_counter;
-    end
-  end
-end
-`endif // PALLADIUM
+`endif // RESET_COUNTER
 
 `ifndef WIRE_CLK
 always #1 clock <= ~clock;
@@ -242,7 +222,7 @@ end
 
 `ifndef TB_NO_DPIC
 `ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
-wire simv_result;
+wire [7:0] simv_result;
 DeferredControl deferred(
   .clock(clock),
   .reset(reset),
@@ -250,28 +230,21 @@ DeferredControl deferred(
   .simv_result(simv_result)
 );
 `else
-`ifdef ENABLE_CORE_SOFT_RST
-reg [31:0] tarp;
-`endif // ENABLE_CORE_SOFT_RST
+reg [7:0] simv_result;
+initial simv_result = 0;
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+
+`ifdef ENABLE_WORKLOAD_SWITCH
+assign workload_switch = simv_result == `SIMV_DONE;
+`endif // ENABLE_WORKLOAD_SWITCH
 `endif // TB_NO_DPIC
 
 reg [63:0] n_cycles;
 always @(posedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;
-`ifndef TB_NO_DPIC
-`ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
-`ifdef ENABLE_CORE_SOFT_RST
-    tarp <= 1'b0;
-`endif // ENABLE_CORE_SOFT_RST
-`endif // CONFIG_DIFFTEST_DEFERRED_RESULT
-`endif // TB_NO_DPIC
-`ifdef ENABLE_CORE_SOFT_RST
-    soft_rst_en <= 1'b0;
-`endif // ENABLE_CORE_SOFT_RST
   end
-  else if(!soft_rst_en) begin
+  else begin
     n_cycles <= n_cycles + 64'h1;
 
     // max cycles
@@ -283,62 +256,28 @@ always @(posedge clock) begin
 `ifndef TB_NO_DPIC
     // difftest
     if (!n_cycles) begin
-      simv_init();
+      if (simv_init()) begin
+        $display("DIFFTEST INIT FAILED");
+        $finish();
+      end
     end
-`ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
-    else if (simv_result) begin
+    else if (simv_result == `SIMV_FAIL) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
-`ifdef ENABLE_CORE_SOFT_RST
-      if (simv_result == STATE_LIMIT_EXCEEDED)begin
-        soft_rst_en <= 1'b1;
-      end 
-      else begin
-        $finish();
-      end
-`else
       $finish();
-`endif // ENABLE_CORE_SOFT_RST
     end
-`else
+`ifdef ENABLE_WORKLOAD_SWITCH
+    else if (simv_result == `SIMV_DONE) begin
+      $display("DIFFTEST WORKLOAD DONE at cycle %d", n_cycles);
+      simv_result <= 8'b0;
+    end
+`endif // ENABLE_WORKLOAD_SWITCH
+`ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
     else if (|difftest_step) begin
-      // check errors
-`ifdef ENABLE_CORE_SOFT_RST
-      if (tarp) begin
-        if (tarp == STATE_LIMIT_EXCEEDED)begin
-          soft_rst_en <= 1'b1;
-        end
-        else begin
-          $display("DIFFTEST FAILED at cycle %d", n_cycles);
-          $finish();
-        end
-      end
-      else begin
-        tarp <= simv_nstep(difftest_step);
-      end
-`else
-      if (simv_nstep(difftest_step)) begin
-        $display("DIFFTEST FAILED at cycle %d", n_cycles);
-        $finish();
-      end
-`endif // ENABLE_CORE_SOFT_RST
+      simv_result <= simv_nstep(difftest_step);
     end
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
   end
 end
-
-`ifndef TB_NO_DPIC
-`ifdef ENABLE_CORE_SOFT_RST
-//soft rst
-always @(posedge clock)begin
-  if (!reset && soft_rst_en) begin
-    if(ram_reload() == 8'd1) begin
-      $display("run work-load list end");
-      $finish();
-    end
-  end
-end
-`endif // ENABLE_CORE_SOFT_RST
-`endif // TB_NO_DPIC
 
 endmodule
