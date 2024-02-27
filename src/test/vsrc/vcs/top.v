@@ -265,12 +265,13 @@ always @(posedge clock) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
       $finish();
     end
-`ifdef ENABLE_WORKLOAD_SWITCH
     else if (simv_result == `SIMV_DONE) begin
       $display("DIFFTEST WORKLOAD DONE at cycle %d", n_cycles);
       simv_result <= 8'b0;
-    end
+`ifndef ENABLE_WORKLOAD_SWITCH
+      $finish();
 `endif // ENABLE_WORKLOAD_SWITCH
+    end
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
     else if (|difftest_step) begin
       simv_result <= simv_nstep(difftest_step);
