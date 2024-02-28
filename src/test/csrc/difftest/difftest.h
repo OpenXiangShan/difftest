@@ -20,11 +20,11 @@
 #include <vector>
 #include "common.h"
 #include "difftrace.h"
+#include "refproxy.h"
+#include "golden.h"
 #ifdef FUZZING
 #include "emu.h"
 #endif // FUZZING
-#include "refproxy.h"
-#include "golden.h"
 
 enum { ICACHEID, DCACHEID, PAGECACHEID };
 enum { ITLBID, LDTLBID, STTLBID };

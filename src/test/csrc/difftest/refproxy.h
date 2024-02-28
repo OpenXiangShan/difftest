@@ -22,6 +22,7 @@
 
 #include "common.h"
 
+/* clang-format off */
 static const char *regs_name_int[] = {
   "$0",  "ra",  "sp",   "gp",   "tp",  "t0",  "t1",   "t2",
   "s0",  "s1",  "a0",   "a1",   "a2",  "a3",  "a4",   "a5",
@@ -63,6 +64,7 @@ static const char *regs_name_vec[] = {
 static const char *regs_name_vec_csr[] = {
   "vstart", "vxsat", "vxrm", "vcsr", "vl", "vtype", "vlenb"
 };
+/* clang-format on */
 
 enum { REF_TO_DUT, DUT_TO_REF };
 
@@ -73,6 +75,7 @@ public:
   bool enable_store_log = false;
 };
 
+/* clang-format off */
 #define REF_BASE(f)                                                           \
   f(ref_init, difftest_init, void, )                                          \
   f(ref_regcpy, difftest_regcpy, void, void*, bool, bool)                     \
@@ -87,14 +90,14 @@ public:
   f(load_flash_bin, difftest_load_flash, void, void*, size_t)
 
 #ifdef ENABLE_RUNHEAD
-#define REF_RUN_AHEAD(f) \
+#define REF_RUN_AHEAD(f)                                                      \
   f(query, difftest_query_ref, void, void *, uint64_t)
 #else
 #define REF_RUN_AHEAD(f)
 #endif
 
 #ifdef ENABLE_STORE_LOG
-#define REF_STORE_LOG(f) \
+#define REF_STORE_LOG(f)                                                      \
   f(ref_store_log_reset, difftest_store_log_reset, void, )                    \
   f(ref_store_log_restore, difftest_store_log_restore, void, )
 #else
@@ -102,13 +105,13 @@ public:
 #endif
 
 #ifdef DEBUG_MODE_DIFF
-#define REF_DEBUG_MODE(f) \
+#define REF_DEBUG_MODE(f)                                                     \
   f(debug_mem_sync, debug_mem_sync, void, uint64_t, void *, size_t)
 #else
 #define REF_DEBUG_MODE(f)
 #endif
 
-#define REF_ALL(f) \
+#define REF_ALL(f)  \
   REF_BASE(f)       \
   REF_RUN_AHEAD(f)  \
   REF_STORE_LOG(f)  \
@@ -126,6 +129,7 @@ public:
 
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
+/* clang-format on */
 
 // This class only loads the functions. It should never call anything.
 class AbstractRefProxy {

@@ -80,6 +80,7 @@ public:
     auto c_llvm = new LLVMSanCoverage;
     cover.push_back(c_llvm);
 #endif // LLVM_COVER
+
 // #if defined(CONFIG_DIFFTEST_INSTRCOVER) && defined(FIRRTL_COVER)
 //     auto c_union_instr_firrtl = new UnionCoverage(c_instr, c_firrtl);
 //     cover.push_back(c_union_instr_firrtl);

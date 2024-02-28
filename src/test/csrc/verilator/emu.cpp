@@ -17,28 +17,28 @@
 #include "emu.h"
 #include "device.h"
 #include "sdcard.h"
+#include <getopt.h>
+#include <signal.h>
+#include "flash.h"
+#include <sys/resource.h>
+#include "ram.h"
+#include "compress.h"
+#include "lightsss.h"
+#include "remote_bitbang.h"
 #ifndef CONFIG_NO_DIFFTEST
 #include "difftest.h"
 #include "refproxy.h"
 #include "goldenmem.h"
 #endif // CONFIG_NO_DIFFTEST
-#include "flash.h"
 #ifdef ENABLE_RUNHEAD
 #include "runahead.h"
 #endif
-#include <getopt.h>
-#include <signal.h>
 #ifdef  ENABLE_CHISEL_DB
 #include "chisel_db.h"
 #endif
 #ifdef ENABLE_IPC
 #include <sys/stat.h>
 #endif
-#include <sys/resource.h>
-#include "ram.h"
-#include "compress.h"
-#include "lightsss.h"
-#include "remote_bitbang.h"
 
 extern remote_bitbang_t * jtag;
 
@@ -123,6 +123,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #ifndef CONFIG_NO_DIFFTEST
   extern const char *difftest_ref_so;
 #endif // CONFIG_NO_DIFFTEST
+
+  /* clang-format off */
   const struct option long_options[] = {
     { "load-snapshot",     1, NULL,  0  },
     { "dump-wave",         0, NULL,  0  },
@@ -165,6 +167,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "help",              0, NULL, 'h' },
     { 0,                   0, NULL,  0  }
   };
+  /* clang-format on */
 
   int o;
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),

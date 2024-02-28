@@ -14,7 +14,6 @@
 ***************************************************************************************/
 
 #ifdef CONFIG_DIFFTEST_PERFCNT
-#include "common.h"
 #include "perf.h"
 #include <time.h>
 

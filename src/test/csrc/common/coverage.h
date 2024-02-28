@@ -17,11 +17,11 @@
 #define __COVERAGE_H
 
 #include "common.h"
+#include <vector>
+#include <string>
 #ifdef FIRRTL_COVER
 #include "firrtl-cover.h"
 #endif // FIRRTL_COVER
-#include <vector>
-#include <string>
 
 #define coverage_display(s, ...) \
   eprintf(ANSI_COLOR_GREEN s ANSI_COLOR_RESET, ##__VA_ARGS__)

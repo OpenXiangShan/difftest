@@ -14,11 +14,10 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "device.h"
 #ifdef SHOW_SCREEN
 #include <SDL2/SDL.h>
 #endif
-
-#include "device.h"
 
 void send_key(uint8_t, bool);
 void init_sdl(void);

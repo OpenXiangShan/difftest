@@ -18,7 +18,7 @@
 #define COMPRESS_H
 
 #include "common.h"
-
+#include <sys/time.h>
 #ifndef NO_GZ_COMPRESSION
 #include <zlib.h>
 #endif
@@ -26,7 +26,6 @@
 #include <zstd.h>
 #include <fcntl.h>
 #endif
-#include <sys/time.h>
 
 #define LOAD_SNAPSHOT 0
 #define LOAD_RAM 1

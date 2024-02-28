@@ -5,7 +5,7 @@ on:
     branches: [ master ]
 
 jobs:
-  scalafmt:
+  format:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -18,16 +18,21 @@ jobs:
           sudo curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.1/0.11.1 > /usr/local/bin/mill
           chmod +x /usr/local/bin/mill
 
+      - name: Clang Format Installation
+        run: |
+          pip install clang-format
+
       - name: Scala Formatter
         run: |
-          make format
+          make scala-format
 
-      - name: Commit and Push
+      - name: Clang Formatter
+        run: |
+          make clang-format
+
+      - name: Format Check
         run: |
           if [ -n "$(git status --porcelain)" ]; then
-            git config user.name github-actions
-            git config user.email github-actions@github.com
-            git add .
-            git commit -m "make format"
-            git push
+            echo "Please run 'make format' manually"
+            exit 1
           fi
