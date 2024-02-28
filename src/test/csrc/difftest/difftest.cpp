@@ -161,8 +161,8 @@ Difftest::~Difftest() {
   }
 #ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
   free(state_ss);
-  if (proxy_ss) {
-    free(proxy_ss);
+  if (proxy_reg_ss) {
+    free(proxy_reg_ss);
   }
 #endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 }
@@ -170,9 +170,8 @@ Difftest::~Difftest() {
 void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   proxy = new REF_PROXY(coreid, ram_size);
 #ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
-  proxy_ss = (REF_PROXY*)malloc(sizeof(REF_PROXY));
-  squash_memsize = ram_size;
-  squash_membuf = (char *)malloc(squash_memsize);
+  proxy_reg_size = proxy->get_reg_size();
+  proxy_reg_ss = (uint8_t*)malloc(proxy_reg_size);
 #endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 }
 
@@ -187,19 +186,23 @@ bool Difftest::squash_check() {
 
 void Difftest::squash_snapshot() {
   memcpy(state_ss, state, sizeof(DiffState));
-  memcpy(proxy_ss, proxy, sizeof(REF_PROXY));
+  memcpy(proxy_reg_ss, &proxy->regs_int, proxy_reg_size);
   proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
-  proxy->ref_memcpy(PMEM_BASE, squash_membuf, squash_memsize, REF_TO_DUT);
+  proxy->ref_store_log_reset();
+  proxy->set_store_log(true);
+  goldenmem_store_log_reset();
+  goldenmem_set_store_log(true);
 }
 
 void Difftest::squash_replay() {
   inReplay = true;
   replay_idx = squash_idx;
   memcpy(state, state_ss, sizeof(DiffState));
-  memcpy(proxy, proxy_ss, sizeof(REF_PROXY));
+  memcpy(&proxy->regs_int, proxy_reg_ss, proxy_reg_size);
   proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
-  proxy->ref_memcpy(PMEM_BASE, squash_membuf, squash_memsize, DUT_TO_REF);
+  proxy->ref_store_log_restore();
+  goldenmem_store_log_restore();
   difftest_squash_replay(replay_idx);
 }
 #endif // CONFIG_DIFFTEST_SQUASH_REPLAY
@@ -216,6 +219,9 @@ int Difftest::step() {
   isSquash = squash_check();
   if (isSquash) {
     squash_snapshot();
+  } else {
+    proxy->set_store_log(false);
+    goldenmem_set_store_log(false);
   }
 #endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 

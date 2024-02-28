@@ -45,4 +45,9 @@ void paddr_write(uint64_t addr, word_t data, int len);
 bool is_sfence_safe(uint64_t addr, int len);
 bool in_pmem(uint64_t addr);
 
+#ifdef ENABLE_STORE_LOG
+void goldenmem_set_store_log(bool enable);
+void goldenmem_store_log_reset();
+void goldenmem_store_log_restore();
+#endif
 #endif
