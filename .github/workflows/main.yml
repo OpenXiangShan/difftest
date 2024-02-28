@@ -319,6 +319,7 @@ jobs:
             make simv DIFFTEST_PERFCNT=1 VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
+            cd difftest && git restore src
 
       - name: Verilator Build with VCS Top (with Squash DutZone Batch and Global Enable PerfCnt)
         run: |
@@ -334,3 +335,4 @@ jobs:
             make simv DIFFTEST_PERFCNT=1 VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
+            cd difftest && git restore src
