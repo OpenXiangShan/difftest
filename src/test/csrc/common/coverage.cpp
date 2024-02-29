@@ -143,25 +143,27 @@ typedef struct {
   uint64_t tag;
 } llvm_sancov_pc_t;
 
-LLVMSanCovData* llvm_sancov = nullptr;
+LLVMSanCovData *llvm_sancov = nullptr;
 
-extern "C" void __sanitizer_cov_trace_pc_guard_init(uint32_t* start, uint32_t* stop) {
+extern "C" void __sanitizer_cov_trace_pc_guard_init(uint32_t *start, uint32_t *stop) {
   static uint32_t count = 0;
-  if (start == stop || *start) return;
+  if (start == stop || *start)
+    return;
   if (!llvm_sancov) {
     llvm_sancov = new LLVMSanCovData();
   }
   auto n_cover = stop - start;
   auto s = llvm_sancov->points.size();
   llvm_sancov->points.resize(llvm_sancov->points.size() + n_cover, false);
-  for (uint32_t* x = start; x < stop; x++) {
+  for (uint32_t *x = start; x < stop; x++) {
     *x = ++count;
   }
 }
 
 extern "C" void __sanitizer_symbolize_pc(uintptr_t pc, const char *fmt, char *out, size_t out_size);
-extern "C" void __sanitizer_cov_trace_pc_guard(uint32_t* guard) {
-  if (!*guard) return;
+extern "C" void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
+  if (!*guard)
+    return;
   auto index = *guard;
   if (llvm_sancov->points.size() >= index) {
     llvm_sancov->points[index - 1] = true;
@@ -185,8 +187,7 @@ extern "C" void __sanitizer_cov_pcs_init(const uintptr_t *pcs_beg, const uintptr
 }
 #endif // LLVM_COVER
 
-UnionCoverage::UnionCoverage(Coverage *_c1, Coverage *_c2): c1(_c1), c2(_c2) {
-}
+UnionCoverage::UnionCoverage(Coverage *_c1, Coverage *_c2) : c1(_c1), c2(_c2) {}
 
 void UnionCoverage::reset() {
   c1->reset();

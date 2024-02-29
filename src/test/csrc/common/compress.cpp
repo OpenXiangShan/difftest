@@ -20,7 +20,7 @@ double calcTime(timeval s, timeval e) {
   double sec, usec;
   sec = e.tv_sec - s.tv_sec;
   usec = e.tv_usec - s.tv_usec;
-  return 1000*sec + usec/1000.0;
+  return 1000 * sec + usec / 1000.0;
 }
 
 // Return whether the file is a gz file
@@ -51,25 +51,27 @@ long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) 
   long curr_size = 0;
   const uint32_t chunk_size = 16384;
   long *temp_page = new long[chunk_size];
-  long *pmem_current = (long*)ptr;
+  long *pmem_current = (long *)ptr;
 
   while (curr_size < buf_size) {
     memset(temp_page, 0, chunk_size * sizeof(long));
     for (uint32_t x = 0; x < chunk_size / sizeof(long); x++) {
-      pmem_current = (long*)((uint8_t*)ptr + curr_size + x * sizeof(long));
+      pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
       if (*pmem_current != 0) {
         *(temp_page + x) = *pmem_current;
       }
     }
     uint32_t bytes_write = gzwrite(compressed_mem, temp_page, chunk_size);
-    if (bytes_write <= 0) { printf("Compress failed\n"); break; }
+    if (bytes_write <= 0) {
+      printf("Compress failed\n");
+      break;
+    }
     curr_size += bytes_write;
     // assert(bytes_write % sizeof(long) == 0);
-
   }
   // printf("Write %lu bytes from gz stream in total\n", curr_size);
 
-  delete [] temp_page;
+  delete[] temp_page;
 
   if (gzclose(compressed_mem)) {
     printf("Error closing '%s'\n", filename);
@@ -81,7 +83,7 @@ long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) 
 #endif
 }
 
-long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_type) {
+long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t load_type) {
 #ifndef NO_GZ_COMPRESSION
   assert(buf_size > 0);
   gzFile compressed_mem = gzopen(file_name, "rb");
@@ -109,22 +111,22 @@ long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_ty
     }
     for (uint32_t x = 0; x < bytes_read / sizeof(long) + 1; x++) {
       if (*(temp_page + x) != 0) {
-        long *pmem_current = (long*)((uint8_t*)ptr + curr_size + x * sizeof(long));
+        long *pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
         *pmem_current = *(temp_page + x);
       }
     }
     curr_size += bytes_read;
   }
 
-  if(gzread(compressed_mem, temp_page, chunk_size) > 0) {
+  if (gzread(compressed_mem, temp_page, chunk_size) > 0) {
     printf("File size is larger than buf_size!\n");
     assert(0);
   }
   // printf("Read %lu bytes from gz stream in total\n", curr_size);
 
-  delete [] temp_page;
+  delete[] temp_page;
 
-  if(gzclose(compressed_mem)) {
+  if (gzclose(compressed_mem)) {
     printf("Error closing '%s'\n", file_name);
     return -1;
   }
@@ -134,7 +136,7 @@ long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_ty
 #endif
 }
 
-long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_type) {
+long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_type) {
 #ifndef NO_ZSTD_COMPRESSION
   assert(buf_size > 0);
 
@@ -186,17 +188,17 @@ long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_
   ZSTD_DStream *dstream = ZSTD_createDStream();
   if (!dstream) {
     printf("Can't create zstd dstream object\n");
-    delete [] compress_file_buffer;
-    delete [] temp_page;
+    delete[] compress_file_buffer;
+    delete[] temp_page;
     return -1;
   }
 
   size_t init_result = ZSTD_initDStream(dstream);
   if (ZSTD_isError(init_result)) {
-    printf("Can't init zstd dstream object: %s\n",ZSTD_getErrorName(init_result));
+    printf("Can't init zstd dstream object: %s\n", ZSTD_getErrorName(init_result));
     ZSTD_freeDStream(dstream);
-    delete [] compress_file_buffer;
-    delete [] temp_page;
+    delete[] compress_file_buffer;
+    delete[] temp_page;
     return -1;
   }
 
@@ -209,8 +211,8 @@ long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_
     if (ZSTD_isError(decompress_result)) {
       printf("Decompress failed: %s\n", ZSTD_getErrorName(decompress_result));
       ZSTD_freeDStream(dstream);
-      delete [] compress_file_buffer;
-      delete [] temp_page;
+      delete[] compress_file_buffer;
+      delete[] temp_page;
       return -1;
     }
 
@@ -220,7 +222,7 @@ long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_
 
     for (uint32_t x = 0; x < output_buffer.pos / sizeof(long) + 1; x++) {
       if (*(temp_page + x) != 0) {
-        long *pmem_current = (long*)((uint8_t*)ptr + curr_size + x * sizeof(long));
+        long *pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
         *pmem_current = *(temp_page + x);
       }
     }
@@ -229,18 +231,18 @@ long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_
 
   ZSTD_outBuffer output_buffer = {temp_page, chunk_size * sizeof(long), 0};
   size_t decompress_result = ZSTD_decompressStream(dstream, &output_buffer, &input_buffer);
-  if (ZSTD_isError(decompress_result) || output_buffer.pos!=0) {
+  if (ZSTD_isError(decompress_result) || output_buffer.pos != 0) {
     printf("Decompress failed: %s\n", ZSTD_getErrorName(decompress_result));
     printf("Binary size larger than memory\n");
     ZSTD_freeDStream(dstream);
-    delete [] compress_file_buffer;
-    delete [] temp_page;
+    delete[] compress_file_buffer;
+    delete[] temp_page;
     return -1;
   }
 
   ZSTD_freeDStream(dstream);
-  delete [] compress_file_buffer;
-  delete [] temp_page;
+  delete[] compress_file_buffer;
+  delete[] temp_page;
 
   return curr_size;
 #else
@@ -248,9 +250,9 @@ long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_
 #endif
 }
 
-void nonzero_large_memcpy(const void* __restrict dest, const void* __restrict src, size_t n) {
+void nonzero_large_memcpy(const void *__restrict dest, const void *__restrict src, size_t n) {
   uint64_t *_dest = (uint64_t *)dest;
-  uint64_t *_src  = (uint64_t *)src;
+  uint64_t *_src = (uint64_t *)src;
   while (n >= sizeof(uint64_t)) {
     if (*_src != 0) {
       *_dest = *_src;
@@ -261,7 +263,7 @@ void nonzero_large_memcpy(const void* __restrict dest, const void* __restrict sr
   }
   if (n > 0) {
     uint8_t *dest8 = (uint8_t *)_dest;
-    uint8_t *src8  = (uint8_t *)_src;
+    uint8_t *src8 = (uint8_t *)_src;
     while (n > 0) {
       *dest8 = *src8;
       dest8++;

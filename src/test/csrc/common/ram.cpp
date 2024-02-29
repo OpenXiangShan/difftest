@@ -14,12 +14,11 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "ram.h"
+#include "common.h"
+#include "compress.h"
 #include <iostream>
 #include <sys/mman.h>
-
-#include "common.h"
-#include "ram.h"
-#include "compress.h"
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -45,20 +44,20 @@ void addpageSv39() {
 //the first layer: one entry for 1GB. (512GB in total by 512 entries). need the 2th entries
 //the second layer: one entry for 2MB. (1GB in total by 512 entries). need the 0th-63rd entries
 //the third layer: one entry for 4KB (2MB in total by 512 entries). need 64 with each one all
-#define TOPSIZE (128 * 1024 * 1024)
-#define PAGESIZE (4 * 1024)  // 4KB = 2^12B
-#define ENTRYNUM (PAGESIZE / 8) //512 2^9
-#define PTEVOLUME (PAGESIZE * ENTRYNUM) // 2MB
-#define PTENUM (TOPSIZE / PTEVOLUME) // 128MB / 2MB = 64
-#define PDDENUM 1
-#define PDENUM 1
-#define PDDEADDR (0x88000000 - (PAGESIZE * (PTENUM + 2))) //0x88000000 - 0x1000*66
-#define PDEADDR (0x88000000 - (PAGESIZE * (PTENUM + 1))) //0x88000000 - 0x1000*65
+#define TOPSIZE    (128 * 1024 * 1024)
+#define PAGESIZE   (4 * 1024)            // 4KB = 2^12B
+#define ENTRYNUM   (PAGESIZE / 8)        //512 2^9
+#define PTEVOLUME  (PAGESIZE * ENTRYNUM) // 2MB
+#define PTENUM     (TOPSIZE / PTEVOLUME) // 128MB / 2MB = 64
+#define PDDENUM    1
+#define PDENUM     1
+#define PDDEADDR   (0x88000000 - (PAGESIZE * (PTENUM + 2)))            //0x88000000 - 0x1000*66
+#define PDEADDR    (0x88000000 - (PAGESIZE * (PTENUM + 1)))            //0x88000000 - 0x1000*65
 #define PTEADDR(i) (0x88000000 - (PAGESIZE * PTENUM) + (PAGESIZE * i)) //0x88000000 - 0x100*64
 #define PTEMMIONUM 128
 #define PDEMMIONUM 1
-#define PTEDEVNUM 128
-#define PDEDEVNUM 1
+#define PTEDEVNUM  128
+#define PDEDEVNUM  1
 
   uint64_t pdde[ENTRYNUM];
   uint64_t pde[ENTRYNUM];
@@ -73,28 +72,29 @@ void addpageSv39() {
   uint64_t ptedev[PTEDEVNUM][ENTRYNUM];
 
   // dev: 0x30000000-0x3fffffff
-  pdde[0] = (((PDDEADDR-PAGESIZE*(PDEMMIONUM+PTEMMIONUM+PDEDEVNUM)) & 0xfffff000) >> 2) | 0x1;
+  pdde[0] = (((PDDEADDR - PAGESIZE * (PDEMMIONUM + PTEMMIONUM + PDEDEVNUM)) & 0xfffff000) >> 2) | 0x1;
 
   for (int i = 0; i < PTEDEVNUM; i++) {
-    pdedev[ENTRYNUM-PTEDEVNUM+i] = (((PDDEADDR-PAGESIZE*(PDEMMIONUM+PTEMMIONUM+PDEDEVNUM+PTEDEVNUM-i)) & 0xfffff000) >> 2) | 0x1;
+    pdedev[ENTRYNUM - PTEDEVNUM + i] =
+        (((PDDEADDR - PAGESIZE * (PDEMMIONUM + PTEMMIONUM + PDEDEVNUM + PTEDEVNUM - i)) & 0xfffff000) >> 2) | 0x1;
   }
 
-  for(int outidx = 0; outidx < PTEDEVNUM; outidx++) {
-    for(int inidx = 0; inidx < ENTRYNUM; inidx++) {
-      ptedev[outidx][inidx] = (((0x30000000 + outidx*PTEVOLUME + inidx*PAGESIZE) & 0xfffff000) >> 2) | 0xf;
+  for (int outidx = 0; outidx < PTEDEVNUM; outidx++) {
+    for (int inidx = 0; inidx < ENTRYNUM; inidx++) {
+      ptedev[outidx][inidx] = (((0x30000000 + outidx * PTEVOLUME + inidx * PAGESIZE) & 0xfffff000) >> 2) | 0xf;
     }
   }
 
   // mmio: 0x40000000 - 0x4fffffff
-  pdde[1] = (((PDDEADDR-PAGESIZE*PDEMMIONUM) & 0xfffff000) >> 2) | 0x1;
+  pdde[1] = (((PDDEADDR - PAGESIZE * PDEMMIONUM) & 0xfffff000) >> 2) | 0x1;
 
-  for(int i = 0; i < PTEMMIONUM; i++) {
-    pdemmio[i] = (((PDDEADDR-PAGESIZE*(PTEMMIONUM+PDEMMIONUM-i)) & 0xfffff000) >> 2) | 0x1;
+  for (int i = 0; i < PTEMMIONUM; i++) {
+    pdemmio[i] = (((PDDEADDR - PAGESIZE * (PTEMMIONUM + PDEMMIONUM - i)) & 0xfffff000) >> 2) | 0x1;
   }
 
-  for(int outidx = 0; outidx < PTEMMIONUM; outidx++) {
-    for(int inidx = 0; inidx < ENTRYNUM; inidx++) {
-      ptemmio[outidx][inidx] = (((0x40000000 + outidx*PTEVOLUME + inidx*PAGESIZE) & 0xfffff000) >> 2) | 0xf;
+  for (int outidx = 0; outidx < PTEMMIONUM; outidx++) {
+    for (int inidx = 0; inidx < ENTRYNUM; inidx++) {
+      ptemmio[outidx][inidx] = (((0x40000000 + outidx * PTEVOLUME + inidx * PAGESIZE) & 0xfffff000) >> 2) | 0xf;
     }
   }
 
@@ -102,25 +102,29 @@ void addpageSv39() {
   pdde[2] = ((PDEADDR & 0xfffff000) >> 2) | 0x1;
   //pdde[2] = ((0x80000000&0xc0000000) >> 2) | 0xf;
 
-  for(int i = 0; i < PTENUM ;i++) {
+  for (int i = 0; i < PTENUM; i++) {
     // pde[i] = ((PTEADDR(i)&0xfffff000)>>2) | 0x1;
-    pde[i] = (((0x80000000+i*2*1024*1024)&0xffe00000)>>2) | 0xf;
+    pde[i] = (((0x80000000 + i * 2 * 1024 * 1024) & 0xffe00000) >> 2) | 0xf;
   }
 
-  for(int outidx = 0; outidx < PTENUM; outidx++ ) {
-    for(int inidx = 0; inidx < ENTRYNUM; inidx++ ) {
-      pte[outidx][inidx] = (((0x80000000 + outidx*PTEVOLUME + inidx*PAGESIZE) & 0xfffff000)>>2) | 0xf;
+  for (int outidx = 0; outidx < PTENUM; outidx++) {
+    for (int inidx = 0; inidx < ENTRYNUM; inidx++) {
+      pte[outidx][inidx] = (((0x80000000 + outidx * PTEVOLUME + inidx * PAGESIZE) & 0xfffff000) >> 2) | 0xf;
     }
   }
 
   Info("try to add identical tlb page to ram\n");
-  memcpy((char *)ram+(TOPSIZE-PAGESIZE*(PTENUM+PDDENUM+PDENUM+PDEMMIONUM+PTEMMIONUM+PDEDEVNUM+PTEDEVNUM)),ptedev,PAGESIZE*PTEDEVNUM);
-  memcpy((char *)ram+(TOPSIZE-PAGESIZE*(PTENUM+PDDENUM+PDENUM+PDEMMIONUM+PTEMMIONUM+PDEDEVNUM)),pdedev,PAGESIZE*PDEDEVNUM);
-  memcpy((char *)ram+(TOPSIZE-PAGESIZE*(PTENUM+PDDENUM+PDENUM+PDEMMIONUM+PTEMMIONUM)),ptemmio, PAGESIZE*PTEMMIONUM);
-  memcpy((char *)ram+(TOPSIZE-PAGESIZE*(PTENUM+PDDENUM+PDENUM+PDEMMIONUM)), pdemmio, PAGESIZE*PDEMMIONUM);
-  memcpy((char *)ram+(TOPSIZE-PAGESIZE*(PTENUM+PDDENUM+PDENUM)), pdde, PAGESIZE*PDDENUM);
-  memcpy((char *)ram+(TOPSIZE-PAGESIZE*(PTENUM+PDENUM)), pde, PAGESIZE*PDENUM);
-  memcpy((char *)ram+(TOPSIZE-PAGESIZE*PTENUM), pte, PAGESIZE*PTENUM);
+  memcpy((char *)ram +
+             (TOPSIZE - PAGESIZE * (PTENUM + PDDENUM + PDENUM + PDEMMIONUM + PTEMMIONUM + PDEDEVNUM + PTEDEVNUM)),
+         ptedev, PAGESIZE * PTEDEVNUM);
+  memcpy((char *)ram + (TOPSIZE - PAGESIZE * (PTENUM + PDDENUM + PDENUM + PDEMMIONUM + PTEMMIONUM + PDEDEVNUM)), pdedev,
+         PAGESIZE * PDEDEVNUM);
+  memcpy((char *)ram + (TOPSIZE - PAGESIZE * (PTENUM + PDDENUM + PDENUM + PDEMMIONUM + PTEMMIONUM)), ptemmio,
+         PAGESIZE * PTEMMIONUM);
+  memcpy((char *)ram + (TOPSIZE - PAGESIZE * (PTENUM + PDDENUM + PDENUM + PDEMMIONUM)), pdemmio, PAGESIZE * PDEMMIONUM);
+  memcpy((char *)ram + (TOPSIZE - PAGESIZE * (PTENUM + PDDENUM + PDENUM)), pdde, PAGESIZE * PDDENUM);
+  memcpy((char *)ram + (TOPSIZE - PAGESIZE * (PTENUM + PDENUM)), pde, PAGESIZE * PDENUM);
+  memcpy((char *)ram + (TOPSIZE - PAGESIZE * PTENUM), pte, PAGESIZE * PTENUM);
 }
 #endif
 
@@ -136,7 +140,7 @@ StdinReader::StdinReader() : n_bytes(next()) {}
 
 uint64_t StdinReader::next() {
   uint64_t value;
-  std::cin.read(reinterpret_cast<char*>(&value), sizeof(uint64_t));
+  std::cin.read(reinterpret_cast<char *>(&value), sizeof(uint64_t));
   if (std::cin.fail()) {
     return 0;
   }
@@ -207,7 +211,7 @@ FileReader::FileReader(const char *filename) : file(filename, std::ios::binary) 
 uint64_t FileReader::next() {
   if (!file.eof()) {
     uint64_t value;
-    file.read(reinterpret_cast<char*>(&value), sizeof(uint64_t));
+    file.read(reinterpret_cast<char *>(&value), sizeof(uint64_t));
     if (!file.fail()) {
       return value;
     }
@@ -217,7 +221,7 @@ uint64_t FileReader::next() {
 
 uint64_t FileReader::read_all(void *dest, uint64_t max_bytes) {
   uint64_t read_size = (file_size > max_bytes) ? max_bytes : file_size;
-  file.read(static_cast<char*>(dest), read_size);
+  file.read(static_cast<char *>(dest), read_size);
   return read_size;
 }
 
@@ -236,7 +240,7 @@ void SimMemory::display_stats() {
 #ifdef FUZZING
   uint64_t req_in_range = 0;
   auto const img_indices = get_img_size() / sizeof(uint64_t);
-  for (auto index : accessed_indices) {
+  for (auto index: accessed_indices) {
     if (index < img_indices) {
       req_in_range++;
     }
@@ -276,13 +280,11 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes)
     Info("Gzip file detected and loading image from extracted gz file\n");
     img_size = readFromGz(ram, image, memory_size, LOAD_RAM);
     assert(img_size >= 0);
-  }
-  else if(isZstdFile(image)) {
+  } else if (isZstdFile(image)) {
     Info("Zstd file detected and loading image from extracted zstd file\n");
     img_size = readFromZstd(ram, image, memory_size, LOAD_RAM);
     assert(img_size >= 0);
-  }
-  else {
+  } else {
     InputReader *reader = createInputReader(image);
     img_size = reader->read_all(ram, memory_size);
     delete reader;
@@ -302,7 +304,7 @@ MmapMemory::~MmapMemory() {
 
 extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
-  difftest_calls[perf_difftest_ram_read] ++;
+  difftest_calls[perf_difftest_ram_read]++;
   difftest_bytes[perf_difftest_ram_read] += 8;
 #endif // CONFIG_DIFFTEST_PERFCNT
   if (!simMemory)
@@ -314,7 +316,7 @@ extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
 
 extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
-  difftest_calls[perf_difftest_ram_write] ++;
+  difftest_calls[perf_difftest_ram_write]++;
   difftest_bytes[perf_difftest_ram_write] += 24;
 #endif // CONFIG_DIFFTEST_PERFCNT
   if (simMemory) {
@@ -343,7 +345,7 @@ void pmem_write(uint64_t waddr, uint64_t wdata) {
 }
 
 MmapMemoryWithFootprints::MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name)
-  : MmapMemory(image, n_bytes) {
+    : MmapMemory(image, n_bytes) {
   uint64_t n_touched = memory_size / sizeof(uint64_t);
   touched = (uint8_t *)mmap(NULL, n_touched, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   footprints_file.open(footprints_name, std::ios::binary);
@@ -358,17 +360,17 @@ MmapMemoryWithFootprints::~MmapMemoryWithFootprints() {
   footprints_file.close();
 }
 
-uint64_t& MmapMemoryWithFootprints::at(uint64_t index) {
+uint64_t &MmapMemoryWithFootprints::at(uint64_t index) {
   uint64_t &data = MmapMemory::at(index);
   if (!touched[index]) {
-    footprints_file.write(reinterpret_cast<const char*>(&data), sizeof(data));
+    footprints_file.write(reinterpret_cast<const char *>(&data), sizeof(data));
     touched[index] = 1;
   }
   return data;
 }
 
 FootprintsMemory::FootprintsMemory(const char *footprints_name, uint64_t n_bytes)
-  : SimMemory(n_bytes), reader(createInputReader(footprints_name)), n_accessed(0) {
+    : SimMemory(n_bytes), reader(createInputReader(footprints_name)), n_accessed(0) {
   printf("The image is %s\n", footprints_name);
   add_callback([this](uint64_t, uint64_t) { this->on_access(this->n_accessed / sizeof(uint64_t)); });
 }
@@ -377,11 +379,11 @@ FootprintsMemory::~FootprintsMemory() {
   delete reader;
 }
 
-uint64_t& FootprintsMemory::at(uint64_t index) {
+uint64_t &FootprintsMemory::at(uint64_t index) {
   if (ram.find(index) == ram.end()) {
     uint64_t value = reader->next();
     ram[index] = value;
-    for (auto& cb : callbacks) {
+    for (auto &cb: callbacks) {
       cb(index, value);
     }
     n_accessed += sizeof(uint64_t);
@@ -389,13 +391,10 @@ uint64_t& FootprintsMemory::at(uint64_t index) {
   return ram[index];
 }
 
-LinearizedFootprintsMemory::LinearizedFootprintsMemory(
-    const char *footprints_name,
-    uint64_t n_bytes,
-    const char *linear_name)
-  : FootprintsMemory(footprints_name, n_bytes), linear_name(linear_name), n_touched(0) {
-  linear_memory = (uint64_t*)mmap(nullptr, n_bytes,
-    PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+LinearizedFootprintsMemory::LinearizedFootprintsMemory(const char *footprints_name, uint64_t n_bytes,
+                                                       const char *linear_name)
+    : FootprintsMemory(footprints_name, n_bytes), linear_name(linear_name), n_touched(0) {
+  linear_memory = (uint64_t *)mmap(nullptr, n_bytes, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   if (linear_memory == MAP_FAILED) {
     perror("mmap");
     exit(EXIT_FAILURE);
@@ -413,7 +412,7 @@ LinearizedFootprintsMemory::~LinearizedFootprintsMemory() {
   munmap(linear_memory, get_size());
 }
 
-void LinearizedFootprintsMemory::save_linear_memory(const char* filename) {
+void LinearizedFootprintsMemory::save_linear_memory(const char *filename) {
   std::ofstream out_file(filename, std::ios::out | std::ios::binary);
   if (!out_file) {
     std::cerr << "Cannot open output file: " << filename << std::endl;
@@ -429,14 +428,14 @@ void LinearizedFootprintsMemory::save_linear_memory(const char* filename) {
   }
   // Even if all all zeros, we still write one uint64_t.
   size_t n_bytes = (last_nonzero_index + 1) * sizeof(uint64_t);
-  out_file.write(reinterpret_cast<char*>(linear_memory), n_bytes);
+  out_file.write(reinterpret_cast<char *>(linear_memory), n_bytes);
   out_file.close();
 }
 
 #ifdef WITH_DRAMSIM3
 void dramsim3_init() {
 #if !defined(DRAMSIM3_CONFIG) || !defined(DRAMSIM3_OUTDIR)
-  #error DRAMSIM3_CONFIG or DRAMSIM3_OUTDIR is not defined
+#error DRAMSIM3_CONFIG or DRAMSIM3_OUTDIR is not defined
 #endif
 
   assert(dram == NULL);

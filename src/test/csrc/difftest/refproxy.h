@@ -17,10 +17,9 @@
 #ifndef __NEMU_PROXY_H
 #define __NEMU_PROXY_H
 
-#include <unistd.h>
-#include <dlfcn.h>
-
 #include "common.h"
+#include <dlfcn.h>
+#include <unistd.h>
 
 /* clang-format off */
 static const char *regs_name_int[] = {
@@ -66,7 +65,10 @@ static const char *regs_name_vec_csr[] = {
 };
 /* clang-format on */
 
-enum { REF_TO_DUT, DUT_TO_REF };
+enum {
+  REF_TO_DUT,
+  DUT_TO_REF
+};
 
 class RefProxyConfig {
 public:
@@ -143,18 +145,16 @@ protected:
   REF_OPTIONAL(DeclRefFunc)
 
 private:
-  void * const handler;
+  void *const handler;
   void *load_handler(const char *env, const char *file_path);
-  template <typename T>
-  T load_function(const char *func_name);
+  template <typename T> T load_function(const char *func_name);
 };
 
 class RefProxy : public AbstractRefProxy {
 public:
-  RefProxy(int coreid, size_t ram_size)
-    : AbstractRefProxy(coreid, ram_size, nullptr, nullptr) {}
+  RefProxy(int coreid, size_t ram_size) : AbstractRefProxy(coreid, ram_size, nullptr, nullptr) {}
   RefProxy(int coreid, size_t ram_size, const char *env, const char *file_path)
-    : AbstractRefProxy(coreid, ram_size, env, file_path) {}
+      : AbstractRefProxy(coreid, ram_size, env, file_path) {}
   ~RefProxy();
 
   DifftestArchIntRegState regs_int;
@@ -173,9 +173,9 @@ public:
   inline uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-      is_fp ? regs_fp.value + src :
+        is_fp ? regs_fp.value + src :
 #endif
-      regs_int.value + src;
+              regs_int.value + src;
   }
 
   inline void sync(bool is_from_dut = false) {
@@ -189,8 +189,7 @@ public:
   inline void skip_one(bool isRVC, bool wen, uint32_t wdest, uint64_t wdata) {
     if (ref_skip_one) {
       ref_skip_one(isRVC, wen, wdest, wdata);
-    }
-    else {
+    } else {
       sync();
       pc += isRVC ? 2 : 4;
       // TODO: what if skip with fpwen?
@@ -229,15 +228,15 @@ public:
   inline int get_reg_size() {
     return sizeof(DifftestArchIntRegState) + sizeof(DifftestCSRState) + sizeof(uint64_t)
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-    + sizeof(DifftestArchFpRegState)
+           + sizeof(DifftestArchFpRegState)
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    + sizeof(DifftestArchVecRegState)
+           + sizeof(DifftestArchVecRegState)
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
-    + sizeof(DifftestVecCSRState)
+           + sizeof(DifftestVecCSRState)
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
-    ;
+        ;
   }
 
   inline int get_status() {
@@ -287,6 +286,6 @@ struct ExecutionGuide {
 };
 
 extern const char *difftest_ref_so;
-extern uint8_t* ref_golden_mem;
+extern uint8_t *ref_golden_mem;
 
 #endif

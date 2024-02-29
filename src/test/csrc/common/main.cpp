@@ -17,7 +17,6 @@
 #include "common.h"
 #include "dut.h"
 
-
 #ifdef VERILATOR
 #include "emu.h"
 #define DUT_MODEL Emulator
@@ -26,7 +25,7 @@
 #ifdef DUT_MODEL
 #ifdef FUZZER_LIB
 
-extern "C" int sim_main(int argc, const char** argv);
+extern "C" int sim_main(int argc, const char **argv);
 int sim_main(int argc, const char *argv[]) {
   optind = 1;
 

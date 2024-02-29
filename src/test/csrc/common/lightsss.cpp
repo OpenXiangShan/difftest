@@ -6,23 +6,23 @@ ForkShareMemory::ForkShareMemory() {
     FAIT_EXIT
   }
 
-  if ((shm_id = shmget(key_n, 1024, 0666 | IPC_CREAT))==-1) {
+  if ((shm_id = shmget(key_n, 1024, 0666 | IPC_CREAT)) == -1) {
     perror("shmget failed...\n");
     FAIT_EXIT
   }
 
-  void* ret = shmat(shm_id, NULL, 0);
-  if ( ret == (void *)-1 ) {
+  void *ret = shmat(shm_id, NULL, 0);
+  if (ret == (void *)-1) {
     perror("shmat failed...\n");
     FAIT_EXIT
-  } else{
-    info = (shinfo*) ret; 
+  } else {
+    info = (shinfo *)ret;
   }
 
-  info->flag      = false;
-  info->notgood   = false;
+  info->flag = false;
+  info->notgood = false;
   info->endCycles = 0;
-  info->oldest    = 0;
+  info->oldest = 0;
 }
 
 ForkShareMemory::~ForkShareMemory() {
@@ -34,11 +34,12 @@ ForkShareMemory::~ForkShareMemory() {
 
 void ForkShareMemory::shwait() {
   while (true) {
-    if (info->flag ) {
-      if(info->notgood) break;
-      else exit(0);
-    }
-    else {
+    if (info->flag) {
+      if (info->notgood)
+        break;
+      else
+        exit(0);
+    } else {
       sleep(WAIT_INTERVAL);
     }
   }
@@ -56,7 +57,7 @@ int LightSSS::do_fork() {
   }
   // fork a new checkpoint process and block it
   if ((pid = fork()) < 0) {
-    eprintf("[%d]Error: could not fork process!\n", getpid()) ;
+    eprintf("[%d]Error: could not fork process!\n", getpid());
     return FORK_ERROR;
   }
   // the original process
@@ -90,7 +91,7 @@ bool LightSSS::is_child() {
 
 int LightSSS::do_clear() {
   FORK_PRINTF("clear processes...\n")
-  while(!pidSlot.empty()){
+  while (!pidSlot.empty()) {
     pid_t temp = pidSlot.back();
     pidSlot.pop_back();
     kill(temp, SIGKILL);

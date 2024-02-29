@@ -26,12 +26,10 @@ int runahead_req_msgq_id = 0;
 int runahead_resp_msgq_id = 0;
 bool runahead_is_slave = false;
 
-Runahead::Runahead(int coreid): Difftest(coreid) {
+Runahead::Runahead(int coreid) : Difftest(coreid) {}
 
-}
-
-void Runahead::remove_all_checkpoints(){
-  while(checkpoints.size()){
+void Runahead::remove_all_checkpoints() {
+  while (checkpoints.size()) {
     runahead_debug("Cleaning checkpoints, try to kill %d\n", checkpoints.back().pid);
     kill(checkpoints.back().pid, SIGKILL);
     checkpoints.pop_back();
@@ -39,19 +37,19 @@ void Runahead::remove_all_checkpoints(){
   }
 }
 
-void Runahead::remove_msg_queues(){
-  if(runahead_req_msgq_id){
+void Runahead::remove_msg_queues() {
+  if (runahead_req_msgq_id) {
     runahead_debug("Try to remove runahead_req_msgq %d\n", runahead_req_msgq_id);
-    msgctl(runahead_req_msgq_id,IPC_RMID,NULL);
+    msgctl(runahead_req_msgq_id, IPC_RMID, NULL);
   }
-  if(runahead_resp_msgq_id){
+  if (runahead_resp_msgq_id) {
     runahead_debug("Try to remove runahead_resp_msgq %d\n", runahead_resp_msgq_id);
-    msgctl(runahead_resp_msgq_id,IPC_RMID,NULL);
+    msgctl(runahead_resp_msgq_id, IPC_RMID, NULL);
   }
 }
 
 int runahead_init() {
-  runahead = new Runahead*[NUM_CORES];
+  runahead = new Runahead *[NUM_CORES];
   assert(difftest);
   for (int i = 0; i < NUM_CORES; i++) {
     runahead[i] = new Runahead(i);
@@ -64,9 +62,9 @@ int runahead_init() {
   runahead_debug("Allocate msgq for %s\n", emu_path);
   key_t req_msgq_key = ftok(emu_path, 'a');
   runahead_req_msgq_id = msgget(req_msgq_key, IPC_CREAT | 0600);
-  key_t resp_msgq_key = ftok(emu_path,'b');
-  runahead_resp_msgq_id = msgget(resp_msgq_key , IPC_CREAT | 0600);
-  if((runahead_req_msgq_id <= 0) || (runahead_resp_msgq_id <= 0)){
+  key_t resp_msgq_key = ftok(emu_path, 'b');
+  runahead_resp_msgq_id = msgget(resp_msgq_key, IPC_CREAT | 0600);
+  if ((runahead_req_msgq_id <= 0) || (runahead_resp_msgq_id <= 0)) {
     runahead_debug("%s\n", std::strerror(errno));
     runahead_debug("Failed to create run ahead message queue.\n");
     assert(0);
@@ -75,7 +73,7 @@ int runahead_init() {
   return 0;
 }
 
-int runahead_cleanup(){
+int runahead_cleanup() {
   for (int i = 0; i < NUM_CORES; i++) {
     runahead[i]->remove_all_checkpoints();
     runahead[i]->remove_msg_queues();
@@ -83,7 +81,7 @@ int runahead_cleanup(){
   return 0;
 }
 
-Runahead::~Runahead(){
+Runahead::~Runahead() {
   remove_all_checkpoints();
   remove_msg_queues();
 }
@@ -113,8 +111,8 @@ bool Runahead::checkpoint_num_exceed_limit() {
 // No checkpoint will be allocated.
 // If it is the first valid inst to be runahead, some init work will be done
 // in do_first_instr_runahead().
-int Runahead::do_instr_runahead(){
-  if(!has_commit){
+int Runahead::do_instr_runahead() {
+  if (!has_commit) {
     do_first_instr_runahead();
   }
   request_slave_runahead();
@@ -127,10 +125,10 @@ int Runahead::do_instr_runahead(){
 // Return checkpoint pid
 // Return -1 if no checkpoint is needed (inst is not jump)
 // Will raise error if the number of checkpoints exceeds limit
-pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc){
+pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc) {
   assert(has_commit);
   // check if checkpoint list is full
-  if(checkpoint_num_exceed_limit()){
+  if (checkpoint_num_exceed_limit()) {
     runahead_debug("Checkpoint list is full, you may forget to free resolved checkpoints\n");
     assert(0);
   }
@@ -159,7 +157,7 @@ void Runahead::register_checkpoint(pid_t pid, uint64_t branch_checkpoint_id, uin
   branch_reported = false;
   // lazy checkpoint gc
 #ifdef AUTO_RUNAHEAD_CHECKPOINT_GC
-  if(checkpoints.size() > AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD) {
+  if (checkpoints.size() > AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD) {
     free_checkpoint();
   }
 #endif
@@ -173,7 +171,7 @@ pid_t Runahead::free_checkpoint() {
   static int num_checkpoint_to_be_freed = 0;
   num_checkpoint_to_be_freed++;
   // debug_print_checkpoint_list();
-  while(num_checkpoint_to_be_freed && checkpoints.size() > 1){ // there should always be at least 1 active slave
+  while (num_checkpoint_to_be_freed && checkpoints.size() > 1) { // there should always be at least 1 active slave
     pid_t to_be_freed_pid = checkpoints.front().pid;
     runahead_debug("Free checkpoint %lx\n", checkpoints.front().checkpoint_id);
     kill(to_be_freed_pid, SIGKILL);
@@ -188,15 +186,15 @@ void Runahead::recover_checkpoint(uint64_t checkpoint_id) {
   debug_print_checkpoint_list();
   assert(checkpoints.size() > 1); // Must maintain at least 1 active slave
   // pop queue until we get the same id
-  while(checkpoints.size() > 0) {
+  while (checkpoints.size() > 0) {
     pid_t to_be_checked_cpid = checkpoints.back().checkpoint_id;
     kill(checkpoints.back().pid, SIGKILL);
     runahead_debug("kill %d\n", checkpoints.back().pid);
-    if(to_be_checked_cpid == checkpoint_id) {
+    if (to_be_checked_cpid == checkpoint_id) {
       runahead_debug("Recover to checkpoint %lx.\n", checkpoint_id);
       branch_checkpoint_id = checkpoints.back().checkpoint_id;
       branch_pc = checkpoints.back().pc;
-      if(!checkpoints.back().may_replay){
+      if (!checkpoints.back().may_replay) {
         // if checkpoint was set up by branch, it will jump to the right target
         branch_reported = true;
         runahead_debug("Checkpoint generated by branch\n");
@@ -215,13 +213,10 @@ void Runahead::recover_checkpoint(uint64_t checkpoint_id) {
 }
 
 // Restart run ahead process
-void Runahead::restart() {
-}
+void Runahead::restart() {}
 
 // Sync debug info from ref
-void Runahead::update_debug_info(void* dest_buffer) {
-
-}
+void Runahead::update_debug_info(void *dest_buffer) {}
 
 void Runahead::do_first_instr_runahead() {
   if (!has_commit && dut_ptr->runahead[0].valid && dut_ptr->runahead[0].pc == FIRST_INST_ADDRESS) {
@@ -242,26 +237,22 @@ void Runahead::do_first_instr_runahead() {
 }
 
 #ifdef QUERY_MEM_ACCESS
-int Runahead::memdep_check(int i, RunaheadResponseQuery* ref_mem_query_result) {
+int Runahead::memdep_check(int i, RunaheadResponseQuery *ref_mem_query_result) {
   auto mem_access_info = &ref_mem_query_result->result.mem_access_info;
   // if(dut_ptr->runahead_memdep_pred[i].valid){
   // TODO: double check
-  if(mem_access_info->mem_access || dut_ptr->runahead_memdep_pred[i].valid){
+  if (mem_access_info->mem_access || dut_ptr->runahead_memdep_pred[i].valid) {
     dut_ptr->runahead_memdep_pred[i].valid = false;
-    if(mem_access_info->mem_access_is_load){
+    if (mem_access_info->mem_access_is_load) {
       // TODO: is seems dut_ptr->runahead_memdep_pred[i].is_load != mem_access_info->mem_access_is_load
       // runahead_debug("Runahead step: ref pc %lx dut pc %lx\n", mem_access_info->pc, dut_ptr->runahead_memdep_pred[i].pc);
       // assert(mem_access_info->mem_access_is_load);
       auto dut_result = dut_ptr->runahead_memdep_pred[i].need_wait;
       auto ref_result = mem_access_info->ref_need_wait;
-      runahead_debug("Runahead memdep_check: ref is load %x dut %x ref %x\n",
-        mem_access_info->mem_access_is_load, dut_result, ref_result
-      );
-      memdep_watcher->update_pred_matrix(
-        dut_result,
-        ref_result
-      );
-      if(dut_result != ref_result){
+      runahead_debug("Runahead memdep_check: ref is load %x dut %x ref %x\n", mem_access_info->mem_access_is_load,
+                     dut_result, ref_result);
+      memdep_watcher->update_pred_matrix(dut_result, ref_result);
+      if (dut_result != ref_result) {
         runahead_debug("mem pred result mismatch: pc %lx dut %x ref %x\n", mem_access_info->pc, dut_result, ref_result);
       }
     }
@@ -276,22 +267,20 @@ int Runahead::step() { // override step() method
   if (dut_ptr->event.interrupt) {
     assert(0); //TODO
     do_interrupt();
-  } else if(dut_ptr->event.exception) {
+  } else if (dut_ptr->event.exception) {
     // We ignored instrAddrMisaligned exception (0) for better debug interface
     // XiangShan should always support RVC, so instrAddrMisaligned will never happen
     assert(0); //TODO
     do_exception();
   } else {
-    if(dut_ptr->runahead_redirect.valid) {
+    if (dut_ptr->runahead_redirect.valid) {
       dut_ptr->runahead_redirect.valid = false;
-      runahead_debug("Run ahead: pc %lx redirect to %lx, recover cpid %lx\n",
-        dut_ptr->runahead_redirect.pc,
-        dut_ptr->runahead_redirect.target_pc,
-        dut_ptr->runahead_redirect.checkpoint_id
-      );
+      runahead_debug("Run ahead: pc %lx redirect to %lx, recover cpid %lx\n", dut_ptr->runahead_redirect.pc,
+                     dut_ptr->runahead_redirect.target_pc, dut_ptr->runahead_redirect.checkpoint_id);
       // no need to recover checkpoint if checkpoint has not been established
-      if(branch_reported && branch_checkpoint_id == dut_ptr->runahead_redirect.checkpoint_id){
-        runahead_debug("Trying to recover checkpoint %lx, which has not been established yet\n", dut_ptr->runahead_redirect.checkpoint_id);
+      if (branch_reported && branch_checkpoint_id == dut_ptr->runahead_redirect.checkpoint_id) {
+        runahead_debug("Trying to recover checkpoint %lx, which has not been established yet\n",
+                       dut_ptr->runahead_redirect.checkpoint_id);
         branch_reported = true; // next run ahead request will report the correct target pc
       } else {
         runahead_debug("Trying to recover checkpoint %lx\n", dut_ptr->runahead_redirect.checkpoint_id);
@@ -299,7 +288,7 @@ int Runahead::step() { // override step() method
       }
       runahead_debug("Run ahead: ignore run ahead req generated in current cycle\n");
       for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH; i++) {
-      // ignore run ahead req generated in current cycle
+        // ignore run ahead req generated in current cycle
         dut_ptr->runahead[i].valid = false;
       }
       return 0;
@@ -307,50 +296,35 @@ int Runahead::step() { // override step() method
     for (int i = 0; i < DIFFTEST_COMMIT_WIDTH && dut_ptr->runahead_commit[i].valid; i++) {
       dut_ptr->runahead_commit[i].valid = false;
       dut_ptr->runahead_memdep_pred[i].valid = false;
-      runahead_debug("Run ahead: jump inst %lx commited, free oldest checkpoint\n",
-        dut_ptr->runahead_commit[i].pc
-      );
+      runahead_debug("Run ahead: jump inst %lx commited, free oldest checkpoint\n", dut_ptr->runahead_commit[i].pc);
       free_checkpoint();
     }
     for (int i = 0; i < DIFFTEST_RUNAHEAD_WIDTH && dut_ptr->runahead[i].valid; i++) {
-      runahead_debug("Run ahead: pc %lx branch(reported by DUT) %x cpid %lx\n",
-        dut_ptr->runahead[i].pc,
-        dut_ptr->runahead[i].branch,
-        dut_ptr->runahead[i].checkpoint_id
-      );
+      runahead_debug("Run ahead: pc %lx branch(reported by DUT) %x cpid %lx\n", dut_ptr->runahead[i].pc,
+                     dut_ptr->runahead[i].branch, dut_ptr->runahead[i].checkpoint_id);
       // check if branch is reported by previous inst
-      if(branch_reported) {
+      if (branch_reported) {
         pid_t pid = do_instr_runahead_pc_guided(dut_ptr->runahead[i].pc);
         // no need to call do_query_mem_access(), as runahead_pc_guided is branch inst
         // register new checkpoint
         register_checkpoint(pid, branch_checkpoint_id, branch_pc, may_replay);
-        runahead_debug("New checkpoint: pid %d cpid %lx pc %lx\n",
-          pid,
-          branch_checkpoint_id,
-          branch_pc
-        );
+        runahead_debug("New checkpoint: pid %d cpid %lx pc %lx\n", pid, branch_checkpoint_id, branch_pc);
 #ifdef QUERY_MEM_ACCESS
         RunaheadResponseQuery ref_mem_access;
         do_query_mem_access(&ref_mem_access);
         // runahead_debug("dut runahead pc %lx ref pc %lx\n",
-        runahead_debug("dut runahead pc %lx ref pc %lx ticks %ld\n",
-          branch_pc,
-          ref_mem_access.result.mem_access_info.pc,
-          ticks
-        );
+        runahead_debug("dut runahead pc %lx ref pc %lx ticks %ld\n", branch_pc,
+                       ref_mem_access.result.mem_access_info.pc, ticks);
         loop_if_not(branch_pc == ref_mem_access.result.mem_access_info.pc);
-        if(!(branch_pc == ref_mem_access.result.mem_access_info.pc)){
-          printf("Error: dut runahead pc %lx ref pc %lx ticks %ld\n",
-            branch_pc,
-            ref_mem_access.result.mem_access_info.pc,
-            ticks
-          );
+        if (!(branch_pc == ref_mem_access.result.mem_access_info.pc)) {
+          printf("Error: dut runahead pc %lx ref pc %lx ticks %ld\n", branch_pc,
+                 ref_mem_access.result.mem_access_info.pc, ticks);
         }
         memdep_check(i, &ref_mem_access);
 #endif
       }
       assert(!(dut_ptr->runahead[i].branch && dut_ptr->runahead[i].may_replay));
-      if(dut_ptr->runahead[i].branch || dut_ptr->runahead[i].may_replay) {
+      if (dut_ptr->runahead[i].branch || dut_ptr->runahead[i].may_replay) {
         branch_reported = true;
         may_replay = dut_ptr->runahead[i].may_replay;
         branch_checkpoint_id = dut_ptr->runahead[i].checkpoint_id;
@@ -362,18 +336,12 @@ int Runahead::step() { // override step() method
         RunaheadResponseQuery ref_mem_access;
         do_query_mem_access(&ref_mem_access);
         // runahead_debug("dut runahead pc %lx ref pc %lx\n",
-        runahead_debug("dut runahead pc %lx ref pc %lx ticks %ld\n",
-          dut_ptr->runahead[i].pc,
-          ref_mem_access.result.mem_access_info.pc,
-          ticks
-        );
+        runahead_debug("dut runahead pc %lx ref pc %lx ticks %ld\n", dut_ptr->runahead[i].pc,
+                       ref_mem_access.result.mem_access_info.pc, ticks);
         loop_if_not(dut_ptr->runahead[i].pc == ref_mem_access.result.mem_access_info.pc);
-        if(!(dut_ptr->runahead[i].pc == ref_mem_access.result.mem_access_info.pc)){
-          printf("Error: dut runahead pc %lx ref pc %lx ticks %ld\n",
-            dut_ptr->runahead[i].pc,
-            ref_mem_access.result.mem_access_info.pc,
-            ticks
-          );
+        if (!(dut_ptr->runahead[i].pc == ref_mem_access.result.mem_access_info.pc)) {
+          printf("Error: dut runahead pc %lx ref pc %lx ticks %ld\n", dut_ptr->runahead[i].pc,
+                 ref_mem_access.result.mem_access_info.pc, ticks);
         }
         memdep_check(i, &ref_mem_access);
 #endif
@@ -390,7 +358,8 @@ pid_t Runahead::request_slave_runahead() {
   RunaheadResponsePid resp;
   request.message_type = RUNAHEAD_MSG_REQ_EXEC;
   assert_no_error(msgsnd(runahead_req_msgq_id, &request, sizeof(RunaheadRequest) - sizeof(long int), 0));
-  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_EXEC, 0));
+  assert_no_error(
+      msgrcv(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_EXEC, 0));
   assert(resp.pid == 0);
   return 0;
 }
@@ -405,45 +374,40 @@ pid_t Runahead::request_slave_runahead_pc_guided(uint64_t target_pc) {
   assert_no_error(msgsnd(runahead_req_msgq_id, &request, sizeof(RunaheadRequest) - sizeof(long int), 0));
   RunaheadResponsePid resp_exec;
   RunaheadResponsePid resp_fork;
-  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp_exec, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_EXEC, 0));
-  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp_fork, sizeof(RunaheadResponsePid) - sizeof(long int), RUNAHEAD_MSG_RESP_FORK, 0));
+  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp_exec, sizeof(RunaheadResponsePid) - sizeof(long int),
+                         RUNAHEAD_MSG_RESP_EXEC, 0));
+  assert_no_error(msgrcv(runahead_resp_msgq_id, &resp_fork, sizeof(RunaheadResponsePid) - sizeof(long int),
+                         RUNAHEAD_MSG_RESP_FORK, 0));
   assert(resp_fork.pid > 0); // fork succeed
   return resp_fork.pid;
 }
 
 // Request slave to run a single inst
-void Runahead::request_slave_refquery(void* resp_target, int type) {
+void Runahead::request_slave_refquery(void *resp_target, int type) {
   RunaheadRequest request;
   request.message_type = RUNAHEAD_MSG_REQ_QUERY;
   request.query_type = type;
   assert_no_error(msgsnd(runahead_req_msgq_id, &request, sizeof(RunaheadRequest) - sizeof(long int), 0));
-  assert_no_error(msgrcv(runahead_resp_msgq_id, resp_target, sizeof(RunaheadResponseQuery) - sizeof(long int), RUNAHEAD_MSG_RESP_QUERY, 0));
+  assert_no_error(msgrcv(runahead_resp_msgq_id, resp_target, sizeof(RunaheadResponseQuery) - sizeof(long int),
+                         RUNAHEAD_MSG_RESP_QUERY, 0));
   return;
 }
 
 // Print all valid items in checkpoint_list (oldest first)
 void Runahead::debug_print_checkpoint_list() {
-  for(auto i:checkpoints){
-    runahead_debug("checkpoint: checkpoint_id %lx pc %lx pid %d\n",
-      i.checkpoint_id,
-      i.pc,
-      i.pid
-    );
+  for (auto i: checkpoints) {
+    runahead_debug("checkpoint: checkpoint_id %lx pc %lx pid %d\n", i.checkpoint_id, i.pc, i.pid);
   }
   fflush(stdout);
 }
 
 #ifdef QUERY_MEM_ACCESS
-void Runahead::do_query_mem_access(RunaheadResponseQuery* result_buffer) {
+void Runahead::do_query_mem_access(RunaheadResponseQuery *result_buffer) {
   auto mem_access_info = &result_buffer->result.mem_access_info;
   request_slave_refquery(result_buffer, REF_QUERY_MEM_EVENT);
-  runahead_debug("Query result: pc %lx mem access %x isload %x vaddr %lx ref_need_wait %x\n",
-    mem_access_info->pc,
-    mem_access_info->mem_access,
-    mem_access_info->mem_access_is_load,
-    mem_access_info->mem_access_vaddr,
-    mem_access_info->ref_need_wait
-  );
+  runahead_debug("Query result: pc %lx mem access %x isload %x vaddr %lx ref_need_wait %x\n", mem_access_info->pc,
+                 mem_access_info->mem_access, mem_access_info->mem_access_is_load, mem_access_info->mem_access_vaddr,
+                 mem_access_info->ref_need_wait);
   return;
 }
 #endif
@@ -462,17 +426,17 @@ void Runahead::runahead_slave() {
   resp.pid = 0;
   resp_query.message_type = RUNAHEAD_MSG_RESP_QUERY;
   auto mem_access_info = &resp_query.result.mem_access_info;
-  while(1){
+  while (1) {
     assert_no_error(msgrcv(runahead_req_msgq_id, &request, sizeof(request) - sizeof(long int), 0, 0));
     runahead_debug("Received msg type: %ld\n", request.message_type);
-    switch(request.message_type) {
+    switch (request.message_type) {
       case RUNAHEAD_MSG_REQ_EXEC:
         proxy->exec(1);
         runahead_debug("Run ahead: proxy->exec(1)\n");
         assert_no_error(msgsnd(runahead_resp_msgq_id, &resp, sizeof(RunaheadResponsePid) - sizeof(long int), 0));
         break;
       case RUNAHEAD_MSG_REQ_GUIDED_EXEC:
-        if(fork_runahead_slave() == 0) { // father process wait here
+        if (fork_runahead_slave() == 0) { // father process wait here
           // child process continue to run
           struct ExecutionGuide guide;
           guide.force_raise_exception = false;
@@ -489,20 +453,20 @@ void Runahead::runahead_slave() {
         runahead_debug("Query runahead result, type %lx\n", request.query_type);
         proxy->query(&resp_query.result, request.query_type);
         mem_access_info->ref_need_wait = false;
-        if(mem_access_info->mem_access){
-          if(mem_access_info->mem_access_is_load){
+        if (mem_access_info->mem_access) {
+          if (mem_access_info->mem_access_is_load) {
             memdep_watcher->watch_load(mem_access_info->pc, mem_access_info->mem_access_vaddr);
-            mem_access_info->ref_need_wait = memdep_watcher->query_load_store_dep(mem_access_info->pc, mem_access_info->mem_access_vaddr);
+            mem_access_info->ref_need_wait =
+                memdep_watcher->query_load_store_dep(mem_access_info->pc, mem_access_info->mem_access_vaddr);
           } else {
             memdep_watcher->watch_store(mem_access_info->pc, mem_access_info->mem_access_vaddr);
           }
         }
-        assert_no_error(msgsnd(runahead_resp_msgq_id, &resp_query, sizeof(RunaheadResponseQuery) - sizeof(long int), 0));
+        assert_no_error(
+            msgsnd(runahead_resp_msgq_id, &resp_query, sizeof(RunaheadResponseQuery) - sizeof(long int), 0));
         break;
 #endif
-      default:
-        runahead_debug("Runahead slave received invalid runahead req\n");
-        assert(0);
+      default: runahead_debug("Runahead slave received invalid runahead req\n"); assert(0);
     }
   };
   assert(0);
@@ -515,11 +479,11 @@ pid_t Runahead::init_runahead_slave() {
   // run ahead simulator needs its own addr space
   // slave will be initialized after first run ahead request is sent
   pid_t pid = fork();
-  if(pid < 0){
+  if (pid < 0) {
     runahead_debug("Failed to create the first runahead slave\n");
     assert(0);
   }
-  if(pid == 0){
+  if (pid == 0) {
     runahead_slave();
   } else {
     register_checkpoint(pid, -1, FIRST_INST_ADDRESS, false);
@@ -534,11 +498,11 @@ pid_t Runahead::fork_runahead_slave() {
   // run ahead simulator needs its own addr space
   // slave will be initialized after first run ahead request is sent
   pid_t pid = fork();
-  if(pid < 0){
+  if (pid < 0) {
     runahead_debug("Failed to fork runahead slave\n");
     assert(0);
   }
-  if(pid == 0){
+  if (pid == 0) {
     return 0;
     // I am the newest checkpoint
   } else {
