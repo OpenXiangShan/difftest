@@ -15,36 +15,41 @@
 ***************************************************************************************/
 
 #include "refproxy.h"
-#include <unistd.h>
 #include <dlfcn.h>
+#include <unistd.h>
 
-uint8_t* ref_golden_mem = NULL;
+uint8_t *ref_golden_mem = NULL;
 const char *difftest_ref_so = NULL;
 
-#define check_and_assert(func)                                \
-  do {                                                        \
-    if (!func) {                                              \
-      printf("Failed loading %s: %s\n", #func, dlerror());    \
-      fflush(stdout); assert(func);                           \
-    }                                                         \
+#define check_and_assert(func)                             \
+  do {                                                     \
+    if (!func) {                                           \
+      printf("Failed loading %s: %s\n", #func, dlerror()); \
+      fflush(stdout);                                      \
+      assert(func);                                        \
+    }                                                      \
   } while (0);
 
 #ifdef LINKED_REFPROXY_LIB
-#define DeclExtRefFunc(dummy, ref_func, ret, ...)             \
-  extern "C" { extern RefFunc(ref_func, ret, __VA_ARGS__); }
+#define DeclExtRefFunc(dummy, ref_func, ret, ...) \
+  extern "C" {                                    \
+  extern RefFunc(ref_func, ret, __VA_ARGS__);     \
+  }
 REF_ALL(DeclExtRefFunc)
 
 // Special notes on these weak symbols:
 // For static libraries, the functions are linked at compile-time, as well as for the symbols.
 // For dynamic libraries, despite being loaded at run-time, the symbols are looked up at compile-time.
 // Be careful if you change the symbols in dynamic libraries after compiling and want to load it at run-time.
-#define DeclWeakExtRefFunc(dummy, ref_func, ret, ...)             \
-  extern "C" { extern RefFunc(ref_func, ret __attribute__((weak)), __VA_ARGS__); }
+#define DeclWeakExtRefFunc(dummy, ref_func, ret, ...)               \
+  extern "C" {                                                      \
+  extern RefFunc(ref_func, ret __attribute__((weak)), __VA_ARGS__); \
+  }
 REF_OPTIONAL(DeclWeakExtRefFunc)
 #endif
 
-AbstractRefProxy::AbstractRefProxy(int coreid, size_t ram_size, const char *env, const char *file_path) :
-  handler(load_handler(env, file_path)) {
+AbstractRefProxy::AbstractRefProxy(int coreid, size_t ram_size, const char *env, const char *file_path)
+    : handler(load_handler(env, file_path)) {
 #ifdef LINKED_REFPROXY_LIB
 #define GetRefFunc(dummy, ref_func, ret, ...) ref_func
 #else
@@ -119,8 +124,7 @@ void *AbstractRefProxy::load_handler(const char *env, const char *file_path) {
   return so_handler;
 }
 
-template <typename T>
-T AbstractRefProxy::load_function(const char *func_name) {
+template <typename T> T AbstractRefProxy::load_function(const char *func_name) {
   check_and_assert(handler);
   return reinterpret_cast<T>(dlsym(handler, func_name));
 }
@@ -130,7 +134,6 @@ RefProxy::~RefProxy() {
     ref_close();
   }
 }
-
 
 void RefProxy::regcpy(DiffTestState *dut) {
   memcpy(&regs_int, dut->regs_int.value, 32 * sizeof(uint64_t));
@@ -151,18 +154,17 @@ void RefProxy::regcpy(DiffTestState *dut) {
 int RefProxy::compare(DiffTestState *dut) {
 #define PROXY_COMPARE(field) memcmp(&(dut->field), &(field), sizeof(field))
 
-  const int results[] = {
-    PROXY_COMPARE(regs_int),
+  const int results[] = {PROXY_COMPARE(regs_int),
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-    PROXY_COMPARE(regs_fp),
+                         PROXY_COMPARE(regs_fp),
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    PROXY_COMPARE(regs_vec),
+                         PROXY_COMPARE(regs_vec),
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
-    PROXY_COMPARE(vcsr),
+                         PROXY_COMPARE(vcsr),
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
-    PROXY_COMPARE(csr)
+                         PROXY_COMPARE(csr)
 
   };
   for (int i = 0; i < sizeof(results) / sizeof(int); i++) {
@@ -183,18 +185,19 @@ int RefProxy::compare(DiffTestState *dut) {
 
 void RefProxy::display(DiffTestState *dut) {
   if (dut) {
-#define PROXY_COMPARE_AND_DISPLAY(field, field_names)                   \
-do {                                                                  \
-  uint64_t *_ptr_dut = (uint64_t *)(&((dut)->field));                 \
-  uint64_t *_ptr_ref = (uint64_t *)(&(field));                    \
-  for (int i = 0; i < sizeof(field) / sizeof(uint64_t); i ++) {   \
-    if (_ptr_dut[i] != _ptr_ref[i]) {                                 \
-      printf("%7s different at pc = 0x%010lx, right= 0x%016lx, "      \
-              "wrong = 0x%016lx\n", field_names[i], dut->commit[0].pc, \
-              _ptr_ref[i], _ptr_dut[i]);                               \
-    }                                                                 \
-  }                                                                   \
-} while(0);
+#define PROXY_COMPARE_AND_DISPLAY(field, field_names)                     \
+  do {                                                                    \
+    uint64_t *_ptr_dut = (uint64_t *)(&((dut)->field));                   \
+    uint64_t *_ptr_ref = (uint64_t *)(&(field));                          \
+    for (int i = 0; i < sizeof(field) / sizeof(uint64_t); i++) {          \
+      if (_ptr_dut[i] != _ptr_ref[i]) {                                   \
+        printf(                                                           \
+            "%7s different at pc = 0x%010lx, right= 0x%016lx, "           \
+            "wrong = 0x%016lx\n",                                         \
+            field_names[i], dut->commit[0].pc, _ptr_ref[i], _ptr_dut[i]); \
+      }                                                                   \
+    }                                                                     \
+  } while (0);
 
     PROXY_COMPARE_AND_DISPLAY(regs_int, regs_name_int)
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
@@ -207,8 +210,7 @@ do {                                                                  \
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
     PROXY_COMPARE_AND_DISPLAY(vcsr, regs_name_vec_csr)
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
-  }
-  else {
+  } else {
     ref_reg_display();
   }
 };
@@ -267,15 +269,12 @@ bool RefProxy::do_csr_waive(DiffTestState *dut) {
 
 #define NEMU_ENV_VARIABLE "NEMU_HOME"
 #define NEMU_SO_FILENAME  "build/riscv64-nemu-interpreter-so"
-NemuProxy::NemuProxy(int coreid, size_t ram_size) :
-  RefProxy(coreid, ram_size, NEMU_ENV_VARIABLE, NEMU_SO_FILENAME) {
-}
+NemuProxy::NemuProxy(int coreid, size_t ram_size) : RefProxy(coreid, ram_size, NEMU_ENV_VARIABLE, NEMU_SO_FILENAME) {}
 
 #define SPIKE_ENV_VARIABLE "SPIKE_HOME"
 #define SPIKE_SO_FILENAME  "difftest/build/riscv64-spike-so"
-SpikeProxy::SpikeProxy(int coreid, size_t ram_size) :
-  RefProxy(coreid, ram_size, SPIKE_ENV_VARIABLE, SPIKE_SO_FILENAME) {
-}
+SpikeProxy::SpikeProxy(int coreid, size_t ram_size)
+    : RefProxy(coreid, ram_size, SPIKE_ENV_VARIABLE, SPIKE_SO_FILENAME) {}
 
 LinkedProxy::LinkedProxy(int coreid, size_t ram_size) : RefProxy(coreid, ram_size) {
   if (NUM_CORES > 1) {

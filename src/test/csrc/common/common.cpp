@@ -14,13 +14,13 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include <signal.h>
-#include <locale.h>
 #include "common.h"
+#include <locale.h>
+#include <signal.h>
 
 int assert_count = 0;
 int signal_num = 0;
-const char* emu_path = NULL;
+const char *emu_path = NULL;
 
 extern "C" void xs_assert(long long line) {
   if (assert_count >= 0) {
@@ -44,7 +44,7 @@ uint32_t uptime(void) {
   int s = t.tv_sec - boot.tv_sec;
   int us = t.tv_usec - boot.tv_usec;
   if (us < 0) {
-    s --;
+    s--;
     us += 1000000;
   }
 
@@ -76,7 +76,6 @@ void common_init(const char *program_name) {
 
   assert_count = 0;
   signal_num = 0;
-
 }
 
 void common_finish() {

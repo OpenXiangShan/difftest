@@ -15,43 +15,43 @@
 ***************************************************************************************/
 
 #include "emu.h"
+#include "compress.h"
 #include "device.h"
+#include "flash.h"
+#include "lightsss.h"
+#include "ram.h"
+#include "remote_bitbang.h"
 #include "sdcard.h"
+#include <getopt.h>
+#include <signal.h>
+#include <sys/resource.h>
 #ifndef CONFIG_NO_DIFFTEST
 #include "difftest.h"
-#include "refproxy.h"
 #include "goldenmem.h"
+#include "refproxy.h"
 #endif // CONFIG_NO_DIFFTEST
-#include "flash.h"
 #ifdef ENABLE_RUNHEAD
 #include "runahead.h"
 #endif
-#include <getopt.h>
-#include <signal.h>
-#ifdef  ENABLE_CHISEL_DB
+#ifdef ENABLE_CHISEL_DB
 #include "chisel_db.h"
 #endif
 #ifdef ENABLE_IPC
 #include <sys/stat.h>
 #endif
-#include <sys/resource.h>
-#include "ram.h"
-#include "compress.h"
-#include "lightsss.h"
-#include "remote_bitbang.h"
 
-extern remote_bitbang_t * jtag;
+extern remote_bitbang_t *jtag;
 
-static uint64_t parse_and_update_ramsize(const char* arg_ramsize_str) {
+static uint64_t parse_and_update_ramsize(const char *arg_ramsize_str) {
   unsigned long ram_size_value = 0;
   char ram_size_unit[64];
-  sscanf(arg_ramsize_str, "%ld%s", &ram_size_value, (char*) &ram_size_unit);
+  sscanf(arg_ramsize_str, "%ld%s", &ram_size_value, (char *)&ram_size_unit);
   assert(ram_size_value > 0);
 
-  if(!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")) {
+  if (!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")) {
     return ram_size_value * 1024 * 1024 * 1024;
   }
-  if(!strcmp(ram_size_unit, "MB") || !strcmp(ram_size_unit, "mb")) {
+  if (!strcmp(ram_size_unit, "MB") || !strcmp(ram_size_unit, "mb")) {
     return ram_size_value * 1024 * 1024;
   }
   printf("Invalid ram size %s\n", ram_size_unit);
@@ -123,6 +123,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #ifndef CONFIG_NO_DIFFTEST
   extern const char *difftest_ref_so;
 #endif // CONFIG_NO_DIFFTEST
+
+  /* clang-format off */
   const struct option long_options[] = {
     { "load-snapshot",     1, NULL,  0  },
     { "dump-wave",         0, NULL,  0  },
@@ -165,10 +167,11 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "help",              0, NULL, 'h' },
     { 0,                   0, NULL,  0  }
   };
+  /* clang-format on */
 
   int o;
-  while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
-          "-s:C:X:I:T:R:W:hi:r:m:b:e:F:", long_options, &long_index)) != -1) {
+  while ((o = getopt_long(argc, const_cast<char *const *>(argv), "-s:C:X:I:T:R:W:hi:r:m:b:e:F:", long_options,
+                          &long_index)) != -1) {
     switch (o) {
       case 0:
         switch (long_index) {
@@ -199,9 +202,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             continue;
 #else
           case 11:
-          case 12:
-            printf("[WARN] chisel db is not enabled at compile time, ignore --dump-db\n");
-            continue;
+          case 12: printf("[WARN] chisel db is not enabled at compile time, ignore --dump-db\n"); continue;
 #endif
           case 13:
 #if VM_COVERAGE == 1
@@ -212,32 +213,39 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             continue;
           case 14: args.enable_ref_trace = true; continue;
           case 15: args.enable_commit_trace = true; continue;
-          case 16: args.trace_name = optarg; args.trace_is_read = true; continue;
-          case 17: args.trace_name = optarg; args.trace_is_read = false; continue;
+          case 16:
+            args.trace_name = optarg;
+            args.trace_is_read = true;
+            continue;
+          case 17:
+            args.trace_name = optarg;
+            args.trace_is_read = false;
+            continue;
           case 18: args.footprints_name = optarg; continue;
           case 19: args.image_as_footprints = true; continue;
           case 20: args.linearized_name = optarg; continue;
-          case 21: args.enable_waveform = true; args.enable_waveform_full = true; continue;
+          case 21:
+            args.enable_waveform = true;
+            args.enable_waveform_full = true;
+            continue;
           case 22: args.overwrite_nbytes = atoll_strict(optarg, "overwrite_nbytes"); continue;
         }
         // fall through
-      default:
-        print_help(argv[0]);
-        exit(0);
+      default: print_help(argv[0]); exit(0);
       case 's':
-        if(std::string(optarg) != "NO_SEED") {
+        if (std::string(optarg) != "NO_SEED") {
           args.seed = atoll_strict(optarg, "seed");
           Info("Using seed = %d\n", args.seed);
         }
         break;
-      case 'C': args.max_cycles = atoll_strict(optarg, "max-cycles");  break;
+      case 'C': args.max_cycles = atoll_strict(optarg, "max-cycles"); break;
       case 'X': args.fork_interval = 1000 * atoll_strict(optarg, "fork-interval"); break;
-      case 'I': args.max_instr = atoll_strict(optarg, "max-instr");  break;
+      case 'I': args.max_instr = atoll_strict(optarg, "max-instr"); break;
 #ifdef DEBUG_REFILL
       case 'T':
         args.track_instr = std::strtoll(optarg, NULL, 0);
         Info("Tracking addr 0x%lx\n", args.track_instr);
-        if(args.track_instr == 0) {
+        if (args.track_instr == 0) {
           printf("Invalid track addr\n");
           exit(1);
         }
@@ -247,7 +255,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #ifdef ENABLE_IPC
         args.ipc_interval = atoll_strict(optarg, "ipc-interval");
         printf("Drawing IPC curve each %d cycles\n", args.ipc_interval);
-        if(args.ipc_interval == 0) {
+        if (args.ipc_interval == 0) {
           printf("Invalid ipc interval\n");
           exit(1);
         }
@@ -255,11 +263,11 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         printf("[WARN] drawing ipc curve is not enabled at compile time, ignore --ipc-interval\n");
 #endif
         break;
-      case 'W': args.warmup_instr = atoll_strict(optarg, "warmup-instr");  break;
-      case 'D': args.stat_cycles = atoll_strict(optarg, "stat-cycles");  break;
+      case 'W': args.warmup_instr = atoll_strict(optarg, "warmup-instr"); break;
+      case 'D': args.stat_cycles = atoll_strict(optarg, "stat-cycles"); break;
       case 'i': args.image = optarg; break;
       case 'r': args.gcpt_restore = optarg; break;
-      case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
+      case 'b': args.log_begin = atoll_strict(optarg, "log-begin"); break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
       case 'F': args.flash_bin = optarg; break;
     }
@@ -295,12 +303,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 
 #include <functional>
 std::function<double()> get_sc_time_stamp = []() -> double { return 0; };
-double sc_time_stamp() { return get_sc_time_stamp(); }
+double sc_time_stamp() {
+  return get_sc_time_stamp();
+}
 
-Emulator::Emulator(int argc, const char *argv[]):
-  dut_ptr(new VSimTop),
-  cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime())
-{
+Emulator::Emulator(int argc, const char *argv[])
+    : dut_ptr(new VSimTop), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
   // set stack size
   struct rlimit rlim;
   getrlimit(RLIMIT_STACK, &rlim);
@@ -309,9 +317,7 @@ Emulator::Emulator(int argc, const char *argv[]):
     printf("[warning] cannot set stack size\n");
   }
   // junk, link for verilator
-  get_sc_time_stamp = [this]() -> double {
-    return get_cycles();
-  };
+  get_sc_time_stamp = [this]() -> double { return get_cycles(); };
 
   args = parse_args(argc, argv);
 #ifdef ENABLE_CONSTANTIN
@@ -334,19 +340,18 @@ Emulator::Emulator(int argc, const char *argv[]):
 
 #if VM_TRACE == 1
   if (args.enable_waveform) {
-    Verilated::traceEverOn(true);	// Verilator must compute traced signals
+    Verilated::traceEverOn(true); // Verilator must compute traced signals
 #ifdef ENABLE_FST
     tfp = new VerilatedFstC;
 #else
     tfp = new VerilatedVcdC;
 #endif
-    dut_ptr->trace(tfp, 99);	// Trace 99 levels of hierarchy
+    dut_ptr->trace(tfp, 99); // Trace 99 levels of hierarchy
     if (args.wave_path != NULL) {
       tfp->open(args.wave_path);
-    }
-    else {
+    } else {
       time_t now = time(NULL);
-      tfp->open(waveform_filename(now));	// Open the dump file
+      tfp->open(waveform_filename(now)); // Open the dump file
     }
   }
 #endif
@@ -363,8 +368,7 @@ Emulator::Emulator(int argc, const char *argv[]):
   if (args.image_as_footprints) {
     if (args.linearized_name) {
       simMemory = new LinearizedFootprintsMemory(args.image, ram_size, args.linearized_name);
-    }
-    else {
+    } else {
       simMemory = new FootprintsMemory(args.image, ram_size);
     }
   }
@@ -372,8 +376,7 @@ Emulator::Emulator(int argc, const char *argv[]):
   else {
     if (args.footprints_name) {
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
-    }
-    else {
+    } else {
       init_ram(args.image, ram_size);
     }
   }
@@ -425,7 +428,7 @@ Emulator::Emulator(int argc, const char *argv[]):
   }
 #endif // CONFIG_NO_DIFFTEST
 #ifdef ENABLE_RUNAHEAD
-  if(args.enable_runahead){
+  if (args.enable_runahead) {
     runahead_init();
   }
 #endif // ENABLE_RUNAHEAD
@@ -439,7 +442,6 @@ Emulator::Emulator(int argc, const char *argv[]):
   for (int i = 0; i < NUM_CORES; i++) {
     core_max_instr[i] = args.max_instr;
   }
-
 
   //check compiling options for lightSSS
   if (args.enable_fork) {
@@ -461,7 +463,8 @@ Emulator::Emulator(int argc, const char *argv[]):
 Emulator::~Emulator() {
   // Simulation ends here, do clean up & display jobs
 #if VM_TRACE == 1
-  if (args.enable_waveform) tfp->close();
+  if (args.enable_waveform)
+    tfp->close();
 #endif
 
 #if VM_COVERAGE == 1
@@ -475,7 +478,7 @@ Emulator::~Emulator() {
 #endif
 
 #ifdef ENABLE_RUNAHEAD
-  if(args.enable_runahead){
+  if (args.enable_runahead) {
     runahead_cleanup(); // remove all checkpoints
   }
 #endif // ENABLE_RUNAHEAD
@@ -484,8 +487,7 @@ Emulator::~Emulator() {
     bool need_wakeup = trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED && trapCode != STATE_SIG;
     if (need_wakeup) {
       lightsss->wakeup_child(cycles);
-    }
-    else {
+    } else {
       lightsss->do_clear();
     }
     delete lightsss;
@@ -522,7 +524,7 @@ Emulator::~Emulator() {
 #endif
 
 #ifdef ENABLE_CHISEL_DB
-  if(args.dump_db){
+  if (args.dump_db) {
     time_t now = time(NULL);
     save_db(logdb_filename(now));
   }
@@ -531,7 +533,8 @@ Emulator::~Emulator() {
   elapsed_time = uptime() - elapsed_time;
 
   Info(ANSI_COLOR_BLUE "Seed=%d Guest cycle spent: %'" PRIu64
-      " (this will be different from cycleCnt if emu loads a snapshot)\n" ANSI_COLOR_RESET, args.seed, cycles);
+                       " (this will be different from cycleCnt if emu loads a snapshot)\n" ANSI_COLOR_RESET,
+       args.seed, cycles);
   Info(ANSI_COLOR_BLUE "Host time spent: %'dms\n" ANSI_COLOR_RESET, elapsed_time);
 
   if (args.enable_jtag) {
@@ -545,7 +548,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   if (args.trace_name && args.trace_is_read) {
     return;
   }
-  for(int i = 0; i < cycles; i++) {
+  for (int i = 0; i < cycles; i++) {
     dut_ptr->reset = 1;
 #ifdef COVERAGE_PORT_RESET
     dut_ptr->coverage_reset = dut_ptr->reset;
@@ -557,9 +560,9 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     dut_ptr->eval();
 
 #if VM_TRACE == 1
-  if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-    tfp->dump(2 * i);
-  }
+    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
+      tfp->dump(2 * i);
+    }
 #endif
 
     dut_ptr->clock = 0;
@@ -569,9 +572,9 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     dut_ptr->eval();
 
 #if VM_TRACE == 1
-  if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-    tfp->dump(2 * i + 1);
-  }
+    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
+      tfp->dump(2 * i + 1);
+    }
 #endif
 
     dut_ptr->reset = 0;
@@ -600,12 +603,11 @@ inline void Emulator::single_cycle() {
     static uint64_t cycle = -1UL;
     cycle++;
 #endif
-    bool in_range  = (args.log_begin <= cycle) && (cycle <= args.log_end);
+    bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
     if (in_range || force_dump_wave) {
       if (args.enable_waveform_full) {
-        tfp->dump(20 + 2*cycle);
-      }
-      else {
+        tfp->dump(20 + 2 * cycle);
+      } else {
         tfp->dump(cycle);
       }
     }
@@ -639,15 +641,15 @@ inline void Emulator::single_cycle() {
     static uint64_t cycle = -1UL;
     cycle++;
 #endif
-    bool in_range  = (args.log_begin <= cycle) && (cycle <= args.log_end);
+    bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
     if (in_range || force_dump_wave) {
-      tfp->dump(21 + 2*cycle);
+      tfp->dump(21 + 2 * cycle);
     }
   }
 #endif
 
 end_single_cycle:
-  cycles ++;
+  cycles++;
 }
 
 int Emulator::tick() {
@@ -698,7 +700,7 @@ int Emulator::tick() {
     if (trap->instrCnt >= core_max_instr[i]) {
       trapCode = STATE_LIMIT_EXCEEDED;
 #ifdef FUZZER_LIB
-    stats.exit_code = SimExitCode::exceed_limit;
+      stats.exit_code = SimExitCode::exceed_limit;
 #endif // FUZZER_LIB
       return trapCode;
     }
@@ -732,8 +734,10 @@ int Emulator::tick() {
       dut_ptr->difftest_perfCtrl_dump = 1;
     }
 #ifdef ENABLE_IPC
-    if (trap->instrCnt >= args.ipc_times * args.ipc_interval && args.ipc_last_instr < args.ipc_times * args.ipc_interval) {
-      fprintf(args.ipc_file, "%d %f\n", args.ipc_times * args.ipc_interval, (float)args.ipc_interval / (cycles - args.ipc_last_cycle));
+    if (trap->instrCnt >= args.ipc_times * args.ipc_interval &&
+        args.ipc_last_instr < args.ipc_times * args.ipc_interval) {
+      fprintf(args.ipc_file, "%d %f\n", args.ipc_times * args.ipc_interval,
+              (float)args.ipc_interval / (cycles - args.ipc_last_cycle));
       args.ipc_times++;
       args.ipc_last_instr = trap->instrCnt;
       args.ipc_last_cycle = cycles;
@@ -760,7 +764,7 @@ int Emulator::tick() {
 
   single_cycle();
 #ifdef CONFIG_NO_DIFFTEST
-  args.max_cycles --;
+  args.max_cycles--;
 #endif // CONFIG_NO_DIFFTEST
   dut_ptr->difftest_perfCtrl_clean = 0;
   dut_ptr->difftest_perfCtrl_dump = 0;
@@ -770,8 +774,7 @@ int Emulator::tick() {
   if (args.trace_name && args.trace_is_read) {
     step = 1;
     difftest_trace_read();
-  }
-  else {
+  } else {
     step = dut_ptr->difftest_step;
   }
 
@@ -781,22 +784,19 @@ int Emulator::tick() {
 
   if (args.enable_diff) {
     trapCode = difftest_nstep(step);
-  }
-  else {
+  } else {
     trapCode = difftest_state();
   }
 
   if (trapCode != STATE_RUNNING) {
 #ifdef FUZZER_LIB
-      if (trapCode == STATE_GOODTRAP) {
-        stats.exit_code = SimExitCode::good_trap;
-      }
-      else if (trapCode != STATE_FUZZ_COND && trapCode != STATE_SIM_EXIT) {
-        stats.exit_code = SimExitCode::bad_trap;
-      }
-      else if (stats.exit_code == SimExitCode::unknown) {
-        stats.exit_code = SimExitCode::bad_trap;
-      }
+    if (trapCode == STATE_GOODTRAP) {
+      stats.exit_code = SimExitCode::good_trap;
+    } else if (trapCode != STATE_FUZZ_COND && trapCode != STATE_SIM_EXIT) {
+      stats.exit_code = SimExitCode::bad_trap;
+    } else if (stats.exit_code == SimExitCode::unknown) {
+      stats.exit_code = SimExitCode::bad_trap;
+    }
 #endif
     return trapCode;
   }
@@ -866,7 +866,7 @@ int Emulator::is_good() {
   return is_good_trap();
 }
 
-inline char* Emulator::timestamp_filename(time_t t, char *buf) {
+inline char *Emulator::timestamp_filename(time_t t, char *buf) {
   char buf_time[64];
   strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
   const char *noop_home = getenv("NOOP_HOME");
@@ -881,7 +881,7 @@ inline char* Emulator::timestamp_filename(time_t t, char *buf) {
 }
 
 #ifdef VM_SAVABLE
-inline char* Emulator::snapshot_filename(time_t t) {
+inline char *Emulator::snapshot_filename(time_t t) {
   static char buf[1024];
   char *p = timestamp_filename(t, buf);
   strcpy(p, ".snapshot");
@@ -889,14 +889,14 @@ inline char* Emulator::snapshot_filename(time_t t) {
 }
 #endif
 
-inline char* Emulator::logdb_filename(time_t t) {
+inline char *Emulator::logdb_filename(time_t t) {
   static char buf[1024];
   char *p = timestamp_filename(t, buf);
   strcpy(p, ".db");
   return buf;
 }
 
-inline char* Emulator::waveform_filename(time_t t) {
+inline char *Emulator::waveform_filename(time_t t) {
   static char buf[1024];
   char *p = timestamp_filename(t, buf);
 #ifdef ENABLE_FST
@@ -908,7 +908,7 @@ inline char* Emulator::waveform_filename(time_t t) {
   return buf;
 }
 
-inline char* Emulator::cycle_wavefile(uint64_t cycles, time_t t) {
+inline char *Emulator::cycle_wavefile(uint64_t cycles, time_t t) {
   static char buf[1024];
   char buf_time[64];
   strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
@@ -929,9 +929,8 @@ inline char* Emulator::cycle_wavefile(uint64_t cycles, time_t t) {
   return buf;
 }
 
-
 #if VM_COVERAGE == 1
-inline char* Emulator::coverage_filename(time_t t) {
+inline char *Emulator::coverage_filename(time_t t) {
   static char buf[1024];
   char *p = timestamp_filename(t, buf);
   strcpy(p, ".coverage.dat");
@@ -947,7 +946,7 @@ inline void Emulator::save_coverage(time_t t) {
 
 void Emulator::trigger_stat_dump() {
   dut_ptr->difftest_perfCtrl_dump = 1;
-  if(get_args().force_dump_result) {
+  if (get_args().force_dump_result) {
     dut_ptr->difftest_logCtrl_end = -1;
   }
   single_cycle();
@@ -962,31 +961,23 @@ void Emulator::display_trapinfo() {
       case STATE_GOODTRAP:
         eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
         break;
-      case STATE_BADTRAP:
-        eprintf(ANSI_COLOR_RED "HIT BAD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
-        break;
-      case STATE_ABORT:
-        eprintf(ANSI_COLOR_RED "ABORT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
-        break;
+      case STATE_BADTRAP: eprintf(ANSI_COLOR_RED "HIT BAD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
+      case STATE_ABORT: eprintf(ANSI_COLOR_RED "ABORT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
       case STATE_LIMIT_EXCEEDED:
         eprintf(ANSI_COLOR_YELLOW "EXCEEDING CYCLE/INSTR LIMIT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
         break;
       case STATE_SIG:
         eprintf(ANSI_COLOR_YELLOW "SOME SIGNAL STOPS THE PROGRAM at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
         break;
-      case STATE_SIM_EXIT:
-        eprintf(ANSI_COLOR_YELLOW "EXIT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
-        break;
-      default:
-        eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n", trapCode);
+      case STATE_SIM_EXIT: eprintf(ANSI_COLOR_YELLOW "EXIT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
+      default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n", trapCode);
     }
 
     difftest[i]->display_stats();
 
-  #ifdef TRACE_INFLIGHT_MEM_INST
+#ifdef TRACE_INFLIGHT_MEM_INST
     runahead[i]->memdep_watcher->print_pred_matrix();
-  #endif
-
+#endif
   }
 
   if (trapCode != STATE_ABORT) {
@@ -1035,7 +1026,7 @@ void Emulator::snapshot_save(const char *filename) {
   stream.unbuf_write(&csr_buf, sizeof(csr_buf));
 
   long sdcard_offset;
-  if(fp)
+  if (fp)
     sdcard_offset = ftell(fp);
   else
     sdcard_offset = 0;
@@ -1083,7 +1074,7 @@ void Emulator::snapshot_load(const char *filename) {
   long sdcard_offset = 0;
   stream.read(&sdcard_offset, sizeof(sdcard_offset));
 
-  if(fp)
+  if (fp)
     fseek(fp, sdcard_offset, SEEK_SET);
 
   // No one uses snapshot when !has_commit, isn't it?
@@ -1100,11 +1091,11 @@ void Emulator::fork_child_init() {
   dut_ptr->atClone();
 #else
 #error Please use Verilator v5.016 or newer versions.
-#endif // check VERILATOR_VERSION_INTEGER values
-#elif EMU_THREAD > 1 // VERILATOR_VERSION_INTEGER not defined
+#endif                 // check VERILATOR_VERSION_INTEGER values
+#elif EMU_THREAD > 1   // VERILATOR_VERSION_INTEGER not defined
 #ifdef VERILATOR_4_210 // v4.210 <= version < 4.220
   dut_ptr->vlSymsp->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
-#else // older than v4.210
+#else                  // older than v4.210
   dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
 #endif
 #endif

@@ -25,7 +25,7 @@
 
 extern "C" uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_t *level) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
-  difftest_calls[perf_pte_helper] ++;
+  difftest_calls[perf_pte_helper]++;
   difftest_bytes[perf_pte_helper] += 25;
 #endif // CONFIG_DIFFTEST_PERFCNT
   uint64_t pg_base = satp << 12, pte_addr;
@@ -54,29 +54,28 @@ enum {
   M_XA_SWAP = 4,
   M_XLR = 6,
   M_XSC = 7,
-  M_XA_ADD  = 8,
-  M_XA_XOR  = 9,
-  M_XA_OR   = 10,
-  M_XA_AND  = 11,
-  M_XA_MIN  = 12,
-  M_XA_MAX  = 13,
+  M_XA_ADD = 8,
+  M_XA_XOR = 9,
+  M_XA_OR = 10,
+  M_XA_AND = 11,
+  M_XA_MIN = 12,
+  M_XA_MAX = 13,
   M_XA_MINU = 14,
   M_XA_MAXU = 15
 };
 
-#define SEXT32(data)        ((uint64_t)(data) | ((data >> 31) ? (0xffffffffUL << 32) : 0))
-#define GET_LOWER32(data)   ((data) & ((1UL << 32) - 1))
-#define GET_UPPER32(data)   ((data) >> 32)
+#define SEXT32(data)      ((uint64_t)(data) | ((data >> 31) ? (0xffffffffUL << 32) : 0))
+#define GET_LOWER32(data) ((data) & ((1UL << 32) - 1))
+#define GET_UPPER32(data) ((data) >> 32)
 
 extern "C" uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
-  difftest_calls[perf_amo_helper] ++;
+  difftest_calls[perf_amo_helper]++;
   difftest_bytes[perf_amo_helper] += 18;
 #endif // CONFIG_DIFFTEST_PERFCNT
   if (addr % 8 == 4 && mask == 0xf0) {
     addr -= 4;
-  }
-  else if (addr % 8 != 0) {
+  } else if (addr % 8 != 0) {
     printf("warning: amo address %lx not naturally aligned to %x!!\n", addr, mask);
   }
   if (mask != 0xff && mask != 0xf && mask != 0xf0) {
@@ -91,20 +90,32 @@ extern "C" uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8
   uint64_t result = 0;
   switch (cmd) {
     case M_XA_SWAP: result = wop; break;
-    case M_XLR: result = rdata; lr_valid = 1; lr_addr = addr; break;
+    case M_XLR:
+      result = rdata;
+      lr_valid = 1;
+      lr_addr = addr;
+      break;
     // always succeed
-    case M_XSC: rop = !(lr_valid && lr_addr == addr); lr_valid = 0; result = wop; break;
-    case M_XA_ADD:  result = wop + rop; break;
-    case M_XA_XOR:  result = wop ^ rop; break;
-    case M_XA_OR:   result = wop | rop; break;
-    case M_XA_AND:  result = wop & rop; break;
+    case M_XSC:
+      rop = !(lr_valid && lr_addr == addr);
+      lr_valid = 0;
+      result = wop;
+      break;
+    case M_XA_ADD: result = wop + rop; break;
+    case M_XA_XOR: result = wop ^ rop; break;
+    case M_XA_OR: result = wop | rop; break;
+    case M_XA_AND: result = wop & rop; break;
     case M_XA_MIN:
-      if (mask == 0xff) result = ((int64_t)wop > (int64_t)rop) ? rop : wop;
-      else result = ((int32_t)((uint32_t)wop) > (int32_t)((uint32_t)rop)) ? rop : wop;
+      if (mask == 0xff)
+        result = ((int64_t)wop > (int64_t)rop) ? rop : wop;
+      else
+        result = ((int32_t)((uint32_t)wop) > (int32_t)((uint32_t)rop)) ? rop : wop;
       break;
     case M_XA_MAX:
-      if (mask == 0xff) result = ((int64_t)wop > (int64_t)rop) ? wop : rop;
-      else result = ((int32_t)((uint32_t)wop) > (int32_t)((uint32_t)rop)) ? wop : rop;
+      if (mask == 0xff)
+        result = ((int64_t)wop > (int64_t)rop) ? wop : rop;
+      else
+        result = ((int32_t)((uint32_t)wop) > (int32_t)((uint32_t)rop)) ? wop : rop;
       break;
     case M_XA_MINU: result = (wop > rdata) ? rop : wop; break;
     case M_XA_MAXU: result = (wop > rdata) ? wop : rop; break;
@@ -112,8 +123,7 @@ extern "C" uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8
   }
   if (mask == 0xf) {
     result = (upper_r << 32) | (result & 0xffffffffUL);
-  }
-  else if (mask == 0xf0) {
+  } else if (mask == 0xf0) {
     result = (result << 32) | lower_r;
   }
   pmem_write(addr, result);

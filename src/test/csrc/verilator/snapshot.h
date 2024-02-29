@@ -19,10 +19,10 @@
 
 #ifdef VM_SAVABLE
 #include "VSimTop.h"
-#include <verilated_save.h>
-#include <sys/mman.h>
 #include "compress.h"
 #include "ram.h"
+#include <sys/mman.h>
+#include <verilated_save.h>
 
 #define SNAPSHOT_SIZE (3UL * simMemory->get_size())
 
@@ -37,14 +37,14 @@ public:
     buf = NULL;
     size = 0;
   }
-  ~VerilatedSaveMem() { }
+  ~VerilatedSaveMem() {}
 
   void init(const char *filename) {
     if (buf != NULL) {
       munmap(buf, SNAPSHOT_SIZE);
       buf = NULL;
     }
-    buf = (uint8_t*)mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    buf = (uint8_t *)mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
     if (buf == (uint8_t *)MAP_FAILED) {
       printf("Cound not mmap 0x%lx bytes\n", SNAPSHOT_SIZE);
       assert(0);
@@ -54,12 +54,12 @@ public:
     header();
   }
 
-  void unbuf_write(const void* __restrict datap, size_t size) VL_MT_UNSAFE_ONE {
+  void unbuf_write(const void *__restrict datap, size_t size) VL_MT_UNSAFE_ONE {
     nonzero_large_memcpy(buf + this->size, datap, size);
     this->size += size;
   }
 
-  void close() { }
+  void close() {}
   void flush();
   void save();
 };
@@ -73,7 +73,7 @@ class VerilatedRestoreMem : public VerilatedDeserialize {
 public:
   VerilatedRestoreMem() {
     buf_size = SNAPSHOT_SIZE;
-    buf = (uint8_t*)mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    buf = (uint8_t *)mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
     if (buf == (uint8_t *)MAP_FAILED) {
       printf("Cound not mmap 0x%lx bytes\n", SNAPSHOT_SIZE);
       assert(0);
@@ -81,12 +81,16 @@ public:
     size = 0;
     buf_ptr = 0;
   }
-  ~VerilatedRestoreMem() { close(); }
+  ~VerilatedRestoreMem() {
+    close();
+  }
 
-  void open(const char* filenamep) VL_MT_UNSAFE_ONE;
-  void open(const std::string& filename) VL_MT_UNSAFE_ONE { open(filename.c_str()); }
+  void open(const char *filenamep) VL_MT_UNSAFE_ONE;
+  void open(const std::string &filename) VL_MT_UNSAFE_ONE {
+    open(filename.c_str());
+  }
 
-  long unbuf_read(uint8_t* dest, long rsize);
+  long unbuf_read(uint8_t *dest, long rsize);
 
   void close() override VL_MT_UNSAFE_ONE;
   void flush() override VL_MT_UNSAFE_ONE {}

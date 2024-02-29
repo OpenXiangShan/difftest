@@ -1,10 +1,8 @@
+#include "difftrace.h"
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "difftrace.h"
-
-DiffTrace::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_size)
-  : is_read(is_read) {
+DiffTrace::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_size) : is_read(is_read) {
   if (!is_read) {
     buffer_size = _buffer_size;
     buffer = (DiffTestState *)calloc(buffer_size, sizeof(DiffTestState));
@@ -35,7 +33,6 @@ bool DiffTrace::read_next(DiffTestState *trace) {
   // printf("%lu...\n", buffer_count);
   return 0;
 }
-
 
 bool DiffTrace::trace_file_next() {
   static uint64_t trace_index = 0;
@@ -69,8 +66,7 @@ bool DiffTrace::trace_file_next() {
     assert(read_bytes == buffer_size);
     fclose(file);
     buffer_count = 0;
-  }
-  else if (buffer_count > 0) {
+  } else if (buffer_count > 0) {
     Info("Writing %lu traces to %s ...\n", buffer_count, filename);
     FILE *file = fopen(filename, "wb");
     fwrite(buffer, sizeof(DiffTestState), buffer_count, file);

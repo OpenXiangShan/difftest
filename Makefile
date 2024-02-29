@@ -202,7 +202,12 @@ include palladium.mk
 clean: vcs-clean pldm-clean
 	rm -rf $(BUILD_DIR)
 
-format:
+format: scala-format clang-format
+
+scala-format:
 	mill -i mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
 
-.PHONY: sim-verilog emu difftest_verilog clean format
+clang-format:
+	clang-format -i $(shell find ./src/test/csrc -name "*.cpp" -or -name "*.h")
+
+.PHONY: sim-verilog emu difftest_verilog clean format scala-format clang-format

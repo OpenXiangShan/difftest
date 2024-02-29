@@ -17,11 +17,11 @@
 #ifndef __NEMU_PROXY_H
 #define __NEMU_PROXY_H
 
-#include <unistd.h>
-#include <dlfcn.h>
-
 #include "common.h"
+#include <dlfcn.h>
+#include <unistd.h>
 
+/* clang-format off */
 static const char *regs_name_int[] = {
   "$0",  "ra",  "sp",   "gp",   "tp",  "t0",  "t1",   "t2",
   "s0",  "s1",  "a0",   "a1",   "a2",  "a3",  "a4",   "a5",
@@ -63,8 +63,12 @@ static const char *regs_name_vec[] = {
 static const char *regs_name_vec_csr[] = {
   "vstart", "vxsat", "vxrm", "vcsr", "vl", "vtype", "vlenb"
 };
+/* clang-format on */
 
-enum { REF_TO_DUT, DUT_TO_REF };
+enum {
+  REF_TO_DUT,
+  DUT_TO_REF
+};
 
 class RefProxyConfig {
 public:
@@ -72,6 +76,7 @@ public:
   bool debug_difftest = false;
 };
 
+/* clang-format off */
 #define REF_BASE(f)                                                           \
   f(ref_init, difftest_init, void, )                                          \
   f(ref_regcpy, difftest_regcpy, void, void*, bool, bool)                     \
@@ -86,20 +91,28 @@ public:
   f(load_flash_bin, difftest_load_flash, void, void*, size_t)
 
 #ifdef ENABLE_RUNHEAD
-#define REF_RUN_AHEAD(f) \
+#define REF_RUN_AHEAD(f)                                                      \
   f(query, difftest_query_ref, void, void *, uint64_t)
 #else
 #define REF_RUN_AHEAD(f)
 #endif
 
+#ifdef ENABLE_STORE_LOG
+#define REF_STORE_LOG(f)                                                      \
+  f(ref_store_log_reset, difftest_store_log_reset, void, )                    \
+  f(ref_store_log_restore, difftest_store_log_restore, void, )
+#else
+#define REF_STORE_LOG(f)
+#endif
+
 #ifdef DEBUG_MODE_DIFF
-#define REF_DEBUG_MODE(f) \
+#define REF_DEBUG_MODE(f)                                                     \
   f(debug_mem_sync, debug_mem_sync, void, uint64_t, void *, size_t)
 #else
 #define REF_DEBUG_MODE(f)
 #endif
 
-#define REF_ALL(f) \
+#define REF_ALL(f)  \
   REF_BASE(f)       \
   REF_RUN_AHEAD(f)  \
   REF_DEBUG_MODE(f)
@@ -116,6 +129,7 @@ public:
 
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
+/* clang-format on */
 
 // This class only loads the functions. It should never call anything.
 class AbstractRefProxy {
@@ -129,18 +143,16 @@ protected:
   REF_OPTIONAL(DeclRefFunc)
 
 private:
-  void * const handler;
+  void *const handler;
   void *load_handler(const char *env, const char *file_path);
-  template <typename T>
-  T load_function(const char *func_name);
+  template <typename T> T load_function(const char *func_name);
 };
 
 class RefProxy : public AbstractRefProxy {
 public:
-  RefProxy(int coreid, size_t ram_size)
-    : AbstractRefProxy(coreid, ram_size, nullptr, nullptr) {}
+  RefProxy(int coreid, size_t ram_size) : AbstractRefProxy(coreid, ram_size, nullptr, nullptr) {}
   RefProxy(int coreid, size_t ram_size, const char *env, const char *file_path)
-    : AbstractRefProxy(coreid, ram_size, env, file_path) {}
+      : AbstractRefProxy(coreid, ram_size, env, file_path) {}
   ~RefProxy();
 
   DifftestArchIntRegState regs_int;
@@ -159,9 +171,9 @@ public:
   inline uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-      is_fp ? regs_fp.value + src :
+        is_fp ? regs_fp.value + src :
 #endif
-      regs_int.value + src;
+              regs_int.value + src;
   }
 
   inline void sync(bool is_from_dut = false) {
@@ -175,8 +187,7 @@ public:
   inline void skip_one(bool isRVC, bool wen, uint32_t wdest, uint64_t wdata) {
     if (ref_skip_one) {
       ref_skip_one(isRVC, wen, wdest, wdata);
-    }
-    else {
+    } else {
       sync();
       pc += isRVC ? 2 : 4;
       // TODO: what if skip with fpwen?
@@ -203,6 +214,27 @@ public:
   inline void set_illegal_mem_access(bool ignored = false) {
     config.ignore_illegal_mem_access = ignored;
     sync_config();
+  }
+
+#ifdef ENABLE_STORE_LOG
+  inline void set_store_log(bool enable = false) {
+    config.enable_store_log = enable;
+    sync_config();
+  }
+#endif // ENABLE_STORE_LOG
+
+  inline int get_reg_size() {
+    return sizeof(DifftestArchIntRegState) + sizeof(DifftestCSRState) + sizeof(uint64_t)
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
+           + sizeof(DifftestArchFpRegState)
+#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+           + sizeof(DifftestArchVecRegState)
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+#ifdef CONFIG_DIFFTEST_VECCSRSTATE
+           + sizeof(DifftestVecCSRState)
+#endif // CONFIG_DIFFTEST_VECCSRSTATE
+        ;
   }
 
   inline int get_status() {
@@ -252,6 +284,6 @@ struct ExecutionGuide {
 };
 
 extern const char *difftest_ref_so;
-extern uint8_t* ref_golden_mem;
+extern uint8_t *ref_golden_mem;
 
 #endif

@@ -14,14 +14,14 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include <common.h>
-#include <locale.h>
-#include "difftest.h"
 #include "device.h"
+#include "difftest.h"
+#include "flash.h"
 #include "goldenmem.h"
 #include "ram.h"
-#include "flash.h"
 #include "refproxy.h"
+#include <common.h>
+#include <locale.h>
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
@@ -43,12 +43,12 @@ enum {
 } simv_state;
 static uint8_t simv_result = SIMV_RUN;
 extern "C" void set_bin_file(char *s) {
-  printf("ram image:%s\n",s);
+  printf("ram image:%s\n", s);
   strcpy(bin_file, s);
 }
 
 extern "C" void set_flash_bin(char *s) {
-  printf("flash image:%s\n",s);
+  printf("flash image:%s\n", s);
   flash_bin_file = (char *)malloc(256);
   strcpy(flash_bin_file, s);
 }
@@ -61,7 +61,7 @@ extern "C" void set_max_instrs(uint64_t mc) {
 extern const char *difftest_ref_so;
 extern "C" void set_diff_ref_so(char *s) {
   printf("diff-test ref so:%s\n", s);
-  char* buf = (char *)malloc(256);
+  char *buf = (char *)malloc(256);
   strcpy(buf, s);
   difftest_ref_so = buf;
 }
@@ -132,11 +132,8 @@ extern "C" uint8_t simv_step() {
       printf("Core %d: ", i);
       uint64_t pc = difftest[i]->get_trap_event()->pc;
       switch (trapCode) {
-        case 0:
-          eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
-          break;
-        default:
-          eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
+        case 0: eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
+        default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
       }
       difftest[i]->display_stats();
     }
@@ -148,7 +145,7 @@ extern "C" uint8_t simv_step() {
 
   if (max_instrs != 0) { // 0 for no limit
     auto trap = difftest[0]->get_trap_event();
-    if(max_instrs < trap->instrCnt) {
+    if (max_instrs < trap->instrCnt) {
       eprintf(ANSI_COLOR_GREEN "EXCEEDED MAX INSTR: %ld\n" ANSI_COLOR_RESET,max_instrs);
       difftest[0]->display_stats();
       return SIMV_DONE;
@@ -192,7 +189,7 @@ extern "C" void simv_nstep(uint8_t step) {
 extern "C" uint8_t simv_nstep(uint8_t step) {
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 #ifdef CONFIG_DIFFTEST_PERFCNT
-  difftest_calls[perf_simv_nstep] ++;
+  difftest_calls[perf_simv_nstep]++;
   difftest_bytes[perf_simv_nstep] += 1;
 #endif // CONFIG_DIFFTEST_PERFCNT
   difftest_switch_zone();

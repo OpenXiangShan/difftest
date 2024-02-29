@@ -37,8 +37,9 @@ static int uart_dequeue(void) {
     f = (f + 1) % QUEUE_SIZE;
   } else {
     static int last = 0;
-    k = "root\n"[last ++];
-    if (last == 5) last = 0;
+    k = "root\n"[last++];
+    if (last == 5)
+      last = 0;
     // generate a random key every 1s for pal
     //k = -1;//"uiojkl"[rand()% 6];
   }
@@ -79,24 +80,25 @@ extern "C" void uart_getc_legacy(uint8_t *ch) {
 
 static void preset_input() {
   char rtthread_cmd[128] = "memtrace\n";
-  char init_cmd[128] = "2" // choose PAL
-    "jjjjjjjkkkkkk" // walk to enemy
-    ;
+  char init_cmd[128] =
+      "2"             // choose PAL
+      "jjjjjjjkkkkkk" // walk to enemy
+      ;
   char busybox_cmd[128] =
-    "ls\n"
-    "echo 123\n"
-    "cd /root/benchmark\n"
-    "ls\n"
-    "./stream\n"
-    "ls\n"
-    "cd /root/redis\n"
-    "ls\n"
-    "ifconfig -a\n"
-    "./redis-server\n";
+      "ls\n"
+      "echo 123\n"
+      "cd /root/benchmark\n"
+      "ls\n"
+      "./stream\n"
+      "ls\n"
+      "cd /root/redis\n"
+      "ls\n"
+      "ifconfig -a\n"
+      "./redis-server\n";
   char debian_cmd[128] = "root\n";
   char *buf = debian_cmd;
   int i;
-  for (i = 0; i < strlen(buf); i ++) {
+  for (i = 0; i < strlen(buf); i++) {
     uart_enqueue(buf[i]);
   }
 }

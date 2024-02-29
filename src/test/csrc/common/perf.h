@@ -16,8 +16,10 @@
 #ifndef __PERF_H__
 #define __PERF_H__
 
+#include "common.h"
+
 #ifdef CONFIG_DIFFTEST_PERFCNT
-static inline void difftest_perfcnt_print(const char* name, long long calls, long long bytes, long long msec) {
+static inline void difftest_perfcnt_print(const char *name, long long calls, long long bytes, long long msec) {
   long long calls_mean = calls * 1000 / msec;
   long long bytes_mean = bytes * 1000 / msec;
   printf("%30s %15lld %15lld/s %15lldB %15lldB/s\n", name, calls, calls_mean, bytes, bytes_mean);

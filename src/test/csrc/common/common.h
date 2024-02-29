@@ -17,17 +17,16 @@
 #ifndef __COMMON_H
 #define __COMMON_H
 
-#include <cstdio>
-#include <cstring>
-#include <cstdlib>
-#include <cstdint>
+#include "config.h"
 #include <cassert>
 #include <cerrno>
 #include <cinttypes>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <sys/time.h>
 #include <unistd.h>
-
-#include "config.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -37,14 +36,14 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-#define eprintf(...) fprintf(stdout, ## __VA_ARGS__)
+#define eprintf(...) fprintf(stdout, ##__VA_ARGS__)
 
 #ifdef WITH_DRAMSIM3
 #include "cosimulation.h"
 #endif
 
 extern int assert_count;
-extern const char* emu_path;
+extern const char *emu_path;
 extern bool enable_simjtag;
 
 extern int signal_num;
@@ -63,29 +62,29 @@ extern bool sim_verbose;
     }                       \
   } while (0)
 
-#define Assert(cond, ...) \
-  do { \
-    if (!(cond)) { \
-      fflush(stdout); \
+#define Assert(cond, ...)           \
+  do {                              \
+    if (!(cond)) {                  \
+      fflush(stdout);               \
       fprintf(stderr, "\33[1;31m"); \
       fprintf(stderr, __VA_ARGS__); \
-      fprintf(stderr, "\33[0m\n"); \
-      assert(cond); \
-    } \
+      fprintf(stderr, "\33[0m\n");  \
+      assert(cond);                 \
+    }                               \
   } while (0)
 
 #define panic(...) Assert(0, __VA_ARGS__)
 
-#define fprintf_with_pid(stream, ...) \
-  do { \
+#define fprintf_with_pid(stream, ...)   \
+  do {                                  \
     fprintf(stream, "(%d) ", getpid()); \
-    fprintf(stream, __VA_ARGS__); \
-  }while(0)
+    fprintf(stream, __VA_ARGS__);       \
+  } while (0)
 
-#define printf_with_pid(...) \
-  do { \
+#define printf_with_pid(...)               \
+  do {                                     \
     fprintf_with_pid(stdout, __VA_ARGS__); \
-  }while(0)
+  } while (0)
 
 #define TODO() panic("please implement me")
 
