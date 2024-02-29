@@ -17,14 +17,14 @@
 #ifndef __RAM_H
 #define __RAM_H
 
-#include <iostream>
+#include "common.h"
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <set>
 #include <unordered_map>
 #include <vector>
-#include "common.h"
 
 #ifndef DEFAULT_EMU_RAM_SIZE
 #define DEFAULT_EMU_RAM_SIZE (256 * 1024 * 1024UL)
@@ -35,8 +35,10 @@ void pmem_write(uint64_t waddr, uint64_t wdata);
 
 class InputReader {
 public:
-  virtual ~InputReader() {};
-  virtual uint64_t len() { return 0; };
+  virtual ~InputReader(){};
+  virtual uint64_t len() {
+    return 0;
+  };
   virtual uint64_t next() = 0;
   virtual uint64_t read_all(void *, uint64_t) = 0;
 };
@@ -56,7 +58,9 @@ class WimReader : public InputReader {
 public:
   WimReader(uint64_t *addr, uint64_t size) : base_addr(addr), size(size), index(0) {}
   ~WimReader() {}
-  uint64_t len() { return size; };
+  uint64_t len() {
+    return size;
+  };
   uint64_t next();
   uint64_t read_all(void *dest, uint64_t max_bytes = -1ULL);
 
@@ -68,8 +72,12 @@ private:
 class FileReader : public InputReader {
 public:
   FileReader(const char *filename);
-  ~FileReader() { file.close(); }
-  uint64_t len() { return file_size; };
+  ~FileReader() {
+    file.close();
+  }
+  uint64_t len() {
+    return file_size;
+  };
   uint64_t next();
   uint64_t read_all(void *dest, uint64_t max_bytes = -1ULL);
 
@@ -109,12 +117,14 @@ public:
     return index < memory_size / sizeof(uint64_t);
   }
 
-  virtual void clone(std::function<void(void*, size_t)> func, bool skip_zero = false) = 0;
-  virtual void clone_on_demand(std::function<void(uint64_t, void*, size_t)> func, bool skip_zero = false) {
-    clone([func](void* src, size_t n) { func(0, src, n); }, skip_zero);
+  virtual void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) = 0;
+  virtual void clone_on_demand(std::function<void(uint64_t, void *, size_t)> func, bool skip_zero = false) {
+    clone([func](void *src, size_t n) { func(0, src, n); }, skip_zero);
   }
-  virtual uint64_t *as_ptr() { return nullptr; }
-  virtual uint64_t& at(uint64_t index) = 0;
+  virtual uint64_t *as_ptr() {
+    return nullptr;
+  }
+  virtual uint64_t &at(uint64_t index) = 0;
   void display_stats();
 };
 
@@ -131,16 +141,18 @@ protected:
 public:
   MmapMemory(const char *image, uint64_t n_bytes);
   virtual ~MmapMemory();
-  void clone(std::function<void(void*, uint64_t)> func, bool skip_zero = false) {
+  void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
     uint64_t n_bytes = skip_zero ? img_size : get_size();
     func(ram, n_bytes);
   }
-  uint64_t& at(uint64_t index) {
+  uint64_t &at(uint64_t index) {
     on_access(index);
     return ram[index];
   }
 
-  uint64_t *as_ptr() { return ram; }
+  uint64_t *as_ptr() {
+    return ram;
+  }
 };
 
 class MmapMemoryWithFootprints : public MmapMemory {
@@ -151,7 +163,7 @@ private:
 public:
   MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name);
   ~MmapMemoryWithFootprints();
-  uint64_t& at(uint64_t index);
+  uint64_t &at(uint64_t index);
 };
 
 class FootprintsMemory : public SimMemory {
@@ -173,15 +185,13 @@ protected:
 public:
   FootprintsMemory(const char *footprints_name, uint64_t n_bytes);
   ~FootprintsMemory();
-  uint64_t& at(uint64_t index);
-  void clone(std::function<void(void*, uint64_t)> func, bool skip_zero = false) {
+  uint64_t &at(uint64_t index);
+  void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
     printf("clone_instant not support by FootprintsMemory\n");
     assert(0);
   }
-  void clone_on_demand(std::function<void(uint64_t, void*, size_t)> func, bool skip_zero = false) {
-    auto cb = [func](uint64_t index, uint64_t value) {
-      func(index * sizeof(uint64_t), &value, sizeof(uint64_t));
-    };
+  void clone_on_demand(std::function<void(uint64_t, void *, size_t)> func, bool skip_zero = false) {
+    auto cb = [func](uint64_t index, uint64_t value) { func(index * sizeof(uint64_t), &value, sizeof(uint64_t)); };
     for (auto i = ram.begin(); i != ram.end(); i++) {
       cb(i->first, i->second);
     }
@@ -192,13 +202,13 @@ public:
 class LinearizedFootprintsMemory : public FootprintsMemory {
 private:
   const char *linear_name;
-  uint64_t* linear_memory;
+  uint64_t *linear_memory;
   uint64_t n_touched; // for performance opt
 
 public:
   LinearizedFootprintsMemory(const char *footprints_name, uint64_t n_bytes, const char *linear_name);
   ~LinearizedFootprintsMemory();
-  void save_linear_memory(const char* filename);
+  void save_linear_memory(const char *filename);
 };
 
 extern SimMemory *simMemory;

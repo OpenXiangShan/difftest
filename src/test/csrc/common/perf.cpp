@@ -14,7 +14,6 @@
 ***************************************************************************************/
 
 #ifdef CONFIG_DIFFTEST_PERFCNT
-#include "common.h"
 #include "perf.h"
 #include <time.h>
 
@@ -38,17 +37,8 @@ void difftest_perfcnt_finish() {
   diffstate_perfcnt_finish(perf_run_msec);
   printf(">>> Other Difftest Func\n");
   const char *func_name[DIFFTEST_PERF_NUM] = {
-    "simv_nstep",
-    "difftest_ram_read",
-    "difftest_ram_write",
-    "flash_read",
-    "sd_set_addr",
-    "sd_read",
-    "jtag_tick",
-    "put_pixel",
-    "vmem_sync",
-    "pte_helper",
-    "amo_helper",
+    "simv_nstep", "difftest_ram_read", "difftest_ram_write", "flash_read", "sd_set_addr", "sd_read",
+    "jtag_tick",  "put_pixel",         "vmem_sync",          "pte_helper", "amo_helper",
   };
   for (int i = 0; i < DIFFTEST_PERF_NUM; i++) {
     difftest_perfcnt_print(func_name[i], difftest_calls[i], difftest_bytes[i], perf_run_msec);

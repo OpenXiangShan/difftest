@@ -16,22 +16,20 @@
 #ifndef __DUT_H__
 #define __DUT_H__
 
-#include <vector>
-
 #include "common.h"
 #include "coverage.h"
+#include <vector>
 
 class DUT {
 public:
-  DUT() { };
-  DUT(int argc, const char *argv[]) { };
+  DUT(){};
+  DUT(int argc, const char *argv[]){};
   virtual int tick() = 0;
   virtual int is_finished() = 0;
   virtual int is_good() = 0;
 };
 
-#define simstats_display(s, ...) \
-  eprintf(ANSI_COLOR_GREEN s ANSI_COLOR_RESET, ##__VA_ARGS__)
+#define simstats_display(s, ...) eprintf(ANSI_COLOR_GREEN s ANSI_COLOR_RESET, ##__VA_ARGS__)
 
 enum {
   STATE_GOODTRAP = 0,
@@ -80,14 +78,15 @@ public:
     auto c_llvm = new LLVMSanCoverage;
     cover.push_back(c_llvm);
 #endif // LLVM_COVER
-// #if defined(CONFIG_DIFFTEST_INSTRCOVER) && defined(FIRRTL_COVER)
-//     auto c_union_instr_firrtl = new UnionCoverage(c_instr, c_firrtl);
-//     cover.push_back(c_union_instr_firrtl);
-// #endif // CONFIG_DIFFTEST_INSTRCOVER && FIRRTL_COVER
-// #if defined(CONFIG_DIFFTEST_INSTRIMMCOVER) && defined(FIRRTL_COVER)
-//     auto c_union_instrimm_firrtl = new UnionCoverage(c_instrimm, c_firrtl);
-//     cover.push_back(c_union_instrimm_firrtl);
-// #endif // CONFIG_DIFFTEST_INSTRIMMCOVER && FIRRTL_COVER
+
+    // #if defined(CONFIG_DIFFTEST_INSTRCOVER) && defined(FIRRTL_COVER)
+    //     auto c_union_instr_firrtl = new UnionCoverage(c_instr, c_firrtl);
+    //     cover.push_back(c_union_instr_firrtl);
+    // #endif // CONFIG_DIFFTEST_INSTRCOVER && FIRRTL_COVER
+    // #if defined(CONFIG_DIFFTEST_INSTRIMMCOVER) && defined(FIRRTL_COVER)
+    //     auto c_union_instrimm_firrtl = new UnionCoverage(c_instrimm, c_firrtl);
+    //     cover.push_back(c_union_instrimm_firrtl);
+    // #endif // CONFIG_DIFFTEST_INSTRIMMCOVER && FIRRTL_COVER
     reset();
   };
 

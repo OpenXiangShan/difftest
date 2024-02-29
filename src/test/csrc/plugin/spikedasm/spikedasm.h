@@ -14,6 +14,6 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-extern char* dasm_result;
+extern char *dasm_result;
 int test_spike();
-void spike_dasm(char* result, char* input);
+void spike_dasm(char *result, char *input);

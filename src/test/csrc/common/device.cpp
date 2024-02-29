@@ -14,11 +14,10 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "device.h"
 #ifdef SHOW_SCREEN
 #include <SDL2/SDL.h>
 #endif
-
-#include "device.h"
 
 void send_key(uint8_t, bool);
 void init_sdl(void);
@@ -26,7 +25,6 @@ void init_sdl(void);
 void init_uart(void);
 extern "C" void init_sd(void);
 extern "C" void init_flash(void);
-
 
 void init_device(void) {
 #ifdef SHOW_SCREEN
@@ -41,16 +39,17 @@ void poll_event() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     switch (event.type) {
-      case SDL_QUIT: break; //set_abort();
+      case SDL_QUIT:
+        break; //set_abort();
 
-                     // If a key was pressed
+        // If a key was pressed
       case SDL_KEYDOWN:
       case SDL_KEYUP: {
-                        uint8_t k = event.key.keysym.scancode;
-                        bool is_keydown = (event.key.type == SDL_KEYDOWN);
-                        send_key(k, is_keydown);
-                        break;
-                      }
+        uint8_t k = event.key.keysym.scancode;
+        bool is_keydown = (event.key.type == SDL_KEYDOWN);
+        send_key(k, is_keydown);
+        break;
+      }
       default: break;
     }
   }

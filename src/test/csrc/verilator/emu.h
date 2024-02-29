@@ -17,23 +17,23 @@
 #ifndef __EMU_H
 #define __EMU_H
 
-#include <sys/types.h>
+#include "VSimTop.h"
+#include "VSimTop__Syms.h"
 #include "common.h"
 #include "dut.h"
 #include "lightsss.h"
 #include "snapshot.h"
-#include "VSimTop.h"
-#include "VSimTop__Syms.h"
+#include <sys/types.h>
 #ifdef ENABLE_FST
 #include <verilated_fst_c.h>
 #else
-#include <verilated_vcd_c.h>	// Trace file format header
+#include <verilated_vcd_c.h> // Trace file format header
 #endif
 #ifdef EMU_THREAD
 #include <verilated_threads.h>
 #endif
 #if VM_TRACE == 1
-#include <verilated_vcd_c.h>	// Trace file format header
+#include <verilated_vcd_c.h> // Trace file format header
 #endif
 
 struct EmuArgs {
@@ -85,9 +85,9 @@ class Emulator final : public DUT {
 private:
   VSimTop *dut_ptr;
 #ifdef ENABLE_FST
-  VerilatedFstC* tfp;
+  VerilatedFstC *tfp;
 #else
-  VerilatedVcdC* tfp;
+  VerilatedVcdC *tfp;
 #endif
   bool force_dump_wave = false;
 #ifdef VM_SAVABLE
@@ -111,26 +111,32 @@ private:
   inline void single_cycle();
   void trigger_stat_dump();
   void display_trapinfo();
-  inline char* timestamp_filename(time_t t, char *buf);
-  inline char* logdb_filename(time_t t);
-  inline char* snapshot_filename(time_t t);
-  inline char* coverage_filename(time_t t);
+  inline char *timestamp_filename(time_t t, char *buf);
+  inline char *logdb_filename(time_t t);
+  inline char *snapshot_filename(time_t t);
+  inline char *coverage_filename(time_t t);
   void snapshot_save(const char *filename);
   void snapshot_load(const char *filename);
-  inline char* waveform_filename(time_t t);
-  inline char* cycle_wavefile(uint64_t cycles, time_t t);
+  inline char *waveform_filename(time_t t);
+  inline char *cycle_wavefile(uint64_t cycles, time_t t);
 #if VM_COVERAGE == 1
   inline void save_coverage(time_t t);
 #endif
   void fork_child_init();
-  inline bool is_fork_child() { return lightsss->is_child(); }
+  inline bool is_fork_child() {
+    return lightsss->is_child();
+  }
 
 public:
   Emulator(int argc, const char *argv[]);
   ~Emulator();
   uint64_t execute(uint64_t max_cycle, uint64_t max_instr);
-  uint64_t get_cycles() const { return cycles; }
-  EmuArgs get_args() const { return args; }
+  uint64_t get_cycles() const {
+    return cycles;
+  }
+  EmuArgs get_args() const {
+    return args;
+  }
   bool is_good_trap() {
 #ifdef FUZZING
     return !(trapCode == STATE_ABORT);
@@ -138,7 +144,9 @@ public:
     return trapCode == STATE_GOODTRAP || trapCode == STATE_LIMIT_EXCEEDED || trapCode == STATE_SIM_EXIT;
 #endif
   };
-  int get_trapcode() { return trapCode; }
+  int get_trapcode() {
+    return trapCode;
+  }
   int tick();
   int is_finished();
   int is_good();

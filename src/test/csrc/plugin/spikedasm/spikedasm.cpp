@@ -14,40 +14,33 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-int test_spike()
-{
+int test_spike() {
   return system("echo \"DASM(deadbeef)\" | spike-dasm > /dev/null");
 }
 
-void execute_cmd(const char *cmd, char *result)
-{
+void execute_cmd(const char *cmd, char *result) {
   char buf_ps[1024];
-  char ps[1024]={0};
+  char ps[1024] = {0};
   FILE *ptr;
   strcpy(ps, cmd);
-  if((ptr=popen(ps, "r"))!=NULL)
-  {
-    while(fgets(buf_ps, 1024, ptr)!=NULL)
-    {
-       strcat(result, buf_ps);
-       if(strlen(result)>1024)
-         break;
+  if ((ptr = popen(ps, "r")) != NULL) {
+    while (fgets(buf_ps, 1024, ptr) != NULL) {
+      strcat(result, buf_ps);
+      if (strlen(result) > 1024)
+        break;
     }
     pclose(ptr);
     ptr = NULL;
-  }
-  else
-  {
+  } else {
     printf("popen %s error\n", ps);
   }
 }
 
-void spike_dasm(char* result, char* input)
-{
+void spike_dasm(char *result, char *input) {
   char cmd[1024] = {0};
   strcat(cmd, "echo \"DASM(");
   strcat(cmd, input);
@@ -56,18 +49,17 @@ void spike_dasm(char* result, char* input)
   execute_cmd(cmd, result);
   // printf("%s\n", result);
   // remove \n
-  char* first_n_occ = strpbrk(result, "\n");
-  if(first_n_occ)
+  char *first_n_occ = strpbrk(result, "\n");
+  if (first_n_occ)
     *first_n_occ = '\0';
 }
 
-int usage()
-{
+int usage() {
   char input[] = "10500073";
   char dasm_result[64] = {0};
 
   int spike_invalid = test_spike();
-  if(!spike_invalid)
+  if (!spike_invalid)
     spike_dasm(dasm_result, input);
 
   printf("%s", dasm_result);

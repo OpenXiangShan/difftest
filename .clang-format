@@ -1,0 +1,23 @@
+---
+# See all possible options and defaults with:
+# clang-format --style=LLVM --dump-config
+Language:        Cpp
+BasedOnStyle:  LLVM
+AlignAfterOpenBracket: Align
+AlignConsecutiveMacros:
+  Enabled:         true
+AlignEscapedNewlines: Left
+AllowAllArgumentsOnNextLine: true
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AlwaysBreakBeforeMultilineStrings: true
+BracedInitializerIndentWidth: 2
+ColumnLimit:     120
+IncludeBlocks:   Merge
+IndentCaseLabels: true
+InsertNewlineAtEOF: true
+PointerAlignment: Right
+ReflowComments:  false
+SpaceBeforeRangeBasedForLoopColon: false

@@ -17,39 +17,44 @@
 #ifndef __DIFFTEST_H__
 #define __DIFFTEST_H__
 
-#include <vector>
 #include "common.h"
 #include "difftrace.h"
+#include "golden.h"
+#include "refproxy.h"
+#include <vector>
 #ifdef FUZZING
 #include "emu.h"
 #endif // FUZZING
-#include "refproxy.h"
-#include "golden.h"
 
-enum { ICACHEID, DCACHEID, PAGECACHEID };
-enum { ITLBID, LDTLBID, STTLBID };
+enum {
+  ICACHEID,
+  DCACHEID,
+  PAGECACHEID
+};
+enum {
+  ITLBID,
+  LDTLBID,
+  STTLBID
+};
 
-#define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && \
-        f >= DEBUG_MEM_BASE && \
-        v)
-#define IS_LOAD_STORE(instr) (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
-#define IS_TRIGGERCSR(instr) (((instr & 0x7f) == 0x73) && ((instr & (0xff0 << 20)) == (0x7a0 << 20)))
-#define IS_DEBUGCSR(instr) (((instr & 0x7f) == 0x73) && ((instr & (0xffe << 20)) == (0x7b0 << 20))) // 7b0 and 7b1
+#define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && f >= DEBUG_MEM_BASE && v)
+#define IS_LOAD_STORE(instr)   (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
+#define IS_TRIGGERCSR(instr)   (((instr & 0x7f) == 0x73) && ((instr & (0xff0 << 20)) == (0x7a0 << 20)))
+#define IS_DEBUGCSR(instr)     (((instr & 0x7f) == 0x73) && ((instr & (0xffe << 20)) == (0x7b0 << 20))) // 7b0 and 7b1
 #ifdef DEBUG_MODE_DIFF
-#define DEBUG_MODE_SKIP(v, f, instr) DEBUG_MEM_REGION(v, f) && \
-(IS_LOAD_STORE(instr) || IS_TRIGGERCSR(instr))
+#define DEBUG_MODE_SKIP(v, f, instr) DEBUG_MEM_REGION(v, f) && (IS_LOAD_STORE(instr) || IS_TRIGGERCSR(instr))
 #else
 #define DEBUG_MODE_SKIP(v, f, instr) false
 #endif
 
 enum retire_inst_type {
-  RET_NORMAL=0,
+  RET_NORMAL = 0,
   RET_INT,
   RET_EXC
 };
 
 enum retire_mem_type {
-  RET_OTHER=0,
+  RET_OTHER = 0,
   RET_LOAD,
   RET_STORE
 };
@@ -81,12 +86,13 @@ public:
   uint8_t isStore;
   uint8_t sqidx;
 
-  InstrTrace(uint64_t pc, uint32_t inst, uint8_t wen, uint8_t dest, uint64_t data,
-    uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore,
-    bool skip = false, bool delayed = false) : CommitTrace(pc, inst),
-    robidx(robidx), isLoad(isLoad), lqidx(lqidx), isStore(isStore), sqidx(sqidx),
-    wen(wen), dest(dest), data(data), tag(get_tag(skip, delayed)) {}
-  virtual inline const char *get_type() { return "commit"; };
+  InstrTrace(uint64_t pc, uint32_t inst, uint8_t wen, uint8_t dest, uint64_t data, uint8_t lqidx, uint8_t sqidx,
+             uint16_t robidx, uint8_t isLoad, uint8_t isStore, bool skip = false, bool delayed = false)
+      : CommitTrace(pc, inst), robidx(robidx), isLoad(isLoad), lqidx(lqidx), isStore(isStore), sqidx(sqidx), wen(wen),
+        dest(dest), data(data), tag(get_tag(skip, delayed)) {}
+  virtual inline const char *get_type() {
+    return "commit";
+  };
 
 protected:
   void display_custom() {
@@ -105,8 +111,10 @@ protected:
 private:
   char get_tag(bool skip, bool delayed) {
     char t = '\0';
-    if (skip) t |= 'S';
-    if (delayed) t |= 'D';
+    if (skip)
+      t |= 'S';
+    if (delayed)
+      t |= 'D';
     return t;
   }
 };
@@ -114,8 +122,10 @@ private:
 class ExceptionTrace : public CommitTrace {
 public:
   uint64_t cause;
-  ExceptionTrace(uint64_t pc, uint32_t inst, uint64_t cause): CommitTrace(pc, inst), cause(cause) {}
-  virtual inline const char *get_type() { return "exception"; };
+  ExceptionTrace(uint64_t pc, uint32_t inst, uint64_t cause) : CommitTrace(pc, inst), cause(cause) {}
+  virtual inline const char *get_type() {
+    return "exception";
+  };
 
 protected:
   void display_custom() {
@@ -125,8 +135,10 @@ protected:
 
 class InterruptTrace : public ExceptionTrace {
 public:
-  InterruptTrace(uint64_t pc, uint32_t inst, uint64_t cause): ExceptionTrace(pc, inst, cause) {}
-  virtual inline const char *get_type() { return "interrupt"; }
+  InterruptTrace(uint64_t pc, uint32_t inst, uint64_t cause) : ExceptionTrace(pc, inst, cause) {}
+  virtual inline const char *get_type() {
+    return "interrupt";
+  }
 };
 
 class DiffState {
@@ -135,12 +147,12 @@ public:
 
   DiffState();
   void record_group(uint64_t pc, uint64_t count) {
-    retire_group_pc_queue [retire_group_pointer] = pc;
+    retire_group_pc_queue[retire_group_pointer] = pc;
     retire_group_cnt_queue[retire_group_pointer] = count;
     retire_group_pointer = (retire_group_pointer + 1) % DEBUG_GROUP_TRACE_SIZE;
   };
   void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip, bool delayed,
-      uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore) {
+                   uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore) {
     push_back_trace(new InstrTrace(pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
     retire_inst_pointer = (retire_inst_pointer + 1) % DEBUG_INST_TRACE_SIZE;
   };
@@ -162,7 +174,7 @@ private:
 
   const static int DEBUG_INST_TRACE_SIZE = 32;
   int retire_inst_pointer = 0;
-  std::vector<CommitTrace*>commit_trace;
+  std::vector<CommitTrace *> commit_trace;
 
   void push_back_trace(CommitTrace *trace) {
     if (commit_trace[retire_inst_pointer]) {
@@ -185,7 +197,7 @@ private:
 
 class Difftest {
 public:
-  DiffTestState* dut;
+  DiffTestState *dut;
 
   // Difftest public APIs for testbench
   // Its backend should be cross-platform (NEMU, Spike, ...)
@@ -211,13 +223,13 @@ public:
   void set_trace(const char *name, bool is_read) {
     difftrace = new DiffTrace(name, is_read);
   }
-  void trace_read(){
+  void trace_read() {
     if (difftrace) {
       difftrace->read_next(dut);
     }
   }
-  void trace_write(int step){
-    if (difftrace){
+  void trace_write(int step) {
+    if (difftrace) {
       int zone = 0;
       for (int i = 0; i < step; i++) {
         difftrace->append(diffstate_buffer[id]->get(zone, i));
@@ -234,9 +246,9 @@ public:
   uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-      is_fp ? dut->regs_fp.value + src :
+        is_fp ? dut->regs_fp.value + src :
 #endif
-      dut->regs_int.value + src;
+              dut->regs_int.value + src;
   }
   inline DiffTestState *get_dut() {
     return dut;
@@ -292,7 +304,9 @@ protected:
   uint64_t track_instr = 0;
 #endif
 
-  void update_last_commit() { last_commit = ticks; }
+  void update_last_commit() {
+    last_commit = ticks;
+  }
   int check_timeout();
   void do_first_instr_commit();
   void do_interrupt();
@@ -311,22 +325,22 @@ protected:
     if (dut->commit[i].fpwen) {
       return
 #ifdef CONFIG_DIFFTEST_FPWRITEBACK
-        dut->wb_fp[dut->commit[i].wpdest].data;
+          dut->wb_fp[dut->commit[i].wpdest].data;
 #else
-        dut->regs_fp.value[dut->commit[i].wdest];
+          dut->regs_fp.value[dut->commit[i].wdest];
 #endif // CONFIG_DIFFTEST_FPWRITEBACK
     } else
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    if (dut->commit[i].vecwen) {
+        if (dut->commit[i].vecwen) {
       return dut->regs_vec.value[dut->commit[i].wdest];
     } else
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
-    return
+      return
 #ifdef CONFIG_DIFFTEST_INTWRITEBACK
-      dut->wb_int[dut->commit[i].wpdest].data;
+          dut->wb_int[dut->commit[i].wpdest].data;
 #else
-      dut->regs_int.value[dut->commit[i].wdest];
+        dut->regs_int.value[dut->commit[i].wdest];
 #endif // CONFIG_DIFFTEST_INTWRITEBACK
   }
   inline bool has_wfi() {
@@ -349,10 +363,10 @@ protected:
   }
 
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  int delayed_int[32] = { 0 };
+  int delayed_int[32] = {0};
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  int delayed_fp[32] = { 0 };
+  int delayed_fp[32] = {0};
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   int update_delayed_writeback();
   int apply_delayed_writeback();

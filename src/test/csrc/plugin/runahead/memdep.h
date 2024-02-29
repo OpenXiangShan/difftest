@@ -22,24 +22,25 @@
 typedef struct MemInstInfo {
   uint64_t pc;
   uint64_t vaddr;
-}MemInstInfo;
+} MemInstInfo;
 
 class MemdepWatchWindow {
-  public:
-    void commit_load();
-    void commit_store();
-    void commit_load(uint64_t pc);
-    void commit_store(uint64_t pc);
-    void watch_load(uint64_t pc, uint64_t vaddr);
-    void watch_store(uint64_t pc, uint64_t vaddr);
-    bool query_load_store_dep(uint64_t load_pc, uint64_t load_vaddr);
-    void update_pred_matrix(bool dut_result, bool ref_result);
-    void print_pred_matrix();
-  private:
-    std::deque<MemInstInfo> store_inflight;
-    std::deque<MemInstInfo> load_inflight;
-    uint64_t total_dependency = 0;
-    uint64_t pred_matrix[2][2] = {};
+public:
+  void commit_load();
+  void commit_store();
+  void commit_load(uint64_t pc);
+  void commit_store(uint64_t pc);
+  void watch_load(uint64_t pc, uint64_t vaddr);
+  void watch_store(uint64_t pc, uint64_t vaddr);
+  bool query_load_store_dep(uint64_t load_pc, uint64_t load_vaddr);
+  void update_pred_matrix(bool dut_result, bool ref_result);
+  void print_pred_matrix();
+
+private:
+  std::deque<MemInstInfo> store_inflight;
+  std::deque<MemInstInfo> load_inflight;
+  uint64_t total_dependency = 0;
+  uint64_t pred_matrix[2][2] = {};
 };
 
 #endif

@@ -21,8 +21,8 @@
 #include <list>
 #include <signal.h>
 #include <sys/ipc.h>
-#include <sys/shm.h>
 #include <sys/prctl.h>
+#include <sys/shm.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -35,7 +35,7 @@ typedef struct shinfo {
 
 class ForkShareMemory {
 private:
-  key_t  key_n ;
+  key_t key_n;
   int shm_id;
 
 public:
@@ -47,13 +47,13 @@ public:
   void shwait();
 };
 
-const int FORK_OK    = 0;
+const int FORK_OK = 0;
 const int FORK_ERROR = 1;
-const int WAIT_LAST  = 2;
-const int WAIT_EXIT  = 3;
+const int WAIT_LAST = 2;
+const int WAIT_EXIT = 3;
 
 class LightSSS {
-  pid_t pid   = -1;
+  pid_t pid = -1;
   int slotCnt = 0;
   int waitProcess = 0;
   std::list<pid_t> pidSlot = {};
@@ -69,10 +69,10 @@ public:
   }
 };
 
-#define FORK_PRINTF(format, args...)                          \
-  do {                                                        \
+#define FORK_PRINTF(format, args...)                       \
+  do {                                                     \
     Info("[FORK_INFO pid(%d)] " format, getpid(), ##args); \
-    fflush(stdout);                                           \
-  } while(0);
+    fflush(stdout);                                        \
+  } while (0);
 
 #endif
