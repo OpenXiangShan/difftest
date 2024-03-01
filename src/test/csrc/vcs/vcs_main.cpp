@@ -41,7 +41,7 @@ enum {
   SIMV_DONE,
   SIMV_FAIL,
 } simv_state;
-
+static uint8_t simv_result = SIMV_RUN;
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n",s);
   strcpy(bin_file, s);
@@ -117,6 +117,7 @@ extern "C" uint8_t simv_init() {
     init_goldenmem();
     init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
   }
+  simv_result = SIMV_RUN;
   return 0;
 }
 
@@ -182,11 +183,10 @@ void difftest_deferred_result(uint8_t result) {
 }
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
-static uint8_t simv_result = SIMV_RUN;
 
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 extern "C" void simv_nstep(uint8_t step) {
-  if (simv_result == SIMV_FAIL)
+  if (simv_result != SIMV_RUN)
     return;
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {
