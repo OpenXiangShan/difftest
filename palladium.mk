@@ -54,12 +54,7 @@ endif
 IXCOM_FLAGS 	+= +tfconfig+$(PLDM_SCRIPTS_DIR)/argConfigs.qel
 
 # Verilog Files
-PLDM_VSRC_DIR  	 = $(RTL_DIR) $(GEN_VSRC_DIR)
-ifeq ($(SYNTHESIS), 1)
-PLDM_VSRC_DIR 	+= $(abspath ./src/test/vsrc/vcs) $(abspath ./src/test/vsrc/common/SimJTAG.v)
-else
-PLDM_VSRC_DIR 	+= $(abspath ./src/test/vsrc)
-endif
+PLDM_VSRC_DIR  	 = $(RTL_DIR) $(GEN_VSRC_DIR) $(abspath ./src/test/vsrc)
 PLDM_VFILELIST 	 = $(PLDM_BUILD_DIR)/vfiles.f
 IXCOM_FLAGS   	+= -F $(PLDM_VFILELIST)
 

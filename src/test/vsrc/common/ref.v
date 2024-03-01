@@ -14,12 +14,14 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+`ifndef TB_NO_DPIC
 import "DPI-C" function byte pte_helper (
   input  longint satp,
   input  longint vpn,
   output longint pte,
   output byte    level
 );
+`endif // TB_NO_DPIC
 
 module PTEHelper(
   input             clock,
@@ -32,17 +34,21 @@ module PTEHelper(
 );
   always @(posedge clock) begin
     if (enable) begin
+`ifndef TB_NO_DPIC
       pf <= pte_helper(satp, vpn, pte, level);
+`endif // TB_NO_DPIC
     end
   end
 endmodule
 
+`ifndef TB_NO_DPIC
 import "DPI-C" function longint amo_helper(
   input byte    cmd,
   input longint addr,
   input longint wdata,
   input byte    mask
 );
+`endif // TB_NO_DPIC
 
 module AMOHelper(
   input             clock,
@@ -56,7 +62,9 @@ module AMOHelper(
 
   always @(posedge clock) begin
     if (enable) begin
+`ifndef TB_NO_DPIC
       rdata <= amo_helper(cmd, addr, wdata, mask);
+`endif // TB_NO_DPIC
     end
   end
 

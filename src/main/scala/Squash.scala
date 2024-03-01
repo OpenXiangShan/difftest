@@ -174,6 +174,8 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |  output reg enable
        |);
        |
+       |`ifndef SYNTHESIS
+       |`ifdef DIFFTEST
        |import "DPI-C" context function void set_squash_scope();
        |
        |initial begin
@@ -188,6 +190,8 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |  enable = en;
        |endtask
        |$replay_task
+       |`endif // DIFFTEST
+       |`endif // SYNTHESIS
        |
        |// For the simulation argument +squash_cycles=N
        |reg [63:0] squash_cycles;
