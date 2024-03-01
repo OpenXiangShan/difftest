@@ -77,6 +77,11 @@ AbstractRefProxy::AbstractRefProxy(int coreid, size_t ram_size, const char *env,
     ref_set_ramsize(ram_size);
   }
 
+#ifdef ENABLE_STORE_LOG
+  check_and_assert(ref_store_log_reset);
+  check_and_assert(ref_store_log_restore);
+#endif // ENABLE_STORE_LOG
+
   ref_init();
 }
 

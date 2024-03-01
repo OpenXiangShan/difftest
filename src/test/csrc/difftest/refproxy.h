@@ -74,6 +74,7 @@ class RefProxyConfig {
 public:
   bool ignore_illegal_mem_access = false;
   bool debug_difftest = false;
+  bool enable_store_log = false;
 };
 
 /* clang-format off */
@@ -115,6 +116,7 @@ public:
 #define REF_ALL(f)  \
   REF_BASE(f)       \
   REF_RUN_AHEAD(f)  \
+  REF_STORE_LOG(f)  \
   REF_DEBUG_MODE(f)
 
 #define REF_OPTIONAL(f)                                                       \

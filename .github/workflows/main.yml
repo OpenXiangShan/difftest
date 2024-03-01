@@ -22,7 +22,7 @@ jobs:
       - name: Compile
         run: |
           mill -i design[3.6.0].compile
-          mill -i design[6.0.0].compile
+          mill -i design[6.1.0].compile
 
       - name: Generate Verilog
         run: |
@@ -319,8 +319,9 @@ jobs:
             make simv DIFFTEST_PERFCNT=1 VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
+            cd difftest && git restore src
 
-      - name: Verilator Build with VCS Top (with Squash DutZone Batch and Global Enable PerfCnt)
+      - name: Verilator Build with VCS Top (with GlobalEnable DutZone Squash SquashReplay Batch PerfCnt)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
@@ -329,11 +330,13 @@ jobs:
             make clean
             sed -i 's/isSquash: Boolean = false/isSquash: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/hasDutZone: Boolean = false/hasDutZone: Boolean = true/' difftest/src/main/scala/Gateway.scala
+            sed -i 's/squashReplay: Boolean = false/squashReplay: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/isBatch: Boolean = false/isBatch: Boolean = true/' difftest/src/main/scala/Gateway.scala
             sed -i 's/hasGlobalEnable: Boolean = false/hasGlobalEnable: Boolean = true/' difftest/src/main/scala/Gateway.scala
             make simv DIFFTEST_PERFCNT=1 VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
+            cd difftest && git restore src
 
       - name: Verilator Build with VCS Top (with workload-list)
         run : |
