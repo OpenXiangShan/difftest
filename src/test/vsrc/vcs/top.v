@@ -75,8 +75,8 @@ initial begin
 `ifndef WIRE_CLK
   clock = 0;
 `endif // WIRE_CLK
-
   reset = 1;
+
 `ifdef VCS
   // enable waveform
   if ($test$plusargs("dump-wave")) begin
@@ -132,11 +132,6 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
-  // set exit instrs const
-  if ($test$plusargs("max-instrs")) begin
-    $value$plusargs("max-instrs=%d", max_instrs);
-    set_max_instrs(max_instrs);
-  end
 `ifdef ENABLE_WORKLOAD_SWITCH
   // set workload list
   if ($test$plusargs("workload-list")) begin
@@ -154,6 +149,11 @@ initial begin
   if ($test$plusargs("max-cycles")) begin
     $value$plusargs("max-cycles=%d", max_cycles);
     $display("set max cycles: %d", max_cycles);
+  end
+  // set exit instrs const
+  if ($test$plusargs("max-instrs")) begin
+    $value$plusargs("max-instrs=%d", max_instrs);
+    set_max_instrs(max_instrs);
   end
 end
 

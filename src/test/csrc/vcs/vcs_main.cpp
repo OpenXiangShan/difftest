@@ -41,7 +41,7 @@ enum {
   SIMV_DONE,
   SIMV_FAIL,
 } simv_state;
-static uint8_t simv_result = SIMV_RUN;
+
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n", s);
   strcpy(bin_file, s);
@@ -73,19 +73,17 @@ extern "C" void set_workload_list(char *s) {
 }
 
 int switch_workload() {
-  static FILE * fp = fopen(workload_list, "r");
+  static FILE *fp = fopen(workload_list, "r");
   if (fp) {
     char name[128];
     int num;
     if (fscanf(fp, "%s %d", name, &num) == 2) {
       set_bin_file(name);
       set_max_instrs(num);
-    }
-    else if (feof(fp)) {
+    } else if (feof(fp)) {
       printf("Workload list is completed\n");
       return 1;
-    }
-    else {
+    } else {
       printf("Unknown workload list format\n");
       return 1;
     }
@@ -103,7 +101,7 @@ extern "C" void set_no_diff() {
 
 extern "C" uint8_t simv_init() {
   if (workload_list != NULL) {
-    if(switch_workload())
+    if (switch_workload())
       return 1;
   }
   common_init("simv");
@@ -117,7 +115,6 @@ extern "C" uint8_t simv_init() {
     init_goldenmem();
     init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
   }
-  simv_result = SIMV_RUN;
   return 0;
 }
 
@@ -146,7 +143,7 @@ extern "C" uint8_t simv_step() {
   if (max_instrs != 0) { // 0 for no limit
     auto trap = difftest[0]->get_trap_event();
     if (max_instrs < trap->instrCnt) {
-      eprintf(ANSI_COLOR_GREEN "EXCEEDED MAX INSTR: %ld\n" ANSI_COLOR_RESET,max_instrs);
+      eprintf(ANSI_COLOR_GREEN "EXCEEDED MAX INSTR: %ld\n" ANSI_COLOR_RESET, max_instrs);
       difftest[0]->display_stats();
       return SIMV_DONE;
     }
@@ -180,10 +177,12 @@ void difftest_deferred_result(uint8_t result) {
 }
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
-
+static uint8_t simv_result = SIMV_RUN;
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 extern "C" void simv_nstep(uint8_t step) {
-  if (simv_result != SIMV_RUN)
+  if (simv_result == SIMV_FAIL)
+    return;
+  if (difftest == NULL)
     return;
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {
@@ -192,17 +191,19 @@ extern "C" uint8_t simv_nstep(uint8_t step) {
   difftest_calls[perf_simv_nstep]++;
   difftest_bytes[perf_simv_nstep] += 1;
 #endif // CONFIG_DIFFTEST_PERFCNT
+  if (difftest == NULL)
+    return 0;
   difftest_switch_zone();
   for (int i = 0; i < step; i++) {
     int ret = simv_step();
     if (ret) {
-        simv_result = ret;
-        difftest_finish();
+      simv_result = ret;
+      difftest_finish();
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
-        difftest_deferred_result(ret);
-        return;
+      difftest_deferred_result(ret);
+      return;
 #else
-        return ret;
+      return ret;
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
     }
   }

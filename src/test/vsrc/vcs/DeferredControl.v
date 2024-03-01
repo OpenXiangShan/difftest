@@ -32,7 +32,7 @@ initial $ixc_ctrl("sfifo", "set_deferred_result");
 
 always @(posedge clock) begin
   if (reset) begin
-    simv_result = 1'b0;
+    simv_result <= 8'b0;
   end
   else if (step != 0) begin
     simv_nstep(step);
