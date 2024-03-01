@@ -82,9 +82,11 @@ int switch_workload() {
       set_max_instrs(num);
     } else if (feof(fp)) {
       printf("Workload list is completed\n");
+      fclose(fp);
       return 1;
     } else {
       printf("Unknown workload list format\n");
+      fclose(fp);
       return 1;
     }
   } else {
@@ -177,12 +179,21 @@ void difftest_deferred_result(uint8_t result) {
 }
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
+void simv_finish() {
+  common_finish();
+  flash_finish();
+  if (enable_difftest) {
+    goldenmem_finish();
+    difftest_finish();
+  }
+  delete simMemory;
+  simMemory = nullptr;
+}
+
 static uint8_t simv_result = SIMV_RUN;
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 extern "C" void simv_nstep(uint8_t step) {
-  if (simv_result == SIMV_FAIL)
-    return;
-  if (difftest == NULL)
+  if (simv_result == SIMV_FAIL || difftest == NULL)
     return;
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {
@@ -200,7 +211,7 @@ extern "C" uint8_t simv_nstep(uint8_t step) {
     int ret = simv_step();
     if (ret) {
       simv_result = ret;
-      difftest_finish();
+      simv_finish();
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
       difftest_deferred_result(ret);
       return;
