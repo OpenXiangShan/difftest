@@ -35,6 +35,9 @@ static char *flash_bin_file = NULL;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
+static char *workload_list_log = NULL;
+static char *ckpt_item = NULL;
+static uint64_t ckpt_idx = 0;
 
 enum {
   SIMV_RUN,
@@ -68,7 +71,15 @@ extern "C" void set_diff_ref_so(char *s) {
 
 extern "C" void set_workload_list(char *s) {
   workload_list = (char *)malloc(256);
+  workload_list_log = (char *)malloc(256);
+  ckpt_item = (char *)malloc(32);
   strcpy(workload_list, s);
+  printf("set workload list %s \n", workload_list);
+  workload_list_log = strncpy(workload_list_log, workload_list, strlen(workload_list) - 4);
+  strcat(workload_list_log, "-result.csv");
+  FILE *fp = fopen(workload_list_log, "w+");
+  fprintf(fp, "workload,point,Insts,Cycles,ipc\n");
+  fclose(fp);
   printf("set workload list %s \n", workload_list);
 }
 
@@ -77,7 +88,8 @@ int switch_workload() {
   if (fp) {
     char name[128];
     int num;
-    if (fscanf(fp, "%s %d", name, &num) == 2) {
+    int scan_num = fscanf(fp, "%s %d %s %ld", name, &num, ckpt_item, &ckpt_idx);
+    if (scan_num == 2 || scan_num == 4) {
       set_bin_file(name);
       set_max_instrs(num);
     } else if (feof(fp)) {
@@ -143,6 +155,14 @@ extern "C" uint8_t simv_step() {
   if (max_instrs != 0) { // 0 for no limit
     auto trap = difftest[0]->get_trap_event();
     if (max_instrs < trap->instrCnt) {
+      if (ckpt_item != NULL) {
+        FILE *fp = fopen(workload_list_log, "a");
+        uint64_t instrCnt = difftest[0]->get_trap_event()->instrCnt;
+        uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
+        double ipc = (double)instrCnt / cycleCnt;
+        fprintf(fp, "%s,%ld,%ld,%ld,%lf\n", ckpt_item, ckpt_idx, instrCnt, cycleCnt, ipc);
+        fclose(fp);
+      }
       eprintf(ANSI_COLOR_GREEN "EXCEEDED MAX INSTR: %ld\n" ANSI_COLOR_RESET, max_instrs);
       difftest[0]->display_stats();
       return SIMV_DONE;
