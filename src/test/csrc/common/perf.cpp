@@ -24,6 +24,11 @@ void difftest_perfcnt_init() {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
   perf_run_msec = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+  for (int i = 0; i < DIFFTEST_PERF_NUM; i++) {
+    difftest_calls[i] = 0;
+    difftest_bytes[i] = 0;
+  }
+  diffstate_perfcnt_init();
 }
 
 void difftest_perfcnt_finish() {

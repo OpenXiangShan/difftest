@@ -337,3 +337,15 @@ jobs:
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
             cd difftest && git restore src
+
+      - name: Verilator Build with VCS Top (with workload-list)
+        run : |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            echo "./ready-to-run/microbench.bin 10000" > list.txt
+            echo "./ready-to-run/linux.bin 20000" >> list.txt
+            make simv VCS=verilator WORKLOAD_SWITCH=1 -j2
+            ./build/simv +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so +workload-list=./list.txt

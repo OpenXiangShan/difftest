@@ -22,12 +22,18 @@ import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
-import "DPI-C" function void simv_init();
+import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
+`ifdef ENABLE_WORKLOAD_SWITCH
+import "DPI-C" function void set_workload_list(string path);
+`endif // ENABLE_WORKLOAD_SWITCH
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
-import "DPI-C" function int simv_nstep(int step);
+import "DPI-C" function byte simv_nstep(byte step);
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
+
+`define SIMV_DONE     8'h1
+`define SIMV_FAIL     8'h2
 
 `ifdef PALLADIUM
   `ifdef SYNTHESIS
@@ -56,6 +62,12 @@ string bin_file;
 string flash_bin_file;
 string wave_type;
 string diff_ref_so;
+string workload_list;
+
+`ifdef ENABLE_WORKLOAD_SWITCH
+wire workload_switch;
+`endif // ENABLE_WORKLOAD_SWITCH
+
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
 
@@ -120,6 +132,17 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
+`ifdef ENABLE_WORKLOAD_SWITCH
+  // set workload list
+  if ($test$plusargs("workload-list")) begin
+    $value$plusargs("workload-list=%s", workload_list);
+    set_workload_list(workload_list);
+  end
+  else begin
+    $display("workload switch is enabled but the workload list is not set");
+    $finish();
+  end
+`endif // ENABLE_WORKLOAD_SWITCH
 `endif // TB_NO_DPIC
   // max cycles to execute, no limit for default
   max_cycles = 0;
@@ -135,7 +158,13 @@ initial begin
 end
 
 // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
-`ifndef PALLADIUM
+`ifdef PALLADIUM
+  `define RESET_COUNTER
+`elsif ENABLE_WORKLOAD_SWITCH
+  `define RESET_COUNTER
+`endif
+
+`ifndef RESET_COUNTER
 initial begin
   #100 reset = 0;
 end
@@ -143,12 +172,22 @@ end
 reg [7:0] reset_counter;
 initial reset_counter = 0;
 always @(posedge clock) begin
-  reset_counter <= reset_counter + 8'd1;
-  if (reset && (reset_counter == 8'd100)) begin
-    reset <= 1'b0;
+`ifdef ENABLE_WORKLOAD_SWITCH
+  if (workload_switch) begin
+    reset_counter <= 8'd0;
+    reset         <= 1'b1;
+    $display("workload switch");
+  end
+  else
+`endif // ENABLE_WORKLOAD_SWITCH
+  begin
+    reset_counter <= reset_counter + 8'd1;
+    if (reset && (reset_counter == 8'd100)) begin
+      reset <= 1'b0;
+    end
   end
 end
-`endif // PALLADIUM
+`endif // RESET_COUNTER
 
 `ifndef WIRE_CLK
 always #1 clock <= ~clock;
@@ -183,14 +222,21 @@ end
 
 `ifndef TB_NO_DPIC
 `ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
-wire simv_result;
+wire [7:0] simv_result;
 DeferredControl deferred(
   .clock(clock),
   .reset(reset),
   .step(difftest_step),
   .simv_result(simv_result)
 );
+`else
+reg [7:0] simv_result;
+initial simv_result = 0;
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+
+`ifdef ENABLE_WORKLOAD_SWITCH
+assign workload_switch = simv_result == `SIMV_DONE;
+`endif // ENABLE_WORKLOAD_SWITCH
 `endif // TB_NO_DPIC
 
 reg [63:0] n_cycles;
@@ -210,20 +256,27 @@ always @(posedge clock) begin
 `ifndef TB_NO_DPIC
     // difftest
     if (!n_cycles) begin
-      simv_init();
+      if (simv_init()) begin
+        $display("DIFFTEST INIT FAILED");
+        $finish();
+      end
     end
-`ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
-    else if (simv_result) begin
+    else if (simv_result == `SIMV_FAIL) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
       $finish();
     end
-`else
+    else if (simv_result == `SIMV_DONE) begin
+      $display("DIFFTEST WORKLOAD DONE at cycle %d", n_cycles);
+`ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
+      simv_result <= 8'b0;
+`endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+`ifndef ENABLE_WORKLOAD_SWITCH
+      $finish();
+`endif // ENABLE_WORKLOAD_SWITCH
+    end
+`ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
     else if (|difftest_step) begin
-      // check errors
-      if (simv_nstep(difftest_step)) begin
-        $display("DIFFTEST FAILED at cycle %d", n_cycles);
-        $finish();
-      end
+      simv_result <= simv_nstep(difftest_step);
     end
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 `endif // TB_NO_DPIC
