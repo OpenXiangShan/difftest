@@ -186,13 +186,15 @@ extern "C" void simv_nstep(uint8_t step) {
     return;
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {
-#endif // CONFIG_DIFFTEST_DEFERRED_RESULT
-#ifdef CONFIG_DIFFTEST_PERFCNT
-  difftest_calls[perf_simv_nstep]++;
-  difftest_bytes[perf_simv_nstep] += 1;
-#endif // CONFIG_DIFFTEST_PERFCNT
   if (difftest == NULL)
     return 0;
+#endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#ifndef CONFIG_DIFFTEST_INTERNAL_STEP
+  difftest_calls[perf_simv_nstep]++;
+  difftest_bytes[perf_simv_nstep] += 1;
+#endif // CONFIG_DIFFTEST_INTERNAL_STEP
+#endif // CONFIG_DIFFTEST_PERFCNT
   difftest_switch_zone();
   for (int i = 0; i < step; i++) {
     int ret = simv_step();

@@ -226,7 +226,9 @@ wire [7:0] simv_result;
 DeferredControl deferred(
   .clock(clock),
   .reset(reset),
+`ifndef CONFIG_DIFFTEST_INTERNAL_STEP
   .step(difftest_step),
+`endif // CONFIG_DIFFTEST_INTERNAL_STEP
   .simv_result(simv_result)
 );
 `else

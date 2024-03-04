@@ -34,15 +34,18 @@ case class GatewayConfig(
   hasDutZone: Boolean = false,
   isBatch: Boolean = false,
   batchSize: Int = 32,
+  hasInternalStep: Boolean = false,
   isNonBlock: Boolean = false,
 ) {
   if (squashReplay) require(isSquash)
+  if (hasInternalStep) require(isBatch)
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
   def dutBufLen: Int = if (isBatch) batchSize else 1
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
-  def hasDeferredResult: Boolean = isNonBlock
+  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3904, 90) else (7800, 190)
+  def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = squashReplay
   def needEndpoint: Boolean = hasGlobalEnable || hasDutZone || isBatch || isSquash
   def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo
@@ -56,6 +59,7 @@ case class GatewayConfig(
     if (isSquash) macros += "CONFIG_DIFFTEST_SQUASH"
     if (squashReplay) macros += "CONFIG_DIFFTEST_SQUASH_REPLAY"
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
+    if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     macros.toSeq
   }
   def vMacros: Seq[String] = {
@@ -63,6 +67,7 @@ case class GatewayConfig(
     macros += s"CONFIG_DIFFTEST_STEPWIDTH ${stepWidth}"
     if (isNonBlock) macros += "CONFIG_DIFFTEST_NONBLOCK"
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
+    if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     macros.toSeq
   }
 }
@@ -115,7 +120,7 @@ object Gateway {
       GatewayResult(
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
-        step = Some(endpoint.step),
+        step = endpoint.step,
       )
     } else {
       GatewaySink.collect(config)
@@ -149,13 +154,17 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   }
 
   val zoneControl = Option.when(config.hasDutZone)(Module(new ZoneControl(config)))
-  val step = IO(Output(UInt(config.stepWidth.W)))
+  val step = Option.when(!config.hasInternalStep)(IO(Output(UInt(config.stepWidth.W))))
   val control = Wire(new GatewaySinkControl(config))
 
   if (config.isBatch) {
     val template = Batch.getTemplate(squashed)
     val batch = Batch(template, squashed, config)
-    step := RegNext(batch.step, 0.U)
+    if (config.hasInternalStep) {
+      control.step.get := batch.step
+    } else {
+      step.get := RegNext(batch.step, 0.U)
+    }
     control.enable := batch.enable
     if (config.hasDutZone) {
       zoneControl.get.enable := batch.enable
@@ -168,7 +177,11 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     if (config.hasGlobalEnable) {
       squashed_enable := VecInit(squashed.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
     }
-    step := RegNext(squashed_enable, 0.U)
+    if (config.hasInternalStep) {
+      control.step.get := squashed_enable
+    } else {
+      step.get := RegNext(squashed_enable, 0.U)
+    }
     control.enable := squashed_enable
     if (config.hasDutZone) {
       zoneControl.get.enable := squashed_enable
@@ -210,6 +223,7 @@ object GatewaySink {
 class GatewaySinkControl(config: GatewayConfig) extends Bundle {
   val enable = Bool()
   val dut_zone = Option.when(config.hasDutZone)(UInt(config.dutZoneWidth.W))
+  val step = Option.when(config.hasInternalStep)(UInt(config.stepWidth.W))
 }
 
 object Preprocess {

@@ -30,6 +30,7 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
   val dut_zone = Option.when(config.hasDutZone)(IO(Input(UInt(config.dutZoneWidth.W))))
+  val step = Option.when(config.hasInternalStep)(IO(Input(UInt(config.stepWidth.W))))
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
@@ -60,7 +61,9 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
 
   protected val commonPorts = Seq(("clock", clock), ("enable", enable))
   def modPorts: Seq[Seq[(String, Data)]] = {
-    val ports = if (config.hasDutZone) commonPorts ++ Seq(("dut_zone", dut_zone.get)) else commonPorts
+    var ports = commonPorts
+    if (config.hasDutZone) ports ++= Seq(("dut_zone", dut_zone.get))
+    if (config.hasInternalStep) ports ++= Seq(("step", step.get))
     ports.map(Seq(_))
   }
 
@@ -91,12 +94,20 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
        |""".stripMargin
   }
 
+  def internalStep: String = if (config.hasInternalStep)
+    """
+      |extern void simv_nstep(uint8_t step);
+      |simv_nstep(step);
+      |""".stripMargin
+  else ""
+
   def dpicFunc: String =
     s"""
        |$dpicFuncProto {
        |  if (!diffstate_buffer) return;
        |$perfCnt
        |  ${dpicFuncAssigns.mkString("\n  ")}
+       |  $internalStep
        |}
        |""".stripMargin
 
@@ -266,6 +277,7 @@ private class DummyDPICWrapper(gen: DifftestBundle, config: GatewayConfig) exten
   dpic.clock := clock
   dpic.enable := io.bits.getValid && control.enable
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
+  if (config.hasInternalStep) dpic.step.get := control.step.get
   dpic.io := io
 }
 
@@ -280,6 +292,7 @@ private class DummyDPICBatchWrapper(
   dpic.clock := clock
   dpic.enable := control.enable
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
+  if (config.hasInternalStep) dpic.step.get := control.step.get
   dpic.io := io
 }
 
