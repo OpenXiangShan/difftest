@@ -37,8 +37,6 @@ case class GatewayConfig(
   hasInternalStep: Boolean = false,
   isNonBlock: Boolean = false,
 ) {
-  if (squashReplay) require(isSquash)
-  if (hasInternalStep) require(isBatch)
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
   def dutBufLen: Int = if (isBatch) batchSize else 1
@@ -70,12 +68,16 @@ case class GatewayConfig(
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     macros.toSeq
   }
+  def check(): Unit = {
+    if (squashReplay) require(isSquash)
+    if (hasInternalStep) require(isBatch)
+  }
 }
 
 case class GatewayResult(
   cppMacros: Seq[String] = Seq(),
   vMacros: Seq[String] = Seq(),
-  instances: Seq[(DifftestBundle, String)] = Seq(),
+  instances: Seq[DifftestBundle] = Seq(),
   structPacked: Option[Boolean] = None,
   step: Option[UInt] = None,
 ) {
@@ -94,8 +96,21 @@ object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
   private var config = GatewayConfig()
 
-  def apply[T <: DifftestBundle](gen: T, style: String): T = {
-    config = GatewayConfig(style = style)
+  def setConfig(cfg: String): Unit = {
+    cfg.foreach {
+      case 'E' => config = config.copy(hasGlobalEnable = true)
+      case 'S' => config = config.copy(isSquash = true)
+      case 'R' => config = config.copy(squashReplay = true)
+      case 'Z' => config = config.copy(hasDutZone = true)
+      case 'B' => config = config.copy(isBatch = true)
+      case 'I' => config = config.copy(hasInternalStep = true)
+      case 'N' => config = config.copy(isNonBlock = true)
+      case x   => println(s"Unknown Gateway Config $x")
+    }
+    config.check()
+  }
+
+  def apply[T <: DifftestBundle](gen: T): T = {
     if (config.needEndpoint) {
       register(WireInit(0.U.asTypeOf(gen)))
     } else {
@@ -133,7 +148,7 @@ object Gateway {
 }
 
 class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val instances = if (config.needTraceInfo) Seq((new DiffTraceInfo(config), config.style)) else Seq()
+  val instances = if (config.needTraceInfo) Seq(new DiffTraceInfo(config)) else Seq()
   val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
   val in_pack = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
   for ((data, id) <- in_pack.zipWithIndex) {
