@@ -1,4 +1,5 @@
 `include "DifftestMacros.v"
+`ifndef TB_NO_DPIC
 `ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 module DeferredControl(
   input clock,
@@ -46,3 +47,4 @@ end
 
 endmodule;
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+`endif // TB_NO_DPIC

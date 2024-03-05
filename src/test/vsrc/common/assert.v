@@ -14,7 +14,9 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+`ifndef TB_NO_DPIC
 import "DPI-C" function void xs_assert
 (
   input  longint    line
 );
+`endif

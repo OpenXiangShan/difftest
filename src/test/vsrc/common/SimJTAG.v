@@ -1,8 +1,8 @@
 // See LICENSE.SiFive for license details.
 //VCS coverage exclude_file
-`ifdef SYNTHESIS
+`ifdef TB_NO_DPIC
     `define DISABLE_SIMJTAG_DPIC
-`endif // SYNTHESIS
+`endif // TB_NO_DPIC
 `ifndef DISABLE_SIMJTAG_DPIC
 import "DPI-C" function int jtag_tick
 (
