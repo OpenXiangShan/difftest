@@ -43,20 +43,14 @@ static const char *regs_name_csr[] = {
   "mtvec",
   "stvec", "mcause", "scause", "satp", "mip", "mie",
   "mscratch", "sscratch", "mideleg", "medeleg",
-#ifdef DASICS_DIFF
-  "dsmcfg", "dsmbound0", "dsmbound1",
-  "dumcfg", "dumbound0", "dumbound1",
-  /* yet to connect
-  "dlcfg0", "dlcfg1",
-  "dlbound0", "dlbound1", "dlbound2", "dlbound3", "dlbound4", "dlbound5",
-  "dlbound6", "dlbound7", "dlbound8", "dlbound9", "dlbound10", "dlbound11",
-  "dlbound12", "dlbound13", "dlbound14", "dlbound15", "dlbound16", "dlbound17",
-  "dlbound18", "dlbound19", "dlbound20", "dlbound21", "dlbound22", "dlbound23",
-  "dlbound24", "dlbound25", "dlbound26", "dlbound27", "dlbound28", "dlbound29",
-  "dlbound30", "dlbound31",
-  */
-  "dmaincall", "dretpc", "dretpcfz",
-#endif  // DASICS_DIFF
+#ifdef FDI_DIFF
+  "fdiMainCfg", "fdiUMBoundLo", "fdiUMBoundHi",
+  "fdiLibCfg",
+  "fdiLibBound0", "fdiLibBound1", "fdiLibBound2", "fdiLibBound3",
+  "fdiLibBound4", "fdiLibBound5", "fdiLibBound6", "fdiLibBound7",
+  "fdiMainCall", "fdiReturnPC",
+  "fdiJumpCfg", "fdiJumpBound0", "fdiJumpBound1",
+#endif  // FDI_DIFF
 };
 
 static const char *regs_name_fp[] = {
