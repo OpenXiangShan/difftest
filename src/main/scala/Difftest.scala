@@ -22,6 +22,7 @@ import difftest.gateway.{Gateway, GatewayConfig}
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
+import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 
 trait DifftestWithCoreid {
@@ -259,20 +260,33 @@ trait DifftestModule[T <: DifftestBundle] {
 
 object DifftestModule {
   private val enabled = true
-  private val instances = ListBuffer.empty[(DifftestBundle, String)]
+  private val instances = ListBuffer.empty[DifftestBundle]
   private val cppMacros = ListBuffer.empty[String]
   private val vMacros = ListBuffer.empty[String]
 
+  def parseArgs(args: Array[String]): Array[String] = {
+    @tailrec
+    def nextOption(args: Array[String], list: List[String]): Array[String] = {
+      list match {
+        case Nil => args
+        case "--difftest-config" :: config :: tail =>
+          Gateway.setConfig(config)
+          nextOption(args.patch(args.indexOf("--difftest-config"), Nil, 2), tail)
+        case option :: tail => nextOption(args, tail)
+      }
+    }
+    nextOption(args, args.toList)
+  }
+
   def apply[T <: DifftestBundle](
     gen: T,
-    style: String = "dpic",
     dontCare: Boolean = false,
     delay: Int = 0,
   ): T = {
     val difftest: T = Wire(gen)
     if (enabled) {
-      register(gen, style)
-      val sink = Gateway(gen, style)
+      register(gen)
+      val sink = Gateway(gen)
       sink := Delayer(difftest, delay)
       sink.coreid := difftest.coreid
     }
@@ -282,22 +296,19 @@ object DifftestModule {
     difftest
   }
 
-  def register[T <: DifftestBundle](gen: T, style: String): Int = {
+  def register[T <: DifftestBundle](gen: T): Int = {
     val id = instances.length
-    val element = (gen, style)
-    instances += element
+    instances += gen
     id
   }
 
-  def finish(cpu: String, cppHeader: Option[String] = Some("dpic")): DifftestTopIO = {
+  def finish(cpu: String): DifftestTopIO = {
     val gateway = Gateway.collect()
     cppMacros ++= gateway.cppMacros
     vMacros ++= gateway.vMacros
     instances ++= gateway.instances
 
-    if (cppHeader.isDefined) {
-      generateCppHeader(cpu, cppHeader.get, gateway.structPacked.getOrElse(false))
-    }
+    generateCppHeader(cpu, gateway.structPacked.getOrElse(false))
     generateVeriogHeader()
 
     if (enabled) {
@@ -326,7 +337,7 @@ object DifftestModule {
     difftest
   }
 
-  def generateCppHeader(cpu: String, style: String, structPacked: Boolean): Unit = {
+  def generateCppHeader(cpu: String, structPacked: Boolean): Unit = {
     val difftestCpp = ListBuffer.empty[String]
     difftestCpp += "#ifndef __DIFFSTATE_H__"
     difftestCpp += "#define __DIFFSTATE_H__"
@@ -341,18 +352,15 @@ object DifftestModule {
     difftestCpp += s"#define CPU_$cpu_s"
     difftestCpp += ""
 
-    val headerInstances = instances.filter(_._2 == style)
-
-    val numCores = headerInstances.count(_._1.isUniqueIdentifier)
-    if (headerInstances.nonEmpty) {
+    val numCores = instances.count(_.isUniqueIdentifier)
+    if (instances.nonEmpty) {
       difftestCpp += s"#define NUM_CORES $numCores"
       difftestCpp += ""
     }
 
-    val uniqBundles = headerInstances.groupBy(_._1.desiredModuleName)
+    val uniqBundles = instances.groupBy(_.desiredModuleName)
     // Create cpp declaration for each bundle type
     uniqBundles.values
-      .map(_.map(_._1))
       .foreach(bundles => {
         val bundleType = bundles.head
         difftestCpp += bundleType.toCppDeclMacro
@@ -372,8 +380,8 @@ object DifftestModule {
 
     // create top-level difftest struct
     difftestCpp += "typedef struct {"
-    for ((className, cppInstances) <- uniqBundles.toSeq.sortBy(_._2.head._1.order)) {
-      val bundleType = cppInstances.head._1
+    for ((className, cppInstances) <- uniqBundles.toSeq.sortBy(_._2.head.order)) {
+      val bundleType = cppInstances.head
       val instanceName = bundleType.desiredCppName
       val cppIsArray = bundleType.isInstanceOf[DifftestWithIndex] || bundleType.isFlatten
       val nInstances = cppInstances.length
