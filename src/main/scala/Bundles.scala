@@ -109,11 +109,15 @@ class CSRState extends DifftestBaseBundle {
   val sscratch = UInt(64.W)
   val mideleg = UInt(64.W)
   val medeleg = UInt(64.W)
-  val dumcfg = Input(UInt(64.W))
-  val dumbound0 = Input(UInt(64.W))
-  val dumbound1 = Input(UInt(64.W))
-  val dmaincall = Input(UInt(64.W))
-  val dretpc = Input(UInt(64.W))
+  val fdiMainCfg = UInt(64.W)
+  val fdiUMBoundLo = UInt(64.W)
+  val fdiUMBoundHi = UInt(64.W)
+  val fdiLibCfg = UInt(64.W)
+  val fdiLibBound = Vec(8, UInt(64.W))
+  val fdiMainCall = UInt(64.W)
+  val fdiReturnPC = UInt(64.W)
+  val fdiJumpCfg = UInt(64.W)
+  val fdiJumpBound = Vec(2, UInt(64.W))
 }
 
 class DebugModeCSRState extends DifftestBaseBundle {
