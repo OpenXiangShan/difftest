@@ -179,6 +179,12 @@ void difftest_deferred_result(uint8_t result) {
 }
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
+#ifdef WITH_DRAMSIM3
+extern "C" void simv_tick() {
+  dramsim3_step();
+}
+#endif
+
 void simv_finish() {
   common_finish();
   flash_finish();

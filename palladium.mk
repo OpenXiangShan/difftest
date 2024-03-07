@@ -27,6 +27,9 @@ PLDM_MACRO_FLAGS 	+= $(PLDM_EXTRA_MACRO)
 ifeq ($(WORKLOAD_SWITCH),1)
 PLDM_MACRO_FLAGS  	+= +define+ENABLE_WORKLOAD_SWITCH
 endif
+ifeq ($(WITH_DRAMSIM3),1)
+PLDM_MACRO_FLAGS  	+= +define+WITH_DRAMSIM3
+endif
 
 # UA Args
 IXCOM_FLAGS  	 = -clean -64 -ua +sv +ignoreSimVerCheck +xe_alt_xlm
@@ -79,6 +82,10 @@ PLDM_CXXFILES 	 = $(SIM_CXXFILES) $(shell find $(PLDM_CSRC_DIR) -name "*.cpp")
 PLDM_CXXFLAGS 	 = -m64 -c -fPIC -g -std=c++11 -I$(PLDM_IXCOM) -I$(PLDM_SIMTOOL)
 PLDM_CXXFLAGS 	+= $(SIM_CXXFLAGS) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
 
+ifeq ($(WITH_DRAMSIM3),1)
+PLDM_LD_LIB  	 = -L $(DRAMSIM3_HOME)/ -ldramsim3 -Wl,-rpath-link=$(DRAMSIM3_HOME)/libdramsim3.so
+endif
+
 # XMSIM Flags
 XMSIM_FLAGS 	 = --xmsim -64 +xcprof -profile -PROFTHREAD
 ifneq ($(SYNTHESIS), 1)
@@ -111,7 +118,7 @@ pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(PLDM_CC_OBJ_DIR)
 	ixcom $(IXCOM_FLAGS) -l $(PLDM_BUILD_DIR)/ixcom.log	&& \
 	cd $(PLDM_CC_OBJ_DIR) 					&& \
 	$(CC) $(PLDM_CXXFLAGS) $(PLDM_CXXFILES)			&& \
-	$(CC) -o $(DPILIB_EMU) -m64 -shared *.o
+	$(CC) -o $(DPILIB_EMU) -m64 -shared *.o $(PLDM_LD_LIB)
 endif
 
 pldm-run: $(PLDM_BUILD_DIR)
