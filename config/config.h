@@ -146,6 +146,12 @@ extern unsigned long EMU_FLASH_SIZE;
 #define AUTO_RUNAHEAD_CHECKPOINT_GC_THRESHOLD 192
 
 // -----------------------------------------------------------------------
+// FDI Difftest
+// -----------------------------------------------------------------------
+
+#define FDI_DIFF
+
+// -----------------------------------------------------------------------
 // Debug mode and trigger
 // -----------------------------------------------------------------------
 // make diff in debug mode available by copying debug mode mmio

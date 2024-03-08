@@ -42,7 +42,15 @@ static const char *regs_name_csr[] = {
   "sepc", "mtval", "stval",
   "mtvec",
   "stvec", "mcause", "scause", "satp", "mip", "mie",
-  "mscratch", "sscratch", "mideleg", "medeleg"
+  "mscratch", "sscratch", "mideleg", "medeleg",
+#ifdef FDI_DIFF
+  "fdiMainCfg", "fdiUMBoundLo", "fdiUMBoundHi",
+  "fdiLibCfg",
+  "fdiLibBound0", "fdiLibBound1", "fdiLibBound2", "fdiLibBound3",
+  "fdiLibBound4", "fdiLibBound5", "fdiLibBound6", "fdiLibBound7",
+  "fdiMainCall", "fdiReturnPC",
+  "fdiJumpCfg", "fdiJumpBound0", "fdiJumpBound1",
+#endif  // FDI_DIFF
 };
 
 static const char *regs_name_fp[] = {
