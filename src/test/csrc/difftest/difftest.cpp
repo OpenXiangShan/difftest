@@ -82,9 +82,14 @@ void difftest_switch_zone() {
     diffstate_buffer[i]->switch_zone();
   }
 }
-int difftest_step() {
+void difftest_set_dut() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->dut = diffstate_buffer[i]->next();
+  }
+}
+int difftest_step() {
+  difftest_set_dut();
+  for (int i = 0; i < NUM_CORES; i++) {
     int ret = difftest[i]->step();
     if (ret) {
       return ret;

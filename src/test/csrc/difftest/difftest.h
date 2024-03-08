@@ -394,6 +394,7 @@ int difftest_init();
 
 int difftest_nstep(int step);
 void difftest_switch_zone();
+void difftest_set_dut();
 int difftest_step();
 int difftest_state();
 void difftest_finish();
