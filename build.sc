@@ -22,7 +22,7 @@ object ivys {
   val scala = "2.13.10"
   val chiselCrossVersions = Map(
     "3.6.0" -> (ivy"edu.berkeley.cs::chisel3:3.6.0", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.0"),
-    "6.1.0" -> (ivy"org.chipsalliance::chisel:6.1.0", ivy"org.chipsalliance:::chisel-plugin:6.1.0"),
+    "6.2.0" -> (ivy"org.chipsalliance::chisel:6.2.0", ivy"org.chipsalliance:::chisel-plugin:6.2.0"),
   )
 }
 
