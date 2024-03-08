@@ -9,3 +9,4 @@ run -swap
 run
 database -upload
 xc off
+exit
