@@ -28,7 +28,7 @@ SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
 
 # generate difftest files for non-chisel design.
 difftest_verilog:
-	mill -i difftest.test.runMain difftest.DifftestMain -td $(RTL_DIR)
+	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR)
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
