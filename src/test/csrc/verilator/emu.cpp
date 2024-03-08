@@ -782,11 +782,7 @@ int Emulator::tick() {
     difftest_trace_write(step);
   }
 
-  if (args.enable_diff) {
-    trapCode = difftest_nstep(step);
-  } else {
-    trapCode = difftest_state();
-  }
+  trapCode = difftest_nstep(step, args.enable_diff);
 
   if (trapCode != STATE_RUNNING) {
 #ifdef FUZZER_LIB

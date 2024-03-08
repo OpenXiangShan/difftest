@@ -392,7 +392,7 @@ protected:
 extern Difftest **difftest;
 int difftest_init();
 
-int difftest_nstep(int step);
+int difftest_nstep(int step, bool enable_diff);
 void difftest_switch_zone();
 void difftest_set_dut();
 int difftest_step();
