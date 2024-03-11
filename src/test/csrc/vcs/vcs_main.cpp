@@ -125,6 +125,13 @@ extern "C" uint8_t simv_step() {
     return SIMV_FAIL;
   }
 
+  if (enable_difftest) {
+    if (difftest_step())
+      return SIMV_FAIL;
+  } else {
+    difftest_set_dut();
+  }
+
   if (difftest_state() != -1) {
     int trapCode = difftest_state();
     for (int i = 0; i < NUM_CORES; i++) {
@@ -151,14 +158,7 @@ extern "C" uint8_t simv_step() {
     }
   }
 
-  if (enable_difftest) {
-    if (difftest_step())
-      return SIMV_FAIL;
-    else
-      return 0;
-  } else {
-    return 0;
-  }
+  return 0;
 }
 
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT

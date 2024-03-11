@@ -62,19 +62,20 @@ int difftest_state() {
   return -1;
 }
 
-int difftest_nstep(int step) {
-  int last_trap_code = STATE_RUNNING;
+int difftest_nstep(int step, bool enable_diff) {
   difftest_switch_zone();
   for (int i = 0; i < step; i++) {
-    if (difftest_step()) {
-      last_trap_code = STATE_ABORT;
-      return last_trap_code;
+    if (enable_diff) {
+      if (difftest_step())
+        return STATE_ABORT;
+    } else {
+      difftest_set_dut();
     }
-    last_trap_code = difftest_state();
-    if (last_trap_code != STATE_RUNNING)
-      return last_trap_code;
+    int status = difftest_state();
+    if (status != STATE_RUNNING)
+      return status;
   }
-  return last_trap_code;
+  return 0;
 }
 
 void difftest_switch_zone() {
@@ -82,9 +83,14 @@ void difftest_switch_zone() {
     diffstate_buffer[i]->switch_zone();
   }
 }
-int difftest_step() {
+void difftest_set_dut() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->dut = diffstate_buffer[i]->next();
+  }
+}
+int difftest_step() {
+  difftest_set_dut();
+  for (int i = 0; i < NUM_CORES; i++) {
     int ret = difftest[i]->step();
     if (ret) {
       return ret;
