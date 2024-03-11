@@ -30,7 +30,7 @@
 #endif // CONFIG_DIFFTEST_PERFCNT
 
 static bool has_reset = false;
-static char bin_file[256] = "ram.bin";
+static char bin_file[256] = "/dev/zero";
 static char *flash_bin_file = NULL;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
