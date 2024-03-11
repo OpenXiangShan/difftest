@@ -120,7 +120,7 @@ pldm-run: $(PLDM_BUILD_DIR)
 
 pldm-debug: $(PLDM_BUILD_DIR)
 	cd $(PLDM_BUILD_DIR) 					&& \
-	xeDebug $(XMSIM_FLAGS) -gui -xedebugargs -fsdb -input $(PLDM_SCRIPTS_DIR)/run_debug.tcl -l debug-$$(date +%Y%m%d-%H%M%S).log
+	xeDebug $(XMSIM_FLAGS) -fsdb -input $(PLDM_SCRIPTS_DIR)/run_debug.tcl -l debug-$$(date +%Y%m%d-%H%M%S).log
 
 pldm-clean:
 	rm -rf $(PLDM_BUILD_DIR)
