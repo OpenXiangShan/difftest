@@ -213,7 +213,6 @@ SimTop sim(
 
 assign difftest_logCtrl_level = 0;
 assign difftest_perfCtrl_clean = 0;
-assign difftest_perfCtrl_dump = 0;
 assign difftest_uart_in_ch = 8'hff;
 
 always @(posedge clock) begin
@@ -242,6 +241,12 @@ initial simv_result = 0;
 `ifdef ENABLE_WORKLOAD_SWITCH
 assign workload_switch = simv_result == `SIMV_DONE;
 `endif // ENABLE_WORKLOAD_SWITCH
+`endif // TB_NO_DPIC
+
+`ifndef TB_NO_DPIC
+assign difftest_perfCtrl_dump = simv_result != 0;
+`else
+assign difftest_perfCtrl_dump = 0;
 `endif // TB_NO_DPIC
 
 reg [63:0] n_cycles;

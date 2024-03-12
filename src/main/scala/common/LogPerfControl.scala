@@ -61,3 +61,15 @@ object LogPerfControl {
 
   def apply(): LogPerfControl = instances.find(_.isVisible).getOrElse(instantiate())
 }
+
+object DifftestPerf {
+  def apply(perfName: String, perfCnt: UInt) = {
+    val helper = LogPerfControl.apply()
+    val counter = RegInit(0.U(64.W))
+    val next_counter = WireInit(counter + perfCnt)
+    counter := Mux(helper.clean, 0.U, next_counter)
+    when(helper.dump) {
+      printf(p"[DIFFTEST_PERF][time=${helper.timer}] $perfName, $next_counter\n")
+    }
+  }
+}
