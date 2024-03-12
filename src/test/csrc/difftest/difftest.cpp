@@ -75,7 +75,7 @@ int difftest_nstep(int step, bool enable_diff) {
     if (status != STATE_RUNNING)
       return status;
   }
-  return 0;
+  return STATE_RUNNING;
 }
 
 void difftest_switch_zone() {
