@@ -115,12 +115,7 @@ endif
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
 SIM_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
-SYSTEM_VAR = $(shell uname -a)
-ifeq ($(findstring "Ubuntu",$(SYSTEM_VAR)),)  
-	SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
-else
-	SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\" -DDRAMSIM3_OUTDIR=\"$(BUILD_DIR)\"
-endif
+SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
 SIM_LDFLAGS  += $(DRAMSIM3_HOME)/build/libdramsim3.a
 endif
 

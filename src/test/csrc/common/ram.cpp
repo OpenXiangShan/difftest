@@ -444,14 +444,19 @@ void dramsim3_init() {
 }
 
 void dramsim3_step() {
+  if (dram == NULL)
+    return;
   dram->tick();
 }
 
 void dramsim3_finish() {
   delete dram;
+  dram = NULL;
 }
 
 uint64_t memory_response(bool isWrite) {
+  if (dram == NULL)
+    return 0;
   auto response = (isWrite) ? dram->check_write_response() : dram->check_read_response();
   if (response) {
     auto meta = static_cast<dramsim3_meta *>(response->req->meta);
@@ -464,6 +469,8 @@ uint64_t memory_response(bool isWrite) {
 }
 
 bool memory_request(uint64_t address, uint32_t id, bool isWrite) {
+  if (dram == NULL)
+    return false;
   if (dram->will_accept(address, isWrite)) {
     auto req = new CoDRAMRequest();
     auto meta = new dramsim3_meta;
