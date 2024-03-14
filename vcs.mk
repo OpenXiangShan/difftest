@@ -40,6 +40,17 @@ ifeq ($(WORKLOAD_SWITCH),1)
 VCS_FLAGS    += +define+ENABLE_WORKLOAD_SWITCH
 endif
 
+ifeq ($(SYNTHESIS), 1)
+VCS_FLAGS    += +define+SYNTHESIS +define+TB_NO_DPIC
+else
+ifeq ($(DISABLE_DIFFTEST_RAM_DPIC), 1)
+VCS_FLAGS    += +define+DISABLE_DIFFTEST_RAM_DPIC
+endif
+ifeq ($(DISABLE_DIFFTEST_FLASH_DPIC), 1)
+VCS_FLAGS    += +define+DISABLE_DIFFTEST_FLASH_DPIC
+endif
+endif
+
 # if fsdb is considered
 # CONSIDER_FSDB ?= 0
 ifeq ($(CONSIDER_FSDB),1)
