@@ -204,7 +204,10 @@ public:
   inline int get_trap_code() {
     return dut->trap.code;
   }
+
   void display();
+  void display_stats();
+
   void set_trace(const char *name, bool is_read) {
     difftrace = new DiffTrace(name, is_read);
   }
@@ -215,9 +218,11 @@ public:
   }
   void trace_write(int step){
     if (difftrace){
+      int zone = 0;
       for (int i = 0; i < step; i++) {
-        difftrace->append(diffstate_buffer[id]->get(i));
+        difftrace->append(diffstate_buffer[id]->get(zone, i));
       }
+      zone = (zone + 1) % CONFIG_DIFFTEST_ZONESIZE;
     }
   }
 
@@ -375,6 +380,7 @@ extern Difftest **difftest;
 int difftest_init();
 
 int difftest_nstep(int step);
+void difftest_switch_zone();
 int difftest_step();
 int difftest_state();
 void difftest_finish();

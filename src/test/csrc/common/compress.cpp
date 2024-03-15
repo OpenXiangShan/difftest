@@ -31,6 +31,14 @@ bool isGzFile(const char *filename) {
   return !strcmp(filename + (strlen(filename) - 3), ".gz");
 }
 
+// Return whether the file is a zstd file
+bool isZstdFile(const char *filename) {
+  if (filename == NULL || strlen(filename) < 6) {
+    return false;
+  }
+  return !strcmp(filename + (strlen(filename) - 5), ".zstd");
+}
+
 long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) {
 #ifndef NO_GZ_COMPRESSION
   gzFile compressed_mem = gzopen(filename, "wb");
@@ -120,6 +128,120 @@ long readFromGz(void* ptr, const char *file_name, long buf_size, uint8_t load_ty
     printf("Error closing '%s'\n", file_name);
     return -1;
   }
+  return curr_size;
+#else
+  return 0;
+#endif
+}
+
+long readFromZstd(void* ptr, const char *file_name, long buf_size, uint8_t load_type) {
+#ifndef NO_ZSTD_COMPRESSION
+  assert(buf_size > 0);
+
+  int fd = -1;
+  int file_size = 0;
+  uint8_t *compress_file_buffer = NULL;
+  size_t compress_file_buffer_size = 0;
+
+  uint64_t curr_size = 0;
+  const uint32_t chunk_size = 16384;
+
+  // Only load from RAM need check
+  if (load_type == LOAD_RAM && (buf_size % chunk_size) != 0) {
+    printf("buf_size must be divisible by chunk_size\n");
+    return -1;
+  }
+
+  fd = open(file_name, O_RDONLY);
+  if (fd < 0) {
+    printf("Can't open compress binary file '%s'", file_name);
+    return -1;
+  }
+
+  file_size = lseek(fd, 0, SEEK_END);
+  if (file_size == 0) {
+    printf("File size must not be zero");
+    return -1;
+  }
+
+  lseek(fd, 0, SEEK_SET);
+
+  compress_file_buffer = new uint8_t[file_size];
+  assert(compress_file_buffer);
+
+  compress_file_buffer_size = read(fd, compress_file_buffer, file_size);
+  if (compress_file_buffer_size != file_size) {
+    close(fd);
+    free(compress_file_buffer);
+    printf("Zstd compressed file read failed, file size: %d, read size: %ld\n", file_size, compress_file_buffer_size);
+    return -1;
+  }
+
+  close(fd);
+
+  ZSTD_inBuffer input_buffer = {compress_file_buffer, compress_file_buffer_size, 0};
+
+  long *temp_page = new long[chunk_size];
+
+  ZSTD_DStream *dstream = ZSTD_createDStream();
+  if (!dstream) {
+    printf("Can't create zstd dstream object\n");
+    delete [] compress_file_buffer;
+    delete [] temp_page;
+    return -1;
+  }
+
+  size_t init_result = ZSTD_initDStream(dstream);
+  if (ZSTD_isError(init_result)) {
+    printf("Can't init zstd dstream object: %s\n",ZSTD_getErrorName(init_result));
+    ZSTD_freeDStream(dstream);
+    delete [] compress_file_buffer;
+    delete [] temp_page;
+    return -1;
+  }
+
+  while (curr_size < buf_size) {
+
+    ZSTD_outBuffer output_buffer = {temp_page, chunk_size * sizeof(long), 0};
+
+    size_t decompress_result = ZSTD_decompressStream(dstream, &output_buffer, &input_buffer);
+
+    if (ZSTD_isError(decompress_result)) {
+      printf("Decompress failed: %s\n", ZSTD_getErrorName(decompress_result));
+      ZSTD_freeDStream(dstream);
+      delete [] compress_file_buffer;
+      delete [] temp_page;
+      return -1;
+    }
+
+    if (output_buffer.pos == 0) {
+      break;
+    }
+
+    for (uint32_t x = 0; x < output_buffer.pos / sizeof(long) + 1; x++) {
+      if (*(temp_page + x) != 0) {
+        long *pmem_current = (long*)((uint8_t*)ptr + curr_size + x * sizeof(long));
+        *pmem_current = *(temp_page + x);
+      }
+    }
+    curr_size += output_buffer.pos;
+  }
+
+  ZSTD_outBuffer output_buffer = {temp_page, chunk_size * sizeof(long), 0};
+  size_t decompress_result = ZSTD_decompressStream(dstream, &output_buffer, &input_buffer);
+  if (ZSTD_isError(decompress_result) || output_buffer.pos!=0) {
+    printf("Decompress failed: %s\n", ZSTD_getErrorName(decompress_result));
+    printf("Binary size larger than memory\n");
+    ZSTD_freeDStream(dstream);
+    delete [] compress_file_buffer;
+    delete [] temp_page;
+    return -1;
+  }
+
+  ZSTD_freeDStream(dstream);
+  delete [] compress_file_buffer;
+  delete [] temp_page;
+
   return curr_size;
 #else
   return 0;

@@ -27,12 +27,13 @@ import $file.difftest.build
 
 // We recommend using a fixed Chisel version.
 object difftest extends millbuild.difftest.build.CommonDiffTest {
-  def crossValue: String = "3.5.6"
+  def crossValue: String = "3.6.0"
 
   override def millSourcePath = os.pwd / "difftest"
 }
 
-// This is for advanced users only. All supported Chisel versions are listed in `build.sc`.
+// This is for advanced users only.
+// All supported Chisel versions are listed in `build.sc`.
 // To pass a cross value to difftest:
 object difftest extends Cross[millbuild.difftest.build.CommonDiffTest](chiselVersions) {
   override def millSourcePath = os.pwd / "difftest"
@@ -46,6 +47,8 @@ emu: sim-verilog
 ```
 
 2. Add difftest modules (in Chisel or Verilog) to your design.
+All modules have been listed in the [APIs](#apis) chapter. Some of them are optional.
+
 ```scala
 import difftest._
 
@@ -60,7 +63,7 @@ difftest.wdest  := io.wb.rfDest
 difftest.wpdest := io.wb.rfDest
 ```
 
-3. Call `val difftesst = DifftestModule.finish(cpu: String)` at the top module whose name should be `SimTop`. The variable name `difftest` must be used to ensure DiffTest could capture the input signals.
+3. Call `val difftesst = DifftestModule.finish(cpu: String)` at the top module whose module name should be `SimTop`. The variable name `difftest` must be used to ensure DiffTest could capture the input signals.
 
 An optional UART input/output can be connected to DiffTest. DiffTest will automatically DontCare it internally.
 
@@ -79,6 +82,8 @@ We provide example designs, including:
 - [XiangShan](https://github.com/OpenXiangShan/XiangShan)
 - [NutShell](https://github.com/OSCPU/NutShell/tree/dev-difftest)
 - [Rocket](https://github.com/OpenXiangShan/rocket-chip/tree/dev-difftest)
+
+If you encountered any issues when integrating DiffTest to your own design, feel free to let us know with necessary information on how you have modified your design. We will try our best to assist you.
 
 ## APIs
 
@@ -111,6 +116,8 @@ coherence via RefillTest.
 | `DiffLrScEvent` | Executed LR/SC instructions | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
+They will be automatically created when calling `DifftestModule.finish(cpu: String)`.
+
 * `LogCtrlIO`
 * `PerfCtrlIO`
 * `UARTIO`

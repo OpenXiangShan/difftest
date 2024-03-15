@@ -63,8 +63,8 @@ trait HasMemInit { this: ExtModule =>
 trait HasReadPort { this: ExtModule =>
   val r = IO(new Bundle {
     val enable = Input(Bool())
-    val index  = Input(UInt(64.W))
-    val data   = Output(UInt(64.W))
+    val index = Input(UInt(64.W))
+    val data = Output(UInt(64.W))
   })
 
   val r_dpic =
@@ -96,18 +96,17 @@ trait HasReadPort { this: ExtModule =>
 
   def read(enable: Bool, index: UInt): UInt = {
     r.enable := enable
-    r.index  := index
+    r.index := index
     r.data
   }
 }
 
-
 trait HasWritePort { this: ExtModule =>
   val w = IO(new Bundle {
     val enable = Input(Bool())
-    val index  = Input(UInt(64.W))
-    val data   = Input(UInt(64.W))
-    val mask   = Input(UInt(64.W))
+    val index = Input(UInt(64.W))
+    val data = Input(UInt(64.W))
+    val mask = Input(UInt(64.W))
   })
 
   val w_dpic =
@@ -145,17 +144,18 @@ trait HasWritePort { this: ExtModule =>
 
   def write(enable: Bool, index: UInt, data: UInt, mask: UInt): HasWritePort = {
     w.enable := enable
-    w.index  := index
-    w.data   := data
-    w.mask   := mask
+    w.index := index
+    w.data := data
+    w.mask := mask
     this
   }
 }
 
 class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort with HasMemInit {
-  val clock  = IO(Input(Clock()))
+  val clock = IO(Input(Clock()))
 
-  setInline("MemRHelper.v",
+  setInline(
+    "MemRHelper.v",
     s"""
        |`ifdef SYNTHESIS
        |  `define DISABLE_DIFFTEST_RAM_DPIC
@@ -170,13 +170,15 @@ class MemRHelper extends ExtModule with HasExtModuleInline with HasReadPort with
        |    $r_func
        |  end
        |endmodule
-     """.stripMargin)
+     """.stripMargin,
+  )
 }
 
 class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort with HasMemInit {
-  val clock  = IO(Input(Clock()))
+  val clock = IO(Input(Clock()))
 
-  setInline("MemWHelper.v",
+  setInline(
+    "MemWHelper.v",
     s"""
        |`ifdef SYNTHESIS
        |  `define DISABLE_DIFFTEST_RAM_DPIC
@@ -191,14 +193,16 @@ class MemWHelper extends ExtModule with HasExtModuleInline with HasWritePort wit
        |   $w_func
        |  end
        |endmodule
-     """.stripMargin)
+     """.stripMargin,
+  )
 }
 
 class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort with HasWritePort with HasMemInit {
-  val clock  = IO(Input(Clock()))
+  val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
 
-  setInline("MemRWHelper.v",
+  setInline(
+    "MemRWHelper.v",
     s"""
        |`ifdef SYNTHESIS
        |  `define DISABLE_DIFFTEST_RAM_DPIC
@@ -219,7 +223,8 @@ class MemRWHelper extends ExtModule with HasExtModuleInline with HasReadPort wit
        |    end
        |  end
        |endmodule
-     """.stripMargin)
+     """.stripMargin,
+  )
 }
 
 abstract class DifftestMem(size: BigInt, lanes: Int, bits: Int) extends Module {
@@ -229,13 +234,13 @@ abstract class DifftestMem(size: BigInt, lanes: Int, bits: Int) extends Module {
   val read = IO(new Bundle {
     val valid = Input(Bool())
     val index = Input(UInt(64.W))
-    val data  = Output(Vec(n_helper, UInt(64.W)))
+    val data = Output(Vec(n_helper, UInt(64.W)))
   })
   val write = IO(Input(new Bundle {
     val valid = Bool()
     val index = UInt(64.W)
-    val data  = Vec(n_helper, UInt(64.W))
-    val mask  = Vec(n_helper, UInt(64.W))
+    val data = Vec(n_helper, UInt(64.W))
+    val mask = Vec(n_helper, UInt(64.W))
   }))
 
   def read(addr: UInt): Vec[UInt] = {
@@ -253,11 +258,11 @@ abstract class DifftestMem(size: BigInt, lanes: Int, bits: Int) extends Module {
   def write(addr: UInt, data: Seq[UInt], mask: Seq[Bool]): Unit = {
     write.valid := true.B
     write.index := addr
-    write.data  := VecInit(data).asTypeOf(write.data)
+    write.data := VecInit(data).asTypeOf(write.data)
     require(data.length == lanes, s"data Vec[UInt] should have the length of $lanes")
     require(mask.length == lanes, s"mask Vec[Bool] should have the length of $lanes")
     require(data.head.getWidth == bits, s"data should have the width of $bits")
-    write.mask  := VecInit(mask.map(m => Fill(bits, m))).asTypeOf(write.mask)
+    write.mask := VecInit(mask.map(m => Fill(bits, m))).asTypeOf(write.mask)
   }
 }
 
@@ -265,77 +270,79 @@ class DifftestMem1P(size: BigInt, lanes: Int, bits: Int) extends DifftestMem(siz
   assert(!read.valid || !write.valid, "read and write come at the same cycle")
 
   val helper = Seq.fill(n_helper)(Module(new MemRWHelper))
-  read.data := helper.zipWithIndex.map{ case (h, i) =>
+  read.data := helper.zipWithIndex.map { case (h, i) =>
     h.clock := clock
     h.enable := !reset.asBool
     h.write(
       enable = write.valid,
-      index  = write.index * n_helper.U + i.U,
-      data   = write.data(i),
-      mask   = write.mask(i)
+      index = write.index * n_helper.U + i.U,
+      data = write.data(i),
+      mask = write.mask(i),
     )
     h.read(
       enable = read.valid,
-      index  = read.index * n_helper.U + i.U
+      index = read.index * n_helper.U + i.U,
     )
   }
 }
 
 class DifftestMem2P(size: BigInt, lanes: Int, bits: Int) extends DifftestMem(size, lanes, bits) {
   val r_helper = Seq.fill(n_helper)(Module(new MemRHelper))
-  read.data := r_helper.zipWithIndex.map{ case (h, i) =>
-    h.clock  := clock
+  read.data := r_helper.zipWithIndex.map { case (h, i) =>
+    h.clock := clock
     h.read(
       enable = !reset.asBool && read.valid,
-      index  = read.index * n_helper.U + i.U
+      index = read.index * n_helper.U + i.U,
     )
   }
 
   val w_helper = Seq.fill(n_helper)(Module(new MemWHelper))
   w_helper.zipWithIndex.foreach { case (h, i) =>
-    h.clock  := clock
+    h.clock := clock
     h.write(
       enable = !reset.asBool && write.valid,
-      index  = write.index * n_helper.U + i.U,
-      data   = write.data(i),
-      mask   = write.mask(i)
+      index = write.index * n_helper.U + i.U,
+      data = write.data(i),
+      mask = write.mask(i),
     )
   }
 }
 
 class DifftestMemInitializer extends ExtModule with HasExtModuleInline {
-  setInline("DifftestMemInitializer.v",
+  setInline(
+    "DifftestMemInitializer.v",
     """
-       |module DifftestMemInitializer();
-       |`ifndef SYNTHESIS
-       |`define TARGET SynthesizableDifftestMem.mem
-       |string bin_file;
-       |integer memory_image = 0, n_read = 0, byte_read = 1;
-       |byte data;
-       |initial begin
-       |  if ($test$plusargs("workload")) begin
-       |    $value$plusargs("workload=%s", bin_file);
-       |    memory_image = $fopen(bin_file, "rb");
-       |    if (memory_image == 0) begin
-       |      $display("Error: failed to open %s", bin_file);
-       |      $finish;
-       |    end
-       |    foreach (`TARGET[i]) begin
-       |      if (byte_read == 0) break;
-       |      for (integer j = 0; j < 8; j++) begin
-       |        byte_read = $fread(data, memory_image);
-       |        if (byte_read == 0) break;
-       |        n_read += 1;
-       |        `TARGET[i][j * 8 +: 8] = data;
-       |      end
-       |    end
-       |    $fclose(memory_image);
-       |    $display("%m: load %d bytes from %s.", n_read, bin_file);
-       |  end
-       |end
-       |`endif
-       |endmodule
-       |""".stripMargin)
+      |module DifftestMemInitializer();
+      |`ifndef SYNTHESIS
+      |`define TARGET SynthesizableDifftestMem.mem
+      |string bin_file;
+      |integer memory_image = 0, n_read = 0, byte_read = 1;
+      |byte data;
+      |initial begin
+      |  if ($test$plusargs("workload")) begin
+      |    $value$plusargs("workload=%s", bin_file);
+      |    memory_image = $fopen(bin_file, "rb");
+      |    if (memory_image == 0) begin
+      |      $display("Error: failed to open %s", bin_file);
+      |      $finish;
+      |    end
+      |    foreach (`TARGET[i]) begin
+      |      if (byte_read == 0) break;
+      |      for (integer j = 0; j < 8; j++) begin
+      |        byte_read = $fread(data, memory_image);
+      |        if (byte_read == 0) break;
+      |        n_read += 1;
+      |        `TARGET[i][j * 8 +: 8] = data;
+      |      end
+      |    end
+      |    $fclose(memory_image);
+      |    $display("%m: load %d bytes from %s.", n_read, bin_file);
+      |  end
+      |end
+      |`endif
+      |endmodule
+      |""".stripMargin,
+  )
 }
 
 class SynthesizableDifftestMem(size: BigInt, lanes: Int, bits: Int) extends DifftestMem(size, lanes, bits) {
@@ -346,7 +353,7 @@ class SynthesizableDifftestMem(size: BigInt, lanes: Int, bits: Int) extends Diff
     read.data(i) := RegEnable(mem(r_index), read.valid)
 
     val w_index = write.index * n_helper.U + i.U
-    when (write.valid) {
+    when(write.valid) {
       mem(w_index) := (write.data(i) & write.mask(i)) | (mem(w_index) & (~write.mask(i)).asUInt)
     }
   }
@@ -371,13 +378,13 @@ object DifftestMem {
     singlePort: Boolean = true,
   ): DifftestMem = {
     val mod = (synthesizable, singlePort) match {
-      case (true, _) => Module(new SynthesizableDifftestMem(size, lanes, bits))
-      case (false, true) => Module(new DifftestMem1P(size, lanes, bits))
+      case (true, _)      => Module(new SynthesizableDifftestMem(size, lanes, bits))
+      case (false, true)  => Module(new DifftestMem1P(size, lanes, bits))
       case (false, false) => Module(new DifftestMem2P(size, lanes, bits))
     }
-    mod.read        := DontCare
-    mod.read.valid  := false.B
-    mod.write       := DontCare
+    mod.read := DontCare
+    mod.read.valid := false.B
+    mod.write := DontCare
     mod.write.valid := false.B
     mod
   }

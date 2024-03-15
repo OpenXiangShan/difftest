@@ -45,8 +45,7 @@ private class WiringInfo(val dataType: Data, val name: String) {
   def toPendingTuple: Option[(Boolean, Data, String)] = {
     if (isPending) {
       Some((nSources == 0, dataType, name))
-    }
-    else {
+    } else {
       None
     }
   }
@@ -55,20 +54,20 @@ private class WiringInfo(val dataType: Data, val name: String) {
 object DifftestWiring {
   private val wires = scala.collection.mutable.ListBuffer.empty[WiringInfo]
   private def getWire(data: Data, name: String): WiringInfo = {
-    wires.find(_.name == name).getOrElse({
+    wires.find(_.name == name).getOrElse {
       val info = new WiringInfo(chiselTypeOf(data), name)
       wires.addOne(info)
       info
-    })
+    }
   }
 
-  def addSource(data: Data, name: String): Data = {
+  def addSource[T <: Data](data: T, name: String): T = {
     getWire(data, name).setSource()
     WiringControl.addSource(data, name)
     data
   }
 
-  def addSink(data: Data, name: String): Data = {
+  def addSink[T <: Data](data: T, name: String): T = {
     getWire(data, name).addSink()
     WiringControl.addSink(data, name)
     data
@@ -79,19 +78,18 @@ object DifftestWiring {
   def getPending: Seq[(Boolean, Data, String)] = wires.flatMap(_.toPendingTuple).toSeq
 
   def createPendingWires(): Seq[Data] = {
-    getPending.map{ case (isSource, dataType, name) =>
+    getPending.map { case (isSource, dataType, name) =>
       val target = WireInit(0.U.asTypeOf(dataType)).suggestName(name)
       if (isSource) {
         addSource(target, name)
-      }
-      else {
+      } else {
         addSink(target, name)
       }
     }
   }
 
   def createExtraIOs(flipped: Boolean = false): Seq[Data] = {
-    getPending.map{ case (isSource, dataType, name) =>
+    getPending.map { case (isSource, dataType, name) =>
       def do_direction(dt: Data): Data = if (isSource) Input(dt) else Output(dt)
       def do_flip(dt: Data): Data = if (flipped) Flipped(dt) else dt
       IO(do_flip(do_direction(dataType))).suggestName(name)
@@ -99,7 +97,7 @@ object DifftestWiring {
   }
 
   def createAndConnectExtraIOs(): Seq[Data] = {
-    createExtraIOs().zip(createPendingWires()).map{ case (io, wire) =>
+    createExtraIOs().zip(createPendingWires()).map { case (io, wire) =>
       io <> wire
       io
     }

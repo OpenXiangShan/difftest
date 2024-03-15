@@ -24,15 +24,21 @@
 #ifdef CONFIG_DIFFTEST_SQUASH
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 
 Difftest **difftest = NULL;
 
 int difftest_init() {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_perfcnt_init();
+#endif // CONFIG_DIFFTEST_PERFCNT
   diffstate_buffer_init();
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
-    difftest[i]->dut = diffstate_buffer[i]->get(0);
+    difftest[i]->dut = diffstate_buffer[i]->get(0, 0);
   }
   return 0;
 }
@@ -58,6 +64,7 @@ int difftest_state() {
 
 int difftest_nstep(int step){
   int last_trap_code = STATE_RUNNING;
+  difftest_switch_zone();
   for(int i = 0; i < step; i++){
     if(difftest_step()){
       last_trap_code = STATE_ABORT;
@@ -70,6 +77,11 @@ int difftest_nstep(int step){
   return last_trap_code;
 }
 
+void difftest_switch_zone() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    diffstate_buffer[i]->switch_zone();
+  }
+}
 int difftest_step() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->dut = diffstate_buffer[i]->next();
@@ -94,6 +106,9 @@ void difftest_trace_write(int step) {
 }
 
 void difftest_finish() {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_perfcnt_finish();
+#endif // CONFIG_DIFFTEST_PERFCNT
   diffstate_buffer_free();
   for (int i = 0; i < NUM_CORES; i++) {
     delete difftest[i];
@@ -976,6 +991,15 @@ void CommitTrace::display(bool use_spike) {
     spike_dasm(dasm_result, inst_str);
     printf(" %s", dasm_result);
   }
+}
+
+void Difftest::display_stats() {
+  auto trap = get_trap_event();
+  uint64_t instrCnt = trap->instrCnt;
+  uint64_t cycleCnt = trap->cycleCnt;
+  double ipc = (double)instrCnt / cycleCnt;
+  eprintf(ANSI_COLOR_MAGENTA "instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
+    instrCnt, cycleCnt, ipc);
 }
 
 void DiffState::display_commit_count(int i) {

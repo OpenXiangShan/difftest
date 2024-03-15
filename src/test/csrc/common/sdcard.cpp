@@ -16,6 +16,9 @@
 
 #include "common.h"
 #include "sdcard.h"
+#ifdef CONFIG_DIFFTEST_PERFCNT
+#include "perf.h"
+#endif // CONFIG_DIFFTEST_PERFCNT
 
 FILE *fp = NULL;
 
@@ -28,6 +31,10 @@ void check_sdcard() {
 }
 
 void sd_setaddr(uint32_t addr) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_sd_set_addr] ++;
+  difftest_bytes[perf_sd_set_addr] += 4;
+#endif // CONFIG_DIFFTEST_PERFCNT
   check_sdcard();
 #ifdef SDCARD_IMAGE
   fseek(fp, addr, SEEK_SET);
@@ -37,6 +44,10 @@ void sd_setaddr(uint32_t addr) {
 }
 
 void sd_read(uint32_t *data) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_sd_read] ++;
+  difftest_bytes[perf_sd_read] += 4;
+#endif // CONFIG_DIFFTEST_PERFCNT
   check_sdcard();
 #ifdef SDCARD_IMAGE
   fread(data, 4, 1, fp);

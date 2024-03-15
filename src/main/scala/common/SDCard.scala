@@ -30,7 +30,8 @@ class SDCardHelper extends ExtModule with HasExtModuleInline {
   val clock = IO(Input(Clock()))
   val io = IO(new DifftestSDCardRead)
 
-  setInline("SDCardHelper.v",
+  setInline(
+    "SDCardHelper.v",
     s"""
        |`ifndef SYNTHESIS
        |import "DPI-C" function void sd_setaddr(input int addr);
@@ -55,7 +56,8 @@ class SDCardHelper extends ExtModule with HasExtModuleInline {
        |`endif // SYNTHESIS
        |
        |endmodule
-     """.stripMargin)
+     """.stripMargin,
+  )
 }
 
 class DifftestSDCard extends Module {

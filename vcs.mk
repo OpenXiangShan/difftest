@@ -50,7 +50,7 @@ endif
 endif
 
 ifeq ($(VCS),verilator)
-VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH
+VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH --max-num-width 150000
 VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5
 VCS_FLAGS += -Mdir $(VCS_BUILD_DIR)  --compiler gcc
 VCS_CXXFLAGS += -std=c++20
@@ -75,7 +75,9 @@ VCS_FLAGS += +define+UNIT_DELAY +define+no_warning
 # C++ flags
 VCS_FLAGS += -CFLAGS "$(VCS_CXXFLAGS)" -LDFLAGS "$(VCS_LDFLAGS)"
 # search build for other missing verilog files
-VCS_FLAGS += -y $(RTL_DIR) -y $(GEN_VSRC_DIR) +libext+.v
+VCS_FLAGS += -y $(RTL_DIR) +libext+.v +libext+.sv
+# search generated-src for verilog included files
+VCS_FLAGS += +incdir+$(GEN_VSRC_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 

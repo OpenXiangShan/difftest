@@ -23,6 +23,7 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function void simv_init();
+import "DPI-C" function void set_max_instrs(longint mc);
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
 import "DPI-C" function int simv_nstep(int step);
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
@@ -55,6 +56,7 @@ string bin_file;
 string flash_bin_file;
 string wave_type;
 string diff_ref_so;
+reg [63:0] max_instrs;
 reg [63:0] max_cycles;
 
 initial begin
@@ -125,6 +127,11 @@ initial begin
     $value$plusargs("max-cycles=%d", max_cycles);
     $display("set max cycles: %d", max_cycles);
   end
+  // set exit instrs const
+  if ($test$plusargs("max-instrs")) begin
+    $value$plusargs("max-instrs=%d", max_instrs);
+    set_max_instrs(max_instrs);
+  end
 end
 
 // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
@@ -175,22 +182,12 @@ always @(posedge clock) begin
 end
 
 `ifndef TB_NO_DPIC
-reg [`CONFIG_DIFFTEST_STEPWIDTH - 1:0] difftest_step_delay;
-always @(posedge clock) begin
-  if (reset) begin
-    difftest_step_delay <= 0;
-  end
-  else begin
-    difftest_step_delay <= difftest_step;
-  end
-end
-
 `ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 wire simv_result;
 DeferredControl deferred(
   .clock(clock),
   .reset(reset),
-  .step(difftest_step_delay),
+  .step(difftest_step),
   .simv_result(simv_result)
 );
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
@@ -221,9 +218,9 @@ always @(posedge clock) begin
       $finish();
     end
 `else
-    else if (|difftest_step_delay) begin
+    else if (|difftest_step) begin
       // check errors
-      if (simv_nstep(difftest_step_delay)) begin
+      if (simv_nstep(difftest_step)) begin
         $display("DIFFTEST FAILED at cycle %d", n_cycles);
         $finish();
       end
