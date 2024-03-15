@@ -294,12 +294,14 @@ int Difftest::step() {
     dut->event.valid = 0;
     dut->commit[0].valid = 0;
   } else {
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH && dut->commit[i].valid; i++) {
-      if (do_instr_commit(i)) {
-        return 1;
+    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+      if (dut->commit[i].valid) {
+        if (do_instr_commit(i)) {
+          return 1;
+        }
+        dut->commit[i].valid = 0;
+        num_commit += 1 + dut->commit[i].nFused;
       }
-      dut->commit[i].valid = 0;
-      num_commit += 1 + dut->commit[i].nFused;
     }
   }
 
