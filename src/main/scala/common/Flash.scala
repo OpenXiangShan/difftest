@@ -21,8 +21,14 @@ import chisel3.util._
 
 class DifftestFlashRead extends Bundle {
   val en = Input(Bool())
-  val addr = Input(UInt(31.W))
+  val addr = Input(UInt(32.W))
   val data = Output(UInt(64.W))
+
+  def read(enable: Bool, address: UInt): UInt = {
+    en := enable
+    addr := address
+    data
+  }
 }
 
 class FlashHelper extends ExtModule with HasExtModuleInline {
