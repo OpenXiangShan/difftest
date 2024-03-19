@@ -20,6 +20,7 @@ import chisel3.experimental.ExtModule
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
+import difftest.common.DifftestPerf
 
 object Squash {
   def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[DifftestBundle] = {
@@ -55,9 +56,33 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   control.clock := clock
   control.reset := reset
 
+  // Record Tick Cause for each SquashGroup
+  val GroupName = in.flatMap(_.squashGroup).distinct
+  val GroupTick = GroupName.map { g =>
+    in.zipWithIndex
+      .filter(_._1.squashGroup.contains(g))
+      .groupBy(_._1.desiredCppName)
+      .map { case (name, vec) =>
+        // Mark one of bundles with same name should tick
+        val tick = vec.map(_._2).map { idx => !supportsSquashBaseVec(idx) || !supportsSquashVec(idx) }.reduce(_ || _)
+        if (config.hasBuiltInPerf) {
+          DifftestPerf(s"SquashTick_${g}_$name", tick.asUInt)
+        }
+        tick
+      }
+      .reduce(_ || _)
+  }
+
   // Submit the pending non-squashable events immediately.
-  val should_tick = !control.enable || !supportsSquash || !supportsSquashBase || tick_first_commit
-  val squashed = Mux(should_tick, state, 0.U.asTypeOf(MixedVec(bundles)))
+  val tickVec = VecInit(in.map { i =>
+    GroupName.zip(GroupTick).collect { case (n, t) if i.squashGroup.contains(n) => t }.foldLeft(false.B)(_ || _) ||
+    !control.enable || tick_first_commit
+  }.toSeq)
+  val should_tick = tickVec.asUInt.orR
+  val squashed = WireInit(0.U.asTypeOf(MixedVec(bundles)))
+  squashed.zip(state).zip(tickVec).foreach { case ((s, st), t) =>
+    s := Mux(t, st, 0.U.asTypeOf(s))
+  }
 
   // Sometimes, the bundle may have squash dependencies.
   val do_squash = WireInit(VecInit.fill(in.length)(true.B))
@@ -74,8 +99,8 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
     }
   }
 
-  for (((i, d), s) <- in.zip(do_squash).zip(state)) {
-    when(should_tick) {
+  for ((((i, d), s), t) <- in.zip(do_squash).zip(state).zip(tickVec)) {
+    when(t) {
       s := i
     }.elsewhen(d) {
       s := i.squash(s)
