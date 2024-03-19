@@ -36,6 +36,7 @@ case class GatewayConfig(
   batchSize: Int = 32,
   hasInternalStep: Boolean = false,
   isNonBlock: Boolean = false,
+  hasBuiltInPerf: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -105,6 +106,7 @@ object Gateway {
       case 'B' => config = config.copy(isBatch = true)
       case 'I' => config = config.copy(hasInternalStep = true)
       case 'N' => config = config.copy(isNonBlock = true)
+      case 'P' => config = config.copy(hasBuiltInPerf = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()

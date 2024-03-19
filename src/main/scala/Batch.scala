@@ -19,6 +19,7 @@ import chisel3._
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
+import difftest.common.DifftestPerf
 
 class BatchIO(dataType: UInt, infoType: UInt) extends Bundle {
   val data = dataType
@@ -131,9 +132,16 @@ class BatchEndpoint(template: Seq[DifftestBundle], bundles: Seq[DifftestBundle],
   val state_info_len = RegInit(0.U(MaxInfoByteWidth.W))
   val state_step_cnt = RegInit(0.U(log2Ceil(config.batchSize + 1).W))
 
-  val exceed = (state_data_len +& step_data_len > MaxDataByteLen.U) |
-    (state_info_len +& step_info_len + (infoWidth / 8).U > MaxInfoByteLen.U)
-  val should_tick = delayed_enable && (exceed || state_step_cnt === config.batchSize.U)
+  val data_exceed = state_data_len +& step_data_len > MaxDataByteLen.U
+  val info_exceed = state_info_len +& step_info_len + (infoWidth / 8).U > MaxInfoByteLen.U
+  val step_exceed = state_step_cnt === config.batchSize.U
+  if (config.hasBuiltInPerf) {
+    DifftestPerf("BatchExceed_data", data_exceed.asUInt)
+    DifftestPerf("BatchExceed_info", info_exceed.asUInt)
+    DifftestPerf("BatchExceed_step", step_exceed.asUInt)
+  }
+
+  val should_tick = delayed_enable && (data_exceed | info_exceed | step_exceed)
   when(delayed_enable) {
     when(should_tick) {
       state_data := step_data

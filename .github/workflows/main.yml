@@ -325,7 +325,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make simv MILL_ARGS="--difftest-config Z" DIFFTEST_PERFCNT=1 VCS=verilator -j2
+            make simv MILL_ARGS="--difftest-config ZP" DIFFTEST_PERFCNT=1 VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
@@ -336,7 +336,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make simv MILL_ARGS="--difftest-config BI" DIFFTEST_PERFCNT=1 VCS=verilator -j2
+            make simv MILL_ARGS="--difftest-config BIP" DIFFTEST_PERFCNT=1 VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
@@ -347,7 +347,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make simv MILL_ARGS="--difftest-config ZESRB" DIFFTEST_PERFCNT=1 VCS=verilator -j2
+            make simv MILL_ARGS="--difftest-config ZESRBP" DIFFTEST_PERFCNT=1 VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
@@ -358,7 +358,7 @@ jobs:
             cd $GITHUB_WORKSPACE/../xs-env/NutShell
             source ./env.sh
             make clean
-            make simv MILL_ARGS="--difftest-config ESRBIN" DIFFTEST_PERFCNT=1 VCS=verilator -j2
+            make simv MILL_ARGS="--difftest-config ESRBINP" DIFFTEST_PERFCNT=1 VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
