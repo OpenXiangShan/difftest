@@ -116,7 +116,11 @@ initial begin
 end
 always #1 clock <= ~clock;
 
-SimTop sim(
+`ifndef SIM_TOP_MODULE_NAME
+`define SIM_TOP_MODULE_NAME SimTop
+`endif
+
+`SIM_TOP_MODULE_NAME sim(
   .clock(clock),
   .reset(reset),
   .difftest_logCtrl_begin(difftest_logCtrl_begin),

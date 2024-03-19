@@ -15,7 +15,7 @@
 #***************************************************************************************
 
 EMU          = $(BUILD_DIR)/emu
-EMU_TOP      = SimTop
+EMU_TOP      = $(SIM_TOP)
 
 EMU_CSRC_DIR   = $(abspath ./src/test/csrc/verilator)
 EMU_CONFIG_DIR = $(abspath ./config)
@@ -89,27 +89,30 @@ ifeq ($(EMU_COVERAGE),1)
 VEXTRA_FLAGS += --coverage-line --coverage-toggle
 endif
 
-VERILATOR_FLAGS =                   \
-  --exe                             \
-  --cc -O3 --top-module $(EMU_TOP)  \
-  +define+VERILATOR=1               \
-  +define+PRINTF_COND=1             \
-  +define+RANDOMIZE_REG_INIT        \
-  +define+RANDOMIZE_MEM_INIT        \
-  +define+RANDOMIZE_GARBAGE_ASSIGN  \
-  +define+RANDOMIZE_DELAY=0         \
-  -Wno-STMTDLY -Wno-WIDTH           \
-  --assert --x-assign unique        \
-  --stats-vars                      \
-  --output-split 30000              \
-  --output-split-cfuncs 30000       \
-  -I$(BUILD_DIR)                    \
-  -CFLAGS "$(EMU_CXXFLAGS)"         \
-  -LDFLAGS "$(EMU_LDFLAGS)"         \
-  -o $(abspath $(EMU))              \
+VERILATOR_FLAGS =                        \
+  --exe                                  \
+  --cc -O3 --top-module $(EMU_TOP)       \
+  --prefix VSimTop                       \
+  +define+VERILATOR=1                    \
+  +define+PRINTF_COND=1                  \
+  +define+RANDOMIZE_REG_INIT             \
+  +define+RANDOMIZE_MEM_INIT             \
+  +define+RANDOMIZE_GARBAGE_ASSIGN       \
+  +define+RANDOMIZE_DELAY=0              \
+  +define+SIM_TOP_MODULE_NAME=$(SIM_TOP) \
+  +define+SimJTAG=$(MODULE_PREFIX)SimJTAG\
+  -Wno-STMTDLY -Wno-WIDTH                \
+  --assert --x-assign unique             \
+  --stats-vars                           \
+  --output-split 30000                   \
+  --output-split-cfuncs 30000            \
+  -I$(BUILD_DIR)                         \
+  -CFLAGS "$(EMU_CXXFLAGS)"              \
+  -LDFLAGS "$(EMU_LDFLAGS)"              \
+  -o $(abspath $(EMU))                   \
   $(VEXTRA_FLAGS)
 
-EMU_MK    := $(BUILD_DIR)/emu-compile/V$(EMU_TOP).mk
+EMU_MK    := $(BUILD_DIR)/emu-compile/VSimTop.mk
 EMU_DEPS  := $(SIM_VSRC) $(EMU_CXXFILES)
 EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
                $(shell find $(SIM_CSRC_DIR) -name "*.h")     \
