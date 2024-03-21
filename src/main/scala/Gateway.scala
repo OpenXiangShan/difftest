@@ -29,6 +29,7 @@ case class GatewayConfig(
   style: String = "dpic",
   hasGlobalEnable: Boolean = false,
   isSquash: Boolean = false,
+  squashQueue: Boolean = false,
   squashReplay: Boolean = false,
   replaySize: Int = 256,
   hasDutZone: Boolean = false,
@@ -70,7 +71,7 @@ case class GatewayConfig(
     macros.toSeq
   }
   def check(): Unit = {
-    if (squashReplay) require(isSquash)
+    if (squashQueue || squashReplay) require(isSquash)
     if (hasInternalStep) require(isBatch)
   }
 }
@@ -101,6 +102,7 @@ object Gateway {
     cfg.foreach {
       case 'E' => config = config.copy(hasGlobalEnable = true)
       case 'S' => config = config.copy(isSquash = true)
+      case 'Q' => config = config.copy(squashQueue = true)
       case 'R' => config = config.copy(squashReplay = true)
       case 'Z' => config = config.copy(hasDutZone = true)
       case 'B' => config = config.copy(isBatch = true)
@@ -150,7 +152,6 @@ object Gateway {
 }
 
 class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val instances = if (config.needTraceInfo) Seq(new DiffTraceInfo(config)) else Seq()
   val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
   val in_pack = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
   for ((data, id) <- in_pack.zipWithIndex) {
@@ -163,6 +164,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   } else {
     WireInit(in)
   }
+  val instances = chiselTypeOf(preprocessed).drop(in.length)
 
   val squashed = if (config.isSquash) {
     WireInit(Squash(preprocessed, config))
@@ -253,23 +255,28 @@ object Preprocess {
 
 class Preprocess(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(signals)))
-  val out = if (config.needTraceInfo) {
-    val traceInfo = new DiffTraceInfo(config)
-    val signalsWithInfo = signals ++ Seq(traceInfo)
-    IO(Output(MixedVec(signalsWithInfo)))
-  } else {
-    IO(Output(MixedVec(signals)))
+  val newSignals = {
+    val appendInfo = if (config.needTraceInfo) signals ++ Seq(new DiffTraceInfo(config)) else signals
+    val appendQueue = if (config.squashQueue) {
+      appendInfo ++ signals.filter(_.squashQueueSize != 0).distinctBy(_.desiredModuleName).flatMap{ bundle =>
+        val appendNum = bundle.squashQueueSize - signals.count(_.desiredModuleName == bundle.desiredModuleName)
+        Seq.fill(appendNum)(bundle)
+      }
+    } else appendInfo
+    appendQueue
+  }
+  val out = IO(Output(MixedVec(newSignals)))
+  out := 0.U.asTypeOf(out)
+  for ((data, idx) <- in.zipWithIndex) {
+    out(idx) := data
   }
 
   if (config.needTraceInfo) {
-    for ((data, id) <- in.zipWithIndex) {
-      out(id) := data
+    // Only works for single core now
+    val coreid = in.filter(_.isUniqueIdentifier).head.coreid
+    out.filter(_.desiredCppName == "trace_info").foreach { gen =>
+      gen.asInstanceOf[DiffTraceInfo].coreid := coreid
     }
-    val traceinfo = out.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
-    traceinfo.coreid := out.filter(_.isUniqueIdentifier).head.coreid
-    traceinfo.squash_idx.get := 0.U // default value, set in Squash
-  } else {
-    out := in
   }
 
   if (config.hasDutZone || config.isSquash || config.isBatch) {

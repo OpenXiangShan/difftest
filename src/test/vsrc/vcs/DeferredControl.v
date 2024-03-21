@@ -19,7 +19,7 @@ end
 
 export "DPI-C" function set_deferred_result;
 function void set_deferred_result(byte result);
-  simv_result = result;
+  simv_result <= result;
 endfunction
 
 `ifdef PALLADIUM

@@ -110,6 +110,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   // Some bundle will have several GroupName, such as LoadEvent
   // Optional GroupName: REF / GOLDENMEM
   val squashGroup: Seq[String] = Seq("REF")
+  // returns Int indicating the size of REF processing Queue, relying on REF config
+  val squashQueueSize: Int = 0
   // returns a squashed, right-value Bundle. Default: overriding `base` with `this`
   def squash(base: DifftestBundle): DifftestBundle = this
 }
