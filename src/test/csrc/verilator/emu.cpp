@@ -382,10 +382,7 @@ Emulator::Emulator(int argc, const char *argv[])
   }
 
   if (args.gcpt_restore) {
-    char gcpt_restore[256];
-    uint64_t overwrite_nbytes = args.overwrite_nbytes;
-    strcpy(gcpt_restore, args.gcpt_restore);
-    overwrite_ram(gcpt_restore, overwrite_nbytes);
+    overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }
 
 #ifdef ENABLE_CHISEL_DB
