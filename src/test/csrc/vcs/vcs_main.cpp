@@ -177,6 +177,11 @@ void difftest_deferred_result(uint8_t result) {
   svSetScope(deferredResultScope);
   set_deferred_result(result);
 }
+
+extern "C" void clean_deferred_result() {
+  set_deferred_result(SIMV_RUN);
+}
+
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
 #ifdef WITH_DRAMSIM3
