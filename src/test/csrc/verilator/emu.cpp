@@ -382,10 +382,7 @@ Emulator::Emulator(int argc, const char *argv[])
   }
 
   if (args.gcpt_restore) {
-    InputReader *reader = new FileReader(args.gcpt_restore);
-    int overwrite_size = reader->read_all(simMemory->as_ptr(), args.overwrite_nbytes);
-    Info("Overwrite %d bytes from file %s.\n", overwrite_size, args.gcpt_restore);
-    delete reader;
+    overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }
 
 #ifdef ENABLE_CHISEL_DB
