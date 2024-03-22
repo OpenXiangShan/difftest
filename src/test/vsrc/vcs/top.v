@@ -20,6 +20,7 @@ module tb_top();
 `ifndef TB_NO_DPIC
 import "DPI-C" function void set_bin_file(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
+import "DPI-C" function void set_gcpt_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function byte simv_init();
@@ -63,6 +64,7 @@ wire [`CONFIG_DIFFTEST_STEPWIDTH - 1:0] difftest_step;
 
 string bin_file;
 string flash_bin_file;
+string gcpt_bin_file;
 string wave_type;
 string diff_ref_so;
 string workload_list;
@@ -125,6 +127,11 @@ initial begin
   if ($test$plusargs("flash")) begin
     $value$plusargs("flash=%s", flash_bin_file);
     set_flash_bin(flash_bin_file);
+  end
+  // overwrite gcpt on ram: bin file
+  if ($test$plusargs("gcpt-restore")) begin
+    $value$plusargs("gcpt-restore=%s", gcpt_bin_file);
+    set_gcpt_bin(gcpt_bin_file);
   end
   // diff-test golden model: nemu-so
   if ($test$plusargs("diff")) begin

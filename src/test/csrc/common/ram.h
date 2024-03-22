@@ -214,6 +214,7 @@ public:
 extern SimMemory *simMemory;
 // This is to initialize the common mmap RAM
 void init_ram(const char *image, uint64_t n_bytes);
+void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes);
 
 #ifdef WITH_DRAMSIM3
 

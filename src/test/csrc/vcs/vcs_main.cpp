@@ -32,9 +32,11 @@
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
 static char *flash_bin_file = NULL;
+static char *gcpt_restore_bin = NULL;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
+static uint64_t overwrite_nbytes = 0xe00;
 
 enum {
   SIMV_RUN,
@@ -51,6 +53,11 @@ extern "C" void set_flash_bin(char *s) {
   printf("flash image:%s\n", s);
   flash_bin_file = (char *)malloc(256);
   strcpy(flash_bin_file, s);
+}
+
+extern "C" void set_gcpt_bin(char *s) {
+  gcpt_restore_bin = (char *)malloc(256);
+  strcpy(gcpt_restore_bin, s);
 }
 
 extern "C" void set_max_instrs(uint64_t mc) {
@@ -116,6 +123,9 @@ extern "C" uint8_t simv_init() {
   if (enable_difftest) {
     init_goldenmem();
     init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
+  }
+  if (gcpt_restore_bin != NULL) {
+    overwrite_ram(gcpt_restore_bin, overwrite_nbytes);
   }
   return 0;
 }
