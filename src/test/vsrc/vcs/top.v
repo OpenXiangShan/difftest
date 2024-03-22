@@ -129,8 +129,8 @@ initial begin
     set_flash_bin(flash_bin_file);
   end
   // overwrite gcpt on ram: bin file
-  if ($test$plusargs("gcpt")) begin
-    $value$plusargs("gcpt=%s", gcpt_bin_file);
+  if ($test$plusargs("gcpt-restore")) begin
+    $value$plusargs("gcpt-restore=%s", gcpt_bin_file);
     set_gcpt_bin(gcpt_bin_file);
   end
   // diff-test golden model: nemu-so
