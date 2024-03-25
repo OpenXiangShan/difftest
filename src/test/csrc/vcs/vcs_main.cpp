@@ -116,10 +116,11 @@ extern "C" uint8_t simv_init() {
   common_init("simv");
 
   init_ram(bin_file, DEFAULT_EMU_RAM_SIZE);
-  init_flash(flash_bin_file);
   if (gcpt_restore_bin != NULL) {
     overwrite_ram(gcpt_restore_bin, overwrite_nbytes);
   }
+  init_flash(flash_bin_file);
+
   difftest_init();
   init_device();
   if (enable_difftest) {
