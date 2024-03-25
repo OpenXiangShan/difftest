@@ -117,15 +117,14 @@ extern "C" uint8_t simv_init() {
 
   init_ram(bin_file, DEFAULT_EMU_RAM_SIZE);
   init_flash(flash_bin_file);
-
+  if (gcpt_restore_bin != NULL) {
+    overwrite_ram(gcpt_restore_bin, overwrite_nbytes);
+  }
   difftest_init();
   init_device();
   if (enable_difftest) {
     init_goldenmem();
     init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
-  }
-  if (gcpt_restore_bin != NULL) {
-    overwrite_ram(gcpt_restore_bin, overwrite_nbytes);
   }
   return 0;
 }
