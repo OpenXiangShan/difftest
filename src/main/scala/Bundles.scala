@@ -226,7 +226,8 @@ class StoreEvent extends DifftestBaseBundle with HasValid {
 class LoadEvent extends DifftestBaseBundle with HasValid {
   val paddr = UInt(64.W)
   val opType = UInt(8.W)
-  val fuType = UInt(8.W)
+  val isAtomic = Bool()
+  val isLoad = Bool() // Todo: support vector load
 }
 
 class AtomicEvent extends DifftestBaseBundle with HasValid {
