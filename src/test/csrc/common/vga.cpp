@@ -63,7 +63,7 @@ void init_sdl() {
 
 void finish_sdl() {
   for (size_t i = 0; i < SCREEN_H; i++) {
-    memset((void *)vmem, 0, SCREEN_W);
+    memset((void *)&vmem, 0, SCREEN_W);
   }
 }
 #else

@@ -64,6 +64,8 @@ void init_sd(void) {
 }
 
 void finish_sd(void) {
+#ifdef SDCARD_IMAGE
   fclose(fp);
+#endif
 }
 }

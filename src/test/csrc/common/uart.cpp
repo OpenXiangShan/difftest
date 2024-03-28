@@ -108,9 +108,7 @@ void init_uart(void) {
 }
 
 void finish_uart(void) {
-  for (size_t i = 0; i < QUEUE_SIZE; i++) {
-    memset((void *)queue[i], 0, sizeof(char));
-  }
+  memset((void *)&queue, 0, QUEUE_SIZE * sizeof(char));
   f = 0;
   r = 0;
 }
