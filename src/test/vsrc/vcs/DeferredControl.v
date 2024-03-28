@@ -9,9 +9,8 @@ module DeferredControl(
 `endif // CONFIG_DIFFTEST_INTERNAL_STEP
   output reg [7:0] simv_result
 );
-
 import "DPI-C" context function void set_deferred_result_scope();
-
+import "DPI-C" context function void clean_deferred_result();
 initial begin
   set_deferred_result_scope();
   simv_result = 8'b0;
@@ -19,7 +18,7 @@ end
 
 export "DPI-C" function set_deferred_result;
 function void set_deferred_result(byte result);
-  simv_result = result;
+  simv_result <= result;
 endfunction
 
 `ifdef PALLADIUM
@@ -37,9 +36,9 @@ initial $ixc_ctrl("gfifo", "simv_nstep");
 
 always @(posedge clock) begin
   if (reset) begin
-    simv_result <= 8'b0;
+    clean_deferred_result();
   end
-  else if (step != 0) begin
+  else if (step != 0 && simv_result == 8'b0) begin
     simv_nstep(step);
   end
 end
