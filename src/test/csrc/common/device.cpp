@@ -23,7 +23,9 @@ void send_key(uint8_t, bool);
 void init_sdl(void);
 
 void init_uart(void);
+void finish_uart(void);
 extern "C" void init_sd(void);
+extern "C" void finish_sd(void);
 extern "C" void init_flash(void);
 
 void init_device(void) {
@@ -32,6 +34,14 @@ void init_device(void) {
 #endif
   init_uart();
   init_sd();
+}
+
+void finish_device(void) {
+#ifdef SHOW_SCREEN
+  finish_sdl();
+#endif
+  finish_uart();
+  finish_sd();
 }
 
 void poll_event() {
