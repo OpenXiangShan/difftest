@@ -18,7 +18,7 @@ package difftest
 
 import chisel3._
 import difftest.common.DifftestWiring
-import difftest.gateway.{Gateway, GatewayConfig}
+import difftest.gateway.Gateway
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
@@ -250,8 +250,20 @@ class DiffRunaheadRedirectEvent extends RunaheadRedirectEvent with DifftestBundl
   override val desiredCppName: String = "runahead_redirect"
 }
 
-class DiffTraceInfo(config: GatewayConfig) extends TraceInfo(config) with DifftestBundle {
+class DiffTraceInfo extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
+
+  override def supportsSquashBase: Bool = true.B
+
+  override def squash(base: DifftestBundle): DifftestBundle = {
+    val that = base.asInstanceOf[DiffTraceInfo]
+    val squashed = WireInit(Mux(valid, this, that))
+    squashed.valid := valid || that.valid
+    when(valid && that.valid) {
+      squashed.trace_head := that.trace_head
+    }
+    squashed
+  }
 }
 
 trait DifftestModule[T <: DifftestBundle] {
@@ -285,7 +297,6 @@ object DifftestModule {
   ): T = {
     val difftest: T = Wire(gen)
     if (enabled) {
-      register(gen)
       val sink = Gateway(gen)
       sink := Delayer(difftest, delay)
       sink.coreid := difftest.coreid
@@ -294,12 +305,6 @@ object DifftestModule {
       difftest := DontCare
     }
     difftest
-  }
-
-  def register[T <: DifftestBundle](gen: T): Int = {
-    val id = instances.length
-    instances += gen
-    id
   }
 
   def finish(cpu: String): DifftestTopIO = {

@@ -22,6 +22,7 @@ import difftest.common.DifftestWiring
 import difftest.dpic.DPIC
 import difftest.squash.Squash
 import difftest.batch.{Batch, BatchIO}
+import difftest.replay.Replay
 
 import scala.collection.mutable.ListBuffer
 
@@ -29,7 +30,7 @@ case class GatewayConfig(
   style: String = "dpic",
   hasGlobalEnable: Boolean = false,
   isSquash: Boolean = false,
-  squashReplay: Boolean = false,
+  hasReplay: Boolean = false,
   replaySize: Int = 256,
   hasDutZone: Boolean = false,
   isBatch: Boolean = false,
@@ -45,7 +46,7 @@ case class GatewayConfig(
   def stepWidth: Int = log2Ceil(maxStep + 1)
   def batchArgByteLen: (Int, Int) = if (isNonBlock) (3904, 90) else (7800, 190)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
-  def needTraceInfo: Boolean = squashReplay
+  def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean = hasGlobalEnable || hasDutZone || isBatch || isSquash
   def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo
   // Macros Generation for Cpp and Verilog
@@ -56,7 +57,7 @@ case class GatewayConfig(
     macros += s"CONFIG_DIFFTEST_BUFLEN $dutBufLen"
     if (isBatch) macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${batchSize}")
     if (isSquash) macros += "CONFIG_DIFFTEST_SQUASH"
-    if (squashReplay) macros += "CONFIG_DIFFTEST_SQUASH_REPLAY"
+    if (hasReplay) macros += "CONFIG_DIFFTEST_REPLAY"
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     macros.toSeq
@@ -70,7 +71,7 @@ case class GatewayConfig(
     macros.toSeq
   }
   def check(): Unit = {
-    if (squashReplay) require(isSquash)
+    if (hasReplay) require(isSquash)
     if (hasInternalStep) require(isBatch)
   }
 }
@@ -101,7 +102,7 @@ object Gateway {
     cfg.foreach {
       case 'E' => config = config.copy(hasGlobalEnable = true)
       case 'S' => config = config.copy(isSquash = true)
-      case 'R' => config = config.copy(squashReplay = true)
+      case 'R' => config = config.copy(hasReplay = true)
       case 'Z' => config = config.copy(hasDutZone = true)
       case 'B' => config = config.copy(isBatch = true)
       case 'I' => config = config.copy(hasInternalStep = true)
@@ -113,22 +114,17 @@ object Gateway {
   }
 
   def apply[T <: DifftestBundle](gen: T): T = {
+    val bundle = WireInit(0.U.asTypeOf(gen))
     if (config.needEndpoint) {
-      register(WireInit(0.U.asTypeOf(gen)))
+      val packed = WireInit(bundle.asUInt)
+      DifftestWiring.addSource(packed, s"gateway_${instances.length}")
     } else {
-      val signal = WireInit(0.U.asTypeOf(gen))
-      val control = Wire(new GatewaySinkControl(config))
+      val control = WireInit(0.U.asTypeOf(new GatewaySinkControl(config)))
       control.enable := true.B
-      GatewaySink(control, signal, config)
-      signal
+      GatewaySink(control, bundle, config)
     }
-  }
-
-  def register[T <: DifftestBundle](gen: T): T = {
-    val gen_pack = WireInit(gen.asUInt)
-    DifftestWiring.addSource(gen_pack, s"gateway_${instances.length}")
     instances += gen
-    gen
+    bundle
   }
 
   def collect(): GatewayResult = {
@@ -140,7 +136,7 @@ object Gateway {
         step = endpoint.step,
       )
     } else {
-      GatewaySink.collect(config)
+      GatewayResult(instances = instances.toSeq) + GatewaySink.collect(config)
     }
     sink + GatewayResult(
       cppMacros = config.cppMacros,
@@ -150,7 +146,6 @@ object Gateway {
 }
 
 class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val instances = if (config.needTraceInfo) Seq(new DiffTraceInfo(config)) else Seq()
   val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
   val in_pack = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
   for ((data, id) <- in_pack.zipWithIndex) {
@@ -164,11 +159,18 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
     WireInit(in)
   }
 
-  val squashed = if (config.isSquash) {
-    WireInit(Squash(preprocessed, config))
+  val replayed = if (config.hasReplay) {
+    WireInit(Replay(preprocessed, config))
   } else {
     WireInit(preprocessed)
   }
+
+  val squashed = if (config.isSquash) {
+    WireInit(Squash(replayed, config))
+  } else {
+    WireInit(replayed)
+  }
+  val instances = chiselTypeOf(squashed).toSeq
 
   val zoneControl = Option.when(config.hasDutZone)(Module(new ZoneControl(config)))
   val step = Option.when(!config.hasInternalStep)(IO(Output(UInt(config.stepWidth.W))))
@@ -245,32 +247,17 @@ class GatewaySinkControl(config: GatewayConfig) extends Bundle {
 
 object Preprocess {
   def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[DifftestBundle] = {
-    val module = Module(new Preprocess(bundles.toSeq.map(_.cloneType), config))
+    val module = Module(new Preprocess(chiselTypeOf(bundles).toSeq, config))
     module.in := bundles
     module.out
   }
 }
 
-class Preprocess(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(signals)))
-  val out = if (config.needTraceInfo) {
-    val traceInfo = new DiffTraceInfo(config)
-    val signalsWithInfo = signals ++ Seq(traceInfo)
-    IO(Output(MixedVec(signalsWithInfo)))
-  } else {
-    IO(Output(MixedVec(signals)))
-  }
+class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
+  val in = IO(Input(MixedVec(bundles)))
+  val out = IO(Output(MixedVec(bundles)))
 
-  if (config.needTraceInfo) {
-    for ((data, id) <- in.zipWithIndex) {
-      out(id) := data
-    }
-    val traceinfo = out.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
-    traceinfo.coreid := out.filter(_.isUniqueIdentifier).head.coreid
-    traceinfo.squash_idx.get := 0.U // default value, set in Squash
-  } else {
-    out := in
-  }
+  out := in
 
   if (config.hasDutZone || config.isSquash || config.isBatch) {
     // Special fix for int writeback. Work for single-core only

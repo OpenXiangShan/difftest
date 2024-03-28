@@ -340,7 +340,7 @@ jobs:
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
-      - name: Verilator Build with VCS Top (with DutZone GlobalEnable Squash SquashReplay Batch PerfCnt)
+      - name: Verilator Build with VCS Top (with DutZone GlobalEnable Squash Replay Batch PerfCnt)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
@@ -351,7 +351,7 @@ jobs:
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
-      - name: Verilator Build with VCS Top (with GlobalEnable Squash SquashReplay Batch InternalStep NonBlock PerfCnt)
+      - name: Verilator Build with VCS Top (with GlobalEnable Squash Replay Batch InternalStep NonBlock PerfCnt)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
             source ./env.sh
