@@ -138,25 +138,30 @@ void difftest_squash_enable(int enable) {
   svSetScope(squashScope);
   set_squash_enable(enable);
 }
-
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
-extern "C" void set_squash_replay(int idx);
-void difftest_squash_replay(int idx) {
-  if (squashScope == NULL) {
-    printf("Error: Could not retrieve squash scope, set first\n");
-    assert(squashScope);
-  }
-  svSetScope(squashScope);
-  set_squash_replay(idx);
-}
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 #endif // CONFIG_DIFFTEST_SQUASH
+
+#ifdef CONFIG_DIFFTEST_REPLAY
+svScope replayScope;
+void set_replay_scope() {
+  replayScope = svGetScope();
+}
+
+extern "C" void set_replay_head(int head);
+void difftest_replay_head(int head) {
+  if (replayScope == NULL) {
+    printf("Error: Could not retrieve replay scope, set first\n");
+    assert(replayScope);
+  }
+  svSetScope(replayScope);
+  set_replay_head(head);
+}
+#endif // CONFIG_DIFFTEST_REPLAY
 
 Difftest::Difftest(int coreid) : id(coreid) {
   state = new DiffState();
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+#ifdef CONFIG_DIFFTEST_REPLAY
   state_ss = (DiffState *)malloc(sizeof(DiffState));
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
+#endif // CONFIG_DIFFTEST_REPLAY
 }
 
 Difftest::~Difftest() {
@@ -165,32 +170,42 @@ Difftest::~Difftest() {
   if (proxy) {
     delete proxy;
   }
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+#ifdef CONFIG_DIFFTEST_REPLAY
   free(state_ss);
   if (proxy_reg_ss) {
     free(proxy_reg_ss);
   }
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
+#endif // CONFIG_DIFFTEST_REPLAY
 }
 
 void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   proxy = new REF_PROXY(coreid, ram_size);
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
+#ifdef CONFIG_DIFFTEST_REPLAY
   proxy_reg_size = proxy->get_reg_size();
   proxy_reg_ss = (uint8_t *)malloc(proxy_reg_size);
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
+#endif // CONFIG_DIFFTEST_REPLAY
 }
 
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
-bool Difftest::squash_check() {
-  int nFused_all = 0;
-  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH && dut->commit[i].valid; i++) {
-    nFused_all += dut->commit[i].nFused;
+#ifdef CONFIG_DIFFTEST_REPLAY
+bool Difftest::can_replay() {
+  auto info = dut->trace_info;
+  return !info.in_replay && (info.trace_head != info.trace_tail);
+}
+
+bool Difftest::in_replay_range() {
+  if (dut->trace_info.trace_head != dut->trace_info.trace_tail)
+    return false;
+  int pos = dut->trace_info.trace_head;
+  int head = replay_status.trace_head;
+  int tail = replay_status.trace_tail;
+  if (tail < head) { // consider ring queue
+    return (pos <= tail) || (pos >= head);
+  } else {
+    return (pos >= head) && (pos <= tail);
   }
-  return nFused_all != 0;
 }
 
-void Difftest::squash_snapshot() {
+void Difftest::replay_snapshot() {
   memcpy(state_ss, state, sizeof(DiffState));
   memcpy(proxy_reg_ss, &proxy->regs_int, proxy_reg_size);
   proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
@@ -200,36 +215,35 @@ void Difftest::squash_snapshot() {
   goldenmem_set_store_log(true);
 }
 
-void Difftest::squash_replay() {
-  inReplay = true;
-  replay_idx = squash_idx;
+void Difftest::do_replay() {
+  replay_status.in_replay = true;
+  replay_status.trace_head = dut->trace_info.trace_head;
+  replay_status.trace_tail = dut->trace_info.trace_tail;
   memcpy(state, state_ss, sizeof(DiffState));
   memcpy(&proxy->regs_int, proxy_reg_ss, proxy_reg_size);
   proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
   proxy->ref_store_log_restore();
   goldenmem_store_log_restore();
-  difftest_squash_replay(replay_idx);
+  difftest_replay_head(dut->trace_info.trace_head);
 }
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
+#endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
   progress = false;
   ticks++;
 
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
-  squash_idx = dut->trace_info.squash_idx;
-  if (inReplay && squash_idx != replay_idx) {
+#ifdef CONFIG_DIFFTEST_REPLAY
+  if (replay_status.in_replay && !in_replay_range()) {
     return 0;
   }
-  isSquash = squash_check();
-  if (isSquash) {
-    squash_snapshot();
+  if (can_replay()) {
+    replay_snapshot();
   } else {
     proxy->set_store_log(false);
     goldenmem_set_store_log(false);
   }
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
+#endif // CONFIG_DIFFTEST_REPLAY
 
   if (check_timeout()) {
     return 1;
@@ -335,12 +349,12 @@ int Difftest::step() {
       return 0;
     }
 #endif
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
-    if (isSquash) {
-      squash_replay();
+#ifdef CONFIG_DIFFTEST_REPLAY
+    if (can_replay()) {
+      do_replay();
       return 0;
     }
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
+#endif // CONFIG_DIFFTEST_REPLAY
     display();
     proxy->display(dut);
 #ifdef FUZZER_LIB

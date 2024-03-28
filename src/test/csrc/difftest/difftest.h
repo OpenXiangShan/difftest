@@ -373,20 +373,22 @@ protected:
 
   void raise_trap(int trapCode);
 
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
-  bool isSquash;
-  int squash_idx;
-  bool inReplay = false;
-  int replay_idx;
+#ifdef CONFIG_DIFFTEST_REPLAY
+  struct {
+    bool in_replay = false;
+    int trace_head;
+    int trace_tail;
+  } replay_status;
 
   DiffState *state_ss = NULL;
   int proxy_reg_size = 0;
   uint8_t *proxy_reg_ss = NULL;
   uint64_t squash_csr_buf[4096];
-  bool squash_check();
-  void squash_snapshot();
-  void squash_replay();
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
+  bool can_replay();
+  bool in_replay_range();
+  void replay_snapshot();
+  void do_replay();
+#endif // CONFIG_DIFFTEST_REPLAY
 };
 
 extern Difftest **difftest;
@@ -407,9 +409,10 @@ int init_nemuproxy(size_t);
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_scope();
 extern "C" void difftest_squash_enable(int enable);
-#ifdef CONFIG_DIFFTEST_SQUASH_REPLAY
-extern "C" void difftest_squash_replay(int idx);
-#endif // CONFIG_DIFFTEST_SQUASH_REPLAY
 #endif // CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_REPLAY
+extern "C" void set_replay_scope();
+extern "C" void difftest_replay_head(int idx);
+#endif // CONFIG_DIFFTEST_REPLAY
 
 #endif
