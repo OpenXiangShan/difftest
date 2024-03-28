@@ -202,6 +202,7 @@ void simv_finish() {
     goldenmem_finish();
     difftest_finish();
   }
+  finish_device();
   delete simMemory;
   simMemory = nullptr;
 }

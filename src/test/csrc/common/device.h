@@ -20,6 +20,7 @@
 #include "common.h"
 
 void init_device();
+void finish_device();
 void poll_event();
 
 #endif
