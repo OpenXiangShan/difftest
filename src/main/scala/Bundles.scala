@@ -107,7 +107,7 @@ class TrapEvent extends DifftestBaseBundle {
 }
 
 class CSRState extends DifftestBaseBundle {
-  val priviledgeMode = UInt(64.W)
+  val privilegeMode = UInt(64.W)
   val mstatus = UInt(64.W)
   val sstatus = UInt(64.W)
   val mepc = UInt(64.W)

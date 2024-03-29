@@ -1052,7 +1052,7 @@ void Difftest::display() {
   printf("\n==============  REF Regs  ==============\n");
   fflush(stdout);
   proxy->ref_reg_display();
-  printf("priviledgeMode: %lu\n", dut->csr.priviledgeMode);
+  printf("privilegeMode: %lu\n", dut->csr.privilegeMode);
 }
 
 void CommitTrace::display(bool use_spike) {
