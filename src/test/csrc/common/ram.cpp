@@ -309,6 +309,10 @@ extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
 #endif // CONFIG_DIFFTEST_PERFCNT
   if (!simMemory)
     return 0;
+  if (!simMemory->in_range_u64(rIdx)) {
+    printf("ERROR: ram rIdx = 0x%lx out of bound!\n", rIdx);
+    return 0;
+  }
   rIdx %= simMemory->get_size() / sizeof(uint64_t);
   uint64_t rdata = simMemory->at(rIdx);
   return rdata;
