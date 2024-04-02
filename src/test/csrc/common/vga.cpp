@@ -62,9 +62,7 @@ void init_sdl() {
 }
 
 void finish_sdl() {
-  for (size_t i = 0; i < SCREEN_H; i++) {
-    memset((void *)&vmem, 0, SCREEN_W);
-  }
+  memset(vmem, 0, SCREEN_H * SCREEN_W * sizeof(vmem));
 }
 #else
 extern "C" void put_pixel(uint32_t pixel) {}
