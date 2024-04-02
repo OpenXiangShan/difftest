@@ -36,7 +36,11 @@
 // -----------------------------------------------------------------------
 
 // emulated memory size (Byte)
+#ifdef WITH_DRAMSIM3
+#define DEFAULT_EMU_RAM_SIZE (16 * 1024 * 1024 * 1024UL) // 8 GB
+#else
 #define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
+#endif // WITH_DRAMSIM3
 
 // physical memory base address
 #define PMEM_BASE 0x80000000UL
