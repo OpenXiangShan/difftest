@@ -37,6 +37,7 @@
 #endif
 
 struct EmuArgs {
+  uint32_t reset_cycles = 50;
   uint32_t seed = 0;
   uint64_t max_cycles = -1;
   uint64_t fork_interval = 1000;
