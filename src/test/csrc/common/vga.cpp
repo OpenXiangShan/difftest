@@ -60,6 +60,10 @@ void init_sdl() {
   SDL_SetWindowTitle(window, "NOOP");
   texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, SCREEN_W, SCREEN_H);
 }
+
+void finish_sdl() {
+  memset(vmem, 0, sizeof(vmem));
+}
 #else
 extern "C" void put_pixel(uint32_t pixel) {}
 extern "C" void vmem_sync(void) {}

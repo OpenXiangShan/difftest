@@ -106,3 +106,9 @@ static void preset_input() {
 void init_uart(void) {
   preset_input();
 }
+
+void finish_uart(void) {
+  memset(queue, 0, sizeof(queue));
+  f = 0;
+  r = 0;
+}

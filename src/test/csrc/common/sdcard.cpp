@@ -62,4 +62,10 @@ void init_sd(void) {
   check_sdcard();
 #endif
 }
+
+void finish_sd(void) {
+#ifdef SDCARD_IMAGE
+  fclose(fp);
+#endif
+}
 }
