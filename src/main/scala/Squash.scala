@@ -35,7 +35,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
 
   // Sometimes, the bundle may have squash dependencies.
   // Only when one of the dependencies is valid, this bundle is squashed.
-  val do_squash = WireInit(VecInit.fill(in.length)(true.B))
+  val do_squash = VecInit(in.map(_.bits.needUpdate.getOrElse(true.B)).toSeq)
   in.zip(do_squash).foreach { case (i, do_s) =>
     if (i.squashDependency.nonEmpty) {
       do_s := VecInit(
@@ -45,7 +45,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
             bundle.coreid === i.coreid && bundle.asInstanceOf[DifftestBaseBundle].getValid
           })
           .toSeq
-      ).asUInt.orR
+      ).asUInt.orR && i.bits.needUpdate.getOrElse(true.B)
     }
   }
 
@@ -74,7 +74,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
 
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
     val (s_in, s_do) = in.zip(do_squash).filter(_._1.desiredCppName == u.desiredCppName).unzip
-    val squasher = Module(new Squasher(s_in.map(chiselTypeOf(_)).toSeq, config))
+    val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, config))
     squasher.in.zip(s_in).foreach { case (i, s_i) => i := s_i }
     squasher.do_squash.zip(s_do).foreach { case (d, s_d) => d := s_d }
     wt := squasher.want_tick
@@ -99,14 +99,24 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
 }
 
 // It will help do squash for bundles with same Class, return tick and state
-class Squasher(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-  val do_squash = IO(Input(Vec(bundles.length, Bool())))
-  val out = IO(Output(MixedVec(bundles)))
+class Squasher(bundleType: DifftestBundle, length: Int, config: GatewayConfig) extends Module {
+  val in = IO(Input(Vec(length, bundleType)))
+  val do_squash = IO(Input(Vec(length, Bool())))
   val want_tick = IO(Output(Bool()))
   val should_tick = IO(Input(Bool()))
 
-  val state = RegInit(0.U.asTypeOf(MixedVec(bundles)))
+  val state = RegInit(0.U.asTypeOf(Vec(length, bundleType)))
+  val out = IO(Output(Vec(length, bundleType)))
+
+  // Mark the initial commit events as non-squashable for initial state synchronization.
+  val tick_first_commit = Option.when(bundleType.desiredCppName == "commit") {
+    val hasValidCommitEvent = VecInit(state.map(_.bits.getValid).toSeq).asUInt.orR
+    val isInitialEvent = RegInit(true.B)
+    when(isInitialEvent && hasValidCommitEvent) {
+      isInitialEvent := false.B
+    }
+    isInitialEvent && hasValidCommitEvent
+  }
 
   // If one of the bundles cannot be squashed, the others are not squashed as well.
   val supportsSquashVec = VecInit(in.zip(state).map { case (i, s) => i.supportsSquash(s) }.toSeq)
@@ -116,17 +126,7 @@ class Squasher(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Modu
   val supportsSquashBaseVec = VecInit(state.map(_.supportsSquashBase).toSeq)
   val supportsSquashBase = supportsSquashBaseVec.asUInt.andR
 
-  // Mark the initial commit events as non-squashable for initial state synchronization.
-  val tick_first_commit = if (in.head.desiredCppName == "commit") {
-    val hasValidCommitEvent = VecInit(state.map(_.bits.getValid).toSeq).asUInt.orR
-    val isInitialEvent = RegInit(true.B)
-    when(isInitialEvent && hasValidCommitEvent) {
-      isInitialEvent := false.B
-    }
-    isInitialEvent && hasValidCommitEvent
-  } else WireInit(false.B)
-  want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit
-
+  want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B)
   for (((i, d), s) <- in.zip(do_squash).zip(state)) {
     when(should_tick) {
       s := i
