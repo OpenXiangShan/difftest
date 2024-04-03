@@ -190,15 +190,15 @@ void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
 #ifdef CONFIG_DIFFTEST_REPLAY
 bool Difftest::can_replay() {
   auto info = dut->trace_info;
-  return !info.in_replay && (info.trace_head != info.trace_tail);
+  return !info.in_replay && info.trace_size > 1;
 }
 
 bool Difftest::in_replay_range() {
-  if (dut->trace_info.trace_head != dut->trace_info.trace_tail)
+  if (dut->trace_info.trace_size > 1)
     return false;
   int pos = dut->trace_info.trace_head;
   int head = replay_status.trace_head;
-  int tail = replay_status.trace_tail;
+  int tail = (head + replay_status.trace_size - 1) % CONFIG_DIFFTEST_REPLAY_SIZE;
   if (tail < head) { // consider ring queue
     return (pos <= tail) || (pos >= head);
   } else {
@@ -219,7 +219,7 @@ void Difftest::replay_snapshot() {
 void Difftest::do_replay() {
   replay_status.in_replay = true;
   replay_status.trace_head = dut->trace_info.trace_head;
-  replay_status.trace_tail = dut->trace_info.trace_tail;
+  replay_status.trace_size = dut->trace_info.trace_size;
   memcpy(state, state_ss, sizeof(DiffState));
   memcpy(&proxy->regs_int, proxy_reg_ss, proxy_reg_size);
   proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);

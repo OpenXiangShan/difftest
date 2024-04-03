@@ -31,7 +31,7 @@ object Replay {
 
 class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
-  val info = WireInit(0.U.asTypeOf(new DiffTraceInfo))
+  val info = WireInit(0.U.asTypeOf(new DiffTraceInfo(config)))
   val appendIn = WireInit(0.U.asTypeOf(MixedVec(bundles ++ Seq(chiselTypeOf(info)))))
   in.zipWithIndex.foreach { case (gen, idx) => appendIn(idx) := gen }
   appendIn.last := info
@@ -52,7 +52,7 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   }
   info.valid := needStore
   info.trace_head := ptr
-  info.trace_tail := ptr
+  info.trace_size := 1.U
   when(needStore && !control.replay) {
     buffer(ptr) := appendIn
     ptr := ptr + 1.U

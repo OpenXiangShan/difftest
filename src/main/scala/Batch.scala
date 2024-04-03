@@ -194,19 +194,33 @@ class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: 
   val state_info = RegInit(0.U(param.MaxInfoBitLen.W))
   val state_info_len = RegInit(0.U(param.MaxInfoByteWidth.W))
   val state_step_cnt = RegInit(0.U(config.stepWidth.W))
+  val state_trace_size = Option.when(config.hasReplay)(RegInit(0.U(16.W)))
 
   val delayed_enable = Delayer(global_enable, inCollect.length)
+  val delayed_trace_size = Option.when(config.hasReplay) {
+    val trace_size = in.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo].trace_size
+    Delayer(trace_size, inCollect.length)
+  }
   val data_exceed = delayed_enable && (state_data_len +& step_data_len > param.MaxDataByteLen.U)
   val info_exceed =
     delayed_enable && (state_info_len +& step_info_len + (param.infoWidth / 8).U > param.MaxInfoByteLen.U)
   val step_exceed = delayed_enable && (state_step_cnt === config.batchSize.U)
+  val trace_exceed = Option.when(config.hasReplay) {
+    delayed_enable && (state_trace_size.get +& delayed_trace_size.get +& inCollect.length.U >= config.replaySize.U)
+  }
   if (config.hasBuiltInPerf) {
     DifftestPerf("BatchExceed_data", data_exceed.asUInt)
     DifftestPerf("BatchExceed_info", info_exceed.asUInt)
     DifftestPerf("BatchExceed_step", step_exceed.asUInt)
+    if (config.hasReplay) DifftestPerf("BatchExceed_trace", trace_exceed.get.asUInt)
   }
 
-  val should_tick = data_exceed | info_exceed | step_exceed
+  val delayed_in_replay = Option.when(config.hasReplay) {
+    val in_replay = in.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo].in_replay
+    Delayer(in_replay, inCollect.length)
+  }
+  val should_tick =
+    data_exceed || info_exceed || step_exceed || trace_exceed.getOrElse(false.B) || delayed_in_replay.getOrElse(false.B)
   when(delayed_enable) {
     when(should_tick) {
       state_data := step_data
@@ -214,12 +228,14 @@ class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: 
       state_info := step_info
       state_info_len := step_info_len
       state_step_cnt := 1.U
+      if (config.hasReplay) state_trace_size.get := delayed_trace_size.get
     }.otherwise {
       state_data := state_data | step_data << (state_data_len << 3)
       state_data_len := state_data_len + step_data_len
       state_info := state_info | step_info << (state_info_len << 3)
       state_info_len := state_info_len + step_info_len
       state_step_cnt := state_step_cnt + 1.U
+      if (config.hasReplay) state_trace_size.get := state_trace_size.get + delayed_trace_size.get
     }
   }
 

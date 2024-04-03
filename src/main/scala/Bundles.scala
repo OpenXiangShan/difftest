@@ -296,5 +296,5 @@ class RunaheadRedirectEvent extends DifftestBaseBundle with HasValid {
 class TraceInfo extends DifftestBaseBundle with HasValid {
   val in_replay = Bool()
   val trace_head = UInt(16.W)
-  val trace_tail = UInt(16.W)
+  val trace_size = UInt(16.W)
 }

@@ -18,7 +18,7 @@ package difftest
 
 import chisel3._
 import difftest.common.DifftestWiring
-import difftest.gateway.Gateway
+import difftest.gateway.{Gateway, GatewayConfig}
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
@@ -278,10 +278,14 @@ class DiffRunaheadRedirectEvent extends RunaheadRedirectEvent with DifftestBundl
   override val desiredCppName: String = "runahead_redirect"
 }
 
-class DiffTraceInfo extends TraceInfo with DifftestBundle {
+class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 
   override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
+  override def supportsSquash(base: DifftestBundle): Bool = {
+    val that = base.asInstanceOf[DiffTraceInfo]
+    !valid || !that.valid || (trace_size +& that.trace_size <= config.replaySize.U)
+  }
   override def supportsSquashBase: Bool = true.B
 
   override def squash(base: DifftestBundle): DifftestBundle = {
@@ -290,6 +294,7 @@ class DiffTraceInfo extends TraceInfo with DifftestBundle {
     squashed.valid := valid || that.valid
     when(valid && that.valid) {
       squashed.trace_head := that.trace_head
+      squashed.trace_size := trace_size + that.trace_size
     }
     squashed
   }
