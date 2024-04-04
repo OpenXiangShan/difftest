@@ -117,6 +117,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   val squashQueueSize: Int = 0
   // Some Bundle may have squashQueueDelay, requires them submitted after related bundle
   val squashQueueDelay: Int = 0
+  // return a Seq indicating ones affected by this bundle, which should be flushed by new-coming this bundle
+  val squashFlush: Seq[String] = Seq()
 }
 
 class DiffArchEvent extends ArchEvent with DifftestBundle {
@@ -211,6 +213,8 @@ class DiffVecCSRState extends VecCSRState with DifftestBundle {
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
+  override val squashFlush: Seq[String] = Seq("load", "l1tlb", "l2tlb", "refill")
+  override val squashQueueSize: Int = 8
 }
 
 class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithIndex {
