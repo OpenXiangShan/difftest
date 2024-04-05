@@ -362,6 +362,17 @@ jobs:
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
 
+      - name: Verilator Build with VCS Top (with GlobalEnable Squash SquashQueue Replay Batch InternalStep NonBlock PerfCnt)
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make simv MILL_ARGS="--difftest-config ESQRBINP" DIFFTEST_PERFCNT=1 VCS=verilator -j2
+            ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +no-diff +max-cycles=100000
+            ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so
+
       - name: Verilator Build with VCS Top (with workload-list)
         run : |
             cd $GITHUB_WORKSPACE/../xs-env
