@@ -50,10 +50,14 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   }
 
   // Sometimes, the bundle may be flushed by new-coming others that affect what it checks
-  val do_flush = VecInit(in.map { i =>
-    in.collect { case b if b.squashFlush.contains(i.desiredCppName) => b.bits.needUpdate.getOrElse(true.B) }
-      .foldLeft(false.B)(_ || _)
-  }.toSeq)
+  val do_flush = if (config.hasSquashFlush) {
+    VecInit(in.map { i =>
+      in.collect { case b if b.squashFlush.contains(i.desiredCppName) => b.bits.needUpdate.getOrElse(true.B) }
+        .foldLeft(false.B)(_ || _)
+    }.toSeq)
+  } else {
+    VecInit.fill(in.length)(false.B)
+  }
 
   val control = Module(new SquashControl(config))
   control.clock := clock
@@ -114,7 +118,9 @@ class Squasher(bundleType: DifftestBundle, length: Int, config: GatewayConfig) e
   val want_tick = IO(Output(Bool()))
   val should_tick = IO(Input(Bool()))
 
-  val hasQueue = config.hasSquashQueue && bundleType.squashQueueSize != 0
+  // Bundles with nonEmpty squashFlush can only be queued with Flush enabled
+  val hasQueue =
+    config.hasSquashQueue && bundleType.squashQueueSize != 0 && (config.hasSquashFlush || bundleType.squashFlush.isEmpty)
   val vecLen = if (hasQueue) bundleType.squashQueueSize else length
   val state = RegInit(0.U.asTypeOf(Vec(vecLen, bundleType)))
   val out = IO(Output(Vec(vecLen, bundleType)))
