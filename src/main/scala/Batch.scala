@@ -288,16 +288,20 @@ class BatchCollector(
   val info = Wire(new BatchInfo)
   info.id := Batch.getBundleID(bundleType).U
   info.num := valid_num
+
+  val offset_map = (0 to length).map(i => i.U -> (i * align_data.head.getWidth).U)
+  val dataLen_map = (0 to length).map(i => i.U -> (i * alignWidth / 8).U)
+
   val data_site = WireInit(0.U((alignWidth * length).W))
   data_site := VecInit(delay_data.zipWithIndex.map { case (d, idx) =>
-    val offset = if (idx == 0) 0.U else PopCount(delay_valid.take(idx)) * align_data.head.getWidth.U
+    val offset = if (idx == 0) 0.U else MuxLookup(PopCount(delay_valid.take(idx)), 0.U)(offset_map)
     (d << offset).asUInt
   }.toSeq).reduce(_ | _)
 
   when(delay_valid.asUInt.orR) {
     data_state := Cat(data_base, data_site)
     info_state := Cat(info_base, info.asUInt)
-    data_len_state := data_len_base + valid_num * (alignWidth / 8).U
+    data_len_state := data_len_base + MuxLookup(valid_num, 0.U)(dataLen_map)
     info_len_state := info_len_base + (param.infoWidth / 8).U
   }.otherwise {
     data_state := data_base
