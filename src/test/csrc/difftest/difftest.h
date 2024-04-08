@@ -238,6 +238,10 @@ public:
     }
   }
 
+  uint64_t track_pc{0};
+  bool enable_track_pc{false};
+  int frequency{1};
+
   // Difftest public APIs for dut: called from DPI-C functions (or testbench)
   // These functions generally do nothing but copy the information to core_state.
   inline DifftestTrapEvent *get_trap_event() {
@@ -405,6 +409,8 @@ void difftest_trace_read();
 void difftest_trace_write(int step);
 
 int init_nemuproxy(size_t);
+
+void set_diff_track_pc(uint64_t track_pc);
 
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_scope();

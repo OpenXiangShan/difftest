@@ -50,6 +50,15 @@ int init_nemuproxy(size_t ramsize = 0) {
   return 0;
 }
 
+void set_diff_track_pc(uint64_t track_pc) {
+  for (int i = 0; i < NUM_CORES; i++) {
+    if (track_pc != 0) {
+      difftest[i]->enable_track_pc = true;
+      difftest[i]->track_pc = track_pc;
+    }
+  }
+}
+
 int difftest_state() {
   for (int i = 0; i < NUM_CORES; i++) {
     if (difftest[i]->get_trap_valid()) {
@@ -302,6 +311,11 @@ int Difftest::step() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
+  #ifdef BASIC_DIFFTEST_ONLY
+    uint64_t commit_pc = proxy->pc;
+  #else
+    uint64_t commit_pc = dut->commit[i].pc;
+  #endif
   if (dut->event.valid) {
     // interrupt has a higher priority than exception
     dut->event.interrupt ? do_interrupt() : do_exception();
@@ -315,6 +329,16 @@ int Difftest::step() {
         }
         dut->commit[i].valid = 0;
         num_commit += 1 + dut->commit[i].nFused;
+        // when the tracking PC is set to the same value as the commit PC, print the clock cycle.
+        // Sometimes the result is inaccurate for branch instruction and fused instruction.
+        // When multiple instructions are committed in a single cycle, the commit PC is inferred 
+        // from the dut->commit[0].pc at the beginning of each cycle and the number of instructions 
+        // has been committed in the current cycle.
+        if (commit_pc == track_pc && enable_track_pc) {
+          printf("tick: %ld, pc: %lx frequency: %d\n", ticks, track_pc, frequency);
+          ++frequency;
+        }
+        commit_pc += dut->commit[i].isRVC ? 2 : 4;
       }
     }
   }

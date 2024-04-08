@@ -37,6 +37,7 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint64_t overwrite_nbytes = 0xe00;
+static uint64_t track_pc = 0;
 
 enum {
   SIMV_RUN,
@@ -63,6 +64,11 @@ extern "C" void set_gcpt_bin(char *s) {
 extern "C" void set_max_instrs(uint64_t mc) {
   printf("set max instrs: %lu\n", mc);
   max_instrs = mc;
+}
+
+extern "C" void set_track_pc(uint64_t pc) {
+  printf("set track pc: %lx\n", pc);
+  track_pc = pc;
 }
 
 extern const char *difftest_ref_so;
@@ -122,6 +128,7 @@ extern "C" uint8_t simv_init() {
   init_flash(flash_bin_file);
 
   difftest_init();
+  set_diff_track_pc(track_pc);
   init_device();
   if (enable_difftest) {
     init_goldenmem();
