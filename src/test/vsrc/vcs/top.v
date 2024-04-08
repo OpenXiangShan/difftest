@@ -25,6 +25,7 @@ import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
+import "DPI-C" function void set_track_pc(longint pc);
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -75,6 +76,8 @@ wire workload_switch;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
+
+reg [63:0] track_pc;
 
 initial begin
 `ifndef WIRE_CLK
@@ -141,6 +144,11 @@ initial begin
   // disable diff-test
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
+  end
+  // set track pc
+  if ($test$plusargs("track-pc")) begin
+    $value$plusargs("track-pc=%h", track_pc);
+    set_track_pc(track_pc);
   end
 `ifdef ENABLE_WORKLOAD_SWITCH
   // set exit instrs const
