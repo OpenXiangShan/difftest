@@ -152,6 +152,7 @@ class HCSRState extends DifftestBaseBundle {
   val vsatp = UInt(64.W)
   val vsscratch = UInt(64.W)
 }
+
 class DebugModeCSRState extends DifftestBaseBundle {
   val debugMode = Bool()
   val dcsr = UInt(64.W)

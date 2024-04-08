@@ -730,9 +730,7 @@ r_s2xlate do_s2xlate(Hgatp *hgatp, uint64_t gpaddr) {
   uint8_t level;
   uint64_t pg_base = hgatp->ppn << 12;
   r_s2xlate r_s2;
-  //  printf("gpaddr: %lx\n", gpaddr);
   if (hgatp->mode == 0) {
-    //  printf("hpaddr: %lx\n", gpaddr);
     r_s2.pte.ppn = gpaddr >> 12;
     r_s2.level = 2;
     return r_s2;
@@ -740,7 +738,6 @@ r_s2xlate do_s2xlate(Hgatp *hgatp, uint64_t gpaddr) {
   for (level = 0; level < 3; level++) {
     hpaddr = pg_base + GVPNi(gpaddr, level) * sizeof(uint64_t);
     read_goldenmem(hpaddr, &pte.val, 8);
-    // printf("i = %d, hpaddr: %lx pte ppn: %lx\n",level, hpaddr, pte.ppn);
     pg_base = pte.ppn << 12;
     if (!pte.v || pte.r || pte.x || pte.w || level == 2) {
       break;
