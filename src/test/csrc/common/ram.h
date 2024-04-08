@@ -223,7 +223,7 @@ void dramsim3_step();
 void dramsim3_finish();
 
 extern "C" uint64_t memory_response(bool isWrite);
-extern "C" bool memory_request(uint64_t address, uint32_t id, bool isWrite);
+extern "C" bool memory_request(uint64_t address, uint32_t id, bool isWrite, uint8_t Step);
 
 struct dramsim3_meta {
   uint32_t id;

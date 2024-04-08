@@ -445,7 +445,7 @@ void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes) {
   delete reader;
 }
 
-#define PLDM
+
 #ifdef WITH_DRAMSIM3
 void dramsim3_init() {
 #if !defined(DRAMSIM3_CONFIG) || !defined(DRAMSIM3_OUTDIR)
@@ -457,71 +457,58 @@ void dramsim3_init() {
   // dram = new SimpleCoDRAMsim3(90);
 }
 
-#ifdef PLDM
+#ifdef PALLADIUM
 typedef struct {
   uint64_t address;
   uint32_t id;
-  bool isWrite;
-}request;
+  bool valid = 0;
+} request;
 typedef struct {
-  request queue[8];
-  uint8_t head = 0;
-  uint8_t end = 0;
-}request_queue;
-
+  request write_queue[8];
+  request read_queue[8];
+} request_queue;
 static request_queue req_queue_step;
-static request_queue req_queue_nstep;
 
-void memory_queue_push(uint64_t address, uint32_t id, bool isWrite, bool Step) {
- if (Step) {
-    req_queue_step.queue[req_queue_step.head].address = address;
-    req_queue_step.queue[req_queue_step.head].id = id;
-    req_queue_step.queue[req_queue_step.head].isWrite = isWrite;
-    if (req_queue_step.head < 8)
-      req_queue_step.head ++;
-    else
-      req_queue_step.head = 0;
+void memory_queue_push(uint64_t address, uint32_t id, bool isWrite, uint8_t Step) {
+  if (isWrite) {
+    req_queue_step.write_queue[Step].valid = 1;
+    req_queue_step.write_queue[Step].address = address;
+    req_queue_step.write_queue[Step].id = id;
   } else {
-    req_queue_nstep.queue[req_queue_nstep.head].address = address;
-    req_queue_nstep.queue[req_queue_nstep.head].id = id;
-    req_queue_nstep.queue[req_queue_nstep.head].isWrite = isWrite;
-    req_queue_nstep.head ++;
-    if (req_queue_nstep.head < 8)
-      req_queue_nstep.head ++;
-    else
-      req_queue_nstep.head = 0;
+    req_queue_step.read_queue[Step].valid = 1;
+    req_queue_step.read_queue[Step].address = address;
+    req_queue_step.read_queue[Step].id = id;
   }
 }
 
-bool memory_queue_pop(uint64_t *address, uint32_t *id, bool *isWrite, bool Step) {
-  if (Step) {
-    if (req_queue_step.end == req_queue_step.head) {
-      return false;
+void memory_queue_check(bool isWrite, uint8_t *Step) {
+  if (isWrite) {
+    while (req_queue_step.write_queue[*Step].valid == 1) {
+      auto req = new CoDRAMRequest();
+      auto meta = new dramsim3_meta;
+      req->address = req_queue_step.write_queue[*Step].address;
+      req->is_write = isWrite;
+      meta->id = req_queue_step.write_queue[*Step].id;
+      req->meta = meta;
+      dram->add_request(req);
+      req_queue_step.write_queue[*Step].valid = 0;
+      *Step = *Step < 8 ? *Step++ : 0;
     }
-    *address = req_queue_step.queue[req_queue_step.end].address;
-    *id      = req_queue_step.queue[req_queue_step.end].id;
-    *isWrite = req_queue_step.queue[req_queue_step.end].isWrite;
-
-    if (req_queue_step.end < 8)
-      req_queue_step.end ++;
-    else
-      req_queue_step.end = 0;
-  }
-  else {
-    if (req_queue_nstep.end == req_queue_nstep.head) {
-      return false;
+  } else {
+    while (req_queue_step.read_queue[*Step].valid == 1) {
+      auto req = new CoDRAMRequest();
+      auto meta = new dramsim3_meta;
+      req->address = req_queue_step.read_queue[*Step].address;
+      req->is_write = isWrite;
+      meta->id = req_queue_step.read_queue[*Step].id;
+      req->meta = meta;
+      dram->add_request(req);
+      req_queue_step.read_queue[*Step].valid = 0;
+      *Step = *Step < 8 ? *Step++ : 0;
     }
-    *address = req_queue_nstep.queue[req_queue_step.end].address;
-    *id      = req_queue_nstep.queue[req_queue_step.end].id;
-    *isWrite = req_queue_nstep.queue[req_queue_step.end].isWrite;
-
-    if (req_queue_nstep.end < 8)
-      req_queue_nstep.end ++;
-    else
-      req_queue_nstep.end = 0;
   }
 }
-#endif
+#endif // PALLADIUM
 
 void dramsim3_step() {
   if (dram == NULL)
@@ -532,10 +519,12 @@ void dramsim3_step() {
 void dramsim3_finish() {
   delete dram;
   dram = NULL;
-  req_queue_step.head = 0;
-  req_queue_step.end = 0;
-  req_queue_nstep.head = 0;
-  req_queue_nstep.end = 0;
+#ifdef PLDM
+  for (size_t i = 0; i < 8; i++) {
+    req_queue_step.read_queue[i].valid = 0;
+    req_queue_step.write_queue[i].valid = 0;
+  }
+#endif
 }
 
 uint64_t memory_response(bool isWrite) {
@@ -552,31 +541,39 @@ uint64_t memory_response(bool isWrite) {
   return 0;
 }
 
-bool memory_request(uint64_t address, uint32_t id, bool isWrite, bool Step) {
+bool memory_request(uint64_t address, uint32_t id, bool isWrite, uint8_t Step) {
   if (dram == NULL)
     return false;
-  uint64_t get_addr = address;
-  uint32_t get_id = id;
-  bool get_iswrite = isWrite;
+  bool will_accept = dram->will_accept(address, isWrite);
+#ifdef PALLADIUM
+  static uint8_t Step_Read = 0;
+  static uint8_t Step_Write = 0;
 
-#ifdef PLDM
-  static bool Step_last = 1;
-  memory_queue_push(address, id, isWrite, Step);
-
-  if (memory_queue_pop(&get_addr, &get_id, &get_iswrite, Step_last) == false)
-    return false;
-#endif
-  if (dram->will_accept(get_addr, get_iswrite)) {
+  if (isWrite && (Step_Write == Step)) {
+    Step_Write = Step_Write < 8 ? Step_Write++ : 0;
+  } else if (Step_Read == Step) {
+    Step_Read = Step_Read < 8 ? Step_Read++ : 0;
+  } else {
+    // accept but not sequential
+    if (will_accept) {
+      memory_queue_push(address, id, isWrite, Step);
+      return true;
+    } else {
+      return false;
+    }
+  }
+#endif // PALLADIUM
+  if (will_accept) {
     auto req = new CoDRAMRequest();
     auto meta = new dramsim3_meta;
-    req->address = get_addr;
-    req->is_write = get_iswrite;
-    meta->id = get_id;
+    req->address = address;
+    req->is_write = isWrite;
+    meta->id = id;
     req->meta = meta;
     dram->add_request(req);
-#ifdef PLDM
-    Step_last = !Step_last;
-#endif
+#ifdef PALLADIUM
+    memory_queue_check(isWrite, isWrite ? &Step_Write : &Step_Read);
+#endif // PALLADIUM
     return true;
   }
   return false;
