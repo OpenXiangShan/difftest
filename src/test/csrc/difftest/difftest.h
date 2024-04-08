@@ -46,6 +46,9 @@ enum {
 #else
 #define DEBUG_MODE_SKIP(v, f, instr) false
 #endif
+#define PAGE_SHIFT 12
+#define PAGE_SIZE  (1ul << PAGE_SHIFT)
+#define PAGE_MASK  (PAGE_SIZE - 1)
 
 enum retire_inst_type {
   RET_NORMAL = 0,

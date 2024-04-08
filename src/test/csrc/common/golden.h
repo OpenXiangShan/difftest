@@ -49,5 +49,19 @@ typedef union PageTableEntry {
   uint64_t val;
 } PTE;
 
-#define VPNi(vpn, i) (((vpn) >> (18 - 9 * (i))) & 0x1ff)
+typedef union atpStruct {
+  struct {
+    uint64_t ppn : 44;
+    uint32_t asid : 16;
+    uint32_t mode : 4;
+  };
+  uint64_t val;
+} Satp, Hgatp;
+#define noS2xlate      0
+#define allStage       3
+#define onlyStage1     1
+#define onlyStage2     2
+#define VPNiSHFT(i)    (12 + 9 * (i))
+#define GVPNi(addr, i) (((addr) >> (18 - 9 * (i) + 12)) & (i == 0 ? 0x7ff : 0x1ff))
+#define VPNi(vpn, i)   (((vpn) >> (18 - 9 * (i))) & 0x1ff)
 #endif
