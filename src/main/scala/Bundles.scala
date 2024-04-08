@@ -133,6 +133,26 @@ class CSRState extends DifftestBaseBundle {
   def =/=(that: CSRState): Bool = VecInit(toSeq.zip(that.toSeq).map(v => v._1 =/= v._2)).asUInt.orR
 }
 
+class HCSRState extends DifftestBaseBundle {
+  val virtMode = UInt(64.W)
+  val mtval2 = UInt(64.W)
+  val mtinst = UInt(64.W)
+  val hstatus = UInt(64.W)
+  val hideleg = UInt(64.W)
+  val hedeleg = UInt(64.W)
+  val hcounteren = UInt(64.W)
+  val htval = UInt(64.W)
+  val htinst = UInt(64.W)
+  val hgatp = UInt(64.W)
+  val vsstatus = UInt(64.W)
+  val vstvec = UInt(64.W)
+  val vsepc = UInt(64.W)
+  val vscause = UInt(64.W)
+  val vstval = UInt(64.W)
+  val vsatp = UInt(64.W)
+  val vsscratch = UInt(64.W)
+}
+
 class DebugModeCSRState extends DifftestBaseBundle {
   val debugMode = Bool()
   val dcsr = UInt(64.W)
@@ -221,6 +241,9 @@ class L1TLBEvent extends DifftestBaseBundle with HasValid {
   val satp = UInt(64.W)
   val vpn = UInt(64.W)
   val ppn = UInt(64.W)
+  val vsatp = UInt(64.W)
+  val hgatp = UInt(64.W)
+  val s2xlate = UInt(2.W)
 }
 
 class L2TLBEvent extends DifftestBaseBundle with HasValid {
@@ -231,6 +254,15 @@ class L2TLBEvent extends DifftestBaseBundle with HasValid {
   val perm = UInt(8.W)
   val level = UInt(8.W)
   val pf = Bool()
+  val pteidx = Vec(8, Bool())
+  val vsatp = UInt(64.W)
+  val hgatp = UInt(64.W)
+  val gvpn = UInt(64.W)
+  val g_perm = UInt(8.W)
+  val g_level = UInt(8.W)
+  val s2ppn = UInt(64.W)
+  val gpf = Bool()
+  val s2xlate = UInt(2.W)
 }
 
 class RefillEvent extends DifftestBaseBundle with HasValid {

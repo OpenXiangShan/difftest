@@ -38,6 +38,13 @@ static const char *regs_name_csr[] = {
   "mscratch", "sscratch", "mideleg", "medeleg"
 };
 
+static const char *regs_name_hcsr[] = {
+  "v",
+  "mtval2", "mtinst", "hstatus", "hideleg", "hedeleg",
+  "hcounteren", "htval", "htinst", "hgatp", "vsstatus",
+  "vstvec","vsepc", "vscause", "vstval", "vsatp", "vsscratch"
+};
+
 static const char *regs_name_fp[] = {
   "ft0", "ft1", "ft2",  "ft3",  "ft4", "ft5", "ft6",  "ft7",
   "fs0", "fs1", "fa0",  "fa1",  "fa2", "fa3", "fa4",  "fa5",
@@ -163,6 +170,9 @@ public:
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
   DifftestCSRState csr;
   uint64_t pc;
+#ifdef CONFIG_DIFFTEST_HCSRSTATE
+  DifftestHCSRState hcsr;
+#endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
   DifftestArchVecRegState regs_vec;
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
@@ -236,6 +246,9 @@ public:
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
            + sizeof(DifftestVecCSRState)
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
+#ifdef CONFIG_DIFFTEST_HCSRSTATE
+           + sizeof(DifftestHCSRState)
+#endif // CONFIG_DIFFTEST_HCSRSTATE
         ;
   }
 
@@ -280,6 +293,11 @@ struct ExecutionGuide {
   uint64_t exception_num;
   uint64_t mtval;
   uint64_t stval;
+#ifdef CONFIG_DIFFTEST_HCSRSTATE
+  uint64_t mtval2;
+  uint64_t htval;
+  uint64_t vstval;
+#endif // CONFIG_DIFFTEST_HCSRSTATE
   // force set jump target
   bool force_set_jump_target;
   uint64_t jump_target;

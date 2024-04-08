@@ -147,6 +147,9 @@ void RefProxy::regcpy(DiffTestState *dut) {
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
   memcpy(&csr, &dut->csr, sizeof(csr));
   pc = dut->commit[0].pc;
+#ifdef CONFIG_DIFFTEST_HCSRSTATE
+  memcpy(&hcsr, &dut->hcsr, sizeof(hcsr));
+#endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
   memcpy(&regs_vec, &dut->regs_vec.value, sizeof(regs_vec));
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
@@ -169,6 +172,9 @@ int RefProxy::compare(DiffTestState *dut) {
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
                          PROXY_COMPARE(vcsr),
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
+#ifdef CONFIG_DIFFTEST_HCSRSTATE
+                         PROXY_COMPARE(hcsr),
+#endif // CONFIG_DIFFTEST_HCSRSTATE
                          PROXY_COMPARE(csr)
 
   };
@@ -209,6 +215,9 @@ void RefProxy::display(DiffTestState *dut) {
     PROXY_COMPARE_AND_DISPLAY(regs_fp, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
     PROXY_COMPARE_AND_DISPLAY(csr, regs_name_csr)
+#ifdef CONFIG_DIFFTEST_HCSRSTATE
+    PROXY_COMPARE_AND_DISPLAY(hcsr, regs_name_hcsr)
+#endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
     PROXY_COMPARE_AND_DISPLAY(regs_vec, regs_name_vec)
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE

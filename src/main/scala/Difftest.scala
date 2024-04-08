@@ -154,6 +154,11 @@ class DiffCSRState extends CSRState with DifftestBundle {
   override val squashDependency: Seq[String] = Seq("commit", "event")
 }
 
+class DiffHCSRState extends HCSRState with DifftestBundle {
+  override val desiredCppName: String = "hcsr"
+  override val desiredOffset: Int = 6
+}
+
 class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
   override val desiredCppName: String = "dmregs"
 }
