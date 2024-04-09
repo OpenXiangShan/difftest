@@ -21,6 +21,7 @@
 #include "difftrace.h"
 #include "golden.h"
 #include "refproxy.h"
+#include <queue>
 #include <vector>
 #ifdef FUZZING
 #include "emu.h"
@@ -60,6 +61,13 @@ enum retire_mem_type {
   RET_OTHER = 0,
   RET_LOAD,
   RET_STORE
+};
+
+class store_event_t {
+public:
+  uint64_t addr;
+  uint64_t data;
+  uint8_t mask;
 };
 
 class CommitTrace {
@@ -302,6 +310,10 @@ protected:
   uint64_t track_instr = 0;
 #endif
 
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  std::queue<store_event_t> store_event_queue;
+  void store_event_record();
+#endif
   void update_last_commit() {
     last_commit = ticks;
   }
@@ -318,6 +330,7 @@ protected:
   int do_l1tlb_check();
   int do_l2tlb_check();
   int do_golden_memory_update();
+
   inline uint64_t get_commit_data(int i) {
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
     if (dut->commit[i].fpwen) {

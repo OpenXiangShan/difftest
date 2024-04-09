@@ -250,9 +250,12 @@ int Difftest::step() {
     return 1;
   }
   do_first_instr_commit();
-  if (do_store_check()) {
-    return 1;
-  }
+
+  // Each cycle is checked for an store event, and recorded in queue.
+  // It is checked every time an instruction is committed and queue has content.
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  store_event_record();
+#endif
 
 #ifdef DEBUG_GOLDENMEM
   if (do_golden_memory_update()) {
@@ -312,6 +315,9 @@ int Difftest::step() {
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
         if (do_instr_commit(i)) {
+          return 1;
+        }
+        if (do_store_check()) {
           return 1;
         }
         dut->commit[i].valid = 0;
@@ -611,13 +617,13 @@ void Difftest::do_first_instr_commit() {
 
 int Difftest::do_store_check() {
 #ifdef CONFIG_DIFFTEST_STOREEVENT
-  for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
-    if (!dut->store[i].valid) {
-      return 0;
-    }
-    auto addr = dut->store[i].addr;
-    auto data = dut->store[i].data;
-    auto mask = dut->store[i].mask;
+  while (!store_event_queue.empty()) {
+    auto store_event = store_event_queue.front();
+
+    auto addr = store_event.addr;
+    auto data = store_event.data;
+    auto mask = store_event.mask;
+
     if (proxy->store_commit(&addr, &data, &mask)) {
 #ifdef FUZZING
       if (in_disambiguation_state()) {
@@ -626,13 +632,15 @@ int Difftest::do_store_check() {
       }
 #endif
       display();
-      printf("Mismatch for store commits %d: \n", i);
+      printf("Mismatch for store commits \n");
       printf("  REF commits addr 0x%lx, data 0x%lx, mask 0x%x\n", addr, data, mask);
-      printf("  DUT commits addr 0x%lx, data 0x%lx, mask 0x%x\n", dut->store[i].addr, dut->store[i].data,
-             dut->store[i].mask);
+      printf("  DUT commits addr 0x%lx, data 0x%lx, mask 0x%x\n", store_event.addr, store_event.data, store_event.mask);
+
+      store_event_queue.pop();
       return 1;
     }
-    dut->store[i].valid = 0;
+
+    store_event_queue.pop();
   }
 #endif // CONFIG_DIFFTEST_STOREEVENT
   return 0;
@@ -1041,6 +1049,19 @@ int Difftest::do_golden_memory_update() {
 #endif // CONFIG_DIFFTEST_ATOMICEVENT
 
   return 0;
+}
+#endif
+
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+void Difftest::store_event_record() {
+  for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
+    if (dut->store[i].valid) {
+      store_event_t event{dut->store[i].addr, dut->store[i].data, dut->store[i].mask};
+      store_event_queue.push(event);
+
+      dut->store[i].valid = 0;
+    }
+  }
 }
 #endif
 
