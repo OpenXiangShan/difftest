@@ -30,7 +30,6 @@ case class BatchParam(config: GatewayConfig, templateLen: Int) {
   val MaxDataByteWidth = log2Ceil(MaxDataByteLen)
   val MaxDataBitLen = MaxDataByteLen * 8
 
-  // Append BatchInterval and BatchFinish Info
   val MaxInfoByteLen = config.batchArgByteLen._2
   val MaxInfoByteWidth = log2Ceil(MaxInfoByteLen)
   val MaxInfoBitLen = MaxInfoByteLen * 8
@@ -80,9 +79,6 @@ object Batch {
         }
       }
       .sum
-  }
-  def getAlignWidth(bundles: Seq[DifftestBundle]): Int = {
-    bundles.map(i => getAlignWidth(i)).sum
   }
 
   def bundleAlign(bundle: DifftestBundle): UInt = {
@@ -289,7 +285,7 @@ class BatchCollector(
   info.id := Batch.getBundleID(bundleType).U
   info.num := valid_num
 
-  val offset_map = (0 to length).map(i => i.U -> (i * align_data.head.getWidth).U)
+  val offset_map = (0 to length).map(i => i.U -> (i * alignWidth).U)
   val dataLen_map = (0 to length).map(i => i.U -> (i * alignWidth / 8).U)
 
   val data_site = WireInit(0.U((alignWidth * length).W))
@@ -299,7 +295,7 @@ class BatchCollector(
   }.toSeq).reduce(_ | _)
 
   when(delay_valid.asUInt.orR) {
-    data_state := Cat(data_base, data_site)
+    data_state := (data_base << MuxLookup(valid_num, 0.U)(offset_map)).asUInt | data_site
     info_state := Cat(info_base, info.asUInt)
     data_len_state := data_len_base + MuxLookup(valid_num, 0.U)(dataLen_map)
     info_len_state := info_len_base + (param.infoWidth / 8).U
