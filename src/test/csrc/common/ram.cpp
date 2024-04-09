@@ -445,7 +445,6 @@ void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes) {
   delete reader;
 }
 
-
 #ifdef WITH_DRAMSIM3
 void dramsim3_init() {
 #if !defined(DRAMSIM3_CONFIG) || !defined(DRAMSIM3_OUTDIR)
@@ -457,7 +456,6 @@ void dramsim3_init() {
   // dram = new SimpleCoDRAMsim3(90);
 }
 
-
 void dramsim3_step() {
   if (dram == NULL)
     return;
@@ -467,12 +465,6 @@ void dramsim3_step() {
 void dramsim3_finish() {
   delete dram;
   dram = NULL;
-#ifdef PLDM
-  for (size_t i = 0; i < 8; i++) {
-    req_queue_step.read_queue[i].valid = 0;
-    req_queue_step.write_queue[i].valid = 0;
-  }
-#endif
 }
 
 uint64_t memory_response(bool isWrite) {
