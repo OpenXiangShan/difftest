@@ -49,6 +49,16 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
     }
   }
 
+  // Sometimes, the bundle may be flushed by new-coming others that affect what it checks
+  val do_flush = if (config.hasSquashFlush) {
+    VecInit(in.map { i =>
+      in.collect { case b if b.squashFlush.contains(i.desiredCppName) => b.bits.needUpdate.getOrElse(true.B) }
+        .foldLeft(false.B)(_ || _)
+    }.toSeq)
+  } else {
+    VecInit.fill(in.length)(false.B)
+  }
+
   val control = Module(new SquashControl(config))
   control.clock := clock
   control.reset := reset
@@ -73,10 +83,12 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   })
 
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
-    val (s_in, s_do) = in.zip(do_squash).filter(_._1.desiredCppName == u.desiredCppName).unzip
+    val (s_in, s_do) = in.zip(do_squash.zip(do_flush)).filter(_._1.desiredCppName == u.desiredCppName).unzip
+    val (s_do_s, s_do_f) = s_do.unzip
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, config))
     squasher.in.zip(s_in).foreach { case (i, s_i) => i := s_i }
-    squasher.do_squash.zip(s_do).foreach { case (d, s_d) => d := s_d }
+    squasher.do_squash.zip(s_do_s).foreach { case (d, s_d) => d := s_d }
+    squasher.do_flush.zip(s_do_f).foreach { case (d, s_d) => d := s_d }
     wt := squasher.want_tick
     val group_tick =
       group_name_vec
@@ -102,11 +114,16 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
 class Squasher(bundleType: DifftestBundle, length: Int, config: GatewayConfig) extends Module {
   val in = IO(Input(Vec(length, bundleType)))
   val do_squash = IO(Input(Vec(length, Bool())))
+  val do_flush = IO(Input(Vec(length, Bool())))
   val want_tick = IO(Output(Bool()))
   val should_tick = IO(Input(Bool()))
 
-  val state = RegInit(0.U.asTypeOf(Vec(length, bundleType)))
-  val out = IO(Output(Vec(length, bundleType)))
+  // Bundles with nonEmpty squashFlush can only be queued with Flush enabled
+  val hasQueue =
+    config.hasSquashQueue && bundleType.squashQueueSize != 0 && (config.hasSquashFlush || bundleType.squashFlush.isEmpty)
+  val vecLen = if (hasQueue) bundleType.squashQueueSize else length
+  val state = RegInit(0.U.asTypeOf(Vec(vecLen, bundleType)))
+  val out = IO(Output(Vec(vecLen, bundleType)))
 
   // Mark the initial commit events as non-squashable for initial state synchronization.
   val tick_first_commit = Option.when(bundleType.desiredCppName == "commit") {
@@ -118,24 +135,47 @@ class Squasher(bundleType: DifftestBundle, length: Int, config: GatewayConfig) e
     isInitialEvent && hasValidCommitEvent
   }
 
-  // If one of the bundles cannot be squashed, the others are not squashed as well.
-  val supportsSquashVec = VecInit(in.zip(state).map { case (i, s) => i.supportsSquash(s) }.toSeq)
-  val supportsSquash = supportsSquashVec.asUInt.andR
-
-  // If one of the bundles cannot be the new base, the others are not as well.
-  val supportsSquashBaseVec = VecInit(state.map(_.supportsSquashBase).toSeq)
-  val supportsSquashBase = supportsSquashBaseVec.asUInt.andR
-
-  want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B)
-  for (((i, d), s) <- in.zip(do_squash).zip(state)) {
-    when(should_tick) {
-      s := i
-    }.elsewhen(d) {
-      s := i.squash(s)
+  if (hasQueue) {
+    // Bundle will not be squashed, but buffered and submit together.
+    val ptr = RegInit(0.U(log2Ceil(vecLen + 1).W))
+    val offset = PopCount(do_squash)
+    val queue_exceed = ptr +& offset > vecLen.U
+    want_tick := queue_exceed || tick_first_commit.getOrElse(false.B)
+    ptr := Mux(should_tick, offset, ptr + offset)
+    in.zip(do_squash).zipWithIndex.foreach { case ((i, d), idx) =>
+      val postEnq = if (idx != 0) PopCount(do_squash.take(idx)) else 0.U
+      when(should_tick && d) {
+        state(postEnq) := i
+      }.elsewhen(d) {
+        state(ptr + postEnq) := i
+      }
     }
-  }
+    state.zip(out).zipWithIndex.foreach { case ((s, o), idx) =>
+      o := Delayer(Mux(should_tick && ptr > idx.U, s, 0.U.asTypeOf(o)), bundleType.squashQueueDelay)
+      o.asInstanceOf[DifftestWithIndex].index := idx.U
+    }
+  } else {
+    // If one of the bundles cannot be squashed, the others are not squashed as well.
+    val supportsSquashVec = VecInit(in.zip(state).map { case (i, s) => i.supportsSquash(s) }.toSeq)
+    val supportsSquash = supportsSquashVec.asUInt.andR
 
-  out := Mux(should_tick, state, 0.U.asTypeOf(out))
+    // If one of the bundles cannot be the new base, the others are not as well.
+    val supportsSquashBaseVec = VecInit(state.map(_.supportsSquashBase).toSeq)
+    val supportsSquashBase = supportsSquashBaseVec.asUInt.andR
+
+    want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B)
+
+    for ((((i, ds), df), s) <- in.zip(do_squash).zip(do_flush).zip(state)) {
+      when(should_tick) {
+        s := i
+      }.elsewhen(ds) {
+        s := i.squash(s)
+      }.elsewhen(df) {
+        s := 0.U.asTypeOf(s)
+      }
+    }
+    out := Mux(should_tick, state, 0.U.asTypeOf(out))
+  }
 }
 
 class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleInline {

@@ -30,6 +30,8 @@ case class GatewayConfig(
   style: String = "dpic",
   hasGlobalEnable: Boolean = false,
   isSquash: Boolean = false,
+  hasSquashQueue: Boolean = false,
+  hasSquashFlush: Boolean = false,
   hasReplay: Boolean = false,
   replaySize: Int = 256,
   hasDutZone: Boolean = false,
@@ -71,7 +73,7 @@ case class GatewayConfig(
     macros.toSeq
   }
   def check(): Unit = {
-    if (hasReplay) require(isSquash)
+    if (hasReplay || hasSquashQueue) require(isSquash)
     if (hasInternalStep) require(isBatch)
   }
 }
@@ -102,6 +104,8 @@ object Gateway {
     cfg.foreach {
       case 'E' => config = config.copy(hasGlobalEnable = true)
       case 'S' => config = config.copy(isSquash = true)
+      case 'Q' => config = config.copy(hasSquashQueue = true)
+      case 'F' => config = config.copy(hasSquashFlush = true)
       case 'R' => config = config.copy(hasReplay = true)
       case 'Z' => config = config.copy(hasDutZone = true)
       case 'B' => config = config.copy(isBatch = true)
