@@ -192,6 +192,8 @@ class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: 
   val state_info = RegInit(0.U(param.MaxInfoBitLen.W))
   val state_info_len = RegInit(0.U(param.MaxInfoByteWidth.W))
   val state_step_cnt = RegInit(0.U(config.stepWidth.W))
+  require(state_data.getWidth >= step_data.getWidth)
+  require(state_info.getWidth >= step_info.getWidth)
 
   val delayed_enable = Delayer(global_enable, inCollect.length)
   val data_exceed = state_data_len +& step_data_len > param.MaxDataByteLen.U
