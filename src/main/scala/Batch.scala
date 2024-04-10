@@ -186,26 +186,27 @@ class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: 
   val step_info = Cat(infoCollect_vec.last, BatchInterval.asUInt)
   val step_data_len = dataLenCollect_vec.last
   val step_info_len = infoLenCollect_vec.last + (param.infoWidth / 8).U
+  assert(step_data_len <= param.MaxDataByteLen.U)
+  assert(step_info_len <= param.MaxInfoByteLen.U)
 
   val state_data = RegInit(0.U(param.MaxDataBitLen.W))
   val state_data_len = RegInit(0.U(param.MaxDataByteWidth.W))
   val state_info = RegInit(0.U(param.MaxInfoBitLen.W))
   val state_info_len = RegInit(0.U(param.MaxInfoByteWidth.W))
   val state_step_cnt = RegInit(0.U(config.stepWidth.W))
-  require(state_data.getWidth >= step_data.getWidth)
-  require(state_info.getWidth >= step_info.getWidth)
 
   val delayed_enable = Delayer(global_enable, inCollect.length)
-  val data_exceed = state_data_len +& step_data_len > param.MaxDataByteLen.U
-  val info_exceed = state_info_len +& step_info_len + (param.infoWidth / 8).U > param.MaxInfoByteLen.U
-  val step_exceed = state_step_cnt === config.batchSize.U
+  val data_exceed = delayed_enable && (state_data_len +& step_data_len > param.MaxDataByteLen.U)
+  val info_exceed =
+    delayed_enable && (state_info_len +& step_info_len + (param.infoWidth / 8).U > param.MaxInfoByteLen.U)
+  val step_exceed = delayed_enable && (state_step_cnt === config.batchSize.U)
   if (config.hasBuiltInPerf) {
     DifftestPerf("BatchExceed_data", data_exceed.asUInt)
     DifftestPerf("BatchExceed_info", info_exceed.asUInt)
     DifftestPerf("BatchExceed_step", step_exceed.asUInt)
   }
 
-  val should_tick = delayed_enable && (data_exceed | info_exceed | step_exceed)
+  val should_tick = data_exceed | info_exceed | step_exceed
   when(delayed_enable) {
     when(should_tick) {
       state_data := step_data
@@ -293,7 +294,7 @@ class BatchCollector(
   val data_site = WireInit(0.U((alignWidth * length).W))
   data_site := VecInit(delay_data.zipWithIndex.map { case (d, idx) =>
     val offset = if (idx == 0) 0.U else MuxLookup(PopCount(delay_valid.take(idx)), 0.U)(offset_map)
-    (d << offset).asUInt
+    Mux(delay_valid(idx), (d << offset).asUInt, 0.U)
   }.toSeq).reduce(_ | _)
 
   when(delay_valid.asUInt.orR) {
