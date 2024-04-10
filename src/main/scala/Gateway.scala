@@ -44,7 +44,7 @@ case class GatewayConfig(
   def dutBufLen: Int = if (isBatch) batchSize else 1
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
-  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3904, 90) else (7800, 190)
+  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3900, 92) else (7800, 192)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean = hasGlobalEnable || hasDutZone || isBatch || isSquash
@@ -177,8 +177,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   val control = Wire(new GatewaySinkControl(config))
 
   if (config.isBatch) {
-    val template = Batch.getTemplate(squashed)
-    val batch = Batch(template, squashed, config)
+    val batch = Batch(squashed, config)
     if (config.hasInternalStep) {
       control.step.get := batch.step
     } else {
@@ -190,7 +189,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
       control.dut_zone.get := zoneControl.get.dut_zone
     }
 
-    GatewaySink.batch(template, control, batch.io, config)
+    GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
   } else {
     val squashed_enable = WireInit(true.B)
     if (config.hasGlobalEnable) {

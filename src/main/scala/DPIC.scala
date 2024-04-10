@@ -21,7 +21,7 @@ import chisel3.reflect.DataMirror
 import chisel3.util._
 import difftest.DifftestModule.streamToFile
 import difftest._
-import difftest.batch.BatchIO
+import difftest.batch.{BatchInfo, BatchIO}
 import difftest.gateway.{GatewayConfig, GatewayResult, GatewaySinkControl}
 
 import scala.collection.mutable.ListBuffer
@@ -225,7 +225,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     }
     unpack += s"memcpy(packet, data$ptrOffset, sizeof(${gen.desiredModuleName}));"
     unpack += s"data += ${bundleArgs.map(_.len).sum};"
-    unpack.toSeq.mkString("\n      ")
+    unpack.toSeq.mkString("\n        ")
   }
 
   override def modPorts = super.modPorts ++ Seq(Seq(("io_data", io.data)), Seq(("io_info", io.info)))
@@ -236,12 +236,26 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     val bundleAssign = template.zipWithIndex.map { case (t, idx) =>
       s"""
          |    else if (id == ${bundleEnum(idx)}) {
-         |      ${getDPICBundleUnpack(t)}
+         |      for (int j = 0; j < num; j++) {
+         |        ${getDPICBundleUnpack(t)}
+         |      }
          |    }
         """.stripMargin
     }.mkString("")
 
-    val infoLen = io.info.getWidth / 8
+    def parseInfo(io_info: Data): (String, Int) = {
+      val info = new BatchInfo
+      val infoLen = io_info.getWidth / info.getWidth
+      val infoDecl =
+        s"""
+           |  static struct {
+           |    ${info.elements.toSeq.map { case (name, data) => getDPICArgString(name, data, true) }
+            .mkString(";\n    ")};
+           |  } info[$infoLen];
+           |""".stripMargin
+      (infoDecl, infoLen)
+    }
+    val (infoDecl, infoLen) = parseInfo(io.info)
     Seq(s"""
            |  enum DifftestBundleType {
            |  ${bundleEnum.mkString(",\n  ")}
@@ -249,11 +263,12 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |
            |  uint64_t offset = 0;
            |  uint32_t dut_index = 0;
-           |  static uint8_t info[$infoLen];
-           |  memcpy(info, io_info, $infoLen * sizeof(uint8_t));
+           |  $infoDecl
+           |  memcpy(info, io_info, sizeof(info));
            |  uint8_t* data = (uint8_t*)io_data;
            |  for (int i = 0; i < $infoLen; i++) {
-           |    uint8_t id = info[i];
+           |    uint8_t id = info[i].id;
+           |    uint8_t num = info[i].num;
            |    uint32_t coreid, index, address;
            |    if (id == BatchFinish) {
            |      break;
