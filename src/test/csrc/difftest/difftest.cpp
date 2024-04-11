@@ -113,7 +113,8 @@ void difftest_trace_write(int step) {
 
 void difftest_finish() {
 #ifdef CONFIG_DIFFTEST_PERFCNT
-  difftest_perfcnt_finish();
+  uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
+  difftest_perfcnt_finish(cycleCnt);
 #endif // CONFIG_DIFFTEST_PERFCNT
   diffstate_buffer_free();
   for (int i = 0; i < NUM_CORES; i++) {
