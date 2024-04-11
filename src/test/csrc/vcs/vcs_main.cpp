@@ -15,11 +15,17 @@
 ***************************************************************************************/
 
 #include "device.h"
+#ifndef CONFIG_NO_DIFFTEST
 #include "difftest.h"
+#endif // CONFIG_NO_DIFFTEST
 #include "flash.h"
+#ifndef CONFIG_NO_DIFFTEST
 #include "goldenmem.h"
+#endif // CONFIG_NO_DIFFTEST
 #include "ram.h"
+#ifndef CONFIG_NO_DIFFTEST
 #include "refproxy.h"
+#endif // CONFIG_NO_DIFFTEST
 #include <common.h>
 #include <locale.h>
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
@@ -65,6 +71,7 @@ extern "C" void set_max_instrs(uint64_t mc) {
   max_instrs = mc;
 }
 
+#ifndef CONFIG_NO_DIFFTEST
 extern const char *difftest_ref_so;
 extern "C" void set_diff_ref_so(char *s) {
   printf("diff-test ref so:%s\n", s);
@@ -72,6 +79,11 @@ extern "C" void set_diff_ref_so(char *s) {
   strcpy(buf, s);
   difftest_ref_so = buf;
 }
+#else
+extern "C" void set_diff_ref_so(char *s) {
+  printf("difftest is not enabled. +diff=%s is ignore.\n", s);
+}
+#endif // CONFIG_NO_DIFFTEST
 
 extern "C" void set_workload_list(char *s) {
   workload_list = (char *)malloc(256);
@@ -121,12 +133,19 @@ extern "C" uint8_t simv_init() {
   }
   init_flash(flash_bin_file);
 
+#ifndef CONFIG_NO_DIFFTEST
   difftest_init();
+#endif // CONFIG_NO_DIFFTEST
+
   init_device();
+
+#ifndef CONFIG_NO_DIFFTEST
   if (enable_difftest) {
     init_goldenmem();
     init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
   }
+#endif // CONFIG_NO_DIFFTEST
+
   return 0;
 }
 
@@ -135,6 +154,7 @@ extern "C" uint8_t simv_step() {
     return SIMV_FAIL;
   }
 
+#ifndef CONFIG_NO_DIFFTEST
   if (enable_difftest) {
     if (difftest_step())
       return SIMV_FAIL;
@@ -167,6 +187,7 @@ extern "C" uint8_t simv_step() {
       return SIMV_DONE;
     }
   }
+#endif // CONFIG_NO_DIFFTEST
 
   return 0;
 }
@@ -198,10 +219,14 @@ extern "C" void simv_tick() {
 void simv_finish() {
   common_finish();
   flash_finish();
+
+#ifndef CONFIG_NO_DIFFTEST
   if (enable_difftest) {
     goldenmem_finish();
     difftest_finish();
   }
+#endif // CONFIG_NO_DIFFTEST
+
   finish_device();
   delete simMemory;
   simMemory = nullptr;
@@ -214,16 +239,23 @@ extern "C" void simv_nstep(uint8_t step) {
     return;
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {
+#ifndef CONFIG_NO_DIFFTEST
   if (difftest == NULL)
     return 0;
+#endif // CONFIG_NO_DIFFTEST
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #ifndef CONFIG_DIFFTEST_INTERNAL_STEP
   difftest_calls[perf_simv_nstep]++;
   difftest_bytes[perf_simv_nstep] += 1;
 #endif // CONFIG_DIFFTEST_INTERNAL_STEP
 #endif // CONFIG_DIFFTEST_PERFCNT
+
+#ifndef CONFIG_NO_DIFFTEST
   difftest_switch_zone();
+#endif // CONFIG_NO_DIFFTEST
+
   for (int i = 0; i < step; i++) {
     int ret = simv_step();
     if (ret) {

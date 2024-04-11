@@ -297,6 +297,16 @@ jobs:
             rm -r difftest
             cp -r $GITHUB_WORKSPACE .
 
+      - name: Verilator Build with VCS Top (NO_DIFF)
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make simv NO_DIFF=1 VCS=verilator -j2
+            ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +max-cycles=100000
+
       - name: Verilator Build with VCS Top (SYNTHESIS)(with DutZone)
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
