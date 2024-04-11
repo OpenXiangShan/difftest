@@ -53,6 +53,10 @@ VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000)
 ifeq ($(VERILATOR_5_000),1)
 VEXTRA_FLAGS += --no-timing +define+VERILATOR_5
 endif
+VERILATOR_5_024 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5024)
+ifeq ($(VERILATOR_5_024),1)
+VEXTRA_FLAGS += --quiet-stats
+endif
 
 # Verilator trace support
 EMU_TRACE ?=
