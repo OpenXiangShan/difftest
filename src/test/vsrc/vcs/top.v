@@ -31,6 +31,7 @@ import "DPI-C" function void simv_tick();
 `ifdef ENABLE_WORKLOAD_SWITCH
 import "DPI-C" function void set_workload_list(string path);
 `endif // ENABLE_WORKLOAD_SWITCH
+import "DPI-C" function byte workload_list_completed();
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
 import "DPI-C" function byte simv_nstep(byte step);
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
@@ -279,8 +280,14 @@ always @(posedge clock) begin
     // difftest
     if (!n_cycles) begin
       if (simv_init()) begin
-        $display("DIFFTEST INIT FAILED");
-        $fatal();
+        if (workload_list_completed()) begin
+          $display("DIFFTEST WORKLOAD LIST DONE at cycle %d", n_cycles);
+          $finish();
+        end
+        else begin
+          $display("DIFFTEST INIT FAILED");
+          $fatal();
+        end
       end
     end
     else if (simv_result == `SIMV_FAIL) begin
