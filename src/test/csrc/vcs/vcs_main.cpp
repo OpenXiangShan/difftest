@@ -91,6 +91,7 @@ extern "C" void set_workload_list(char *s) {
   printf("set workload list %s \n", workload_list);
 }
 
+bool switch_workload_completed = false;
 int switch_workload() {
   static FILE *fp = fopen(workload_list, "r");
   if (fp) {
@@ -101,6 +102,7 @@ int switch_workload() {
       set_max_instrs(num);
     } else if (feof(fp)) {
       printf("Workload list is completed\n");
+      switch_workload_completed = true;
       fclose(fp);
       return 1;
     } else {
@@ -113,6 +115,10 @@ int switch_workload() {
     return 1;
   }
   return 0;
+}
+
+extern "C" bool workload_list_completed() {
+  return switch_workload_completed;
 }
 
 extern "C" void set_no_diff() {
