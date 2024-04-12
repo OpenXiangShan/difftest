@@ -98,7 +98,7 @@ initial begin
 `endif
     else begin
       $display("unknown wave file format, want [vpd, fsdb] but:%s\n", wave_type);
-      $finish();
+      $fatal();
     end
   end
 `endif
@@ -155,7 +155,7 @@ initial begin
   end
   else begin
     $display("workload switch is enabled but the workload list is not set");
-    $finish();
+    $fatal();
   end
 `endif // ENABLE_WORKLOAD_SWITCH
 `endif // TB_NO_DPIC
@@ -280,12 +280,12 @@ always @(posedge clock) begin
     if (!n_cycles) begin
       if (simv_init()) begin
         $display("DIFFTEST INIT FAILED");
-        $finish();
+        $fatal();
       end
     end
     else if (simv_result == `SIMV_FAIL) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
-      $finish();
+      $fatal();
     end
     else if (simv_result == `SIMV_DONE) begin
       $display("DIFFTEST WORKLOAD DONE at cycle %d", n_cycles);
