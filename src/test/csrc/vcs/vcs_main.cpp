@@ -227,9 +227,9 @@ void simv_finish() {
   flash_finish();
 
 #ifndef CONFIG_NO_DIFFTEST
+  difftest_finish();
   if (enable_difftest) {
     goldenmem_finish();
-    difftest_finish();
   }
 #endif // CONFIG_NO_DIFFTEST
 
