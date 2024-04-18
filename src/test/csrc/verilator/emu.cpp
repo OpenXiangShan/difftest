@@ -97,7 +97,7 @@ static inline void print_help(const char *file) {
   printf("      --dump-db              enable database dump\n");
   printf("      --dump-select-db       select database's table to dump\n");
 #endif
-  printf("      --flash                the flash bin file for simulation\n");
+  printf("  -F, --flash                the flash bin file for simulation\n");
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
