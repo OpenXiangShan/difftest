@@ -26,6 +26,7 @@ VCS_CXXFILES  = $(SIM_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
 VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
 VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
+VCS_FLAGS 	 += +define+VCS
 # DiffTest support
 ifneq ($(NO_DIFF), 1)
 VCS_FLAGS    += +define+DIFFTEST
