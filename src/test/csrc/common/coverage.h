@@ -27,7 +27,7 @@
 
 class Coverage {
 public:
-  Coverage(){};
+  Coverage() {};
   virtual const char *get_name() = 0;
   virtual const char *get_cover_name(uint32_t i) {
     return "unknown";
@@ -199,7 +199,7 @@ extern LLVMSanCovData *llvm_sancov;
 
 class LLVMSanCoverage : public Coverage {
 public:
-  LLVMSanCoverage(){};
+  LLVMSanCoverage() {};
   inline const char *get_name() {
     return "llvm.branch";
   }

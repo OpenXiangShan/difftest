@@ -22,8 +22,8 @@
 
 class DUT {
 public:
-  DUT(){};
-  DUT(int argc, const char *argv[]){};
+  DUT() {};
+  DUT(int argc, const char *argv[]) {};
   virtual int tick() = 0;
   virtual int is_finished() = 0;
   virtual int is_good() = 0;
