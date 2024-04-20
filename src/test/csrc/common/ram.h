@@ -35,7 +35,7 @@ void pmem_write(uint64_t waddr, uint64_t wdata);
 
 class InputReader {
 public:
-  virtual ~InputReader(){};
+  virtual ~InputReader() {};
   virtual uint64_t len() {
     return 0;
   };
