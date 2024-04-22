@@ -61,6 +61,10 @@ extern "C" void set_flash_bin(char *s) {
   strcpy(flash_bin_file, s);
 }
 
+extern "C" void set_overwrite_nbytes(uint64_t len) {
+  overwrite_nbytes = len;
+}
+
 extern "C" void set_gcpt_bin(char *s) {
   gcpt_restore_bin = (char *)malloc(256);
   strcpy(gcpt_restore_bin, s);
