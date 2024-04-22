@@ -25,6 +25,7 @@ import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
 import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
+import "DPI-C" function void set_overwrite_nbytes(longint len);
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -69,6 +70,7 @@ string gcpt_bin_file;
 string wave_type;
 string diff_ref_so;
 string workload_list;
+longint overwrite_nbytes;
 
 `ifdef ENABLE_WORKLOAD_SWITCH
 wire workload_switch;
@@ -128,6 +130,11 @@ initial begin
   if ($test$plusargs("flash")) begin
     $value$plusargs("flash=%s", flash_bin_file);
     set_flash_bin(flash_bin_file);
+  end
+  // size of the gcpt used
+  if ($test$plusargs("overwrite_nbytes")) begin
+    $value$plusargs("overwrite_nbytes=%d", overwrite_nbytes);
+    set_overwrite_nbytes(overwrite_nbytes);
   end
   // overwrite gcpt on ram: bin file
   if ($test$plusargs("gcpt-restore")) begin
