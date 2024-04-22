@@ -143,12 +143,12 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
-`ifdef ENABLE_WORKLOAD_SWITCH
   // set exit instrs const
   if ($test$plusargs("max-instrs")) begin
     $value$plusargs("max-instrs=%d", max_instrs);
     set_max_instrs(max_instrs);
   end
+`ifdef ENABLE_WORKLOAD_SWITCH
   // set workload list
   if ($test$plusargs("workload-list")) begin
     $value$plusargs("workload-list=%s", workload_list);
