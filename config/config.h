@@ -170,7 +170,7 @@ extern unsigned long EMU_FLASH_SIZE;
 // #define ENABLE_IPC
 
 // stack size for emu
-#define EMU_STACK_SIZE (16 * 1024 * 1024)
+#define EMU_STACK_SIZE (32 * 1024 * 1024)
 
 // whether to maintain goldenmem
 #if NUM_CORES>1
