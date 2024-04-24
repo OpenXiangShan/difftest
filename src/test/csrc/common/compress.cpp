@@ -25,18 +25,50 @@ double calcTime(timeval s, timeval e) {
 
 // Return whether the file is a gz file
 bool isGzFile(const char *filename) {
-  if (filename == NULL || strlen(filename) < 4) {
+#ifdef NO_GZ_COMPRESSION
+  return false;
+#endif
+  int fd = -1;
+
+  fd = open(filename, O_RDONLY);
+  assert(fd);
+
+  uint8_t buf[2];
+
+  size_t sz = read(fd, buf, 2);
+  if (sz != 2) {
+    close(fd);
     return false;
   }
-  return !strcmp(filename + (strlen(filename) - 3), ".gz");
+
+  close(fd);
+
+  const uint8_t gz_magic[2] = {0x1f, 0x8B};
+  return memcmp(buf, gz_magic, 2) == 0;
 }
 
 // Return whether the file is a zstd file
 bool isZstdFile(const char *filename) {
-  if (filename == NULL || strlen(filename) < 6) {
+#ifdef NO_ZSTD_COMPRESSION
+  return false;
+#endif
+  int fd = -1;
+
+  fd = open(filename, O_RDONLY);
+  assert(fd);
+
+  uint8_t buf[4];
+
+  size_t sz = read(fd, buf, 4);
+  if (sz != 4) {
+    close(fd);
     return false;
   }
-  return !strcmp(filename + (strlen(filename) - 5), ".zstd");
+
+  close(fd);
+
+  const uint8_t zstd_magic[4] = {0x28, 0xB5, 0x2F, 0xFD};
+  return memcmp(buf, zstd_magic, 4) == 0;
 }
 
 long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) {
