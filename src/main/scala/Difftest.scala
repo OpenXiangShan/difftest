@@ -164,6 +164,7 @@ class DiffCSRState extends CSRState with DifftestBundle {
 class DiffHCSRState extends HCSRState with DifftestBundle {
   override val desiredCppName: String = "hcsr"
   override val desiredOffset: Int = 6
+  override val squashDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
@@ -213,6 +214,7 @@ class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val desiredCppName: String = "vcsr"
   override val desiredOffset: Int = 5
+  override val squashDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
