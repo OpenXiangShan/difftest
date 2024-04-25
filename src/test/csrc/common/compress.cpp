@@ -200,12 +200,14 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
 
   lseek(fd, 0, SEEK_SET);
 
-  compress_file_buffer = new uint8_t[file_size];
+  long *temp_page = (long *)mallo(chunk_size);
+  compress_file_buffer = (uint8_t *)malloc(file_size);
   assert(compress_file_buffer);
 
   compress_file_buffer_size = read(fd, compress_file_buffer, file_size);
   if (compress_file_buffer_size != file_size) {
     close(fd);
+    free(temp_page);
     free(compress_file_buffer);
     printf("Zstd compressed file read failed, file size: %d, read size: %ld\n", file_size, compress_file_buffer_size);
     return -1;
@@ -215,13 +217,11 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
 
   ZSTD_inBuffer input_buffer = {compress_file_buffer, compress_file_buffer_size, 0};
 
-  long *temp_page = new long[chunk_size];
-
   ZSTD_DStream *dstream = ZSTD_createDStream();
   if (!dstream) {
     printf("Can't create zstd dstream object\n");
-    delete[] compress_file_buffer;
-    delete[] temp_page;
+    free(temp_page);
+    free(compress_file_buffer);
     return -1;
   }
 
@@ -229,8 +229,8 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
   if (ZSTD_isError(init_result)) {
     printf("Can't init zstd dstream object: %s\n", ZSTD_getErrorName(init_result));
     ZSTD_freeDStream(dstream);
-    delete[] compress_file_buffer;
-    delete[] temp_page;
+    free(temp_page);
+    free(compress_file_buffer);
     return -1;
   }
 
@@ -243,8 +243,8 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
     if (ZSTD_isError(decompress_result)) {
       printf("Decompress failed: %s\n", ZSTD_getErrorName(decompress_result));
       ZSTD_freeDStream(dstream);
-      delete[] compress_file_buffer;
-      delete[] temp_page;
+      free(temp_page);
+      free(compress_file_buffer);
       return -1;
     }
 
@@ -267,14 +267,14 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
     printf("Decompress failed: %s\n", ZSTD_getErrorName(decompress_result));
     printf("Binary size larger than memory\n");
     ZSTD_freeDStream(dstream);
-    delete[] compress_file_buffer;
-    delete[] temp_page;
+    free(temp_page);
+    free(compress_file_buffer);
     return -1;
   }
 
   ZSTD_freeDStream(dstream);
-  delete[] compress_file_buffer;
-  delete[] temp_page;
+  free(temp_page);
+  free(compress_file_buffer);
 
   return curr_size;
 #else
