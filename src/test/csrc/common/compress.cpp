@@ -200,7 +200,7 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
 
   lseek(fd, 0, SEEK_SET);
 
-  long *temp_page = (long *)mallo(chunk_size);
+  long *temp_page = (long *)malloc(chunk_size);
   compress_file_buffer = (uint8_t *)malloc(file_size);
   assert(compress_file_buffer);
 
