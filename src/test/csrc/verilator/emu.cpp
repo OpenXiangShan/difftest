@@ -78,6 +78,7 @@ static inline void print_help(const char *file) {
   printf("  -r, --gcpt-restore=FILE    overwrite gcptrestore img with this image file\n");
   printf("  -b, --log-begin=NUM        display log from NUM th cycle\n");
   printf("  -e, --log-end=NUM          stop display log at NUM th cycle\n");
+  printf("  -S, --stack-size=NUM       stack size for emu\n");
 #ifdef DEBUG_REFILL
   printf("  -T, --track-instr=ADDR     track refill action concerning ADDR\n");
 #endif
@@ -164,13 +165,14 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "log-begin",         1, NULL, 'b' },
     { "log-end",           1, NULL, 'e' },
     { "flash",             1, NULL, 'F' },
+    { "stack-size",        1, NULL, 'S' },
     { "help",              0, NULL, 'h' },
     { 0,                   0, NULL,  0  }
   };
   /* clang-format on */
 
   int o;
-  while ((o = getopt_long(argc, const_cast<char *const *>(argv), "-s:C:X:I:T:R:W:hi:r:m:b:e:F:", long_options,
+  while ((o = getopt_long(argc, const_cast<char *const *>(argv), "-s:C:X:I:T:R:W:hi:r:m:b:e:F:S:", long_options,
                           &long_index)) != -1) {
     switch (o) {
       case 0:
@@ -270,9 +272,11 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'b': args.log_begin = atoll_strict(optarg, "log-begin"); break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
       case 'F': args.flash_bin = optarg; break;
+      case 'S': args.stack_size = atoll_strict(optarg, "stack-size"); break;
     }
   }
 
+  Info("Using stack size = %d kb\n", args.stack_size >> 10);
   if (args.image == NULL) {
     Info("Hint: --image=IMAGE_FILE is not specified. Use /dev/zero instead.\n");
     args.image = "/dev/zero";
@@ -309,17 +313,18 @@ double sc_time_stamp() {
 
 Emulator::Emulator(int argc, const char *argv[])
     : dut_ptr(new VSimTop), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
+  args = parse_args(argc, argv);
+
   // set stack size
   struct rlimit rlim;
   getrlimit(RLIMIT_STACK, &rlim);
-  rlim.rlim_cur = EMU_STACK_SIZE;
+  rlim.rlim_cur = args.stack_size;
   if (setrlimit(RLIMIT_STACK, &rlim)) {
     printf("[warning] cannot set stack size\n");
   }
   // junk, link for verilator
   get_sc_time_stamp = [this]() -> double { return get_cycles(); };
 
-  args = parse_args(argc, argv);
 #ifdef ENABLE_CONSTANTIN
   void constantinLoad();
   constantinLoad();
