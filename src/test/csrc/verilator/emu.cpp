@@ -276,7 +276,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     }
   }
 
-  Info("Using stack size = %d kb\n", args.stack_size >> 10);
+  Info("Using stack size = %lu kb\n", args.stack_size >> 10);
   if (args.image == NULL) {
     Info("Hint: --image=IMAGE_FILE is not specified. Use /dev/zero instead.\n");
     args.image = "/dev/zero";
