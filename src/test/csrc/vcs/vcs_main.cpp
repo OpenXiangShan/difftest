@@ -252,6 +252,10 @@ void simv_finish() {
   finish_device();
   delete simMemory;
   simMemory = nullptr;
+
+  for (int i = 0; i < NUM_CORES; i++)
+    core_end_info.core_trap[i] = 0;
+  core_end_info.core_trap_num = 0;
 }
 
 static uint8_t simv_result = SIMV_RUN;
