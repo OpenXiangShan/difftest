@@ -43,11 +43,11 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint64_t overwrite_nbytes = 0xe00;
-struct CORE_END_INFO {
+struct core_end_info_t {
   bool core_trap[NUM_CORES];
   uint8_t core_trap_num;
 };
-static CORE_END_INFO core_end_info;
+static core_end_info_t core_end_info;
 
 enum {
   SIMV_RUN,
@@ -197,10 +197,10 @@ extern "C" uint8_t simv_step() {
   if (max_instrs != 0) { // 0 for no limit
     for (int i = 0; i < NUM_CORES; i++) {
       if (core_end_info.core_trap[i])
-        break;
+        continue;
       auto trap = difftest[i]->get_trap_event();
       if (max_instrs < trap->instrCnt) {
-        core_end_info.core_trap[i] = 1;
+        core_end_info.core_trap[i] = true;
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
         difftest[i]->display_stats();
@@ -254,7 +254,7 @@ void simv_finish() {
   simMemory = nullptr;
 
   for (int i = 0; i < NUM_CORES; i++)
-    core_end_info.core_trap[i] = 0;
+    core_end_info.core_trap[i] = false;
   core_end_info.core_trap_num = 0;
 }
 
