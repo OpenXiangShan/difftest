@@ -1172,8 +1172,8 @@ void Difftest::display_stats() {
   uint64_t instrCnt = trap->instrCnt;
   uint64_t cycleCnt = trap->cycleCnt;
   double ipc = (double)instrCnt / cycleCnt;
-  eprintf(ANSI_COLOR_MAGENTA "instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET, instrCnt,
-          cycleCnt, ipc);
+  eprintf(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
+          this->id, instrCnt, cycleCnt, ipc);
 }
 
 void DiffState::display_commit_count(int i) {
