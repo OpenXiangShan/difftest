@@ -43,6 +43,11 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint64_t overwrite_nbytes = 0xe00;
+struct CORE_END_INFO {
+  bool core_trap[NUM_CORES];
+  uint8_t core_trap_num;
+};
+static CORE_END_INFO core_end_info;
 
 enum {
   SIMV_RUN,
@@ -190,11 +195,18 @@ extern "C" uint8_t simv_step() {
   }
 
   if (max_instrs != 0) { // 0 for no limit
-    auto trap = difftest[0]->get_trap_event();
-    if (max_instrs < trap->instrCnt) {
-      eprintf(ANSI_COLOR_GREEN "EXCEEDED MAX INSTR: %ld\n" ANSI_COLOR_RESET, max_instrs);
-      difftest[0]->display_stats();
-      return SIMV_DONE;
+    for (int i = 0; i < NUM_CORES; i++) {
+      if (core_end_info.core_trap[i])
+        break;
+      auto trap = difftest[i]->get_trap_event();
+      if (max_instrs < trap->instrCnt) {
+        core_end_info.core_trap[i] = 1;
+        core_end_info.core_trap_num++;
+        eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
+        difftest[i]->display_stats();
+        if (core_end_info.core_trap_num == NUM_CORES)
+          return SIMV_DONE;
+      }
     }
   }
 #endif // CONFIG_NO_DIFFTEST
