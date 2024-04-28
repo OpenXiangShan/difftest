@@ -55,7 +55,7 @@ SIM_CXXFLAGS += -DNOOP_HOME=\\\"$(NOOP_HOME)\\\"
 
 # generated-src
 GEN_CSRC_DIR  = $(BUILD_DIR)/generated-src
-SIM_CXXFILES += $(shell find $(GEN_CSRC_DIR) -name "*.cpp")
+SIM_CXXFILES += $(shell find $(GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null)
 SIM_CXXFLAGS += -I$(GEN_CSRC_DIR)
 
 PLUGIN_CSRC_DIR = $(abspath ./src/test/csrc/plugin)
@@ -212,7 +212,14 @@ format: scala-format clang-format
 scala-format:
 	mill -i mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
 
+CLANG_FORMAT_VER = 18_1_4
 clang-format:
+ifeq ($(shell clang-format --version 2>/dev/null| cut -f3 -d' ' | tr '.' '_'), $(CLANG_FORMAT_VER))
 	clang-format -i $(shell find ./src/test/csrc -name "*.cpp" -or -name "*.h")
+else
+	@echo "Required clang-format Version: $(CLANG_FORMAT_VER)"
+	@echo "Your Version: $(shell clang-format --version)"
+	@echo "Please run \"pip install --user --upgrade clang-format\", then set PATH manually"
+endif
 
 .PHONY: sim-verilog emu difftest_verilog clean format scala-format clang-format
