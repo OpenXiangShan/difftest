@@ -726,7 +726,7 @@ int Emulator::tick() {
       dut_ptr->difftest_perfCtrl_clean = 1;
       dut_ptr->difftest_perfCtrl_dump = 1;
 #else
-      set_warmup_info(trap->cycleCnt, warmup_instrs);
+      difftest[i]->set_warmup_info(trap->cycleCnt, warmup_instrs);
 #endif
       args.warmup_instr = -1;
     }
