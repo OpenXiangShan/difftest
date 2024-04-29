@@ -43,17 +43,17 @@ export OBJCACHE = ccache
 endif
 
 # Verilator version check
-VERILATOR_VER_CMD = verilator --version | cut -f2 -d' ' | tr -d '.'
-VERILATOR_4_210 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 4210)
+VERILATOR_VER_CMD = verilator --version 2> /dev/null | cut -f2 -d' ' | tr -d '.'
+VERILATOR_4_210 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 4210 2> /dev/null)
 ifeq ($(VERILATOR_4_210),1)
 EMU_CXXFLAGS += -DVERILATOR_4_210
 VEXTRA_FLAGS += --instr-count-dpi 1
 endif
-VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000)
+VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000 2> /dev/null)
 ifeq ($(VERILATOR_5_000),1)
 VEXTRA_FLAGS += --no-timing +define+VERILATOR_5
 endif
-VERILATOR_5_024 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5024)
+VERILATOR_5_024 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5024 2> /dev/null)
 ifeq ($(VERILATOR_5_024),1)
 VEXTRA_FLAGS += --quiet-stats
 endif

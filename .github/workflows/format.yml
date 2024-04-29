@@ -20,7 +20,7 @@ jobs:
 
       - name: Clang Format Installation
         run: |
-          pip install clang-format
+          pip install clang-format==18.1.4
 
       - name: Scala Formatter
         run: |
