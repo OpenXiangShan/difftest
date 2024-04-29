@@ -214,7 +214,7 @@ scala-format:
 
 CLANG_FORMAT_VER = 18_1_4
 clang-format:
-ifeq ($(shell clang-format --version 2>/dev/null| cut -f3 -d' ' | tr '.' '_'), $(CLANG_FORMAT_VER))
+ifeq ($(shell clang-format --version 2> /dev/null| cut -f3 -d' ' | tr '.' '_'), $(CLANG_FORMAT_VER))
 	clang-format -i $(shell find ./src/test/csrc -name "*.cpp" -or -name "*.h")
 else
 	@echo "Required clang-format Version: $(CLANG_FORMAT_VER)"
