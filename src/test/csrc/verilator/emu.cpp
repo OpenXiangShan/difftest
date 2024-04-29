@@ -722,8 +722,12 @@ int Emulator::tick() {
     auto trap = difftest[i]->get_trap_event();
     if (trap->instrCnt >= args.warmup_instr) {
       Info("Warmup finished. The performance counters will be dumped and then reset.\n");
+#if defined(NUM_CORES == 1)
       dut_ptr->difftest_perfCtrl_clean = 1;
       dut_ptr->difftest_perfCtrl_dump = 1;
+#else
+      set_warmup_info(trap->cycleCnt, warmup_instrs);
+#endif
       args.warmup_instr = -1;
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {

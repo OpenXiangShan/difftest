@@ -43,11 +43,13 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint64_t overwrite_nbytes = 0xe00;
-struct core_end_info_t {
+uint64_t warmup_instrs = 0;
+struct core_info_t {
   bool core_trap[NUM_CORES];
+  bool core_warmup[NUM_CORES];
   uint8_t core_trap_num;
 };
-static core_end_info_t core_end_info;
+core_info_t core_info;
 
 enum {
   SIMV_RUN,
@@ -68,6 +70,11 @@ extern "C" void set_flash_bin(char *s) {
 
 extern "C" void set_overwrite_nbytes(uint64_t len) {
   overwrite_nbytes = len;
+}
+
+extern "C" void set_warmup_instrs(uint64_t instrs) {
+  warmup_instrs = instrs;
+  printf("set warmup_instrs %ld\n", warmup_instrs);
 }
 
 extern "C" void set_gcpt_bin(char *s) {
@@ -196,15 +203,24 @@ extern "C" uint8_t simv_step() {
 
   if (max_instrs != 0) { // 0 for no limit
     for (int i = 0; i < NUM_CORES; i++) {
-      if (core_end_info.core_trap[i])
+      if (core_info.core_trap[i])
         continue;
       auto trap = difftest[i]->get_trap_event();
+      // warmup doesn't make sense if you don't set it to exit by max-instrs , so it's only checked here
+      if (!core_info.core_warmup[i] && warmup_instrs != 0) {
+        if (trap->instrCnt >= warmup_instrs) {
+          Info("Warmup finished. The performance counters will be dumped and then reset.\n");
+          eprintf("core-%d warmup cycle %ld instrs %ld\n", trap->cycleCnt, trap->instrCnt);
+          difftest[i]->set_warmup_info(trap->cycleCnt, warmup_instrs);
+          core_info.core_warmup[i] = true;
+        }
+      }
       if (max_instrs < trap->instrCnt) {
-        core_end_info.core_trap[i] = true;
-        core_end_info.core_trap_num++;
+        core_info.core_trap[i] = true;
+        core_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
         difftest[i]->display_stats();
-        if (core_end_info.core_trap_num == NUM_CORES)
+        if (core_info.core_trap_num == NUM_CORES)
           return SIMV_DONE;
       }
     }
@@ -253,9 +269,11 @@ void simv_finish() {
   delete simMemory;
   simMemory = nullptr;
 
-  for (int i = 0; i < NUM_CORES; i++)
-    core_end_info.core_trap[i] = false;
-  core_end_info.core_trap_num = 0;
+  for (int i = 0; i < NUM_CORES; i++) {
+    core_info.core_trap[i] = false;
+    core_info.core_warmup[i] = false;
+  }
+  core_info.core_trap_num = 0;
 }
 
 static uint8_t simv_result = SIMV_RUN;

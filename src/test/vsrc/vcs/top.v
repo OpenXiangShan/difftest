@@ -26,6 +26,7 @@ import "DPI-C" function void set_no_diff();
 import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function void set_overwrite_nbytes(longint len);
+import "DPI-C" function void set_warmup_instrs(longint instrs);
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -71,6 +72,7 @@ string wave_type;
 string diff_ref_so;
 string workload_list;
 longint overwrite_nbytes;
+longint warmup_instr;
 
 `ifdef ENABLE_WORKLOAD_SWITCH
 wire workload_switch;
@@ -140,6 +142,10 @@ initial begin
   if ($test$plusargs("gcpt-restore")) begin
     $value$plusargs("gcpt-restore=%s", gcpt_bin_file);
     set_gcpt_bin(gcpt_bin_file);
+  end
+  // warmup instr
+  if ($test$plusargs("warmup-instr")) begin
+    $value$plusargs("warmup-instr=%d", warmup_instr);
   end
   // diff-test golden model: nemu-so
   if ($test$plusargs("diff")) begin

@@ -273,6 +273,11 @@ public:
     state->dump_commit_trace = enable;
   }
 
+  void set_warmup_info(uint64_t cycle, uint64_t instr) {
+    warmup_cycle = cycle;
+    warmup_instrs = instr;
+  }
+
 protected:
   DiffTrace *difftrace = nullptr;
 
@@ -297,6 +302,8 @@ protected:
 
   int id;
 
+  uint64_t warmup_cycle = 0;
+  uint64_t warmup_instrs = 0;
   bool progress = false;
   uint64_t ticks = 0;
   uint64_t last_commit = 0;
