@@ -212,14 +212,14 @@ format: scala-format clang-format
 scala-format:
 	mill -i mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
 
-CLANG_FORMAT_VER = 18_1_4
+CLANG_FORMAT_VER = 18.1.4
 clang-format:
-ifeq ($(shell clang-format --version 2> /dev/null| cut -f3 -d' ' | tr '.' '_'), $(CLANG_FORMAT_VER))
+ifeq ($(shell clang-format --version 2> /dev/null| cut -f3 -d' ' | tr '.' '_'), $(shell echo $(CLANG_FORMAT_VER) | tr '.' '_'))
 	clang-format -i $(shell find ./src/test/csrc -name "*.cpp" -or -name "*.h")
 else
 	@echo "Required clang-format Version: $(CLANG_FORMAT_VER)"
 	@echo "Your Version: $(shell clang-format --version)"
-	@echo "Please run \"pip install --user --upgrade clang-format\", then set PATH manually"
+	@echo "Please run \"pip install --user clang-format==$(CLANG_FORMAT_VER)", then set PATH manually"
 endif
 
 .PHONY: sim-verilog emu difftest_verilog clean format scala-format clang-format
