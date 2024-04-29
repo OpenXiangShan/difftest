@@ -98,9 +98,10 @@ coherence via RefillTest.
 | `DiffTrapEvent` | Simulation environment call | Yes |
 | `DiffArchIntRegState` | General-purpose registers | Yes |
 | `DiffArchFpRegState` | Floating-point registers | No |
-| `DiffArchVecRegState` | Floating-point registers | No |
-| `DiffCSRState` | Control and status registers | Yes |
-| `DiffVecCSRState` | Control and status registers | No |
+| `DiffArchVecRegState` | Vector registers | No |
+| `DiffCSRState` | Control and status registers (CSRs) | Yes |
+| `DiffVecCSRState` | CSRs for the Vector extension | No |
+| `DiffHCSRState` | CSRs for the Hypervisor extension | No |
 | `DiffDebugMode` | Debug mode registers | No |
 | `DiffIntWriteback` | General-purpose writeback operations | No |
 | `DiffFpWriteback` | Floating-point writeback operations | No |
@@ -127,6 +128,8 @@ These IOs can be used along with the controller wrapper at `src/main/scala/commo
 For compatibility on different platforms, the CPU should access a C++ memory via
 DPI-C interfaces. This memory will be initialized in C++.
 
+You may also use macro `DISABLE_DIFFTEST_RAM_DPIC` to remove memory DPI-Cs and use Verilog arrays instead.
+
 ```scala
 val mem = DifftestMem(memByte, 8)
 when (wen) {
@@ -143,7 +146,12 @@ To use DiffTest, please include all necessary modules and top-level IOs in your 
 It's worth noting the Chisel Bundles may have arguments with default values.
 Please set the correct parameters for the interfaces.
 
-# Further reference
+# References
 
-* [Difftest: detailed usage (Chinese)](./doc/usage.md)
-* [SMP-Difftest 支持多处理器的差分测试方法](https://github.com/OpenXiangShan/XiangShan-doc/blob/main/slides/20210624-RVWC-SMP-Difftest%20%E6%94%AF%E6%8C%81%E5%A4%9A%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%B7%AE%E5%88%86%E6%B5%8B%E8%AF%95%E6%96%B9%E6%B3%95.pdf)
+* Theories of DiffTest / DiffTest 的基本原理
+  * [一生一芯计划讲义](https://ysyx.oscc.cc/slides/2205/12.html)
+* Advanced theories of DiffTest / DiffTest 原理的进阶问题讨论
+  * [Paper 1](https://ieeexplore.ieee.org/document/9923860), [Paper 2](https://jcst.ict.ac.cn/en/article/doi/10.1007/s11390-023-3285-8)
+  * SMP-DiffTest 支持多处理器的差分测试方法: [PPT](https://github.com/OpenXiangShan/XiangShan-doc/blob/main/slides/20210624-RVWC-SMP-Difftest%20%E6%94%AF%E6%8C%81%E5%A4%9A%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%B7%AE%E5%88%86%E6%B5%8B%E8%AF%95%E6%96%B9%E6%B3%95.pdf), [视频](https://www.bilibili.com/video/BV1NM4y1T7Hz/)
+* Next-generation DiffTest / DiffTest 的下一步演进
+  * DiffTest on Cadence Palladium: to be released soon
