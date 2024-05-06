@@ -18,12 +18,12 @@
 #define COMPRESS_H
 
 #include "common.h"
+#include <fcntl.h>
 #include <sys/time.h>
 #ifndef NO_GZ_COMPRESSION
 #include <zlib.h>
 #endif
 #ifndef NO_ZSTD_COMPRESSION
-#include <fcntl.h>
 #include <zstd.h>
 #endif
 
