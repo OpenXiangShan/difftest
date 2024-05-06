@@ -15,6 +15,7 @@
 #***************************************************************************************
 
 NOOP_HOME  ?= $(abspath .)
+export NOOP_HOME
 
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
