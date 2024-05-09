@@ -28,6 +28,7 @@ RTL_SUFFIX ?= v
 SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
 
 # generate difftest files for non-chisel design.
+.DEFAULT_GOAL := difftest_verilog
 difftest_verilog:
 	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR)
 
@@ -44,7 +45,6 @@ TIME_CMD = time -a -o $(TIMELOG)
 
 # remote machine with more cores to speedup c++ build
 REMOTE ?= localhost
-.DEFAULT_GOAL = emu
 
 # simulation
 SIM_CONFIG_DIR = $(abspath ./config)
