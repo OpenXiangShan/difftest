@@ -169,9 +169,6 @@ extern unsigned long EMU_FLASH_SIZE;
 // set WITH_IPC=1 when make to enable drawing ipc curve in verilator simulation
 // #define ENABLE_IPC
 
-// stack size for emu
-#define EMU_STACK_SIZE (32 * 1024 * 1024)
-
 // whether to maintain goldenmem
 #if NUM_CORES>1
 #define DEBUG_GOLDENMEM
