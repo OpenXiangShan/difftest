@@ -309,13 +309,20 @@ double sc_time_stamp() {
 
 Emulator::Emulator(int argc, const char *argv[])
     : dut_ptr(new VSimTop), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
-  // set stack size
+
+#if !defined(VERILATOR_VERSION_INTEGER) || VERILATOR_VERSION_INTEGER < 5026000
+  // Large designs may cause segmentation fault due to stack overflow.
+  // Legacy versions of Verilator do not automatically set the stack size.
+  // Therefore, we set it manually here with a default value.
+  const size_t EMU_STACK_SIZE = 32 * 1024 * 1024;
   struct rlimit rlim;
   getrlimit(RLIMIT_STACK, &rlim);
   rlim.rlim_cur = EMU_STACK_SIZE;
   if (setrlimit(RLIMIT_STACK, &rlim)) {
-    printf("[warning] cannot set stack size\n");
+    printf("[warning] cannot set stack size. Large designs may cause SIGSEGV.\n");
   }
+#endif
+
   // junk, link for verilator
   get_sc_time_stamp = [this]() -> double { return get_cycles(); };
 
