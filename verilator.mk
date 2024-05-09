@@ -37,7 +37,7 @@ EMU = $(BUILD_DIR)/fuzzer
 endif
 
 # CCACHE
-CCACHE := $(if $(shell which ccache),ccache,)
+CCACHE := $(if $(shell which ccache 2> /dev/null),ccache,)
 ifneq ($(CCACHE),)
 export OBJCACHE = ccache
 endif
