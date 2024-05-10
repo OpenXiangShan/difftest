@@ -105,6 +105,7 @@ coherence via RefillTest.
 | `DiffDebugMode` | Debug mode registers | No |
 | `DiffIntWriteback` | General-purpose writeback operations | No |
 | `DiffFpWriteback` | Floating-point writeback operations | No |
+| `DiffVecWriteback` | Vector writeback operations | No |
 | `DiffArchIntDelayedUpdate` | Delayed general-purpose writeback | No |
 | `DiffArchFpDelayedUpdate` | Delayed floating-point writeback | No |
 | `DiffStoreEvent` | Store operations | No |

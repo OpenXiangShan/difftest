@@ -183,6 +183,10 @@ class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
   override val desiredCppName: String = "wb_fp"
 }
 
+class DiffVecWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
+  override val desiredCppName: String = "wb_vec"
+}
+
 class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "regs_int"
   override val desiredOffset: Int = 0
