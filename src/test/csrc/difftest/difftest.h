@@ -336,7 +336,7 @@ protected:
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
         if (dut->commit[i].vecwen) {
-          return
+      return
 #ifdef CONFIG_DIFFTEST_VECWRITEBACK
           dut->wb_vec[dut->commit[i].wpdest].data;
 #else
