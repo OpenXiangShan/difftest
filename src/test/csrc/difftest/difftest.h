@@ -189,13 +189,8 @@ private:
     }
   }
   void display_commit_count(int i);
-  void display_commit_instr(int i) {
-    extern int test_spike();
-    int spike_invalid = test_spike();
-    display_commit_instr(retire_inst_pointer, spike_invalid);
-    fflush(stdout);
-  }
-  void display_commit_instr(int i, bool spike_invalid);
+  void display_commit_instr(int i);
+  void display_commit_instr(int i, bool use_spike);
 };
 
 class Difftest {

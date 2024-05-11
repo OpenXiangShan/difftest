@@ -475,14 +475,9 @@ int Difftest::do_instr_commit(int i) {
   }
 
 #ifdef DEBUG_MODE_DIFF
-  int spike_invalid = test_spike();
-  if (!spike_invalid && (IS_DEBUGCSR(commit_instr) || IS_TRIGGERCSR(commit_instr))) {
-    char inst_str[32];
-    char dasm_result[64] = {0};
-    sprintf(inst_str, "%08x", commit_instr);
-    spike_dasm(dasm_result, inst_str);
+  if (spike_valid() && (IS_DEBUGCSR(commit_instr) || IS_TRIGGERCSR(commit_instr))) {
     Info("s0 is %016lx ", dut->regs.gpr[8]);
-    Info("pc is %lx %s\n", commit_pc, dasm_result);
+    Info("pc is %lx %s\n", commit_pc, spike_dasm(commit_instr));
   }
 #endif
 
@@ -1159,11 +1154,7 @@ void CommitTrace::display(bool use_spike) {
   printf("%s pc %016lx inst %08x", get_type(), pc, inst);
   display_custom();
   if (use_spike) {
-    char inst_str[9];
-    char dasm_result[32] = {0};
-    sprintf(inst_str, "%x", inst);
-    spike_dasm(dasm_result, inst_str);
-    printf(" %s", dasm_result);
+    printf(" %s", spike_dasm(inst));
   }
 }
 
@@ -1182,27 +1173,31 @@ void DiffState::display_commit_count(int i) {
          (i == retire_pointer) ? " <--" : "");
 }
 
-void DiffState::display_commit_instr(int i, bool spike_invalid) {
+void DiffState::display_commit_instr(int i) {
+  display_commit_instr(retire_inst_pointer, spike_valid());
+  fflush(stdout);
+}
+
+void DiffState::display_commit_instr(int i, bool use_spike) {
   if (!commit_trace[i]) {
     return;
   }
   printf("[%02d] ", i);
-  commit_trace[i]->display(!spike_invalid);
+  commit_trace[i]->display(use_spike);
   auto retire_pointer = (retire_inst_pointer + DEBUG_INST_TRACE_SIZE - 1) % DEBUG_INST_TRACE_SIZE;
   printf("%s\n", (i == retire_pointer) ? " <--" : "");
 }
 
 void DiffState::display(int coreid) {
-  int spike_invalid = test_spike();
-
   printf("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
   for (int j = 0; j < DEBUG_GROUP_TRACE_SIZE; j++) {
     display_commit_count(j);
   }
 
   printf("\n============== Commit Instr Trace ==============\n");
+  bool use_spike = spike_valid();
   for (int j = 0; j < DEBUG_INST_TRACE_SIZE; j++) {
-    display_commit_instr(j, spike_invalid);
+    display_commit_instr(j, use_spike);
   }
 
   fflush(stdout);

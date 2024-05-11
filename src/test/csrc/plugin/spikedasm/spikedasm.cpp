@@ -14,54 +14,59 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "spikedasm.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int test_spike() {
-  return system("echo \"DASM(deadbeef)\" | spike-dasm > /dev/null");
+// We cache the spike-dasm state here. If it is changed during running, the behavior is undefined.
+static bool is_tested = false, is_valid = true;
+
+// This is a place-holder command string. spike_dasm function will replace the inst.
+static char dasm_cmd[] = "echo \"DASM(01234567deadbeaf)\" | spike-dasm";
+static const int dasm_offset = sizeof("echo \"DASM(") - 1;
+
+// We are using a global string as the result buffer.
+static char dasm_result[32];
+
+bool spike_valid() {
+  if (!is_tested) {
+    is_tested = true;
+    char cmd[128];
+    sprintf(cmd, "%s > /dev/null 2> /dev/null", dasm_cmd);
+    is_valid = !system(cmd);
+  }
+  return is_valid;
 }
 
-void execute_cmd(const char *cmd, char *result) {
-  char buf_ps[1024];
-  char ps[1024] = {0};
-  FILE *ptr;
-  strcpy(ps, cmd);
-  if ((ptr = popen(ps, "r")) != NULL) {
-    while (fgets(buf_ps, 1024, ptr) != NULL) {
-      strcat(result, buf_ps);
-      if (strlen(result) > 1024)
-        break;
-    }
+static void execute_dasm_cmd() {
+  FILE *ptr = popen(dasm_cmd, "r");
+  if (ptr) {
+    fgets(dasm_result, sizeof(dasm_result), ptr);
     pclose(ptr);
-    ptr = NULL;
   } else {
-    printf("popen %s error\n", ps);
+    printf("popen %s error\n", dasm_cmd);
   }
 }
 
-void spike_dasm(char *result, char *input) {
-  char cmd[1024] = {0};
-  strcat(cmd, "echo \"DASM(");
-  strcat(cmd, input);
-  strcat(cmd, ")\" | spike-dasm");
-  // printf("%s ", cmd);
-  execute_cmd(cmd, result);
-  // printf("%s\n", result);
-  // remove \n
-  char *first_n_occ = strpbrk(result, "\n");
+const char *spike_dasm(uint64_t inst) {
+  char inst_hex_string[17];
+  sprintf(inst_hex_string, "%016lx", inst);
+  memcpy(dasm_cmd + dasm_offset, inst_hex_string, 16);
+  execute_dasm_cmd();
+  char *first_n_occ = strpbrk(dasm_result, "\n");
   if (first_n_occ)
     *first_n_occ = '\0';
+  return dasm_result;
 }
 
-int usage() {
-  char input[] = "10500073";
-  char dasm_result[64] = {0};
+// This is an example usage. Not used.
+static int usage() {
+  uint64_t input = 0x10500073L;
 
-  int spike_invalid = test_spike();
-  if (!spike_invalid)
-    spike_dasm(dasm_result, input);
+  if (spike_valid()) {
+    printf("%s", spike_dasm(input));
+  }
 
-  printf("%s", dasm_result);
   return 0;
 }

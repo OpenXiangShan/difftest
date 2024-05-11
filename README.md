@@ -147,7 +147,21 @@ To use DiffTest, please include all necessary modules and top-level IOs in your 
 It's worth noting the Chisel Bundles may have arguments with default values.
 Please set the correct parameters for the interfaces.
 
-# References
+## Plugins
+
+There are several plugins to improvement the RTL-simulation and debugging process.
+
+### spike-dasm: a disassembly engine for RISC-V instructions
+
+When the simulation aborts, DiffTest gives a report on the current architectural states and a list of recently commited instructions.
+To simplify the debugging process, we may want the disassembly of the executed instructions.
+DiffTest is currently using the `spike-dasm` command provided by the [riscv-isa-sim](https://github.com/riscv-software-src/riscv-isa-sim) project for RISC-V instruction disassembly.
+To use this plugin, you are required to build it from source and install the tool to somewhere in your `PATH`.
+DiffTest will automatically detect its existence by searching the `PATH`.
+Please refer to [the original README](https://github.com/riscv-software-src/riscv-isa-sim?tab=readme-ov-file#build-steps) for detailed installation instructions.
+Feel free to change the `--prefix=` argument to where you have access to, such as `~/.cache`, so that you won't need the `sudo` privilege for the installation.
+
+## References
 
 * Theories of DiffTest / DiffTest 的基本原理
   * [一生一芯计划讲义](https://ysyx.oscc.cc/slides/2205/12.html)
