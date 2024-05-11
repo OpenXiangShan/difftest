@@ -162,13 +162,31 @@ Please set the correct parameters for the interfaces.
 
 ## Plugins
 
-There are several plugins to improvement the RTL-simulation and debugging process.
+There are several plugins to improve the RTL-simulation and debugging process.
+
+See the Makefiles for the compilation time arguments. Run `emu --help` to see the full list of supported run-time arguments.
+
+### LightSSS: a lightweight simulation snapshot mechanism
+
+After the simulation aborts, we require some debugging information to assist locating the root cause, such as waveform and DUT/REF logs.
+Traditionally, this requires a second run for the simulation with debugging enabled for the last period of simulation (region of interest, ROI).
+To avoid such tedious stage, we propose a snapshot mechanism to periodically take snapshots for the simulation process with minor performance overhead.
+A recent snapshot will be restored after the simulation aborts to reproduce the abortion with debugging information enabled.
+To understand the technical details of this mechanism, please refer to [our MICRO'22 paper](https://xiangshan-doc.readthedocs.io/zh-cn/latest/tutorials/publications/#towards-developing-high-performance-risc-v-processors-using-agile-methodology).
+
+The plugin LightSSS is by default included at compilation time and should be manually enabled during simulation time using `--enable-fork`.
+You may configure the snapshot period using `--fork-interval`. A typical period is 1 (for small designs) to 30 (for super large designs) seconds.
+After the simulation aborts, DiffTest automatically re-runs the simulation from a recent snapshot and enables debugging information, including waveform and DUT/REF logs.
+You may want to redirect the stderr to a file to capture the REF logs output by NEMU and Spike.
+Please avoid using `--enable-fork` together with other debugging options, such as `-b`, `-e`, `--dump-wave`, `--dump-ref-trace`, etc.
+The behavior when they are enabled simultaneously is undefined.
 
 ### spike-dasm: a disassembly engine for RISC-V instructions
 
 When the simulation aborts, DiffTest gives a report on the current architectural states and a list of recently commited instructions.
 To simplify the debugging process, we may want the disassembly of the executed instructions.
 DiffTest is currently using the `spike-dasm` command provided by the [riscv-isa-sim](https://github.com/riscv-software-src/riscv-isa-sim) project for RISC-V instruction disassembly.
+
 To use this plugin, you are required to build it from source and install the tool to somewhere in your `PATH`.
 DiffTest will automatically detect its existence by searching the `PATH`.
 Please refer to [the original README](https://github.com/riscv-software-src/riscv-isa-sim?tab=readme-ov-file#build-steps) for detailed installation instructions.
