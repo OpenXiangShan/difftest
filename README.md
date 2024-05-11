@@ -2,17 +2,30 @@
 
 DiffTest (差分测试): a modern co-simulation framework for RISC-V processors.
 
-## Generate Example Verilog
+## Example: Generate Verilog
 
-DiffTest interfaces are provided in Chisel bundles and expected to be integrated
+DiffTest interfaces are provided in [Chisel bundles](src/main/scala/Bundles.scala) and expected to be integrated
 into Chisel designs with auto-generated C++ interfaces.
-However, we also provide examples of the generated Verilog modules.
+
+**We strongly recommend using Chisel as the design description language when using DiffTest.**
+It will greatly benefit the verification setup since we are providing some advanced features
+only in Chisel, such as datapath optimizations for higher simulation speed on emulation platforms.
+
+If you are using DiffTest in a non-Chisel environment, we still provide examples of the generated Verilog modules.
+You may configure the test interfaces in [src/test/scala/DifftestMain.scala](src/test/scala/DifftestMain.scala) based on your design details.
+The generated Verilog and C++ files will match (in type and count) what you have described about your use case.
+After running the following command, files will be generated at `build`.
 
 ```bash
-make difftest_verilog NOOP_HOME=$(pwd)
+make
 ```
 
-## Example Usage
+## Example Chisel Usage
+
+We are supporting Chisel 3.6.0 (the last version supporting Scala FIRRTL Compiler)
+as well as 6.3.0 (the latest stable version supporting MLIR FIRRTL Compiler).
+
+Here are the detail instructions on integrating DiffTest to your own project.
 
 1. Add this submodule to your design.
 
