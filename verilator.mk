@@ -126,7 +126,7 @@ ifeq ($(EMU_COVERAGE),1)
 	@python3 ./scripts/coverage/vtransform.py $(RTL_DIR)
 endif
 	@mkdir -p $(@D)
-	@echo "\n[verilator] Generating C++ files..." >> $(TIMELOG)
+	@echo -e "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) verilator $(VERILATOR_FLAGS) -Mdir $(@D) $^ $(EMU_DEPS)
 ifneq ($(VERILATOR_5_000),1)
@@ -139,7 +139,7 @@ EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
 
 build_emu_local: $(EMU_MK)
-	@echo "\n[g++] Compiling C++ files..." >> $(TIMELOG)
+	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
