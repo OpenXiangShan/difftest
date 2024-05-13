@@ -141,7 +141,7 @@ EMU_COMPILE_FILTER =
 build_emu_local: $(EMU_MK)
 	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" OPT_SLOW="-O0" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
 $(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
 ifeq ($(REMOTE),localhost)
