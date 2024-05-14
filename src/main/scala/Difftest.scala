@@ -342,7 +342,7 @@ object DifftestModule {
     difftest
   }
 
-  def finish(cpu: String): DifftestTopIO = {
+  def finish(cpu: String, createTopIO: Boolean): Option[DifftestTopIO] = {
     val gateway = Gateway.collect()
     cppMacros ++= gateway.cppMacros
     vMacros ++= gateway.vMacros
@@ -351,11 +351,17 @@ object DifftestModule {
     generateCppHeader(cpu, gateway.structPacked.getOrElse(false))
     generateVeriogHeader()
 
-    if (enabled) {
-      createTopIOs(gateway.step.getOrElse(0.U))
-    } else {
-      WireInit(0.U.asTypeOf(new DifftestTopIO))
+    Option.when(createTopIO) {
+      if (enabled) {
+        createTopIOs(gateway.step.getOrElse(0.U))
+      } else {
+        WireInit(0.U.asTypeOf(new DifftestTopIO))
+      }
     }
+  }
+
+  def finish(cpu: String): DifftestTopIO = {
+    finish(cpu, true).get
   }
 
   def createTopIOs(step: UInt): DifftestTopIO = {
