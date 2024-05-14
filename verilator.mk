@@ -36,12 +36,6 @@ ifneq ($(FUZZER_LIB), )
 EMU = $(BUILD_DIR)/fuzzer
 endif
 
-# CCACHE
-CCACHE := $(if $(shell which ccache 2> /dev/null),ccache,)
-ifneq ($(CCACHE),)
-export OBJCACHE = ccache
-endif
-
 # Verilator version check
 VERILATOR_VER_CMD = verilator --version 2> /dev/null | cut -f2 -d' ' | tr -d '.'
 VERILATOR_4_210 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 4210 2> /dev/null)
