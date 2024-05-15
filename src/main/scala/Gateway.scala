@@ -99,7 +99,6 @@ case class GatewayResult(
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
   private var config = GatewayConfig()
-  private var coreid = 0.asUInt
   def setConfig(cfg: String): Unit = {
     cfg.foreach {
       case 'E' => config = config.copy(hasGlobalEnable = true)
@@ -119,7 +118,6 @@ object Gateway {
 
   def apply[T <: DifftestBundle](gen: T): T = {
     val bundle = WireInit(0.U.asTypeOf(gen))
-    coreid = bundle.coreid
     if (config.needEndpoint) {
       val packed = WireInit(bundle.asUInt)
       DifftestWiring.addSource(packed, s"gateway_${instances.length}")
@@ -134,7 +132,7 @@ object Gateway {
 
   def collect(): GatewayResult = {
     val sink = if (config.needEndpoint) {
-      val endpoint = Module(new GatewayEndpoint(instances.toSeq, config, coreid))
+      val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
       GatewayResult(
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
@@ -150,17 +148,17 @@ object Gateway {
   }
 }
 
-class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig, coreid: UInt) extends Module {
+class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
   val in_pack = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
-  val maxcoreid = signals.count(_.isUniqueIdentifier)
+  val numcores = signals.count(_.isUniqueIdentifier)
   for ((data, id) <- in_pack.zipWithIndex) {
     DifftestWiring.addSink(data, s"gateway_$id")
     in(id) := data.asTypeOf(in(id).cloneType)
   }
 
   val preprocessed = if (config.needPreprocess) {
-    WireInit(Preprocess(in, config, coreid, maxcoreid))
+    WireInit(Preprocess(in, config, numcores))
   } else {
     WireInit(in)
   }
@@ -251,17 +249,15 @@ class GatewaySinkControl(config: GatewayConfig) extends Bundle {
 }
 
 object Preprocess {
-  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig, coreid: UInt, maxcoreid: Int): MixedVec[DifftestBundle] = {
-    val module = Module(new Preprocess(chiselTypeOf(bundles).toSeq, config, maxcoreid))
+  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig, numcores: Int): MixedVec[DifftestBundle] = {
+    val module = Module(new Preprocess(chiselTypeOf(bundles).toSeq, config, numcores))
     module.in := bundles
-    module.coreid := coreid
     module.out
   }
 }
 
-class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig, maxcoreid: Int) extends Module {
+class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig, numcores: Int) extends Module {
   val in = IO(Input(MixedVec(bundles)))
-  val coreid = IO(Input(UInt(0.W)))
   val out = IO(Output(MixedVec(bundles)))
 
   out := in
@@ -271,13 +267,12 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig, maxcoreid:
     if (in.exists(_.desiredCppName == "wb_int")) {
       //require(in.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
       val writebacks = in.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
+      val coreid = writebacks.head.coreid
       val numPhyRegs = writebacks.head.numElements
-      val wb_int = Reg(Vec(numPhyRegs * maxcoreid, UInt(64.W)))
-      val offset = UInt(0.W)
-      offset := (coreid * numPhyRegs.asUInt)
+      val wb_int = Reg(Vec(numcores, Vec(numPhyRegs, UInt(64.W))))
       for (wb <- writebacks) {
         when(wb.valid) {
-          wb_int(wb.address + offset) := wb.data
+          wb_int(coreid)(wb.address) := wb.data
         }
       }
 
@@ -288,10 +283,10 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig, maxcoreid:
       for (c <- commits) {
         when(c.valid && c.skip) {
           wb_for_skip.valid := true.B
-          wb_for_skip.address := c.wpdest + offset
-          wb_for_skip.data := wb_int(c.wpdest + offset)
+          wb_for_skip.address := c.wpdest
+          wb_for_skip.data := wb_int(coreid)(c.wpdest)
           for (wb <- writebacks) {
-            when(wb.valid && wb.address === (c.wpdest + offset)) {
+            when(wb.valid && wb.address === c.wpdest) {
               wb_for_skip.data := wb.data
             }
           }
