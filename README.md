@@ -87,6 +87,18 @@ val difftest = DifftestModule.finish("Demo")
 difftest.uart <> mmio.io.uart
 ```
 
+Alternatively, you can skip the optional UART connections by using an overloaded version
+of `DifftestModule.finish(cpu: String, createTopIO: Boolean)` with the 2nd parameter
+`createTopIO` set to `false`. This overloaded version can be used in non-module context
+(e.g. in App class) as following.
+
+```scala
+object Main extends App {
+  // ...
+  DifftestModule.finish("Demo", false)
+}
+```
+
 4. Generate verilog files for simulation.
 
 5. `make emu` and start simulating & debugging!
