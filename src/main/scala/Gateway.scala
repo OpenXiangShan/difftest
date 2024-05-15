@@ -99,6 +99,7 @@ case class GatewayResult(
 object Gateway {
   private val instances = ListBuffer.empty[DifftestBundle]
   private var config = GatewayConfig()
+
   def setConfig(cfg: String): Unit = {
     cfg.foreach {
       case 'E' => config = config.copy(hasGlobalEnable = true)
@@ -265,14 +266,15 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig, numcores: 
   if (config.hasDutZone || config.isSquash || config.isBatch) {
     // Special fix for int writeback. Work for single-core only
     if (in.exists(_.desiredCppName == "wb_int")) {
-      //require(in.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
+      if (config.isSquash || config.isBatch) {
+        require(in.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
+      }
       val writebacks = in.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
-      val coreid = writebacks.head.coreid
       val numPhyRegs = writebacks.head.numElements
       val wb_int = Reg(Vec(numcores, Vec(numPhyRegs, UInt(64.W))))
       for (wb <- writebacks) {
         when(wb.valid) {
-          wb_int(coreid)(wb.address) := wb.data
+          wb_int(wb.coreid)(wb.address) := wb.data
         }
       }
 
@@ -284,7 +286,7 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig, numcores: 
         when(c.valid && c.skip) {
           wb_for_skip.valid := true.B
           wb_for_skip.address := c.wpdest
-          wb_for_skip.data := wb_int(coreid)(c.wpdest)
+          wb_for_skip.data := wb_int(c.coreid)(c.wpdest)
           for (wb <- writebacks) {
             when(wb.valid && wb.address === c.wpdest) {
               wb_for_skip.data := wb.data
