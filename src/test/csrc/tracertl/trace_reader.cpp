@@ -43,12 +43,12 @@ bool TraceReader::read(Instruction &inst) {
   TraceInstruction trace_entry;
   trace_stream->read(reinterpret_cast<char *> (&trace_entry), sizeof(TraceInstruction));
 
-  trace_entry.dump();
+  // trace_entry.dump();
 
-  inst.memory_size = trace_entry.memory_size;
+  // inst.memory_size = trace_entry.memory_size;
   inst.instr_pc    = trace_entry.instr_pc;
   inst.instr       = trace_entry.instr;
-  inst.memory_address = trace_entry.memory_address;
+  // inst.memory_address = trace_entry.memory_address;
 
   return true;
 }

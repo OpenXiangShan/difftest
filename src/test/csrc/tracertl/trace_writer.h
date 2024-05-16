@@ -13,26 +13,30 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-
-#ifndef __TRACE_READER_H__
-#define __TRACE_READER_H__
+#ifndef __TRACE_WRITER_H__
+#define __TRACE_WRITER_H__
 
 #include <fstream>
 #include <iostream>
 #include "trace_format.h"
 
-class TraceReader {
-  std::ifstream *trace_stream;
+class TraceWriter {
+  std::ofstream *trace_stream;
 
 public:
-  TraceReader(std::string trace_file_name);
-  ~TraceReader() {
+  TraceWriter(std::string trace_file_name);
+  ~TraceWriter() {
     delete trace_stream;
   }
-  /* get an instruction from file */
-  bool read(Instruction &inst);
-  /* if the trace is over */
-  bool traceOver();
+
+  /* write an instruction */
+  bool write(Instruction &inst);
+  /* write an bare instruction */
+  bool write(uint64_t pc, uint32_t instr);
+  /* write an control */
+  bool write(Control &ctrl);
+
+  void traceOver();
 };
 
 #endif
