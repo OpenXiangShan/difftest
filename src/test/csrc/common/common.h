@@ -88,7 +88,14 @@ extern bool sim_verbose;
 
 #define TODO() panic("please implement me")
 
+// Initialize common functions, such as buffering, assertions, siganl handlers.
 void common_init(const char *program_name);
+
+// Some designs may raise assertions during the reset stage.
+// Use common_init_without_assertion with common_enable_assert to manually control assertions.
+void common_init_without_assertion(const char *program_name);
+void common_enable_assert();
+
 void common_finish();
 
 uint32_t uptime(void);

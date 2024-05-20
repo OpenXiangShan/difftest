@@ -34,10 +34,15 @@ int sim_main(int argc, const char *argv[]) {
 #else
 int main(int argc, const char *argv[]) {
 #endif // FUZZER_LIB
-  common_init(argv[0]);
+  common_init_without_assertion(argv[0]);
+
+  // initialize the design-under-test (DUT)
+  auto emu = new DUT_MODEL(argc, argv);
+
+  // allow assertions only after DUT resets
+  common_enable_assert();
 
   // main simulation loop
-  auto emu = new DUT_MODEL(argc, argv);
   while (!emu->is_finished()) {
     emu->tick();
   }
