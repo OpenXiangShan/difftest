@@ -62,7 +62,7 @@ uint32_t uptime(void) {
 
 static char mybuf[BUFSIZ];
 
-void common_init(const char *program_name) {
+void common_init_without_assertion(const char *program_name) {
   // set emu_path
   emu_path = program_name;
 
@@ -83,8 +83,17 @@ void common_init(const char *program_name) {
 
   gettimeofday(&boot, NULL);
 
-  assert_count = 0;
+  assert_count = -1;
   signal_num = 0;
+}
+
+void common_enable_assert() {
+  assert_count = 0;
+}
+
+void common_init(const char *program_name) {
+  common_init_without_assertion(program_name);
+  common_enable_assert();
 }
 
 void common_finish() {
