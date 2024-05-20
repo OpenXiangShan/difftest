@@ -22,9 +22,18 @@ int assert_count = 0;
 int signal_num = 0;
 const char *emu_path = NULL;
 
+// Usage in SV/Verilog: xs_assert(`__LINE__);
 extern "C" void xs_assert(long long line) {
   if (assert_count >= 0) {
     printf("Assertion failed at line %lld.\n", line);
+    assert_count++;
+  }
+}
+
+// Usage in SV/Verilog: xs_assert_v2(`__FILE__, `__LINE__);
+extern "C" void xs_assert_v2(const char *filename, long long line) {
+  if (assert_count >= 0) {
+    printf("Assertion failed at %s:%lld.\n", filename, line);
     assert_count++;
   }
 }
