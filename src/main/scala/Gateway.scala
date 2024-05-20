@@ -152,14 +152,13 @@ object Gateway {
 class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
   val in_pack = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
-  val numcores = signals.count(_.isUniqueIdentifier)
   for ((data, id) <- in_pack.zipWithIndex) {
     DifftestWiring.addSink(data, s"gateway_$id")
     in(id) := data.asTypeOf(in(id).cloneType)
   }
 
   val preprocessed = if (config.needPreprocess) {
-    WireInit(Preprocess(in, config, numcores))
+    WireInit(Preprocess(in, config))
   } else {
     WireInit(in)
   }
@@ -250,28 +249,28 @@ class GatewaySinkControl(config: GatewayConfig) extends Bundle {
 }
 
 object Preprocess {
-  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig, numcores: Int): MixedVec[DifftestBundle] = {
-    val module = Module(new Preprocess(chiselTypeOf(bundles).toSeq, config, numcores))
+  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[DifftestBundle] = {
+    val module = Module(new Preprocess(chiselTypeOf(bundles).toSeq, config))
     module.in := bundles
     module.out
   }
 }
 
-class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig, numcores: Int) extends Module {
+class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val out = IO(Output(MixedVec(bundles)))
-
+  val numCores = bundles.count(_.isUniqueIdentifier)
   out := in
 
   if (config.hasDutZone || config.isSquash || config.isBatch) {
     // Special fix for int writeback. Work for single-core only
     if (in.exists(_.desiredCppName == "wb_int")) {
       if (config.isSquash || config.isBatch) {
-        require(in.count(_.isUniqueIdentifier) == 1, "only single-core is supported yet")
+        require(numCores == 1, "only single-core is supported yet")
       }
       val writebacks = in.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
       val numPhyRegs = writebacks.head.numElements
-      val wb_int = Reg(Vec(numcores, Vec(numPhyRegs, UInt(64.W))))
+      val wb_int = Reg(Vec(numCores, Vec(numPhyRegs, UInt(64.W))))
       for (wb <- writebacks) {
         when(wb.valid) {
           wb_int(wb.coreid)(wb.address) := wb.data
