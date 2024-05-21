@@ -97,6 +97,15 @@ SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
 endif
 endif
 
+# TraceRTL mode
+ifeq ($(TRACERTL_MODE), 1)
+SIM_CXXFLAGS += -DTRACERTL_MODE
+TRACERTL_DIR = $(abspath ./src/test/csrc/tracertl)
+TRACERTL_CXXFILES = $(shell find $(TRACERTL_DIR) -name "*.cpp")
+SIM_CXXFILES += $(TRACERTL_CXXFILES)
+SIM_CXXFLAGS += -I$(TRACERTL_DIR)
+endif
+
 # ChiselDB
 WITH_CHISELDB ?= 1
 ifeq ($(WITH_CHISELDB), 1)

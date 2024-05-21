@@ -33,6 +33,9 @@
 #ifdef ENABLE_RUNHEAD
 #include "runahead.h"
 #endif
+#ifdef TRACERTL_MODE
+#include "tracertl.h"
+#endif
 #ifdef ENABLE_CHISEL_DB
 #include "chisel_db.h"
 #endif
@@ -109,7 +112,10 @@ static inline void print_help(const char *file) {
   printf("      --remote-jtag-port     specify remote bitbang port\n");
 #ifdef WITH_DRAMSIM3
   printf("      --dramsim3-ini         specify the ini file for DRAMSim3\n");
-#endif
+#endif // WITH_DRAMSIM3
+#ifdef TRACERTL_MODE
+  printf("      --trace-file=NAME      load trace from NAME\n");
+#endif // TRACERTL_MODE
 #if VM_COVERAGE == 1
   printf("      --dump-coverage        enable coverage dump\n");
 #endif // VM_COVERAGE
@@ -159,6 +165,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "iotrace-name",      1, NULL,  0  },
     { "dramsim3-ini",      1, NULL,  0  },
     { "overwrite-auto",    1, NULL,  0  },
+    { "tracertl-file",     1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -255,8 +262,15 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("Dramsim3 is not enabled, but --dramsim3-ini is specified\n");
             exit(1);
             break;
-#endif
+#endif // WITH_DRAMSIM3
           case 26: args.overwrite_nbytes_autoset = true; continue;
+          case 27:
+#ifdef TRACERTL_MODE
+            args.tracertl_file = optarg; continue;
+#else
+            printf("[WARN] tracertl is not enabled at compile time, ignore --tracertl-file\n");
+            continue;
+#endif // TRACERTL_MODE
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -384,6 +398,8 @@ Emulator::Emulator(int argc, const char *argv[])
   // init core
   reset_ncycles(args.reset_cycles);
 
+  printf("before init ram\n");
+
   // init ram
   uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
   if (args.ram_size) {
@@ -418,6 +434,16 @@ Emulator::Emulator(int argc, const char *argv[])
     }
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }
+
+#ifdef TRACERTL_MODE
+  printf("before init_tracertl\n");
+  if (args.trace_name) {
+    init_tracertl(args.tracertl_file);
+  } else {
+    fprintf(stderr, "trace file not specified\n");
+    throw std::runtime_error("trace file not specified");
+  }
+#endif
 
 #ifdef ENABLE_CHISEL_DB
   init_db(args.dump_db, (args.select_db != NULL), args.select_db);
