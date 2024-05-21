@@ -296,8 +296,9 @@ class BatchCollector(
   val info_len_state = RegInit(0.U(param.MaxInfoByteWidth.W))
 
   val align_data = VecInit(data_in.map(i => Batch.bundleAlign(i)).toSeq)
-  val delay_data = VecInit(align_data.map(i => Delayer(i, delay)).toSeq)
-  val delay_valid = VecInit(data_in.map(i => Delayer(i.bits.needUpdate.get && enable, delay)).toSeq)
+  val valid_vec = VecInit(data_in.map(i => i.bits.needUpdate.get && enable))
+  val delay_data = Delayer(align_data.asUInt, delay, useMem = true).asTypeOf(align_data)
+  val delay_valid = Delayer(valid_vec.asUInt, delay, useMem = true).asTypeOf(valid_vec)
 
   val valid_num = PopCount(delay_valid)
   val info = Wire(new BatchInfo)
