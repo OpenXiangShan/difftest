@@ -280,7 +280,7 @@ protected:
   DiffTrace *difftrace = nullptr;
 
 #ifdef CONFIG_DIFFTEST_BATCH
-  const uint64_t commit_storage = DIFFTEST_BATCH_SIZE;
+  const uint64_t commit_storage = CONFIG_DIFFTEST_BATCH_SIZE;
 #else
   const uint64_t commit_storage = 1;
 #endif // CONFIG_DIFFTEST_BATCH
@@ -393,7 +393,7 @@ protected:
   struct {
     bool in_replay = false;
     int trace_head;
-    int trace_tail;
+    int trace_size;
   } replay_status;
 
   DiffState *state_ss = NULL;

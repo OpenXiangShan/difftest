@@ -33,7 +33,7 @@ case class GatewayConfig(
   hasSquashQueue: Boolean = false,
   hasSquashFlush: Boolean = false,
   hasReplay: Boolean = false,
-  replaySize: Int = 256,
+  replaySize: Int = 1024,
   hasDutZone: Boolean = false,
   isBatch: Boolean = false,
   batchSize: Int = 32,
@@ -57,9 +57,9 @@ case class GatewayConfig(
     macros += s"CONFIG_DIFFTEST_${style.toUpperCase}"
     macros += s"CONFIG_DIFFTEST_ZONESIZE $dutZoneSize"
     macros += s"CONFIG_DIFFTEST_BUFLEN $dutBufLen"
-    if (isBatch) macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"DIFFTEST_BATCH_SIZE ${batchSize}")
+    if (isBatch) macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"CONFIG_DIFFTEST_BATCH_SIZE ${batchSize}")
     if (isSquash) macros += "CONFIG_DIFFTEST_SQUASH"
-    if (hasReplay) macros += "CONFIG_DIFFTEST_REPLAY"
+    if (hasReplay) macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     macros.toSeq
