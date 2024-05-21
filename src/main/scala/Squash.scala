@@ -95,7 +95,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
         .zip(group_tick_vec)
         .collect { case (n, gt) if u.squashGroup.contains(n) => gt }
         .foldLeft(false.B)(_ || _)
-    squasher.should_tick := group_tick || global_tick
+    squasher.should_tick := wt || group_tick || global_tick
     squasher.out
   }
   // Flatten Seq[MixedVec[DifftestBundle]] to MixedVec[DifftestBundle]

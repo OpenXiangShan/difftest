@@ -317,12 +317,12 @@ int Difftest::step() {
         if (do_instr_commit(i)) {
           return 1;
         }
-        if (do_store_check()) {
-          return 1;
-        }
         dut->commit[i].valid = 0;
         num_commit += 1 + dut->commit[i].nFused;
       }
+    }
+    if (num_commit > 0 && do_store_check()) {
+      return 1;
     }
   }
 

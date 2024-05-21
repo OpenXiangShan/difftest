@@ -230,6 +230,7 @@ class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWit
 
 class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "store"
+  override val squashGroup: Seq[String] = Seq()
   // To avoid overflow, queueSize should be less than REF
   override val squashQueueSize: Int = 64
   override val squashQueueDelay: Int = 1
