@@ -54,26 +54,37 @@ TraceICache::TraceICache(const char *binary_name) {
 
 bool TraceICache::readCacheLine(char *line, int addr) {
   if (!legalAddr(addr)) {
-    perror("illegal address");
-    exit(EXIT_FAILURE);
+    // perror("illegal address");
+    // exit(EXIT_FAILURE);
     return false;
   }
 
-  int ram_addr = ramAddr(addr);
+  int ram_addr = ramAddr(addr, sizeof(TraceCacheLine));
   memcpy(line, (char *)(ram + ram_addr), sizeof(TraceCacheLine));
   return true;
 }
 
 bool TraceICache::readHalfCacheLine(char *line, int addr) {
-  printf("readHalfCacheLine: addr = %x\n", addr);
   if (!legalAddr(addr)) {
-    perror("illegal address");
-    exit(EXIT_FAILURE);
+    // perror("illegal address");
+    // exit(EXIT_FAILURE);
     return false;
   }
 
-  int ram_addr = ramAddr(addr);
+  int ram_addr = ramAddr(addr, sizeof(TraceHalfCacheLine));
   memcpy(line, (char *)(ram + ram_addr), sizeof(TraceHalfCacheLine));
+  return true;
+}
+
+bool TraceICache::readDWord(uint64_t *dest, uint64_t addr) {
+  if (!legalAddr(addr)) {
+    // perror("illegal address");
+    // exit(EXIT_FAILURE);
+    return false;
+  }
+
+  int ram_addr = ramAddr(addr, sizeof(uint64_t));
+  memcpy(dest, (char *)(ram + ram_addr), sizeof(uint64_t));
   return true;
 }
 

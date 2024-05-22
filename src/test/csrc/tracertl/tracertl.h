@@ -19,8 +19,15 @@
 
 #include "trace_format.h"
 
-void init_tracertl(const char *trace_file_name);
+extern "C" void init_tracertl(const char *trace_file_name);
+
+extern "C" void init_traceicache(const char *binary_name);
+extern "C" void trace_icache_helper(uint64_t addr, uint8_t *res_valid, uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3, uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7);
+extern "C" uint64_t trace_icache_dword_helper(uint64_t addr);
+extern "C" uint8_t trace_icache_legal_addr(uint64_t addr);
+
+
 Instruction read_one_trace();
-bool read_one_trace_bare(uint64_t *pc, uint32_t *instr);
+extern "C" bool read_one_trace_bare(uint64_t *pc, uint32_t *instr);
 
 #endif

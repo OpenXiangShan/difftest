@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include "trace_format.h"
 
 struct TraceCacheLine {
   uint64_t pc[512 / sizeof(uint64_t)];
@@ -42,11 +43,12 @@ public:
   ~TraceICache();
   bool readCacheLine(char *line, int addr);
   bool readHalfCacheLine(char *line, int addr);
-  int ramAddr(int addr) {
-    return alignAddr(addr - base_addr);
+  bool readDWord(uint64_t *dest, uint64_t addr);
+  int ramAddr(int addr, uint64_t size) {
+    return alignAddr(addr - base_addr, size);
   }
-  int alignAddr(int addr) {
-    return addr & ~(sizeof(TraceCacheLine) - 1);
+  int alignAddr(int addr, uint64_t size) {
+    return addr & ~(size - 1);
   }
   int legalAddr(int addr) {
     return ((addr >= base_addr) && ((addr < base_addr) + ram_size));

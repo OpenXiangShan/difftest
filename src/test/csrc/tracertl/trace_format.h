@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <stdio.h>
 
+#define Log() printf("file: %s, line: %d\n", __FILE__, __LINE__); fflush(stdout)
+
 // TODO : pack it
 // TODO : mv instr and instr_pc to map(or more ca, icache)
 struct TraceInstruction {
