@@ -87,9 +87,12 @@ ifeq ($(EMU_COVERAGE),1)
 VEXTRA_FLAGS += --coverage-line --coverage-toggle
 endif
 
+# Verilator optimization
+EMU_OPTIMIZE ?= -O3
+
 VERILATOR_FLAGS =                   \
-  --exe                             \
-  --cc -O3 --top-module $(EMU_TOP)  \
+  --exe $(EMU_OPTIMIZE)             \
+  --cc --top-module $(EMU_TOP)      \
   +define+VERILATOR=1               \
   +define+PRINTF_COND=1             \
   +define+RANDOMIZE_REG_INIT        \
