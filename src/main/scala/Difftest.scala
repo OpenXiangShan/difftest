@@ -175,8 +175,7 @@ class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
 class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
   override val desiredCppName: String = "wb_int"
   override protected val needFlatten: Boolean = true
-  // TODO: We have a special and temporary fix for int writeback in Squash.scala
-  // It is only required for MMIO data synchronization for single-core co-sim
+  // It is required for MMIO/Load(only for multi-core) data synchronization, and commit instr trace record
   override def supportsSquashBase: Bool = true.B
 }
 
