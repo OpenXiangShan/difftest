@@ -215,6 +215,7 @@ public:
   bool has_commit = false;
   // Trigger a difftest checking procdure
   int step();
+  void load_instruction(int i, bool realWen);
   void update_nemuproxy(int, size_t);
   inline bool get_trap_valid() {
     return dut->trap.hasTrap;
