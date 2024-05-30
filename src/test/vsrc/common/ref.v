@@ -83,15 +83,6 @@ module TraceICacheHelper(
   always @(posedge clock) begin
     if (enable) begin
 `ifndef TB_NO_DPIC
-      // data0 <= 0;
-      // data1 <= 0;
-      // data2 <= 0;
-      // data3 <= 0;
-      // data4 <= 0;
-      // data5 <= 0;
-      // data6 <= 0;
-      // data7 <= 0;
-      // trace_icache_helper(addr, legal_addr, data0, data1, data2, data3, data4, data5, data6, data7);
       legal_addr <= trace_icache_legal_addr(addr_align);
       data0 <= trace_icache_dword_helper(addr_align + 0 * 8);
       data1 <= trace_icache_dword_helper(addr_align + 1 * 8);
@@ -106,6 +97,77 @@ module TraceICacheHelper(
     end
   end
 endmodule
+
+`ifndef TB_NO_DPIC
+// Read Trace Instruction
+import "DPI-C" function void trace_read_one_instr(
+  input byte enable,
+  output longint pc,
+  output int instr
+);
+`endif // TB_NO_DPIC
+
+module TraceReaderHelper(
+  input             clock,
+  input             reset,
+  input             enable,
+  output [63:0] pc_0,
+  output [63:0] pc_1,
+  output [63:0] pc_2,
+  output [63:0] pc_3,
+  output [63:0] pc_4,
+  output [63:0] pc_5,
+  output [63:0] pc_6,
+  output [63:0] pc_7,
+  output [63:0] pc_8,
+  output [63:0] pc_9,
+  output [63:0] pc_10,
+  output [63:0] pc_11,
+  output [63:0] pc_12,
+  output [63:0] pc_13,
+  output [63:0] pc_14,
+  output [63:0] pc_15,
+  output [31:0] instr_0,
+  output [31:0] instr_1,
+  output [31:0] instr_2,
+  output [31:0] instr_3,
+  output [31:0] instr_4,
+  output [31:0] instr_5,
+  output [31:0] instr_6,
+  output [31:0] instr_7,
+  output [31:0] instr_8,
+  output [31:0] instr_9,
+  output [31:0] instr_10,
+  output [31:0] instr_11,
+  output [31:0] instr_12,
+  output [31:0] instr_13,
+  output [31:0] instr_14,
+  output [31:0] instr_15
+);
+
+  always @(posedge clock) begin
+    if (enable && !reset) begin
+      // FIXME: Trace Read is not thread-safe, so we need read within one method
+      trace_read_one_instr(enable, pc_0,  instr_0);
+      trace_read_one_instr(enable, pc_1,  instr_1);
+      trace_read_one_instr(enable, pc_2,  instr_2);
+      trace_read_one_instr(enable, pc_3,  instr_3);
+      trace_read_one_instr(enable, pc_4,  instr_4);
+      trace_read_one_instr(enable, pc_5,  instr_5);
+      trace_read_one_instr(enable, pc_6,  instr_6);
+      trace_read_one_instr(enable, pc_7,  instr_7);
+      trace_read_one_instr(enable, pc_8,  instr_8);
+      trace_read_one_instr(enable, pc_9,  instr_9);
+      trace_read_one_instr(enable, pc_10, instr_10);
+      trace_read_one_instr(enable, pc_11, instr_11);
+      trace_read_one_instr(enable, pc_12, instr_12);
+      trace_read_one_instr(enable, pc_13, instr_13);
+      trace_read_one_instr(enable, pc_14, instr_14);
+      trace_read_one_instr(enable, pc_15, instr_15);
+    end
+  end
+endmodule
+
 
 `ifndef TB_NO_DPIC
 import "DPI-C" function longint amo_helper(

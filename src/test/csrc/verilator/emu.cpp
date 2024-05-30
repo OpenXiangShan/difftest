@@ -398,6 +398,17 @@ Emulator::Emulator(int argc, const char *argv[])
   // init core
   reset_ncycles(args.reset_cycles);
 
+#ifdef TRACERTL_MODE
+  // Use fakeicache for placeholder
+  // init_traceicache(args.image);
+  if (args.tracertl_file) {
+    init_tracertl(args.tracertl_file);
+  } else {
+    fprintf(stderr, "trace file not specified\n");
+    fflush(stderr);
+    throw std::runtime_error("trace file not specified");
+  }
+#endif
 
   // init ram
   uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
@@ -433,17 +444,6 @@ Emulator::Emulator(int argc, const char *argv[])
     }
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }
-
-#ifdef TRACERTL_MODE
-  // Use fakeicache for placeholder
-  init_traceicache(args.image);
-  // if (args.trace_name) {
-  //   init_tracertl(args.tracertl_file);
-  // } else {
-  //   fprintf(stderr, "trace file not specified\n");
-  //   throw std::runtime_error("trace file not specified");
-  // }
-#endif
 
 #ifdef ENABLE_CHISEL_DB
   init_db(args.dump_db, (args.select_db != NULL), args.select_db);

@@ -57,6 +57,22 @@ extern "C" void init_traceicache(const char *binary_name) {
   trace_icache = new TraceICache(binary_name);
 }
 
+extern "C" void trace_read_one_instr(uint8_t enable, uint64_t *pc, uint32_t *instr) {
+  if (!enable) {
+    *pc = 0;
+    *instr = 0;
+    return ;
+  }
+  Instruction inst;
+  if (trace_reader->traceOver() || !trace_reader->read(inst)) {
+    *pc = 0;
+    *instr = 0;
+    return ;
+  }
+  *pc = inst.instr_pc;
+  *instr = inst.instr;
+}
+
 extern "C" uint64_t trace_icache_dword_helper(uint64_t addr) {
   uint64_t data;
   trace_icache->readDWord(&data, addr);
