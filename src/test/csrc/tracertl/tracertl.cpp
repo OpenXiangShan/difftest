@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include <cstdio>
+#include <cstdlib>
 #include "tracertl.h"
 #include "trace_format.h"
 #include "trace_reader.h"
@@ -64,9 +65,16 @@ extern "C" void trace_read_one_instr(uint8_t enable, uint64_t *pc, uint32_t *ins
     return ;
   }
   Instruction inst;
-  if (trace_reader->traceOver() || !trace_reader->read(inst)) {
-    *pc = 0;
-    *instr = 0;
+  if (trace_reader->traceOver()) {
+    printf("trace_read_one_instr: traceOver. Finish\n");
+    printf("TODO: add trap signal to finish the simulation\n");
+    exit(0);
+    return ;
+  }
+  if (!trace_reader->read(inst)) {
+    printf("trace_read_one_instr: read failed. Finish\n");
+    printf("TODO: add trap signal to finish the simulation\n");
+    exit(1);
     return ;
   }
   *pc = inst.instr_pc;

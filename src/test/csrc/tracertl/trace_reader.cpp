@@ -29,20 +29,8 @@ TraceReader::TraceReader(std::string trace_file_name)
 }
 
 bool TraceReader::read(Instruction &inst) {
-  if (trace_stream == NULL) {
-    throw std::runtime_error("[TraceReader.read] empty trace_stream.");
-    return false;
-  }
-
-  if (traceOver()) {
-    // this should no happen, check it outside
-    throw std::runtime_error("[TraceReader.read] end of file.");
-    return false;
-  }
-
   TraceInstruction trace_entry;
   trace_stream->read(reinterpret_cast<char *> (&trace_entry), sizeof(TraceInstruction));
-
   // trace_entry.dump();
 
   // inst.memory_size = trace_entry.memory_size;
