@@ -32,6 +32,7 @@ object Squash {
 
 class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
+  val numCores = in.count(_.isUniqueIdentifier)
 
   // Sometimes, the bundle may have squash dependencies.
   // Only when one of the dependencies is valid, this bundle is squashed.
@@ -85,7 +86,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
     val (s_in, s_do) = in.zip(do_squash.zip(do_flush)).filter(_._1.desiredCppName == u.desiredCppName).unzip
     val (s_do_s, s_do_f) = s_do.unzip
-    val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, config))
+    val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
     squasher.in.zip(s_in).foreach { case (i, s_i) => i := s_i }
     squasher.do_squash.zip(s_do_s).foreach { case (d, s_d) => d := s_d }
     squasher.do_flush.zip(s_do_f).foreach { case (d, s_d) => d := s_d }
@@ -111,7 +112,7 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
 }
 
 // It will help do squash for bundles with same Class, return tick and state
-class Squasher(bundleType: DifftestBundle, length: Int, config: GatewayConfig) extends Module {
+class Squasher(bundleType: DifftestBundle, length: Int, numCores: Int, config: GatewayConfig) extends Module {
   val in = IO(Input(Vec(length, bundleType)))
   val do_squash = IO(Input(Vec(length, Bool())))
   val do_flush = IO(Input(Vec(length, Bool())))
@@ -135,12 +136,17 @@ class Squasher(bundleType: DifftestBundle, length: Int, config: GatewayConfig) e
     isInitialEvent && hasValidCommitEvent
   }
 
+  val tick_load_multicore = Option.when(bundleType.desiredCppName == "load" && numCores > 1) {
+    VecInit(state.map(_.bits.getValid).toSeq).asUInt.orR
+  }
+
+  val force_tick = tick_first_commit.getOrElse(false.B) || tick_load_multicore.getOrElse(false.B)
   if (hasQueue) {
     // Bundle will not be squashed, but buffered and submit together.
     val ptr = RegInit(0.U(log2Ceil(vecLen + 1).W))
     val offset = PopCount(do_squash)
     val queue_exceed = ptr +& offset > vecLen.U
-    want_tick := queue_exceed || tick_first_commit.getOrElse(false.B)
+    want_tick := queue_exceed || force_tick
     ptr := Mux(should_tick, offset, ptr + offset)
     in.zip(do_squash).zipWithIndex.foreach { case ((i, d), idx) =>
       val postEnq = if (idx != 0) PopCount(do_squash.take(idx)) else 0.U
@@ -163,7 +169,7 @@ class Squasher(bundleType: DifftestBundle, length: Int, config: GatewayConfig) e
     val supportsSquashBaseVec = VecInit(state.map(_.supportsSquashBase).toSeq)
     val supportsSquashBase = supportsSquashBaseVec.asUInt.andR
 
-    want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B)
+    want_tick := !supportsSquash || !supportsSquashBase || force_tick
 
     for ((((i, ds), df), s) <- in.zip(do_squash).zip(do_flush).zip(state)) {
       when(should_tick) {
