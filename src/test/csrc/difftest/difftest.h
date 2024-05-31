@@ -215,7 +215,6 @@ public:
   bool has_commit = false;
   // Trigger a difftest checking procdure
   int step();
-  void load_instruction(int i, bool realWen);
   void update_nemuproxy(int, size_t);
   inline bool get_trap_valid() {
     return dut->trap.hasTrap;
@@ -331,6 +330,7 @@ protected:
   int do_l1tlb_check();
   int do_l2tlb_check();
   int do_golden_memory_update();
+  void do_load_smp_check(int i, bool realWen);
 
   inline uint64_t get_commit_data(int i) {
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE

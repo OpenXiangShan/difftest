@@ -505,12 +505,12 @@ int Difftest::do_instr_commit(int i) {
   }
 #if NUM_CORES > 1
   // Handle load instruction carefully for SMP
-  load_instruction(i, realWen);
+  do_load_smp_check(i, realWen);
 #endif
   return 0;
 }
 
-void Difftest::load_instruction(int i, bool realWen) {
+void Difftest::do_load_smp_check(int i, bool realWen) {
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   if (dut->load[i].isLoad || dut->load[i].isAtomic) {
     proxy->sync();
