@@ -128,12 +128,17 @@ class Squasher(bundleType: DifftestBundle, length: Int, numCores: Int, config: G
 
   // Mark the initial commit events as non-squashable for initial state synchronization.
   val tick_first_commit = Option.when(bundleType.desiredCppName == "commit") {
-    val hasValidCommitEvent = VecInit(state.map(_.bits.getValid).toSeq).asUInt.orR
-    val isInitialEvent = RegInit(true.B)
-    when(isInitialEvent && hasValidCommitEvent) {
-      isInitialEvent := false.B
-    }
-    isInitialEvent && hasValidCommitEvent
+    VecInit
+      .tabulate(numCores) { id =>
+        val hasValidCommitEvent = VecInit(state.map(c => c.coreid === id.U && c.bits.getValid).toSeq).asUInt.orR
+        val isInitialEvent = RegInit(true.B)
+        when(isInitialEvent && hasValidCommitEvent) {
+          isInitialEvent := false.B
+        }
+        isInitialEvent && hasValidCommitEvent
+      }
+      .asUInt
+      .orR
   }
 
   val tick_load_multicore = Option.when(bundleType.desiredCppName == "load" && numCores > 1) {
