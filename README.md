@@ -23,7 +23,7 @@ make
 ## Example Chisel Usage
 
 We are supporting Chisel 3.6.0 (the last version supporting Scala FIRRTL Compiler)
-as well as 6.3.0 (the latest stable version supporting MLIR FIRRTL Compiler).
+as well as 6.4.0 (the latest stable version supporting MLIR FIRRTL Compiler).
 
 Here are the detail instructions on integrating DiffTest to your own project.
 
