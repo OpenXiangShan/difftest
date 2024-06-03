@@ -578,6 +578,8 @@ int Difftest::do_instr_commit(int i) {
 #endif
         }
       }
+      dut->load[i].isLoad = 0;
+      dut->load[i].isAtomic = 0;
     }
 #endif // CONFIG_DIFFTEST_LOADEVENT
   }
