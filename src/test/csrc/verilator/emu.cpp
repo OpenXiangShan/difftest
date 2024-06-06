@@ -114,7 +114,7 @@ static inline void print_help(const char *file) {
   printf("      --dramsim3-ini         specify the ini file for DRAMSim3\n");
 #endif // WITH_DRAMSIM3
 #ifdef TRACERTL_MODE
-  printf("      --trace-file=NAME      load trace from NAME\n");
+  printf("      --tracertl-file=NAME      load trace from NAME\n");
 #endif // TRACERTL_MODE
 #if VM_COVERAGE == 1
   printf("      --dump-coverage        enable coverage dump\n");
