@@ -105,9 +105,11 @@ VERILATOR_FLAGS =                   \
   --output-split 30000              \
   --output-split-cfuncs 30000       \
   -I$(RTL_DIR)                      \
-  -I$(GEN_VSRC_DIR)		    \
+  -I$(GEN_VSRC_DIR)                 \
   -CFLAGS "$(EMU_CXXFLAGS)"         \
   -LDFLAGS "$(EMU_LDFLAGS)"         \
+  -CFLAGS "\$$(PGO_CFLAGS)"         \
+  -LDFLAGS "\$$(PGO_LDFLAGS)"       \
   -o $(abspath $(EMU))              \
   $(VEXTRA_FLAGS)
 
@@ -117,6 +119,10 @@ EMU_DEPS  := $(SIM_VSRC) $(EMU_CXXFILES)
 EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
                $(shell find $(SIM_CSRC_DIR) -name "*.h")     \
                $(shell find $(DIFFTEST_CSRC_DIR) -name "*.h")
+
+# Profile Guided Optimization
+EMU_PGO_DIR  = $(EMU_DIR)/pgo
+PGO_MAX_CYCLE ?= 2000000
 
 $(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
 ifeq ($(EMU_COVERAGE),1)
@@ -138,13 +144,48 @@ EMU_COMPILE_FILTER =
 build_emu_local: $(EMU_MK)
 	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
+ifdef PGO_WORKLOAD
+	@echo "Building PGO profile..."
+	@stat $(PGO_WORKLOAD) > /dev/null
+	@$(MAKE) clean_obj
+	@mkdir -p $(EMU_PGO_DIR)
+	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" OPT_SLOW="-O0" PGO_CFLAGS="-fprofile-generate=$(EMU_PGO_DIR)" PGO_LDFLAGS="-fprofile-generate=$(EMU_PGO_DIR)" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	@echo "Training emu with PGO Workload..."
+	$(EMU) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) 1>$(EMU_PGO_DIR)/`date +%s`.log 2>$(EMU_PGO_DIR)/`date +%s`.err $(PGO_EMU_ARGS)
+ifdef LLVM_PROFDATA
+# When using LLVM's profile-guided optimization, the raw data can not
+# directly be used in -fprofile-use. We need to use a specific version of
+# llvm-profdata. This happens when verilator compiled with CC=clang
+# CXX=clang++. In this case, we should add LLVM_PROFDATA=llvm-profdata
+# when calling make. For GCC, this step should be skipped. Also, some
+# machines may have multiple versions of llvm-profdata. So please never
+# add default value for LLVM_PROFDATA unless we have a proper way to probe
+# the compiler and the corresponding llvm-profdata value.
+	$(LLVM_PROFDATA) merge $(EMU_PGO_DIR)/*.profraw -o $(EMU_PGO_DIR)/default.profdata
+else # ifdef LLVM_PROFDATA
+	@echo ""
+	@echo "----------------------- NOTICE BEGIN -----------------------"
+	@echo "If your verilator is compiled with LLVM, please don't forget"
+	@echo "to add LLVM_PROFDATA=llvm-profdata when calling make."
+	@echo ""
+	@echo "If your verilator is compiled with GCC, please ignore this"
+	@echo "message and NEVER adding LLVM_PROFDATA when calling make."
+	@echo "----------------------- NOTICE  END  -----------------------"
+	@echo ""
+endif # ifdef LLVM_PROFDATA
+	@echo "Building emu with PGO profile..."
+	@$(MAKE) clean_obj
+	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" OPT_SLOW="-O0" PGO_CFLAGS="-fprofile-use=$(EMU_PGO_DIR)" PGO_LDFLAGS="-fprofile-use=$(EMU_PGO_DIR)" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+else # ifdef PGO_WORKLOAD
+	@echo "Building emu..."
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" OPT_SLOW="-O0" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+endif # ifdef PGO_WORKLOAD
 
 $(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
 ifeq ($(REMOTE),localhost)
 	@$(MAKE) build_emu_local
 else
-	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local'
+	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local PGO_WORKLOAD=$(PGO_WORKLOAD) LLVM_PROFDATA=$(LLVM_PROFDATA) PGO_MAX_CYCLE=$(PGO_MAX_CYCLE) PGO_EMU_ARGS=$(PGO_EMU_ARGS)'
 endif
 
 emu: $(EMU)
@@ -157,4 +198,7 @@ coverage:
 	@python3 scripts/coverage/statistics.py $(COVERAGE_DIR) > $(COVERAGE_DIR)/coverage_$(SIM_TOP).log
 	@mv $(COVERAGE_DATA) $(COVERAGE_DIR)
 
-.PHONY: build_emu_local
+clean_obj:
+	rm -f $(EMU_DIR)/*.o $(EMU_DIR)/*.gch $(EMU_DIR)/*.a $(EMU)
+
+.PHONY: build_emu_local clean_obj
