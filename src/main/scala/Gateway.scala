@@ -296,6 +296,39 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mo
         }
       }
     }
+    // Special fix for fp writeback.
+    else if (in.exists(_.desiredCppName == "wb_fp")) {
+      val writebacks = in.filter(_.desiredCppName == "wb_fp").map(_.asInstanceOf[DiffFpWriteback])
+      val numPhyRegs = writebacks.head.numElements
+      val wb_fp = Reg(Vec(numCores, Vec(numPhyRegs, UInt(64.W))))
+      for (wb <- writebacks) {
+        when(wb.valid) {
+          wb_fp(wb.coreid)(wb.address) := wb.data
+        }
+      }
+
+      val wb_out = out.filter(_.desiredCppName == "wb_fp").map(_.asInstanceOf[DiffFpWriteback])
+      val commits = in.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit])
+      // We use physical FpReg WriteBack for compare when load and MMIO, and record commit instr trace
+      // As there are multiple DUT buffer in software side, wb_fp transferred and used may not in the same buffer
+      // So we buffer wb_fp until instrCommit
+      require(wb_out.length >= commits.length, "WriteBack port length should be larger than InstrCommit")
+      wb_out.foreach { wb => wb.valid := false.B }
+      for ((c, wb) <- commits.zip(wb_out.take(commits.length))) {
+        when(c.valid) {
+          wb.coreid := c.coreid
+          wb.valid := true.B
+          wb.address := c.wpdest
+          wb.data := wb_fp(c.coreid)(c.wpdest)
+          // Consider wb_fp valid in same cycle
+          for (wb_in <- writebacks) {
+            when(wb_in.valid && wb_in.address === c.wpdest && wb_in.coreid === c.coreid) {
+              wb.data := wb_in.data
+            }
+          }
+        }
+      }
+    }
   }
 }
 
