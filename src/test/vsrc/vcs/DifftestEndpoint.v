@@ -185,7 +185,7 @@ assign difftest_perfCtrl_dump = 0;
 `endif // TB_NO_DPIC
 
 reg [63:0] n_cycles;
-always @(posedge clock) begin
+  always @(negedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;
   end
