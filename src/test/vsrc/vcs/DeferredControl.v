@@ -35,7 +35,7 @@ initial $ixc_ctrl("gfifo", "simv_nstep");
 `endif // PALLADIUM
 `endif // CONFIG_DIFFTEST_NONBLOCK
 
-always @(posedge clock) begin
+  always @(negedge clock) begin
   if (reset) begin
     simv_result <= 8'b0;
   end
