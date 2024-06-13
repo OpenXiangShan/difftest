@@ -297,7 +297,7 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mo
       }
     }
     // Special fix for fp writeback.
-    else if (in.exists(_.desiredCppName == "wb_fp")) {
+    if (in.exists(_.desiredCppName == "wb_fp")) {
       val writebacks = in.filter(_.desiredCppName == "wb_fp").map(_.asInstanceOf[DiffFpWriteback])
       val numPhyRegs = writebacks.head.numElements
       val wb_fp = Reg(Vec(numCores, Vec(numPhyRegs, UInt(64.W))))

@@ -511,12 +511,6 @@ int Difftest::do_instr_commit(int i) {
     proxy->sync();
     bool reg_cmp_fail =
         !dut->commit[i].vecwen && *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) != get_commit_data(i);
-    // This is Temporary fix for wrtie back, if failed use reg again check
-    if (reg_cmp_fail) {
-      uint64_t dutArchRegData =
-          dut->commit[i].fpwen ? dut->regs_fp.value[dut->commit[i].wdest] : dut->regs_int.value[dut->commit[i].wdest];
-      reg_cmp_fail = *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) != dutArchRegData;
-    }
     if (realWen && reg_cmp_fail) {
       // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
       // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut->load[i].opType, dut->load[i].paddr, dut->commit[i].wen, dut->commit[i].wdest, get_commit_data(i), dut->commit[i].pc);
