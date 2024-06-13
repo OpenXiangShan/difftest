@@ -73,16 +73,23 @@ VCS_CXXFLAGS += -std=c++20
 else
 VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR) -j200
+VCS_FLAGS += +define+VCS
+ifeq ($(ENABLE_XPROP),1)
+VCS_FLAGS += -xprop
+else
 # randomize all undefined signals (instead of using X)
-VCS_FLAGS += +vcs+initreg+random +define+VCS
+VCS_FLAGS += +vcs+initreg+random
+endif
 VCS_CXXFLAGS += -std=c++11 -static
 endif
 
 VCS_FLAGS += -o $(VCS_TARGET)
+ifneq ($(ENABLE_XPROP),1)
 VCS_FLAGS += +define+RANDOMIZE_GARBAGE_ASSIGN
 VCS_FLAGS += +define+RANDOMIZE_INVALID_ASSIGN
 VCS_FLAGS += +define+RANDOMIZE_MEM_INIT
 VCS_FLAGS += +define+RANDOMIZE_REG_INIT
+endif
 # manually set RANDOMIZE_DELAY to avoid VCS from incorrect random initialize
 # NOTE: RANDOMIZE_DELAY must NOT be rounded to 0
 VCS_FLAGS += +define+RANDOMIZE_DELAY=1
