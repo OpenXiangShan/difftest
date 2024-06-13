@@ -292,7 +292,8 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mo
   out := outWire
 }
 
-class WritebackHandler[T <: DiffIntWriteback](bundles: Seq[DifftestBundle], wbName: String, numCores: Int) extends Module {
+class WritebackHandler[T <: DiffIntWriteback](bundles: Seq[DifftestBundle], wbName: String, numCores: Int)
+  extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val out = IO(Output(MixedVec(bundles)))
   val writebacks = in.filter(_.desiredCppName == wbName).map(_.asInstanceOf[T])
