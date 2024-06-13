@@ -96,6 +96,16 @@ jobs:
             source ./env.sh
             ./build/emu -b 0 -e 0 --no-diff -C 10000
 
+      - name: Basic Difftest with PGO build
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make -C ./difftest clean_obj
+            make emu PGO_WORKLOAD=`realpath ready-to-run/microbench.bin` LLVM_PROFDATA=llvm-profdata PGO_EMU_ARGS="--diff `realpath ./ready-to-run/riscv64-nemu-interpreter-so` 2>/dev/null" -j2
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so
+
       - name: Difftest with Snapshot
         run: |
             cd $GITHUB_WORKSPACE/../xs-env
