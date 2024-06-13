@@ -90,6 +90,9 @@ endif
 # Verilator optimization
 EMU_OPTIMIZE ?= -O3
 
+# C optimization
+OPT_FAST ?= -O3
+
 VERILATOR_FLAGS =                   \
   --exe $(EMU_OPTIMIZE)             \
   --cc --top-module $(EMU_TOP)      \
@@ -141,7 +144,23 @@ endif
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
 
-build_emu_local: $(EMU_MK)
+build_emu:
+ifeq ($(REMOTE),localhost)
+	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
+						OPT_FAST=$(OPT_FAST) \
+						PGO_CFLAGS=$(PGO_CFLAGS) \
+						PGO_LDFLAGS=$(PGO_LDFLAGS) \
+						-C $(EMU_DIR) -f $(EMU_MK) $(EMU_COMPILE_FILTER)
+else
+	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); \
+					   $(MAKE) -C $(NOOP_HOME)/difftest build_emu \
+					   -j `nproc` \
+					   OPT_FAST="'"$(OPT_FAST)"'" \
+					   PGO_CFLAGS="'"$(PGO_CFLAGS)"'" \
+					   PGO_LDFLAGS="'"$(PGO_LDFLAGS)"'"'
+endif
+
+$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
 	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 ifdef PGO_WORKLOAD
@@ -149,9 +168,14 @@ ifdef PGO_WORKLOAD
 	@stat $(PGO_WORKLOAD) > /dev/null
 	@$(MAKE) clean_obj
 	@mkdir -p $(EMU_PGO_DIR)
-	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" OPT_SLOW="-O0" PGO_CFLAGS="-fprofile-generate=$(EMU_PGO_DIR)" PGO_LDFLAGS="-fprofile-generate=$(EMU_PGO_DIR)" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST) \
+					   PGO_CFLAGS="-fprofile-generate=$(EMU_PGO_DIR)" \
+					   PGO_LDFLAGS="-fprofile-generate=$(EMU_PGO_DIR)"
 	@echo "Training emu with PGO Workload..."
-	$(EMU) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) 1>$(EMU_PGO_DIR)/`date +%s`.log 2>$(EMU_PGO_DIR)/`date +%s`.err $(PGO_EMU_ARGS)
+	$(EMU) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+		   1>$(EMU_PGO_DIR)/`date +%s`.log \
+		   2>$(EMU_PGO_DIR)/`date +%s`.err \
+		   $(PGO_EMU_ARGS)
 ifdef LLVM_PROFDATA
 # When using LLVM's profile-guided optimization, the raw data can not
 # directly be used in -fprofile-use. We need to use a specific version of
@@ -175,18 +199,13 @@ else # ifdef LLVM_PROFDATA
 endif # ifdef LLVM_PROFDATA
 	@echo "Building emu with PGO profile..."
 	@$(MAKE) clean_obj
-	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" OPT_SLOW="-O0" PGO_CFLAGS="-fprofile-use=$(EMU_PGO_DIR)" PGO_LDFLAGS="-fprofile-use=$(EMU_PGO_DIR)" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST) \
+					   PGO_CFLAGS="-fprofile-use=$(EMU_PGO_DIR)" \
+					   PGO_LDFLAGS="-fprofile-use=$(EMU_PGO_DIR)"
 else # ifdef PGO_WORKLOAD
 	@echo "Building emu..."
-	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" OPT_SLOW="-O0" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST)
 endif # ifdef PGO_WORKLOAD
-
-$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
-ifeq ($(REMOTE),localhost)
-	@$(MAKE) build_emu_local
-else
-	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local PGO_WORKLOAD=$(PGO_WORKLOAD) LLVM_PROFDATA=$(LLVM_PROFDATA) PGO_MAX_CYCLE=$(PGO_MAX_CYCLE) PGO_EMU_ARGS=$(PGO_EMU_ARGS)'
-endif
 
 emu: $(EMU)
 
@@ -201,4 +220,4 @@ coverage:
 clean_obj:
 	rm -f $(EMU_DIR)/*.o $(EMU_DIR)/*.gch $(EMU_DIR)/*.a $(EMU)
 
-.PHONY: build_emu_local clean_obj
+.PHONY: build_emu clean_obj
