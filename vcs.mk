@@ -1,5 +1,6 @@
 #***************************************************************************************
-# Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2024 Beijing Institute of Open Source Chip (BOSC)
+# Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
 # Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
 # DiffTest is licensed under Mulan PSL v2.
@@ -18,6 +19,7 @@ VCS           = vcs
 VCS_TOP       = tb_top
 VCS_TARGET    = $(abspath $(BUILD_DIR)/simv)
 VCS_BUILD_DIR = $(abspath $(BUILD_DIR)/simv-compile)
+VCS_RUN_DIR   = $(abspath $(BUILD_DIR)/$(notdir $(RUN_BIN)))
 
 VCS_CSRC_DIR   = $(abspath ./src/test/csrc/vcs)
 VCS_CONFIG_DIR = $(abspath ./config)
@@ -27,7 +29,7 @@ VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
 VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
 # DiffTest support
-ifneq ($(NO_DIFF), 1)
+ifneq ($(NO_DIFF),1)
 VCS_FLAGS    += +define+DIFFTEST
 endif
 
@@ -106,6 +108,35 @@ ifeq ($(VCS),verilator)
 endif
 
 simv: $(VCS_TARGET)
+
+RUN_OPTS := +workload=$(RUN_BIN)
+
+ifeq ($(TRACE),1)
+ifeq ($(CONSIDER_FSDB),1)
+RUN_OPTS += +dump-wave=fsdb
+else
+RUN_OPTS += +dump-wave=vpd
+endif
+endif
+
+ifneq ($(REF_SO),)
+RUN_OPTS += +diff=$(REF_SO)
+endif
+
+ifeq ($(NO_DIFF),1)
+RUN_OPTS += +no-diff
+endif
+
+RUN_OPTS += -assert finish_maxfail=30 -assert global_finish_maxfail=10000
+
+simv-run:
+	$(shell if [ ! -e $(VCS_RUN_DIR) ]; then mkdir -p $(VCS_RUN_DIR); fi)
+	touch $(VCS_RUN_DIR)/sim.log
+	$(shell if [ -e $(VCS_RUN_DIR)/simv ]; then rm -f $(VCS_RUN_DIR)/simv; fi)
+	$(shell if [ -e $(VCS_RUN_DIR)/simv.daidir ]; then rm -rf $(VCS_RUN_DIR)/simv.daidir; fi)
+	ln -s $(VCS_TARGET) $(VCS_RUN_DIR)/simv
+	ln -s $(BUILD_DIR)/simv.daidir $(VCS_RUN_DIR)/simv.daidir
+	cd $(VCS_RUN_DIR) && (./simv $(RUN_OPTS) 2> assert.log | tee sim.log)
 
 vcs-clean:
 	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)
