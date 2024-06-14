@@ -146,11 +146,13 @@ EMU_COMPILE_FILTER =
 
 build_emu:
 ifeq ($(REMOTE),localhost)
+	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
 						OPT_FAST=$(OPT_FAST) \
 						PGO_CFLAGS=$(PGO_CFLAGS) \
 						PGO_LDFLAGS=$(PGO_LDFLAGS) \
 						-C $(EMU_DIR) -f $(EMU_MK) $(EMU_COMPILE_FILTER)
+	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); \
 					   $(MAKE) -C $(NOOP_HOME)/difftest build_emu \
@@ -168,14 +170,17 @@ ifdef PGO_WORKLOAD
 	@stat $(PGO_WORKLOAD) > /dev/null
 	@$(MAKE) clean_obj
 	@mkdir -p $(EMU_PGO_DIR)
+	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST) \
 					   PGO_CFLAGS="-fprofile-generate=$(EMU_PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-generate=$(EMU_PGO_DIR)"
 	@echo "Training emu with PGO Workload..."
+	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 	$(EMU) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
 		   1>$(EMU_PGO_DIR)/`date +%s`.log \
 		   2>$(EMU_PGO_DIR)/`date +%s`.err \
 		   $(PGO_EMU_ARGS)
+	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 ifdef LLVM_PROFDATA
 # When using LLVM's profile-guided optimization, the raw data can not
 # directly be used in -fprofile-use. We need to use a specific version of
@@ -199,6 +204,7 @@ else # ifdef LLVM_PROFDATA
 endif # ifdef LLVM_PROFDATA
 	@echo "Building emu with PGO profile..."
 	@$(MAKE) clean_obj
+	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST) \
 					   PGO_CFLAGS="-fprofile-use=$(EMU_PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-use=$(EMU_PGO_DIR)"
@@ -206,6 +212,7 @@ else # ifdef PGO_WORKLOAD
 	@echo "Building emu..."
 	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST)
 endif # ifdef PGO_WORKLOAD
+	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 
 emu: $(EMU)
 
