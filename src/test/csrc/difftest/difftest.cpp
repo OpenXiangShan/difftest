@@ -505,84 +505,84 @@ int Difftest::do_instr_commit(int i) {
   }
 
   // Handle load instruction carefully for SMP
-#if NUM_CORES > 1
+  if (NUM_CORES > 1) {
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-  if (dut->load[i].isLoad || dut->load[i].isAtomic) {
-    proxy->sync();
-    bool reg_cmp_fail =
-        !dut->commit[i].vecwen && *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) != get_commit_data(i);
-    if (realWen && reg_cmp_fail) {
-      // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
-      // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut->load[i].opType, dut->load[i].paddr, dut->commit[i].wen, dut->commit[i].wdest, get_commit_data(i), dut->commit[i].pc);
-      uint64_t golden;
-      int len = 0;
-      if (dut->load[i].isLoad) {
-        switch (dut->load[i].opType) {
-          case 0: len = 1; break;
-          case 1: len = 2; break;
-          case 2: len = 4; break;
-          case 3: len = 8; break;
-          case 4: len = 1; break;
-          case 5: len = 2; break;
-          case 6: len = 4; break;
-          default: Info("Unknown fuOpType: 0x%x\n", dut->load[i].opType);
-        }
-      } else if (dut->load[i].isAtomic) {
-        if (dut->load[i].opType % 2 == 0) {
-          len = 4;
-        } else { // dut->load[i].opType % 2 == 1
-          len = 8;
-        }
-      }
-      read_goldenmem(dut->load[i].paddr, &golden, len);
-      if (dut->load[i].isLoad) {
-        switch (dut->load[i].opType) {
-          case 0: golden = (int64_t)(int8_t)golden; break;
-          case 1: golden = (int64_t)(int16_t)golden; break;
-          case 2: golden = (int64_t)(int32_t)golden; break;
-        }
-      }
-      // printf("---    golden: 0x%lx  original: 0x%lx\n", golden, ref_regs_ptr[dut->commit[i].wdest]);
-      if (golden == get_commit_data(i)) {
-        proxy->ref_memcpy(dut->load[i].paddr, &golden, len, DUT_TO_REF);
-        if (realWen) {
-          if (!dut->commit[i].vecwen) {
-            *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) = get_commit_data(i);
+    if (dut->load[i].isLoad || dut->load[i].isAtomic) {
+      proxy->sync();
+      bool reg_cmp_fail =
+          !dut->commit[i].vecwen && *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) != get_commit_data(i);
+      if (realWen && reg_cmp_fail) {
+        // printf("---[DIFF Core%d] This load instruction gets rectified!\n", this->id);
+        // printf("---    ltype: 0x%x paddr: 0x%lx wen: 0x%x wdst: 0x%x wdata: 0x%lx pc: 0x%lx\n", dut->load[i].opType, dut->load[i].paddr, dut->commit[i].wen, dut->commit[i].wdest, get_commit_data(i), dut->commit[i].pc);
+        uint64_t golden;
+        int len = 0;
+        if (dut->load[i].isLoad) {
+          switch (dut->load[i].opType) {
+            case 0: len = 1; break;
+            case 1: len = 2; break;
+            case 2: len = 4; break;
+            case 3: len = 8; break;
+            case 4: len = 1; break;
+            case 5: len = 2; break;
+            case 6: len = 4; break;
+            default: Info("Unknown fuOpType: 0x%x\n", dut->load[i].opType);
           }
-          proxy->sync(true);
-        }
-      } else if (dut->load[i].isAtomic) { //  atomic instr carefully handled
-        proxy->ref_memcpy(dut->load[i].paddr, &golden, len, DUT_TO_REF);
-        if (realWen) {
-          if (!dut->commit[i].vecwen) {
-            *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) = get_commit_data(i);
+        } else if (dut->load[i].isAtomic) {
+          if (dut->load[i].opType % 2 == 0) {
+            len = 4;
+          } else { // dut->load[i].opType % 2 == 1
+            len = 8;
           }
-          proxy->sync(true);
         }
-      } else {
+        read_goldenmem(dut->load[i].paddr, &golden, len);
+        if (dut->load[i].isLoad) {
+          switch (dut->load[i].opType) {
+            case 0: golden = (int64_t)(int8_t)golden; break;
+            case 1: golden = (int64_t)(int16_t)golden; break;
+            case 2: golden = (int64_t)(int32_t)golden; break;
+          }
+        }
+        // printf("---    golden: 0x%lx  original: 0x%lx\n", golden, ref_regs_ptr[dut->commit[i].wdest]);
+        if (golden == get_commit_data(i)) {
+          proxy->ref_memcpy(dut->load[i].paddr, &golden, len, DUT_TO_REF);
+          if (realWen) {
+            if (!dut->commit[i].vecwen) {
+              *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) = get_commit_data(i);
+            }
+            proxy->sync(true);
+          }
+        } else if (dut->load[i].isAtomic) { //  atomic instr carefully handled
+          proxy->ref_memcpy(dut->load[i].paddr, &golden, len, DUT_TO_REF);
+          if (realWen) {
+            if (!dut->commit[i].vecwen) {
+              *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) = get_commit_data(i);
+            }
+            proxy->sync(true);
+          }
+        } else {
 #ifdef DEBUG_SMP
-        // goldenmem check failed as well, raise error
-        Info("---  SMP difftest mismatch!\n");
-        Info("---  Trying to probe local data of another core\n");
-        uint64_t buf;
-        difftest[(NUM_CORES - 1) - this->id]->proxy->memcpy(dut->load[i].paddr, &buf, len, DIFFTEST_TO_DUT);
-        Info("---    content: %lx\n", buf);
+          // goldenmem check failed as well, raise error
+          Info("---  SMP difftest mismatch!\n");
+          Info("---  Trying to probe local data of another core\n");
+          uint64_t buf;
+          difftest[(NUM_CORES - 1) - this->id]->proxy->memcpy(dut->load[i].paddr, &buf, len, DIFFTEST_TO_DUT);
+          Info("---    content: %lx\n", buf);
 #else
-        proxy->ref_memcpy(dut->load[i].paddr, &golden, len, DUT_TO_REF);
-        if (realWen) {
-          if (!dut->commit[i].vecwen) {
-            *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) = get_commit_data(i);
+          proxy->ref_memcpy(dut->load[i].paddr, &golden, len, DUT_TO_REF);
+          if (realWen) {
+            if (!dut->commit[i].vecwen) {
+              *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) = get_commit_data(i);
+            }
+            proxy->sync(true);
           }
-          proxy->sync(true);
-        }
 #endif
+        }
       }
+      dut->load[i].isLoad = 0;
+      dut->load[i].isAtomic = 0;
     }
-    dut->load[i].isLoad = 0;
-    dut->load[i].isAtomic = 0;
-  }
 #endif // CONFIG_DIFFTEST_LOADEVENT
-#endif // NUM_CORES > 1
+  }
   return 0;
 }
 
