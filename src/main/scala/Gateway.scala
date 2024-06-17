@@ -261,15 +261,15 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mo
   val out = IO(Output(MixedVec(bundles)))
   val numCores = bundles.count(_.isUniqueIdentifier)
 
-  val outWire = Wire(MixedVec(bundles))
-  outWire := in
+  val outTemp = Wire(MixedVec(bundles))
+  outTemp := in
 
   if (config.hasDutZone || config.isSquash || config.isBatch) {
     // Special fix for int writeback.
     if (in.exists(_.desiredCppName == "wb_int")) {
       val intWriteback = Module(new WritebackHandler[DiffIntWriteback](bundles, "wb_int", numCores))
       intWriteback.in := in
-      for ((outBundle, intOutBundle) <- outWire.zip(intWriteback.out)) {
+      for ((outBundle, intOutBundle) <- outTemp.zip(intWriteback.out)) {
         val isIntWriteback = intOutBundle.desiredCppName == "wb_int"
         when(isIntWriteback.asBool) {
           outBundle := intOutBundle
@@ -280,7 +280,7 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mo
     if (in.exists(_.desiredCppName == "wb_fp")) {
       val fpWriteback = Module(new WritebackHandler[DiffFpWriteback](bundles, "wb_fp", numCores))
       fpWriteback.in := in
-      for ((outBundle, fpOutBundle) <- outWire.zip(fpWriteback.out)) {
+      for ((outBundle, fpOutBundle) <- outTemp.zip(fpWriteback.out)) {
         val isFpWriteback = fpOutBundle.desiredCppName == "wb_fp"
         when(isFpWriteback.asBool) {
           outBundle := fpOutBundle
@@ -289,7 +289,7 @@ class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mo
     }
   }
 
-  out := outWire
+  out := outTemp
 }
 
 class WritebackHandler[T <: DiffIntWriteback](bundles: Seq[DifftestBundle], wbName: String, numCores: Int)
