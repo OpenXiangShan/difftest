@@ -8,7 +8,7 @@
 #endif // CONFIG_DIFFTEST_PERFCNT
 
 remote_bitbang_t *jtag;
-bool enable_simjtag;
+bool enable_simjtag = false;
 uint16_t remote_jtag_port = 23334;
 
 void jtag_init() {

@@ -37,7 +37,6 @@
 #endif
 
 struct EmuArgs {
-  uint16_t remote_jtag_port = 23334;
   uint32_t reset_cycles = 50;
   uint32_t seed = 0;
   uint64_t max_cycles = -1;
@@ -75,7 +74,6 @@ struct EmuArgs {
   bool force_dump_result = false;
   bool enable_diff = true;
   bool enable_fork = false;
-  bool enable_jtag = false;
   bool enable_runahead = false;
   bool dump_db = false;
   bool trace_is_read = true;

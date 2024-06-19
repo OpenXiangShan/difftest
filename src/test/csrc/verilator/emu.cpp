@@ -186,7 +186,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #endif // CONFIG_NO_DIFFTEST
           case 5: args.enable_diff = false; continue;
           case 6: args.enable_fork = true; continue;
-          case 7: args.enable_jtag = true; continue;
+          case 7: enable_simjtag = true; continue;
           case 8: args.wave_path = optarg; continue;
           case 9: args.ram_size = optarg; continue;
           case 10:
@@ -231,7 +231,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             args.enable_waveform_full = true;
             continue;
           case 22: args.overwrite_nbytes = atoll_strict(optarg, "overwrite_nbytes"); continue;
-          case 23: args.remote_jtag_port = atoll_strict(optarg, "remote-jtag-port"); continue;
+          case 23: remote_jtag_port = atoll_strict(optarg, "remote-jtag-port"); continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -341,9 +341,7 @@ Emulator::Emulator(int argc, const char *argv[])
   Verilated::randReset(2);
 
   // init remote-bitbang
-  enable_simjtag = args.enable_jtag;
-  if (args.enable_jtag) {
-    remote_jtag_port = args.remote_jtag_port;
+  if (enable_simjtag) {
     jtag_init();
   }
   // init flash
@@ -545,7 +543,7 @@ Emulator::~Emulator() {
        args.seed, cycles);
   Info(ANSI_COLOR_BLUE "Host time spent: %'dms\n" ANSI_COLOR_RESET, elapsed_time);
 
-  if (args.enable_jtag) {
+  if (enable_simjtag) {
     delete jtag;
   }
 
