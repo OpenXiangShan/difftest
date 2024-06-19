@@ -23,8 +23,9 @@
 #include "trace_icache.h"
 
 TraceReader *trace_reader = NULL;
-TraceICache *trace_icache = NULL;
 // TraceWriter *trace_writer = NULL;
+
+/** Used By Emulator */
 
 extern "C" void init_tracertl(const char *trace_file_name) {
   printf("init_tracertl: %s\n", trace_file_name);
@@ -32,38 +33,33 @@ extern "C" void init_tracertl(const char *trace_file_name) {
 }
 
 
-Instruction read_one_trace() {
-  Instruction inst;
-  if (trace_reader->traceOver() || !trace_reader->read(inst)) {
-    inst.instr = 0;
-  }
-  return inst;
-}
+// Instruction read_one_trace() {
+//   Instruction inst;
+//   if (trace_reader->traceOver() || !trace_reader->read(inst)) {
+//     inst.instr = 0;
+//   }
+//   return inst;
+// }
 
-extern "C" bool read_one_trace_bare(uint64_t *pc, uint32_t *instr) {
-  Instruction inst;
-  if (trace_reader->traceOver() || !trace_reader->read(inst)) {
-    return false;
-  }
-  *pc = inst.instr_pc;
-  *instr = inst.instr;
-  return true;
-}
+// extern "C" bool read_one_trace_bare(uint64_t *pc, uint32_t *instr) {
+//   Instruction inst;
+//   if (trace_reader->traceOver() || !trace_reader->read(inst)) {
+//     return false;
+//   }
+//   *pc = inst.instr_pc_va;
+//   *instr = inst.instr;
+//   return true;
+// }
 
 /*
  * TraceICache init and DPI-C Helper
  **/
 
-extern "C" void init_traceicache(const char *binary_name) {
-  trace_icache = new TraceICache(binary_name);
-}
+extern "C" void trace_read_one_instr(
+  uint64_t *pc_va, uint64_t *pc_pa, uint64_t *memory_addr_va, uint64_t *memory_addr_pa,
+  uint64_t *target, uint32_t *instr,
+  uint8_t *memory_type, uint8_t *memory_size, uint8_t *branch_type, uint8_t *branch_taken) {
 
-extern "C" void trace_read_one_instr(uint8_t enable, uint64_t *pc, uint32_t *instr) {
-  if (!enable) {
-    *pc = 0;
-    *instr = 0;
-    return ;
-  }
   Instruction inst;
   if (trace_reader->traceOver()) {
     printf("trace_read_one_instr: traceOver. Finish\n");
@@ -77,8 +73,24 @@ extern "C" void trace_read_one_instr(uint8_t enable, uint64_t *pc, uint32_t *ins
     exit(1);
     return ;
   }
-  *pc = inst.instr_pc;
+  *pc_va = inst.instr_pc_va;
+  *pc_pa = inst.instr_pc_pa;
+  *memory_addr_va = inst.memory_address_va;
+  *memory_addr_pa = inst.memory_address_pa;
+  *target = inst.target;
   *instr = inst.instr;
+  *memory_type = inst.memory_type;
+  *memory_size = inst.memory_size;
+  *branch_type = inst.branch_type;
+  *branch_taken = inst.branch_taken;
+}
+
+/** Fake ICache */
+
+TraceICache *trace_icache = NULL;
+
+extern "C" void init_traceicache(const char *binary_name) {
+  trace_icache = new TraceICache(binary_name);
 }
 
 extern "C" uint64_t trace_icache_dword_helper(uint64_t addr) {

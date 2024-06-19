@@ -24,18 +24,27 @@
 // TODO : pack it
 // TODO : mv instr and instr_pc to map(or more ca, icache)
 struct TraceInstruction {
-  // bool is_branch;
-  // bool branch_taken;
-  // uint8_t memory_size;
-  // uint8_t padding[3];
-  uint64_t instr_pc;
+  uint64_t instr_pc_va;
+  uint64_t instr_pc_pa;
+  uint64_t memory_address_va;
+  uint64_t memory_address_pa;
+  uint64_t target = 0;
   uint32_t instr;
-  uint32_t padding;
-  // uint64_t memory_address;
+  uint8_t memory_type;
+  uint8_t memory_size;
+  uint8_t branch_type;
+  uint8_t branch_taken;
 
-  void dump() {
+void dump() {
     // printf("Instr: TraceSize %ld memSize %02x PC 0x%016lx instr 0x%04x memAddr 0x%016lx\n", sizeof(TraceInstruction), memory_size, instr_pc, instr, memory_address);
-    printf("Instr: TraceSize %ld PC 0x%016lx instr 0x%08x\n", sizeof(TraceInstruction), instr_pc, instr);
+    printf("Instr: size %ld PC 0x%08lx|%08lx instr 0x%08x", sizeof(TraceInstruction), instr_pc_va, instr_pc_pa, instr);
+    if (memory_type != 0) {
+      printf(" is_mem %d addr %08lx|%08lx", memory_type, memory_address_va, memory_address_pa);
+    }
+    if (branch_type != 0) {
+      printf(" is_branch %d taken %d target %08lx", branch_type, branch_taken, target);
+    }
+    printf("\n");
   }
 };
 

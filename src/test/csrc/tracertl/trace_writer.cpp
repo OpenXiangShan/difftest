@@ -44,11 +44,8 @@ bool TraceWriter::write(uint64_t pc, uint32_t instr) {
   }
 
   Instruction inst;
-  inst.instr_pc = pc;
+  inst.instr_pc_va = pc;
   inst.instr = instr;
-  inst.padding = 0;
-  // inst.memory_size = 0;
-  // inst.memory_address = 0;
 
   trace_stream->write(reinterpret_cast<char *> (&inst), sizeof(Instruction));
   return true;

@@ -29,14 +29,8 @@ TraceReader::TraceReader(std::string trace_file_name)
 }
 
 bool TraceReader::read(Instruction &inst) {
-  TraceInstruction trace_entry;
-  trace_stream->read(reinterpret_cast<char *> (&trace_entry), sizeof(TraceInstruction));
-  // trace_entry.dump();
-
-  // inst.memory_size = trace_entry.memory_size;
-  inst.instr_pc    = trace_entry.instr_pc;
-  inst.instr       = trace_entry.instr;
-  // inst.memory_address = trace_entry.memory_address;
+  trace_stream->read(reinterpret_cast<char *> (&inst), sizeof(TraceInstruction));
+  inst.dump();
 
   return true;
 }
