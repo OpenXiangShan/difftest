@@ -35,6 +35,9 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
+#ifdef WITH_QEMUCKPT
+char out_ipc_info_file[32] = "./emu_to_cpi_file.txt";
+#endif
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
 static char *flash_bin_file = NULL;

@@ -30,6 +30,10 @@ endif
 ifeq ($(WITH_DRAMSIM3),1)
 PLDM_MACRO_FLAGS  	+= +define+WITH_DRAMSIM3
 endif
+# Out ipc info on liunx fifo, used to support qemu multi-core sampled data output
+ifeq ($(WITH_QEMUCKPT),1)
+PLDM_MACRO_FLAGS  	+= +define+WITH_QEMUCKPT
+endif
 
 # UA Args
 IXCOM_FLAGS  	 = -clean -64 -ua +sv +ignoreSimVerCheck +xe_alt_xlm

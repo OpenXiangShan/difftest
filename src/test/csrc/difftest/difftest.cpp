@@ -1188,6 +1188,12 @@ void Difftest::display_stats() {
   double ipc = (double)instrCnt / cycleCnt;
   eprintf(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
           this->id, instrCnt, cycleCnt, ipc);
+#ifdef WITH_QEMUCKPT
+  double cpi = (double)cycleCnt / instrCnt;
+  extern char out_ipc_info_file[32];
+  static FILE *fp = fopen(out_ipc_info_file, "a+");
+  fprintf(fp, "%d,%lf\n", this->id, cpi);
+#endif
 }
 
 void DiffState::display_commit_count(int i) {
