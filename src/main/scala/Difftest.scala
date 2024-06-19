@@ -181,6 +181,7 @@ class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with Di
 
 class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
   override val desiredCppName: String = "wb_fp"
+  override def supportsSquashBase: Bool = true.B
 }
 
 class DiffVecWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
