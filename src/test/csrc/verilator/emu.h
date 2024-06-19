@@ -74,7 +74,6 @@ struct EmuArgs {
   bool force_dump_result = false;
   bool enable_diff = true;
   bool enable_fork = false;
-  bool enable_jtag = false;
   bool enable_runahead = false;
   bool dump_db = false;
   bool trace_is_read = true;

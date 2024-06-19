@@ -105,6 +105,7 @@ static inline void print_help(const char *file) {
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
+  printf("      --remote-jtag-port     specify remote bitbang port\n");
 #if VM_COVERAGE == 1
   printf("      --dump-coverage        enable coverage dump\n");
 #endif // VM_COVERAGE
@@ -149,6 +150,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dump-linearized",   1, NULL,  0  },
     { "dump-wave-full",    0, NULL,  0  },
     { "overwrite-nbytes",  1, NULL,  0  },
+    { "remote-jtag-port",  1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -184,7 +186,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #endif // CONFIG_NO_DIFFTEST
           case 5: args.enable_diff = false; continue;
           case 6: args.enable_fork = true; continue;
-          case 7: args.enable_jtag = true; continue;
+          case 7: enable_simjtag = true; continue;
           case 8: args.wave_path = optarg; continue;
           case 9: args.ram_size = optarg; continue;
           case 10:
@@ -229,6 +231,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             args.enable_waveform_full = true;
             continue;
           case 22: args.overwrite_nbytes = atoll_strict(optarg, "overwrite_nbytes"); continue;
+          case 23: remote_jtag_port = atoll_strict(optarg, "remote-jtag-port"); continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -338,9 +341,8 @@ Emulator::Emulator(int argc, const char *argv[])
   Verilated::randReset(2);
 
   // init remote-bitbang
-  enable_simjtag = args.enable_jtag;
-  if (args.enable_jtag) {
-    jtag = new remote_bitbang_t(23334);
+  if (enable_simjtag) {
+    jtag_init();
   }
   // init flash
   init_flash(args.flash_bin);
@@ -541,7 +543,7 @@ Emulator::~Emulator() {
        args.seed, cycles);
   Info(ANSI_COLOR_BLUE "Host time spent: %'dms\n" ANSI_COLOR_RESET, elapsed_time);
 
-  if (args.enable_jtag) {
+  if (enable_simjtag) {
     delete jtag;
   }
 
