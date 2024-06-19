@@ -44,7 +44,6 @@
 
 extern int assert_count;
 extern const char *emu_path;
-extern bool enable_simjtag;
 
 extern int signal_num;
 void sig_handler(int signo);

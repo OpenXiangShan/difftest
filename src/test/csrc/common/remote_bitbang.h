@@ -6,6 +6,11 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+extern bool enable_simjtag;
+extern uint16_t remote_jtag_port;
+
+void jtag_init();
+
 class remote_bitbang_t {
 public:
   // Create a new server, listening for connections from localhost on the given
