@@ -62,6 +62,6 @@ typedef union atpStruct {
 #define onlyStage1     1
 #define onlyStage2     2
 #define VPNiSHFT(i)    (12 + 9 * (i))
-#define GVPNi(addr, i) (((addr) >> (18 - 9 * (i) + 12)) & (i == 0 ? 0x7ff : 0x1ff))
-#define VPNi(vpn, i)   (((vpn) >> (18 - 9 * (i))) & 0x1ff)
+#define GVPNi(addr, i) (((addr) >> (9 * (i) + 12)) & (i == 2 ? 0x7ff : 0x1ff))
+#define VPNi(vpn, i)   (((vpn) >> (9 * (i))) & 0x1ff)
 #endif
