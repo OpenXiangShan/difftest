@@ -89,6 +89,11 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
   }
 }
 
+// Instantiate inside DiffTest, work for get_commit_data specially
+class CommitData extends DifftestBaseBundle with HasValid {
+  val data = UInt(64.W)
+}
+
 class TrapEvent extends DifftestBaseBundle {
   val hasTrap = Bool()
   val cycleCnt = UInt(64.W)

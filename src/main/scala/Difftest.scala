@@ -151,6 +151,11 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with Dif
   }
 }
 
+class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "commit_data"
+  override def supportsSquashBase: Bool = true.B
+}
+
 class DiffTrapEvent extends TrapEvent with DifftestBundle {
   override val desiredCppName: String = "trap"
   override def supportsSquashBase: Bool = !hasTrap && !hasWFI

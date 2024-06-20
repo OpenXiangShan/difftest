@@ -254,49 +254,64 @@ object Preprocess {
     module.in := bundles
     module.out
   }
+  def getCommitData(
+    bundles: MixedVec[DifftestBundle],
+    commits: Seq[DiffInstrCommit],
+    wbName: String,
+    regName: String,
+  ): Seq[UInt] = {
+    if (bundles.exists(_.desiredCppName == regName)) {
+      if (bundles.exists(_.desiredCppName == wbName)) {
+        val numCores = bundles.count(_.isUniqueIdentifier)
+        val writeBacks = bundles.filter(_.desiredCppName == wbName).map(_.asInstanceOf[DiffIntWriteback])
+        val phyRf = Reg(Vec(numCores, Vec(writeBacks.head.numElements, UInt(64.W))))
+        for (wb <- writeBacks) {
+          when(wb.valid) {
+            phyRf(wb.coreid)(wb.address) := wb.data
+          }
+        }
+        commits.map { c =>
+          val data = WireInit(phyRf(c.coreid)(c.wpdest))
+          for (wb <- writeBacks) { // Consider WriteBack valid in same cycle
+            when(wb.valid && wb.coreid === c.coreid && wb.address === c.wpdest) {
+              data := wb.data
+            }
+          }
+          data
+        }
+      } else {
+        val archRf = VecInit(bundles.filter(_.desiredCppName == regName).map(_.asInstanceOf[ArchIntRegState]).toSeq)
+        commits.map { c => archRf(c.coreid).value(c.wdest) }
+      }
+    } else {
+      Seq.fill(commits.length)(0.U)
+    }
+  }
 }
 
 class Preprocess(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
-  val out = IO(Output(MixedVec(bundles)))
-  val numCores = bundles.count(_.isUniqueIdentifier)
-  out := in
 
-  if (config.hasDutZone || config.isSquash || config.isBatch) {
-    // Special fix for int writeback.
-    if (in.exists(_.desiredCppName == "wb_int")) {
-      val writebacks = in.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
-      val numPhyRegs = writebacks.head.numElements
-      val wb_int = Reg(Vec(numCores, Vec(numPhyRegs, UInt(64.W))))
-      for (wb <- writebacks) {
-        when(wb.valid) {
-          wb_int(wb.coreid)(wb.address) := wb.data
-        }
-      }
-
-      val wb_out = out.filter(_.desiredCppName == "wb_int").map(_.asInstanceOf[DiffIntWriteback])
-      val commits = in.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit])
-      // We use physical IntReg WriteBack for compare when load and MMIO, and record commit instr trace
-      // As there are multiple DUT buffer in software side, wb_int transferred and used may not in the same buffer
-      // So we buffer wb_int until instrCommit
-      require(wb_out.length >= commits.length, "WriteBack port length should be larger than InstrCommit")
-      wb_out.foreach { wb => wb.valid := false.B }
-      for ((c, wb) <- commits.zip(wb_out.take(commits.length))) {
-        when(c.valid) {
-          wb.coreid := c.coreid
-          wb.valid := true.B
-          wb.address := c.wpdest
-          wb.data := wb_int(c.coreid)(c.wpdest)
-          // Consider wb_int valid in same cycle
-          for (wb_in <- writebacks) {
-            when(wb_in.valid && wb_in.address === c.wpdest && wb_in.coreid === c.coreid) {
-              wb.data := wb_in.data
-            }
-          }
-        }
-      }
-    }
+  // Special fix of writeback for get_commit_data
+  // We use physical WriteBack for compare when load and MMIO, and record commit instr trace
+  // As there are multiple DUT buffer in software side, writeBacks transferred and used may not in the same buffer
+  // So we buffer writeBacks until instrCommit, and submit corresponding data
+  val commits = in.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit]).toSeq
+  val fpData = Preprocess.getCommitData(in, commits, "wb_fp", "regs_fp")
+  val vecData = Preprocess.getCommitData(in, commits, "wb_vec", "regs_vec")
+  val intData = Preprocess.getCommitData(in, commits, "wb_int", "regs_int")
+  val commitData = commits.zip(fpData).zip(vecData).zip(intData).map { case (((c, f), v), i) =>
+    val cd = WireInit(0.U.asTypeOf(new DiffCommitData))
+    cd.coreid := c.coreid
+    cd.index := c.index
+    cd.valid := c.valid
+    cd.data := Mux(c.fpwen, f, Mux(c.vecwen, v, i))
+    cd
   }
+
+  val withCommitData = MixedVecInit((in.filterNot(_.desiredCppName.contains("wb")) ++ commitData).toSeq)
+  val out = IO(Output(chiselTypeOf(withCommitData)))
+  out := withCommitData
 }
 
 class ZoneControl(config: GatewayConfig) extends Module {
