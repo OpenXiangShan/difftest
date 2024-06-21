@@ -787,6 +787,29 @@ int Emulator::tick() {
   if (trapCode != STATE_RUNNING) {
     return trapCode;
   }
+
+#ifdef TRACERTL_MODE
+  // trace check
+  do{
+    auto trap = difftest[0]->get_trap_event();
+    if (!tracertl_update_tick(trap->cycleCnt)) {
+      printf("Trace Stack Too Many Cycle. Current Cycle: %lu\n", trap->cycleCnt);
+      tracertl_dump();
+      trapCode = STATE_ABORT;
+      return trapCode;
+    }
+    if (tracertl_over()) {
+      trapCode = STATE_TRACE_OVER;
+      return trapCode;
+    }
+    if (tracertl_error()) {
+      trapCode = STATE_ABORT;
+      return trapCode;
+    }
+
+  } while(0);
+#endif // TRACERTL_MODE
+
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();

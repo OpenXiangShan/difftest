@@ -30,12 +30,51 @@ TraceReader::TraceReader(std::string trace_file_name)
 
 bool TraceReader::read(Instruction &inst) {
   trace_stream->read(reinterpret_cast<char *> (&inst), sizeof(TraceInstruction));
+  instList.push_back(inst);
+
   inst.dump();
 
   return true;
 }
 
+bool TraceReader::check(uint64_t pc, uint32_t instn, uint8_t instNum) {
+    if (instList.size() < instNum) {
+      return false;
+    }
+    Instruction inst = instList.front();
+    if ((inst.instr_pc_va != pc) || (inst.instr != instn)) {
+      return false;
+    }
+
+    for (int i = 0; i < instNum; i++) {
+        instList.pop_front();
+    }
+    setCommit();
+    commit_inst_num += instNum;
+    return true;
+}
+
 bool TraceReader::traceOver() {
   // end of file or add signal into the trace
   return trace_stream->eof();
+}
+
+bool TraceReader::update_tick(uint64_t tick) {
+  uint64_t threa;
+  if (commit_inst_num == 0) threa = FIRST_BLOCK_THREASHOLD;
+  else threa = BLOCK_THREASHOLD;
+
+   if (isCommited()) {
+     last_commit_tick = tick;
+     clearCommit();
+     return true;
+   }
+  return (tick - last_commit_tick) < threa;
+}
+
+void TraceReader::dump() {
+  printf("\n");
+  printf("TraceRTL Dump:\n");
+  printf("commit_inst_num: %lu\n", commit_inst_num);
+  printf("last_commit_tick: %lu\n", last_commit_tick);
 }

@@ -27,29 +27,26 @@ TraceReader *trace_reader = NULL;
 
 /** Used By Emulator */
 
-extern "C" void init_tracertl(const char *trace_file_name) {
+void init_tracertl(const char *trace_file_name) {
   printf("init_tracertl: %s\n", trace_file_name);
   trace_reader = new TraceReader(trace_file_name);
 }
 
+bool tracertl_over() {
+  return trace_reader->isOver();
+}
 
-// Instruction read_one_trace() {
-//   Instruction inst;
-//   if (trace_reader->traceOver() || !trace_reader->read(inst)) {
-//     inst.instr = 0;
-//   }
-//   return inst;
-// }
+bool tracertl_error() {
+  return trace_reader->isError();
+}
 
-// extern "C" bool read_one_trace_bare(uint64_t *pc, uint32_t *instr) {
-//   Instruction inst;
-//   if (trace_reader->traceOver() || !trace_reader->read(inst)) {
-//     return false;
-//   }
-//   *pc = inst.instr_pc_va;
-//   *instr = inst.instr;
-//   return true;
-// }
+bool tracertl_update_tick(uint64_t tick) {
+  return trace_reader->update_tick(tick);
+}
+
+void tracertl_dump() {
+  trace_reader->dump();
+}
 
 /*
  * TraceICache init and DPI-C Helper
@@ -60,19 +57,15 @@ extern "C" void trace_read_one_instr(
   uint64_t *target, uint32_t *instr,
   uint8_t *memory_type, uint8_t *memory_size, uint8_t *branch_type, uint8_t *branch_taken) {
 
-  Instruction inst;
   if (trace_reader->traceOver()) {
     printf("trace_read_one_instr: traceOver. Finish\n");
-    printf("TODO: add trap signal to finish the simulation\n");
-    exit(0);
+    trace_reader->setOver();
+    // TODO: insert nop
     return ;
   }
-  if (!trace_reader->read(inst)) {
-    printf("trace_read_one_instr: read failed. Finish\n");
-    printf("TODO: add trap signal to finish the simulation\n");
-    exit(1);
-    return ;
-  }
+  Instruction inst;
+  trace_reader->read(inst);
+
   *pc_va = inst.instr_pc_va;
   *pc_pa = inst.instr_pc_pa;
   *memory_addr_va = inst.memory_address_va;
@@ -83,6 +76,13 @@ extern "C" void trace_read_one_instr(
   *memory_size = inst.memory_size;
   *branch_type = inst.branch_type;
   *branch_taken = inst.branch_taken;
+}
+
+extern "C" void trace_collect_one_instr(uint64_t pc, uint32_t instr, uint8_t instNum) {
+    if (!trace_reader->check(pc, instr, instNum)) {
+      trace_reader->setError();
+      return ;
+    };
 }
 
 /** Fake ICache */

@@ -20,9 +20,24 @@
 #include <fstream>
 #include <iostream>
 #include "trace_format.h"
+#include "emu.h"
+
+enum TraceStatus {
+  TRACE_IDLE,
+  TRACE_EOF,
+  TRACE_ERROR
+};
 
 class TraceReader {
   std::ifstream *trace_stream;
+  std::deque<Instruction> instList;
+  TraceStatus status;
+  uint64_t commit_inst_num = 0;
+  uint64_t last_commit_tick = 0;
+  uint64_t BLOCK_THREASHOLD = 2000;
+  uint64_t FIRST_BLOCK_THREASHOLD = 5000;
+
+  bool last_committed = false;
 
 public:
   TraceReader(std::string trace_file_name);
@@ -31,8 +46,21 @@ public:
   }
   /* get an instruction from file */
   bool read(Instruction &inst);
+  bool check(uint64_t pc, uint32_t inst, uint8_t instNum);
   /* if the trace is over */
   bool traceOver();
+
+  bool update_tick(uint64_t tick);
+  void dump();
+
+  bool isOver() { return status == TRACE_EOF; }
+  bool isError() { return status == TRACE_ERROR; }
+  void setOver() { status = TRACE_EOF; }
+  void setError() { status = TRACE_ERROR; }
+
+  bool isCommited() { return last_committed;}
+  void setCommit() { last_committed = true;}
+  void clearCommit() { last_committed = false;}
 };
 
 #endif

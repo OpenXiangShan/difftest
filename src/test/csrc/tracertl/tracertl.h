@@ -18,12 +18,21 @@
 #define __TRACERTL_H__
 
 #include "trace_format.h"
+#include "trace_reader.h"
 
-extern "C" void init_tracertl(const char *trace_file_name);
+//TraceReader *trace_reader = NULL;
+
+void init_tracertl(const char *trace_file_name);
+bool tracertl_over();
+bool tracertl_error();
+bool tracertl_update_tick(uint64_t tick);
+void tracertl_dump();
+
 extern "C" void trace_read_one_instr(
   uint64_t *pc_va, uint64_t *pc_pa, uint64_t *memory_addr_va, uint64_t *memory_addr_pa,
   uint64_t *target, uint32_t *instr,
   uint8_t *memory_type, uint8_t *memory_size, uint8_t *branch_type, uint8_t *branch_taken);
+extern "C" void trace_collect_one_instr(uint64_t pc, uint32_t instr, uint8_t instNum);
 // Instruction read_one_trace();
 // extern "C" bool read_one_trace_bare(uint64_t *pc, uint32_t *instr);
 
