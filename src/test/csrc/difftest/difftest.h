@@ -310,8 +310,16 @@ protected:
   uint64_t track_instr = 0;
 #endif
 
+#ifdef CONFIG_DIFFTEST_SQUASH
+  int commit_stamp = 0;
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+  std::queue<DifftestLoadEvent> load_event_queue;
+  void load_event_record();
+#endif // CONFIG_DIFFTEST_LOADEVENT
+#endif // CONFIG_DIFFTEST_SQUASH
+
 #ifdef CONFIG_DIFFTEST_STOREEVENT
-  std::queue<store_event_t> store_event_queue;
+  std::queue<DifftestStoreEvent> store_event_queue;
   void store_event_record();
 #endif
   void update_last_commit() {

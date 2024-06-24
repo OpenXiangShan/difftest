@@ -257,6 +257,12 @@ int Difftest::step() {
   store_event_record();
 #endif
 
+#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+  load_event_record();
+#endif // CONFIG_DIFFTEST_LOADEVENT
+#endif // CONFIG_DIFFTEST_SQUASH
+
 #ifdef DEBUG_GOLDENMEM
   if (do_golden_memory_update()) {
     return 1;
@@ -317,9 +323,12 @@ int Difftest::step() {
         if (do_instr_commit(i)) {
           return 1;
         }
+#ifndef CONFIG_DIFFTEST_SQUASH
+        do_load_check(i);
         if (do_store_check()) {
           return 1;
         }
+#endif // CONFIG_DIFFTEST_SQUASH
         dut->commit[i].valid = 0;
         num_commit += 1 + dut->commit[i].nFused;
       }
@@ -497,11 +506,17 @@ int Difftest::do_instr_commit(int i) {
     return 0;
   }
 
-  // single step exec
-  proxy->ref_exec(1);
+  // Default: single step exec
   // when there's a fused instruction, let proxy execute more instructions.
-  for (int j = 0; j < dut->commit[i].nFused; j++) {
+  for (int j = 0; j < dut->commit[i].nFused + 1; j++) {
     proxy->ref_exec(1);
+#ifdef CONFIG_DIFFTEST_SQUASH
+    commit_stamp = (commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+    do_load_check(i);
+    if (do_store_check()) {
+      return 1;
+    }
+#endif // CONFIG_DIFFTEST_SQUASH
   }
 
   return 0;
@@ -542,17 +557,30 @@ void Difftest::do_load_check(int i) {
   // Handle load instruction carefully for SMP
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   if (NUM_CORES > 1) {
-    if (!dut->load[i].valid)
+#ifdef CONFIG_DIFFTEST_SQUASH
+    if (load_event_queue.empty())
+      return;
+    auto load_event = load_event_queue.front();
+    if (load_event.stamp != commit_stamp)
+      return;
+    bool regWen = load_event.regWen;
+    auto refRegPtr = proxy->arch_reg(load_event.wdest, load_event.fpwen);
+    auto commitData = load_event.commitData;
+#else
+    auto load_event = dut->load[i];
+    if (!load_event.valid)
       return;
     bool regWen =
         ((dut->commit[i].rfwen && dut->commit[i].wdest != 0) || dut->commit[i].fpwen) && !dut->commit[i].vecwen;
-    if (dut->load[i].isLoad || dut->load[i].isAtomic) {
+    auto refRegPtr = proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) auto commitData = get_commit_data(i);
+#endif // CONFIG_DIFFTEST_SQUASH
+    if (load_event.isLoad || load_event.isAtomic) {
       proxy->sync();
-      if (regWen && *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) != get_commit_data(i)) {
+      if (regWen && *refRegPtr != commitData) {
         uint64_t golden;
         int len = 0;
-        if (dut->load[i].isLoad) {
-          switch (dut->load[i].opType) {
+        if (load_event.isLoad) {
+          switch (load_event.opType) {
             case 0: len = 1; break;
             case 1: len = 2; break;
             case 2: len = 4; break;
@@ -560,27 +588,27 @@ void Difftest::do_load_check(int i) {
             case 4: len = 1; break;
             case 5: len = 2; break;
             case 6: len = 4; break;
-            default: Info("Unknown fuOpType: 0x%x\n", dut->load[i].opType);
+            default: Info("Unknown fuOpType: 0x%x\n", load_event.opType);
           }
-        } else if (dut->load[i].isAtomic) {
-          if (dut->load[i].opType % 2 == 0) {
+        } else if (load_event.isAtomic) {
+          if (load_event.opType % 2 == 0) {
             len = 4;
-          } else { // dut->load[i].opType % 2 == 1
+          } else { // load_event.opType % 2 == 1
             len = 8;
           }
         }
-        read_goldenmem(dut->load[i].paddr, &golden, len);
-        if (dut->load[i].isLoad) {
-          switch (dut->load[i].opType) {
+        read_goldenmem(load_event.paddr, &golden, len);
+        if (load_event.isLoad) {
+          switch (load_event.opType) {
             case 0: golden = (int64_t)(int8_t)golden; break;
             case 1: golden = (int64_t)(int16_t)golden; break;
             case 2: golden = (int64_t)(int32_t)golden; break;
           }
         }
-        if (golden == get_commit_data(i) || dut->load[i].isAtomic) { //  atomic instr carefully handled
-          proxy->ref_memcpy(dut->load[i].paddr, &golden, len, DUT_TO_REF);
+        if (golden == commitData || load_event.isAtomic) { //  atomic instr carefully handled
+          proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
           if (regWen) {
-            *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) = get_commit_data(i);
+            *refRegPtr = commitData;
             proxy->sync(true);
           }
         } else {
@@ -589,19 +617,23 @@ void Difftest::do_load_check(int i) {
           Info("---  SMP difftest mismatch!\n");
           Info("---  Trying to probe local data of another core\n");
           uint64_t buf;
-          difftest[(NUM_CORES - 1) - this->id]->proxy->memcpy(dut->load[i].paddr, &buf, len, DIFFTEST_TO_DUT);
+          difftest[(NUM_CORES - 1) - this->id]->proxy->memcpy(load_event.paddr, &buf, len, DIFFTEST_TO_DUT);
           Info("---    content: %lx\n", buf);
 #else
-          proxy->ref_memcpy(dut->load[i].paddr, &golden, len, DUT_TO_REF);
+          proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
           if (regWen) {
-            *proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) = get_commit_data(i);
+            *refRegPtr = commitData;
             proxy->sync(true);
           }
 #endif
         }
       }
     }
-    dut->load[i].valid = 0;
+#ifdef CONFIG_DIFFTEST_SQUASH
+    load_event_queue.pop();
+#else
+    load_event.valid = 0;
+#endif // CONFIG_DIFFTEST_SQUASH
   }
 #endif // CONFIG_DIFFTEST_LOADEVENT
 }
@@ -610,7 +642,10 @@ int Difftest::do_store_check() {
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   while (!store_event_queue.empty()) {
     auto store_event = store_event_queue.front();
-
+#ifdef CONFIG_DIFFTEST_SQUASH
+    if (store_event.stamp != commit_stamp)
+      return 0;
+#endif // CONFIG_DIFFTEST_SQUASH
     auto addr = store_event.addr;
     auto data = store_event.data;
     auto mask = store_event.mask;
@@ -1047,14 +1082,25 @@ int Difftest::do_golden_memory_update() {
 void Difftest::store_event_record() {
   for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
     if (dut->store[i].valid) {
-      store_event_t event{dut->store[i].addr, dut->store[i].data, dut->store[i].mask};
-      store_event_queue.push(event);
-
+      store_event_queue.push(dut->store[i]);
       dut->store[i].valid = 0;
     }
   }
 }
 #endif
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+void Difftest::load_event_record() {
+  for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
+    if (dut->load[i].valid) {
+      load_event_queue.push(dut->load[i]);
+      dut->load[i].valid = 0;
+    }
+  }
+}
+#endif // CONFIG_DIFFTEST_LOADEVENT
+#endif // CONFIG_DIFFTEST_SQUASH
 
 int Difftest::check_timeout() {
   // check whether there're any commits since the simulation starts
