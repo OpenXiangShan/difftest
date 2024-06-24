@@ -35,7 +35,7 @@ struct TraceInstruction {
   uint8_t branch_type;
   uint8_t branch_taken;
 
-void dump() {
+  void dump() {
     // printf("Instr: TraceSize %ld memSize %02x PC 0x%016lx instr 0x%04x memAddr 0x%016lx\n", sizeof(TraceInstruction), memory_size, instr_pc, instr, memory_address);
     printf("Instr: size %ld PC 0x%08lx|%08lx instr 0x%08x", sizeof(TraceInstruction), instr_pc_va, instr_pc_pa, instr);
     if (memory_type != 0) {

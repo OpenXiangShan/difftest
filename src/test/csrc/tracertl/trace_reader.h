@@ -38,6 +38,7 @@ class TraceReader {
   uint64_t FIRST_BLOCK_THREASHOLD = 5000;
 
   bool last_committed = false;
+  uint64_t read_inst_cnt = 0;
 
 public:
   TraceReader(std::string trace_file_name);
@@ -51,6 +52,7 @@ public:
   bool traceOver();
 
   bool update_tick(uint64_t tick);
+  void dump_uncommited_inst();
   void dump();
 
   bool isOver() { return status == TRACE_EOF; }

@@ -32,7 +32,8 @@ bool TraceReader::read(Instruction &inst) {
   trace_stream->read(reinterpret_cast<char *> (&inst), sizeof(TraceInstruction));
   instList.push_back(inst);
 
-  inst.dump();
+//  printf("[%08lu] ", read_inst_cnt++);
+//  inst.dump();
 
   return true;
 }
@@ -52,6 +53,13 @@ bool TraceReader::check(uint64_t pc, uint32_t instn, uint8_t instNum) {
     setCommit();
     commit_inst_num += instNum;
     return true;
+}
+
+void TraceReader::dump_uncommited_inst() {
+  for (auto inst : instList) {
+    printf("[%08lu] ", commit_inst_num++);
+    inst.dump();
+  }
 }
 
 bool TraceReader::traceOver() {
@@ -77,4 +85,6 @@ void TraceReader::dump() {
   printf("TraceRTL Dump:\n");
   printf("commit_inst_num: %lu\n", commit_inst_num);
   printf("last_commit_tick: %lu\n", last_commit_tick);
+
+  dump_uncommited_inst();
 }
