@@ -34,6 +34,19 @@ trait DifftestWithIndex {
   val index = UInt(8.W)
 }
 
+trait DifftestWithStamp {
+  val stamp = UInt(16.W)
+}
+
+trait DiffTestIsInherited { this: DifftestBundle =>
+  def inheritFrom[T <: DifftestBundle](parent: T): Unit = {
+    parent.elements.foreach { case (name, data) =>
+      require(this.elements.contains(name))
+      this.elements(name) := data
+    }
+  }
+}
+
 sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: DifftestBaseBundle =>
   def bits: DifftestBaseBundle = this
 
@@ -44,7 +57,10 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   val desiredCppName: String
   def desiredModuleName: String = {
-    val className = this.getClass.getName.replace("$", ".").replace("Diff", "Difftest")
+    val className = {
+      val name = this.getClass.getName.replace("$", ".").replace("Diff", "Difftest")
+      if (squashQueue) name.replace("Queue", "") else name
+    }
     className.split("\\.").filterNot(_.forall(java.lang.Character.isDigit)).last
   }
 
@@ -113,13 +129,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   val squashGroup: Seq[String] = Seq("REF")
   // returns a squashed, right-value Bundle. Default: overriding `base` with `this`
   def squash(base: DifftestBundle): DifftestBundle = this
-  // return Size indicating the size of queue. Defualt: 0
-  // When hasSquashQueue is true and queueSize non-zero, bundle will not be squashed, but buffered and sumbited together.
-  val squashQueueSize: Int = 0
-  // Some Bundle may have squashQueueDelay, requires them submitted after related bundle
-  val squashQueueDelay: Int = 0
-  // return a Seq indicating ones affected by this bundle, which should be flushed by new-coming this bundle
-  val squashFlush: Seq[String] = Seq()
+  def squashQueue: Boolean = false
 }
 
 class DiffArchEvent extends ArchEvent with DifftestBundle {
@@ -229,22 +239,27 @@ class DiffVecCSRState extends VecCSRState with DifftestBundle {
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
-  override val squashFlush: Seq[String] = Seq("load", "l1tlb", "l2tlb", "refill")
-  override val squashQueueSize: Int = 8
 }
 
 class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "store"
-  // To avoid overflow, queueSize should be less than REF
-  override val squashQueueSize: Int = 64
-  override val squashQueueDelay: Int = 1
+}
+
+class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
+  override val squashQueue: Boolean = true
 }
 
 class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "load"
   override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
-  // TODO: currently we assume it can be dropped
-  override def supportsSquashBase: Bool = true.B
+}
+
+class DiffLoadEventQueue extends DiffLoadEvent with DifftestWithStamp with DiffTestIsInherited {
+  val commitData = UInt(64.W)
+  val regWen = Bool()
+  val wdest = UInt(8.W)
+  val fpwen = Bool()
+  override val squashQueue: Boolean = true
 }
 
 class DiffAtomicEvent extends AtomicEvent with DifftestBundle {
