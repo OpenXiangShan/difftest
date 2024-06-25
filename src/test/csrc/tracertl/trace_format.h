@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <stdio.h>
+#include "spikedasm.h"
 
 #define Log() printf("file: %s, line: %d\n", __FILE__, __LINE__); fflush(stdout)
 
@@ -37,7 +38,7 @@ struct TraceInstruction {
 
   void dump() {
     // printf("Instr: TraceSize %ld memSize %02x PC 0x%016lx instr 0x%04x memAddr 0x%016lx\n", sizeof(TraceInstruction), memory_size, instr_pc, instr, memory_address);
-    printf("Instr: size %ld PC 0x%08lx|%08lx instr 0x%08x", sizeof(TraceInstruction), instr_pc_va, instr_pc_pa, instr);
+    printf("PC 0x%08lx|%08lx instr 0x%08x(%s)", instr_pc_va, instr_pc_pa, instr, spike_dasm(instr));
     if (memory_type != 0) {
       printf(" is_mem %d addr %08lx|%08lx", memory_type, memory_address_va, memory_address_pa);
     }
@@ -54,6 +55,21 @@ struct Control {
   uint8_t type;
   uint8_t data;
   // TODO: placeholder, not implemented
+};
+
+struct TraceCollectInstruction {
+  uint64_t instr_pc;
+  uint32_t instr;
+  uint8_t instNum;
+  uint64_t instID;
+
+  void dump() {
+    if (instNum == 0) {
+        printf("[%08lu]: PC 0x%08lx instr 0x%08x(%s)\n", instID, instr_pc, instr, spike_dasm(instr));
+    } else {
+        printf("[%08lu]: PC 0x%08lx instr 0x%08x(%s) Merge %d\n", instID, instr_pc, instr, spike_dasm(instr), instNum);
+    }
+  }
 };
 
 #endif

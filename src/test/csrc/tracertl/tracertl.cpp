@@ -40,12 +40,28 @@ bool tracertl_error() {
   return trace_reader->isError();
 }
 
+bool tracertl_error_drive() {
+  return trace_reader->isErrorDrive();
+}
+
+bool tracertl_stuck() {
+  return trace_reader->isStuck();
+}
+
 bool tracertl_update_tick(uint64_t tick) {
   return trace_reader->update_tick(tick);
 }
 
-void tracertl_dump() {
-  trace_reader->dump();
+void tracertl_error_dump() {
+  trace_reader->error_dump();
+}
+
+void tracertl_error_drive_dump() {
+  trace_reader->error_drive_dump();
+}
+
+void tracertl_success_dump() {
+  trace_reader->success_dump();
 }
 
 /*
@@ -81,6 +97,13 @@ extern "C" void trace_read_one_instr(
 extern "C" void trace_collect_one_instr(uint64_t pc, uint32_t instr, uint8_t instNum) {
     if (!trace_reader->check(pc, instr, instNum)) {
       trace_reader->setError();
+      return ;
+    };
+}
+
+extern "C" void trace_drive_collect_one_instr(uint64_t pc, uint32_t instr) {
+    if (!trace_reader->check_drive(pc, instr)) {
+      trace_reader->setErrorDrive();
       return ;
     };
 }

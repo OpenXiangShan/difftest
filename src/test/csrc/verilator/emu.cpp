@@ -792,17 +792,27 @@ int Emulator::tick() {
   // trace check
   do{
     auto trap = difftest[0]->get_trap_event();
-    if (!tracertl_update_tick(trap->cycleCnt)) {
+    tracertl_update_tick(trap->cycleCnt);
+    if (tracertl_stuck()) {
       printf("Trace Stack Too Many Cycle. Current Cycle: %lu\n", trap->cycleCnt);
-      tracertl_dump();
+      tracertl_error_dump();
       trapCode = STATE_ABORT;
       return trapCode;
     }
     if (tracertl_over()) {
       trapCode = STATE_TRACE_OVER;
+      tracertl_success_dump();
       return trapCode;
     }
     if (tracertl_error()) {
+      printf("Trace RTL Encouter Error.\n");
+      tracertl_error_dump();
+      trapCode = STATE_ABORT;
+      return trapCode;
+    }
+    if (tracertl_error_drive()) {
+      printf("Trace RTL Encouter Drive Error. Check IFU/IBuffer\n");
+      tracertl_error_drive_dump();
       trapCode = STATE_ABORT;
       return trapCode;
     }
