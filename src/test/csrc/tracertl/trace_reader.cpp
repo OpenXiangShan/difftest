@@ -55,17 +55,17 @@ bool TraceReader::check(uint64_t pc, uint32_t instn, uint8_t instNum) {
     return false;
   }
 
-  printf("TraceCheck:=== [%08lu] pc 0x%08lx instn 0x%08x instNum %d==\n", commit_inst_num, pc, instn, instNum);
+//  printf("TraceCheck:=== [%08lu] pc 0x%08lx instn 0x%08x instNum %d==\n", commit_inst_num, pc, instn, instNum);
   for (int i = 0; i < instNum; i++) {
       auto tmp = instList.front();
-      tmp.dump();
+//      tmp.dump();
       committedInst.push_back(tmp);
       if (committedInst.size() > CommittedInstSize) {
           committedInst.pop_front();
       }
       instList.pop_front();
   }
-  printf("TraceCheck End================================\n");
+//  printf("TraceCheck End================================\n");
 
   TraceCollectInstruction dut;
   dut.instr_pc = pc;
