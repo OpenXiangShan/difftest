@@ -25,6 +25,7 @@ import difftest.squash.Squash
 import difftest.batch.{Batch, BatchIO}
 import difftest.replay.Replay
 import difftest.util.VerificationExtractor
+import difftest.validate.Validate
 
 import scala.collection.mutable.ListBuffer
 
@@ -129,7 +130,7 @@ object Gateway {
     } else {
       val control = WireInit(0.U.asTypeOf(new GatewaySinkControl(config)))
       control.enable := true.B
-      GatewaySink(control, Delayer(bundle, delay), config)
+      GatewaySink(control, Delayer(bundle, delay).genValidBundle, config)
     }
     instanceWithDelay += ((gen, delay))
     bundle
@@ -182,12 +183,14 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     WireInit(preprocessed)
   }
 
+  val validated = Validate(replayed, config)
+
   val squashed = if (config.isSquash) {
-    WireInit(Squash(replayed, config))
+    WireInit(Squash(validated, config))
   } else {
-    WireInit(replayed)
+    WireInit(validated)
   }
-  val instances = chiselTypeOf(squashed).toSeq
+  val instances = chiselTypeOf(squashed).map(_.bits).toSeq
 
   val zoneControl = Option.when(config.hasDutZone)(Module(new ZoneControl(config)))
   val step = Option.when(!config.hasInternalStep)(IO(Output(UInt(config.stepWidth.W))))
@@ -208,10 +211,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
 
     GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
   } else {
-    val squashed_enable = WireInit(true.B)
-    if (config.hasGlobalEnable) {
-      squashed_enable := VecInit(squashed.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
-    }
+    val squashed_enable = VecInit(squashed.map(_.valid).toSeq).asUInt.orR
     if (config.hasInternalStep) {
       control.step.get := squashed_enable
     } else {
@@ -233,7 +233,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
 }
 
 object GatewaySink {
-  def apply(control: GatewaySinkControl, io: DifftestBundle, config: GatewayConfig): Unit = {
+  def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
     config.style match {
       case "dpic" => DPIC(control, io, config)
       case _      => DPIC(control, io, config) // Default: DPI-C

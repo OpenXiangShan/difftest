@@ -39,13 +39,6 @@ sealed trait DifftestBaseBundle extends Bundle {
   }
 
   def needUpdate: Option[Bool] = if (hasValid) Some(getValid) else None
-  def defaultUpdate(): DifftestBaseBundle = {
-    if (hasValid) {
-      getValid := false.B
-    }
-    this
-  }
-
   def hasAddress: Boolean = this.isInstanceOf[HasAddress]
   def getNumElements: Int = {
     this match {
@@ -102,13 +95,6 @@ class TrapEvent extends DifftestBaseBundle {
 
   val code = UInt(32.W)
   val pc = UInt(64.W)
-
-  override def needUpdate: Option[Bool] = Some(hasTrap || hasWFI)
-  override def defaultUpdate(): TrapEvent = {
-    hasTrap := false.B
-    hasWFI := false.B
-    this
-  }
 }
 
 class CSRState extends DifftestBaseBundle {
