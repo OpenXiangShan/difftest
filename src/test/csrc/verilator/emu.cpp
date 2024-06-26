@@ -766,6 +766,9 @@ int Emulator::tick() {
   // assertions
   if (assert_count > 0) {
     Info("The simulation stopped. There might be some assertion failed.\n");
+#ifdef TRACERTL_MODE
+    tracertl_assert_dump();
+#endif
     trapCode = STATE_ABORT;
     return trapCode;
   }

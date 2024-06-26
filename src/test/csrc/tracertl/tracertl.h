@@ -29,6 +29,7 @@ bool tracertl_error_drive();
 bool tracertl_update_tick(uint64_t tick);
 bool tracertl_stuck();
 void tracertl_error_dump();
+void tracertl_assert_dump();
 void tracertl_success_dump();
 void tracertl_error_drive_dump();
 

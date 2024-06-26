@@ -172,7 +172,7 @@ void TraceReader::error_dump() {
 
   dump_committed_inst();
   dump_dut_committed_inst();
-  printf("\n\n\n");
+  printf("\n");
   if (isError()) {
     printf("========= TraceRTL Error at inst %lu ===========\n", commit_inst_num);
     printf("DUT inst: ");
@@ -181,6 +181,17 @@ void TraceReader::error_dump() {
   } else {
     printf("========= TraceRTL Stuck at inst %lu ===========\n", commit_inst_num);
   }
+  dump_uncommited_inst();
+}
+
+void TraceReader::assert_dump() {
+  printf("\n");
+  printf("TraceRTL Dump:\n");
+  printf("commit_inst_num: %lu\n", commit_inst_num);
+  printf("last_commit_tick: %lu\n", last_commit_tick);
+
+  dump_committed_inst();
+  dump_dut_committed_inst();
   dump_uncommited_inst();
 }
 

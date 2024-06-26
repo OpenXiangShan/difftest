@@ -56,6 +56,10 @@ void tracertl_error_dump() {
   trace_reader->error_dump();
 }
 
+void tracertl_assert_dump() {
+  trace_reader->assert_dump();
+}
+
 void tracertl_error_drive_dump() {
   trace_reader->error_drive_dump();
 }

@@ -71,6 +71,7 @@ public:
   void dump_committed_inst();
   void dump_dut_committed_inst();
   void error_dump();
+  void assert_dump();
   void success_dump();
   void error_drive_dump();
 
