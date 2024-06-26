@@ -24,13 +24,47 @@ import difftest.common.DifftestPerf
 
 object Squash {
   def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[DifftestBundle] = {
-    val stamper = Module(new Stamper(chiselTypeOf(bundles).toSeq))
-    stamper.in := bundles
-    val stamped = stamper.out
+    val validated = {
+      val module = Module(new Validator(chiselTypeOf(bundles).toSeq))
+      module.in := bundles
+      module.out
+    }
+    val stamped = {
+      val module = Module(new Stamper(chiselTypeOf(validated).toSeq))
+      module.in := validated
+      module.out
+    }
     val module = Module(new SquashEndpoint(chiselTypeOf(stamped).toSeq, config))
     module.in := stamped
     module.out
   }
+}
+
+class Validator(bundles: Seq[DifftestBundle]) extends Module {
+  val in = IO(Input(MixedVec(bundles)))
+  val validated = MixedVecInit(in.map { i =>
+    if (!i.bits.hasValid) {
+      // Sometimes, the bundle may have squash dependencies.
+      // Only when one of the dependencies is valid, this bundle is squashed.
+      val valid = Option
+        .when(i.squashDependency.nonEmpty)(
+          VecInit(
+            in.filter(b => i.squashDependency.contains(b.desiredCppName))
+              .map(bundle => {
+                // Only if the corresponding bundle is valid, we update this bundle
+                bundle.coreid === i.coreid && bundle.needUpdate.getOrElse(true.B)
+              })
+              .toSeq
+          ).asUInt.orR
+        )
+        .getOrElse(true.B) && i.needUpdate.getOrElse(true.B)
+      i.getValidated(valid)
+    } else {
+      i
+    }
+  }.toSeq)
+  val out = IO(Output(chiselTypeOf(validated)))
+  out := validated
 }
 
 class Stamper(bundles: Seq[DifftestBundle]) extends Module {
@@ -86,22 +120,6 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   val in = IO(Input(MixedVec(bundles)))
   val numCores = in.count(_.isUniqueIdentifier)
 
-  // Sometimes, the bundle may have squash dependencies.
-  // Only when one of the dependencies is valid, this bundle is squashed.
-  val do_squash = VecInit(in.map(_.bits.needUpdate.getOrElse(true.B)).toSeq)
-  in.zip(do_squash).foreach { case (i, do_s) =>
-    if (i.squashDependency.nonEmpty) {
-      do_s := VecInit(
-        in.filter(b => i.squashDependency.contains(b.desiredCppName))
-          .map(bundle => {
-            // Only if the corresponding bundle is valid, we update this bundle
-            bundle.coreid === i.coreid && bundle.asInstanceOf[DifftestBaseBundle].getValid
-          })
-          .toSeq
-      ).asUInt.orR && i.bits.needUpdate.getOrElse(true.B)
-    }
-  }
-
   val control = Module(new SquashControl(config))
   control.clock := clock
   control.reset := reset
@@ -130,10 +148,9 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   })
 
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
-    val (s_in, s_do) = in.zip(do_squash).filter(_._1.desiredCppName == u.desiredCppName).unzip
+    val s_in = in.filter(_.desiredCppName == u.desiredCppName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
     squasher.in.zip(s_in).foreach { case (i, s_i) => i := s_i }
-    squasher.do_squash.zip(s_do).foreach { case (d, s_d) => d := s_d }
     wt := squasher.want_tick
     val group_tick =
       group_name_vec
@@ -158,7 +175,6 @@ class SquashEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
 // It will help do squash for bundles with same Class, return tick and state
 class Squasher(bundleType: DifftestBundle, length: Int, numCores: Int, config: GatewayConfig) extends Module {
   val in = IO(Input(Vec(length, bundleType)))
-  val do_squash = IO(Input(Vec(length, Bool())))
   val want_tick = IO(Output(Bool()))
   val should_tick = IO(Input(Bool()))
 
@@ -190,10 +206,10 @@ class Squasher(bundleType: DifftestBundle, length: Int, numCores: Int, config: G
 
   want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B)
 
-  for (((i, ds), s) <- in.zip(do_squash).zip(state)) {
+  for ((i, s) <- in.zip(state)) {
     when(should_tick) {
       s := i
-    }.elsewhen(ds) {
+    }.otherwise {
       s := i.squash(s)
     }
   }

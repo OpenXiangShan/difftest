@@ -48,7 +48,7 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   // ignore useless data when hasGlobalEnable
   val needStore = WireInit(true.B)
   if (config.hasGlobalEnable) {
-    needStore := VecInit(in.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
+    needStore := VecInit(in.flatMap(_.needUpdate).toSeq).asUInt.orR
   }
   info.valid := needStore
   info.trace_head := ptr

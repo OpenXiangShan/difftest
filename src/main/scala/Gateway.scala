@@ -34,7 +34,7 @@ case class GatewayConfig(
   replaySize: Int = 1024,
   hasDutZone: Boolean = false,
   isBatch: Boolean = false,
-  batchSize: Int = 32,
+  batchSize: Int = 256,
   hasInternalStep: Boolean = false,
   isNonBlock: Boolean = false,
   hasBuiltInPerf: Boolean = false,
@@ -193,7 +193,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   } else {
     val squashed_enable = WireInit(true.B)
     if (config.hasGlobalEnable) {
-      squashed_enable := VecInit(squashed.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
+      squashed_enable := VecInit(squashed.flatMap(_.needUpdate).toSeq).asUInt.orR
     }
     if (config.hasInternalStep) {
       control.step.get := squashed_enable
