@@ -64,10 +64,10 @@ struct TraceCollectInstruction {
   uint64_t instID;
 
   void dump() {
-    if (instNum == 0) {
-        printf("[%08lu]: PC 0x%08lx instr 0x%08x(%s)\n", instID, instr_pc, instr, spike_dasm(instr));
+    if (instNum == 1 || instNum == 0) {
+        printf("[0x%08lx]: PC 0x%08lx instr 0x%08x(%s)\n", instID, instr_pc, instr, spike_dasm(instr));
     } else {
-        printf("[%08lu]: PC 0x%08lx instr 0x%08x(%s) Merge %d\n", instID, instr_pc, instr, spike_dasm(instr), instNum);
+        printf("[0x%08lx]: PC 0x%08lx instr 0x%08x(%s) Merge %d\n", instID, instr_pc, instr, spike_dasm(instr), instNum);
     }
   }
 };
