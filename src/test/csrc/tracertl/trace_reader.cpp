@@ -33,7 +33,7 @@ bool TraceReader::read(Instruction &inst) {
   instList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
 
-//  printf("[%08lu] ", read_inst_cnt++);
+//  printf("[0x%08lx] ", read_inst_cnt++);
 //  inst.dump();
 
   return true;
@@ -55,7 +55,7 @@ bool TraceReader::check(uint64_t pc, uint32_t instn, uint8_t instNum) {
     return false;
   }
 
-//  printf("TraceCheck:=== [%08lu] pc 0x%08lx instn 0x%08x instNum %d==\n", commit_inst_num, pc, instn, instNum);
+//  printf("TraceCheck:=== [0x%08lx] pc 0x%08lx instn 0x%08x instNum 0x%x==\n", commit_inst_num, pc, instn, instNum);
   for (int i = 0; i < instNum; i++) {
       auto tmp = instList.front();
 //      tmp.dump();
@@ -117,7 +117,7 @@ void TraceReader::dump_uncommited_inst() {
   printf("UnCommitted Inst: ========================\n");
   int i = 0;
   for (auto inst : instList) {
-    printf("[%08lu] ", commit_inst_num + (i++));
+    printf("[0x%08lx] ", commit_inst_num + (i++));
     inst.dump();
   }
   printf("UnCommitted Inst End =======================\n");
@@ -127,7 +127,7 @@ void TraceReader::dump_committed_inst() {
   uint64_t base_idx = commit_inst_num - committedInst.size();
   printf("Committed Inst: =======================\n");
   for (auto inst : committedInst) {
-    printf("[%08lu] ", base_idx++);
+    printf("[0x%08lx] ", base_idx++);
     inst.dump();
   }
   printf("Committed Inst End =======================\n");
@@ -174,12 +174,12 @@ void TraceReader::error_dump() {
   dump_dut_committed_inst();
   printf("\n");
   if (isError()) {
-    printf("========= TraceRTL Error at inst %lu ===========\n", commit_inst_num);
+    printf("========= TraceRTL Error at inst 0x%lx ===========\n", commit_inst_num);
     printf("DUT inst: ");
     errorInst.dump();
     printf("========= TraceRTL Error End ===========\n");
   } else {
-    printf("========= TraceRTL Stuck at inst %lu ===========\n", commit_inst_num);
+    printf("========= TraceRTL Stuck at inst 0x%lx ===========\n", commit_inst_num);
   }
   dump_uncommited_inst();
 }
@@ -207,7 +207,7 @@ void TraceReader::error_drive_dump() {
   printf("Drive Decoded: =================\n");
   int i = 0;
   for (auto inst : driveInstDecoded) {
-//    printf("[%08lu]:", decoded_inst_num - driveInstDecoded.size() + (i++));
+//    printf("[0x%08lx]:", decoded_inst_num - driveInstDecoded.size() + (i++));
     inst.dump();
   }
   printf("Drive Decoded End================= \n");
@@ -218,7 +218,7 @@ void TraceReader::error_drive_dump() {
   printf("Drive Not Decoded: =================\n");
   i = 0;
   for (auto inst : driveInstInput) {
-    printf("[%08lu]", decoded_inst_num + (i++));
+    printf("[0x%08lx]", decoded_inst_num + (i++));
     inst.dump();
   }
   printf("Drive Not Decoded End================= \n");
