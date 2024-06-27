@@ -35,7 +35,7 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
-#ifdef WITH_QEMUCKPT
+#ifdef OUTPUT_CPI_TO_FILE
 char out_ipc_info_file[32] = "./emu_to_cpi_file.txt";
 #endif
 static bool has_reset = false;
