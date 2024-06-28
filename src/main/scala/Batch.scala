@@ -87,15 +87,20 @@ object Batch {
       data.asTypeOf(UInt(width.W))
     }
 
+    def locFilter: ((String, Data)) => Boolean = { case (name, _) =>
+      Seq("coreid", "index", "address").contains(name)
+    }
+    val origin = bundle.elements.toSeq.reverse
+      .filterNot((bundle.isFlatten || bundle.isValidated) && _._1 == "valid")
+    val reorder = origin.filterNot(locFilter) ++ origin.filter(locFilter)
+
     MixedVecInit(
-      bundle.elements.toSeq.reverse
-        .filterNot((bundle.isFlatten || bundle.isValidated) && _._1 == "valid")
-        .flatMap { case (_, data) =>
-          data match {
-            case vec: Vec[_] => vec.map(byteAlign(_))
-            case _           => Seq(byteAlign(data))
-          }
+      reorder.flatMap { case (_, data) =>
+        data match {
+          case vec: Vec[_] => vec.map(byteAlign(_))
+          case _           => Seq(byteAlign(data))
         }
+      }
     ).asUInt
   }
 }

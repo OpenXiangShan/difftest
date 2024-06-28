@@ -199,14 +199,18 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     case class ArgPair(name: String, len: Int, offset: Int)
     def getBundleArgs(gen: DifftestBundle): Seq[ArgPair] = {
       def byteCnt(data: Data): Int = (data.getWidth + 7) / 8
-      val argsWithLen = gen.elements.toSeq.reverse
+      def locFilter: ((String, Data)) => Boolean = { case (name, _) =>
+        Seq("coreid", "index", "address").contains(name)
+      }
+      val rawElement = gen.elements.toSeq.reverse
         .filterNot((gen.isFlatten || gen.isValidated) && _._1 == "valid")
-        .flatMap { case (name, data) =>
-          data match {
-            case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"{${name}_$i}", byteCnt(v)) }
-            case _           => Seq((s"$name", byteCnt(data)))
-          }
+      val reorderElemnt = rawElement.filterNot(locFilter) ++ rawElement.filter(locFilter)
+      val argsWithLen = reorderElemnt.flatMap { case (name, data) =>
+        data match {
+          case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"{${name}_$i}", byteCnt(v)) }
+          case _           => Seq((s"$name", byteCnt(data)))
         }
+      }
       argsWithLen.zipWithIndex.map { case ((name, len), idx) =>
         val offset = argsWithLen.take(idx).map(_._2).sum
         ArgPair(name, len, offset)
