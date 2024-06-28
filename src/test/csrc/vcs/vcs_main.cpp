@@ -35,8 +35,13 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
-#ifdef OUTPUT_CPI_TO_FILE
-char out_ipc_info_file[32] = "./emu_to_cpi_file.txt";
+#ifdef OUTPUT_CPI_TO_FIFO
+char *emu_to_detail_fifo_name = "../emu_to_cpi_file.txt";
+typedef struct Detail2emu {
+    double CPI[NUM_CORES];
+} Detail2emu;
+Detail2emu d2q_buf;
+static int d2q_fifo = open(emu_to_detail_fifo_name, O_WRONLY);
 #endif
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
@@ -207,8 +212,16 @@ extern "C" uint8_t simv_step() {
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
         difftest[i]->display_stats();
-        if (core_end_info.core_trap_num == NUM_CORES)
+        if (core_end_info.core_trap_num == NUM_CORES) {
+#ifdef OUTPUT_CPI_TO_FIFO
+          char d2q_temp[32];
+          for (size_t i = 0; i < NUM_CORES; i++) {
+            sprintf(d2q_temp,"%d,%lf", i, d2q_buf.CPI);
+          }
+          write(d2q, &q2d_buf, sizeof(Qemu2Detail));
+#endif
           return SIMV_DONE;
+        }
       }
     }
   }
