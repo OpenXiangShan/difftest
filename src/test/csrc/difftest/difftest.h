@@ -332,6 +332,9 @@ protected:
   int do_golden_memory_update();
 
   inline uint64_t get_commit_data(int i) {
+#ifdef CONFIG_DIFFTEST_COMMITDATA
+    return dut->commit_data[i].data;
+#else
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
     if (dut->commit[i].fpwen) {
       return
@@ -358,6 +361,7 @@ protected:
 #else
         dut->regs_int.value[dut->commit[i].wdest];
 #endif // CONFIG_DIFFTEST_INTWRITEBACK
+#endif // CONFIG_DIFFTEST_COMMITDATA
   }
   inline bool has_wfi() {
     return dut->trap.hasWFI;
