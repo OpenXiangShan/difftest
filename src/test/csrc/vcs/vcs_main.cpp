@@ -214,9 +214,9 @@ extern "C" uint8_t simv_step() {
         difftest[i]->display_stats();
         if (core_end_info.core_trap_num == NUM_CORES) {
 #ifdef OUTPUT_CPI_TO_FIFO
-          char d2q_temp[32];
           for (size_t i = 0; i < NUM_CORES; i++) {
-            sprintf(d2q_temp, "%d,%lf", i, d2q_buf.CPI);
+            char d2q_temp[32] = {};
+            sprintf(d2q_temp, "%d,%.6lf", i, d2q_buf.CPI);
           }
           write(d2q, &q2d_buf, sizeof(Qemu2Detail));
 #endif
