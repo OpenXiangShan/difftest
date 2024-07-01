@@ -224,7 +224,7 @@ public:
   }
 
   void display();
-  void display_stats();
+  double display_stats();
 
   void set_trace(const char *name, bool is_read) {
     difftrace = new DiffTrace(name, is_read);

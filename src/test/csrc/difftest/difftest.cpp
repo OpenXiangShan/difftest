@@ -1181,7 +1181,7 @@ void CommitTrace::display(bool use_spike) {
   }
 }
 
-void Difftest::display_stats() {
+double Difftest::display_stats() {
   auto trap = get_trap_event();
   uint64_t instrCnt = trap->instrCnt;
   uint64_t cycleCnt = trap->cycleCnt;
@@ -1189,8 +1189,11 @@ void Difftest::display_stats() {
   eprintf(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
           this->id, instrCnt, cycleCnt, ipc);
 #ifdef OUTPUT_CPI_TO_FIFO
-  extern Detail2emu d2q_buf;
-  d2q_buf.CPI[this->id] = (double)cycleCnt / instrCnt;
+  //extern Detail2emu d2q_buf;
+  //d2q_buf.CPI[this->id] = (double)cycleCnt / instrCnt;
+  return ((double)cycleCnt / instrCnt);
+#else
+  return 0;
 #endif
 }
 

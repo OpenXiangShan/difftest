@@ -36,12 +36,11 @@
 #endif // CONFIG_DIFFTEST_PERFCNT
 
 #ifdef OUTPUT_CPI_TO_FIFO
-char *emu_to_detail_fifo_name = "../emu_to_cpi_file.txt";
+char emu_to_detail_fifo_name[32] = "../emu_to_cpi_file.txt";
 typedef struct Detail2emu {
   double CPI[NUM_CORES];
 } Detail2emu;
 Detail2emu d2q_buf;
-static int d2q_fifo = open(emu_to_detail_fifo_name, O_WRONLY);
 #endif
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
@@ -211,14 +210,18 @@ extern "C" uint8_t simv_step() {
         core_end_info.core_trap[i] = true;
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
+#ifdef OUTPUT_CPI_TO_FIFO
+        d2q_buf.CPI[i] = difftest[i]->display_stats();
+#else
         difftest[i]->display_stats();
+#endif
         if (core_end_info.core_trap_num == NUM_CORES) {
 #ifdef OUTPUT_CPI_TO_FIFO
+          FILE *d2q_fifo = fopen(emu_to_detail_fifo_name, "a+");
+          printf("OUTPUT_CPI_TO_FIFO to %s\n", emu_to_detail_fifo_name);
           for (size_t i = 0; i < NUM_CORES; i++) {
-            char d2q_temp[32] = {};
-            sprintf(d2q_temp, "%d,%.6lf", i, d2q_buf.CPI);
+            fprintf(d2q_fifo, "%d,%.6lf\n", i, d2q_buf.CPI);
           }
-          write(d2q, &q2d_buf, sizeof(Qemu2Detail));
 #endif
           return SIMV_DONE;
         }
