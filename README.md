@@ -22,7 +22,7 @@ make
 
 ## Example Chisel Usage
 
-We are supporting Chisel 3.6.0 (the last version supporting Scala FIRRTL Compiler)
+We are supporting Chisel 3.6.1 (the last version supporting Scala FIRRTL Compiler)
 as well as 6.4.0 (the latest stable version supporting MLIR FIRRTL Compiler).
 
 Here are the detail instructions on integrating DiffTest to your own project.
@@ -40,7 +40,7 @@ import $file.difftest.build
 
 // We recommend using a fixed Chisel version.
 object difftest extends millbuild.difftest.build.CommonDiffTest {
-  def crossValue: String = "3.6.0"
+  def crossValue: String = "3.6.1"
 
   override def millSourcePath = os.pwd / "difftest"
 }

@@ -19,9 +19,9 @@ import scalalib._
 import publish._
 
 object ivys {
-  val scala = "2.13.10"
+  val scala = "2.13.14"
   val chiselCrossVersions = Map(
-    "3.6.0" -> (ivy"edu.berkeley.cs::chisel3:3.6.0", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.0"),
+    "3.6.1" -> (ivy"edu.berkeley.cs::chisel3:3.6.1", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.1"),
     "6.4.0" -> (ivy"org.chipsalliance::chisel:6.4.0", ivy"org.chipsalliance:::chisel-plugin:6.4.0"),
   )
 }
@@ -51,7 +51,7 @@ trait DiffTestModule extends CommonDiffTest {
 
 object difftest extends CommonDiffTest {
 
-  def crossValue: String = "3.6.0"
+  def crossValue: String = "3.6.1"
 
   override def millSourcePath = os.pwd
 
