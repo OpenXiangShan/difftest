@@ -163,7 +163,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
       }
     }
   }
-  override def dpicFuncArgs: Seq[Seq[(String, Data)]] = if (gen.bits.hasValid) {
+  override def dpicFuncArgs: Seq[Seq[(String, Data)]] = if (gen.bits.hasValid || gen.isValidated) {
     super.dpicFuncArgs.filterNot(p => p.length == 1 && p.head._1 == "io_valid")
   } else {
     super.dpicFuncArgs
@@ -200,7 +200,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     def getBundleArgs(gen: DifftestBundle): Seq[ArgPair] = {
       def byteCnt(data: Data): Int = (data.getWidth + 7) / 8
       val argsWithLen = gen.elements.toSeq.reverse
-        .filterNot(gen.isFlatten && _._1 == "valid")
+        .filterNot((gen.isFlatten || gen.isValidated) && _._1 == "valid")
         .flatMap { case (name, data) =>
           data match {
             case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"{${name}_$i}", byteCnt(v)) }
@@ -290,7 +290,7 @@ private class DummyDPICWrapper(gen: DifftestBundle, config: GatewayConfig) exten
   val io = IO(Input(gen))
   val dpic = Module(new DPIC(gen, config))
   dpic.clock := clock
-  dpic.enable := io.bits.getValid && control.enable
+  dpic.enable := io.needUpdate.getOrElse(true.B) && control.enable
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
   if (config.hasInternalStep) dpic.step.get := control.step.get
   dpic.io := io
