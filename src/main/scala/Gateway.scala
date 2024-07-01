@@ -30,13 +30,11 @@ case class GatewayConfig(
   style: String = "dpic",
   hasGlobalEnable: Boolean = false,
   isSquash: Boolean = false,
-  hasSquashQueue: Boolean = false,
-  hasSquashFlush: Boolean = false,
   hasReplay: Boolean = false,
   replaySize: Int = 1024,
   hasDutZone: Boolean = false,
   isBatch: Boolean = false,
-  batchSize: Int = 32,
+  batchSize: Int = 256,
   hasInternalStep: Boolean = false,
   isNonBlock: Boolean = false,
   hasBuiltInPerf: Boolean = false,
@@ -58,7 +56,7 @@ case class GatewayConfig(
     macros += s"CONFIG_DIFFTEST_ZONESIZE $dutZoneSize"
     macros += s"CONFIG_DIFFTEST_BUFLEN $dutBufLen"
     if (isBatch) macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"CONFIG_DIFFTEST_BATCH_SIZE ${batchSize}")
-    if (isSquash) macros += "CONFIG_DIFFTEST_SQUASH"
+    if (isSquash) macros ++= Seq("CONFIG_DIFFTEST_SQUASH", s"CONFIG_DIFFTEST_SQUASH_STAMPSIZE 4096") // Stamp Width 12
     if (hasReplay) macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
@@ -73,7 +71,7 @@ case class GatewayConfig(
     macros.toSeq
   }
   def check(): Unit = {
-    if (hasReplay || hasSquashQueue) require(isSquash)
+    if (hasReplay) require(isSquash)
     if (hasInternalStep) require(isBatch)
   }
 }
@@ -104,8 +102,6 @@ object Gateway {
     cfg.foreach {
       case 'E' => config = config.copy(hasGlobalEnable = true)
       case 'S' => config = config.copy(isSquash = true)
-      case 'Q' => config = config.copy(hasSquashQueue = true)
-      case 'F' => config = config.copy(hasSquashFlush = true)
       case 'R' => config = config.copy(hasReplay = true)
       case 'Z' => config = config.copy(hasDutZone = true)
       case 'B' => config = config.copy(isBatch = true)
@@ -197,7 +193,7 @@ class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) exten
   } else {
     val squashed_enable = WireInit(true.B)
     if (config.hasGlobalEnable) {
-      squashed_enable := VecInit(squashed.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
+      squashed_enable := VecInit(squashed.flatMap(_.needUpdate).toSeq).asUInt.orR
     }
     if (config.hasInternalStep) {
       control.step.get := squashed_enable

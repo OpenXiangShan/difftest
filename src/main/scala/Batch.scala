@@ -71,7 +71,7 @@ object Batch {
   def getAlignWidth(bundleType: DifftestBundle): Int = {
     def byteAlignWidth(data: Data) = (data.getWidth + 7) / 8 * 8
     bundleType.elements.toSeq.reverse
-      .filterNot(bundleType.isFlatten && _._1 == "valid")
+      .filterNot((bundleType.isFlatten || bundleType.isValidated) && _._1 == "valid")
       .map { case (_, data) =>
         data match {
           case vec: Vec[_] => vec.map(byteAlignWidth(_)).sum
@@ -87,15 +87,20 @@ object Batch {
       data.asTypeOf(UInt(width.W))
     }
 
+    def locFilter: ((String, Data)) => Boolean = { case (name, _) =>
+      Seq("coreid", "index", "address").contains(name)
+    }
+    val origin = bundle.elements.toSeq.reverse
+      .filterNot((bundle.isFlatten || bundle.isValidated) && _._1 == "valid")
+    val reorder = origin.filterNot(locFilter) ++ origin.filter(locFilter)
+
     MixedVecInit(
-      bundle.elements.toSeq.reverse
-        .filterNot(bundle.isFlatten && _._1 == "valid")
-        .flatMap { case (_, data) =>
-          data match {
-            case vec: Vec[_] => vec.map(byteAlign(_))
-            case _           => Seq(byteAlign(data))
-          }
+      reorder.flatMap { case (_, data) =>
+        data match {
+          case vec: Vec[_] => vec.map(byteAlign(_))
+          case _           => Seq(byteAlign(data))
         }
+      }
     ).asUInt
   }
 }
@@ -103,7 +108,7 @@ object Batch {
 class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: BatchParam) extends Module {
   val in = IO(Input(MixedVec(bundles)))
 
-  def updateFilter = (x: DifftestBundle) => x.bits.needUpdate.isDefined
+  def updateFilter = (x: DifftestBundle) => x.needUpdate.isDefined
   def vecAlignWidth = (vec: Seq[DifftestBundle]) => Batch.getAlignWidth(vec.head) * vec.length
 
   // Process bundles without needUpdate Option as Base in parallel
@@ -127,7 +132,7 @@ class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: 
   // Collect bundles with needUpdate Option in Pipeline
   val global_enable = WireInit(true.B)
   if (config.hasGlobalEnable) {
-    global_enable := VecInit(in.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
+    global_enable := VecInit(in.flatMap(_.needUpdate).toSeq).asUInt.orR
   }
   val inCollect =
     in.filter(updateFilter).groupBy(_.desiredCppName).values.toSeq.map(_.toSeq).sortBy(vecAlignWidth).reverse
@@ -296,7 +301,7 @@ class BatchCollector(
   val info_len_state = RegInit(0.U(param.MaxInfoByteWidth.W))
 
   val align_data = VecInit(data_in.map(i => Batch.bundleAlign(i)).toSeq)
-  val valid_vec = VecInit(data_in.map(i => i.bits.needUpdate.get && enable))
+  val valid_vec = VecInit(data_in.map(i => i.needUpdate.get && enable))
   val delay_data = Delayer(align_data.asUInt, delay, useMem = true).asTypeOf(align_data)
   val delay_valid = Delayer(valid_vec.asUInt, delay, useMem = true).asTypeOf(valid_vec)
 
