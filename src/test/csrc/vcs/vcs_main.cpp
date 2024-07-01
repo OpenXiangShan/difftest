@@ -38,7 +38,7 @@
 #ifdef OUTPUT_CPI_TO_FIFO
 char *emu_to_detail_fifo_name = "../emu_to_cpi_file.txt";
 typedef struct Detail2emu {
-    double CPI[NUM_CORES];
+  double CPI[NUM_CORES];
 } Detail2emu;
 Detail2emu d2q_buf;
 static int d2q_fifo = open(emu_to_detail_fifo_name, O_WRONLY);
@@ -216,7 +216,7 @@ extern "C" uint8_t simv_step() {
 #ifdef OUTPUT_CPI_TO_FIFO
           char d2q_temp[32];
           for (size_t i = 0; i < NUM_CORES; i++) {
-            sprintf(d2q_temp,"%d,%lf", i, d2q_buf.CPI);
+            sprintf(d2q_temp, "%d,%lf", i, d2q_buf.CPI);
           }
           write(d2q, &q2d_buf, sizeof(Qemu2Detail));
 #endif
