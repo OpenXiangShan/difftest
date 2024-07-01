@@ -35,8 +35,7 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
-#ifdef OUTPUT_CPI_TO_FIFO
-static char emu_to_detail_fifo_name[32] = "../emu_to_cpi_file.txt";
+#ifdef OUTPUT_CPI_TO_FILE
 typedef struct Detail2emu {
   double CPI[NUM_CORES];
 } Detail2emu;
@@ -210,19 +209,19 @@ extern "C" uint8_t simv_step() {
         core_end_info.core_trap[i] = true;
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
-#ifdef OUTPUT_CPI_TO_FIFO
+#ifdef OUTPUT_CPI_TO_FILE
         d2q_buf.CPI[i] = difftest[i]->display_stats();
 #else
         difftest[i]->display_stats();
 #endif
         if (core_end_info.core_trap_num == NUM_CORES) {
-#ifdef OUTPUT_CPI_TO_FIFO
-          FILE *d2q_fifo = fopen(emu_to_detail_fifo_name, "w+");
+#ifdef OUTPUT_CPI_TO_FILE
+          FILE *d2q_fifo = fopen(OUTPUT_CPI_TO_FILE_DIR, "w+");
           if (d2q_fifo == NULL) {
             printf("open dq2_fifo fail\n");
             return SIMV_FAIL;
           }
-          printf("OUTPUT_CPI_TO_FIFO to %s\n", emu_to_detail_fifo_name);
+          printf("OUTPUT_CPI_TO_FIFO to %s\n", OUTPUT_CPI_TO_FILE_DIR);
           for (size_t i = 0; i < NUM_CORES; i++) {
             fprintf(d2q_fifo, "%d,%.6lf\n", i, d2q_buf.CPI[i]);
           }

@@ -1188,8 +1188,7 @@ double Difftest::display_stats() {
   double ipc = (double)instrCnt / cycleCnt;
   eprintf(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
           this->id, instrCnt, cycleCnt, ipc);
-#ifdef OUTPUT_CPI_TO_FIFO
-  //extern Detail2emu d2q_buf;
+#ifdef OUTPUT_CPI_TO_FILE
   double cpi = (double)cycleCnt / (double)instrCnt;
   return cpi;
 #else
