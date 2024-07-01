@@ -1190,8 +1190,8 @@ double Difftest::display_stats() {
           this->id, instrCnt, cycleCnt, ipc);
 #ifdef OUTPUT_CPI_TO_FIFO
   //extern Detail2emu d2q_buf;
-  //d2q_buf.CPI[this->id] = (double)cycleCnt / instrCnt;
-  return ((double)cycleCnt / instrCnt);
+  double cpi = (double)cycleCnt / (double)instrCnt;
+  return cpi;
 #else
   return 0;
 #endif
