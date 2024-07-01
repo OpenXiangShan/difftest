@@ -322,6 +322,7 @@ protected:
   void do_interrupt();
   void do_exception();
   int do_instr_commit(int index);
+  void do_load_check(int index);
   int do_store_check();
   int do_refill_check(int cacheid);
   int do_irefill_check();
