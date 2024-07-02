@@ -1190,16 +1190,6 @@ void Difftest::display_stats() {
           this->id, instrCnt, cycleCnt, ipc);
 }
 
-#ifdef OUTPUT_CPI_TO_FILE
-double Difftest::get_cpi() {
-  auto trap = get_trap_event();
-  uint64_t instrCnt = trap->instrCnt;
-  uint64_t cycleCnt = trap->cycleCnt;
-  double cpi = (double)cycleCnt / (double)instrCnt;
-  return cpi;
-}
-#endif
-
 void DiffState::display_commit_count(int i) {
   auto retire_pointer = (retire_group_pointer + DEBUG_GROUP_TRACE_SIZE - 1) % DEBUG_GROUP_TRACE_SIZE;
   printf("commit group [%02d]: pc %010lx cmtcnt %d%s\n", i, retire_group_pc_queue[i], retire_group_cnt_queue[i],

@@ -35,12 +35,6 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
-#ifdef OUTPUT_CPI_TO_FILE
-typedef struct Detail2emu {
-  double CPI[NUM_CORES];
-} Detail2emu;
-Detail2emu d2q_buf;
-#endif
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
 static char *flash_bin_file = NULL;
@@ -51,6 +45,7 @@ static char *workload_list = NULL;
 static uint64_t overwrite_nbytes = 0xe00;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
+  double core_cpi[NUM_CORES];
   uint8_t core_trap_num;
 };
 static core_end_info_t core_end_info;
@@ -179,7 +174,7 @@ int output_cpi_to_file() {
   }
   printf("OUTPUT_CPI_TO_FIFO to %s\n", OUTPUT_CPI_TO_FILE_DIR);
   for (size_t i = 0; i < NUM_CORES; i++) {
-    fprintf(d2q_fifo, "%d,%.6lf\n", i, d2q_buf.CPI[i]);
+    fprintf(d2q_fifo, "%d,%.6lf\n", i, core_end_info.core_cpi[i]);
   }
   return 0;
 }
@@ -225,12 +220,10 @@ extern "C" uint8_t simv_step() {
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
         difftest[i]->display_stats();
-#ifdef OUTPUT_CPI_TO_FILE
-        d2q_buf.CPI[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
-#endif
+        core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
         if (core_end_info.core_trap_num == NUM_CORES) {
 #ifdef OUTPUT_CPI_TO_FILE
-          if(output_cpi_to_file())
+          if (output_cpi_to_file())
             return SIMV_FAIL;
 #endif
           return SIMV_DONE;

@@ -226,10 +226,6 @@ public:
   void display();
   void display_stats();
 
-#ifdef OUTPUT_CPI_TO_FILE
-  double Difftest::get_cpi();
-#endif
-
   void set_trace(const char *name, bool is_read) {
     difftrace = new DiffTrace(name, is_read);
   }
