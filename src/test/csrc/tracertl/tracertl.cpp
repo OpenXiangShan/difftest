@@ -75,7 +75,9 @@ void tracertl_success_dump() {
 extern "C" void trace_read_one_instr(
   uint64_t *pc_va, uint64_t *pc_pa, uint64_t *memory_addr_va, uint64_t *memory_addr_pa,
   uint64_t *target, uint32_t *instr,
-  uint8_t *memory_type, uint8_t *memory_size, uint8_t *branch_type, uint8_t *branch_taken) {
+  uint8_t *memory_type, uint8_t *memory_size,
+  uint8_t *branch_type, uint8_t *branch_taken,
+  uint64_t *InstID) {
 
   if (trace_reader->traceOver()) {
     printf("trace_read_one_instr: traceOver. Finish\n");
@@ -86,16 +88,21 @@ extern "C" void trace_read_one_instr(
   Instruction inst;
   trace_reader->read(inst);
 
-  *pc_va = inst.instr_pc_va;
-  *pc_pa = inst.instr_pc_pa;
-  *memory_addr_va = inst.memory_address_va;
-  *memory_addr_pa = inst.memory_address_pa;
-  *target = inst.target;
-  *instr = inst.instr;
-  *memory_type = inst.memory_type;
-  *memory_size = inst.memory_size;
-  *branch_type = inst.branch_type;
-  *branch_taken = inst.branch_taken;
+  *pc_va = inst.static_inst.instr_pc_va;
+  *pc_pa = inst.static_inst.instr_pc_pa;
+  *memory_addr_va = inst.static_inst.memory_address_va;
+  *memory_addr_pa = inst.static_inst.memory_address_pa;
+  *target = inst.static_inst.target;
+  *instr = inst.static_inst.instr;
+  *memory_type = inst.static_inst.memory_type;
+  *memory_size = inst.static_inst.memory_size;
+  *branch_type = inst.static_inst.branch_type;
+  *branch_taken = inst.static_inst.branch_taken;
+  *InstID = inst.inst_id;
+}
+
+extern "C" void trace_redirect(uint64_t inst_id) {
+  trace_reader->redirect(inst_id);
 }
 
 extern "C" void trace_collect_one_instr(uint64_t pc, uint32_t instr, uint8_t instNum) {

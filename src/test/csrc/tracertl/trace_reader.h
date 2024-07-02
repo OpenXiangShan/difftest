@@ -30,29 +30,64 @@ enum TraceStatus {
   TRACE_STUCK
 };
 
+class TraceCounter {
+  uint64_t value = 0;
+
+public:
+  inline uint64_t pop() { return value++; }
+  inline uint64_t get() { return value; }
+  inline void set(uint64_t id) { value = id; }
+  inline void reset() { value = 0; }
+  inline void inc() { value++; }
+  inline void dec() { value++; }
+  inline void add(uint64_t id) { value += id; }
+  inline void sub(uint64_t id) { value -= id; }
+};
+
+
 class TraceReader {
   std::ifstream *trace_stream;
 
   TraceStatus status;
   TraceCollectInstruction errorInst;
 
-  uint64_t commit_inst_num = 0;
+  TraceCounter commit_inst_num;
   uint64_t last_commit_tick = 0;
   bool last_committed = false;
   uint64_t BLOCK_THREASHOLD = 2000;
   uint64_t FIRST_BLOCK_THREASHOLD = 5000;
 
-  uint64_t read_inst_cnt = 0;
-  std::deque<Instruction> instList;
-  std::deque<Instruction> committedInst;
-  std::deque<TraceCollectInstruction> dutCommittedInst;
-  const int CommittedInstSize = 16;
-  const int DutCommittedInstSize = 8;
+  // for all the inst queue:
+  // back(old) -> front(young)
+  // normally, push_back to insert, pop_front to pop out
+  // but, for the redirect, we need to pop_back to get the older(bigger inst_id) inst
 
-  uint64_t decoded_inst_num = 0;
+  // Commit Check
+  TraceCounter current_inst_id;
+  // pending: inserted to dut.
+  // Usage1: used by check method to difftest with the dut's commit info
+  // Usage2: used by redirect method to re-insert to dut
+  std::deque<Instruction> pendingInstList;
+  // committed from the dut, recording the trace inst info. Print it to debug.
+  std::deque<Instruction> committedInstList;
+  // committed from the dut, recording the dut inst info. Print it to debug.
+  std::deque<TraceCollectInstruction> dutCommittedInstList;
+  // control the size(num of entry) of of above list to print
+  const int CommittedInstSize = 16;
+  const int DutCommittedInstSize = 16;
+
+  // Drive Check
+  // Similar with the commit check, but use for dirve.
+  // "drive" is put after ibuffer's out
+//  TraceCounter decoded_inst_num;
   std::deque<Instruction> driveInstInput;
   std::deque<TraceCollectInstruction> driveInstDecoded;
   const int DriveInstDecodedSize = 16;
+
+  // Redirect support
+  std::deque<Instruction> redirectInstList;
+  std::deque<uint64_t> redirectLog;
+  const int RedirectLogSize = 16;
 
 public:
   TraceReader(std::string trace_file_name);
@@ -61,6 +96,7 @@ public:
   }
   /* get an instruction from file */
   bool read(Instruction &inst);
+  void redirect(uint64_t inst_id);
   bool check(uint64_t pc, uint32_t inst, uint8_t instNum);
   bool check_drive(uint64_t pc, uint32_t inst);
   /* if the trace is over */

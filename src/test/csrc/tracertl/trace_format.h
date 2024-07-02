@@ -49,7 +49,15 @@ struct TraceInstruction {
   }
 };
 
-struct Instruction : TraceInstruction {};
+struct Instruction {
+  TraceInstruction static_inst;
+  uint64_t inst_id;
+
+  void dump() {
+    printf("[0x%08lx]: ", inst_id);
+    static_inst.dump();
+  }
+};
 
 struct Control {
   uint8_t type;

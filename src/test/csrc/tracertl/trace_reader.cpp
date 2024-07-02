@@ -29,41 +29,79 @@ TraceReader::TraceReader(std::string trace_file_name)
 }
 
 bool TraceReader::read(Instruction &inst) {
-  trace_stream->read(reinterpret_cast<char *> (&inst), sizeof(TraceInstruction));
-  instList.push_back(inst); // for commit check
+  // read a inst from redirect buffer
+  if (redirectInstList.size() > 0) {
+    inst = redirectInstList.front();
+    redirectInstList.pop_front();
+  } else {
+    // read a inst from the source
+    trace_stream->read(reinterpret_cast<char *> (&(inst.static_inst)), sizeof(TraceInstruction));
+    inst.inst_id = current_inst_id.pop();
+  }
+  pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
 
-//  printf("[0x%08lx] ", read_inst_cnt++);
 //  inst.dump();
 
   return true;
+}
+
+/**
+  * Redirect the instruction to re-run from inst_id
+  * 1. pop inst from pendingInstList(from oldest to inst_id) and push to redirectInstList
+  *    pendingInstList : back(old) -> front(young). the front is the youngest inst.
+  *    redirectInstList: back(old) -> front(young). the front is the youngest inst.
+  *    younger inst has smaller inst_id.
+  * 2. flush the driveInstInput
+  */
+void TraceReader::redirect(uint64_t inst_id) {
+  redirectLog.push_back(inst_id);
+
+  if (pendingInstList.size() > 0) {
+    if (pendingInstList.back().inst_id < inst_id || pendingInstList.front().inst_id > inst_id) {
+      setError();
+      printf("Redirect Error: inst_id %lu not in the pendingInstList range [%lu, %lu]\n",
+       inst_id, pendingInstList.back().inst_id, pendingInstList.front().inst_id);
+      return;
+    }
+  }
+
+  // redirect inst from pendingInstList to redirectInstList
+  while(pendingInstList.size() > 0){
+    Instruction inst = pendingInstList.back();
+    if (inst.inst_id < inst_id) break;
+    pendingInstList.pop_back();
+    redirectInstList.push_front(inst);
+  }
+  // flush driveInstInput
+  driveInstInput.clear();
 }
 
 bool TraceReader::check(uint64_t pc, uint32_t instn, uint8_t instNum) {
   if (isError() || isStuck() || isErrorDrive()) {
     return false;
   }
-  if (instList.size() < instNum) {
+  if (pendingInstList.size() < instNum) {
     return false;
   }
-  Instruction inst = instList.front();
-  if ((inst.instr_pc_va != pc) || (inst.instr != instn)) {
+  Instruction inst = pendingInstList.front();
+  if ((inst.static_inst.instr_pc_va != pc) || (inst.static_inst.instr != instn)) {
     errorInst.instr = instn;
     errorInst.instr_pc = pc;
     errorInst.instNum = instNum;
-    errorInst.instID = commit_inst_num;
+    errorInst.instID = commit_inst_num.get();
     return false;
   }
 
-//  printf("TraceCheck:=== [0x%08lx] pc 0x%08lx instn 0x%08x instNum 0x%x==\n", commit_inst_num, pc, instn, instNum);
+//  printf("TraceCheck:=== [0x%08lx] pc 0x%08lx instn 0x%08x instNum 0x%x==\n", commit_inst_num.get(), pc, instn, instNum);
   for (int i = 0; i < instNum; i++) {
-      auto tmp = instList.front();
+      auto tmp = pendingInstList.front();
 //      tmp.dump();
-      committedInst.push_back(tmp);
-      if (committedInst.size() > CommittedInstSize) {
-          committedInst.pop_front();
+      committedInstList.push_back(tmp);
+      if (committedInstList.size() > CommittedInstSize) {
+          committedInstList.pop_front();
       }
-      instList.pop_front();
+      pendingInstList.pop_front();
   }
 //  printf("TraceCheck End================================\n");
 
@@ -71,14 +109,14 @@ bool TraceReader::check(uint64_t pc, uint32_t instn, uint8_t instNum) {
   dut.instr_pc = pc;
   dut.instr = instn;
   dut.instNum = instNum;
-  dut.instID = commit_inst_num;
-  dutCommittedInst.push_back(dut);
-  if (dutCommittedInst.size() > DutCommittedInstSize) {
-      dutCommittedInst.pop_front();
+  dut.instID = commit_inst_num.get();
+  dutCommittedInstList.push_back(dut);
+  if (dutCommittedInstList.size() > DutCommittedInstSize) {
+      dutCommittedInstList.pop_front();
   }
 
   setCommit();
-  commit_inst_num += instNum;
+  commit_inst_num.add(instNum);
   return true;
 }
 
@@ -90,12 +128,13 @@ bool TraceReader::check_drive(uint64_t pc, uint32_t inst) {
     printf("DriveInstInput empty\n");
     return false;
   }
-  if (driveInstInput.front().instr_pc_va != pc || driveInstInput.front().instr != inst) {
+  Instruction instBundle = driveInstInput.front();
+  if (instBundle.static_inst.instr_pc_va != pc || instBundle.static_inst.instr != inst) {
     printf("DriveInstInput not match\n");
     errorInst.instr = inst;
     errorInst.instr_pc = pc;
     errorInst.instNum = 1;
-    errorInst.instID = decoded_inst_num;
+    errorInst.instID = instBundle.inst_id;
     return false;
   }
   driveInstInput.pop_front();
@@ -104,30 +143,25 @@ bool TraceReader::check_drive(uint64_t pc, uint32_t inst) {
   dut.instr_pc = pc;
   dut.instr = inst;
   dut.instNum = 1;
-  dut.instID = decoded_inst_num;
+  dut.instID = instBundle.inst_id;
   driveInstDecoded.push_back(dut);
   if (driveInstDecoded.size() > DriveInstDecodedSize ) {
     driveInstDecoded.pop_front();
   }
-  decoded_inst_num++;
   return true;
 }
 
 void TraceReader::dump_uncommited_inst() {
   printf("UnCommitted Inst: ========================\n");
-  int i = 0;
-  for (auto inst : instList) {
-    printf("[0x%08lx] ", commit_inst_num + (i++));
+  for (auto inst : pendingInstList) {
     inst.dump();
   }
   printf("UnCommitted Inst End =======================\n");
 }
 
 void TraceReader::dump_committed_inst() {
-  uint64_t base_idx = commit_inst_num - committedInst.size();
   printf("Committed Inst: =======================\n");
-  for (auto inst : committedInst) {
-    printf("[0x%08lx] ", base_idx++);
+  for (auto inst : committedInstList) {
     inst.dump();
   }
   printf("Committed Inst End =======================\n");
@@ -135,12 +169,12 @@ void TraceReader::dump_committed_inst() {
 
 bool TraceReader::traceOver() {
   // end of file or add signal into the trace
-  return trace_stream->eof();
+  return redirectInstList.empty() && trace_stream->eof();
 }
 
 bool TraceReader::update_tick(uint64_t tick) {
   uint64_t threa;
-  if (commit_inst_num == 0) threa = FIRST_BLOCK_THREASHOLD;
+  if (commit_inst_num.get() == 0) threa = FIRST_BLOCK_THREASHOLD;
   else threa = BLOCK_THREASHOLD;
 
   if (isCommited()) {
@@ -158,7 +192,7 @@ bool TraceReader::update_tick(uint64_t tick) {
 
 void TraceReader::dump_dut_committed_inst() {
   printf("DUT Committed Inst:=====================\n");
-  for (auto inst : dutCommittedInst) {
+  for (auto inst : dutCommittedInstList) {
     inst.dump();
   }
   printf("DUT Committed Inst End ==============\n");
@@ -167,19 +201,19 @@ void TraceReader::dump_dut_committed_inst() {
 void TraceReader::error_dump() {
   printf("\n");
   printf("TraceRTL Dump:\n");
-  printf("commit_inst_num: %lu\n", commit_inst_num);
+  printf("commit_inst_num: %lu\n", commit_inst_num.get());
   printf("last_commit_tick: %lu\n", last_commit_tick);
 
   dump_committed_inst();
   dump_dut_committed_inst();
   printf("\n");
   if (isError()) {
-    printf("========= TraceRTL Error at inst 0x%lx ===========\n", commit_inst_num);
+    printf("========= TraceRTL Error at inst 0x%lx ===========\n", commit_inst_num.get());
     printf("DUT inst: ");
     errorInst.dump();
     printf("========= TraceRTL Error End ===========\n");
   } else {
-    printf("========= TraceRTL Stuck at inst 0x%lx ===========\n", commit_inst_num);
+    printf("========= TraceRTL Stuck at inst 0x%lx ===========\n", commit_inst_num.get());
   }
   dump_uncommited_inst();
 }
@@ -187,7 +221,7 @@ void TraceReader::error_dump() {
 void TraceReader::assert_dump() {
   printf("\n");
   printf("TraceRTL Dump:\n");
-  printf("commit_inst_num: %lu\n", commit_inst_num);
+  printf("commit_inst_num: %lu\n", commit_inst_num.get());
   printf("last_commit_tick: %lu\n", last_commit_tick);
 
   dump_committed_inst();
@@ -198,7 +232,7 @@ void TraceReader::assert_dump() {
 void TraceReader::success_dump() {
   printf("\n");
   printf("TraceRTL Dump:\n");
-  printf("commit_inst_num: %lu\n", commit_inst_num);
+  printf("commit_inst_num: %lu\n", commit_inst_num.get());
   printf("last_commit_tick: %lu\n", last_commit_tick);
 }
 
@@ -207,7 +241,6 @@ void TraceReader::error_drive_dump() {
   printf("Drive Decoded: =================\n");
   int i = 0;
   for (auto inst : driveInstDecoded) {
-//    printf("[0x%08lx]:", decoded_inst_num - driveInstDecoded.size() + (i++));
     inst.dump();
   }
   printf("Drive Decoded End================= \n");
@@ -218,7 +251,6 @@ void TraceReader::error_drive_dump() {
   printf("Drive Not Decoded: =================\n");
   i = 0;
   for (auto inst : driveInstInput) {
-    printf("[0x%08lx]", decoded_inst_num + (i++));
     inst.dump();
   }
   printf("Drive Not Decoded End================= \n");
