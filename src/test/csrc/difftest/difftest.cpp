@@ -1181,20 +1181,24 @@ void CommitTrace::display(bool use_spike) {
   }
 }
 
-double Difftest::display_stats() {
+void Difftest::display_stats() {
   auto trap = get_trap_event();
   uint64_t instrCnt = trap->instrCnt;
   uint64_t cycleCnt = trap->cycleCnt;
   double ipc = (double)instrCnt / cycleCnt;
   eprintf(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
           this->id, instrCnt, cycleCnt, ipc);
+}
+
 #ifdef OUTPUT_CPI_TO_FILE
+double Difftest::get_cpi() {
+  auto trap = get_trap_event();
+  uint64_t instrCnt = trap->instrCnt;
+  uint64_t cycleCnt = trap->cycleCnt;
   double cpi = (double)cycleCnt / (double)instrCnt;
   return cpi;
-#else
-  return 0;
-#endif
 }
+#endif
 
 void DiffState::display_commit_count(int i) {
   auto retire_pointer = (retire_group_pointer + DEBUG_GROUP_TRACE_SIZE - 1) % DEBUG_GROUP_TRACE_SIZE;

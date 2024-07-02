@@ -125,8 +125,6 @@ ifeq ($(OUTPUT_CPI_TO_FILE),1)
 SIM_CXXFLAGS += -DOUTPUT_CPI_TO_FILE
 ifneq ($(origin OUTPUT_CPI_TO_FILE_DIR), undefined)
 SIM_CXXFLAGS += -DOUTPUT_CPI_TO_FILE_DIR=$(OUTPUT_CPI_TO_FILE_DIR)
-else
-SIM_CXXFLAGS += -DOUTPUT_CPI_TO_FILE_DIR=\\\"$(shell pwd)/emu_to_cpi_file.txt\\\"
 endif
 endif
 
