@@ -572,7 +572,8 @@ void Difftest::do_load_check(int i) {
       return;
     bool regWen =
         ((dut->commit[i].rfwen && dut->commit[i].wdest != 0) || dut->commit[i].fpwen) && !dut->commit[i].vecwen;
-    auto refRegPtr = proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen) auto commitData = get_commit_data(i);
+    auto refRegPtr = proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen);
+    auto commitData = get_commit_data(i);
 #endif // CONFIG_DIFFTEST_SQUASH
     if (load_event.isLoad || load_event.isAtomic) {
       proxy->sync();
