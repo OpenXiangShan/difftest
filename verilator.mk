@@ -46,6 +46,8 @@ endif
 VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000 2> /dev/null)
 ifeq ($(VERILATOR_5_000),1)
 VEXTRA_FLAGS += --no-timing +define+VERILATOR_5
+else
+VEXTRA_FLAGS += +define+VERILATOR_LEGACY
 endif
 VERILATOR_5_024 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5024 2> /dev/null)
 ifeq ($(VERILATOR_5_024),1)
