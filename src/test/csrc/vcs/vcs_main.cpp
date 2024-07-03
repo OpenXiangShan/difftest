@@ -176,6 +176,7 @@ int output_cpi_to_file() {
   for (size_t i = 0; i < NUM_CORES; i++) {
     fprintf(d2q_fifo, "%d,%.6lf\n", i, core_end_info.core_cpi[i]);
   }
+  fclose(d2q_fifo);
   return 0;
 }
 #endif
