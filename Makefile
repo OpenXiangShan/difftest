@@ -24,7 +24,7 @@ NUM_CORES  ?= 1
 BUILD_DIR  = $(DESIGN_DIR)/build
 
 RTL_DIR = $(BUILD_DIR)/rtl
-RTL_SUFFIX ?= v
+RTL_SUFFIX ?= sv
 SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
 
 # generate difftest files for non-chisel design.
