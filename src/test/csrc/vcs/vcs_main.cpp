@@ -167,12 +167,12 @@ extern "C" uint8_t simv_init() {
 
 #ifdef OUTPUT_CPI_TO_FILE
 int output_cpi_to_file() {
-  FILE *d2q_fifo = fopen(OUTPUT_CPI_TO_FILE_DIR, "w+");
+  FILE *d2q_fifo = fopen(OUTPUT_CPI_TO_FILE, "w+");
   if (d2q_fifo == NULL) {
     printf("open dq2_fifo fail\n");
     return SIMV_FAIL;
   }
-  printf("OUTPUT_CPI_TO_FIFO to %s\n", OUTPUT_CPI_TO_FILE_DIR);
+  printf("OUTPUT_CPI_TO_FIFO to %s\n", OUTPUT_CPI_TO_FILE);
   for (size_t i = 0; i < NUM_CORES; i++) {
     fprintf(d2q_fifo, "%d,%.6lf\n", i, core_end_info.core_cpi[i]);
   }
