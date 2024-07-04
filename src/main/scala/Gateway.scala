@@ -38,6 +38,7 @@ case class GatewayConfig(
   hasInternalStep: Boolean = false,
   isNonBlock: Boolean = false,
   hasBuiltInPerf: Boolean = false,
+  hierarchicalWiring: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -108,6 +109,7 @@ object Gateway {
       case 'I' => config = config.copy(hasInternalStep = true)
       case 'N' => config = config.copy(isNonBlock = true)
       case 'P' => config = config.copy(hasBuiltInPerf = true)
+      case 'H' => config = config.copy(hierarchicalWiring = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()
@@ -117,7 +119,7 @@ object Gateway {
     val bundle = WireInit(0.U.asTypeOf(gen))
     if (config.needEndpoint) {
       val packed = WireInit(bundle.asUInt)
-      DifftestWiring.addSource(packed, s"gateway_${instances.length}")
+      DifftestWiring.addSource(packed, s"gateway_${instances.length}", config.hierarchicalWiring)
     } else {
       val control = WireInit(0.U.asTypeOf(new GatewaySinkControl(config)))
       control.enable := true.B
@@ -129,7 +131,13 @@ object Gateway {
 
   def collect(): GatewayResult = {
     val sink = if (config.needEndpoint) {
-      val endpoint = Module(new GatewayEndpoint(instances.toSeq, config))
+      val signals = instances.toSeq
+      val packed = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
+      for ((data, idx) <- packed.zipWithIndex) {
+        DifftestWiring.addSink(data, s"gateway_$idx", config.hierarchicalWiring)
+      }
+      val endpoint = Module(new GatewayEndpoint(signals, config))
+      endpoint.in := packed
       GatewayResult(
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
@@ -146,17 +154,13 @@ object Gateway {
 }
 
 class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val in = WireInit(0.U.asTypeOf(MixedVec(signals.map(_.cloneType))))
-  val in_pack = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
-  for ((data, id) <- in_pack.zipWithIndex) {
-    DifftestWiring.addSink(data, s"gateway_$id")
-    in(id) := data.asTypeOf(in(id).cloneType)
-  }
+  val in = IO(Input(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
+  val bundle = MixedVecInit(in.zip(signals).map { case (i, s) => i.asTypeOf(s) }.toSeq)
 
   val preprocessed = if (config.needPreprocess) {
-    WireInit(Preprocess(in, config))
+    WireInit(Preprocess(bundle, config))
   } else {
-    WireInit(in)
+    WireInit(bundle)
   }
 
   val replayed = if (config.hasReplay) {
