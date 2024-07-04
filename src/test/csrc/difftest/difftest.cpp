@@ -633,7 +633,7 @@ void Difftest::do_load_check(int i) {
 #ifdef CONFIG_DIFFTEST_SQUASH
     load_event_queue.pop();
 #else
-    load_event.valid = 0;
+    dut->load[i].valid = 0;
 #endif // CONFIG_DIFFTEST_SQUASH
   }
 #endif // CONFIG_DIFFTEST_LOADEVENT
