@@ -45,6 +45,7 @@ static char *workload_list = NULL;
 static uint64_t overwrite_nbytes = 0xe00;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
+  double core_cpi[NUM_CORES];
   uint8_t core_trap_num;
 };
 static core_end_info_t core_end_info;
@@ -164,6 +165,22 @@ extern "C" uint8_t simv_init() {
   return 0;
 }
 
+#ifdef OUTPUT_CPI_TO_FILE
+int output_cpi_to_file() {
+  FILE *d2q_fifo = fopen(OUTPUT_CPI_TO_FILE, "w+");
+  if (d2q_fifo == NULL) {
+    printf("open dq2_fifo fail\n");
+    return SIMV_FAIL;
+  }
+  printf("OUTPUT_CPI_TO_FIFO to %s\n", OUTPUT_CPI_TO_FILE);
+  for (size_t i = 0; i < NUM_CORES; i++) {
+    fprintf(d2q_fifo, "%d,%.6lf\n", i, core_end_info.core_cpi[i]);
+  }
+  fclose(d2q_fifo);
+  return 0;
+}
+#endif
+
 extern "C" uint8_t simv_step() {
   if (assert_count > 0) {
     return SIMV_FAIL;
@@ -204,13 +221,18 @@ extern "C" uint8_t simv_step() {
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
         difftest[i]->display_stats();
-        if (core_end_info.core_trap_num == NUM_CORES)
+        core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
+        if (core_end_info.core_trap_num == NUM_CORES) {
+#ifdef OUTPUT_CPI_TO_FILE
+          if (output_cpi_to_file())
+            return SIMV_FAIL;
+#endif
           return SIMV_DONE;
+        }
       }
     }
   }
 #endif // CONFIG_NO_DIFFTEST
-
   return 0;
 }
 

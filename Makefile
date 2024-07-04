@@ -120,6 +120,11 @@ SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/X
 SIM_LDFLAGS  += $(DRAMSIM3_HOME)/build/libdramsim3.a
 endif
 
+# out ipc info on temporary txt file, mainly applied to support qemu multi-core sampled data
+ifneq ($(OUTPUT_CPI_TO_FILE),)
+SIM_CXXFLAGS += -DOUTPUT_CPI_TO_FILE=$(OUTPUT_CPI_TO_FILE)
+endif
+
 ifeq ($(PMEM_CHECK),1)
 SIM_CXXFLAGS += -DPMEM_CHECK
 endif
