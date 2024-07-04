@@ -791,37 +791,6 @@ int Emulator::tick() {
     return trapCode;
   }
 
-#ifdef TRACERTL_MODE
-  // trace check
-  do{
-    auto trap = difftest[0]->get_trap_event();
-    tracertl_update_tick(trap->cycleCnt);
-    if (tracertl_stuck()) {
-      printf("Trace Stack Too Many Cycle. Current Cycle: %lu\n", trap->cycleCnt);
-      tracertl_error_dump();
-      trapCode = STATE_ABORT;
-      return trapCode;
-    }
-    if (tracertl_over()) {
-      trapCode = STATE_TRACE_OVER;
-      tracertl_success_dump();
-      return trapCode;
-    }
-    if (tracertl_error()) {
-      printf("Trace RTL Encouter Error.\n");
-      tracertl_error_dump();
-      trapCode = STATE_ABORT;
-      return trapCode;
-    }
-    if (tracertl_error_drive()) {
-      printf("Trace RTL Encouter Drive Error. Check IFU/IBuffer\n");
-      tracertl_error_drive_dump();
-      trapCode = STATE_ABORT;
-      return trapCode;
-    }
-
-  } while(0);
-#endif // TRACERTL_MODE
 
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
@@ -866,6 +835,40 @@ int Emulator::tick() {
 #endif // CONFIG_NO_DIFFTEST
 
   single_cycle();
+
+#ifdef TRACERTL_MODE
+  // trace check
+  do{
+    auto trap = difftest[0]->get_trap_event();
+    tracertl_update_tick(trap->cycleCnt);
+    if (tracertl_stuck()) {
+      eprintf("Trace Stack Too Many Cycle. Current Cycle: %lu\n", trap->cycleCnt);
+      tracertl_error_dump();
+      trapCode = STATE_ABORT;
+      return trapCode;
+    }
+    if (tracertl_over()) {
+      eprintf("Trace RTL's Trace is Over. Stop Emulation.\n");
+      tracertl_success_dump();
+      trapCode = STATE_TRACE_OVER;
+      return trapCode;
+    }
+    if (tracertl_error()) {
+      eprintf("Trace RTL Encouter Error.\n");
+      tracertl_error_dump();
+      trapCode = STATE_ABORT;
+      return trapCode;
+    }
+    if (tracertl_error_drive()) {
+      eprintf("Trace RTL Encouter Drive Error. Check IFU/IBuffer\n");
+      tracertl_error_drive_dump();
+      trapCode = STATE_ABORT;
+      return trapCode;
+    }
+
+  } while(0);
+#endif // TRACERTL_MODE
+
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles--;
 #endif // CONFIG_NO_DIFFTEST
@@ -1074,6 +1077,9 @@ void Emulator::display_trapinfo() {
       case STATE_ABORT: eprintf(ANSI_COLOR_RED "ABORT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
       case STATE_LIMIT_EXCEEDED:
         eprintf(ANSI_COLOR_YELLOW "EXCEEDING CYCLE/INSTR LIMIT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
+        break;
+      case STATE_TRACE_OVER:
+        eprintf(ANSI_COLOR_YELLOW "EXCEEDING TRACE END at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
         break;
       case STATE_SIG:
         eprintf(ANSI_COLOR_YELLOW "SOME SIGNAL STOPS THE PROGRAM at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
