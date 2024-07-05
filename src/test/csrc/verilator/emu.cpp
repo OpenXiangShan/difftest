@@ -542,7 +542,8 @@ Emulator::~Emulator() {
 #endif // ENABLE_RUNAHEAD
 
   if (args.enable_fork && !is_fork_child()) {
-    bool need_wakeup = trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED && trapCode != STATE_SIG;
+    bool need_wakeup = (trapCode != STATE_GOODTRAP) && (trapCode != STATE_LIMIT_EXCEEDED) && (trapCode != STATE_SIG) &&
+        (trapCode != STATE_TRACE_OVER);
     if (need_wakeup) {
       lightsss->wakeup_child(cycles);
     } else {
