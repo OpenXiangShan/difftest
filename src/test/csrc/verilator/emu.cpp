@@ -395,9 +395,6 @@ Emulator::Emulator(int argc, const char *argv[])
   }
 #endif
 
-  // init core
-  reset_ncycles(args.reset_cycles);
-
 #ifdef TRACERTL_MODE
   // Use fakeicache for placeholder
   // init_traceicache(args.image);
@@ -408,7 +405,11 @@ Emulator::Emulator(int argc, const char *argv[])
     fflush(stderr);
     throw std::runtime_error("trace file not specified");
   }
-#endif
+#endif // TRACERTL_MODE
+
+  // init core
+  reset_ncycles(args.reset_cycles);
+
 
   // init ram
   uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
@@ -791,7 +792,6 @@ int Emulator::tick() {
     return trapCode;
   }
 
-
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
@@ -834,11 +834,25 @@ int Emulator::tick() {
   }
 #endif // CONFIG_NO_DIFFTEST
 
+#ifdef TRACERTL_MODE
+  do {
+    tracertl_prepare_read();
+  } while (0);
+#endif // TRACERTL_MODE
+
+//  printf("Before single cycle\n");
+//  fflush(stdout);
   single_cycle();
+//  printf("After single cycle\n");
+//  fflush(stdout);
 
 #ifdef TRACERTL_MODE
   // trace check
   do{
+    // trace's commit/drive check
+    tracertl_check_commit();
+    tracertl_check_drive();
+
     auto trap = difftest[0]->get_trap_event();
     tracertl_update_tick(trap->cycleCnt);
     if (tracertl_stuck()) {

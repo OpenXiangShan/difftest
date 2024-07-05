@@ -44,6 +44,23 @@ public:
   inline void sub(uint64_t id) { value -= id; }
 };
 
+struct TraceReadBufferEntry {
+  bool valid = false;
+  Instruction inst;
+};
+
+struct TraceCollectBufferEntry {
+  bool valid = false;
+  TraceCollectInstruction inst;
+};
+
+#define DriveInstDecodedSize 16
+#define CommittedInstSize 16
+#define DutCommittedInstSize 16
+#define RedirectLogSize 16
+#define TraceReadBufferSize 16
+#define TraceCommitBufferSize 8
+#define TraceDriveBufferSize 8
 
 class TraceReader {
   std::ifstream *trace_stream;
@@ -73,21 +90,24 @@ class TraceReader {
   // committed from the dut, recording the dut inst info. Print it to debug.
   std::deque<TraceCollectInstruction> dutCommittedInstList;
   // control the size(num of entry) of of above list to print
-  const int CommittedInstSize = 16;
-  const int DutCommittedInstSize = 16;
 
   // Drive Check
   // Similar with the commit check, but use for dirve.
   // "drive" is put after ibuffer's out
-//  TraceCounter decoded_inst_num;
   std::deque<Instruction> driveInstInput;
   std::deque<TraceCollectInstruction> driveInstDecoded;
-  const int DriveInstDecodedSize = 16;
 
   // Redirect support
   std::deque<Instruction> redirectInstList;
   std::deque<uint64_t> redirectLog;
-  const int RedirectLogSize = 16;
+
+  // Read buffer for multi-thread support
+  // Problem: when verilator multi-thread, dpic should be thread-safe.
+  //   But trace-read is serialized. So we need a buffer to make it thread-isolated to achieve thread-safe
+  uint8_t readBufferStartIdx = 0;
+  TraceReadBufferEntry readBuffer[TraceReadBufferSize]; // Keep the same with PredictWidth(== TraceReadWidth)
+  TraceCollectBufferEntry commitBuffer[TraceCommitBufferSize];
+  TraceCollectBufferEntry driveBuffer[TraceDriveBufferSize];
 
 public:
   TraceReader(std::string trace_file_name);
@@ -95,10 +115,17 @@ public:
     delete trace_stream;
   }
   /* get an instruction from file */
+  // Used by dut to read
+  bool readFromBuffer(Instruction &inst, uint8_t idx);
+  bool prepareRead();
+  // Used by prepareRead
   bool read(Instruction &inst);
+
   void redirect(uint64_t inst_id);
-  bool check(uint64_t pc, uint32_t inst, uint8_t instNum);
-  bool check_drive(uint64_t pc, uint32_t inst);
+  void collectCommit(uint64_t pc, uint32_t inst, uint8_t instNum, uint8_t idx);
+  void collectDrive(uint64_t pc, uint32_t inst, uint8_t idx);
+  void checkCommit();
+  void checkDrive();
   /* if the trace is over */
   bool traceOver();
 

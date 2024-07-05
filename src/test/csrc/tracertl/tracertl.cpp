@@ -30,6 +30,20 @@ TraceReader *trace_reader = NULL;
 void init_tracertl(const char *trace_file_name) {
   printf("init_tracertl: %s\n", trace_file_name);
   trace_reader = new TraceReader(trace_file_name);
+
+  trace_reader->prepareRead();
+}
+
+bool tracertl_prepare_read() {
+  return trace_reader->prepareRead();
+}
+
+void tracertl_check_commit() {
+  trace_reader->checkCommit();
+}
+
+void tracertl_check_drive() {
+  trace_reader->checkDrive();
 }
 
 bool tracertl_over() {
@@ -77,7 +91,8 @@ extern "C" void trace_read_one_instr(
   uint64_t *target, uint32_t *instr,
   uint8_t *memory_type, uint8_t *memory_size,
   uint8_t *branch_type, uint8_t *branch_taken,
-  uint64_t *InstID) {
+  uint64_t *InstID,
+  uint8_t idx) {
 
   if (trace_reader->traceOver()) {
     printf("trace_read_one_instr: traceOver. Finish\n");
@@ -86,7 +101,10 @@ extern "C" void trace_read_one_instr(
     return ;
   }
   Instruction inst;
-  trace_reader->read(inst);
+  trace_reader->readFromBuffer(inst, idx);
+//  printf("TraceRead idx %d", idx);
+//  inst.dump();
+//  fflush(stdout);
 
   *pc_va = inst.static_inst.instr_pc_va;
   *pc_pa = inst.static_inst.instr_pc_pa;
@@ -105,22 +123,15 @@ extern "C" void trace_redirect(uint64_t inst_id) {
   trace_reader->redirect(inst_id);
 }
 
-extern "C" void trace_collect_one_instr(uint64_t pc, uint32_t instr, uint8_t instNum) {
-    if (!trace_reader->check(pc, instr, instNum)) {
-      trace_reader->setError();
-      return ;
-    };
+extern "C" void trace_collect_commit(uint64_t pc, uint32_t instr, uint8_t instNum, uint8_t idx) {
+  trace_reader->collectCommit(pc, instr, instNum, idx);
 }
 
-extern "C" void trace_drive_collect_one_instr(uint64_t pc, uint32_t instr) {
-    if (!trace_reader->check_drive(pc, instr)) {
-      trace_reader->setErrorDrive();
-      return ;
-    };
+extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx) {
+  trace_reader->collectDrive(pc, instr, idx);
 }
 
 /** Fake ICache */
-
 TraceICache *trace_icache = NULL;
 
 extern "C" void init_traceicache(const char *binary_name) {

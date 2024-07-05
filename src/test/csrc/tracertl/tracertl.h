@@ -22,7 +22,11 @@
 
 //TraceReader *trace_reader = NULL;
 
+// call by emu
 void init_tracertl(const char *trace_file_name);
+bool tracertl_prepare_read();
+void tracertl_check_commit();
+void tracertl_check_drive();
 bool tracertl_over();
 bool tracertl_error();
 bool tracertl_error_drive();
@@ -33,17 +37,16 @@ void tracertl_assert_dump();
 void tracertl_success_dump();
 void tracertl_error_drive_dump();
 
+// call by dut
 extern "C" void trace_read_one_instr(
   uint64_t *pc_va, uint64_t *pc_pa, uint64_t *memory_addr_va, uint64_t *memory_addr_pa,
   uint64_t *target, uint32_t *instr,
   uint8_t *memory_type, uint8_t *memory_size,
   uint8_t *branch_type, uint8_t *branch_taken,
-  uint64_t *instID);
+  uint64_t *instID, uint8_t idx);
 extern "C" void trace_redirect(uint64_t inst_id);
-extern "C" void trace_collect_one_instr(uint64_t pc, uint32_t instr, uint8_t instNum);
-extern "C" void trace_ibuffer_collect_one_instr(uint64_t pc, uint32_t instr);
-// Instruction read_one_trace();
-// extern "C" bool read_one_trace_bare(uint64_t *pc, uint32_t *instr);
+extern "C" void trace_collect_commit(uint64_t pc, uint32_t instr, uint8_t instNum, uint8_t idx);
+extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx);
 
 extern "C" void init_traceicache(const char *binary_name);
 extern "C" void trace_icache_helper(uint64_t addr, uint8_t *res_valid, uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3, uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7);
