@@ -107,9 +107,9 @@ extern "C" void trace_read_one_instr(
 //  fflush(stdout);
 
   *pc_va = inst.static_inst.instr_pc_va;
-  *pc_pa = inst.static_inst.instr_pc_pa;
+  *pc_pa = inst.static_inst.instr_pc_pa == 0 ? inst.static_inst.instr_pc_va : inst.static_inst.instr_pc_pa;
   *memory_addr_va = inst.static_inst.memory_address_va;
-  *memory_addr_pa = inst.static_inst.memory_address_pa;
+  *memory_addr_pa = inst.static_inst.memory_address_pa == 0 ? inst.static_inst.memory_address_va : inst.static_inst.memory_address_pa;
   *target = inst.static_inst.target;
   *instr = inst.static_inst.instr;
   *memory_type = inst.static_inst.memory_type;
