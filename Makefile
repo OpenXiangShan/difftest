@@ -98,6 +98,7 @@ endif
 endif
 
 # TraceRTL mode
+TRACERTL_MODE ?= 1
 ifeq ($(TRACERTL_MODE), 1)
 SIM_CXXFLAGS += -DTRACERTL_MODE
 TRACERTL_DIR = $(abspath ./src/test/csrc/tracertl)
