@@ -18,6 +18,7 @@
 #define MEMDEP_H
 
 #include "common.h"
+#include <deque>
 
 typedef struct MemInstInfo {
   uint64_t pc;
