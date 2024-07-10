@@ -29,54 +29,26 @@ TraceReader::TraceReader(std::string trace_file_name)
 }
 
 bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {
-  uint8_t idx_inner = (readBufferStartIdx + idx) % TraceReadBufferSize;
-  if (readBuffer[idx_inner].valid) {
-    inst = readBuffer[idx_inner].inst;
-    readBuffer[idx_inner].valid = false;
-
-//    printf("TraceReadBuffer %d+%d->newIdx:%d", idx, readBufferStartIdx, idx_inner);
-//    inst.dump();
-//    fflush(stdout);
-
-    return true;
-  } else {
-    // traceOver
-    Log();
-//    printf("TraceRTL: Trace Over for readBuffer not enough");
-//    fflush(stdout);
-    return false;
-  }
+  inst = readBuffer[idx];
+  readBufferNeedReload = true;
+//  printf("TraceReadBuffer %d+%d->newIdx:%d", idx, readBufferStartIdx, idx_inner);
+//  inst.dump();
+//  fflush(stdout);
+  return true;
 }
 
 bool TraceReader::prepareRead() {
-  // update startIdx
-  uint8_t oldStartIdx = readBufferStartIdx;
-//  bool updated = false;
-  for (int i = 0; i < TraceReadBufferSize; i++) {
-    uint8_t idx = (i + oldStartIdx) % TraceReadBufferSize;
-    if (!readBuffer[idx].valid) {
-//      updated = true;
-      readBufferStartIdx = (idx + 1) % TraceReadBufferSize;
-    } else { break; }
-  }
-
-//  if (updated) {
-//    printf("Update startIdx old %d -> new %d\n", oldStartIdx, readBufferStartIdx);
-//    fflush(stdout);
-//  }
+  if (!readBufferNeedReload) return true;
+  readBufferNeedReload = false;
 
   for (int i = 0; i < TraceReadBufferSize; i++) {
-    int idx = (readBufferStartIdx + i) % TraceReadBufferSize;
-    if (!readBuffer[idx].valid) {
-      readBuffer[idx].valid = true;
-      bool ret = read(readBuffer[idx].inst);
+    bool ret = read(readBuffer[i]);
 
-      if (!ret) { return false; }
-      else {
-//        printf("Prepare read idx %d", idx);
-//        readBuffer[idx].inst.dump();
-//        fflush(stdout);
-      }
+    if (!ret) { return false; }
+    else {
+//      printf("Prepare read idx %d", i);
+//      readBuffer[i].dump();
+//      fflush(stdout);
     }
   }
   return true;
@@ -95,6 +67,11 @@ bool TraceReader::read(Instruction &inst) {
   pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
 
+  if (pendingInstList.size() > 500) {
+    setError();
+    printf("TraceRTL: pendingInstList has too many inst, more than 1000. Check it.\n");
+  }
+
 //  inst.dump();
 
   return true;
@@ -107,7 +84,7 @@ bool TraceReader::read(Instruction &inst) {
   *    redirectInstList: back(old) -> front(young). the front is the youngest inst.
   *    younger inst has smaller inst_id.
   * 2. flush the driveInstInput
-  * 3. clear readBuffer
+  * 3. re-prepare readBuffer
   */
 void TraceReader::redirect(uint64_t inst_id) {
   redirectLog.push_back(inst_id);
@@ -131,11 +108,7 @@ void TraceReader::redirect(uint64_t inst_id) {
   // flush driveInstInput
   driveInstInput.clear();
 
-  // clear readBuffer
-  readBufferStartIdx = 0;
-  for (int i = 0; i < TraceReadBufferSize; i++) {
-    readBuffer[i].valid = false;
-  }
+  readBufferNeedReload = true;
 }
 
 void TraceReader::collectCommit(uint64_t pc, uint32_t inst, uint8_t instNum, uint8_t idx) {
@@ -252,7 +225,10 @@ void TraceReader::checkDrive() {
 
 void TraceReader::dump_uncommited_inst() {
   printf("UnCommitted Inst: ========================\n");
+  int count = 0;
   for (auto inst : pendingInstList) {
+    if (count > 100) { break; }
+    count ++;
     inst.dump();
   }
   printf("UnCommitted Inst End =======================\n");

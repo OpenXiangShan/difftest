@@ -44,11 +44,6 @@ public:
   inline void sub(uint64_t id) { value -= id; }
 };
 
-struct TraceReadBufferEntry {
-  bool valid = false;
-  Instruction inst;
-};
-
 struct TraceCollectBufferEntry {
   bool valid = false;
   TraceCollectInstruction inst;
@@ -104,8 +99,9 @@ class TraceReader {
   // Read buffer for multi-thread support
   // Problem: when verilator multi-thread, dpic should be thread-safe.
   //   But trace-read is serialized. So we need a buffer to make it thread-isolated to achieve thread-safe
-  uint8_t readBufferStartIdx = 0;
-  TraceReadBufferEntry readBuffer[TraceReadBufferSize]; // Keep the same with PredictWidth(== TraceReadWidth)
+//  uint8_t readBufferStartIdx = 0;
+  volatile bool readBufferNeedReload = true; // when dut read, set it true
+  Instruction readBuffer[TraceReadBufferSize]; // Keep the same with PredictWidth(== TraceReadWidth)
   TraceCollectBufferEntry commitBuffer[TraceCommitBufferSize];
   TraceCollectBufferEntry driveBuffer[TraceDriveBufferSize];
 
