@@ -22,26 +22,40 @@ import firrtl.options.Phase
 import firrtl.passes.wiring.{SinkAnnotation, SourceAnnotation}
 import firrtl.stage.FirrtlCircuitAnnotation
 
-// This is the main user interface for defining the Verification sink. Should be called only once.
+// This is the main user interface for defining the Verification sink.
+// index i (i < 0) is connected with assertions.orR; index i (i >= 0) is connected with assertions(i)
 // If any sink is defined, the following VerificationExtractor transform will perform the wiring.
 object VerificationExtractor {
-  def sink(cond: chisel3.Bool): Unit = {
+  def sink(cond: chisel3.Bool, index: Int): Unit = {
     chisel3.experimental.annotate(new chisel3.experimental.ChiselAnnotation {
-      override def toFirrtl: Annotation = VerificationExtractorSink(cond.toTarget)
+      override def toFirrtl: Annotation = VerificationExtractorSink(cond.toTarget, index)
     })
   }
+
+  def sink(cond: chisel3.Bool): Unit = sink(cond, -1)
+
+  def sink(conds: Seq[chisel3.Bool]): Unit = sink(conds, 0)
+
+  def sink(conds: Seq[chisel3.Bool], offset: Int): Unit = conds.zipWithIndex.foreach(x => sink(x._1, offset + x._2))
 }
 
-// This transform converts firrtl.ir.Verification to Wiring when the sink is defined via annotation.
+// This transform converts firrtl.ir.Verification to Wiring when sinks are annotated.
 class VerificationExtractor extends Phase {
   // Legacy Chisel versions are not supported.
   require(!chisel3.BuildInfo.version.startsWith("3"), "This transform does not support Chisel 3.")
 
   implicit class AnnotationSeqHelper(annotations: AnnotationSeq) {
+    import scala.reflect.ClassTag
+
+    def extract[T <: Annotation: ClassTag](): (Seq[T], Seq[Annotation]) = {
+      val (res, others) = annotations.partition(implicitly[ClassTag[T]].runtimeClass.isInstance)
+      (res.asInstanceOf[Seq[T]], others)
+    }
+
     def extractCircuit: (Circuit, Seq[Annotation]) = {
-      val (circuitAnno, otherAnnos) = annotations.partition(_.isInstanceOf[FirrtlCircuitAnnotation])
+      val (circuitAnno, otherAnnos) = annotations.extract[FirrtlCircuitAnnotation]()
       require(circuitAnno.length == 1, "no circuit?")
-      (circuitAnno.head.asInstanceOf[FirrtlCircuitAnnotation].circuit, otherAnnos)
+      (circuitAnno.head.circuit, otherAnnos)
     }
   }
 
@@ -49,24 +63,51 @@ class VerificationExtractor extends Phase {
 
   override def transform(annotations: AnnotationSeq): AnnotationSeq = {
     val (c, annos) = annotations.extractCircuit
-    val (sinkAnnos, otherAnnos) = annos.partition(_.isInstanceOf[VerificationExtractorSink])
-    // This transform runs only when the sink is defined
+    val circuitName = CircuitName(c.main)
+
+    // Wiring the sources and perform an orR for it.
+    def transformOrRSink(
+      modules: Seq[DefModule],
+      sinks: Seq[VerificationExtractorSink],
+      sources: Seq[SourceAnnotation],
+    ): (Seq[DefModule], Seq[Annotation]) = {
+      if (sinks.nonEmpty) {
+        require(sinks.length == 1, "cannot have more than one Verification sink")
+        val sink = sinks.head
+        val (sinkModules, otherModules) = modules.partition(_.name == sink.target.module)
+        require(sinkModules.length == 1, "cannot have more than one Verification sink Module")
+        require(sinkModules.head.isInstanceOf[Module], "Verification sink must be wrapper in some Module")
+        val sinkModule = sinkModules.head.asInstanceOf[Module]
+        val sinkTarget = sink.target.name
+        val (newSinkModule, orRSinkAnnos) = onOrRSinkModule(sinkModule, sinkTarget, circuitName, sources)
+        (otherModules :+ newSinkModule, orRSinkAnnos)
+      } else {
+        (modules, Seq())
+      }
+    }
+
+    // The sink has already been annotated. We replace its annotation with SinkAnnotation.
+    // Out-of-range sinks are implicitly removed.
+    def transformIndexSink(
+      sinks: Seq[VerificationExtractorSink],
+      sources: Seq[SourceAnnotation],
+    ): Seq[SinkAnnotation] = {
+      sinks.filter(_.index < sources.length).map(s => SinkAnnotation(s.target, sources(s.index).pin))
+    }
+
+    val (sinkAnnos, otherAnnos) = AnnotationSeq(annos).extract[VerificationExtractorSink]()
+    // This transform runs only when any sink is defined
     if (sinkAnnos.nonEmpty) {
-      require(sinkAnnos.length == 1, "cannot have more than one Verification sink")
-      val circuitName = CircuitName(c.main)
       // Extract the Verification IRs and convert them into Sources
-      val (sourceAnnos, modules) = c.modules.map(m => onSourceModule(m, circuitName)).unzip
-      // Connect the Sources to the Sink module
-      val sinkAnno = sinkAnnos.head.asInstanceOf[VerificationExtractorSink]
-      val (sinkModules, otherModules) = modules.partition(_.name == sinkAnno.target.module)
-      require(sinkModules.length == 1, "cannot have more than one Verification sink Module")
-      require(sinkModules.head.isInstanceOf[Module], "Verification sink must be wrapper in some Module")
-      val sinkModule = sinkModules.head.asInstanceOf[Module]
-      val sinkTarget = sinkAnno.target.name
-      val (newSinkAnnos, newSinkModule) = onSinkModule(sinkModule, circuitName, sinkTarget, sourceAnnos.flatten)
-      // Concat all new modules and annotations
-      val allModules = newSinkModule +: otherModules
-      val allAnnos = otherAnnos ++ sourceAnnos.flatten ++ newSinkAnnos
+      val (sourceAnnosSeq, modules) = c.modules.map(m => onSourceModule(m, circuitName)).unzip
+      val sourceAnnos = sourceAnnosSeq.flatten
+      // Connect the Sources to the Sink modules
+      val (orRSinks, indexSinks) = sinkAnnos.partition(_.index < 0)
+      val (allModules, orRSinkAnnos) = transformOrRSink(modules, orRSinks, sourceAnnos)
+      val indexSinkAnnos = transformIndexSink(indexSinks, sourceAnnos)
+      // If there is no orRSink, we need to remove the source annotations never used by any index sink.
+      val usedSourceAnnos = sourceAnnos.filter(a => indexSinkAnnos.exists(_.pin == a.pin) || orRSinkAnnos.nonEmpty)
+      val allAnnos = otherAnnos ++ usedSourceAnnos ++ orRSinkAnnos ++ indexSinkAnnos
       FirrtlCircuitAnnotation(c.copy(modules = allModules)) +: allAnnos
     } else {
       annotations
@@ -91,7 +132,8 @@ class VerificationExtractor extends Phase {
         val (reg, regRef) = regGen.next(v.clk)
         val conn = Connect(NoInfo, regRef, UIntLiteral(1))
         val cond = Conditionally(NoInfo, v.pred, EmptyStmt, conn)
-        (Seq(reg), cond)
+        // The Verification IR remains existed.
+        (Seq(reg), Block(v, cond))
       case Conditionally(info, pred, conseq, alt) =>
         val (regs1, s1) = onStmt(conseq)
         val (regs2, s2) = onStmt(alt)
@@ -103,12 +145,12 @@ class VerificationExtractor extends Phase {
     }
   }
 
-  private def onSinkModule(
+  private def onOrRSinkModule(
     m: Module,
-    circuitName: CircuitName,
     target: String,
+    circuitName: CircuitName,
     sources: Seq[SourceAnnotation],
-  ): (Seq[SinkAnnotation], DefModule) = {
+  ): (DefModule, Seq[SinkAnnotation]) = {
     require(m.ports.exists(_.name == "clock"), "clock is required for Verification sink Module")
     require(m.ports.exists(_.name == "reset"), "reset is required for Verification sink Module")
     val clock = Reference("clock", ClockType)
@@ -124,16 +166,17 @@ class VerificationExtractor extends Phase {
     )
     val orReduce = DoPrim(PrimOps.Orr, Seq(concat), Seq(), UIntType(IntWidth(1)))
     val conn = Connect(NoInfo, Reference(target, UIntType(IntWidth(1))), orReduce)
-    (sinkAnnos, m.copy(body = Block(m.body +: sinkDefRegs :+ conn)))
+    (m.copy(body = Block(m.body +: sinkDefRegs :+ conn)), sinkAnnos)
   }
 }
 
-private case class VerificationExtractorSink(target: ReferenceTarget) extends SingleTargetAnnotation[ReferenceTarget] {
+private case class VerificationExtractorSink(target: ReferenceTarget, index: Int)
+  extends SingleTargetAnnotation[ReferenceTarget] {
   override def duplicate(n: ReferenceTarget): Annotation = this.copy(n)
 }
 
 private class AssertionRegGenerator(moduleName: ModuleName, reset: Expression) {
-  val annos = scala.collection.mutable.ListBuffer.empty[SourceAnnotation]
+  private val annos = scala.collection.mutable.ListBuffer.empty[SourceAnnotation]
 
   def next(clock: Expression): (Statement, Reference) = {
     val name = s"assertion_gen_${annos.length}"
