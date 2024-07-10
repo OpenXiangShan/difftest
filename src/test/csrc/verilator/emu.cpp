@@ -612,7 +612,7 @@ inline void Emulator::single_cycle() {
     bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
     if (in_range || force_dump_wave) {
       if (args.enable_waveform_full) {
-        tfp->dump(2 * args.reset_cycles + 2 * cycle);
+        tfp->dump(2 * args.reset_cycles + 2 * cycles);
       } else {
         tfp->dump(cycle);
       }
@@ -649,7 +649,7 @@ inline void Emulator::single_cycle() {
 #endif
     bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
     if (in_range || force_dump_wave) {
-      tfp->dump(2 * args.reset_cycles + 1 + 2 * cycle);
+      tfp->dump(2 * args.reset_cycles + 1 + 2 * cycles);
     }
   }
 #endif
