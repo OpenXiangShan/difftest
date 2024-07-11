@@ -114,10 +114,11 @@ private:
   inline void single_cycle();
   void trigger_stat_dump();
   void display_trapinfo();
-  inline char *timestamp_filename(time_t t, char *buf);
-  inline char *logdb_filename(time_t t);
-  inline char *snapshot_filename(time_t t);
-  inline char *coverage_filename(time_t t);
+  inline char* timestamp_filename(time_t t, char *buf);
+  inline char* logdb_filename(time_t t);
+  inline char* chiselmap_filename(time_t t);
+  inline char* snapshot_filename(time_t t);
+  inline char* coverage_filename(time_t t);
   void snapshot_save(const char *filename);
   void snapshot_load(const char *filename);
   inline char *waveform_filename(time_t t);

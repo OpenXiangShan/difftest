@@ -39,6 +39,9 @@
 #ifdef ENABLE_CHISEL_DB
 #include "chisel_db.h"
 #endif
+#ifdef ENABLE_CHISEL_MAP
+#include "chisel_map.h"
+#endif
 #ifdef ENABLE_IPC
 #include <sys/stat.h>
 #endif
@@ -450,6 +453,12 @@ Emulator::Emulator(int argc, const char *argv[])
   init_db(args.dump_db, (args.select_db != NULL), args.select_db);
 #endif
 
+#ifdef ENABLE_CHISEL_MAP
+  init_map(true);
+#else
+  printf("[WARN] chisel map is not enabled at compile time.\n");
+#endif
+
 #ifdef VM_SAVABLE
   snapshot_slot = new VerilatedSaveMem[2];
   if (args.snapshot_path != NULL) {
@@ -587,6 +596,12 @@ Emulator::~Emulator() {
     time_t now = time(NULL);
     save_db(logdb_filename(now));
   }
+#endif
+
+#ifdef ENABLE_CHISEL_MAP
+  time_t now_map = time(NULL);
+  // save_maps(logdb_filename(now_map));
+  save_maps(chiselmap_filename(now_map));
 #endif
 
   elapsed_time = uptime() - elapsed_time;
@@ -1020,6 +1035,13 @@ inline char *Emulator::logdb_filename(time_t t) {
   static char buf[1024];
   char *p = timestamp_filename(t, buf);
   strcpy(p, ".db");
+  return buf;
+}
+
+inline char *Emulator::chiselmap_filename(time_t t) {
+  // just use the timestamp for prefix
+  static char buf[1024];
+  timestamp_filename(t, buf);
   return buf;
 }
 
