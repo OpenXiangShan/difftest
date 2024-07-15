@@ -16,6 +16,7 @@
 package difftest.util
 
 import chisel3._
+import chisel3.experimental.SourceInfo
 
 import scala.reflect.runtime.currentMirror
 import scala.reflect.runtime.universe._
@@ -28,10 +29,20 @@ private[difftest] object DataMirror {
     methodSymb.map(s => currentMirror.reflect(obj).reflectMethod(s))
   }
 
-  implicit class DataMirrorLoader(data: Data) {
+  implicit class DataMirrorLoader[T <: Data](data: T) {
     def isVisible: Boolean = {
       val method = loadMethodOfObject("isVisible", "chisel3.reflect.DataMirror")
       method.exists(_.apply(data).asInstanceOf[Boolean])
+    }
+
+    def tapAndRead(implicit si: SourceInfo): T = {
+      require(
+        !chisel3.BuildInfo.version.startsWith("3"),
+        "BoringUtils.tapAndRead does not support Chisel 3, use BoringUtils.addSource/addSink in replace.",
+      )
+      val method = loadMethodOfObject("tapAndRead", "chisel3.util.experimental.BoringUtils")
+      val argument: Seq[Any] = Seq(data, si)
+      method.get.apply(argument: _*).asInstanceOf[T]
     }
   }
 }

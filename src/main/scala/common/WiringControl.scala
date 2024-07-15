@@ -17,15 +17,18 @@ package difftest.common
 
 import chisel3._
 import chisel3.util.experimental.BoringUtils
+import difftest.util.DataMirror._
 
 // Wrapper for the Chisel wiring utils.
 private object WiringControl {
   def addSource(data: Data, name: String): Unit = BoringUtils.addSource(data, s"difftest_$name")
 
   def addSink(data: Data, name: String): Unit = BoringUtils.addSink(data, s"difftest_$name")
+
+  def tapAndRead[T <: Data](source: T): T = source.tapAndRead
 }
 
-private class WiringInfo(val dataType: Data, val name: String) {
+private class WiringInfo(val data: Data, val name: String, val isHierarchical: Boolean) {
   private var nSources: Int = 0
   private var nSinks: Int = 0
 
@@ -42,9 +45,9 @@ private class WiringInfo(val dataType: Data, val name: String) {
 
   def isPending: Boolean = nSources == 0 || nSinks == 0
   // (isSource, dataType, name)
-  def toPendingTuple: Option[(Boolean, Data, String)] = {
+  def toPendingTuple: Option[(Boolean, Data, String, Boolean)] = {
     if (isPending) {
-      Some((nSources == 0, dataType, name))
+      Some((nSources == 0, chiselTypeOf(data), name, isHierarchical))
     } else {
       None
     }
@@ -53,43 +56,61 @@ private class WiringInfo(val dataType: Data, val name: String) {
 
 object DifftestWiring {
   private val wires = scala.collection.mutable.ListBuffer.empty[WiringInfo]
-  private def getWire(data: Data, name: String): WiringInfo = {
+  private def getWire(data: Data, name: String, isHierarchical: Boolean): WiringInfo = {
     wires.find(_.name == name).getOrElse {
-      val info = new WiringInfo(chiselTypeOf(data), name)
+      val info = new WiringInfo(data, name, isHierarchical)
       wires.addOne(info)
       info
     }
   }
 
+  // Hierarchical Wiring does not support Chisel 3.
+  def isChisel3: Boolean = chisel3.BuildInfo.version.startsWith("3")
+
+  def addSource[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
+    getWire(data, name, isHierarchical).setSource()
+    if (!isHierarchical || isChisel3) {
+      WiringControl.addSource(data, name)
+    }
+    data
+  }
+
   def addSource[T <: Data](data: T, name: String): T = {
-    getWire(data, name).setSource()
-    WiringControl.addSource(data, name)
+    addSource[T](data, name, false)
+  }
+
+  def addSink[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
+    val info = getWire(data, name, isHierarchical).addSink()
+    if (isHierarchical && !isChisel3) {
+      require(!info.isPending, s"[${info.name}]: Hierarchical wiring requires addSource before addSink")
+      data := WiringControl.tapAndRead(info.data)
+    } else {
+      WiringControl.addSink(data, name)
+    }
     data
   }
 
   def addSink[T <: Data](data: T, name: String): T = {
-    getWire(data, name).addSink()
-    WiringControl.addSink(data, name)
-    data
+    addSink[T](data, name, false)
   }
 
   def isEmpty: Boolean = !hasPending
   def hasPending: Boolean = wires.exists(_.isPending)
-  def getPending: Seq[(Boolean, Data, String)] = wires.flatMap(_.toPendingTuple).toSeq
+  def getPending: Seq[(Boolean, Data, String, Boolean)] = wires.flatMap(_.toPendingTuple).toSeq
 
   def createPendingWires(): Seq[Data] = {
-    getPending.map { case (isSource, dataType, name) =>
+    getPending.map { case (isSource, dataType, name, isHierarchical) =>
       val target = WireInit(0.U.asTypeOf(dataType)).suggestName(name)
       if (isSource) {
-        addSource(target, name)
+        addSource(target, name, isHierarchical)
       } else {
-        addSink(target, name)
+        addSink(target, name, isHierarchical)
       }
     }
   }
 
   def createExtraIOs(flipped: Boolean = false): Seq[Data] = {
-    getPending.map { case (isSource, dataType, name) =>
+    getPending.map { case (isSource, dataType, name, _) =>
       def do_direction(dt: Data): Data = if (isSource) Input(dt) else Output(dt)
       def do_flip(dt: Data): Data = if (flipped) Flipped(dt) else dt
       IO(do_flip(do_direction(dataType))).suggestName(name)
