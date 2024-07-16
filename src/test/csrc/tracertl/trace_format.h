@@ -22,6 +22,8 @@
 
 #define Log() printf("file: %s, line: %d\n", __FILE__, __LINE__); fflush(stdout)
 
+#define TraceFetchWidth 16
+
 // TODO : pack it
 // TODO : mv instr and instr_pc to map(or more ca, icache)
 struct TraceInstruction {
@@ -49,14 +51,31 @@ struct TraceInstruction {
   }
 };
 
-struct Instruction {
-  TraceInstruction static_inst;
+struct Instruction : TraceInstruction {
+  // TraceInstruction static_inst;
   uint64_t inst_id;
 
   void dump() {
     printf("[0x%08lx]: ", inst_id);
-    static_inst.dump();
+    TraceInstruction::dump();
   }
+
+  void fromTraceInst(TraceInstruction t) {
+    instr_pc_va = t.instr_pc_va;
+    instr_pc_pa = t.instr_pc_pa;
+    memory_address_va = t.memory_address_va;
+    memory_address_pa = t.memory_address_pa;
+    target = t.target;
+    instr = t.instr;
+    memory_type = t.memory_type;
+    memory_size = t.memory_size;
+    branch_type = t.branch_type;
+    branch_taken = t.branch_taken;
+  }
+};
+
+struct ManyInstruction_t {
+  Instruction insts[TraceFetchWidth]; // 16 is traceFetchWidth
 };
 
 struct Control {

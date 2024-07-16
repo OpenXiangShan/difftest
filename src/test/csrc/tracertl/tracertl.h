@@ -38,6 +38,7 @@ void tracertl_success_dump();
 void tracertl_error_drive_dump();
 
 // call by dut
+void __attribute__((noinline)) trace_read_insts(uint8_t enable, ManyInstruction_t insts);
 extern "C" void trace_read_one_instr(
   uint64_t *pc_va, uint64_t *pc_pa, uint64_t *memory_addr_va, uint64_t *memory_addr_pa,
   uint64_t *target, uint32_t *instr,

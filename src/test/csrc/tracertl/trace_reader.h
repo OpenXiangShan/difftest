@@ -53,9 +53,9 @@ struct TraceCollectBufferEntry {
 #define CommittedInstSize 16
 #define DutCommittedInstSize 16
 #define RedirectLogSize 16
-#define TraceReadBufferSize 16
 #define TraceCommitBufferSize 8
 #define TraceDriveBufferSize 8
+#define TraceReadBufferSize TraceFetchWidth
 
 class TraceReader {
   std::ifstream *trace_stream;

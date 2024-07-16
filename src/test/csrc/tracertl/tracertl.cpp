@@ -85,6 +85,27 @@ void tracertl_success_dump() {
 /*
  * TraceICache init and DPI-C Helper
  **/
+// Not Used
+void __attribute__((noinline))  trace_read_insts(uint8_t enable, ManyInstruction_t *manyInsts) {
+  // ManyInstruction_t *manyInsts = insts;
+  if (enable != 0) {
+    for (int i = 0; i < TraceFetchWidth; i ++) {
+      if (trace_reader->traceOver()) {
+        printf("trace_read_one_instr: traceOver. Finish\n");
+        trace_reader->setOver();
+        // TODO: insert nop
+        return ;
+        // return manyInsts;
+      }
+      trace_reader->readFromBuffer(manyInsts->insts[i], i);
+      manyInsts->insts[i].instr_pc_pa = manyInsts->insts[i].instr_pc_pa == 0 ?
+        manyInsts->insts[i].instr_pc_va : manyInsts->insts[i].instr_pc_pa;
+      manyInsts->insts[i].memory_address_pa = manyInsts->insts[i].memory_address_pa == 0 ?
+        manyInsts->insts[i].memory_address_va : manyInsts->insts[i].memory_address_pa;
+    }
+  }
+  return ;
+}
 
 extern "C" void trace_read_one_instr(
   uint64_t *pc_va, uint64_t *pc_pa, uint64_t *memory_addr_va, uint64_t *memory_addr_pa,
@@ -102,20 +123,20 @@ extern "C" void trace_read_one_instr(
   }
   Instruction inst;
   trace_reader->readFromBuffer(inst, idx);
-//  printf("TraceRead idx %d", idx);
-//  inst.dump();
-//  fflush(stdout);
+  // printf("TraceRead idx %d", idx);
+  // inst.dump();
+  // fflush(stdout);
 
-  *pc_va = inst.static_inst.instr_pc_va;
-  *pc_pa = inst.static_inst.instr_pc_pa == 0 ? inst.static_inst.instr_pc_va : inst.static_inst.instr_pc_pa;
-  *memory_addr_va = inst.static_inst.memory_address_va;
-  *memory_addr_pa = inst.static_inst.memory_address_pa == 0 ? inst.static_inst.memory_address_va : inst.static_inst.memory_address_pa;
-  *target = inst.static_inst.target;
-  *instr = inst.static_inst.instr;
-  *memory_type = inst.static_inst.memory_type;
-  *memory_size = inst.static_inst.memory_size;
-  *branch_type = inst.static_inst.branch_type;
-  *branch_taken = inst.static_inst.branch_taken;
+  *pc_va = inst.instr_pc_va;
+  *pc_pa = inst.instr_pc_pa == 0 ? inst.instr_pc_va : inst.instr_pc_pa;
+  *memory_addr_va = inst.memory_address_va;
+  *memory_addr_pa = inst.memory_address_pa == 0 ? inst.memory_address_va : inst.memory_address_pa;
+  *target = inst.target;
+  *instr = inst.instr;
+  *memory_type = inst.memory_type;
+  *memory_size = inst.memory_size;
+  *branch_type = inst.branch_type;
+  *branch_taken = inst.branch_taken;
   *InstID = inst.inst_id;
 }
 

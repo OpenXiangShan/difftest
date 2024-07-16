@@ -61,7 +61,9 @@ bool TraceReader::read(Instruction &inst) {
     redirectInstList.pop_front();
   } else {
     // read a inst from the source
-    trace_stream->read(reinterpret_cast<char *> (&(inst.static_inst)), sizeof(TraceInstruction));
+    TraceInstruction static_inst;
+    trace_stream->read(reinterpret_cast<char *> (&static_inst), sizeof(TraceInstruction));
+    inst.fromTraceInst(static_inst);
     inst.inst_id = current_inst_id.pop();
   }
   pendingInstList.push_back(inst); // for commit check
@@ -146,8 +148,8 @@ void TraceReader::checkCommit() {
       setError();
       printf("TraceRTL pendingInstList size %zu less then instNum %d\n", pendingInstList.size(), instNum);
     }
-    if ((pendingInstList.front().static_inst.instr_pc_va != pc) ||
-        (pendingInstList.front().static_inst.instr != instn)) {
+    if ((pendingInstList.front().instr_pc_va != pc) ||
+        (pendingInstList.front().instr != instn)) {
       setError();
       printf("TraceRTL Commit Mismatch\n");
     }
@@ -199,7 +201,7 @@ void TraceReader::checkDrive() {
       return ;
     }
     Instruction instBundle = driveInstInput.front();
-    if (instBundle.static_inst.instr_pc_va != pc || instBundle.static_inst.instr != inst) {
+    if (instBundle.instr_pc_va != pc || instBundle.instr != inst) {
       setErrorDrive();
       printf("DriveInstInput not match\n");
       fflush(stdout);
