@@ -42,6 +42,7 @@ wire        difftest_uart_out_valid;
 wire [ 7:0] difftest_uart_out_ch;
 wire        difftest_uart_in_valid;
 wire [ 7:0] difftest_uart_in_ch;
+wire [63:0] difftest_exit;
 wire [`CONFIG_DIFFTEST_STEPWIDTH - 1:0] difftest_step;
 
 string wave_type;
@@ -122,6 +123,7 @@ SimTop sim(
   .difftest_uart_out_ch(difftest_uart_out_ch),
   .difftest_uart_in_valid(difftest_uart_in_valid),
   .difftest_uart_in_ch(difftest_uart_in_ch),
+  .difftest_exit(difftest_exit),
   .difftest_step(difftest_step)
 );
 
@@ -140,6 +142,7 @@ DifftestEndpoint difftest(
   .difftest_uart_out_ch(difftest_uart_out_ch),
   .difftest_uart_in_valid(difftest_uart_in_valid),
   .difftest_uart_in_ch(difftest_uart_in_ch),
+  .difftest_exit(difftest_exit),
   .difftest_step(difftest_step)
 );
 
