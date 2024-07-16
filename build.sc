@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -22,7 +22,7 @@ object ivys {
   val scala = "2.13.14"
   val chiselCrossVersions = Map(
     "3.6.1" -> (ivy"edu.berkeley.cs::chisel3:3.6.1", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.1"),
-    "6.4.0" -> (ivy"org.chipsalliance::chisel:6.4.0", ivy"org.chipsalliance:::chisel-plugin:6.4.0"),
+    "6.5.0" -> (ivy"org.chipsalliance::chisel:6.5.0", ivy"org.chipsalliance:::chisel-plugin:6.5.0"),
   )
 }
 
