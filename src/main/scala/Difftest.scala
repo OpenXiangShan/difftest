@@ -378,7 +378,7 @@ object DifftestModule {
 
     Option.when(createTopIO) {
       if (enabled) {
-        createTopIOs(gateway.step.getOrElse(0.U))
+        createTopIOs(gateway.exit, gateway.step)
       } else {
         WireInit(0.U.asTypeOf(new DifftestTopIO))
       }
@@ -389,10 +389,11 @@ object DifftestModule {
     finish(cpu, true).get
   }
 
-  def createTopIOs(step: UInt): DifftestTopIO = {
+  def createTopIOs(exit: Option[UInt], step: Option[UInt]): DifftestTopIO = {
     val difftest = IO(new DifftestTopIO)
 
-    difftest.step := step
+    difftest.exit := exit.getOrElse(0.U)
+    difftest.step := step.getOrElse(0.U)
 
     val timer = RegInit(0.U(64.W)).suggestName("timer")
     timer := timer + 1.U
@@ -550,6 +551,7 @@ object Delayer {
 
 // Difftest emulator top. Will be created by DifftestModule.finish
 class DifftestTopIO extends Bundle {
+  val exit = Output(UInt(64.W))
   val step = Output(UInt(64.W))
   val perfCtrl = new PerfCtrlIO
   val logCtrl = new LogCtrlIO

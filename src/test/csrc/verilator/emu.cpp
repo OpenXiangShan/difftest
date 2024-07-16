@@ -723,6 +723,16 @@ int Emulator::tick() {
     trapCode = STATE_SIG;
   }
 
+  // exit signal: non-zero exit exits the simulation. exit all 1's indicates good.
+  if (dut_ptr->difftest_exit) {
+    if (dut_ptr->difftest_exit == -1UL) {
+      trapCode = STATE_SIM_EXIT;
+    } else {
+      Info("The simulation aborted via the top-level exit of 0x%lx.\n", dut_ptr->difftest_exit);
+      trapCode = STATE_ABORT;
+    }
+  }
+
   if (trapCode != STATE_RUNNING) {
     return trapCode;
   }

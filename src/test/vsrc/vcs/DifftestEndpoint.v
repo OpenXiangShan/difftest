@@ -34,6 +34,7 @@ module DifftestEndpoint(
   input  wire [ 7:0] difftest_uart_out_ch,
   output wire        difftest_uart_in_valid,
   output wire [ 7:0] difftest_uart_in_ch,
+  input  wire [63:0] difftest_exit,
   input  wire [`CONFIG_DIFFTEST_STEPWIDTH - 1:0] difftest_step
 );
 
@@ -196,6 +197,16 @@ always @(posedge clock) begin
     if (max_cycles > 0 && n_cycles >= max_cycles) begin
       $display("EXCEEDED MAX CYCLE: %d", max_cycles);
       $finish();
+    end
+
+    // exit signal: all 1's for normal exit; others are error
+    if (difftest_exit == 64'hffff_ffff_ffff_ffff) begin
+      $display("The simulation exits normally");
+      $finish();
+    end
+    else if (difftest_exit != 0) begin
+      $display("The simulation aborts: error code 0x%x", difftest_exit);
+      $fatal;
     end
 
 `ifndef TB_NO_DPIC

@@ -82,6 +82,7 @@ case class GatewayResult(
   vMacros: Seq[String] = Seq(),
   instances: Seq[DifftestBundle] = Seq(),
   structPacked: Option[Boolean] = None,
+  exit: Option[UInt] = None,
   step: Option[UInt] = None,
 ) {
   def +(that: GatewayResult): GatewayResult = {
@@ -90,6 +91,7 @@ case class GatewayResult(
       vMacros = vMacros ++ that.vMacros,
       instances = instances ++ that.instances,
       structPacked = if (structPacked.isDefined) structPacked else that.structPacked,
+      exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
     )
   }
