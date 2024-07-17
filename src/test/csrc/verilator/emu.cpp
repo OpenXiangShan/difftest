@@ -738,9 +738,10 @@ int Emulator::tick() {
 
   if (args.enable_fork && is_fork_child() && cycles != 0) {
     if (cycles == lightsss->get_end_cycles()) {
-      FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
+      FORK_PRINTF("checkpoint has reached the main process abort point: %lu. TrapCode %d\n", cycles, trapCode)
     }
     if (cycles == lightsss->get_end_cycles() + STEP_FORWARD_CYCLES) {
+      FORK_PRINTF("checkpoint has reached the force abort point: %lu\n", cycles)
       trapCode = STATE_ABORT;
       return trapCode;
     }
