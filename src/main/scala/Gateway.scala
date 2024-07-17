@@ -23,6 +23,7 @@ import difftest.dpic.DPIC
 import difftest.squash.Squash
 import difftest.batch.{Batch, BatchIO}
 import difftest.replay.Replay
+import difftest.util.VerificationExtractor
 
 import scala.collection.mutable.ListBuffer
 
@@ -39,6 +40,7 @@ case class GatewayConfig(
   isNonBlock: Boolean = false,
   hasBuiltInPerf: Boolean = false,
   hierarchicalWiring: Boolean = false,
+  exitOnAssertions: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -112,6 +114,7 @@ object Gateway {
       case 'N' => config = config.copy(isNonBlock = true)
       case 'P' => config = config.copy(hasBuiltInPerf = true)
       case 'H' => config = config.copy(hierarchicalWiring = true)
+      case 'X' => config = config.copy(exitOnAssertions = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()
@@ -132,6 +135,12 @@ object Gateway {
   }
 
   def collect(): GatewayResult = {
+    val exit = Option.when(config.exitOnAssertions) {
+      val asserted = RegInit(false.B)
+      VerificationExtractor.sink(asserted)
+      // Holds 1 after any assertion is asserted.
+      RegEnable(1.U(64.W), 0.U(64.W), asserted)
+    }
     val sink = if (config.needEndpoint) {
       val signals = instances.toSeq
       val packed = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
@@ -151,6 +160,7 @@ object Gateway {
     sink + GatewayResult(
       cppMacros = config.cppMacros,
       vMacros = config.vMacros,
+      exit = exit,
     )
   }
 }
