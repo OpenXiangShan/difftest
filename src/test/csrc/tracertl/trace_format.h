@@ -38,6 +38,17 @@ struct TraceInstruction {
   uint8_t branch_type;
   uint8_t branch_taken;
 
+  bool legalInst() {
+    if ((instr_pc_va == 0) &&
+      (instr_pc_pa == 0) &&
+      (instr == 0)) {
+      return false;
+    }
+    else {
+      return true;
+    }
+  }
+
   void dump() {
     // printf("Instr: TraceSize %ld memSize %02x PC 0x%016lx instr 0x%04x memAddr 0x%016lx\n", sizeof(TraceInstruction), memory_size, instr_pc, instr, memory_address);
     printf("PC 0x%08lx|%08lx instr 0x%08x(%s)", instr_pc_va, instr_pc_pa, instr, spike_dasm(instr));

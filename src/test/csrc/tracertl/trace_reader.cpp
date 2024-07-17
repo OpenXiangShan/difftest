@@ -65,6 +65,13 @@ bool TraceReader::read(Instruction &inst) {
     trace_stream->read(reinterpret_cast<char *> (&static_inst), sizeof(TraceInstruction));
     inst.fromTraceInst(static_inst);
     inst.inst_id = current_inst_id.pop();
+
+    if (!static_inst.legalInst()) {
+      setError();
+      printf("TraceRTL: read from trace file, but illegal inst. Dump the static_inst and inst:\n");
+      static_inst.dump();
+      inst.dump();
+    }
   }
   pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
