@@ -92,7 +92,9 @@ extern unsigned long EMU_FLASH_SIZE;
 #define SNAPSHOT_INTERVAL 60 // unit: second
 
 // if error, let simulator print debug info
+#ifndef TRACERTL_MODE // when tracertl, no difftest enable(but defined)/simulator
 #define ENABLE_SIMULATOR_DEBUG_INFO
+#endif // TRACERTL_MODE
 
 // how many cycles child processes step forward when reaching error point
 #define STEP_FORWARD_CYCLES 100
