@@ -74,7 +74,7 @@ class VerificationExtractor extends Phase {
     def transformOrRSink(
       modules: Seq[DefModule],
       sinks: Seq[VerificationExtractorSink],
-      sources: Seq[SourceAnnotation],
+      sources: Seq[(Int, SourceAnnotation)],
     ): (Seq[DefModule], Seq[Annotation]) = {
       if (sinks.nonEmpty) {
         require(sinks.length == 1, "cannot have more than one Verification sink")
@@ -84,7 +84,7 @@ class VerificationExtractor extends Phase {
         require(sinkModules.head.isInstanceOf[Module], "Verification sink must be wrapper in some Module")
         val sinkModule = sinkModules.head.asInstanceOf[Module]
         val (newSinkModule, orRSinkAnnos) = onOrRSinkModule(sinkModule, sink, circuitName, sources)
-        (otherModules :+ newSinkModule, orRSinkAnnos)
+        (otherModules :+ newSinkModule, sources.map(_._2) ++ orRSinkAnnos)
       } else {
         (modules, Seq())
       }
@@ -95,45 +95,51 @@ class VerificationExtractor extends Phase {
     def transformIndexSink(
       sinks: Seq[VerificationExtractorSink],
       sources: Seq[SourceAnnotation],
-    ): Seq[SinkAnnotation] = {
-      sinks.filter(_.index < sources.length).map(s => SinkAnnotation(s.target, sources(s.index).pin))
+    ): Seq[Annotation] = {
+      // We need to remove the sink annotations whose indices are out-of-range.
+      val sinkAnnos = sinks.filter(_.index < sources.length).map(s => SinkAnnotation(s.target, sources(s.index).pin))
+      // We need to remove the source annotations never used by any index sink.
+      val srcAnnos = sources.zipWithIndex.filter(x => sinks.exists(_.index == x._2)).map(_._1)
+      srcAnnos ++ sinkAnnos
     }
 
     val (sinkAnnos, otherAnnos) = AnnotationSeq(annos).extract[VerificationExtractorSink]()
     // This transform runs only when any sink is defined
     if (sinkAnnos.nonEmpty) {
       // Extract the Verification IRs and convert them into Sources
-      val (sourceAnnosSeq, modules) = c.modules.map(m => onSourceModule(m, circuitName)).unzip
-      val sourceAnnos = sourceAnnosSeq.flatten
+      val (trackers, modules) = c.modules.map(m => onSourceModule(m, circuitName)).unzip
       // Connect the Sources to the Sink modules
       val (orRSinks, indexSinks) = sinkAnnos.partition(_.index < 0)
-      val (allModules, orRSinkAnnos) = transformOrRSink(modules, orRSinks, sourceAnnos)
-      val indexSinkAnnos = transformIndexSink(indexSinks, sourceAnnos)
-      // If there is no orRSink, we need to remove the source annotations never used by any index sink.
-      val usedSourceAnnos = sourceAnnos.filter(a => indexSinkAnnos.exists(_.pin == a.pin) || orRSinkAnnos.nonEmpty)
-      val allAnnos = otherAnnos ++ usedSourceAnnos ++ orRSinkAnnos ++ indexSinkAnnos
+      // 1) For orR sink: we use vectored sources.
+      val (allModules, orRSinkAnnos) = transformOrRSink(modules, orRSinks, trackers.flatten.flatMap(_.vecAnno))
+      // 2) For normal sink: we use indexed sources.
+      for ((s, i) <- trackers.flatten.flatMap(_.bitAnnos).zipWithIndex) {
+        println(s"source[$i]: ${s.target} via ${s.pin}")
+      }
+      val indexSinkAnnos = transformIndexSink(indexSinks, trackers.flatten.flatMap(_.bitAnnos))
+      val allAnnos = otherAnnos ++ orRSinkAnnos ++ indexSinkAnnos
       FirrtlCircuitAnnotation(c.copy(modules = allModules)) +: allAnnos
     } else {
       annotations
     }
   }
 
-  private def onSourceModule(m: DefModule, c: CircuitName): (Seq[SourceAnnotation], DefModule) = {
+  private def onSourceModule(m: DefModule, c: CircuitName): (Option[AssertionTracker], DefModule) = {
     m match {
       case Module(info, name, ports, body) =>
-        val gen = new AssertionRegGenerator(ModuleName(name, c))
-        val (regDefs, newBody) = onStmt(body)(gen)
-        val (tailStmt, sourceAnnos) = gen.collect()
-        (sourceAnnos, Module(info, name, ports, Block(regDefs :+ newBody :+ tailStmt)))
-      case other: DefModule => (Seq(), other)
+        val tracker = new AssertionTracker(ModuleName(name, c))
+        val (regDefs, newBody) = onStmt(body)(tracker)
+        val bodyTail = tracker.bodyTail.getOrElse(EmptyStmt)
+        (Some(tracker), Module(info, name, ports, Block(regDefs :+ newBody :+ bodyTail)))
+      case other: DefModule => (None, other)
     }
   }
 
-  private def onStmt(statement: Statement)(implicit regGen: AssertionRegGenerator): (Seq[Statement], Statement) = {
+  private def onStmt(statement: Statement)(implicit tracker: AssertionTracker): (Seq[Statement], Statement) = {
     statement match {
       // TODO: Verification should have an implicit reset such that we can use it as the reset for this Reg.
       case v: Verification if v.op == Formal.Assert =>
-        val (reg, regRef) = regGen.next(v.clk)
+        val (reg, regRef) = tracker.next(v.clk)
         val conn0 = Connect(NoInfo, regRef, UIntLiteral(0))
         val conn1 = Connect(NoInfo, regRef, UIntLiteral(1))
         // Original:
@@ -158,19 +164,19 @@ class VerificationExtractor extends Phase {
     m: Module,
     verificationSink: VerificationExtractorSink,
     circuitName: CircuitName,
-    sources: Seq[SourceAnnotation],
+    sources: Seq[(Int, SourceAnnotation)],
   ): (DefModule, Seq[SinkAnnotation]) = {
     val target = verificationSink.target.name
     val clock = Reference(verificationSink.clock.get.toTarget.ref, ClockType)
     val reset = Reference(verificationSink.reset.get.toTarget.ref, ResetType)
-    val (sinkDefRegs, sinkDefRefs, sinkAnnos) = sources.map { case SourceAnnotation(_, pin) =>
-      val (defReg, ref) = DefRegisterWithRef(NoInfo, pin, UIntType(IntWidth(1)), clock, reset, UIntLiteral(0))
+    val (sinkDefRegs, sinkDefRefs, sinkAnnos) = sources.map { case (w, SourceAnnotation(_, pin)) =>
+      val (defReg, ref) = DefRegisterWithRef(NoInfo, pin, UIntType(IntWidth(w)), clock, reset, UIntLiteral(0))
       val conn = Connect(NoInfo, ref, UIntLiteral(0))
       val anno = SinkAnnotation(ComponentName(pin, ModuleName(m.name, circuitName)), pin)
       (Block(defReg, conn), ref, anno)
     }.unzip3
     val concat = sinkDefRefs.reduceLeft((result: Expression, sinkRef: Reference) =>
-      DoPrim(PrimOps.Cat, Seq(sinkRef, result), Seq(), UIntType(IntWidth(1)))
+      DoPrim(PrimOps.Cat, Seq(sinkRef, result), Seq(), UIntType(UnknownWidth))
     )
     val orReduce = DoPrim(PrimOps.Orr, Seq(concat), Seq(), UIntType(IntWidth(1)))
     val conn = Connect(NoInfo, Reference(target, UIntType(IntWidth(1))), orReduce)
@@ -187,12 +193,12 @@ private case class VerificationExtractorSink(
   override def duplicate(n: ReferenceTarget): Annotation = this.copy(n)
 }
 
-private class AssertionRegGenerator(moduleName: ModuleName) {
+private class AssertionTracker(moduleName: ModuleName) {
   private val clocks = scala.collection.mutable.ListBuffer.empty[Connect]
-  private val annos = scala.collection.mutable.ListBuffer.empty[SourceAnnotation]
+  private val refs = scala.collection.mutable.ListBuffer.empty[Reference]
 
   def next(clock: Expression): (Statement, Reference) = {
-    val name = s"assertion_gen_${annos.length}"
+    val name = s"assertion_gen_${refs.length}"
     // We add this clockWire because the clock Expression may not exist at the beginning of the module.
     // Its connection is put at the end of the module after any nodes in the module body.
     // This may not work if the clock is defined within some When scope. We should fix it in the future.
@@ -200,11 +206,26 @@ private class AssertionRegGenerator(moduleName: ModuleName) {
     val clockRef = Reference(clockWire.name, clockWire.tpe)
     clocks.append(Connect(NoInfo, clockRef, clock))
     val (defReg, defRegRef) = DefRegisterWithRef(NoInfo, name, UIntType(IntWidth(1)), clockRef)
-    annos.append(SourceAnnotation(ComponentName(defRegRef.name, moduleName), s"${moduleName.name}_$name"))
+    refs.append(defRegRef)
     (Block(clockWire, defReg), defRegRef)
   }
 
-  def collect(): (Statement, Seq[SourceAnnotation]) = (Block(clocks.toSeq), annos.toSeq)
+  // Lazy mechanism: once the body is accessed, their values are computed and fixed.
+  private lazy val concat = DefWire(NoInfo, "assertion_gen_concat", UIntType(IntWidth(refs.length)))
+  lazy val bodyTail: Option[Statement] = Option.when(refs.nonEmpty) {
+    val expr = refs.reduceLeft((result: Expression, sinkRef: Reference) =>
+      DoPrim(PrimOps.Cat, Seq(sinkRef, result), Seq(), UIntType(UnknownWidth))
+    )
+    val conn = Connect(NoInfo, Reference(concat.name, concat.tpe), expr)
+    Block(clocks.toSeq ++ Seq(concat, conn))
+  }
+
+  def bitAnnos: Seq[SourceAnnotation] = {
+    refs.map(_.name).map(n => SourceAnnotation(ComponentName(n, moduleName), s"${moduleName.name}_$n")).toSeq
+  }
+  def vecAnno: Option[(Int, SourceAnnotation)] = Option.when(refs.nonEmpty) {
+    (refs.length, SourceAnnotation(ComponentName(concat.name, moduleName), s"${moduleName.name}_${concat.name}"))
+  }
 }
 
 // Return DefRegister as well as the Reference
