@@ -25,10 +25,15 @@ import firrtl.stage.FirrtlCircuitAnnotation
 // This is the main user interface for defining the Verification sink.
 // index i (i < 0) is connected with assertions.orR; index i (i >= 0) is connected with assertions(i)
 // If any sink is defined, the following VerificationExtractor transform will perform the wiring.
+// It's worth noting the assertion sink will not hold its value. It will be sampled by the user clock.
 object VerificationExtractor {
   def sink(cond: chisel3.Bool, index: Int): Unit = {
+    val clock = chisel3.compatibility.currentClock
+    val reset = chisel3.compatibility.currentReset
+    require(clock.isDefined || index > 0, "Clock must exist for orR sink")
+    require(reset.isDefined || index > 0, "Reset must exist for orR sink")
     chisel3.experimental.annotate(new chisel3.experimental.ChiselAnnotation {
-      override def toFirrtl: Annotation = VerificationExtractorSink(cond.toTarget, index)
+      override def toFirrtl: Annotation = VerificationExtractorSink(cond.toTarget, index, clock, reset)
     })
   }
 
@@ -78,8 +83,7 @@ class VerificationExtractor extends Phase {
         require(sinkModules.length == 1, "cannot have more than one Verification sink Module")
         require(sinkModules.head.isInstanceOf[Module], "Verification sink must be wrapper in some Module")
         val sinkModule = sinkModules.head.asInstanceOf[Module]
-        val sinkTarget = sink.target.name
-        val (newSinkModule, orRSinkAnnos) = onOrRSinkModule(sinkModule, sinkTarget, circuitName, sources)
+        val (newSinkModule, orRSinkAnnos) = onOrRSinkModule(sinkModule, sink, circuitName, sources)
         (otherModules :+ newSinkModule, orRSinkAnnos)
       } else {
         (modules, Seq())
@@ -117,23 +121,28 @@ class VerificationExtractor extends Phase {
   private def onSourceModule(m: DefModule, c: CircuitName): (Seq[SourceAnnotation], DefModule) = {
     m match {
       case Module(info, name, ports, body) =>
-        require(ports.exists(_.name == "reset"), "reset is required for converting assertions")
-        val gen = new AssertionRegGenerator(ModuleName(name, c), Reference("reset", ResetType))
+        val gen = new AssertionRegGenerator(ModuleName(name, c))
         val (regDefs, newBody) = onStmt(body)(gen)
-        val sourceAnoos = gen.collect()
-        (sourceAnoos, Module(info, name, ports, Block(regDefs :+ newBody)))
+        val (tailStmt, sourceAnnos) = gen.collect()
+        (sourceAnnos, Module(info, name, ports, Block(regDefs :+ newBody :+ tailStmt)))
       case other: DefModule => (Seq(), other)
     }
   }
 
   private def onStmt(statement: Statement)(implicit regGen: AssertionRegGenerator): (Seq[Statement], Statement) = {
     statement match {
-      case v: Verification =>
+      // TODO: Verification should have an implicit reset such that we can use it as the reset for this Reg.
+      case v: Verification if v.op == Formal.Assert =>
         val (reg, regRef) = regGen.next(v.clk)
-        val conn = Connect(NoInfo, regRef, UIntLiteral(1))
-        val cond = Conditionally(NoInfo, v.pred, EmptyStmt, conn)
-        // The Verification IR remains existed.
-        (Seq(reg), Block(v, cond))
+        val conn0 = Connect(NoInfo, regRef, UIntLiteral(0))
+        val conn1 = Connect(NoInfo, regRef, UIntLiteral(1))
+        // Original:
+        //   assert(v.pred) // note: this is still preserved after the transform
+        // Current:
+        //   assert_reg := false.B
+        //   when (v.pred) { } else { assert_reg := true.B }
+        val cond = Conditionally(NoInfo, v.pred, EmptyStmt, conn1)
+        (Seq(reg, conn0), Block(v, cond))
       case Conditionally(info, pred, conseq, alt) =>
         val (regs1, s1) = onStmt(conseq)
         val (regs2, s2) = onStmt(alt)
@@ -147,16 +156,15 @@ class VerificationExtractor extends Phase {
 
   private def onOrRSinkModule(
     m: Module,
-    target: String,
+    verificationSink: VerificationExtractorSink,
     circuitName: CircuitName,
     sources: Seq[SourceAnnotation],
   ): (DefModule, Seq[SinkAnnotation]) = {
-    require(m.ports.exists(_.name == "clock"), "clock is required for Verification sink Module")
-    require(m.ports.exists(_.name == "reset"), "reset is required for Verification sink Module")
-    val clock = Reference("clock", ClockType)
-    val reset = Reference("reset", ResetType)
+    val target = verificationSink.target.name
+    val clock = Reference(verificationSink.clock.get.toTarget.ref, ClockType)
+    val reset = Reference(verificationSink.reset.get.toTarget.ref, ResetType)
     val (sinkDefRegs, sinkDefRefs, sinkAnnos) = sources.map { case SourceAnnotation(_, pin) =>
-      val (defReg, ref) = DefRegisterWithReset.withRef(NoInfo, pin, UIntType(IntWidth(1)), clock, reset, UIntLiteral(0))
+      val (defReg, ref) = DefRegisterWithRef(NoInfo, pin, UIntType(IntWidth(1)), clock, reset, UIntLiteral(0))
       val conn = Connect(NoInfo, ref, UIntLiteral(0))
       val anno = SinkAnnotation(ComponentName(pin, ModuleName(m.name, circuitName)), pin)
       (Block(defReg, conn), ref, anno)
@@ -170,29 +178,38 @@ class VerificationExtractor extends Phase {
   }
 }
 
-private case class VerificationExtractorSink(target: ReferenceTarget, index: Int)
-  extends SingleTargetAnnotation[ReferenceTarget] {
+private case class VerificationExtractorSink(
+  target: ReferenceTarget,
+  index: Int,
+  clock: Option[chisel3.Clock],
+  reset: Option[chisel3.Reset],
+) extends SingleTargetAnnotation[ReferenceTarget] {
   override def duplicate(n: ReferenceTarget): Annotation = this.copy(n)
 }
 
-private class AssertionRegGenerator(moduleName: ModuleName, reset: Expression) {
+private class AssertionRegGenerator(moduleName: ModuleName) {
+  private val clocks = scala.collection.mutable.ListBuffer.empty[Connect]
   private val annos = scala.collection.mutable.ListBuffer.empty[SourceAnnotation]
 
   def next(clock: Expression): (Statement, Reference) = {
     val name = s"assertion_gen_${annos.length}"
-    val (defReg, ref) = DefRegisterWithReset.withRef(NoInfo, name, UIntType(IntWidth(1)), clock, reset, UIntLiteral(0))
-    annos.append(SourceAnnotation(ComponentName(name, moduleName), s"${moduleName.name}_$name"))
-    (defReg, ref)
+    // We add this clockWire because the clock Expression may not exist at the beginning of the module.
+    // Its connection is put at the end of the module after any nodes in the module body.
+    // This may not work if the clock is defined within some When scope. We should fix it in the future.
+    val clockWire = DefWire(NoInfo, s"${name}_clock", ClockType)
+    val clockRef = Reference(clockWire.name, clockWire.tpe)
+    clocks.append(Connect(NoInfo, clockRef, clock))
+    val (defReg, defRegRef) = DefRegisterWithRef(NoInfo, name, UIntType(IntWidth(1)), clockRef)
+    annos.append(SourceAnnotation(ComponentName(defRegRef.name, moduleName), s"${moduleName.name}_$name"))
+    (Block(clockWire, defReg), defRegRef)
   }
 
-  def collect(): Seq[SourceAnnotation] = annos.toSeq
+  def collect(): (Statement, Seq[SourceAnnotation]) = (Block(clocks.toSeq), annos.toSeq)
 }
 
-// We define this DefRegisterWithReset to allow compiling the code in Chisel 3.x.
-import scala.reflect.runtime.currentMirror
-
-object DefRegisterWithReset {
-  def withRef(
+// Return DefRegister as well as the Reference
+private object DefRegisterWithRef {
+  def apply(
     info: Info,
     name: String,
     tpe: Type,
@@ -200,12 +217,17 @@ object DefRegisterWithReset {
     reset: Expression,
     init: Expression,
   ): (Statement, Reference) = {
-    val classSymbol = currentMirror.staticClass("firrtl.ir.DefRegisterWithReset")
-    val classMirror = currentMirror.reflectClass(classSymbol)
-    val constructorSymbol = classSymbol.primaryConstructor.asMethod
-    val constructorMirror = classMirror.reflectConstructor(constructorSymbol)
-    val arguments: Seq[Any] = Seq(info, name, tpe, clock, reset, init)
-    val defReg = constructorMirror.apply(arguments: _*).asInstanceOf[Statement]
+    val defReg = difftest.compatibility.DefRegisterWithReset(info, name, tpe, clock, reset, init)
+    (defReg, Reference(name, tpe))
+  }
+
+  def apply(
+    info: Info,
+    name: String,
+    tpe: Type,
+    clock: Expression,
+  ): (Statement, Reference) = {
+    val defReg = difftest.compatibility.DefRegister(info, name, tpe, clock)
     (defReg, Reference(name, tpe))
   }
 }
