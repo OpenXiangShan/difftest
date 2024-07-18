@@ -187,6 +187,11 @@ class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
   override val desiredCppName: String = "dmregs"
 }
 
+class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
+  override val desiredCppName: String = "triggercsr"
+  override val squashDependency: Seq[String] = Seq("commit", "event")
+}
+
 class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
   override val desiredCppName: String = "wb_int"
   override protected val needFlatten: Boolean = true
