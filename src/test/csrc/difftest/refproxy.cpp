@@ -156,6 +156,9 @@ void RefProxy::regcpy(DiffTestState *dut) {
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
   memcpy(&vcsr, &dut->vcsr, sizeof(vcsr));
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
+#ifdef CONFIG_DIFFTEST_FPCSRSTATE
+  memcpy(&fcsr, &dut->fcsr, sizeof(fcsr));
+#endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
   memcpy(&triggercsr, &dut->triggercsr, sizeof(triggercsr));
 #endif //CONFIG_DIFFTEST_TRIGGERCSRSTATE
@@ -175,6 +178,9 @@ int RefProxy::compare(DiffTestState *dut) {
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
                          PROXY_COMPARE(vcsr),
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
+#ifdef CONFIG_DIFFTEST_FPCSRSTATE
+                         PROXY_COMPARE(fcsr),
+#endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
                          PROXY_COMPARE(hcsr),
 #endif // CONFIG_DIFFTEST_HCSRSTATE
@@ -230,6 +236,9 @@ void RefProxy::display(DiffTestState *dut) {
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
     PROXY_COMPARE_AND_DISPLAY(vcsr, regs_name_vec_csr)
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
+#ifdef CONFIG_DIFFTEST_FPCSRSTATE
+    PROXY_COMPARE_AND_DISPLAY(fcsr, regs_name_fp_csr)
+#endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
     PROXY_COMPARE_AND_DISPLAY(triggercsr, regs_name_triggercsr)
 #endif // CONFIG_DIFFTEST_TRIGGERCSRSTATE

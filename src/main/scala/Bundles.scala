@@ -209,6 +209,10 @@ class VecCSRState extends DifftestBaseBundle {
   val vlenb = UInt(64.W)
 }
 
+class FpCSRState extends DifftestBaseBundle {
+  val fcsr = UInt(64.W)
+}
+
 class SbufferEvent extends DifftestBaseBundle with HasValid {
   val addr = UInt(64.W)
   val data = Vec(64, UInt(8.W))

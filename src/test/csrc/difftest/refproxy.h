@@ -71,6 +71,10 @@ static const char *regs_name_vec_csr[] = {
   "vstart", "vxsat", "vxrm", "vcsr", "vl", "vtype", "vlenb"
 };
 
+static const char *regs_name_fp_csr[] = {
+  "fcsr"
+};
+
 static const char *regs_name_triggercsr[] = {
   "tselect", "tdata1", "tinfo", "tcontol"
 };
@@ -184,6 +188,9 @@ public:
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
   DifftestVecCSRState vcsr;
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
+#ifdef CONFIG_DIFFTEST_FPCSRSTATE
+  DifftestFpCSRState fcsr;
+#endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
   DifftestTriggerCSRState triggercsr;
 #endif // CONFIG_DIFFTEST_TRIGGERCSRSTATE
@@ -254,6 +261,9 @@ public:
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
            + sizeof(DifftestVecCSRState)
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
+#ifdef CONFIG_DIFFTEST_FPCSRSTATE
+           + sizeof(DifftestFpCSRState)
+#endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
            + sizeof(DifftestHCSRState)
 #endif // CONFIG_DIFFTEST_HCSRSTATE
