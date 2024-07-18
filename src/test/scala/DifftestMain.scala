@@ -19,6 +19,11 @@ package difftest
 import chisel3._
 import chisel3.stage._
 
+import java.nio.file.{Files, Paths}
+import scala.annotation.tailrec
+import org.json4s.DefaultFormats
+import org.json4s.native.JsonMethods.parse
+
 // Main class to generate difftest modules when design is not written in chisel.
 class DifftestTop extends Module {
   val difftest_arch_event = DifftestModule(new DiffArchEvent, dontCare = true)
@@ -54,6 +59,55 @@ class DifftestTop extends Module {
   DifftestModule.finish("demo")
 }
 
+// Generate simulation interface based on Profile describing the instantiated information of design
+class SimTop(profileName: String, numCores: Int) extends Module {
+  val profileStr = Files.readString(Paths.get(profileName))
+  val profiles = parse(profileStr).extract[List[Map[String, Any]]](DefaultFormats, manifest[List[Map[String, Any]]])
+  for (coreid <- 0 until numCores) {
+    profiles.filter(_.contains("className")).zipWithIndex.foreach { case (rawProf, idx) =>
+      val prof = rawProf.map { case (k, v) =>
+        v match {
+          case i: BigInt => (k, i.toInt) // convert BigInt to Int
+          case x         => (k, x)
+        }
+      }
+      val constructor = Class.forName(prof("className").toString).getConstructors()(0)
+      val args = constructor.getParameters().toSeq.map { param => prof(param.getName.toString) }
+      val inst = constructor.newInstance(args: _*).asInstanceOf[DifftestBundle]
+      DifftestModule(inst, true, prof("delay").asInstanceOf[Int]).suggestName(s"gateway_${coreid}_$idx")
+    }
+  }
+  val dutInfo = profiles.find(_.contains("cpu")).get
+  DifftestModule.finish(dutInfo("cpu").asInstanceOf[String])
+}
+
 object DifftestMain extends App {
-  (new ChiselStage).execute(args, Seq(ChiselGeneratorAnnotation(() => new DifftestTop)))
+  case class GenParams(
+    profile: Option[String] = None,
+    numCores: Int = 1,
+  )
+  def parseArgs(args: Array[String]): (GenParams, Array[String]) = {
+    val default = new GenParams()
+    var firrtlOpts = Array[String]()
+    @tailrec
+    def nextOption(param: GenParams, list: List[String]): GenParams = {
+      list match {
+        case Nil                            => param
+        case "--profile" :: str :: tail     => nextOption(param.copy(profile = Some(str)), tail)
+        case "--num-cores" :: value :: tail => nextOption(param.copy(numCores = value.toInt), tail)
+        case option :: tail =>
+          firrtlOpts :+= option
+          nextOption(param, tail)
+      }
+    }
+    (nextOption(default, args.toList), firrtlOpts)
+  }
+  val newArgs = DifftestModule.parseArgs(args)
+  val (param, firrtlOpts) = parseArgs(newArgs)
+  val gen = if (param.profile.isDefined) { () =>
+    new SimTop(param.profile.get, param.numCores)
+  } else { () =>
+    new DifftestTop
+  }
+  (new ChiselStage).execute(firrtlOpts, Seq(ChiselGeneratorAnnotation(gen)))
 }
