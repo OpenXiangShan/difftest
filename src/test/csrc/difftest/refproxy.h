@@ -70,6 +70,11 @@ static const char *regs_name_vec[] = {
 static const char *regs_name_vec_csr[] = {
   "vstart", "vxsat", "vxrm", "vcsr", "vl", "vtype", "vlenb"
 };
+
+static const char *regs_name_triggercsr[] = {
+  "tselect", "tdata1", "tinfo", "tcontol"
+};
+
 /* clang-format on */
 
 enum {
@@ -179,6 +184,9 @@ public:
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
   DifftestVecCSRState vcsr;
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
+#ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
+  DifftestTriggerCSRState triggercsr;
+#endif // CONFIG_DIFFTEST_TRIGGERCSRSTATE
 
   inline uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
@@ -249,6 +257,9 @@ public:
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
            + sizeof(DifftestHCSRState)
 #endif // CONFIG_DIFFTEST_HCSRSTATE
+#ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
+           + sizeof(DifftestTriggerCSRState)
+#endif //CONFIG_DIFFTEST_TRIGGERCSRSTATE
         ;
   }
 

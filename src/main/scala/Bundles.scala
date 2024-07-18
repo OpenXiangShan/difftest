@@ -166,6 +166,13 @@ class DebugModeCSRState extends DifftestBaseBundle {
   val dscratch1 = UInt(64.W)
 }
 
+class TriggerCSRState extends DifftestBaseBundle {
+  val tselect = UInt(64.W)
+  val tdata1 = UInt(64.W)
+  val tinfo = UInt(64.W)
+  val tcontrol = UInt(64.W)
+}
+
 class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
   val data = UInt(64.W)
 }
