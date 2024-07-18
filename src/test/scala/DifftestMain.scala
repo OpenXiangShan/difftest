@@ -35,6 +35,7 @@ class DifftestTop extends Module {
   val difftest_trigger_csr_state = DifftestModule(new DiffTriggerCSRState, dontCare = true)
   val difftest_vector_state = DifftestModule(new DiffArchVecRegState, dontCare = true)
   val difftest_vector_csr_state = DifftestModule(new DiffVecCSRState, dontCare = true)
+  val difftest_fp_csr_state = DifftestModule(new DiffFpCSRState, dontCare = true)
   val difftest_int_writeback = DifftestModule(new DiffIntWriteback, dontCare = true)
   val difftest_fp_writeback = DifftestModule(new DiffFpWriteback, dontCare = true)
   val difftest_vec_writeback = DifftestModule(new DiffVecWriteback, dontCare = true)

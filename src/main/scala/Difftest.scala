@@ -262,6 +262,12 @@ class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
+class DiffFpCSRState extends FpCSRState with DifftestBundle {
+  override val desiredCppName: String = "fcsr"
+  override val desiredOffset: Int = 7
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+}
+
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
