@@ -17,7 +17,6 @@
 package difftest
 
 import chisel3._
-import chisel3.util._
 import difftest.common.DifftestWiring
 import difftest.gateway.{Gateway, GatewayConfig}
 
@@ -362,9 +361,7 @@ object DifftestModule {
   ): T = {
     val difftest: T = Wire(gen)
     if (enabled) {
-      val sink = Gateway(gen)
-      sink := Delayer(difftest, delay)
-      sink.coreid := difftest.coreid
+      Gateway(gen, delay) := difftest
     }
     if (dontCare) {
       difftest := DontCare
@@ -509,48 +506,6 @@ object DifftestModule {
     Files.createDirectories(Paths.get(outputDir))
     val outputFile = outputDir + fileName
     Files.write(Paths.get(outputFile), fileStream.mkString("\n").getBytes(StandardCharsets.UTF_8))
-  }
-}
-
-private class Delayer[T <: Data](gen: T, n_cycles: Int) extends Module {
-  val i = IO(Input(chiselTypeOf(gen)))
-  val o = IO(Output(chiselTypeOf(gen)))
-}
-
-private class DelayReg[T <: Data](gen: T, n_cycles: Int) extends Delayer(gen, n_cycles) {
-  var r = WireInit(i)
-  for (_ <- 0 until n_cycles) {
-    r = RegNext(r, 0.U.asTypeOf(gen))
-  }
-  o := r
-}
-
-private class DelayMem[T <: Data](gen: T, n_cycles: Int) extends Delayer(gen, n_cycles) {
-  val mem = Mem(n_cycles, chiselTypeOf(gen))
-  val ptr = RegInit(0.U(log2Ceil(n_cycles).W))
-  val init_flag = RegInit(false.B)
-  mem(ptr) := i
-  ptr := ptr + 1.U
-  when(ptr === (n_cycles - 1).U) {
-    init_flag := true.B
-    ptr := 0.U
-  }
-  o := Mux(init_flag, mem(ptr), 0.U.asTypeOf(gen))
-}
-
-object Delayer {
-  def apply[T <: Data](gen: T, n_cycles: Int, useMem: Boolean = false): T = {
-    if (n_cycles > 0) {
-      val delayer = if (useMem) {
-        Module(new DelayMem(gen, n_cycles))
-      } else {
-        Module(new DelayReg(gen, n_cycles))
-      }
-      delayer.i := gen
-      delayer.o
-    } else {
-      gen
-    }
   }
 }
 

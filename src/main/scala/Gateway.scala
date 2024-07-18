@@ -19,6 +19,7 @@ import chisel3._
 import chisel3.util._
 import difftest._
 import difftest.common.DifftestWiring
+import difftest.util.Delayer
 import difftest.dpic.DPIC
 import difftest.squash.Squash
 import difftest.batch.{Batch, BatchIO}
@@ -50,7 +51,7 @@ case class GatewayConfig(
   def batchArgByteLen: (Int, Int) = if (isNonBlock) (3900, 92) else (7800, 192)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
-  def needEndpoint: Boolean = hasGlobalEnable || hasDutZone || isBatch || isSquash
+  def needEndpoint: Boolean = hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring
   def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo
   // Macros Generation for Cpp and Verilog
   def cppMacros: Seq[String] = {
@@ -100,7 +101,7 @@ case class GatewayResult(
 }
 
 object Gateway {
-  private val instances = ListBuffer.empty[DifftestBundle]
+  private val instanceWithDelay = ListBuffer.empty[(DifftestBundle, Int)]
   private var config = GatewayConfig()
 
   def setConfig(cfg: String): Unit = {
@@ -120,17 +121,17 @@ object Gateway {
     config.check()
   }
 
-  def apply[T <: DifftestBundle](gen: T): T = {
+  def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
     val bundle = WireInit(0.U.asTypeOf(gen))
     if (config.needEndpoint) {
       val packed = WireInit(bundle.asUInt)
-      DifftestWiring.addSource(packed, s"gateway_${instances.length}", config.hierarchicalWiring)
+      DifftestWiring.addSource(packed, s"gateway_${instanceWithDelay.length}", config.hierarchicalWiring)
     } else {
       val control = WireInit(0.U.asTypeOf(new GatewaySinkControl(config)))
       control.enable := true.B
-      GatewaySink(control, bundle, config)
+      GatewaySink(control, Delayer(bundle, delay), config)
     }
-    instances += gen
+    instanceWithDelay += ((gen, delay))
     bundle
   }
 
@@ -141,13 +142,13 @@ object Gateway {
       // Holds 1 after any assertion is asserted.
       RegEnable(1.U(64.W), 0.U(64.W), asserted)
     }
+    val instances = instanceWithDelay.map(_._1).toSeq
     val sink = if (config.needEndpoint) {
-      val signals = instances.toSeq
-      val packed = WireInit(0.U.asTypeOf(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
+      val packed = WireInit(0.U.asTypeOf(MixedVec(instances.map(gen => UInt(gen.getWidth.W)))))
       for ((data, idx) <- packed.zipWithIndex) {
         DifftestWiring.addSink(data, s"gateway_$idx", config.hierarchicalWiring)
       }
-      val endpoint = Module(new GatewayEndpoint(signals, config))
+      val endpoint = Module(new GatewayEndpoint(instanceWithDelay.toSeq, config))
       endpoint.in := packed
       GatewayResult(
         instances = endpoint.instances,
@@ -155,7 +156,7 @@ object Gateway {
         step = endpoint.step,
       )
     } else {
-      GatewayResult(instances = instances.toSeq) + GatewaySink.collect(config)
+      GatewayResult(instances = instances) + GatewaySink.collect(config)
     }
     sink + GatewayResult(
       cppMacros = config.cppMacros,
@@ -165,9 +166,9 @@ object Gateway {
   }
 }
 
-class GatewayEndpoint(signals: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(signals.map(gen => UInt(gen.getWidth.W)))))
-  val bundle = MixedVecInit(in.zip(signals).map { case (i, s) => i.asTypeOf(s) }.toSeq)
+class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: GatewayConfig) extends Module {
+  val in = IO(Input(MixedVec(instanceWithDelay.map { case (gen, _) => UInt(gen.getWidth.W) })))
+  val bundle = MixedVecInit(in.zip(instanceWithDelay).map { case (i, (gen, d)) => Delayer(i.asTypeOf(gen), d) }.toSeq)
 
   val preprocessed = if (config.needPreprocess) {
     WireInit(Preprocess(bundle, config))

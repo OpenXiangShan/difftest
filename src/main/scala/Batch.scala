@@ -20,6 +20,7 @@ import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.common.DifftestPerf
+import difftest.util.Delayer
 
 import scala.collection.mutable.ListBuffer
 
