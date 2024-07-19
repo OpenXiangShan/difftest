@@ -861,8 +861,7 @@ int Emulator::tick() {
       lasttime_snapshot = timer;
       switch (lightsss->do_fork()) {
         case FORK_ERROR: return -1;
-        case WAIT_EXIT: exit(0);
-        case WAIT_LAST: fork_child_init();
+        case FORK_CHILD: fork_child_init();
         default: break;
       }
     }
