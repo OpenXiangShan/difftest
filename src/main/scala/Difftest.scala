@@ -24,6 +24,8 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
+import org.json4s.DefaultFormats
+import org.json4s.native.Serialization.writePretty
 
 trait DifftestWithCoreid {
   val coreid = UInt(8.W)
@@ -115,6 +117,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     cpp.mkString("\n")
   }
 
+  def toJsonProfile: Map[String, Any] = Map("className" -> this.getClass.getName)
+
   // returns Bool indicating whether `this` bundle can be squashed with `base`
   def supportsSquash(base: DifftestBundle): Bool = supportsSquashBase
   def supportsSquashBase: Bool = if (hasValid) !getValid else true.B
@@ -158,6 +162,8 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with Dif
     }
     squashed
   }
+
+  override def toJsonProfile: Map[String, Any] = super.toJsonProfile ++ Map("nPhyRegs" -> nPhyRegs)
 }
 
 class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
@@ -196,6 +202,7 @@ class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with Di
   override protected val needFlatten: Boolean = true
   // It is required for MMIO/Load(only for multi-core) data synchronization, and commit instr trace record
   override def supportsSquashBase: Bool = true.B
+  override def toJsonProfile: Map[String, Any] = super.toJsonProfile ++ Map("numRegs" -> numRegs)
 }
 
 class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
@@ -214,7 +221,9 @@ class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
 abstract class DiffArchDelayedUpdate(numRegs: Int)
   extends ArchDelayedUpdate(numRegs)
   with DifftestBundle
-  with DifftestWithIndex
+  with DifftestWithIndex {
+  override def toJsonProfile: Map[String, Any] = super.toJsonProfile ++ Map("numRegs" -> numRegs)
+}
 
 class DiffArchIntDelayedUpdate extends DiffArchDelayedUpdate(32) {
   override val desiredCppName: String = "regs_int_delayed"
@@ -339,6 +348,7 @@ object DifftestModule {
   private val instances = ListBuffer.empty[DifftestBundle]
   private val cppMacros = ListBuffer.empty[String]
   private val vMacros = ListBuffer.empty[String]
+  private val jsonProfiles = ListBuffer.empty[Map[String, Any]]
 
   def parseArgs(args: Array[String]): Array[String] = {
     @tailrec
@@ -366,6 +376,7 @@ object DifftestModule {
     if (dontCare) {
       difftest := DontCare
     }
+    jsonProfiles += (gen.toJsonProfile ++ Map("delay" -> delay))
     difftest
   }
 
@@ -377,6 +388,7 @@ object DifftestModule {
 
     generateCppHeader(cpu, gateway.structPacked.getOrElse(false))
     generateVeriogHeader()
+    generateJsonProfile(cpu)
 
     Option.when(createTopIO) {
       if (enabled) {
@@ -499,6 +511,13 @@ object DifftestModule {
     val difftestVeriog = ListBuffer.empty[String]
     vMacros.foreach(m => difftestVeriog += s"`define $m")
     streamToFile(difftestVeriog, "DifftestMacros.v")
+  }
+
+  def generateJsonProfile(cpu: String): Unit = {
+    val difftestJson = ListBuffer.empty[String]
+    val profile = jsonProfiles ++ Map("cpu" -> cpu)
+    difftestJson += writePretty(profile)(DefaultFormats)
+    streamToFile(difftestJson, "difftest_profile.json")
   }
 
   def streamToFile(fileStream: ListBuffer[String], fileName: String) {
