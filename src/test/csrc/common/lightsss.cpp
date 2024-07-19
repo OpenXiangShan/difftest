@@ -63,7 +63,7 @@ int LightSSS::do_fork() {
   // the original process
   else if (pid != 0) {
     slotCnt++;
-    pidSlot.insert(pidSlot.begin(), pid);
+    pidSlot.push_front(pid);
     return FORK_OK;
   }
   // for the fork child
@@ -71,13 +71,28 @@ int LightSSS::do_fork() {
   forkshm.shwait();
   //checkpoint process wakes up
   //start wave dumping
-  bool is_last = forkshm.info->oldest == getpid();
-  return (is_last) ? WAIT_LAST : WAIT_EXIT;
+  if (forkshm.info->oldest != getpid()) {
+    FORK_PRINTF("Error, non-oldest process should not live. Parent Process should kill the process manually.\n")
+    return FORK_ERROR;
+  }
+  return FORK_CHILD;
 }
 
 int LightSSS::wakeup_child(uint64_t cycles) {
   forkshm.info->endCycles = cycles;
   forkshm.info->oldest = pidSlot.back();
+
+  // only the oldest is wantted, so kill others by parent process.
+  for (auto pid: pidSlot) {
+    if (pid != forkshm.info->oldest) {
+      kill(pid, SIGKILL);
+      waitpid(pid, NULL, 0);
+    }
+  }
+  // flush before wake up child.
+  fflush(stdout);
+  fflush(stderr);
+
   forkshm.info->notgood = true;
   forkshm.info->flag = true;
   int status = -1;
