@@ -817,6 +817,10 @@ int Emulator::tick() {
       dut_ptr->difftest_perfCtrl_clean = 1;
       dut_ptr->difftest_perfCtrl_dump = 1;
       args.warmup_instr = -1;
+#ifdef ENABLE_CHISEL_MAP
+      time_t now_map = time(NULL);
+      warmup_save_maps(chiselmap_filename(now_map));
+#endif // ENABLE_CHISEL_MAP
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
       dut_ptr->difftest_perfCtrl_clean = 1;
