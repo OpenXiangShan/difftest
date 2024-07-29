@@ -285,15 +285,15 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
   setInline(s"$desiredName.v", moduleBody)
 }
 
-private class DummyDPICWrapper(gen: DifftestBundle, config: GatewayConfig) extends Module {
+private class DummyDPICWrapper(gen: Valid[DifftestBundle], config: GatewayConfig) extends Module {
   val control = IO(Input(new GatewaySinkControl(config)))
   val io = IO(Input(gen))
-  val dpic = Module(new DPIC(gen, config))
+  val dpic = Module(new DPIC(gen.bits, config))
   dpic.clock := clock
-  dpic.enable := io.bits.getValid && control.enable
+  dpic.enable := io.valid && control.enable
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
   if (config.hasInternalStep) dpic.step.get := control.step.get
-  dpic.io := io
+  dpic.io := io.bits
 }
 
 private class DummyDPICBatchWrapper(
@@ -314,7 +314,7 @@ private class DummyDPICBatchWrapper(
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
 
-  def apply(control: GatewaySinkControl, io: DifftestBundle, config: GatewayConfig): Unit = {
+  def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
     val module = Module(new DummyDPICWrapper(chiselTypeOf(io), config))
     module.control := control
     module.io := io

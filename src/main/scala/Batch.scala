@@ -55,8 +55,8 @@ class BatchInfo extends Bundle {
 object Batch {
   private val template = ListBuffer.empty[DifftestBundle]
 
-  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): BatchOutput = {
-    template ++= chiselTypeOf(bundles).distinctBy(_.desiredCppName)
+  def apply(bundles: MixedVec[Valid[DifftestBundle]], config: GatewayConfig): BatchOutput = {
+    template ++= chiselTypeOf(bundles).map(_.bits).distinctBy(_.desiredCppName)
     val param = BatchParam(config, template.length)
     val module = Module(new BatchEndpoint(chiselTypeOf(bundles).toSeq, config, param))
     module.in := bundles
@@ -101,82 +101,64 @@ object Batch {
   }
 }
 
-class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: BatchParam) extends Module {
+class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig, param: BatchParam) extends Module {
   val in = IO(Input(MixedVec(bundles)))
+  def vecAlignWidth = (vec: Seq[Valid[DifftestBundle]]) => Batch.getAlignWidth(vec.head.bits) * vec.length
 
-  def updateFilter = (x: DifftestBundle) => x.bits.needUpdate.isDefined
-  def vecAlignWidth = (vec: Seq[DifftestBundle]) => Batch.getAlignWidth(vec.head) * vec.length
-
-  // Process bundles without needUpdate Option as Base in parallel
-  val inBase = in.filterNot(updateFilter).groupBy(_.desiredCppName).values.toSeq.map(_.toSeq)
-  val inBase_w = inBase.map(vecAlignWidth)
-  val dataBase_vec = WireInit(0.U.asTypeOf(MixedVec(inBase_w.map(i => UInt(i.W)).toSeq)))
-  val infoBase_vec = WireInit(0.U.asTypeOf(Vec(inBase.length, UInt(param.infoWidth.W))))
-  val dataLenBase_vec = WireInit(0.U.asTypeOf(Vec(inBase.length, UInt(param.MaxDataByteWidth.W))))
-  inBase.zipWithIndex.foreach { case (in, idx) =>
-    val base = Module(new BatchBase(chiselTypeOf(in.head), in.length, param))
-    base.data_in := in
-    dataBase_vec(idx) := base.data_out
-    infoBase_vec(idx) := base.info_out
-    dataLenBase_vec(idx) := base.data_len_out
-  }
-  val dataBase = dataBase_vec.asUInt
-  val infoBase = infoBase_vec.asUInt
-  val dataLenBase = dataLenBase_vec.foldLeft(0.U)(_ + _)
-  val infoLenBase = (inBase.length * param.infoWidth / 8).U
-
-  // Collect bundles with needUpdate Option in Pipeline
-  val global_enable = WireInit(true.B)
-  if (config.hasGlobalEnable) {
-    global_enable := VecInit(in.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
-  }
+  // Collect bundles with valid in Pipeline
+  val global_enable = VecInit(in.map(_.valid).toSeq).asUInt.orR
   val inCollect =
-    in.filter(updateFilter).groupBy(_.desiredCppName).values.toSeq.map(_.toSeq).sortBy(vecAlignWidth).reverse
+    in.groupBy(_.bits.desiredCppName).values.toSeq.map(_.toSeq).sortBy(vecAlignWidth).reverse
   val inCollect_w = inCollect.map(vecAlignWidth)
   val dataCollect_vec = WireInit(
     0.U.asTypeOf(
       MixedVec(
-        (0 to inCollect.length).map { i =>
-          val width = if (i == 0) dataBase.getWidth else dataBase.getWidth + inCollect_w.take(i).sum
-          UInt(width.W)
-        }
+        Seq.tabulate(inCollect.length)(i => UInt(inCollect_w.take(i + 1).sum.W))
       )
     )
   )
   val infoCollect_vec = WireInit(
     0.U.asTypeOf(
       MixedVec(
-        (0 to inCollect.length).map(i => UInt((infoBase.getWidth + i * param.infoWidth).W))
+        Seq.tabulate(inCollect.length)(i => UInt(((i + 1) * param.infoWidth).W))
       )
     )
   )
-  val dataLenCollect_vec = WireInit(0.U.asTypeOf(Vec(inCollect.length + 1, UInt(param.MaxDataByteWidth.W))))
-  val infoLenCollect_vec = WireInit(0.U.asTypeOf(Vec(inCollect.length + 1, UInt(param.MaxInfoByteWidth.W))))
-  dataCollect_vec(0) := dataBase
-  infoCollect_vec(0) := infoBase
-  dataLenCollect_vec(0) := dataLenBase
-  infoLenCollect_vec(0) := infoLenBase
+  val dataLenCollect_vec = WireInit(0.U.asTypeOf(Vec(inCollect.length, UInt(param.MaxDataByteWidth.W))))
+  val infoLenCollect_vec = WireInit(0.U.asTypeOf(Vec(inCollect.length, UInt(param.MaxInfoByteWidth.W))))
   inCollect.zipWithIndex.foreach { case (in, idx) =>
+    val (dataBaseW, infoBaseW) = if (idx != 0) {
+      (dataCollect_vec(idx - 1).getWidth, infoCollect_vec(idx - 1).getWidth)
+    } else {
+      (0, 0)
+    }
     val collector = Module(
       new BatchCollector(
         chiselTypeOf(in.head),
         in.length,
-        dataCollect_vec(idx).getWidth,
-        infoCollect_vec(idx).getWidth,
+        dataBaseW,
+        infoBaseW,
         param,
         idx,
       )
     )
     collector.data_in := in
     collector.enable := global_enable
-    collector.data_base := dataCollect_vec(idx)
-    collector.info_base := infoCollect_vec(idx)
-    collector.data_len_base := dataLenCollect_vec(idx)
-    collector.info_len_base := infoLenCollect_vec(idx)
-    dataCollect_vec(idx + 1) := collector.data_out
-    infoCollect_vec(idx + 1) := collector.info_out
-    dataLenCollect_vec(idx + 1) := collector.data_len_out
-    infoLenCollect_vec(idx + 1) := collector.info_len_out
+    if (idx != 0) {
+      collector.data_base := dataCollect_vec(idx - 1)
+      collector.info_base := infoCollect_vec(idx - 1)
+      collector.data_len_base := dataLenCollect_vec(idx - 1)
+      collector.info_len_base := infoLenCollect_vec(idx - 1)
+    } else {
+      collector.data_base := 0.U
+      collector.info_base := 0.U
+      collector.data_len_base := 0.U
+      collector.info_len_base := 0.U
+    }
+    dataCollect_vec(idx) := collector.data_out
+    infoCollect_vec(idx) := collector.info_out
+    dataLenCollect_vec(idx) := collector.data_len_out
+    infoLenCollect_vec(idx) := collector.info_len_out
   }
 
   val BatchInterval = WireInit(0.U.asTypeOf(new BatchInfo))
@@ -198,10 +180,11 @@ class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: 
   val state_trace_size = Option.when(config.hasReplay)(RegInit(0.U(16.W)))
 
   val delayed_enable = Delayer(global_enable, inCollect.length)
-  val delayed_trace_size = Option.when(config.hasReplay) {
-    val trace_size = in.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo].trace_size
-    Delayer(trace_size, inCollect.length)
-  }
+
+  val (delayed_trace_size, delayed_in_replay) = if (config.hasReplay) {
+    val trace_info = in.map(_.bits).filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
+    (Some(Delayer(trace_info.trace_size, inCollect.length)), Some(Delayer(trace_info.in_replay, inCollect.length)))
+  } else (None, None)
   val data_exceed = delayed_enable && (state_data_len +& step_data_len > param.MaxDataByteLen.U)
   val info_exceed =
     delayed_enable && (state_info_len +& step_info_len + (param.infoWidth / 8).U > param.MaxInfoByteLen.U)
@@ -216,10 +199,6 @@ class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: 
     if (config.hasReplay) DifftestPerf("BatchExceed_trace", trace_exceed.get.asUInt)
   }
 
-  val delayed_in_replay = Option.when(config.hasReplay) {
-    val in_replay = in.filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo].in_replay
-    Delayer(in_replay, inCollect.length)
-  }
   val should_tick =
     data_exceed || info_exceed || step_exceed || trace_exceed.getOrElse(false.B) || delayed_in_replay.getOrElse(false.B)
   when(delayed_enable) {
@@ -247,34 +226,16 @@ class BatchEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig, param: 
   out.step := Mux(out.enable, state_step_cnt, 0.U)
 }
 
-// Align Bundles without Valid Option as Batch base
-class BatchBase(bundleType: DifftestBundle, length: Int, param: BatchParam) extends Module {
-  val dataOut_w = Batch.getAlignWidth(bundleType) * length
-
-  val data_in = IO(Input(Vec(length, bundleType)))
-
-  val data_out = IO(Output(UInt(dataOut_w.W)))
-  val info_out = IO(Output(UInt(param.infoWidth.W)))
-  val data_len_out = IO(Output(UInt(param.MaxDataByteWidth.W)))
-
-  data_out := VecInit(data_in.map(i => Batch.bundleAlign(i))).asUInt
-  val info = Wire(new BatchInfo)
-  info.id := Batch.getBundleID(bundleType).U
-  info.num := length.U
-  info_out := info.asUInt
-  data_len_out := (data_out.getWidth / 8).U
-}
-
 // Collect Bundles with Valid by pipeline, same Class will be processed in parallel
 class BatchCollector(
-  bundleType: DifftestBundle,
+  bundleType: Valid[DifftestBundle],
   length: Int,
   dataBase_w: Int,
   infoBase_w: Int,
   param: BatchParam,
   delay: Int,
 ) extends Module {
-  val alignWidth = Batch.getAlignWidth(bundleType)
+  val alignWidth = Batch.getAlignWidth(bundleType.bits)
   val dataOut_w = dataBase_w + alignWidth * length
   val infoOut_w = infoBase_w + param.infoWidth
 
@@ -296,14 +257,14 @@ class BatchCollector(
   val data_len_state = RegInit(0.U(param.MaxDataByteWidth.W))
   val info_len_state = RegInit(0.U(param.MaxInfoByteWidth.W))
 
-  val align_data = VecInit(data_in.map(i => Batch.bundleAlign(i)).toSeq)
-  val valid_vec = VecInit(data_in.map(i => i.bits.needUpdate.get && enable))
+  val align_data = VecInit(data_in.map(i => Batch.bundleAlign(i.bits)).toSeq)
+  val valid_vec = VecInit(data_in.map(i => i.valid && enable))
   val delay_data = Delayer(align_data.asUInt, delay, useMem = true).asTypeOf(align_data)
   val delay_valid = Delayer(valid_vec.asUInt, delay, useMem = true).asTypeOf(valid_vec)
 
   val valid_num = PopCount(delay_valid)
   val info = Wire(new BatchInfo)
-  info.id := Batch.getBundleID(bundleType).U
+  info.id := Batch.getBundleID(bundleType.bits).U
   info.num := valid_num
 
   val offset_map = (0 to length).map(i => i.U -> (i * alignWidth).U)

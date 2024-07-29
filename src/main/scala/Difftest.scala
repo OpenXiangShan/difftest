@@ -17,6 +17,7 @@
 package difftest
 
 import chisel3._
+import chisel3.util._
 import difftest.common.DifftestWiring
 import difftest.gateway.{Gateway, GatewayConfig}
 
@@ -119,12 +120,13 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   def toJsonProfile: Map[String, Any] = Map("className" -> this.getClass.getName)
 
+  // returns a Seq indicating the udpate dependencies. Default: empty
+  // Only when one of the dependencies is valid, this bundle is updated.
+  val updateDependency: Seq[String] = Seq()
+
   // returns Bool indicating whether `this` bundle can be squashed with `base`
   def supportsSquash(base: DifftestBundle): Bool = supportsSquashBase
   def supportsSquashBase: Bool = if (hasValid) !getValid else true.B
-  // returns a Seq indicating the squash dependencies. Default: empty
-  // Only when one of the dependencies is valid, this bundle is squashed.
-  val squashDependency: Seq[String] = Seq()
   // returns a seq of Group name of this bundle, Default: REF
   // Only bundles with same GroupName will affect others' squash state.
   // Some bundle will have several GroupName, such as LoadEvent
@@ -133,6 +135,15 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   // returns a squashed, right-value Bundle. Default: overriding `base` with `this`
   def squash(base: DifftestBundle): DifftestBundle = this
   def squashQueue: Boolean = false
+
+  // When enable squash, we append valid signal for DifftestBundle
+  def genValidBundle(valid: Bool): Valid[DifftestBundle] = {
+    val gen = Wire(Valid(chiselTypeOf(this)))
+    gen.valid := valid
+    gen.bits := this
+    gen
+  }
+  def genValidBundle: Valid[DifftestBundle] = genValidBundle(this.getValid)
 }
 
 class DiffArchEvent extends ArchEvent with DifftestBundle {
@@ -179,14 +190,16 @@ class DiffTrapEvent extends TrapEvent with DifftestBundle {
 class DiffCSRState extends CSRState with DifftestBundle {
   override val desiredCppName: String = "csr"
   override val desiredOffset: Int = 1
-  override val squashDependency: Seq[String] = Seq("commit", "event")
+  override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffHCSRState extends HCSRState with DifftestBundle {
   override val desiredCppName: String = "hcsr"
   override val desiredOffset: Int = 6
-  override val squashDependency: Seq[String] = Seq("commit", "event")
+  override val updateDependency: Seq[String] = Seq("commit", "event")
 }
+
+//class DiffHCSRStateValidate extends DiffHCSRState with DifftestIsValidated
 
 class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
   override val desiredCppName: String = "dmregs"
@@ -194,7 +207,7 @@ class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
 
 class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
   override val desiredCppName: String = "triggercsr"
-  override val squashDependency: Seq[String] = Seq("commit", "event")
+  override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
@@ -246,7 +259,7 @@ class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val desiredCppName: String = "vcsr"
   override val desiredOffset: Int = 5
-  override val squashDependency: Seq[String] = Seq("commit", "event")
+  override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
