@@ -22,7 +22,7 @@ import difftest.common.DifftestWiring
 import difftest.gateway.{Gateway, GatewayConfig}
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Paths, StandardOpenOption}
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 import org.json4s.DefaultFormats
@@ -533,11 +533,20 @@ object DifftestModule {
     streamToFile(difftestJson, "difftest_profile.json")
   }
 
-  def streamToFile(fileStream: ListBuffer[String], fileName: String) {
+  def streamToFile(fileStream: ListBuffer[String], fileName: String, append: Boolean = false) {
     val outputDir = sys.env("NOOP_HOME") + "/build/generated-src/"
     Files.createDirectories(Paths.get(outputDir))
     val outputFile = outputDir + fileName
-    Files.write(Paths.get(outputFile), fileStream.mkString("\n").getBytes(StandardCharsets.UTF_8))
+    val options = if (append) {
+      Seq(StandardOpenOption.CREATE, StandardOpenOption.APPEND)
+    } else {
+      Seq(StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+    }
+    Files.write(
+      Paths.get(outputFile),
+      (fileStream.mkString("\n") + "\n").getBytes(StandardCharsets.UTF_8),
+      options: _*
+    )
   }
 }
 
