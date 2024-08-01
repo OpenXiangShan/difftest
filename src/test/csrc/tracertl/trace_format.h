@@ -39,8 +39,7 @@ struct TraceInstruction {
   uint8_t branch_taken;
 
   bool legalInst() {
-    if ((instr_pc_va == 0) &&
-      (instr_pc_pa == 0) &&
+    if ((instr_pc_va == 0) ||
       (instr == 0)) {
       return false;
     }
@@ -59,6 +58,7 @@ struct TraceInstruction {
       printf(" is_branch %d taken %d target %08lx", branch_type, branch_taken, target);
     }
     printf("\n");
+    fflush(stdout);
   }
 };
 
@@ -69,9 +69,10 @@ struct Instruction : TraceInstruction {
   void dump() {
     printf("[0x%08lx]: ", inst_id);
     TraceInstruction::dump();
+    fflush(stdout);
   }
 
-  void fromTraceInst(TraceInstruction t) {
+  inline void fromTraceInst(TraceInstruction t) {
     instr_pc_va = t.instr_pc_va;
     instr_pc_pa = t.instr_pc_pa;
     memory_address_va = t.memory_address_va;
@@ -82,6 +83,13 @@ struct Instruction : TraceInstruction {
     memory_size = t.memory_size;
     branch_type = t.branch_type;
     branch_taken = t.branch_taken;
+  }
+
+  bool legalInst() {
+    if (inst_id == 0) {
+      return false;
+    }
+    return TraceInstruction::legalInst();
   }
 };
 
