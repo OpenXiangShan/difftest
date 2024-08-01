@@ -41,17 +41,17 @@ private:
 public:
   TraceICache(const char *binary_name);
   ~TraceICache();
-  bool readCacheLine(char *line, int addr);
-  bool readHalfCacheLine(char *line, int addr);
+  bool readCacheLine(char *line, uint64_t addr);
+  bool readHalfCacheLine(char *line, uint64_t addr);
   bool readDWord(uint64_t *dest, uint64_t addr);
-  int ramAddr(int addr, uint64_t size) {
+  uint64_t ramAddr(uint64_t addr, uint64_t size) {
     return alignAddr(addr - base_addr, size);
   }
-  int alignAddr(int addr, uint64_t size) {
+  uint64_t alignAddr(uint64_t addr, uint32_t size) {
     return addr & ~(size - 1);
   }
-  int legalAddr(int addr) {
-    return ((addr >= base_addr) && ((addr < base_addr) + ram_size));
+  bool legalAddr(uint64_t addr, int size = 8) {
+    return (addr >= base_addr) && ((addr + size) < (base_addr + ram_size));
   }
 };
 

@@ -127,6 +127,12 @@ extern "C" void trace_read_one_instr(
   // inst.dump();
   // fflush(stdout);
 
+  if (!inst.legalInst()) {
+    printf("trace_read_one_instr: error inst. Finish\n");
+    inst.dump();
+    Log();
+    trace_reader->setOver();
+  }
   *pc_va = inst.instr_pc_va;
   *pc_pa = inst.instr_pc_pa == 0 ? inst.instr_pc_va : inst.instr_pc_pa;
   *memory_addr_va = inst.memory_address_va;
@@ -156,6 +162,7 @@ extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx) {
 TraceICache *trace_icache = NULL;
 
 extern "C" void init_traceicache(const char *binary_name) {
+  printf("init fake trace icache %s\n", binary_name);
   trace_icache = new TraceICache(binary_name);
 }
 

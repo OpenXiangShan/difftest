@@ -50,28 +50,29 @@ TraceICache::TraceICache(const char *binary_name) {
   }
 
   base_addr = 0x80000000; // 2GB
+  printf("Init TraceICache %s baseAddr %08lx ram_size %08lx\n", binary_name, base_addr, ram_size);
 }
 
-bool TraceICache::readCacheLine(char *line, int addr) {
+bool TraceICache::readCacheLine(char *line, uint64_t addr) {
   if (!legalAddr(addr)) {
     // perror("illegal address");
     // exit(EXIT_FAILURE);
     return false;
   }
 
-  int ram_addr = ramAddr(addr, sizeof(TraceCacheLine));
+  uint64_t ram_addr = ramAddr(addr, sizeof(TraceCacheLine));
   memcpy(line, (char *)(ram + ram_addr), sizeof(TraceCacheLine));
   return true;
 }
 
-bool TraceICache::readHalfCacheLine(char *line, int addr) {
+bool TraceICache::readHalfCacheLine(char *line, uint64_t addr) {
   if (!legalAddr(addr)) {
     // perror("illegal address");
     // exit(EXIT_FAILURE);
     return false;
   }
 
-  int ram_addr = ramAddr(addr, sizeof(TraceHalfCacheLine));
+  uint64_t ram_addr = ramAddr(addr, sizeof(TraceHalfCacheLine));
   memcpy(line, (char *)(ram + ram_addr), sizeof(TraceHalfCacheLine));
   return true;
 }
@@ -83,7 +84,7 @@ bool TraceICache::readDWord(uint64_t *dest, uint64_t addr) {
     return false;
   }
 
-  int ram_addr = ramAddr(addr, sizeof(uint64_t));
+  uint64_t ram_addr = ramAddr(addr, sizeof(uint64_t));
   memcpy(dest, (char *)(ram + ram_addr), sizeof(uint64_t));
   return true;
 }
