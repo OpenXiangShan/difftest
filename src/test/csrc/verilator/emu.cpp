@@ -104,6 +104,9 @@ static inline void print_help(const char *file) {
   printf("      --dump-db              enable database dump\n");
   printf("      --dump-select-db       select database's table to dump\n");
 #endif
+#ifdef ENABLE_CHISEL_MAP
+  printf("      --dump-chiselmap       enable chiselmap dump\n");
+#endif
   printf("  -F, --flash                the flash bin file for simulation\n");
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
@@ -169,6 +172,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dramsim3-ini",      1, NULL,  0  },
     { "overwrite-auto",    1, NULL,  0  },
     { "tracertl-file",     1, NULL,  0  },
+    { "dump-chiselmap",    0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -274,6 +278,13 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] tracertl is not enabled at compile time, ignore --tracertl-file\n");
             continue;
 #endif // TRACERTL_MODE
+          case 28:
+#ifdef ENABLE_CHISEL_MAP
+            args.dump_chiselmap = true; continue;
+#else
+            printf("[WARN] chiselmap is not enabled at compile time, ignore --dump-chiselmap\n");
+            continue;
+#endif // ENABLE_CHISEL_MAP
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -400,7 +411,7 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #ifdef TRACERTL_MODE
   // Use fakeicache for placeholder
-  // init_traceicache(args.image);
+  init_traceicache(args.image);
   if (args.tracertl_file) {
     init_tracertl(args.tracertl_file);
   } else {
@@ -599,9 +610,10 @@ Emulator::~Emulator() {
 #endif
 
 #ifdef ENABLE_CHISEL_MAP
-  time_t now_map = time(NULL);
-  // save_maps(logdb_filename(now_map));
-  save_maps(chiselmap_filename(now_map));
+  if (args.dump_chiselmap) {
+    time_t now_map = time(NULL);
+    save_maps(chiselmap_filename(now_map));
+  }
 #endif
 
   elapsed_time = uptime() - elapsed_time;
@@ -818,8 +830,10 @@ int Emulator::tick() {
       dut_ptr->difftest_perfCtrl_dump = 1;
       args.warmup_instr = -1;
 #ifdef ENABLE_CHISEL_MAP
-      time_t now_map = time(NULL);
-      warmup_save_maps(chiselmap_filename(now_map));
+      if (args.dump_chiselmap) {
+        time_t now_map = time(NULL);
+        warmup_save_maps(chiselmap_filename(now_map));
+      }
 #endif // ENABLE_CHISEL_MAP
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {

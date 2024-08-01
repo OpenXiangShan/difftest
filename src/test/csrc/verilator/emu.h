@@ -78,6 +78,7 @@ struct EmuArgs {
   bool enable_fork = false;
   bool enable_runahead = false;
   bool dump_db = false;
+  bool dump_chiselmap = false;
   bool trace_is_read = true;
   bool dump_coverage = false;
   bool image_as_footprints = false;
