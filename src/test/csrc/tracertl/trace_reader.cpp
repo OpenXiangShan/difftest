@@ -20,12 +20,35 @@
 
 TraceReader::TraceReader(std::string trace_file_name)
 {
-  trace_stream = new std::ifstream(trace_file_name, std::ios_base::in);
-  if ((!trace_stream->is_open())) {
+  // preread trace
+  trace_stream_preread = new std::ifstream(trace_file_name, std::ios_base::in);
+  if ((!trace_stream_preread->is_open())) {
     std::ostringstream oss;
-    oss << "[TraceReader.TraceReader] Could not open file: " << trace_file_name;
+    oss << "[TraceReader.TraceReader] preread. Could not open file: " << trace_file_name;
     throw std::runtime_error(oss.str());
   }
+  inst_id_preread.pop(); // set init id to 1
+
+  printf("TraceRTL: preread tracefile...\n");
+  fflush(stdout);
+  while (!trace_stream_preread->eof()) {
+    TraceInstruction static_inst;
+    Instruction inst;
+    trace_stream_preread->read(reinterpret_cast<char *> (&static_inst), sizeof(TraceInstruction));
+    inst.fromTraceInst(static_inst);
+    inst.inst_id = inst_id_preread.pop();
+
+    if (!inst.legalInst()) {
+      setError();
+      printf("TraceRTL preread: read from trace file, but illegal inst. Dump the inst:\n");
+      inst.dump();
+    }
+    instList_preread.push(inst);
+  }
+  printf("TraceRTL: preread tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());
+  fflush(stdout);
+  trace_stream_preread->close();
+  delete trace_stream_preread;
 }
 
 bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {
@@ -60,18 +83,8 @@ bool TraceReader::read(Instruction &inst) {
     inst = redirectInstList.front();
     redirectInstList.pop_front();
   } else {
-    // read a inst from the source
-    TraceInstruction static_inst;
-    trace_stream->read(reinterpret_cast<char *> (&static_inst), sizeof(TraceInstruction));
-    inst.fromTraceInst(static_inst);
-    inst.inst_id = current_inst_id.pop();
-
-    if (!static_inst.legalInst()) {
-      setError();
-      printf("TraceRTL: read from trace file, but illegal inst. Dump the static_inst and inst:\n");
-      static_inst.dump();
-      inst.dump();
-    }
+    inst = instList_preread.front();
+    instList_preread.pop();
   }
   pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
@@ -253,7 +266,7 @@ void TraceReader::dump_committed_inst() {
 
 bool TraceReader::traceOver() {
   // end of file or add signal into the trace
-  return redirectInstList.empty() && trace_stream->eof();
+  return redirectInstList.empty() && instList_preread.empty();
 }
 
 bool TraceReader::update_tick(uint64_t tick) {

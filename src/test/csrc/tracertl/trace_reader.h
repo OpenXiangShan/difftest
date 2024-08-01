@@ -19,6 +19,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <queue>
 #include "trace_format.h"
 #include "emu.h"
 
@@ -58,7 +59,9 @@ struct TraceCollectBufferEntry {
 #define TraceReadBufferSize TraceFetchWidth
 
 class TraceReader {
-  std::ifstream *trace_stream;
+  std::ifstream *trace_stream_preread;
+  TraceCounter inst_id_preread;
+  std::queue<Instruction> instList_preread;
 
   TraceStatus status;
   TraceCollectInstruction errorInst;
@@ -75,7 +78,6 @@ class TraceReader {
   // but, for the redirect, we need to pop_back to get the older(bigger inst_id) inst
 
   // Commit Check
-  TraceCounter current_inst_id;
   // pending: inserted to dut.
   // Usage1: used by check method to difftest with the dut's commit info
   // Usage2: used by redirect method to re-insert to dut
@@ -108,7 +110,6 @@ class TraceReader {
 public:
   TraceReader(std::string trace_file_name);
   ~TraceReader() {
-    delete trace_stream;
   }
   /* get an instruction from file */
   // Used by dut to read
