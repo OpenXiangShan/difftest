@@ -51,7 +51,7 @@ object Trace {
     uniqBundles.foreach { case (name, gens) =>
       difftestCpp += gens.head.toTraceDeclaration
       difftestCpp += ""
-      val suffix = if (gens.length == 1) "" else s"[$gens.length]"
+      val suffix = if (gens.length == 1) "" else s"[${gens.length}]"
       val typeName = name.replace("Difftest", "DiffTrace")
       traceDecl += f"  ${typeName}%-30s ${gens.head.desiredCppName}${suffix};"
     }
