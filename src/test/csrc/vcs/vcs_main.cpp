@@ -34,6 +34,7 @@
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
+#include "remote_bitbang.h"
 
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
@@ -134,6 +135,10 @@ extern "C" bool workload_list_completed() {
 extern "C" void set_no_diff() {
   printf("disable diff-test\n");
   enable_difftest = false;
+}
+
+extern "C" void set_simjtag() {
+  enable_simjtag = true;
 }
 
 extern "C" uint8_t simv_init() {
