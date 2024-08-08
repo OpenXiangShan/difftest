@@ -107,6 +107,10 @@ class TraceReader {
   TraceCollectBufferEntry commitBuffer[TraceCommitBufferSize];
   TraceCollectBufferEntry driveBuffer[TraceDriveBufferSize];
 
+  // performance counter
+  uint64_t counterReadFromRedirect = 0;
+  uint64_t counterReadFromInstList = 0;
+
 public:
   TraceReader(std::string trace_file_name);
   ~TraceReader() {

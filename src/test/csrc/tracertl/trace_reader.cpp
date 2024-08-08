@@ -79,13 +79,21 @@ bool TraceReader::prepareRead() {
 
 bool TraceReader::read(Instruction &inst) {
   // read a inst from redirect buffer
-  if (redirectInstList.size() > 0) {
+  if (!redirectInstList.empty()) {
     inst = redirectInstList.front();
     redirectInstList.pop_front();
-  } else {
+    counterReadFromRedirect ++;
+  } else if (!instList_preread.empty()) {
     inst = instList_preread.front();
     instList_preread.pop();
+    counterReadFromInstList ++;
+  } else {
+    setOver();
+    memset(reinterpret_cast<char *> (&inst), 0, sizeof(Instruction));
+    return false;
   }
+
+
   pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
 
@@ -123,6 +131,7 @@ void TraceReader::redirect(uint64_t inst_id) {
   // redirect inst from pendingInstList to redirectInstList
   while(pendingInstList.size() > 0){
     Instruction inst = pendingInstList.back();
+
     if (inst.inst_id < inst_id) break;
     pendingInstList.pop_back();
     redirectInstList.push_front(inst);
@@ -331,6 +340,7 @@ void TraceReader::success_dump() {
   printf("TraceRTL Dump:\n");
   printf("commit_inst_num: %lu\n", commit_inst_num.get());
   printf("last_commit_tick: %lu\n", last_commit_tick);
+  printf("inst read from instList: %lu from Redirect: %lu\n", counterReadFromInstList, counterReadFromRedirect);
 }
 
 void TraceReader::error_drive_dump() {

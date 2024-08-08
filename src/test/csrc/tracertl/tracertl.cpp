@@ -115,24 +115,12 @@ extern "C" void trace_read_one_instr(
   uint64_t *InstID,
   uint8_t idx) {
 
-  if (trace_reader->traceOver()) {
-    printf("trace_read_one_instr: traceOver. Finish\n");
-    trace_reader->setOver();
-    // TODO: insert nop
-    return ;
-  }
   Instruction inst;
   trace_reader->readFromBuffer(inst, idx);
   // printf("TraceRead idx %d", idx);
   // inst.dump();
   // fflush(stdout);
 
-  if (!inst.legalInst()) {
-    printf("trace_read_one_instr: error inst. Finish\n");
-    inst.dump();
-    Log();
-    trace_reader->setOver();
-  }
   *pc_va = inst.instr_pc_va;
   *pc_pa = inst.instr_pc_pa == 0 ? inst.instr_pc_va : inst.instr_pc_pa;
   *memory_addr_va = inst.memory_address_va;
