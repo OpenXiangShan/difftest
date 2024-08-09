@@ -318,6 +318,15 @@ int Difftest::step() {
     dut->event.valid = 0;
     dut->commit[0].valid = 0;
   } else {
+#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
+    if (dut->commit[0].valid) {
+      dut_commit_first_pc = dut->commit[0].pc;
+      ref_commit_first_pc = proxy->pc;
+      if (dut_commit_first_pc != ref_commit_first_pc) {
+        pc_mismatch = true;
+      }
+    }
+#endif
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
         if (do_instr_commit(i)) {
@@ -358,7 +367,7 @@ int Difftest::step() {
     return 1;
   }
 
-  if (proxy->compare(dut)) {
+  if (proxy->compare(dut) || pc_mismatch) {
 #ifdef FUZZING
     if (in_disambiguation_state()) {
       Info("Mismatch detected with a disambiguation state at pc = 0x%lx.\n", dut->trap.pc);
@@ -1201,6 +1210,10 @@ void Difftest::raise_trap(int trapCode) {
 }
 
 void Difftest::display() {
+  printf("\n==============  In the last commit group  ==============\n");
+  printf("the first commit instr pc of DUT is 0x%016lx\nthe first commit instr pc of REF is 0x%016lx\n",
+         dut_commit_first_pc, ref_commit_first_pc);
+
   state->display(this->id);
 
   printf("\n==============  REF Regs  ==============\n");
