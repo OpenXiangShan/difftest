@@ -152,6 +152,7 @@ class DifftestTrace(width: Int, isDump: Boolean) extends ExtModule with HasExtMo
   val io = IO(do_flip(Input(UInt(width.W))))
 
   val io_direction = if (isDump) "input" else "output"
+  val io_assign = if (isDump) "assign io_dummy = io;" else "assign io = io_dummy;"
   setInline(
     "DifftestTrace.v",
     s"""
@@ -164,9 +165,10 @@ class DifftestTrace(width: Int, isDump: Boolean) extends ExtModule with HasExtMo
        |import "DPI-C" function void v_difftest_trace (
        |  $io_direction bit[${width - 1}:0] io
        |);
-       |
+       |  bit[${width - 1}:0] io_dummy;
+       |  $io_assign
        |  always @(posedge clock) begin
-       |    if (enable) v_difftest_trace(io);
+       |    if (enable) v_difftest_trace(io_dummy);
        |  end
        |endmodule
        |""".stripMargin,

@@ -186,16 +186,17 @@ object Gateway {
 
 class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(instanceWithDelay.map { case (gen, _) => UInt(gen.getWidth.W) })))
-  val bundle = MixedVecInit(in.zip(instanceWithDelay).map { case (i, (gen, d)) => Delayer(i.asTypeOf(gen), d) }.toSeq)
-
+  val (gens, delays) = instanceWithDelay.unzip
+  val bundle = MixedVecInit(in.zip(gens).map { case (i, gen) => i.asTypeOf(gen) }.toSeq)
   if (config.traceDump) {
     Trace(bundle)
   }
+  val delayed = MixedVecInit(bundle.zip(delays).map { case (b, delay) => Delayer(b, delay) }.toSeq)
 
   val preprocessed = if (config.needPreprocess) {
-    WireInit(Preprocess(bundle, config))
+    WireInit(Preprocess(delayed, config))
   } else {
-    WireInit(bundle)
+    WireInit(delayed)
   }
 
   val replayed = if (config.hasReplay) {
