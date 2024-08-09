@@ -234,7 +234,7 @@ ifeq ($(shell clang-format --version 2> /dev/null| cut -f3 -d' ' | tr '.' '_'), 
 else
 	@echo "Required clang-format Version: $(CLANG_FORMAT_VER)"
 	@echo "Your Version: $(shell clang-format --version)"
-	@echo "Please run \"pip install --user clang-format==$(CLANG_FORMAT_VER)", then set PATH manually"
+	@echo "Please run \"pip install --user clang-format==$(CLANG_FORMAT_VER)\", then set PATH manually"
 endif
 
 .PHONY: sim-verilog emu difftest_verilog clean format scala-format clang-format
