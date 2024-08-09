@@ -34,6 +34,9 @@ int difftest_init() {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_perfcnt_init();
 #endif // CONFIG_DIFFTEST_PERFCNT
+#ifdef CONFIG_DIFFTEST_IOTRACE
+  difftest_iotrace_init();
+#endif // CONFIG_DIFFTEST_IOTRACE
   diffstate_buffer_init();
   difftest = new Difftest *[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
@@ -116,6 +119,9 @@ void difftest_finish() {
   uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
   difftest_perfcnt_finish(cycleCnt);
 #endif // CONFIG_DIFFTEST_PERFCNT
+#ifdef CONFIG_DIFFTEST_IOTRACE
+  difftest_iotrace_free();
+#endif // CONFIG_DIFFTEST_IOTRACE
   diffstate_buffer_free();
   for (int i = 0; i < NUM_CORES; i++) {
     delete difftest[i];

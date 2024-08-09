@@ -57,6 +57,9 @@ import "DPI-C" function byte workload_list_completed();
 `ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
 import "DPI-C" function byte simv_nstep(byte step);
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+`ifdef CONFIG_DIFFTEST_IOTRACE
+import "DPI-C" function void set_iotrace_name(string name);
+`endif // CONFIG_DIFFTEST_IOTRACE
 `endif // TB_NO_DPIC
 
 `define SIMV_DONE     8'h1
@@ -70,6 +73,7 @@ string flash_bin_file;
 string gcpt_bin_file;
 string diff_ref_so;
 string workload_list;
+string iotrace_name;
 longint overwrite_nbytes;
 
 reg [63:0] max_instrs;
@@ -125,6 +129,13 @@ initial begin
     $value$plusargs("max-instrs=%d", max_instrs);
     set_max_instrs(max_instrs);
   end
+`ifdef CONFIG_DIFFTEST_IOTRACE
+  // set difftest iotrace directory path
+  if ($test$plusargs("iotrace-name")) begin
+    $value$plusargs("iotrace-name=%s", iotrace_name);
+    set_iotrace_name(iotrace_name);
+  end
+`endif // CONFIG_DIFFTEST_IOTRACE
 `ifdef ENABLE_WORKLOAD_SWITCH
   // set workload list
   if ($test$plusargs("workload-list")) begin

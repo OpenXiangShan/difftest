@@ -111,6 +111,7 @@ static inline void print_help(const char *file) {
 #endif // VM_COVERAGE
   printf("      --load-difftrace=NAME  load from trace NAME\n");
   printf("      --dump-difftrace=NAME  dump to trace NAME\n");
+  printf("      --iotrace-name=NAME    load from/dump to iotrace NAME\n");
   printf("      --dump-footprints=NAME dump memory access footprints to NAME\n");
   printf("      --as-footprints        load the image as memory access footprints\n");
   printf("      --dump-linearized=NAME dump the linearized footprints to NAME\n");
@@ -151,6 +152,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dump-wave-full",    0, NULL,  0  },
     { "overwrite-nbytes",  1, NULL,  0  },
     { "remote-jtag-port",  1, NULL,  0  },
+    { "iotrace-name",      1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -232,6 +234,13 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             continue;
           case 22: args.overwrite_nbytes = atoll_strict(optarg, "overwrite_nbytes"); continue;
           case 23: remote_jtag_port = atoll_strict(optarg, "remote-jtag-port"); continue;
+          case 24:
+#ifdef CONFIG_DIFFTEST_IOTRACE
+            set_iotrace_name(optarg);
+#else
+            printf("[WARN] iotrace is not enabled at compile time, ignore --iotrace-name");
+#endif // CONFIG_DIFFTEST_IOTRACE
+            continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);

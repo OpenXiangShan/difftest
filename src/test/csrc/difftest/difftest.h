@@ -227,7 +227,7 @@ public:
   void display_stats();
 
   void set_trace(const char *name, bool is_read) {
-    difftrace = new DiffTrace(name, is_read);
+    difftrace = new DiffTrace<DiffTestState>(name, is_read);
   }
   void trace_read() {
     if (difftrace) {
@@ -277,7 +277,7 @@ public:
   }
 
 protected:
-  DiffTrace *difftrace = nullptr;
+  DiffTrace<DiffTestState> *difftrace = nullptr;
 
 #ifdef CONFIG_DIFFTEST_BATCH
   const uint64_t commit_storage = CONFIG_DIFFTEST_BATCH_SIZE;
