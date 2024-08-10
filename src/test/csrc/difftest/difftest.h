@@ -304,6 +304,11 @@ protected:
   uint64_t ticks = 0;
   uint64_t last_commit = 0;
 
+  // For compare the first instr pc of a commit group
+  bool pc_mismatch = false;
+  uint64_t dut_commit_first_pc = 0;
+  uint64_t ref_commit_first_pc = 0;
+
   uint64_t nemu_this_pc;
   DiffState *state = NULL;
 #ifdef DEBUG_REFILL
