@@ -68,42 +68,11 @@ object Batch {
   def getBundleID(bundleType: DifftestBundle): Int = {
     template.indexWhere(_.desiredCppName == bundleType.desiredCppName)
   }
-
-  def getAlignWidth(bundleType: DifftestBundle): Int = {
-    def byteAlignWidth(data: Data) = (data.getWidth + 7) / 8 * 8
-    bundleType.elements.toSeq.reverse
-      .filterNot(bundleType.isFlatten && _._1 == "valid")
-      .map { case (_, data) =>
-        data match {
-          case vec: Vec[_] => vec.map(byteAlignWidth(_)).sum
-          case _           => byteAlignWidth(data)
-        }
-      }
-      .sum
-  }
-
-  def bundleAlign(bundle: DifftestBundle): UInt = {
-    def byteAlign(data: Data): UInt = {
-      val width: Int = (data.getWidth + 7) / 8 * 8
-      data.asTypeOf(UInt(width.W))
-    }
-
-    MixedVecInit(
-      bundle.elements.toSeq.reverse
-        .filterNot(bundle.isFlatten && _._1 == "valid")
-        .flatMap { case (_, data) =>
-          data match {
-            case vec: Vec[_] => vec.map(byteAlign(_))
-            case _           => Seq(byteAlign(data))
-          }
-        }
-    ).asUInt
-  }
 }
 
 class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig, param: BatchParam) extends Module {
   val in = IO(Input(MixedVec(bundles)))
-  def vecAlignWidth = (vec: Seq[Valid[DifftestBundle]]) => Batch.getAlignWidth(vec.head.bits) * vec.length
+  def vecAlignWidth = (vec: Seq[Valid[DifftestBundle]]) => vec.head.bits.getByteAlign.getWidth * vec.length
 
   // Collect bundles with valid in Pipeline
   val global_enable = VecInit(in.map(_.valid).toSeq).asUInt.orR
@@ -235,7 +204,7 @@ class BatchCollector(
   param: BatchParam,
   delay: Int,
 ) extends Module {
-  val alignWidth = Batch.getAlignWidth(bundleType.bits)
+  val alignWidth = bundleType.bits.getByteAlignWidth
   val dataOut_w = dataBase_w + alignWidth * length
   val infoOut_w = infoBase_w + param.infoWidth
 
@@ -257,7 +226,7 @@ class BatchCollector(
   val data_len_state = RegInit(0.U(param.MaxDataByteWidth.W))
   val info_len_state = RegInit(0.U(param.MaxInfoByteWidth.W))
 
-  val align_data = VecInit(data_in.map(i => Batch.bundleAlign(i.bits)).toSeq)
+  val align_data = VecInit(data_in.map(i => i.bits.getByteAlign).toSeq)
   val valid_vec = VecInit(data_in.map(i => i.valid && enable))
   val delay_data = Delayer(align_data.asUInt, delay, useMem = true).asTypeOf(align_data)
   val delay_valid = Delayer(valid_vec.asUInt, delay, useMem = true).asTypeOf(valid_vec)
