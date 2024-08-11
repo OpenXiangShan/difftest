@@ -18,6 +18,7 @@ package difftest
 
 import chisel3._
 import chisel3.util._
+import chisel3.reflect.DataMirror
 import difftest.common.DifftestWiring
 import difftest.gateway.{Gateway, GatewayConfig}
 
@@ -161,25 +162,37 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   def genValidBundle: Valid[DifftestBundle] = genValidBundle(this.getValid)
 
   // Byte align all elements
-  def getByteAlign(isTrace: Boolean): UInt = {
+  def getByteAlignElems(isTrace: Boolean): Seq[(String, Data)] = {
     def byteAlign(data: Data): UInt = {
       val width: Int = (data.getWidth + 7) / 8 * 8
       data.asTypeOf(UInt(width.W))
     }
-
-    MixedVecInit(
-      this.elements.toSeq.reverse
-        .filterNot(this.isFlatten && _._1 == "valid" && !isTrace)
-        .flatMap { case (_, data) =>
-          data match {
-            case vec: Vec[_] => vec.map(byteAlign(_))
-            case _           => Seq(byteAlign(data))
-          }
-        }
-    ).asUInt
+    val gen = if (DataMirror.isWire(this) || DataMirror.isReg(this) || DataMirror.isIO(this)) {
+      this
+    } else {
+      0.U.asTypeOf(this)
+    }
+    val elems = if (isTrace) {
+      gen.elements.toSeq.reverse
+    } else {
+      // Reorder to separate locating and transmitted data
+      def locFilter: ((String, Data)) => Boolean = { case (name, _) =>
+        Seq("coreid", "index", "address").contains(name)
+      }
+      val raw = gen.elements.toSeq.reverse.filterNot(this.isFlatten && _._1 == "valid")
+      raw.filterNot(locFilter) ++ raw.filter(locFilter)
+    }
+    elems.flatMap { case (name, data) =>
+      data match {
+        case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"{${name}_$i}", byteAlign(v)) }
+        case _           => Seq((s"$name", byteAlign(data)))
+      }
+    }
   }
+  def getByteAlignElems: Seq[(String, Data)] = getByteAlignElems(false)
+  def getByteAlign(isTrace: Boolean): UInt = MixedVecInit(getByteAlignElems(isTrace).map(_._2)).asUInt
   def getByteAlign: UInt = getByteAlign(false)
-  def getByteAlignWidth(isTrace: Boolean): Int = WireInit(0.U.asTypeOf(this)).getByteAlign(isTrace).getWidth
+  def getByteAlignWidth(isTrace: Boolean): Int = this.getByteAlign(isTrace).getWidth
   def getByteAlignWidth: Int = getByteAlignWidth(false)
   def reverseByteAlign(aligned: UInt, isTrace: Boolean): DifftestBundle = {
     require(aligned.getWidth == this.getByteAlignWidth(isTrace))
