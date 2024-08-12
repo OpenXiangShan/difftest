@@ -263,6 +263,7 @@ int Runahead::memdep_check(int i, RunaheadResponseQuery *ref_mem_query_result) {
 #endif
 
 int Runahead::step() { // override step() method
+  static uint64_t ticks = 0;
   ticks++;
   if (dut_ptr->event.interrupt) {
     assert(0); //TODO

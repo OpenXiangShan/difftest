@@ -82,6 +82,14 @@ extern "C" void set_max_instrs(uint64_t mc) {
   max_instrs = mc;
 }
 
+extern "C" uint64_t get_stuck_limit() {
+#ifdef CONFIG_NO_DIFFTEST
+  return 0;
+#else
+  return Difftest::stuck_limit;
+#endif // CONFIG_NO_DIFFTEST
+}
+
 #ifndef CONFIG_NO_DIFFTEST
 extern const char *difftest_ref_so;
 extern "C" void set_diff_ref_so(char *s) {

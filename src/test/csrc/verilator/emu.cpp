@@ -803,6 +803,17 @@ int Emulator::tick() {
     step = dut_ptr->difftest_step;
   }
 
+  static uint64_t stuck_timer = 0;
+  if (step) {
+    stuck_timer = 0;
+  } else {
+    stuck_timer++;
+    if (stuck_timer >= Difftest::stuck_limit) {
+      Info("No difftest check for more than %lu cycles, maybe get stuck.", Difftest::stuck_limit);
+      return STATE_ABORT;
+    }
+  }
+
   if (args.trace_name && !args.trace_is_read) {
     difftest_trace_write(step);
   }

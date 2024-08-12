@@ -238,7 +238,6 @@ void Difftest::do_replay() {
 
 int Difftest::step() {
   progress = false;
-  ticks++;
 
 #ifdef CONFIG_DIFFTEST_REPLAY
   if (replay_status.in_replay && !in_replay_range()) {
@@ -1060,9 +1059,11 @@ void dumpGoldenMem(const char *banner, uint64_t addr, uint64_t time) {
 #ifdef DEBUG_GOLDENMEM
 int Difftest::do_golden_memory_update() {
   // Update Golden Memory info
-
-  if (ticks == 100) {
-    dumpGoldenMem("Init", track_instr, ticks);
+  uint64_t cycleCnt = get_trap_event()->cycleCnt;
+  static bool initDump = true;
+  if (cycleCnt >= 100 && initDump) {
+    initDump = false;
+    dumpGoldenMem("Init", track_instr, cycleCnt);
   }
 
 #ifdef CONFIG_DIFFTEST_SBUFFEREVENT
@@ -1071,7 +1072,7 @@ int Difftest::do_golden_memory_update() {
       dut->sbuffer[i].valid = 0;
       update_goldenmem(dut->sbuffer[i].addr, dut->sbuffer[i].data, dut->sbuffer[i].mask, 64);
       if (dut->sbuffer[i].addr == track_instr) {
-        dumpGoldenMem("Store", track_instr, ticks);
+        dumpGoldenMem("Store", track_instr, cycleCnt);
       }
     }
   }
@@ -1083,7 +1084,7 @@ int Difftest::do_golden_memory_update() {
     int ret =
         handle_atomic(id, dut->atomic.addr, dut->atomic.data, dut->atomic.mask, dut->atomic.fuop, dut->atomic.out);
     if (dut->atomic.addr == track_instr) {
-      dumpGoldenMem("Atmoic", track_instr, ticks);
+      dumpGoldenMem("Atmoic", track_instr, cycleCnt);
     }
     if (ret)
       return ret;
@@ -1119,10 +1120,11 @@ void Difftest::load_event_record() {
 #endif // CONFIG_DIFFTEST_SQUASH
 
 int Difftest::check_timeout() {
+  uint64_t cycleCnt = get_trap_event()->cycleCnt;
   // check whether there're any commits since the simulation starts
-  if (!has_commit && ticks > last_commit + firstCommit_limit) {
+  if (!has_commit && cycleCnt > last_commit + first_commit_limit) {
     Info("The first instruction of core %d at 0x%lx does not commit after %lu cycles.\n", id, FIRST_INST_ADDRESS,
-         firstCommit_limit);
+         first_commit_limit);
     display();
     return 1;
   }
@@ -1135,11 +1137,11 @@ int Difftest::check_timeout() {
   }
 
   // check whether there're any commits in the last `stuck_limit` cycles
-  if (has_commit && ticks > last_commit + stuck_limit) {
+  if (has_commit && cycleCnt > last_commit + stuck_commit_limit) {
     Info(
         "No instruction of core %d commits for %lu cycles, maybe get stuck\n"
         "(please also check whether a fence.i instruction requires more than %lu cycles to flush the icache)\n",
-        id, stuck_limit, stuck_limit);
+        id, stuck_commit_limit, stuck_commit_limit);
     Info("Let REF run one more instruction.\n");
     proxy->ref_exec(1);
     display();
