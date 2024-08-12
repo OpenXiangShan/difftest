@@ -196,35 +196,17 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
 
   def getDPICBundleUnpack(gen: DifftestBundle): String = {
     val unpack = ListBuffer.empty[String]
-    case class ArgPair(name: String, len: Int, offset: Int)
-    def getBundleArgs(gen: DifftestBundle): Seq[ArgPair] = {
-      def byteCnt(data: Data): Int = (data.getWidth + 7) / 8
-      val argsWithLen = gen.elements.toSeq.reverse
-        .filterNot(gen.isFlatten && _._1 == "valid")
-        .flatMap { case (name, data) =>
-          data match {
-            case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"{${name}_$i}", byteCnt(v)) }
-            case _           => Seq((s"$name", byteCnt(data)))
-          }
-        }
-      argsWithLen.zipWithIndex.map { case ((name, len), idx) =>
-        val offset = argsWithLen.take(idx).map(_._2).sum
-        ArgPair(name, len, offset)
+    // Note: locating elems will not in struct defined, but at the end of reordered Bundle
+    val (elem_names, elem_bytes) = gen.getByteAlignElems.map { case (name, data) => (name, data.getWidth / 8) }.unzip
+    elem_names.zipWithIndex.foreach { case (name, idx) =>
+      if (Seq("coreid", "index", "address").contains(name)) {
+        val offset = elem_bytes.take(idx).sum
+        unpack += s"$name = data[$offset];"
       }
     }
-
-    // Note: filterArgs will not in struct defined, but at the beginning or the end of Bundle
-    val bundleArgs = getBundleArgs(gen)
-    val filterArgs = Seq("coreid", "index", "address")
-    unpack ++= bundleArgs.filter(p => filterArgs.contains(p.name)).map(p => s"${p.name} = data[${p.offset}];")
     unpack += getPacketDecl(gen, "", config)
-    val packedArgs = bundleArgs.filterNot(p => filterArgs.contains(p.name))
-    val ptrOffset: String = packedArgs.head.offset match {
-      case 0 => ""
-      case n => s" + $n"
-    }
-    unpack += s"memcpy(packet, data$ptrOffset, sizeof(${gen.desiredModuleName}));"
-    unpack += s"data += ${bundleArgs.map(_.len).sum};"
+    unpack += s"memcpy(packet, data, sizeof(${gen.desiredModuleName}));"
+    unpack += s"data += ${elem_bytes.sum};"
     unpack.toSeq.mkString("\n        ")
   }
 
