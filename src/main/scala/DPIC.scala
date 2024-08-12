@@ -292,7 +292,6 @@ private class DummyDPICWrapper(gen: Valid[DifftestBundle], config: GatewayConfig
   dpic.clock := clock
   dpic.enable := io.valid && control.enable
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
-  if (config.hasInternalStep) dpic.step.get := control.step.get
   dpic.io := io.bits
 }
 
