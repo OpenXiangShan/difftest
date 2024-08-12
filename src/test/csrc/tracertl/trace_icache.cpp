@@ -24,72 +24,37 @@
 #include <iostream>
 #include "trace_icache.h"
 
-TraceICache::TraceICache(const char *binary_name) {
+TraceICache::TraceICache() {
   // uint64_t memory_size = 8 * 1024 * 1024 * 1024UL; // 8GB
-  fd = open(binary_name, O_RDONLY);
-  if (fd == -1) {
-    perror("open file failed.");
-    exit(EXIT_FAILURE);
-    return;
-  }
-  struct stat sb;
-  if (fstat(fd, &sb) == -1) {
-    perror("fstat failed.");
-    close(fd);
-    exit(EXIT_FAILURE);
-  }
-
-  mmap_size = sb.st_size;
-  ram_size = mmap_size;
-  ram = (char *)mmap(NULL, mmap_size, PROT_READ, MAP_PRIVATE, fd, 0);
-
-  if (ram == MAP_FAILED) {
-    perror("mmap failed.");
-    close(fd);
-    exit(EXIT_FAILURE);
-  }
-
-  base_addr = 0x80000000; // 2GB
-  printf("Init TraceICache %s baseAddr %08lx ram_size %08lx\n", binary_name, base_addr, ram_size);
 }
 
-bool TraceICache::readCacheLine(char *line, uint64_t addr) {
-  if (!legalAddr(addr)) {
-    // perror("illegal address");
-    // exit(EXIT_FAILURE);
-    return false;
+void TraceICache::constructICache(uint64_t vaddr, uint32_t inst) {
+  bool isRVC = (inst & 0x3) != 0x3;
+  if (isRVC) {
+    icache_va[vaddr >> 1] = (uint16_t) (inst & 0xffff);
+  } else {
+    icache_va[vaddr >> 1] = (uint16_t) (inst & 0xffff);
+    icache_va[(vaddr >> 1) + 1] = (uint16_t) (inst >> 16);
   }
-
-  uint64_t ram_addr = ramAddr(addr, sizeof(TraceCacheLine));
-  memcpy(line, (char *)(ram + ram_addr), sizeof(TraceCacheLine));
-  return true;
 }
 
-bool TraceICache::readHalfCacheLine(char *line, uint64_t addr) {
-  if (!legalAddr(addr)) {
-    // perror("illegal address");
-    // exit(EXIT_FAILURE);
-    return false;
+uint16_t TraceICache::readHWord(uint64_t key) {
+  auto it = icache_va.find(key);
+  if (it != icache_va.end()) {
+    return it->second;
+  } else {
+    return 0;
   }
-
-  uint64_t ram_addr = ramAddr(addr, sizeof(TraceHalfCacheLine));
-  memcpy(line, (char *)(ram + ram_addr), sizeof(TraceHalfCacheLine));
-  return true;
 }
 
-bool TraceICache::readDWord(uint64_t *dest, uint64_t addr) {
-  if (!legalAddr(addr)) {
-    // perror("illegal address");
-    // exit(EXIT_FAILURE);
-    return false;
-  }
-
-  uint64_t ram_addr = ramAddr(addr, sizeof(uint64_t));
-  memcpy(dest, (char *)(ram + ram_addr), sizeof(uint64_t));
-  return true;
+void TraceICache::readDWord(uint64_t &dest, uint64_t addr) {
+  uint64_t addr_inner = addr >> 1;
+  dest = 0;
+  dest |= (uint64_t)readHWord(addr_inner + 0);
+  dest |= (uint64_t)readHWord(addr_inner + 1) << 16;
+  dest |= (uint64_t)readHWord(addr_inner + 2) << 32;
+  dest |= (uint64_t)readHWord(addr_inner + 3) << 48;
 }
 
 TraceICache::~TraceICache() {
-  close(fd);
-  munmap(ram, mmap_size);
 }

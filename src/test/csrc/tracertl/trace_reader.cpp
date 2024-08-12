@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <sstream>
 #include "trace_reader.h"
+#include "tracertl.h"
 
 TraceReader::TraceReader(std::string trace_file_name)
 {
@@ -43,6 +44,10 @@ TraceReader::TraceReader(std::string trace_file_name)
       printf("TraceRTL preread: read from trace file, but illegal inst. Dump the inst:\n");
       inst.dump();
     }
+
+    // construct trace_icache
+    trace_icache->constructICache(inst.instr_pc_va, inst.instr);
+    // construct trace
     instList_preread.push(inst);
   }
   printf("TraceRTL: preread tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());

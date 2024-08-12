@@ -19,40 +19,21 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <map>
+#include <unordered_map>
 #include "trace_format.h"
-
-struct TraceCacheLine {
-  uint64_t pc[512 / sizeof(uint64_t)];
-};
-struct TraceHalfCacheLine {
-  uint64_t pc[256 / sizeof(uint64_t)];
-};
 
 class TraceICache {
 
 private:
-  // only for program binary
-  char *ram;
-  int fd;
-  uint64_t mmap_size;
-  uint64_t ram_size;
-  uint64_t base_addr;
+  std::unordered_map<uint64_t, uint16_t> icache_va;
 
 public:
-  TraceICache(const char *binary_name);
+  TraceICache();
   ~TraceICache();
-  bool readCacheLine(char *line, uint64_t addr);
-  bool readHalfCacheLine(char *line, uint64_t addr);
-  bool readDWord(uint64_t *dest, uint64_t addr);
-  uint64_t ramAddr(uint64_t addr, uint64_t size) {
-    return alignAddr(addr - base_addr, size);
-  }
-  uint64_t alignAddr(uint64_t addr, uint32_t size) {
-    return addr & ~(size - 1);
-  }
-  bool legalAddr(uint64_t addr, int size = 8) {
-    return (addr >= base_addr) && ((addr + size) < (base_addr + ram_size));
-  }
+  void constructICache(uint64_t vaddr, uint32_t inst);
+  void readDWord(uint64_t &dest, uint64_t addr);
+  uint16_t readHWord(uint64_t key);
 };
 
 #endif

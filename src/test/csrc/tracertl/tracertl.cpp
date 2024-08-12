@@ -149,41 +149,16 @@ extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx) {
 /** Fake ICache */
 TraceICache *trace_icache = NULL;
 
-extern "C" void init_traceicache(const char *binary_name) {
-  printf("init fake trace icache %s\n", binary_name);
-  trace_icache = new TraceICache(binary_name);
+extern "C" void init_traceicache() {
+  trace_icache = new TraceICache();
 }
 
 extern "C" uint64_t trace_icache_dword_helper(uint64_t addr) {
   uint64_t data;
-  trace_icache->readDWord(&data, addr);
+  trace_icache->readDWord(data, addr);
   return data;
 }
 
 extern "C" uint8_t trace_icache_legal_addr(uint64_t addr) {
-  if (trace_icache->legalAddr(addr)) return 1;
-  else return 0;
-}
-
-extern "C" void trace_icache_helper(uint64_t addr, uint8_t *result_valid, uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3, uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7) {
-  uint64_t line[4];
-  if (!trace_icache->readHalfCacheLine((char *)line, addr)) {
-    *result_valid = 0;
-    return ;
-  }
-  *data0 = line[0];
-  *data1 = line[1];
-  *data2 = line[2];
-  *data3 = line[3];
-  if (!trace_icache->readHalfCacheLine((char *)line, addr + 256)) {
-    *result_valid = 0;
-    return ;
-  }
-  *data4 = line[0];
-  *data5 = line[1];
-  *data6 = line[2];
-  *data7 = line[3];
-
-  *result_valid = 1;
-  return ;
+  return 1;
 }

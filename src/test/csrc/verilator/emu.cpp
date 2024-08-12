@@ -411,8 +411,9 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #ifdef TRACERTL_MODE
   // Use fakeicache for placeholder
-  init_traceicache(args.image);
   if (args.tracertl_file) {
+    // traceicache's ram is constructed by tracertl's init method.
+    init_traceicache();
     init_tracertl(args.tracertl_file);
   } else {
     fprintf(stderr, "trace file not specified\n");
