@@ -44,6 +44,7 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_gcpt_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
+import "DPI-C" function void set_simjtag();
 import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function void set_overwrite_nbytes(longint len);
@@ -123,6 +124,10 @@ initial begin
   // disable diff-test
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
+  end
+  // enable sim-jtag
+  if ($test$plusargs("enable-jtag")) begin
+    set_simjtag();
   end
   // set exit instrs const
   if ($test$plusargs("max-instrs")) begin

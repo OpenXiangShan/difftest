@@ -11,7 +11,7 @@ remote_bitbang_t *jtag;
 bool enable_simjtag = false;
 uint16_t remote_jtag_port = 23334;
 
-void jtag_init() {
+extern "C" void jtag_init() {
   jtag = new remote_bitbang_t(remote_jtag_port);
 }
 

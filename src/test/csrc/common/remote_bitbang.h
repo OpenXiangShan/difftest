@@ -9,7 +9,7 @@
 extern bool enable_simjtag;
 extern uint16_t remote_jtag_port;
 
-void jtag_init();
+extern "C" void jtag_init();
 
 class remote_bitbang_t {
 public:
