@@ -47,6 +47,7 @@ import "DPI-C" function void set_no_diff();
 import "DPI-C" function void set_simjtag();
 import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
+import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
@@ -79,6 +80,7 @@ longint overwrite_nbytes;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
+reg [63:0] stuck_limit;
 
 initial begin
   // log begin
@@ -95,7 +97,9 @@ initial begin
   else begin
     difftest_logCtrl_end_r = 0;
   end
+  stuck_limit = 0;
 `ifndef TB_NO_DPIC
+  stuck_limit = get_stuck_limit();
   // workload: bin file
   if ($test$plusargs("workload")) begin
     $value$plusargs("workload=%s", bin_file);
@@ -202,9 +206,11 @@ assign difftest_perfCtrl_dump = 0;
 `endif // TB_NO_DPIC
 
 reg [63:0] n_cycles;
+reg [63:0] stuck_timer;
 always @(posedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;
+    stuck_timer <= 64'h0;
   end
   else begin
     n_cycles <= n_cycles + 64'h1;
@@ -213,6 +219,17 @@ always @(posedge clock) begin
     if (max_cycles > 0 && n_cycles >= max_cycles) begin
       $display("EXCEEDED MAX CYCLE: %d", max_cycles);
       $finish();
+    end
+
+    // stuck check
+    if (difftest_step)
+      stuck_timer <= 0;
+    else
+      stuck_timer <= stuck_timer + 64'h1;
+
+    if (stuck_limit > 0 && stuck_timer >= stuck_limit) begin
+      $display("No difftest Check for more than %d cycles, maybe get stuck", stuck_limit);
+      $fatal;
     end
 
     // exit signal: all 1's for normal exit; others are error
