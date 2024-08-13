@@ -171,7 +171,7 @@ object Gateway {
       GatewayResult(
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
-        step = endpoint.step,
+        step = Some(endpoint.step),
       )
     } else {
       GatewayResult(instances = instances) + GatewaySink.collect(config)
@@ -219,15 +219,16 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val instances = chiselTypeOf(squashed).map(_.bits).toSeq
 
   val zoneControl = Option.when(config.hasDutZone)(Module(new ZoneControl(config)))
-  val step = Option.when(!config.hasInternalStep)(IO(Output(UInt(config.stepWidth.W))))
+  val step = IO(Output(UInt(config.stepWidth.W)))
   val control = Wire(new GatewaySinkControl(config))
 
   if (config.isBatch) {
     val batch = Batch(squashed, config)
     if (config.hasInternalStep) {
+      step := batch.step
       control.step.get := batch.step
     } else {
-      step.get := RegNext(batch.step, 0.U)
+      step := RegNext(batch.step, 0.U)
     }
     control.enable := batch.enable
     if (config.hasDutZone) {
@@ -238,11 +239,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
   } else {
     val squashed_enable = VecInit(squashed.map(_.valid).toSeq).asUInt.orR
-    if (config.hasInternalStep) {
-      control.step.get := squashed_enable
-    } else {
-      step.get := RegNext(squashed_enable, 0.U)
-    }
+    step := RegNext(squashed_enable, 0.U)
     control.enable := squashed_enable
     if (config.hasDutZone) {
       zoneControl.get.enable := squashed_enable
