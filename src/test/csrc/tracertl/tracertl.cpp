@@ -87,6 +87,7 @@ void tracertl_success_dump() {
  **/
 // Not Used
 void __attribute__((noinline))  trace_read_insts(uint8_t enable, ManyInstruction_t *manyInsts) {
+  METHOD_TRACE();
   // ManyInstruction_t *manyInsts = insts;
   if (enable != 0) {
     for (int i = 0; i < TraceFetchWidth; i ++) {
@@ -104,6 +105,7 @@ void __attribute__((noinline))  trace_read_insts(uint8_t enable, ManyInstruction
         manyInsts->insts[i].memory_address_va : manyInsts->insts[i].memory_address_pa;
     }
   }
+  METHOD_TRACE();
   return ;
 }
 
@@ -112,8 +114,9 @@ extern "C" void trace_read_one_instr(
   uint64_t *target, uint32_t *instr,
   uint8_t *memory_type, uint8_t *memory_size,
   uint8_t *branch_type, uint8_t *branch_taken,
-  uint64_t *InstID,
-  uint8_t idx) {
+  uint8_t *exception,
+  uint64_t *InstID, uint8_t idx) {
+  METHOD_TRACE();
 
   Instruction inst;
   trace_reader->readFromBuffer(inst, idx);
@@ -131,18 +134,23 @@ extern "C" void trace_read_one_instr(
   *memory_size = inst.memory_size;
   *branch_type = inst.branch_type;
   *branch_taken = inst.branch_taken;
+  *exception = inst.exception;
   *InstID = inst.inst_id;
+  METHOD_TRACE();
 }
 
 extern "C" void trace_redirect(uint64_t inst_id) {
+  METHOD_TRACE();
   trace_reader->redirect(inst_id);
 }
 
 extern "C" void trace_collect_commit(uint64_t pc, uint32_t instr, uint8_t instNum, uint8_t idx) {
+  METHOD_TRACE();
   trace_reader->collectCommit(pc, instr, instNum, idx);
 }
 
 extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx) {
+  METHOD_TRACE();
   trace_reader->collectDrive(pc, instr, idx);
 }
 
@@ -155,10 +163,23 @@ extern "C" void init_traceicache() {
 
 extern "C" uint64_t trace_icache_dword_helper(uint64_t addr) {
   uint64_t data;
+  METHOD_TRACE();
   trace_icache->readDWord(data, addr);
   return data;
 }
 
 extern "C" uint8_t trace_icache_legal_addr(uint64_t addr) {
   return 1;
+}
+
+extern "C" uint64_t trace_tlb_ats(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
+  // asid/vmid is not used.
+  METHOD_TRACE();
+  return trace_icache->addrTrans(vaddr, 0, 0);
+}
+
+extern "C" bool trace_tlb_ats_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
+  // asid/vmid is not used.
+  METHOD_TRACE();
+  return trace_icache->addrTrans_hit(vaddr, 0, 0);
 }

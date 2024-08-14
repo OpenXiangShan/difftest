@@ -29,6 +29,7 @@ TraceReader::TraceReader(std::string trace_file_name)
     throw std::runtime_error(oss.str());
   }
   inst_id_preread.pop(); // set init id to 1
+  commit_inst_num.pop(); // set init id to 1
 
   printf("TraceRTL: preread tracefile...\n");
   fflush(stdout);
@@ -47,6 +48,11 @@ TraceReader::TraceReader(std::string trace_file_name)
 
     // construct trace_icache
     trace_icache->constructICache(inst.instr_pc_va, inst.instr);
+    if (inst.instr_pc_pa != 0)
+      trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+    if (inst.memory_address_pa != 0)
+      trace_icache->constructSoftTLB(inst.memory_address_va, 0, 0, inst.memory_address_pa);
+
     // construct trace
     instList_preread.push(inst);
   }
@@ -57,44 +63,57 @@ TraceReader::TraceReader(std::string trace_file_name)
 }
 
 bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {
+  METHOD_TRACE();
   inst = readBuffer[idx];
   readBufferNeedReload = true;
 //  printf("TraceReadBuffer %d+%d->newIdx:%d", idx, readBufferStartIdx, idx_inner);
 //  inst.dump();
 //  fflush(stdout);
+  METHOD_TRACE();
   return true;
 }
 
 bool TraceReader::prepareRead() {
-  if (!readBufferNeedReload) return true;
+  METHOD_TRACE();
+  if (!readBufferNeedReload) {
+    METHOD_TRACE();
+    return true;
+  }
   readBufferNeedReload = false;
 
   for (int i = 0; i < TraceReadBufferSize; i++) {
     bool ret = read(readBuffer[i]);
 
-    if (!ret) { return false; }
-    else {
+    if (!ret) {
+      METHOD_TRACE();
+      return false;
+    } else {
 //      printf("Prepare read idx %d", i);
 //      readBuffer[i].dump();
 //      fflush(stdout);
     }
   }
+  METHOD_TRACE();
   return true;
 }
 
 bool TraceReader::read(Instruction &inst) {
   // read a inst from redirect buffer
+  METHOD_TRACE();
   if (!redirectInstList.empty()) {
+    METHOD_TRACE();
     inst = redirectInstList.front();
     redirectInstList.pop_front();
     counterReadFromRedirect ++;
   } else if (!instList_preread.empty()) {
+    METHOD_TRACE();
     inst = instList_preread.front();
     instList_preread.pop();
     counterReadFromInstList ++;
   } else {
     setOver();
     memset(reinterpret_cast<char *> (&inst), 0, sizeof(Instruction));
+    METHOD_TRACE();
     return false;
   }
 
@@ -109,6 +128,7 @@ bool TraceReader::read(Instruction &inst) {
 
 //  inst.dump();
 
+  METHOD_TRACE();
   return true;
 }
 
@@ -122,6 +142,7 @@ bool TraceReader::read(Instruction &inst) {
   * 3. re-prepare readBuffer
   */
 void TraceReader::redirect(uint64_t inst_id) {
+  METHOD_TRACE();
   redirectLog.push_back(inst_id);
 
   if (pendingInstList.size() > 0) {
@@ -145,9 +166,11 @@ void TraceReader::redirect(uint64_t inst_id) {
   driveInstInput.clear();
 
   readBufferNeedReload = true;
+  METHOD_TRACE();
 }
 
 void TraceReader::collectCommit(uint64_t pc, uint32_t inst, uint8_t instNum, uint8_t idx) {
+  METHOD_TRACE();
   commitBuffer[idx].valid = true;
   commitBuffer[idx].inst.instr_pc = pc;
   commitBuffer[idx].inst.instr = inst;
@@ -155,9 +178,11 @@ void TraceReader::collectCommit(uint64_t pc, uint32_t inst, uint8_t instNum, uin
 //  printf("Trace CollectCommit %d", idx);
 //  commitBuffer[idx].inst.dump();
 //  fflush(stdout);
+  METHOD_TRACE();
 }
 
 void TraceReader::collectDrive(uint64_t pc, uint32_t inst, uint8_t idx) {
+  METHOD_TRACE();
   driveBuffer[idx].valid = true;
   driveBuffer[idx].inst.instr_pc = pc;
   driveBuffer[idx].inst.instr = inst;
@@ -165,9 +190,11 @@ void TraceReader::collectDrive(uint64_t pc, uint32_t inst, uint8_t idx) {
 //  printf("Trace CollectDrive %d", idx);
 //  driveBuffer[idx].inst.dump();
 //  fflush(stdout);
+  METHOD_TRACE();
 }
 
 void TraceReader::checkCommit() {
+  METHOD_TRACE();
   for (int i = 0; i < TraceCommitBufferSize && commitBuffer[i].valid; i ++) {
     commitBuffer[i].valid = false;
     uint64_t pc = commitBuffer[i].inst.instr_pc;
@@ -217,9 +244,11 @@ void TraceReader::checkCommit() {
     setCommit();
     commit_inst_num.add(instNum);
   }
+  METHOD_TRACE();
 }
 
 void TraceReader::checkDrive() {
+  METHOD_TRACE();
   for (int i = 0; (i < TraceDriveBufferSize) && driveBuffer[i].valid; i ++) {
     driveBuffer[i].valid = false;
     uint64_t pc = driveBuffer[i].inst.instr_pc;
@@ -257,6 +286,7 @@ void TraceReader::checkDrive() {
       driveInstDecoded.pop_front();
     }
   }
+  METHOD_TRACE();
 }
 
 void TraceReader::dump_uncommited_inst() {
@@ -279,11 +309,13 @@ void TraceReader::dump_committed_inst() {
 }
 
 bool TraceReader::traceOver() {
+  METHOD_TRACE();
   // end of file or add signal into the trace
   return redirectInstList.empty() && instList_preread.empty();
 }
 
 bool TraceReader::update_tick(uint64_t tick) {
+  METHOD_TRACE();
   uint64_t threa;
   if (commit_inst_num.get() == 0) threa = FIRST_BLOCK_THREASHOLD;
   else threa = BLOCK_THREASHOLD;

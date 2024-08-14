@@ -23,16 +23,41 @@
 #include <unordered_map>
 #include "trace_format.h"
 
+struct TLBKeyType {
+  uint64_t vaddr;
+  uint16_t asid;
+  uint16_t vmid;
+
+  bool operator<(const TLBKeyType &other) const {
+    if (vaddr != other.vaddr) return vaddr < other.vaddr;
+    if (asid  != other.asid)  return asid  < other.asid;
+    return vmid < other.vmid;
+  };
+
+  bool operator==(const TLBKeyType &other) const {
+    return vaddr == other.vaddr && asid == other.asid && vmid == other.vmid;
+  };
+
+  TLBKeyType(uint64_t ovpn, uint16_t oasid, uint16_t ovmid):
+    vaddr(ovpn), asid(oasid), vmid(ovmid) {
+  };
+};
+
 class TraceICache {
 
 private:
   std::unordered_map<uint64_t, uint16_t> icache_va;
+  // std::unordered_map<TLBKeyType, uint64_t> soft_tlb;
+  std::unordered_map<uint64_t, uint64_t> soft_tlb;
 
 public:
   TraceICache();
   ~TraceICache();
+  void constructSoftTLB(uint64_t vaddr, uint16_t asid, uint16_t vmid, uint64_t paddr);
   void constructICache(uint64_t vaddr, uint32_t inst);
   void readDWord(uint64_t &dest, uint64_t addr);
+  uint64_t addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid);
+  bool addrTrans_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid);
   uint16_t readHWord(uint64_t key);
 };
 

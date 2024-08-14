@@ -20,7 +20,16 @@
 #include <stdio.h>
 #include "spikedasm.h"
 
+// #define TRACE_METHOD_TRACE
+
+
 #define Log() printf("file: %s, line: %d\n", __FILE__, __LINE__); fflush(stdout)
+
+#ifdef TRACE_METHOD_TRACE
+#define METHOD_TRACE() Log()
+#else
+#define METHOD_TRACE()
+#endif
 
 #define TraceFetchWidth 16
 
@@ -33,19 +42,27 @@ struct TraceInstruction {
   uint64_t memory_address_pa;
   uint64_t target = 0;
   uint32_t instr;
-  uint8_t memory_type;
-  uint8_t memory_size;
+  uint8_t memory_type:4;
+  uint8_t memory_size:4;
   uint8_t branch_type;
   uint8_t branch_taken;
+  uint8_t exception;
 
   bool legalInst() {
-    if ((instr_pc_va == 0) ||
-      (instr == 0)) {
-      return false;
-    }
-    else {
-      return true;
-    }
+    // when not exception, pc_va and inst should not be zero (when pc_pa is zero, vm not enable)
+    if (exception == 0) return (instr_pc_va != 0) && (instr != 0);
+    // when exception, pc_va & target should not be zero
+    else if (isException()) return (instr_pc_va != 0) && (target != 0);
+    // when interrupt, target should not be zero
+    return target != 0;
+  }
+
+  bool isInterrupt() {
+    return (exception & 0x80) != 0;
+  }
+
+  bool isException() {
+    return (exception & 0x80) == 0;
   }
 
   void dump() {
@@ -55,7 +72,10 @@ struct TraceInstruction {
       printf(" is_mem %d addr %08lx|%08lx", memory_type, memory_address_va, memory_address_pa);
     }
     if (branch_type != 0) {
-      printf(" is_branch %d taken %d target %08lx", branch_type, branch_taken, target);
+      printf(" is_branch %d taken %d target 0x%08lx", branch_type, branch_taken, target);
+    }
+    if (exception != 0) {
+      printf(" is_exception 0x%02x target 0x%08lx", exception, target);
     }
     printf("\n");
     fflush(stdout);
@@ -83,6 +103,7 @@ struct Instruction : TraceInstruction {
     memory_size = t.memory_size;
     branch_type = t.branch_type;
     branch_taken = t.branch_taken;
+    exception = t.exception;
   }
 
   bool legalInst() {
