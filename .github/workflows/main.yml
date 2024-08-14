@@ -227,6 +227,20 @@ jobs:
             make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
             ./build/emu -b 0 -e 0 -i ../ready-to-run/microbench.bin --diff ../ready-to-run/riscv64-nemu-interpreter-so --iotrace-name ../iotrace
 
+      - name: Difftest with JsonProfile and DiffTestIOTrace-ZSTD
+        run: |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make emu MILL_ARGS="--difftest-config ET" IOTRACE_ZSTD=1 -j2
+            ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --iotrace-name iotrace
+            cd difftest && export NOOP_HOME=$(pwd)
+            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=EL
+            make emu RTL_SUFFIX=v WITH_CHISELDB=0 WITH_CONSTANTIN=0 IOTRACE_ZSTD=1 -j2
+            ./build/emu -b 0 -e 0 -i ../ready-to-run/microbench.bin --diff ../ready-to-run/riscv64-nemu-interpreter-so --iotrace-name ../iotrace
+    
   test-difftest-fuzzing:
     # This test runs on ubuntu-20.04 for two reasons:
     # (1) riscv-arch-test can be built with riscv-linux-gnu toolchain 9.4.0,
@@ -421,4 +435,18 @@ jobs:
             cd difftest && export NOOP_HOME=$(pwd)
             make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=ZEL MFC=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0
+            ./build/simv +workload=../ready-to-run/microbench.bin +e=0 +diff=../ready-to-run/riscv64-nemu-interpreter-so +iotrace-name=../iotrace
+
+      - name: Verilator Build with VCS Top (with JsonProfile and DiffTestIOTrace-ZSTD)
+        run : |
+            cd $GITHUB_WORKSPACE/../xs-env
+            source ./env.sh
+            cd $GITHUB_WORKSPACE/../xs-env/NutShell
+            source ./env.sh
+            make clean
+            make simv MILL_ARGS="--difftest-config ZET" VCS=verilator IOTRACE_ZSTD=1 -j2
+            ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so +iotrace-name=iotrace
+            cd difftest && export NOOP_HOME=$(pwd)
+            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=ZEL
+            make simv VCS=verilator RTL_SUFFIX=v WITH_CHISELDB=0 WITH_CONSTANTIN=0 IOTRACE_ZSTD=1
             ./build/simv +workload=../ready-to-run/microbench.bin +e=0 +diff=../ready-to-run/riscv64-nemu-interpreter-so +iotrace-name=../iotrace
