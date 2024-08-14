@@ -2,10 +2,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#ifdef CONFIG_IOTRACE_ZSTD
-static DiffTraceZstd *trace_zstd = new DiffTraceZstd;
-#endif // CONFIG_IOTRACE_ZSTD
-
 template <typename T>
 DiffTrace<T>::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_size) : is_read(is_read) {
   buffer_size = _buffer_size;
@@ -124,19 +120,19 @@ template class DiffTrace<DiffTestState>;
 #ifdef CONFIG_IOTRACE_ZSTD
 void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
   if (is_read) {
-    if (io_trace_file_i.is_open()) {
-      io_trace_file_i.close();
+    if (io_trace_file.is_open()) {
+      io_trace_file.close();
     }
-    io_trace_file_i.open(file_name, std::ios::binary);
-    if (io_trace_file_i.is_open() == false) {
+    io_trace_file.open(file_name, std::ios::binary);
+    if (io_trace_file.is_open() == false) {
       printf("No more trace files.End simulation\n");
       exit(0);
     }
   } else {
-    if (io_trace_file_o.is_open()) {
-      io_trace_file_o.close();
+    if (io_trace_file.is_open()) {
+      io_trace_file.close();
     }
-    io_trace_file_o.open(file_name, std::ios::binary);
+    io_trace_file.open(file_name, std::ios::binary);
   }
 }
 
@@ -153,7 +149,7 @@ void DiffTraceZstd::diff_IOtrace_dump(const char *str, uint64_t len) {
     return;
   }
 
-  io_trace_file_o.write(outputBuffer.data(), compressedSize);
+  io_trace_file.write(outputBuffer.data(), compressedSize);
   ZSTD_freeCCtx(trace_cctx);
 }
 
@@ -190,12 +186,12 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
 
   if (input.pos == input.size) {
     inputBuffer.resize(inbufferSize);
-    io_trace_file_i.read(inputBuffer.data(), inbufferSize);
-    input.size = io_trace_file_i.gcount();
+    io_trace_file.read(inputBuffer.data(), inbufferSize);
+    input.size = io_trace_file.gcount();
     input.pos = 0;
 
     // Outputs the current file pointer location
-    std::streampos currentPos = io_trace_file_i.tellg();
+    std::streampos currentPos = io_trace_file.tellg();
     if (currentPos == -1) {
       std::cout << "Decompress read zstd file error" << std::endl;
       return 2;
@@ -211,19 +207,7 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
 
   // Decompress the data
   size_t ret = ZSTD_decompressStream(trace_dctx, &output, &input);
-#ifdef IOTRACE_ZSTD_DEBUG
-  std::cout << "Current input file position: " << currentPos << std::endl;
-  if (output.pos == output.size) {
-    std::cout << "there might be some data left within internal buffers" << std::endl;
-  }
-  if (input.pos == input.size) {
-    std::cout << "once a block has been processed, more data is needed" << std::endl;
-  }
-  if (ZSTD_isError(ret)) {
-    std::cerr << "Decompression error: " << ZSTD_getErrorName(ret) << std::endl;
-    exit(0);
-  }
-#endif // IOTRACE_ZSTD_DEBUG
+
   io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.end());
 
   return 0;

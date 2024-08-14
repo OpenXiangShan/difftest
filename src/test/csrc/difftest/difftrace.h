@@ -12,13 +12,15 @@
 #include <zstd.h>
 #endif // CONFIG_IOTRACE_ZSTD
 
-const uint64_t trace_buffer_size = 1024 * 1024;
 template <typename T> class DiffTrace {
 public:
   char trace_name[32];
   bool is_read;
+#ifdef CONFIG_IOTRACE_ZSTD
+  DiffTraceZstd *trace_zstd = new DiffTraceZstd(buffer_size);
+#endif // CONFIG_IOTRACE_ZSTD
 
-  DiffTrace(const char *trace_name, bool is_read, uint64_t buffer_size = trace_buffer_size);
+  DiffTrace(const char *trace_name, bool is_read, uint64_t buffer_size = 1024 * 1024);
   ~DiffTrace() {
     if (!is_read) {
       trace_file_next();
@@ -26,6 +28,9 @@ public:
     if (buffer) {
       free(buffer);
     }
+#ifdef CONFIG_IOTRACE_ZSTD
+    delete trace_zstd;
+#endif // CONFIG_IOTRACE_ZSTD
   }
   bool append(const T *trace);
   bool read_next(T *trace);
@@ -45,7 +50,8 @@ public:
   int trace_load_len = 0;
   bool need_load_new_file = true;
 
-  DiffTraceZstd() {
+  DiffTraceZstd(uint64_t buffer_size) {
+    trace_buffer_size = buffer_size;
     io_trace_buffer.reserve(max_dcompress_size);
   };
 
@@ -61,14 +67,14 @@ public:
   int diff_IOtrace_ZstdDcompress();
 
 private:
+  uint64_t trace_buffer_size = 0;
   const uint64_t max_compress_size = 5000 * trace_buffer_size / 10; // The number of bytes in a single compression
   const uint64_t max_dcompress_size = 5000 * trace_buffer_size;
   std::vector<char> io_trace_buffer;
 
   ZSTD_CCtx *trace_cctx = NULL;
   ZSTD_DCtx *trace_dctx = NULL;
-  std::ofstream io_trace_file_o;
-  std::ifstream io_trace_file_i;
+  std::fstream io_trace_file;
 };
 #endif // CONFIG_IOTRACE_ZSTD
 
