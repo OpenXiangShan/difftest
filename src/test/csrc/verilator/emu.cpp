@@ -1287,6 +1287,7 @@ void Emulator::fork_child_init() {
   // override output range config, force dump wave
   force_dump_wave = true;
   args.enable_waveform = true;
+  args.enable_waveform_full = true;
 #endif
 #ifndef CONFIG_NO_DIFFTEST
 #ifdef ENABLE_SIMULATOR_DEBUG_INFO
