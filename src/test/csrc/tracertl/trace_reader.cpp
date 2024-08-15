@@ -148,8 +148,8 @@ void TraceReader::redirect(uint64_t inst_id) {
   if (pendingInstList.size() > 0) {
     if (pendingInstList.back().inst_id < inst_id || pendingInstList.front().inst_id > inst_id) {
       setError();
-      printf("Redirect Error: inst_id %lu not in the pendingInstList range [%lu, %lu]\n",
-       inst_id, pendingInstList.back().inst_id, pendingInstList.front().inst_id);
+      printf("Redirect Error: inst_id 0x%lx not in the pendingInstList range [0x%lx, 0x%lx]\n",
+       inst_id, pendingInstList.front().inst_id, pendingInstList.back().inst_id);
       return;
     }
   }
