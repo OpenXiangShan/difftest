@@ -95,6 +95,8 @@ class TrapEvent extends DifftestBaseBundle {
 
   val code = UInt(32.W)
   val pc = UInt(64.W)
+
+  override def needUpdate: Option[Bool] = Some(hasTrap || hasWFI)
 }
 
 class CSRState extends DifftestBaseBundle {
