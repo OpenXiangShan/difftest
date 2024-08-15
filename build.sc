@@ -15,14 +15,15 @@
 
 import os.Path
 import mill._
+import mill.api.PathRef
 import scalalib._
 import publish._
 
 object ivys {
   val scala = "2.13.14"
   val chiselCrossVersions = Map(
-    "3.6.1" -> (ivy"edu.berkeley.cs::chisel3:3.6.1", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.1"),
-    "6.5.0" -> (ivy"org.chipsalliance::chisel:6.5.0", ivy"org.chipsalliance:::chisel-plugin:6.5.0"),
+    "chisel3" -> (ivy"edu.berkeley.cs::chisel3:3.6.1", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.1"),
+    "chisel" -> (ivy"org.chipsalliance::chisel:6.5.0", ivy"org.chipsalliance:::chisel-plugin:6.5.0"),
   )
 }
 
@@ -49,12 +50,16 @@ trait DiffTestModule extends CommonDiffTest {
 
 }
 
-object difftest extends CommonDiffTest {
-
-  def crossValue: String = "3.6.1"
+object difftest extends Cross[Difftest](ivys.chiselCrossVersions.keys.toSeq)
+trait Difftest extends CommonDiffTest { outer =>
 
   override def millSourcePath = os.pwd
 
-  object test extends SbtModuleTests with TestModule.ScalaTest
+  object test extends SbtModuleTests with TestModule.ScalaTest {
+    override def millSourcePath = outer.millSourcePath
+    override def sources = T.sources {
+      super.sources() ++ Seq(PathRef(millSourcePath / "src" / "generator" / s"$crossValue"))
+    }
+  }
 
 }
