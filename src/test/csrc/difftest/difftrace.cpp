@@ -98,6 +98,9 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
     assert(read_bytes == buffer_size);
     fclose(file);
 #else
+    if (buffer) {
+      free(buffer);
+    }
     buffer = (T *)calloc(buffer_size, sizeof(T));
     trace_zstd->diff_IOtrace_load((char *)buffer, sizeof(T));
 #endif // CONFIG_IOTRACE_ZSTD
@@ -119,20 +122,13 @@ template class DiffTrace<DiffTestState>;
 
 #ifdef CONFIG_IOTRACE_ZSTD
 void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
-  if (is_read) {
-    if (io_trace_file.is_open()) {
-      io_trace_file.close();
-    }
-    io_trace_file.open(file_name, std::ios::binary);
-    if (io_trace_file.is_open() == false) {
-      printf("No more trace files.End simulation\n");
-      exit(0);
-    }
-  } else {
-    if (io_trace_file.is_open()) {
-      io_trace_file.close();
-    }
-    io_trace_file.open(file_name, std::ios::binary);
+  if (io_trace_file.is_open()) {
+    io_trace_file.close();
+  }
+  io_trace_file.open(file_name, std::ios::binary);
+  if (is_read && io_trace_file.is_open() == false) {
+    printf("No more trace files.End simulation\n");
+    exit(0);
   }
 }
 
@@ -165,7 +161,6 @@ bool DiffTraceZstd::diff_IOtrace_load(char *buffer, uint64_t len) {
     trace_load_len = have_size;
     // clear read data
     io_trace_buffer.erase(io_trace_buffer.begin(), io_trace_buffer.begin() + byte_size);
-    //printf("iotrace load erase get size %ld len %ld\n", have_size, len);
   }
   return true;
 }
