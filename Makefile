@@ -217,7 +217,7 @@ SIM_CXXFLAGS += -DLLVM_COVER
 SIM_LDFLAGS  += -fsanitize-coverage=trace-pc-guard -fsanitize-coverage=pc-table
 endif
 
-ifdef ($(IOTRACE_ZSTD),1)
+ifeq ($(IOTRACE_ZSTD),1)
 SIM_CXXFLAGS += -DCONFIG_IOTRACE_ZSTD
 endif
 

@@ -14,6 +14,9 @@ DiffTrace<T>::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_
     exit(0);
   }
   strcpy(trace_name, _trace_name);
+#ifdef CONFIG_IOTRACE_ZSTD
+  trace_zstd = new DiffTraceZstd(buffer_size);
+#endif
 }
 
 template <typename T> bool DiffTrace<T>::append(const T *trace) {
@@ -78,6 +81,9 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
 #endif
 
   if (is_read) {
+    if (buffer) {
+      free(buffer);
+    }
 #ifndef CONFIG_IOTRACE_ZSTD
     FILE *file = fopen(filename, "rb");
     if (!file) {
@@ -87,23 +93,17 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
     // check the number of traces
     fseek(file, 0, SEEK_END);
     buffer_size = ftell(file) / sizeof(T);
-    if (buffer) {
-      free(buffer);
-    }
     buffer = (T *)calloc(buffer_size, sizeof(T));
     // read the binary file
-    Info("Loading %lu traces from %s ...\n", buffer_size, filename);
     fseek(file, 0, SEEK_SET);
     uint64_t read_bytes = fread(buffer, sizeof(T), buffer_size, file);
     assert(read_bytes == buffer_size);
     fclose(file);
 #else
-    if (buffer) {
-      free(buffer);
-    }
     buffer = (T *)calloc(buffer_size, sizeof(T));
     trace_zstd->diff_IOtrace_load((char *)buffer, sizeof(T));
 #endif // CONFIG_IOTRACE_ZSTD
+    Info("Loading %lu traces from %s ...\n", buffer_size, filename);
   } else if (buffer_count > 0) {
     Info("Writing %lu traces to %s ...\n", buffer_count, filename);
 #ifndef CONFIG_IOTRACE_ZSTD
@@ -127,7 +127,7 @@ void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
   }
   io_trace_file.open(file_name, std::ios::binary);
   if (is_read && io_trace_file.is_open() == false) {
-    printf("No more trace files.End simulation\n");
+    printf("Run %s not find,No more trace files.End simulation\n", file_name);
     exit(0);
   }
 }
@@ -142,11 +142,13 @@ void DiffTraceZstd::diff_IOtrace_dump(const char *str, uint64_t len) {
   if (ZSTD_isError(compressedSize)) {
     std::cerr << "Zstd Compress error: " << ZSTD_getErrorName(compressedSize) << std::endl;
     ZSTD_freeCCtx(trace_cctx);
+    assert(0);
     return;
   }
 
   io_trace_file.write(outputBuffer.data(), compressedSize);
   ZSTD_freeCCtx(trace_cctx);
+  trace_cctx = NULL;
 }
 
 bool DiffTraceZstd::diff_IOtrace_load(char *buffer, uint64_t len) {
