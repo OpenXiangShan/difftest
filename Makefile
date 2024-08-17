@@ -21,6 +21,8 @@ SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 NUM_CORES  ?= 1
 
+MFC 	   ?= 1
+
 BUILD_DIR  = $(DESIGN_DIR)/build
 
 RTL_DIR = $(BUILD_DIR)/rtl
@@ -29,6 +31,12 @@ SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
 
 # generate difftest files for non-chisel design.
 .DEFAULT_GOAL := difftest_verilog
+ifeq ($(MFC), 1)
+CHISEL_VERSION = chisel
+MILL_ARGS += --target systemverilog --split-verilog
+else
+CHISEL_VERSION = chisel3
+endif
 ifneq ($(PROFILE), )
 MILL_ARGS += --profile $(abspath $(PROFILE))
 endif
@@ -39,7 +47,7 @@ ifneq ($(CONFIG), )
 MILL_ARGS += --difftest-config $(CONFIG)
 endif
 difftest_verilog:
-	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
+	mill -i difftest[$(CHISEL_VERSION)].test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)

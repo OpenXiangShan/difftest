@@ -17,7 +17,6 @@
 package difftest
 
 import chisel3._
-import chisel3.stage._
 
 import java.nio.file.{Files, Paths}
 import scala.annotation.tailrec
@@ -82,7 +81,7 @@ class SimTop(profileName: String, numCores: Int) extends Module {
   DifftestModule.finish(dutInfo("cpu").asInstanceOf[String])
 }
 
-object DifftestMain extends App {
+abstract class DifftestApp extends App {
   case class GenParams(
     profile: Option[String] = None,
     numCores: Int = 1,
@@ -110,5 +109,4 @@ object DifftestMain extends App {
   } else { () =>
     new DifftestTop
   }
-  (new ChiselStage).execute(firrtlOpts, Seq(ChiselGeneratorAnnotation(gen)))
 }

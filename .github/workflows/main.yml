@@ -21,12 +21,13 @@ jobs:
 
       - name: Compile
         run: |
-          mill -i design[3.6.1].compile
-          mill -i design[6.5.0].compile
+          mill -i design[chisel3].compile
+          mill -i design[chisel].compile
 
       - name: Generate Verilog
         run: |
-          make
+          make MFC=0
+          make MFC=1
 
   test-difftest-nutshell:
     runs-on: ubuntu-22.04
@@ -222,8 +223,8 @@ jobs:
             make emu MILL_ARGS="--difftest-config ET" -j2
             ./build/emu -b 0 -e 0 -i ./ready-to-run/microbench.bin --diff ./ready-to-run/riscv64-nemu-interpreter-so --iotrace-name iotrace
             cd difftest && export NOOP_HOME=$(pwd)
-            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=EL
-            make emu RTL_SUFFIX=v WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
+            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=EL MFC=1
+            make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
             ./build/emu -b 0 -e 0 -i ../ready-to-run/microbench.bin --diff ../ready-to-run/riscv64-nemu-interpreter-so --iotrace-name ../iotrace
 
   test-difftest-fuzzing:
@@ -418,6 +419,6 @@ jobs:
             make simv MILL_ARGS="--difftest-config ZET" VCS=verilator -j2
             ./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so +iotrace-name=iotrace
             cd difftest && export NOOP_HOME=$(pwd)
-            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=ZEL
-            make simv VCS=verilator RTL_SUFFIX=v WITH_CHISELDB=0 WITH_CONSTANTIN=0
+            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=ZEL MFC=1
+            make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0
             ./build/simv +workload=../ready-to-run/microbench.bin +e=0 +diff=../ready-to-run/riscv64-nemu-interpreter-so +iotrace-name=../iotrace
