@@ -196,6 +196,15 @@ void TraceReader::collectDrive(uint64_t pc, uint32_t inst, uint8_t idx) {
 void TraceReader::checkCommit() {
   METHOD_TRACE();
   for (int i = 0; i < TraceCommitBufferSize && commitBuffer[i].valid; i ++) {
+    // RTL should not commit exception/interrupt/traceCtrl
+    // So skip the check.
+    if (i == 0) {
+      while (!pendingInstList.empty()) {
+        if (pendingInstList.front().isCtrlForceJump()) {
+          pendingInstList.pop_front();
+        }
+      }
+    }
     commitBuffer[i].valid = false;
     uint64_t pc = commitBuffer[i].inst.instr_pc;
     uint32_t instn = commitBuffer[i].inst.instr;
