@@ -57,6 +57,10 @@ struct TraceInstruction {
     return target != 0;
   }
 
+  bool isCtrlForceJump() {
+    return exception != 0;
+  }
+
   bool isInterrupt() {
     return (exception & 0x80) != 0;
   }
