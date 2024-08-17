@@ -202,6 +202,8 @@ void TraceReader::checkCommit() {
       while (!pendingInstList.empty()) {
         if (pendingInstList.front().isCtrlForceJump()) {
           pendingInstList.pop_front();
+        } else {
+          break;
         }
       }
     }
