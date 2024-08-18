@@ -886,11 +886,10 @@ int Emulator::tick() {
   // trace check
   do{
     // trace's commit/drive check
-    tracertl_check_commit();
+    auto trap = difftest[0]->get_trap_event();
+    tracertl_check_commit(trap->cycleCnt);
     tracertl_check_drive();
 
-    auto trap = difftest[0]->get_trap_event();
-    tracertl_update_tick(trap->cycleCnt);
     if (tracertl_stuck()) {
       eprintf("Trace Stack Too Many Cycle. Current Cycle: %lu\n", trap->cycleCnt);
       tracertl_error_dump();

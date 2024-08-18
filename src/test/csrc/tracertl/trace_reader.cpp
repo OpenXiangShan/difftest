@@ -60,6 +60,8 @@ TraceReader::TraceReader(std::string trace_file_name)
   fflush(stdout);
   trace_stream_preread->close();
   delete trace_stream_preread;
+
+  last_interval_time = gen_cur_time();
 }
 
 bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {
@@ -193,7 +195,7 @@ void TraceReader::collectDrive(uint64_t pc, uint32_t inst, uint8_t idx) {
   METHOD_TRACE();
 }
 
-void TraceReader::checkCommit() {
+void TraceReader::checkCommit(uint64_t tick) {
   METHOD_TRACE();
   for (int i = 0; i < TraceCommitBufferSize && commitBuffer[i].valid; i ++) {
     // RTL should not commit exception/interrupt/traceCtrl
@@ -254,7 +256,31 @@ void TraceReader::checkCommit() {
 
     setCommit();
     commit_inst_num.add(instNum);
+
   }
+
+  update_tick(tick);
+
+#ifdef PRINT_SIMULATION_SPEED
+  if (commit_inst_num.get() > next_print_inst) {
+    uint64_t cur_time = gen_cur_time();
+    uint64_t time_delta = cur_time - last_interval_time + 1; // plus 1 to avoid divid 0
+    uint64_t cycle_delta = tick - last_interval_tick;
+    uint64_t inst_delta = commit_inst_num.get() - last_interval_inst;
+
+    uint64_t cycle_per_second = cycle_delta / time_delta;
+    uint64_t inst_per_second = inst_delta / time_delta;
+
+    last_interval_time = cur_time;
+    last_interval_tick = tick;
+    last_interval_inst = commit_inst_num.get();
+    next_print_inst += PRINT_INST_INTERVAL;
+
+    printf("Current Finished Inst Num %ld. Simulation Speed: %ld cycle/s %ld inst/s\r ", commit_inst_num.get(), cycle_per_second, inst_per_second);
+    fflush(stdout);
+
+  }
+#endif
   METHOD_TRACE();
 }
 

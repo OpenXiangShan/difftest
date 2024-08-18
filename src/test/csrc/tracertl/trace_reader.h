@@ -72,6 +72,13 @@ class TraceReader {
   uint64_t BLOCK_THREASHOLD = 5000;
   uint64_t FIRST_BLOCK_THREASHOLD = 15000;
 
+  // process print
+  uint64_t PRINT_INST_INTERVAL = 100000;
+  uint64_t next_print_inst = 0;
+  uint64_t last_interval_time = 0;
+  uint64_t last_interval_tick = 0;
+  uint64_t last_interval_inst = 0;
+
   // for all the inst queue:
   // back(old) -> front(young)
   // normally, push_back to insert, pop_front to pop out
@@ -111,6 +118,13 @@ class TraceReader {
   uint64_t counterReadFromRedirect = 0;
   uint64_t counterReadFromInstList = 0;
 
+  // time
+  uint64_t gen_cur_time() {
+    auto now = std::chrono::system_clock::now();
+    auto duration = now.time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+  }
+
 public:
   TraceReader(std::string trace_file_name);
   ~TraceReader() {
@@ -125,7 +139,7 @@ public:
   void redirect(uint64_t inst_id);
   void collectCommit(uint64_t pc, uint32_t inst, uint8_t instNum, uint8_t idx);
   void collectDrive(uint64_t pc, uint32_t inst, uint8_t idx);
-  void checkCommit();
+  void checkCommit(uint64_t tick);
   void checkDrive();
   /* if the trace is over */
   bool traceOver();

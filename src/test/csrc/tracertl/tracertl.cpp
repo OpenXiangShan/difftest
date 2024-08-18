@@ -38,8 +38,8 @@ bool tracertl_prepare_read() {
   return trace_reader->prepareRead();
 }
 
-void tracertl_check_commit() {
-  trace_reader->checkCommit();
+void tracertl_check_commit(uint64_t tick) {
+  trace_reader->checkCommit(tick);
 }
 
 void tracertl_check_drive() {

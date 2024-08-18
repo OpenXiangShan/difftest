@@ -27,7 +27,7 @@ extern TraceICache *trace_icache;
 // call by emu
 void init_tracertl(const char *tracefile_name);
 bool tracertl_prepare_read();
-void tracertl_check_commit();
+void tracertl_check_commit(uint64_t tick);
 void tracertl_check_drive();
 bool tracertl_over();
 bool tracertl_error();

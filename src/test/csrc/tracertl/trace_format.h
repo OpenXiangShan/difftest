@@ -21,6 +21,7 @@
 #include "spikedasm.h"
 
 // #define TRACE_METHOD_TRACE
+#define PRINT_SIMULATION_SPEED
 
 
 #define Log() printf("file: %s, line: %d\n", __FILE__, __LINE__); fflush(stdout)
