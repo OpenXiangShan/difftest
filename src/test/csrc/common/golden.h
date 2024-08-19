@@ -37,14 +37,18 @@ typedef union PageTableEntry {
     uint32_t d : 1;
     uint32_t rsw : 2;
     uint64_t ppn : 44;
-    uint32_t pad : 10;
+    uint32_t rsvd : 7;
+    uint32_t pbmt : 2;
+    uint32_t n : 1;
   };
   struct {
     uint32_t difftest_v : 1;
     uint32_t difftest_perm : 7;
     uint32_t difftest_rsw : 2;
     uint64_t difftest_ppn : 44;
-    uint32_t difftest_pad : 10;
+    uint32_t difftest_rsvd : 7;
+    uint32_t difftest_pbmt : 2;
+    uint32_t difftest_n : 1;
   };
   uint64_t val;
 } PTE;
