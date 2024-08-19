@@ -43,6 +43,7 @@ template <typename T> bool DiffTrace<T>::read_next(T *trace) {
 }
 
 template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
+  memset(file_name, 0, 128);
   static uint64_t trace_index = 0;
   char dirname[128];
   if (strchr(trace_name, '/')) {
@@ -62,12 +63,13 @@ template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
 }
 
 template <typename T> bool DiffTrace<T>::trace_file_next() {
-  char *filename = (char *)malloc(128);
+  static char *filename = (char *)malloc(128);
 #ifdef CONFIG_IOTRACE_ZSTD
   if (trace_zstd->need_load_new_file == true && is_read) {
     next_file_name(filename);
     trace_zstd->diff_zstd_next(filename, is_read);
     trace_zstd->need_load_new_file = false;
+    Info("Loading traces from %s ...\n", filename);
   } else if (!is_read) {
     next_file_name(filename);
     trace_zstd->diff_zstd_next(filename, is_read);
@@ -99,11 +101,11 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
     uint64_t read_bytes = fread(buffer, sizeof(T), buffer_size, file);
     assert(read_bytes == buffer_size);
     fclose(file);
+    Info("Loading %lu traces from %s ...\n", buffer_size, filename);
 #else
     buffer = (T *)calloc(buffer_size, sizeof(T));
     trace_zstd->diff_IOtrace_load((char *)buffer, sizeof(T));
 #endif // CONFIG_IOTRACE_ZSTD
-    Info("Loading %lu traces from %s ...\n", buffer_size, filename);
   } else if (buffer_count > 0) {
     Info("Writing %lu traces to %s ...\n", buffer_count, filename);
 #ifndef CONFIG_IOTRACE_ZSTD
@@ -125,10 +127,14 @@ void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
   if (io_trace_file.is_open()) {
     io_trace_file.close();
   }
-  io_trace_file.open(file_name, std::ios::binary);
-  if (is_read && io_trace_file.is_open() == false) {
-    printf("Run %s not find,No more trace files.End simulation\n", file_name);
-    exit(0);
+  if (is_read) {
+    io_trace_file.open(file_name, std::ios::binary | std::ios::in);
+    if (io_trace_file.is_open() == false) {
+      printf("Run %s not find,No more trace files.End simulation\n", file_name);
+      exit(0);
+    }
+  } else {
+    io_trace_file.open(file_name, std::ios::binary | std::ios::out);
   }
 }
 
