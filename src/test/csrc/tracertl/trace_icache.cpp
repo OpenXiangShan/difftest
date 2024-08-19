@@ -30,11 +30,14 @@ TraceICache::TraceICache() {
 }
 
 void TraceICache::constructSoftTLB(uint64_t vaddr, uint16_t asid, uint16_t vmid, uint64_t paddr) {
+  vaddr = vaddr & vaddr_mask();
+  paddr = paddr & paddr_mask();
   // soft_tlb[TLBKeyType(vaddr >> 12, asid, vmid)] = paddr >> 12;
   soft_tlb[vaddr >> 12] = paddr >> 12;
 }
 
 void TraceICache::constructICache(uint64_t vaddr, uint32_t inst) {
+  vaddr = vaddr & vaddr_mask();
   bool isRVC = (inst & 0x3) != 0x3;
   if (isRVC) {
     icache_va[vaddr >> 1] = (uint16_t) (inst & 0xffff);
@@ -56,6 +59,7 @@ uint16_t TraceICache::readHWord(uint64_t key) {
 
 void TraceICache::readDWord(uint64_t &dest, uint64_t addr) {
   METHOD_TRACE();
+  addr = addr & vaddr_mask();
   uint64_t addr_inner = addr >> 1;
   dest = 0;
   dest |= (uint64_t)readHWord(addr_inner + 0);
@@ -66,6 +70,8 @@ void TraceICache::readDWord(uint64_t &dest, uint64_t addr) {
 
 uint64_t TraceICache::addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
   METHOD_TRACE();
+  vaddr = vaddr & vaddr_mask();
+
   uint64_t vpn = vaddr >> 12;
   uint64_t off = vaddr & 0xfff;
   // auto it = soft_tlb.find(TLBKeyType(vpn, asid, vmid));
@@ -81,6 +87,7 @@ uint64_t TraceICache::addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
 
 bool TraceICache::addrTrans_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
   METHOD_TRACE();
+  vaddr = vaddr & vaddr_mask();
   uint64_t vpn = vaddr >> 12;
   // auto it = soft_tlb.find(TLBKeyType(vpn, asid, vmid));
   auto it = soft_tlb.find(vpn);

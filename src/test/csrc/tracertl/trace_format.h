@@ -34,6 +34,18 @@
 
 #define TraceFetchWidth 16
 
+#define PADDRBITS 39
+#define VADDRBITS 36
+
+inline uint64_t paddr_mask() {
+  uint64_t mask = (uint64_t) -1;
+  return mask >> (64 - PADDRBITS);
+};
+inline uint64_t vaddr_mask() {
+  uint64_t mask = (uint64_t) -1;
+  return mask >> (64 - VADDRBITS);
+};
+
 // TODO : pack it
 // TODO : mv instr and instr_pc to map(or more ca, icache)
 struct TraceInstruction {
@@ -48,6 +60,13 @@ struct TraceInstruction {
   uint8_t branch_type;
   uint8_t branch_taken;
   uint8_t exception;
+
+  bool pc_va_match(uint64_t pc_va) {
+    return (instr_pc_va & paddr_mask()) == (pc_va & paddr_mask());
+  }
+  bool pc_pa_match(uint64_t pc_pa) {
+    return (instr_pc_pa & paddr_mask()) == (pc_pa & paddr_mask());
+  }
 
   bool legalInst() {
     // when not exception, pc_va and inst should not be zero (when pc_pa is zero, vm not enable)

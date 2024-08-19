@@ -222,7 +222,7 @@ void TraceReader::checkCommit(uint64_t tick) {
       setError();
       printf("TraceRTL pendingInstList size %zu less then instNum %d\n", pendingInstList.size(), instNum);
     }
-    if ((pendingInstList.front().instr_pc_va != pc) ||
+    if ((!pendingInstList.front().pc_va_match(pc)) ||
         (pendingInstList.front().instr != instn)) {
       setError();
       printf("TraceRTL Commit Mismatch\n");
@@ -301,7 +301,7 @@ void TraceReader::checkDrive() {
       return ;
     }
     Instruction instBundle = driveInstInput.front();
-    if (instBundle.instr_pc_va != pc || instBundle.instr != inst) {
+    if (!instBundle.pc_va_match(pc) || instBundle.instr != inst) {
       setErrorDrive();
       printf("DriveInstInput not match\n");
       fflush(stdout);
