@@ -106,6 +106,9 @@ static inline void print_help(const char *file) {
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --remote-jtag-port     specify remote bitbang port\n");
+#ifdef WITH_DRAMSIM3
+  printf("      --dramsim3-ini         specify the ini file for DRAMSim3\n");
+#endif
 #if VM_COVERAGE == 1
   printf("      --dump-coverage        enable coverage dump\n");
 #endif // VM_COVERAGE
@@ -153,6 +156,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "overwrite-nbytes",  1, NULL,  0  },
     { "remote-jtag-port",  1, NULL,  0  },
     { "iotrace-name",      1, NULL,  0  },
+    { "dramsim3-ini",      1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -241,6 +245,15 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] iotrace is not enabled at compile time, ignore --iotrace-name");
 #endif // CONFIG_DIFFTEST_IOTRACE
             continue;
+          case 25:
+#ifdef WITH_DRAMSIM3
+            args.dramsim3_ini = optarg;
+            continue;
+#else
+            printf("Dramsim3 is not enabled, but --dramsim3-ini is specified\n");
+            exit(1);
+            break;
+#endif
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -387,6 +400,9 @@ Emulator::Emulator(int argc, const char *argv[])
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
     } else {
       init_ram(args.image, ram_size);
+#ifdef WITH_DRAMSIM3
+      dramsim3_init(args.dramsim3_ini);
+#endif
     }
   }
 

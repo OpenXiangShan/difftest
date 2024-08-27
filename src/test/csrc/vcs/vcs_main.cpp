@@ -157,6 +157,9 @@ extern "C" uint8_t simv_init() {
   common_init("simv");
 
   init_ram(bin_file, DEFAULT_EMU_RAM_SIZE);
+#ifdef WITH_DRAMSIM3
+  dramsim3_init(nullptr);
+#endif
   if (gcpt_restore_bin != NULL) {
     overwrite_ram(gcpt_restore_bin, overwrite_nbytes);
   }
