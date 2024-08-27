@@ -78,6 +78,12 @@ SIM_VSRC = $(shell find $(VSRC_DIR) -name "*.v" -or -name "*.sv")
 
 # DiffTest support
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)
+# FPGA-Difftest support
+FPGA ?= 0
+ifeq ($(FPGA),1)
+DIFFTEST_CSRC_DIR += $(abspath ./src/test/csrc/fpga)
+endif
+
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 ifeq ($(NO_DIFF), 1)
 SIM_CXXFLAGS += -DCONFIG_NO_DIFFTEST
