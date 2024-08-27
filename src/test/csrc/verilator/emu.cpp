@@ -313,12 +313,6 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
   return args;
 }
 
-#include <functional>
-std::function<double()> get_sc_time_stamp = []() -> double { return 0; };
-double sc_time_stamp() {
-  return get_sc_time_stamp();
-}
-
 Emulator::Emulator(int argc, const char *argv[])
     : dut_ptr(new VSimTop), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
 
@@ -334,9 +328,6 @@ Emulator::Emulator(int argc, const char *argv[])
     printf("[warning] cannot set stack size. Large designs may cause SIGSEGV.\n");
   }
 #endif
-
-  // junk, link for verilator
-  get_sc_time_stamp = [this]() -> double { return get_cycles(); };
 
   args = parse_args(argc, argv);
 #ifdef ENABLE_CONSTANTIN
