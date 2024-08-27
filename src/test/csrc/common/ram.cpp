@@ -289,10 +289,6 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes)
     img_size = reader->read_all(ram, memory_size);
     delete reader;
   }
-
-#ifdef WITH_DRAMSIM3
-  dramsim3_init();
-#endif
 }
 
 MmapMemory::~MmapMemory() {
@@ -446,13 +442,24 @@ void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes) {
 }
 
 #ifdef WITH_DRAMSIM3
-void dramsim3_init() {
+void dramsim3_init(const char *config_file) {
 #if !defined(DRAMSIM3_CONFIG) || !defined(DRAMSIM3_OUTDIR)
 #error DRAMSIM3_CONFIG or DRAMSIM3_OUTDIR is not defined
 #endif
 
+  config_file = (config_file == nullptr) ? DRAMSIM3_CONFIG : config_file;
+
   assert(dram == NULL);
-  dram = new ComplexCoDRAMsim3(DRAMSIM3_CONFIG, DRAMSIM3_OUTDIR);
+  // check config_file is valid
+  std::ifstream ifs(config_file);
+  if (!ifs) {
+    std::cerr << "Cannot open DRAMSIM3 config file: " << config_file << std::endl;
+    exit(1);
+  }
+  ifs.close();
+
+  std::cout << "DRAMSIM3 config: " << config_file << std::endl;
+  dram = new ComplexCoDRAMsim3(config_file, DRAMSIM3_OUTDIR);
   // dram = new SimpleCoDRAMsim3(90);
 }
 
