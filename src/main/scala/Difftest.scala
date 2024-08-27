@@ -463,6 +463,7 @@ object DifftestModule {
     }
     if (dontCare) {
       difftest := DontCare
+      difftest.bits.getValidOption.foreach(_ := false.B)
     }
     jsonProfiles += (gen.toJsonProfile ++ Map("delay" -> delay))
     difftest
