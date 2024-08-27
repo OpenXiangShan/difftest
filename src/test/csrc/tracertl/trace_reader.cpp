@@ -18,25 +18,60 @@
 #include <sstream>
 #include "trace_reader.h"
 #include "tracertl.h"
+#include "trace_decompress.h"
 
-TraceReader::TraceReader(std::string trace_file_name)
+TraceReader::TraceReader(const char *trace_file_name)
 {
+  printf("TraceRTL: check file exists %s...\n", trace_file_name);
   // preread trace
-  trace_stream_preread = new std::ifstream(trace_file_name, std::ios_base::in);
-  if ((!trace_stream_preread->is_open())) {
-    std::ostringstream oss;
-    oss << "[TraceReader.TraceReader] preread. Could not open file: " << trace_file_name;
-    throw std::runtime_error(oss.str());
+  trace_stream = new std::ifstream(trace_file_name, std::ios_base::in);
+  if ((!trace_stream->is_open())) {
+    printf("[TraceReader.TraceReader] Could not open file.\n");
+    exit(1);
   }
+
+  // read file into buffer;
+  printf("TraceRTL: read tracefile...\n");
+  trace_stream->seekg(0, std::ios::end);
+  std::streampos fileSize = trace_stream->tellg();
+  trace_stream->seekg(0, std::ios::beg);
+  char *fileBuffer = new char[fileSize];
+  trace_stream->read(fileBuffer, fileSize);
+  trace_stream->close();
+  delete trace_stream;
+
+  if (fileSize == 0 ) {
+    std::cerr << "FileSize Error, should not be zero" << std::endl;
+    exit(1);
+  }
+
+  // decompress
+  printf("TraceRTL: decompress tracefile...\n");
+  size_t sizeAfterDC = traceDecompressSizeZSTD(fileBuffer, fileSize);
+  if ((sizeAfterDC % sizeof(TraceInstruction)) != 0) {
+    printf("Trace file decompress result wrong. sizeAfterDC cannot be divide exactly.\n");
+    exit(0);
+  }
+
+  TraceInstruction *instDecompressBuffer = new TraceInstruction[sizeAfterDC / sizeof(TraceInstruction)];
+  uint64_t decompressedSize =
+    traceDecompressZSTD((char *)instDecompressBuffer, sizeAfterDC, fileBuffer, fileSize);
+  uint64_t traceInstNum = decompressedSize / sizeof(TraceInstruction);
+  delete[] fileBuffer;
+
+  if (decompressedSize != sizeAfterDC) {
+    std::cerr << "TraceRTL: Error of Decompress. Decompress size not match "
+              << sizeAfterDC << " " << decompressedSize << std::endl;
+    exit(1);
+  }
+
+  // pre-process the trace inst;
+  printf("TraceRTL: preparse/precheck tracefile...\n");
   inst_id_preread.pop(); // set init id to 1
   commit_inst_num.pop(); // set init id to 1
-
-  printf("TraceRTL: preread tracefile...\n");
-  fflush(stdout);
-  while (!trace_stream_preread->eof()) {
-    TraceInstruction static_inst;
+  for (uint64_t idx = 0; idx < traceInstNum; idx ++) {
+    TraceInstruction static_inst = instDecompressBuffer[idx];
     Instruction inst;
-    trace_stream_preread->read(reinterpret_cast<char *> (&static_inst), sizeof(TraceInstruction));
     inst.fromTraceInst(static_inst);
     inst.inst_id = inst_id_preread.pop();
 
@@ -56,10 +91,9 @@ TraceReader::TraceReader(std::string trace_file_name)
     // construct trace
     instList_preread.push(inst);
   }
-  printf("TraceRTL: preread tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());
+  printf("TraceRTL: preparse tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());
   fflush(stdout);
-  trace_stream_preread->close();
-  delete trace_stream_preread;
+  delete[] instDecompressBuffer;
 
   last_interval_time = gen_cur_time();
 }

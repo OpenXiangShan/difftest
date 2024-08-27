@@ -57,9 +57,8 @@ struct TraceCollectBufferEntry {
 #define TraceCommitBufferSize 8
 #define TraceDriveBufferSize 8
 #define TraceReadBufferSize TraceFetchWidth
-
 class TraceReader {
-  std::ifstream *trace_stream_preread;
+  std::ifstream *trace_stream;
   TraceCounter inst_id_preread;
   std::queue<Instruction> instList_preread;
 
@@ -126,7 +125,7 @@ class TraceReader {
   }
 
 public:
-  TraceReader(std::string trace_file_name);
+  TraceReader(const char *trace_file_name);
   ~TraceReader() {
   }
   /* get an instruction from file */
