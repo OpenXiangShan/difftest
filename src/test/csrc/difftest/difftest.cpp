@@ -777,7 +777,7 @@ r_s2xlate do_s2xlate(Hgatp *hgatp, uint64_t gpaddr) {
   r_s2xlate r_s2;
   if (hgatp->mode == 0) {
     r_s2.pte.ppn = gpaddr >> 12;
-    r_s2.level = 2;
+    r_s2.level = 0;
     return r_s2;
   }
   int max_level = hgatp->mode == 8 ? 2 : 3;
@@ -811,6 +811,7 @@ int Difftest::do_l1tlb_check() {
     Hgatp *hgatp = (Hgatp *)&dut->l1tlb[i].hgatp;
     uint8_t hasS2xlate = dut->l1tlb[i].s2xlate != noS2xlate;
     uint8_t onlyS2 = dut->l1tlb[i].s2xlate == onlyStage2;
+    uint8_t hasAllStage = dut->l1tlb[i].s2xlate == allStage;
     uint64_t pg_base = (hasS2xlate ? vsatp->ppn : satp->ppn) << 12;
     int mode = hasS2xlate ? vsatp->mode : satp->mode;
     int max_level = mode == 8 ? 2 : 3;
@@ -821,7 +822,7 @@ int Difftest::do_l1tlb_check() {
     } else {
       for (difftest_level = max_level; difftest_level >= 0; difftest_level--) {
         paddr = pg_base + VPNi(dut->l1tlb[i].vpn, difftest_level) * sizeof(uint64_t);
-        if (hasS2xlate) {
+        if (hasAllStage) {
           r_s2 = do_s2xlate(hgatp, paddr);
           uint64_t pg_mask = ((1ull << VPNiSHFT(r_s2.level)) - 1);
           pg_base = (r_s2.pte.ppn << 12 & ~pg_mask) | (paddr & pg_mask & ~PAGE_MASK);
@@ -837,7 +838,7 @@ int Difftest::do_l1tlb_check() {
         uint64_t pg_mask = ((1ull << VPNiSHFT(difftest_level)) - 1);
         pg_base = (pte.ppn << 12 & ~pg_mask) | (dut->l1tlb[i].vpn << 12 & pg_mask & ~PAGE_MASK);
       }
-      if (hasS2xlate && pte.v) {
+      if (hasAllStage && pte.v) {
         r_s2 = do_s2xlate(hgatp, pg_base);
         pte = r_s2.pte;
         difftest_level = r_s2.level;
