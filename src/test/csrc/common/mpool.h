@@ -13,6 +13,9 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
+#ifndef __MPOOL_H__
+#define __MPOOL_H__
+
 #include <atomic>
 #include <condition_variable>
 #include <functional>
@@ -81,3 +84,5 @@ private:
   size_t page_head = 0;
   size_t page_end = 0;
 };
+
+#endif
