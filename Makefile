@@ -238,6 +238,7 @@ include verilator.mk
 include vcs.mk
 include palladium.mk
 include libso.mk
+include fpga.mk
 
 clean: vcs-clean pldm-clean
 	rm -rf $(BUILD_DIR)
