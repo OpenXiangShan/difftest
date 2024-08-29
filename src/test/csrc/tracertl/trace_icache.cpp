@@ -78,7 +78,7 @@ uint64_t TraceICache::addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
   auto it = soft_tlb.find(vpn);
   if (it != soft_tlb.end()) {
     METHOD_TRACE();
-    return it->second | off;
+    return (it->second << 12) | off;
   } else {
     METHOD_TRACE();
     return 0x90000000 | off; // give a legal addr
@@ -95,6 +95,20 @@ bool TraceICache::addrTrans_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
     return true;
   } else {
     return false;
+  }
+}
+
+void TraceICache::dumpICache() {
+  fprintf(stderr, "TraceICache Content:\n");
+  for (const auto &pair : icache_va) {
+    fprintf(stderr, "%08lx -> %04hx\n", pair.first, pair.second);
+  }
+}
+
+void TraceICache::dumpSoftTlb() {
+  fprintf(stderr, "TraceSoftTlb Content:\n");
+  for (const auto &pair : soft_tlb) {
+    fprintf(stderr, "%016lx -> %09lx\n", pair.first, pair.second);
   }
 }
 

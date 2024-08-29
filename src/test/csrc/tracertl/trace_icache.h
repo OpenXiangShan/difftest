@@ -59,6 +59,9 @@ public:
   uint64_t addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid);
   bool addrTrans_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid);
   uint16_t readHWord(uint64_t key);
+
+  void dumpICache();
+  void dumpSoftTlb();
 };
 
 #endif
