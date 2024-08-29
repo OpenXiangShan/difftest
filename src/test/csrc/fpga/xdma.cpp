@@ -13,11 +13,15 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-#include "xdma.h"
+#include <fcntl.h>
+#include <signal.h>
 
-FpgaXdma::FpgaXdma() {
+#include "xdma.h"
+#include "mpool.h"
+
+FpgaXdma::FpgaXdma(const char *device_name) {
   signal(SIGINT, handle_sigint);
-  fd_c2h = open("/dev/xdma0_c2h_0", O_RDWR);
+  fd_c2h = open(device_name, O_RDWR);
   set_dma_fd_block();
 }
 
@@ -27,37 +31,47 @@ void FpgaXdma::handle_sigint(int sig) {
 }
 
 void FpgaXdma::set_dma_fd_block() {
-  int flags = fcntl(fd, F_GETFL, 0);
+  int flags = fcntl(fd_c2h, F_GETFL, 0);
   if (flags == -1) {
     perror("fcntl get error");
     return;
   }
   // Clear the O NONBLOCK flag and set it to blocking mode
   flags &= ~O_NONBLOCK;
-  if (fcntl(fd, F_SETFL, flags) == -1) {
+  if (fcntl(fd_c2h, F_SETFL, flags) == -1) {
     perror("fcntl set error");
     return;
   }
 }
 
-void FpgaXdma::thread_read_xdma() {
+void FpgaXdma::read_xdma_thread() {
   while (running) {
-    char *memory = memory_pool.get_free_chunk();
+    char *memory = xdma_mempool.get_free_chunk();
     read(fd_c2h, memory, recv_size);
-    memory_pool.set_busy_chunk();
+    xdma_mempool.set_busy_chunk();
   }
 }
 
 void FpgaXdma::write_difftest_thread() {
   while (running) {
-    const char *memory = memory_pool.get_busy_chunk();
-    memcpy(&diffteststate, memory, sizeof(diffteststate));
+    const char *memory = xdma_mempool.get_busy_chunk();
+    static uint8_t valid_core = 0;
+    uint8_t core_id = 0;
 
-    stream_receiver_cout ++;
-    memory_pool.set_free_chunk();
+    memcpy(&core_id, memory + sizeof(DiffTestState), sizeof(uint8_t));
+    assert(core_id > NUM_CORES);
+    {
+      std::unique_lock<std::mutex> lock(diff_mtx);
+      diff_empile_cv.wait(lock, [this] { return !diff_packge_filled; });
+      memcpy(&difftest_pack[core_id], memory, sizeof(DiffTestState));
+    }
+    valid_core ++;
+    xdma_mempool.set_free_chunk();
 
-// Notify difftest to run the next beat
-  
-
+    if (core_id == NUM_CORES) {
+      diff_packge_filled = true;
+      // Notify difftest to run the next check
+      diff_filled_cv.notify_one();
+    }
   }
 }
