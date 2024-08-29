@@ -14,9 +14,10 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "difftest.h"
 #include "diffstate.h"
+#include "difftest.h"
 #include "mpool.h"
+#include "refproxy.h"
 #include "xdma.h"
 
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_0"
@@ -41,11 +42,13 @@ void simv_init();
 void simv_step();
 void cpu_endtime_check();
 void set_dut_from_xdma();
+void set_diff_ref_so(char *s);
+void args_parsingniton(int argc, char *argv[]);
 
-FpgaXdma *xdma_device = NULL; 
+FpgaXdma *xdma_device = NULL;
 
 int main(int argc, char *argv[]) {
-
+  args_parsingniton(argc, argv);
   simv_init();
 
   while (simv_result == SIMV_RUN) {
@@ -56,6 +59,15 @@ int main(int argc, char *argv[]) {
     simv_step();
     cpu_endtime_check();
   }
+  free(xdma_device);
+}
+
+void set_diff_ref_so(char *s) {
+  extern const char *difftest_ref_so;
+  printf("diff-test ref so:%s\n", s);
+  char *buf = (char *)malloc(256);
+  strcpy(buf, s);
+  difftest_ref_so = buf;
 }
 
 void set_dut_from_xdma() {
@@ -98,6 +110,14 @@ void cpu_endtime_check() {
           simv_result = SIMV_DONE;
         }
       }
+    }
+  }
+}
+
+void args_parsingniton(int argc, char *argv[]) {
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--diff") == 0) {
+      set_diff_ref_so(argv[++i]);
     }
   }
 }
