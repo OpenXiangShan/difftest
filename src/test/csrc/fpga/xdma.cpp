@@ -13,15 +13,19 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-#include <fcntl.h>
-#include <signal.h>
-
 #include "xdma.h"
 #include "mpool.h"
+#include <fcntl.h>
+#include <signal.h>
 
 FpgaXdma::FpgaXdma(const char *device_name) {
   signal(SIGINT, handle_sigint);
   fd_c2h = open(device_name, O_RDWR);
+  if (fd_c2h == -1) {
+    printf("xdma device not find %s\n", device_name);
+    exit(1);
+  }
+  printf("xdma device %s\n", device_name);
   set_dma_fd_block();
 }
 
@@ -34,6 +38,7 @@ void FpgaXdma::set_dma_fd_block() {
   int flags = fcntl(fd_c2h, F_GETFL, 0);
   if (flags == -1) {
     perror("fcntl get error");
+    exit(1);
     return;
   }
   // Clear the O NONBLOCK flag and set it to blocking mode
@@ -42,6 +47,25 @@ void FpgaXdma::set_dma_fd_block() {
     perror("fcntl set error");
     return;
   }
+}
+
+void FpgaXdma::start_transmit_thread() {
+  if (running == true)
+    return;
+  receive_thread = std::thread(&FpgaXdma::read_xdma_thread, this);
+  process_thread = std::thread(&FpgaXdma::write_difftest_thread, this);
+  running = true;
+}
+
+void FpgaXdma::stop_thansmit_thread() {
+  if (running == false)
+    return;
+  xdma_mempool.unlock_thread();
+  if (receive_thread.joinable())
+    receive_thread.join();
+  if (process_thread.joinable())
+    process_thread.join();
+  running = false;
 }
 
 void FpgaXdma::read_xdma_thread() {
@@ -65,11 +89,12 @@ void FpgaXdma::write_difftest_thread() {
       diff_empile_cv.wait(lock, [this] { return !diff_packge_filled; });
       memcpy(&difftest_pack[core_id], memory, sizeof(DiffTestState));
     }
-    valid_core ++;
+    valid_core++;
     xdma_mempool.set_free_chunk();
 
-    if (core_id == NUM_CORES) {
+    if (valid_core == NUM_CORES) {
       diff_packge_filled = true;
+      valid_core = 0;
       // Notify difftest to run the next check
       diff_filled_cv.notify_one();
     }
