@@ -16,22 +16,18 @@
 #ifndef __XDMA_H__
 #define __XDMA_H__
 
+#include "common.h"
+#include "diffstate.h"
+#include "mpool.h"
 #include <queue>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/shm.h>
+#include <thread>
 #include <vector>
 
-#include "common.h"
-#include "diffstate.h"
-#include "mpool.h"
-
 #define WITH_FPGA
-#define HEAD_DATA_LEN   7
-#define BUFSIZE         1024 * 8 * 8
-#define WAIT_RECV_SLEEP 5
-
 typedef struct FpgaPackgeHead {
   DiffTestState difftestinfo;
   uint8_t corid;
@@ -48,6 +44,7 @@ public:
 
   int fd_c2h;
   int fd_interrupt;
+  bool running = false;
 
   unsigned int recv_size = sizeof(FpgaPackgeHead);
   unsigned long old_exec_instr = 0;
@@ -57,15 +54,22 @@ public:
   std::mutex diff_mtx;
   bool diff_packge_filled = false;
   FpgaXdma(const char *device_name);
-  ~FpgaXdma() {};
+  ~FpgaXdma() {
+    stop_thansmit_thread();
+  };
 
   void set_dma_fd_block();
 
   // thread api
+  void start_transmit_thread();
+  void stop_thansmit_thread();
   void read_xdma_thread();
   void write_difftest_thread();
 
 private:
+  std::thread receive_thread;
+  std::thread process_thread;
+
   static void handle_sigint(int sig);
 };
 

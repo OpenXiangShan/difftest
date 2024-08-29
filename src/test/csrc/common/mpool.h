@@ -28,7 +28,6 @@
 #define NUM_BLOCKS     (MEMPOOL_SIZE / MEMBLOCK_SIZE)
 #define REM_NUM_BLOCKS (NUM_BLOCKS - 1)
 
-extern bool running;
 class MemoryPool {
 public:
   // Constructor to allocate aligned memory blocks
