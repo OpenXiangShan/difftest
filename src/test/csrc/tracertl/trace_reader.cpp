@@ -67,6 +67,7 @@ TraceReader::TraceReader(const char *trace_file_name)
 
   // pre-process the trace inst;
   printf("TraceRTL: preparse/precheck tracefile...\n");
+  TraceCounter inst_id_preread;
   inst_id_preread.pop(); // set init id to 1
   commit_inst_num.pop(); // set init id to 1
   for (uint64_t idx = 0; idx < traceInstNum; idx ++) {
@@ -83,10 +84,8 @@ TraceReader::TraceReader(const char *trace_file_name)
 
     // construct trace_icache
     trace_icache->constructICache(inst.instr_pc_va, inst.instr);
-    if (inst.instr_pc_pa != 0)
-      trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
-    if (inst.memory_address_pa != 0)
-      trace_icache->constructSoftTLB(inst.memory_address_va, 0, 0, inst.memory_address_pa);
+    trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+    trace_icache->constructSoftTLB(inst.memory_address_va, 0, 0, inst.memory_address_pa);
 
     // construct trace
     instList_preread.push(inst);
@@ -388,7 +387,7 @@ bool TraceReader::traceOver() {
 bool TraceReader::update_tick(uint64_t tick) {
   METHOD_TRACE();
   uint64_t threa;
-  if (commit_inst_num.get() == 0) threa = FIRST_BLOCK_THREASHOLD;
+  if (commit_inst_num.get() == 1) threa = FIRST_BLOCK_THREASHOLD;
   else threa = BLOCK_THREASHOLD;
 
   if (isCommited()) {

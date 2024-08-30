@@ -118,9 +118,9 @@ struct Instruction : TraceInstruction {
 
   inline void fromTraceInst(TraceInstruction t) {
     instr_pc_va = t.instr_pc_va;
-    instr_pc_pa = t.instr_pc_pa;
+    instr_pc_pa = (t.instr_pc_pa != 0) ? t.instr_pc_pa : t.instr_pc_va;
     memory_address_va = t.memory_address_va;
-    memory_address_pa = t.memory_address_pa;
+    memory_address_pa = (t.memory_address_pa != 0) ? t.memory_address_pa : t.memory_address_va;
     target = t.target;
     instr = t.instr;
     memory_type = t.memory_type;

@@ -59,7 +59,6 @@ struct TraceCollectBufferEntry {
 #define TraceReadBufferSize TraceFetchWidth
 class TraceReader {
   std::ifstream *trace_stream;
-  TraceCounter inst_id_preread;
   std::queue<Instruction> instList_preread;
 
   TraceStatus status;
