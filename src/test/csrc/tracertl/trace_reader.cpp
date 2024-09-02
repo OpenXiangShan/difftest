@@ -70,6 +70,24 @@ TraceReader::TraceReader(const char *trace_file_name)
   TraceCounter inst_id_preread;
   inst_id_preread.pop(); // set init id to 1
   commit_inst_num.pop(); // set init id to 1
+
+  if (instDecompressBuffer[0].instr_pc_va != RESET_VECTOR) {
+    TraceInstruction static_inst;
+    static_inst.setToForceJump(RESET_VECTOR, instDecompressBuffer[0].instr_pc_va);
+    Instruction inst;
+    inst.fromTraceInst(static_inst);
+    inst.inst_id = inst_id_preread.pop();
+
+    if (!inst.legalInst()) {
+      setError();
+      printf("TraceRTL preread: read from trace file, but illegal inst. Dump the inst:\n");
+      inst.dump();
+    }
+
+    // construct trace
+    instList_preread.push(inst);
+  }
+
   for (uint64_t idx = 0; idx < traceInstNum; idx ++) {
     TraceInstruction static_inst = instDecompressBuffer[idx];
     Instruction inst;

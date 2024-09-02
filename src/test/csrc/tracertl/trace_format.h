@@ -61,6 +61,20 @@ struct TraceInstruction {
   uint8_t branch_taken;
   uint8_t exception;
 
+  void setToForceJump(uint64_t o_pc, uint64_t o_target) {
+    instr_pc_va = o_pc;
+    instr_pc_pa = o_pc;
+    memory_address_pa = 0;
+    memory_address_va = 0;
+    target = o_target;
+    instr = 0;
+    memory_type = 0;
+    memory_size = 0;
+    branch_taken = 0;
+    branch_type = 0;
+    exception = 0x81;
+  }
+
   bool pc_va_match(uint64_t pc_va) {
     return (instr_pc_va & paddr_mask()) == (pc_va & paddr_mask());
   }

@@ -23,6 +23,8 @@
 #include "trace_format.h"
 #include "emu.h"
 
+#define RESET_VECTOR 0x80000000
+
 enum TraceStatus {
   TRACE_IDLE,
   TRACE_EOF,
