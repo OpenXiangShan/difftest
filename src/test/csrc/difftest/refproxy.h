@@ -143,6 +143,7 @@ public:
   f(ref_put_gmaddr, difftest_put_gmaddr, void, void *)                        \
   f(ref_skip_one, difftest_skip_one, void, bool, bool, uint32_t, uint64_t)    \
   f(ref_guided_exec, difftest_guided_exec, void, void*)                       \
+  f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                      \
   f(disambiguation_state, difftest_disambiguation_state, int, )
 
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
@@ -222,6 +223,12 @@ public:
         regs_int.value[wdest] = wdata;
       }
       sync(true);
+    }
+  }
+
+  inline void trigger_nmi(bool hasNMI) {
+    if (raise_nmi_intr) {
+      raise_nmi_intr(hasNMI);
     }
   }
 

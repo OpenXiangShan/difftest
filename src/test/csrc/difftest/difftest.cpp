@@ -398,6 +398,7 @@ int Difftest::step() {
 
 void Difftest::do_interrupt() {
   state->record_interrupt(dut->event.exceptionPC, dut->event.exceptionInst, dut->event.interrupt);
+  proxy->trigger_nmi(dut->event.hasNMI);
   proxy->raise_intr(dut->event.interrupt | (1ULL << 63));
   progress = true;
 }
