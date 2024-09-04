@@ -29,6 +29,7 @@ TraceReader *trace_reader = NULL;
 
 void init_tracertl(const char *trace_file_name) {
   printf("init_tracertl: %s\n", trace_file_name);
+  fflush(stdout);
   trace_reader = new TraceReader(trace_file_name);
 
   trace_reader->prepareRead();

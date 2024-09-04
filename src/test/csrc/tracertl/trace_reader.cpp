@@ -23,6 +23,7 @@
 TraceReader::TraceReader(const char *trace_file_name)
 {
   printf("TraceRTL: check file exists %s...\n", trace_file_name);
+  fflush(stdout);
   // preread trace
   trace_stream = new std::ifstream(trace_file_name, std::ios_base::in);
   if ((!trace_stream->is_open())) {

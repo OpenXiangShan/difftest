@@ -411,6 +411,8 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #ifdef TRACERTL_MODE
   // Use fakeicache for placeholder
+  printf("Compiled for TraceRTL\n");
+  fflush(stdout);
   if (args.tracertl_file) {
     // traceicache's ram is constructed by tracertl's init method.
     init_traceicache();
@@ -420,7 +422,10 @@ Emulator::Emulator(int argc, const char *argv[])
     fflush(stderr);
     throw std::runtime_error("trace file not specified");
   }
-#endif // TRACERTL_MODE
+#else // TRACERTL_MODE
+  printf("Compiled for Exection Driven\n");
+  fflush(stdout);
+#endif
 
   // init core
   reset_ncycles(args.reset_cycles);
