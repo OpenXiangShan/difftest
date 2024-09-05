@@ -144,6 +144,7 @@ public:
   f(ref_skip_one, difftest_skip_one, void, bool, bool, uint32_t, uint64_t)    \
   f(ref_guided_exec, difftest_guided_exec, void, void*)                       \
   f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                      \
+  f(ref_virtual_interrupt_is_hvictl_inject, difftest_virtual_interrupt_is_hvictl_inject, void, bool)        \
   f(disambiguation_state, difftest_disambiguation_state, int, )
 
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
@@ -229,6 +230,16 @@ public:
   inline void trigger_nmi(bool hasNMI) {
     if (raise_nmi_intr) {
       raise_nmi_intr(hasNMI);
+    } else {
+      printf("No NMI interrupt is triggered.\n");
+    }
+  }
+
+  inline void virtual_interrupt_is_hvictl_inject(bool virtualInterruptIsHvictlInject) {
+    if (ref_virtual_interrupt_is_hvictl_inject) {
+      ref_virtual_interrupt_is_hvictl_inject(virtualInterruptIsHvictlInject);
+    } else {
+      printf("Virtual interrupt without hvictl register injection.\n");
     }
   }
 
