@@ -334,6 +334,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     args.image = "/dev/zero";
   }
 
+  if (args.enable_waveform && args.enable_fork) {
+    printf("--dump-wave should not exist with --enable-fork\n");
+    fflust(stdout);
+    exit(1);
+  }
+
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
 #ifdef ENABLE_IPC
