@@ -43,7 +43,8 @@ static char *gcpt_restore_bin = NULL;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
-static uint64_t overwrite_nbytes = 0xe00;
+static uint32_t overwrite_nbytes = 0xe00;
+static bool overwrite_auto = true;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   double core_cpi[NUM_CORES];
@@ -70,11 +71,26 @@ extern "C" void set_flash_bin(char *s) {
 
 extern "C" void set_overwrite_nbytes(uint64_t len) {
   overwrite_nbytes = len;
+  overwrite_auto = false;
 }
 
 extern "C" void set_gcpt_bin(char *s) {
   gcpt_restore_bin = (char *)malloc(256);
   strcpy(gcpt_restore_bin, s);
+  // Get the lower four bytes
+  if (overwrite_auto) {
+    FILE *fp = fopen(gcpt_restore_bin, "rb");
+    fseek(fp, 4, SEEK_SET);
+    if (fread(&overwrite_nbytes, sizeof(uint32_t), 1, fp) != 1) {
+      fclose(fp);
+      printf("auto read gcpt overwrite size fiald, need manual set_overwrite_nbytes\n");
+    }
+    fclose(fp);
+    if (overwrite_nbytes > 1024 * 1024) {
+      printf("the workload you are using may not support overwrite automatically\n");
+    }
+    printf("gcpt auto overwrite size :%x\n", overwrite_nbytes);
+  }
 }
 
 extern "C" void set_max_instrs(uint64_t mc) {
