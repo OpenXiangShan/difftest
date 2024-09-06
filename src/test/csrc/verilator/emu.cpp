@@ -336,7 +336,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 
   if (args.enable_waveform && args.enable_fork) {
     printf("--dump-wave should not exist with --enable-fork\n");
-    fflust(stdout);
+    fflush(stdout);
     exit(1);
   }
 
