@@ -44,7 +44,7 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
-static bool overwrite_auto = true;
+static bool overwrite_auto = false;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   double core_cpi[NUM_CORES];
@@ -71,26 +71,24 @@ extern "C" void set_flash_bin(char *s) {
 
 extern "C" void set_overwrite_nbytes(uint64_t len) {
   overwrite_nbytes = len;
-  overwrite_auto = false;
+}
+
+extern "C" void set_overwrite_autoset() {
+  FILE *fp = fopen(gcpt_restore_bin, "rb");
+  if (fp == NULL) {
+    printf("set the gcpt path before using auto set");
+    return;
+  }
+  // Get the lower four bytes
+  fseek(fp, 4, SEEK_SET);
+  uint32_t data = 0;
+  fread(&overwrite_nbytes, sizeof(uint32_t), 1, fp);
+  fclose(fp);
 }
 
 extern "C" void set_gcpt_bin(char *s) {
   gcpt_restore_bin = (char *)malloc(256);
   strcpy(gcpt_restore_bin, s);
-  // Get the lower four bytes
-  if (overwrite_auto) {
-    FILE *fp = fopen(gcpt_restore_bin, "rb");
-    fseek(fp, 4, SEEK_SET);
-    uint32_t data = 0;
-    if (fread(&data, sizeof(uint32_t), 1, fp) == 1) {
-      if (data > 1024 * 1024) {
-        printf("the workload you are using may not support overwrite automatically\n");
-      } else {
-        overwrite_nbytes = data;
-      }
-    }
-    fclose(fp);
-  }
 }
 
 extern "C" void set_max_instrs(uint64_t mc) {
