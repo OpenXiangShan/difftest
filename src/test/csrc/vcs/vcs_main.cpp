@@ -81,15 +81,15 @@ extern "C" void set_gcpt_bin(char *s) {
   if (overwrite_auto) {
     FILE *fp = fopen(gcpt_restore_bin, "rb");
     fseek(fp, 4, SEEK_SET);
-    if (fread(&overwrite_nbytes, sizeof(uint32_t), 1, fp) != 1) {
-      fclose(fp);
-      printf("auto read gcpt overwrite size fiald, need manual set_overwrite_nbytes\n");
+    uint32_t data = 0;
+    if (fread(&data, sizeof(uint32_t), 1, fp) == 1) {
+      if (data > 1024 * 1024) {
+        printf("the workload you are using may not support overwrite automatically\n");
+      } else {
+        overwrite_nbytes = data;
+      }
     }
     fclose(fp);
-    if (overwrite_nbytes > 1024 * 1024) {
-      printf("the workload you are using may not support overwrite automatically\n");
-    }
-    printf("gcpt auto overwrite size :%x\n", overwrite_nbytes);
   }
 }
 
