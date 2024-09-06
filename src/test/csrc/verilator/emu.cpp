@@ -410,12 +410,11 @@ Emulator::Emulator(int argc, const char *argv[])
   }
 
   if (args.gcpt_restore) {
-        if (args.overwrite_nbytes_autoset) {
-            FILE *fp = fopen(gcpt_restore_bin, "rb");
-            fseek(fp, 4, SEEK_SET);
-            fread(&args.overwrite_nbytes, sizeof(uint32_t), 1, fp);
-            fclose(fp);
-         
+    if (args.overwrite_nbytes_autoset) {
+      FILE *fp = fopen(args.gcpt_restore, "rb");
+      fseek(fp, 4, SEEK_SET);
+      fread(&args.overwrite_nbytes, sizeof(uint32_t), 1, fp);
+      fclose(fp);
     }
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }

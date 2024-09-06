@@ -44,7 +44,6 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
-static bool overwrite_auto = false;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   double core_cpi[NUM_CORES];
@@ -81,7 +80,6 @@ extern "C" void set_overwrite_autoset() {
   }
   // Get the lower four bytes
   fseek(fp, 4, SEEK_SET);
-  uint32_t data = 0;
   fread(&overwrite_nbytes, sizeof(uint32_t), 1, fp);
   fclose(fp);
 }
