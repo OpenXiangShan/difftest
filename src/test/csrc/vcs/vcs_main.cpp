@@ -43,7 +43,7 @@ static char *gcpt_restore_bin = NULL;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
-static uint64_t overwrite_nbytes = 0xe00;
+static uint32_t overwrite_nbytes = 0xe00;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   double core_cpi[NUM_CORES];
@@ -70,6 +70,18 @@ extern "C" void set_flash_bin(char *s) {
 
 extern "C" void set_overwrite_nbytes(uint64_t len) {
   overwrite_nbytes = len;
+}
+
+extern "C" void set_overwrite_autoset() {
+  FILE *fp = fopen(gcpt_restore_bin, "rb");
+  if (fp == NULL) {
+    printf("set the gcpt path before using auto set");
+    return;
+  }
+  // Get the lower four bytes
+  fseek(fp, 4, SEEK_SET);
+  fread(&overwrite_nbytes, sizeof(uint32_t), 1, fp);
+  fclose(fp);
 }
 
 extern "C" void set_gcpt_bin(char *s) {

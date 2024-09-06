@@ -86,6 +86,7 @@ static inline void print_help(const char *file) {
 #endif
   printf("  -X, --fork-interval=NUM    LightSSS snapshot interval (in seconds)\n");
   printf("      --overwrite-nbytes=N   set valid bytes, but less than 0xf00, default: 0xe00\n");
+  printf("      --overwrite-auto       overwrite size is automatically set of the new gcpt\n");
   printf("      --force-dump-result    force dump performance counter result in the end\n");
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
@@ -157,6 +158,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "remote-jtag-port",  1, NULL,  0  },
     { "iotrace-name",      1, NULL,  0  },
     { "dramsim3-ini",      1, NULL,  0  },
+    { "overwrite-auto",    1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -254,6 +256,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             exit(1);
             break;
 #endif
+          case 26: args.overwrite_nbytes_autoset = true; continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -407,6 +410,12 @@ Emulator::Emulator(int argc, const char *argv[])
   }
 
   if (args.gcpt_restore) {
+    if (args.overwrite_nbytes_autoset) {
+      FILE *fp = fopen(args.gcpt_restore, "rb");
+      fseek(fp, 4, SEEK_SET);
+      fread(&args.overwrite_nbytes, sizeof(uint32_t), 1, fp);
+      fclose(fp);
+    }
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }
 
