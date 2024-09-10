@@ -1,5 +1,5 @@
 #***************************************************************************************
-# Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
 # Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
 # DiffTest is licensed under Mulan PSL v2.
@@ -48,14 +48,6 @@ MILL_ARGS += --difftest-config $(CONFIG)
 endif
 difftest_verilog:
 	mill -i difftest[$(CHISEL_VERSION)].test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
-
-# co-simulation with DRAMsim3
-ifeq ($(WITH_DRAMSIM3),1)
-ifndef DRAMSIM3_HOME
-$(error DRAMSIM3_HOME is not set)
-endif
-override SIM_ARGS += --with-dramsim3
-endif
 
 TIMELOG = $(BUILD_DIR)/time.log
 TIME_CMD = time -avp -o $(TIMELOG)
@@ -132,6 +124,9 @@ endif
 
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
+ifndef DRAMSIM3_HOME
+$(error DRAMSIM3_HOME is not set)
+endif
 SIM_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
 SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
 SIM_LDFLAGS  += $(DRAMSIM3_HOME)/build/libdramsim3.a
