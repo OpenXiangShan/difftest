@@ -30,7 +30,7 @@ extern "C" uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_
 #endif // CONFIG_DIFFTEST_PERFCNT
   uint64_t pg_base = satp << 12, pte_addr;
   PTE *pte_p = (PTE *)pte;
-  for (*level = 0; *level < 3; (*level)++) {
+  for (*level = 2; *level >= 0; (*level)--) {
     pte_addr = pg_base + VPNi(vpn, *level) * sizeof(uint64_t);
 #ifdef CONFIG_NO_DIFFTEST
     pte_p->val = pmem_read(pte_addr);
