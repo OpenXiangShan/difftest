@@ -44,7 +44,7 @@ public:
       munmap(buf, SNAPSHOT_SIZE);
       buf = NULL;
     }
-    buf = (uint8_t *)mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    buf = (uint8_t *)mmap(NULL, buf_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
     if (buf == (uint8_t *)MAP_FAILED) {
       printf("Cound not mmap 0x%lx bytes\n", SNAPSHOT_SIZE);
       assert(0);
