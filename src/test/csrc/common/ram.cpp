@@ -252,7 +252,7 @@ void SimMemory::display_stats() {
 
 MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes) {
   // initialize memory using Linux mmap
-  ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+  ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {
     printf("Warning: Insufficient phisical memory\n");
     memory_size = 128 * 1024 * 1024UL;

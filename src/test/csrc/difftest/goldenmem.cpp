@@ -32,7 +32,7 @@ void *guest_to_host(uint64_t addr) {
 
 void init_goldenmem() {
   pmem_size = simMemory->get_size();
-  pmem = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+  pmem = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (pmem == (uint8_t *)MAP_FAILED) {
     printf("ERROR allocating physical memory. \n");
   }
