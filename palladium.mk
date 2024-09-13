@@ -112,13 +112,15 @@ pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(PLDM_CLOCK_SRC)
 	cd $(PLDM_BUILD_DIR) 					&& \
 	ixcom $(IXCOM_FLAGS) -l $(PLDM_BUILD_DIR)/ixcom.log
 else
-pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(PLDM_CC_OBJ_DIR)
+pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(DPILIB_EMU)
 	cd $(PLDM_BUILD_DIR) 					&& \
 	vlan $(VLAN_FLAGS) -l $(PLDM_BUILD_DIR)/vlan.log	&& \
-	ixcom $(IXCOM_FLAGS) -l $(PLDM_BUILD_DIR)/ixcom.log	&& \
+	ixcom $(IXCOM_FLAGS) -l $(PLDM_BUILD_DIR)/ixcom.log
+
+$(DPILIB_EMU): $(PLDM_CC_OBJ_DIR)
 	cd $(PLDM_CC_OBJ_DIR) 					&& \
 	$(CC) $(PLDM_CXXFLAGS) $(PLDM_CXXFILES)			&& \
-	$(CC) -o $(DPILIB_EMU) -m64 -shared *.o $(PLDM_LD_LIB)
+	$(CC) -o $@ -m64 -shared *.o $(PLDM_LD_LIB)
 endif
 
 pldm-run: $(PLDM_BUILD_DIR)
