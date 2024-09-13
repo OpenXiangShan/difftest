@@ -316,6 +316,10 @@ int Difftest::step() {
   }
 #endif
 
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+  do_non_reg_interrupt_pending();
+#endif
+
   num_commit = 0; // reset num_commit this cycle to 0
   if (dut->event.valid) {
     // interrupt has a higher priority than exception
@@ -361,11 +365,6 @@ int Difftest::step() {
 
   if (num_commit > 0) {
     state->record_group(dut->commit[0].pc, num_commit);
-  }
-
-  // FIXME: the following code is dirty
-  if (dut->csr.mip != proxy->csr.mip) { // Ignore difftest for MIP
-    proxy->csr.mip = dut->csr.mip;
   }
 
   if (apply_delayed_writeback()) {
@@ -1229,6 +1228,24 @@ void Difftest::raise_trap(int trapCode) {
   dut->trap.hasTrap = 1;
   dut->trap.code = trapCode;
 }
+
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+void Difftest::do_non_reg_interrupt_pending() {
+  if (dut->non_reg_interrupt_pending.valid) {
+    struct NonRegInterruptPending ip;
+    ip.platformIRPMtip = dut->non_reg_interrupt_pending.platformIRPMtip;
+    ip.platformIRPMeip = dut->non_reg_interrupt_pending.platformIRPMeip;
+    ip.platformIRPMsip = dut->non_reg_interrupt_pending.platformIRPMsip;
+    ip.platformIRPSeip = dut->non_reg_interrupt_pending.platformIRPSeip;
+    ip.platformIRPStip = dut->non_reg_interrupt_pending.platformIRPStip;
+    ip.platformIRPVseip = dut->non_reg_interrupt_pending.platformIRPVseip;
+    ip.platformIRPVstip = dut->non_reg_interrupt_pending.platformIRPVstip;
+    ip.localCounterOverflowInterruptReq = dut->non_reg_interrupt_pending.localCounterOverflowInterruptReq;
+
+    proxy->non_reg_interrupt_pending(ip);
+  }
+}
+#endif
 
 void Difftest::display() {
   printf("\n==============  In the last commit group  ==============\n");

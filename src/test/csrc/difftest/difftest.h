@@ -409,7 +409,9 @@ protected:
   int apply_delayed_writeback();
 
   void raise_trap(int trapCode);
-
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+  void do_non_reg_interrupt_pending();
+#endif
 #ifdef CONFIG_DIFFTEST_REPLAY
   struct {
     bool in_replay = false;

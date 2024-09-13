@@ -301,6 +301,17 @@ class RunaheadRedirectEvent extends DifftestBaseBundle with HasValid {
   val checkpoint_id = UInt(64.W)
 }
 
+class NonRegInterruptPendingEvent extends DifftestBaseBundle with HasValid {
+  val platformIRPMeip = Bool()
+  val platformIRPMtip = Bool()
+  val platformIRPMsip = Bool()
+  val platformIRPSeip = Bool()
+  val platformIRPStip = Bool()
+  val platformIRPVseip = Bool()
+  val platformIRPVstip = Bool()
+  val localCounterOverflowInterruptReq = Bool()
+}
+
 class TraceInfo extends DifftestBaseBundle with HasValid {
   val in_replay = Bool()
   val trace_head = UInt(16.W)

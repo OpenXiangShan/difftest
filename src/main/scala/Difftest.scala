@@ -405,6 +405,11 @@ class DiffRunaheadRedirectEvent extends RunaheadRedirectEvent with DifftestBundl
   override val desiredCppName: String = "runahead_redirect"
 }
 
+class DiffNonRegInterruptPendingEvent extends NonRegInterruptPendingEvent with DifftestBundle {
+  override val desiredCppName: String = "non_reg_interrupt_pending"
+
+}
+
 class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 
