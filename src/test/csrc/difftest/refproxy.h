@@ -350,8 +350,8 @@ struct ExecutionGuide {
 };
 
 struct NonRegInterruptPending {
-  bool platformIRPMtip;
   bool platformIRPMeip;
+  bool platformIRPMtip;
   bool platformIRPMsip;
   bool platformIRPSeip;
   bool platformIRPStip;
