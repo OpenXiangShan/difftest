@@ -145,7 +145,8 @@ public:
   f(ref_guided_exec, difftest_guided_exec, void, void*)                       \
   f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                      \
   f(ref_virtual_interrupt_is_hvictl_inject, difftest_virtual_interrupt_is_hvictl_inject, void, bool)        \
-  f(disambiguation_state, difftest_disambiguation_state, int, )
+  f(disambiguation_state, difftest_disambiguation_state, int, )               \
+  f(ref_non_reg_interrupt_pending, difftest_non_reg_interrupt_pending, void, void*)
 
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
@@ -240,6 +241,12 @@ public:
       ref_virtual_interrupt_is_hvictl_inject(virtualInterruptIsHvictlInject);
     } else {
       printf("Virtual interrupt without hvictl register injection.\n");
+    }
+  }
+
+  inline void non_reg_interrupt_pending(struct NonRegInterruptPending &ip) {
+    if (ref_non_reg_interrupt_pending) {
+      ref_non_reg_interrupt_pending(&ip);
     }
   }
 
@@ -340,6 +347,17 @@ struct ExecutionGuide {
   // force set jump target
   bool force_set_jump_target;
   uint64_t jump_target;
+};
+
+struct NonRegInterruptPending {
+  bool platformIRPMtip;
+  bool platformIRPMeip;
+  bool platformIRPMsip;
+  bool platformIRPSeip;
+  bool platformIRPStip;
+  bool platformIRPVseip;
+  bool platformIRPVstip;
+  bool localCounterOverflowInterruptReq;
 };
 
 extern const char *difftest_ref_so;
