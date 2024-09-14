@@ -1233,8 +1233,8 @@ void Difftest::raise_trap(int trapCode) {
 void Difftest::do_non_reg_interrupt_pending() {
   if (dut->non_reg_interrupt_pending.valid) {
     struct NonRegInterruptPending ip;
-    ip.platformIRPMtip = dut->non_reg_interrupt_pending.platformIRPMtip;
     ip.platformIRPMeip = dut->non_reg_interrupt_pending.platformIRPMeip;
+    ip.platformIRPMtip = dut->non_reg_interrupt_pending.platformIRPMtip;
     ip.platformIRPMsip = dut->non_reg_interrupt_pending.platformIRPMsip;
     ip.platformIRPSeip = dut->non_reg_interrupt_pending.platformIRPSeip;
     ip.platformIRPStip = dut->non_reg_interrupt_pending.platformIRPStip;
