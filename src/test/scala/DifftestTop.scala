@@ -62,7 +62,7 @@ class DifftestTop extends Module {
 
 // Generate simulation interface based on Profile describing the instantiated information of design
 class SimTop(profileName: String, numCores: Int) extends Module {
-  val profileStr = Files.readString(Paths.get(profileName))
+  val profileStr = new String(Files.readAllBytes(Paths.get(profileName)))
   val profiles = parse(profileStr).extract[List[Map[String, Any]]](DefaultFormats, manifest[List[Map[String, Any]]])
   for (coreid <- 0 until numCores) {
     profiles.filter(_.contains("className")).zipWithIndex.foreach { case (rawProf, idx) =>
