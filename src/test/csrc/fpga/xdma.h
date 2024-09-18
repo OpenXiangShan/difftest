@@ -36,13 +36,16 @@ typedef struct FpgaPackgeHead {
 class FpgaXdma {
 public:
   struct FpgaPackgeHead *shmadd_recv;
-  MemoryPool xdma_mempool;
+
+  MemoryPool xdma_mempool[DMA_CHANNS];
   DiffTestState difftest_pack[NUM_CORES] = {};
   int shmid_recv;
   int ret_recv;
   key_t key_recv;
 
-  int fd_c2h;
+  int xdma_c2h_fd[DMA_CHANNS];
+  int xdma_h2c_fd;
+
   int fd_interrupt;
   bool running = false;
 
@@ -53,7 +56,7 @@ public:
   std::condition_variable diff_empile_cv;
   std::mutex diff_mtx;
   bool diff_packge_filled = false;
-  FpgaXdma(const char *device_name);
+  FpgaXdma();
   ~FpgaXdma() {
     stop_thansmit_thread();
   };
@@ -67,8 +70,8 @@ public:
   void write_difftest_thread();
 
 private:
-  std::thread receive_thread;
-  std::thread process_thread;
+  std::thread receive_thread[DMA_CHANNS];
+  std::thread process_thread[DMA_CHANNS];
 
   static void handle_sigint(int sig);
 };
