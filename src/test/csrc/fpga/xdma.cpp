@@ -18,15 +18,31 @@
 #include <fcntl.h>
 #include <signal.h>
 
-FpgaXdma::FpgaXdma(const char *device_name) {
+#define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
+#define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
+static const int dma_channel = CONFIG_DMA_CHANNELS;
+
+FpgaXdma::FpgaXdma() {
   signal(SIGINT, handle_sigint);
-  fd_c2h = open(device_name, O_RDWR);
-  if (fd_c2h == -1) {
-    printf("xdma device not find %s\n", device_name);
-    exit(1);
+  for (int channel = 0; i < dma_channel; channel ++) {
+    char c2h_device[64];
+    sprintf(c2h_device,"%s%d",DEVICE_C2H_NAME,i); 
+    xdma_c2h_fd[i] = open(c2h_device, O_RDONLY );
+    if (xdma_c2h_fd[i] == -1) {
+      std::cout << c2h_device << std::endl;
+      perror("Failed to open XDMA device");
+      exit(-1);
+    }
+    std::cout << "XDMA link " << c2h_device << std::endl;
   }
-  printf("xdma device %s\n", device_name);
-  set_dma_fd_block();
+
+  xdma_h2c_fd[i] = open(h2c_device, O_WRONLY);
+  if (xdma_h2c_fd[i] == -1) {
+    std::cout << h2c_device << std::endl;
+    perror("Failed to open XDMA device");
+    exit(-1);
+  }
+  std::cout << "XDMA link " << h2c_device << std::endl;
 }
 
 void FpgaXdma::handle_sigint(int sig) {
@@ -34,26 +50,15 @@ void FpgaXdma::handle_sigint(int sig) {
   exit(1);
 }
 
-void FpgaXdma::set_dma_fd_block() {
-  int flags = fcntl(fd_c2h, F_GETFL, 0);
-  if (flags == -1) {
-    perror("fcntl get error");
-    exit(1);
-    return;
-  }
-  // Clear the O NONBLOCK flag and set it to blocking mode
-  flags &= ~O_NONBLOCK;
-  if (fcntl(fd_c2h, F_SETFL, flags) == -1) {
-    perror("fcntl set error");
-    return;
-  }
-}
-
 void FpgaXdma::start_transmit_thread() {
   if (running == true)
     return;
-  receive_thread = std::thread(&FpgaXdma::read_xdma_thread, this);
-  process_thread = std::thread(&FpgaXdma::write_difftest_thread, this);
+
+  for(int i = 0; i < dma_channel;i ++) {
+    printf("start channel %d \n", i);
+    receive_thread[i] = std::thread(&FpgaXdma::read_xdma_thread, this, i);
+  }
+  process_thread[i] = std::thread(&FpgaXdma::write_difftest_thread, this, i);
   running = true;
 }
 
@@ -68,7 +73,7 @@ void FpgaXdma::stop_thansmit_thread() {
   running = false;
 }
 
-void FpgaXdma::read_xdma_thread() {
+void FpgaXdma::read_xdma_thread(int channel) {
   while (running) {
     char *memory = xdma_mempool.get_free_chunk();
     read(fd_c2h, memory, recv_size);

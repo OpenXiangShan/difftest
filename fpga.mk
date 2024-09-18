@@ -11,6 +11,9 @@ FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp")
 FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
 FPGA_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
+DMA_CHANNELS?=1
+FPGA_LDFLAGS += -DCONFIG_DMA_CHANNELS=$(DMA_CHANNELS)
+
 fpga-build: fpga-clean fpga-host
 
 fpga-host:
