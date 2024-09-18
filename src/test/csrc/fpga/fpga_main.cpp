@@ -20,8 +20,6 @@
 #include "refproxy.h"
 #include "xdma.h"
 
-#define XDMA_C2H_DEVICE "/dev/xdma0_c2h_0"
-
 enum {
   SIMV_RUN,
   SIMV_DONE,
@@ -84,7 +82,7 @@ void set_dut_from_xdma() {
 }
 
 void simv_init() {
-  xdma_device = new FpgaXdma(XDMA_C2H_DEVICE);
+  xdma_device = new FpgaXdma;
   difftest_init();
   max_instrs = 40000000;
 }
