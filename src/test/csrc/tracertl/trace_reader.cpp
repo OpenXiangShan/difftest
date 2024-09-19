@@ -175,9 +175,9 @@ bool TraceReader::read(Instruction &inst) {
   pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
 
-  if (pendingInstList.size() > 500) {
+  if (pendingInstList.size() > 2000) {
     setError();
-    printf("TraceRTL: pendingInstList has too many inst, more than 1000. Check it.\n");
+    printf("TraceRTL: pendingInstList has too many inst, more than 2000. Check it.\n");
   }
 
 //  inst.dump();
