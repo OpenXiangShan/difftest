@@ -22,11 +22,36 @@
 #include <memory>
 #include <mutex>
 #include <vector>
+#include <cstring>
 
 #define MEMPOOL_SIZE   4096 * 1024 // 4M page
 #define MEMBLOCK_SIZE  4096        // 4K packge
 #define NUM_BLOCKS     (MEMPOOL_SIZE / MEMBLOCK_SIZE)
 #define REM_NUM_BLOCKS (NUM_BLOCKS - 1)
+
+struct MemoryBlock {
+  std::unique_ptr<char[], std::function<void(char*)>> data;
+  std::atomic<bool> is_free;
+
+  MemoryBlock() : is_free(true) {
+    void* ptr = nullptr;
+    if (posix_memalign(&ptr, 4096, 4096) != 0) {
+      throw std::runtime_error("Failed to allocate aligned memory");
+    }
+    memset(ptr, 0, 4096);
+    data = std::unique_ptr<char[], std::function<void(char*)>>(
+      static_cast<char*>(ptr),
+      [](char* p) { free(p); }
+    );
+  }
+  // Disable copy operations
+  MemoryBlock(const MemoryBlock&) = delete;
+  MemoryBlock& operator=(const MemoryBlock&) = delete;
+
+  // Enable move operations
+  MemoryBlock(MemoryBlock&&) = default;
+  MemoryBlock& operator=(MemoryBlock&&) = default;
+};
 
 class MemoryPool {
 public:
@@ -74,7 +99,7 @@ private:
   };
   std::vector<MemoryBlock> memory_pool;              // Mempool
   std::vector<std::mutex> block_mutexes{NUM_BLOCKS}; // Partition lock array
-  std::atomic<size_t> empty_blocks = NUM_BLOCKS;     // Free block count
+  std::atomic<size_t> empty_blocks {NUM_BLOCKS};     // Free block count
   std::atomic<size_t> filled_blocks;                 // Filled blocks count
   std::atomic<size_t> write_index;
   std::atomic<size_t> read_index;
@@ -83,5 +108,6 @@ private:
   size_t page_head = 0;
   size_t page_end = 0;
 };
+
 
 #endif
