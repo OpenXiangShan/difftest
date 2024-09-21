@@ -46,13 +46,36 @@ inline uint64_t vaddr_mask() {
   return mask >> (64 - VADDRBITS);
 };
 
+enum MemoryType {
+  MEM_TYPE_None = 0,
+  MEM_TYPE_Load = 1,
+  MEM_TYPE_Store = 2,
+  MEM_TYPE_AMO = 3,
+  MEM_TYPE_LR = 4,
+  MEM_TYPE_SC = 5
+};
+
+struct MemoryAddr {
+  uint64_t va;
+  uint64_t pa;
+};
+
+// union doest allow non-trivial constructor
+struct ArthiSrc {
+  uint64_t src0;
+  uint64_t src1;
+};
+
+
 // TODO : pack it
 // TODO : mv instr and instr_pc to map(or more ca, icache)
 struct TraceInstruction {
   uint64_t instr_pc_va;
   uint64_t instr_pc_pa;
-  uint64_t memory_address_va;
-  uint64_t memory_address_pa;
+  union {
+    MemoryAddr memory_address;
+    ArthiSrc arthi_src;
+  } exu_data;
   uint64_t target = 0;
   uint32_t instr;
   uint8_t memory_type:4;
@@ -64,8 +87,8 @@ struct TraceInstruction {
   void setToForceJump(uint64_t o_pc, uint64_t o_target) {
     instr_pc_va = o_pc;
     instr_pc_pa = o_pc;
-    memory_address_pa = 0;
-    memory_address_va = 0;
+    exu_data.memory_address.pa = 0;
+    exu_data.memory_address.va = 0;
     target = o_target;
     instr = 0;
     memory_type = 0;
@@ -106,8 +129,10 @@ struct TraceInstruction {
   void dump() {
     // printf("Instr: TraceSize %ld memSize %02x PC 0x%016lx instr 0x%04x memAddr 0x%016lx\n", sizeof(TraceInstruction), memory_size, instr_pc, instr, memory_address);
     printf("PC 0x%08lx|%08lx instr 0x%08x(%s)", instr_pc_va, instr_pc_pa, instr, spike_dasm(instr));
-    if (memory_type != 0) {
-      printf(" is_mem %d addr %08lx|%08lx", memory_type, memory_address_va, memory_address_pa);
+    if (memory_type != MEM_TYPE_None) {
+      printf(" is_mem %d addr %08lx|%08lx", memory_type, exu_data.memory_address.va, exu_data.memory_address.pa);
+    } else {
+      printf(" arthi(for fp/div) src0 %016lx src1 %016lx", exu_data.arthi_src.src0, exu_data.arthi_src.src1);
     }
     if (branch_type != 0) {
       printf(" is_branch %d taken %d target 0x%08lx", branch_type, branch_taken, target);
@@ -133,8 +158,8 @@ struct Instruction : TraceInstruction {
   inline void fromTraceInst(TraceInstruction t) {
     instr_pc_va = t.instr_pc_va;
     instr_pc_pa = (t.instr_pc_pa != 0) ? t.instr_pc_pa : t.instr_pc_va;
-    memory_address_va = t.memory_address_va;
-    memory_address_pa = (t.memory_address_pa != 0) ? t.memory_address_pa : t.memory_address_va;
+    exu_data.memory_address.va = t.exu_data.memory_address.va;
+    exu_data.memory_address.pa = (t.exu_data.memory_address.pa != 0) ? t.exu_data.memory_address.pa : t.exu_data.memory_address.va;
     target = t.target;
     instr = t.instr;
     memory_type = t.memory_type;

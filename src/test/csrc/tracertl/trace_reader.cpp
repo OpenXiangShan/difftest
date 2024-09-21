@@ -104,7 +104,9 @@ TraceReader::TraceReader(const char *trace_file_name)
     // construct trace_icache
     trace_icache->constructICache(inst.instr_pc_va, inst.instr);
     trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
-    trace_icache->constructSoftTLB(inst.memory_address_va, 0, 0, inst.memory_address_pa);
+    if (inst.memory_type != MEM_TYPE_None) {
+      trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
+    }
 
     // construct trace
     instList_preread.push(inst);
