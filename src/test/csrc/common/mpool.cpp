@@ -81,7 +81,7 @@ void MemoryIdxPool::cleanupMemoryPool() {
 bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
   size_t page_w_idx;
   {
-    std::lock_guard <std::mutex> lock(offset_mutexes);
+    std::lock_guard<std::mutex> lock(offset_mutexes);
 
     page_w_idx = idx + group_w_offset;
     // Processing of winding data at the boundary
@@ -89,14 +89,14 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
       size_t this_group = group_w_idx.load();
       size_t offset = ((this_group & REM_MAX_GROUPING_IDX) * MAX_IDX);
       page_w_idx = idx + offset;
-      write_next_count ++;
+      write_next_count++;
       // Lookup failed
       if (memory_pool[page_w_idx].is_free.load() == false) {
-        printf("This block has been written, and there is a duplicate packge idx %d\n",idx);
+        printf("This block has been written, and there is a duplicate packge idx %d\n", idx);
         return false;
       }
     } else {
-      write_count ++;
+      write_count++;
       // Proceed to the next group
       if (write_count == MAX_IDX) {
         memory_pool[page_w_idx].is_free.store(false);
@@ -106,10 +106,10 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
         group_w_offset = (next_w_idx & REM_MAX_GROUPING_IDX) * MAX_IDX;
         write_count = write_next_count;
         write_next_count = 0;
-      return true;
+        return true;
       }
     }
-    memory_pool[page_w_idx].is_free.store(false);     
+    memory_pool[page_w_idx].is_free.store(false);
   }
   memcpy(memory_pool[page_w_idx].data.get(), data, 4096);
 
@@ -143,7 +143,7 @@ size_t MemoryIdxPool::wait_next_free_group() {
   //Reserve at least two free blocks
   if (free_num <= 2) {
     std::unique_lock<std::mutex> lock(window_mutexes);
-    cv_empty.wait(lock, [this] { return empty_blocks.load() > 1;});
+    cv_empty.wait(lock, [this] { return empty_blocks.load() > 1; });
   }
   return group_w_idx.fetch_add(1);
 }
@@ -155,7 +155,7 @@ size_t MemoryIdxPool::wait_next_full_group() {
 
   if (free_num >= MAX_GROUP_READ) {
     std::unique_lock<std::mutex> lock(window_mutexes);
-    cv_filled.wait(lock, [this] { return empty_blocks.load() < MAX_GROUP_READ;});
+    cv_filled.wait(lock, [this] { return empty_blocks.load() < MAX_GROUP_READ; });
   }
   return group_r_idx.fetch_add(1);
 }

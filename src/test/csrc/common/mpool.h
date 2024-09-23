@@ -18,11 +18,11 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <vector>
-#include <cstring>
 
 #define MEMPOOL_SIZE   4096 * 1024 // 4M page
 #define MEMBLOCK_SIZE  4096        // 4K packge
@@ -30,27 +30,24 @@
 #define REM_NUM_BLOCKS (NUM_BLOCKS - 1)
 
 struct MemoryBlock {
-  std::unique_ptr<char[], std::function<void(char*)>> data;
+  std::unique_ptr<char[], std::function<void(char *)>> data;
   std::atomic<bool> is_free;
 
   MemoryBlock() : is_free(true) {
-    void* ptr = nullptr;
+    void *ptr = nullptr;
     if (posix_memalign(&ptr, 4096, 4096) != 0) {
       throw std::runtime_error("Failed to allocate aligned memory");
     }
     memset(ptr, 0, 4096);
-    data = std::unique_ptr<char[], std::function<void(char*)>>(
-      static_cast<char*>(ptr),
-      [](char* p) { free(p); }
-    );
+    data = std::unique_ptr<char[], std::function<void(char *)>>(static_cast<char *>(ptr), [](char *p) { free(p); });
   }
   // Disable copy operations
-  MemoryBlock(const MemoryBlock&) = delete;
-  MemoryBlock& operator=(const MemoryBlock&) = delete;
+  MemoryBlock(const MemoryBlock &) = delete;
+  MemoryBlock &operator=(const MemoryBlock &) = delete;
 
   // Enable move operations
-  MemoryBlock(MemoryBlock&&) = default;
-  MemoryBlock& operator=(MemoryBlock&&) = default;
+  MemoryBlock(MemoryBlock &&) = default;
+  MemoryBlock &operator=(MemoryBlock &&) = default;
 };
 
 class MemoryPool {
@@ -99,7 +96,7 @@ private:
   };
   std::vector<MemoryBlock> memory_pool;              // Mempool
   std::vector<std::mutex> block_mutexes{NUM_BLOCKS}; // Partition lock array
-  std::atomic<size_t> empty_blocks {NUM_BLOCKS};     // Free block count
+  std::atomic<size_t> empty_blocks{NUM_BLOCKS};      // Free block count
   std::atomic<size_t> filled_blocks;                 // Filled blocks count
   std::atomic<size_t> write_index;
   std::atomic<size_t> read_index;
@@ -108,7 +105,6 @@ private:
   size_t page_head = 0;
   size_t page_end = 0;
 };
-
 
 static const size_t MAX_IDX = 256;
 static const size_t MAX_GROUPING_IDX = NUM_BLOCKS / MAX_IDX;
@@ -128,8 +124,8 @@ public:
     cleanupMemoryPool();
   }
   // Disable copy constructors and copy assignment operators
-  MemoryIdxPool(const MemoryIdxPool&) = delete;
-  MemoryIdxPool& operator=(const MemoryIdxPool&) = delete;
+  MemoryIdxPool(const MemoryIdxPool &) = delete;
+  MemoryIdxPool &operator=(const MemoryIdxPool &) = delete;
 
   void initMemoryPool() {}
 
@@ -152,16 +148,16 @@ public:
   bool check_group();
 
 private:
-  MemoryBlock memory_pool[NUM_BLOCKS];  // Mempool
-  std::mutex window_mutexes; // window sliding protection
-  std::mutex offset_mutexes; // w/r offset protection
-  std::condition_variable cv_empty;  // Free block condition variable
-  std::condition_variable cv_filled; // Filled block condition variable
+  MemoryBlock memory_pool[NUM_BLOCKS]; // Mempool
+  std::mutex window_mutexes;           // window sliding protection
+  std::mutex offset_mutexes;           // w/r offset protection
+  std::condition_variable cv_empty;    // Free block condition variable
+  std::condition_variable cv_filled;   // Filled block condition variable
 
   size_t group_r_offset = 0; // The offset used by the current consumer
   size_t group_w_offset = 0; // The offset used by the current producer
   size_t read_count = 0;
-  size_t write_count = 0;    
+  size_t write_count = 0;
   size_t write_next_count = 0;
 
   std::atomic<size_t> empty_blocks{MAX_GROUP_READ};
