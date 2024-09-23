@@ -41,13 +41,6 @@ struct MemoryBlock {
     memset(ptr, 0, 4096);
     data = std::unique_ptr<char[], std::function<void(char *)>>(static_cast<char *>(ptr), [](char *p) { free(p); });
   }
-  // Disable copy operations
-  MemoryBlock(const MemoryBlock &) = delete;
-  MemoryBlock &operator=(const MemoryBlock &) = delete;
-
-  // Enable move operations
-  MemoryBlock(MemoryBlock &&) = default;
-  MemoryBlock &operator=(MemoryBlock &&) = default;
 };
 
 class MemoryPool {

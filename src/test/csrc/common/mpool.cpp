@@ -126,7 +126,7 @@ bool MemoryIdxPool::read_busy_chunk(char *data) {
     group_r_offset = ((next_r_idx & REM_MAX_GROUPING_IDX) * MAX_IDX);
   }
   if (memory_pool[page_r_idx].is_free.load() == true) {
-    printf("An attempt was made to read the block of free %d\n", page_r_idx);
+    printf("An attempt was made to read the block of free %zu\n", page_r_idx);
     return false;
   }
 

@@ -30,20 +30,20 @@
 #define WITH_FPGA
 typedef struct FpgaPackgeHead {
   DiffTestState difftestinfo;
-  uint8_t corid;
+  uint8_t packge_idx;
 } FpgaPackgeHead;
 
 class FpgaXdma {
 public:
   struct FpgaPackgeHead *shmadd_recv;
 
-  MemoryPool xdma_mempool[DMA_CHANNS];
+  MemoryIdxPool xdma_mempool;
   DiffTestState difftest_pack[NUM_CORES] = {};
   int shmid_recv;
   int ret_recv;
   key_t key_recv;
 
-  int xdma_c2h_fd[DMA_CHANNS];
+  int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
   int xdma_h2c_fd;
 
   int fd_interrupt;
@@ -66,12 +66,12 @@ public:
   // thread api
   void start_transmit_thread();
   void stop_thansmit_thread();
-  void read_xdma_thread();
+  void read_xdma_thread(int channel);
   void write_difftest_thread();
 
 private:
-  std::thread receive_thread[DMA_CHANNS];
-  std::thread process_thread[DMA_CHANNS];
+  std::thread receive_thread[CONFIG_DMA_CHANNELS];
+  std::thread process_thread;
 
   static void handle_sigint(int sig);
 };

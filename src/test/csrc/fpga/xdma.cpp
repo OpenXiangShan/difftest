@@ -16,6 +16,7 @@
 #include "xdma.h"
 #include "mpool.h"
 #include <fcntl.h>
+#include <iostream>
 #include <signal.h>
 
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
@@ -24,10 +25,10 @@ static const int dma_channel = CONFIG_DMA_CHANNELS;
 
 FpgaXdma::FpgaXdma() {
   signal(SIGINT, handle_sigint);
-  for (int channel = 0; i < dma_channel; channel ++) {
+  for (int i = 0; i < dma_channel; i++) {
     char c2h_device[64];
-    sprintf(c2h_device,"%s%d",DEVICE_C2H_NAME,i); 
-    xdma_c2h_fd[i] = open(c2h_device, O_RDONLY );
+    sprintf(c2h_device, "%s%d", XDMA_C2H_DEVICE, i);
+    xdma_c2h_fd[i] = open(c2h_device, O_RDONLY);
     if (xdma_c2h_fd[i] == -1) {
       std::cout << c2h_device << std::endl;
       perror("Failed to open XDMA device");
@@ -36,13 +37,13 @@ FpgaXdma::FpgaXdma() {
     std::cout << "XDMA link " << c2h_device << std::endl;
   }
 
-  xdma_h2c_fd[i] = open(h2c_device, O_WRONLY);
-  if (xdma_h2c_fd[i] == -1) {
-    std::cout << h2c_device << std::endl;
+  xdma_h2c_fd = open(XDMA_H2C_DEVICE, O_WRONLY);
+  if (xdma_h2c_fd == -1) {
+    std::cout << XDMA_H2C_DEVICE << std::endl;
     perror("Failed to open XDMA device");
     exit(-1);
   }
-  std::cout << "XDMA link " << h2c_device << std::endl;
+  std::cout << "XDMA link " << XDMA_H2C_DEVICE << std::endl;
 }
 
 void FpgaXdma::handle_sigint(int sig) {
@@ -54,54 +55,55 @@ void FpgaXdma::start_transmit_thread() {
   if (running == true)
     return;
 
-  for(int i = 0; i < dma_channel;i ++) {
+  for (int i = 0; i < dma_channel; i++) {
     printf("start channel %d \n", i);
     receive_thread[i] = std::thread(&FpgaXdma::read_xdma_thread, this, i);
   }
-  process_thread[i] = std::thread(&FpgaXdma::write_difftest_thread, this, i);
+  process_thread = std::thread(&FpgaXdma::write_difftest_thread, this);
   running = true;
 }
 
 void FpgaXdma::stop_thansmit_thread() {
   if (running == false)
     return;
-  xdma_mempool.unlock_thread();
-  if (receive_thread.joinable())
-    receive_thread.join();
+  running = false;
+
+  for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
+    if (receive_thread[i].joinable())
+      receive_thread[i].join();
+    close(xdma_c2h_fd[i]);
+  }
+
   if (process_thread.joinable())
     process_thread.join();
-  running = false;
+
+  close(xdma_h2c_fd);
+  xdma_mempool.cleanupMemoryPool();
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
+  FpgaPackgeHead packge;
+  bool result = true;
   while (running) {
-    char *memory = xdma_mempool.get_free_chunk();
-    read(fd_c2h, memory, recv_size);
-    xdma_mempool.set_busy_chunk();
+    size_t size = read(xdma_c2h_fd[channel], &packge, sizeof(FpgaPackgeHead));
+    uint8_t idx = packge.packge_idx;
+    if (xdma_mempool.write_free_chunk(idx, (char *)&packge) == false) {
+      printf("It should not be the case that no available block can be found\n");
+      assert(0);
+    }
   }
 }
 
 void FpgaXdma::write_difftest_thread() {
+  FpgaPackgeHead packge;
+  bool result = true;
   while (running) {
-    const char *memory = xdma_mempool.get_busy_chunk();
-    static uint8_t valid_core = 0;
-    uint8_t core_id = 0;
-
-    memcpy(&core_id, memory + sizeof(DiffTestState), sizeof(uint8_t));
-    assert(core_id > NUM_CORES);
-    {
-      std::unique_lock<std::mutex> lock(diff_mtx);
-      diff_empile_cv.wait(lock, [this] { return !diff_packge_filled; });
-      memcpy(&difftest_pack[core_id], memory, sizeof(DiffTestState));
+    if (xdma_mempool.read_busy_chunk((char *)&packge) == false) {
+      printf("Failed to read data from the XDMA memory pool\n");
+      assert(0);
     }
-    valid_core++;
-    xdma_mempool.set_free_chunk();
+    // packge unpack
 
-    if (valid_core == NUM_CORES) {
-      diff_packge_filled = true;
-      valid_core = 0;
-      // Notify difftest to run the next check
-      diff_filled_cv.notify_one();
-    }
+    // difftest run
   }
 }
