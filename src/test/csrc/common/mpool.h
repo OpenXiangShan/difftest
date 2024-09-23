@@ -110,4 +110,63 @@ private:
 };
 
 
+static const size_t MAX_IDX = 256;
+static const size_t MAX_GROUPING_IDX = NUM_BLOCKS / MAX_IDX;
+static const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2; //窗口需要预留两个空闲空间
+static const size_t REM_MAX_IDX = (MAX_IDX - 1);
+static const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
+
+// Split the memory pool into sliding Windows based on the index width
+// Support multi-thread out-of-order write sequential read
+class MemoryIdxPool {
+public:
+  MemoryIdxPool() {
+    initMemoryPool();
+  }
+
+  ~MemoryIdxPool() {
+    cleanupMemoryPool();
+  }
+  // Disable copy constructors and copy assignment operators
+  MemoryIdxPool(const MemoryIdxPool&) = delete;
+  MemoryIdxPool& operator=(const MemoryIdxPool&) = delete;
+
+  void initMemoryPool() {}
+
+  // Cleaning up memory pools
+  void cleanupMemoryPool();
+
+  // Write a specified free block of a free window
+  bool write_free_chunk(uint8_t idx, const char *data);
+
+  // Get the head memory
+  bool read_busy_chunk(char *data);
+
+  // Wait for the data to be free
+  size_t wait_next_free_group();
+
+  // Wait for the data to be readable
+  size_t wait_next_full_group();
+
+  // Check if there is a window to read
+  bool check_group();
+
+private:
+  MemoryBlock memory_pool[NUM_BLOCKS];  // Mempool
+  std::mutex window_mutexes; // window sliding protection
+  std::mutex offset_mutexes; // w/r offset protection
+  std::condition_variable cv_empty;  // Free block condition variable
+  std::condition_variable cv_filled; // Filled block condition variable
+
+  size_t group_r_offset = 0; // The offset used by the current consumer
+  size_t group_w_offset = 0; // The offset used by the current producer
+  size_t read_count = 0;
+  size_t write_count = 0;    
+  size_t write_next_count = 0;
+
+  std::atomic<size_t> empty_blocks{MAX_GROUP_READ};
+  std::atomic<size_t> group_w_idx{1};
+  std::atomic<size_t> group_r_idx{1};
+};
+
 #endif
