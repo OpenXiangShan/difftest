@@ -34,8 +34,8 @@
 
 #define TraceFetchWidth 16
 
-#define PADDRBITS 39
-#define VADDRBITS 36
+#define PADDRBITS 36
+#define VADDRBITS 39
 
 inline uint64_t paddr_mask() {
   uint64_t mask = (uint64_t) -1;
