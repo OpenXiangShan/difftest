@@ -70,3 +70,97 @@ void MemoryPool::set_free_chunk() {
   cv_empty.notify_one();
   ++empty_blocks;
 }
+
+// Cleaning up memory pools
+void MemoryIdxPool::cleanupMemoryPool() {
+  cv_empty.notify_all();
+  cv_filled.notify_all();
+}
+
+// Write a specified free block of a free window
+bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
+  size_t page_w_idx;
+  {
+    std::lock_guard <std::mutex> lock(offset_mutexes);
+
+    page_w_idx = idx + group_w_offset;
+    // Processing of winding data at the boundary
+    if (memory_pool[page_w_idx].is_free.load() == false) {
+      size_t this_group = group_w_idx.load();
+      size_t offset = ((this_group & REM_MAX_GROUPING_IDX) * MAX_IDX);
+      page_w_idx = idx + offset;
+      write_next_count ++;
+      // Lookup failed
+      if (memory_pool[page_w_idx].is_free.load() == false) {
+        printf("This block has been written, and there is a duplicate packge idx %d\n",idx);
+        return false;
+      }
+    } else {
+      write_count ++;
+      // Proceed to the next group
+      if (write_count == MAX_IDX) {
+        memory_pool[page_w_idx].is_free.store(false);
+        memcpy(memory_pool[page_w_idx].data.get(), data, 4096);
+
+        size_t next_w_idx = wait_next_free_group();
+        group_w_offset = (next_w_idx & REM_MAX_GROUPING_IDX) * MAX_IDX;
+        write_count = write_next_count;
+        write_next_count = 0;
+      return true;
+      }
+    }
+    memory_pool[page_w_idx].is_free.store(false);     
+  }
+  memcpy(memory_pool[page_w_idx].data.get(), data, 4096);
+
+  return true;
+}
+
+bool MemoryIdxPool::read_busy_chunk(char *data) {
+  size_t page_r_idx = read_count + group_r_offset;
+  size_t this_r_idx = ++read_count;
+
+  if (this_r_idx == MAX_IDX) {
+    read_count = 0;
+    size_t next_r_idx = wait_next_full_group();
+    group_r_offset = ((next_r_idx & REM_MAX_GROUPING_IDX) * MAX_IDX);
+  }
+  if (memory_pool[page_r_idx].is_free.load() == true) {
+    printf("An attempt was made to read the block of free %d\n", page_r_idx);
+    return false;
+  }
+
+  memcpy(data, memory_pool[page_r_idx].data.get(), 4096);
+  memory_pool[page_r_idx].is_free.store(true);
+
+  return true;
+}
+
+size_t MemoryIdxPool::wait_next_free_group() {
+  empty_blocks.fetch_sub(1);
+  size_t free_num = empty_blocks.load();
+  cv_filled.notify_all();
+  //Reserve at least two free blocks
+  if (free_num <= 2) {
+    std::unique_lock<std::mutex> lock(window_mutexes);
+    cv_empty.wait(lock, [this] { return empty_blocks.load() > 1;});
+  }
+  return group_w_idx.fetch_add(1);
+}
+
+size_t MemoryIdxPool::wait_next_full_group() {
+  empty_blocks.fetch_add(1);
+  size_t free_num = empty_blocks.load();
+  cv_empty.notify_all();
+
+  if (free_num >= MAX_GROUP_READ) {
+    std::unique_lock<std::mutex> lock(window_mutexes);
+    cv_filled.wait(lock, [this] { return empty_blocks.load() < MAX_GROUP_READ;});
+  }
+  return group_r_idx.fetch_add(1);
+}
+
+bool MemoryIdxPool::check_group() {
+  bool result = (group_w_idx.load() > group_r_idx.load()) ? true : false;
+  return result;
+}
