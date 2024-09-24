@@ -18,7 +18,9 @@
 
 #include "common.h"
 #include "diffstate.h"
+#include "difftest-dpic.h"
 #include "mpool.h"
+#include <atomic>
 #include <queue>
 #include <stdbool.h>
 #include <stdio.h>
@@ -28,8 +30,9 @@
 #include <vector>
 
 #define WITH_FPGA
+
 typedef struct FpgaPackgeHead {
-  DiffTestState difftestinfo;
+  BatchInfo difftest_batch_info;
   uint8_t packge_idx;
 } FpgaPackgeHead;
 
@@ -38,30 +41,21 @@ public:
   struct FpgaPackgeHead *shmadd_recv;
 
   MemoryIdxPool xdma_mempool;
-  DiffTestState difftest_pack[NUM_CORES] = {};
-  int shmid_recv;
-  int ret_recv;
-  key_t key_recv;
 
   int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
   int xdma_h2c_fd;
 
-  int fd_interrupt;
   bool running = false;
-
-  unsigned int recv_size = sizeof(FpgaPackgeHead);
-  unsigned long old_exec_instr = 0;
 
   std::condition_variable diff_filled_cv;
   std::condition_variable diff_empile_cv;
-  std::mutex diff_mtx;
-  bool diff_packge_filled = false;
+
+  std::atomic<uint32_t> diff_packge_count{0};
+
   FpgaXdma();
   ~FpgaXdma() {
     stop_thansmit_thread();
   };
-
-  void set_dma_fd_block();
 
   // thread api
   void start_transmit_thread();

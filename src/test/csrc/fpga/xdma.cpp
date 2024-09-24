@@ -103,7 +103,8 @@ void FpgaXdma::write_difftest_thread() {
       assert(0);
     }
     // packge unpack
-
+    v_difftest_Batch(packge.difftest_batch_info.io_data, packge.difftest_batch_info.io_info);
     // difftest run
+    diff_packge_count.fetch_add(1, std::memory_order_relaxed);
   }
 }

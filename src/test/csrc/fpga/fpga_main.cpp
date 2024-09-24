@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "diffstate.h"
+#include "difftest-dpic.h"
 #include "difftest.h"
 #include "mpool.h"
 #include "refproxy.h"
@@ -26,6 +27,7 @@ enum {
   SIMV_FAIL,
 } simv_state;
 
+static char work_load[256] = "/dev/zero";
 static uint8_t simv_result = SIMV_RUN;
 static uint64_t max_instrs = 0;
 
@@ -39,7 +41,6 @@ static core_end_info_t core_end_info;
 void simv_init();
 void simv_step();
 void cpu_endtime_check();
-void set_dut_from_xdma();
 void set_diff_ref_so(char *s);
 void args_parsingniton(int argc, char *argv[]);
 
@@ -50,12 +51,13 @@ int main(int argc, char *argv[]) {
   simv_init();
 
   while (simv_result == SIMV_RUN) {
-    // get xdma data
-    set_dut_from_xdma();
-
-    // run difftest
-    simv_step();
-    cpu_endtime_check();
+    // wait get xdma data
+    if (xdma_device->diff_packge_count.load(std::memory_order_seq_cst) > 0) {
+      // run difftest
+      simv_step();
+      cpu_endtime_check();
+      xdma_device->diff_packge_count.fetch_sub(1, std::memory_order_relaxed);
+    }
   }
   free(xdma_device);
 }
@@ -68,28 +70,30 @@ void set_diff_ref_so(char *s) {
   difftest_ref_so = buf;
 }
 
-void set_dut_from_xdma() {
-  {
-    std::unique_lock<std::mutex> lock(xdma_device->diff_mtx);
-    xdma_device->diff_filled_cv.wait(lock, [] { return xdma_device->diff_packge_filled; });
-    for (int i = 0; i < NUM_CORES; i++) {
-
-      difftest[i]->dut = &xdma_device->difftest_pack[i];
-    }
-    xdma_device->diff_packge_filled = false;
-    xdma_device->diff_empile_cv.notify_one();
-  }
-}
-
 void simv_init() {
   xdma_device = new FpgaXdma;
   difftest_init();
-  max_instrs = 40000000;
 }
 
 void simv_step() {
   if (difftest_step())
     simv_result = SIMV_FAIL;
+  if (difftest_state() != -1) {
+    int trapCode = difftest_state();
+    for (int i = 0; i < NUM_CORES; i++) {
+      printf("Core %d: ", i);
+      uint64_t pc = difftest[i]->get_trap_event()->pc;
+      switch (trapCode) {
+        case 0: eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
+        default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
+      }
+      difftest[i]->display_stats();
+    }
+    if (trapCode == 0)
+      simv_result = SIMV_DONE;
+    else
+      simv_result = SIMV_FAIL;
+  }
 }
 
 void cpu_endtime_check() {
@@ -116,6 +120,10 @@ void args_parsingniton(int argc, char *argv[]) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--diff") == 0) {
       set_diff_ref_so(argv[++i]);
+    } else if (strcmp(argv[i], "-i") == 0) {
+      memcpy(work_load, argv[++i], sizeof(argv[++i]));
+    } else if (strcmp(argv[i], "--max-instrs") == 0) {
+      max_instrs = std::stoul(argv[++i], nullptr, 16);
     }
   }
 }
