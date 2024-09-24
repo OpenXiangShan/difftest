@@ -274,6 +274,10 @@ int Difftest::step() {
   }
 #endif
 
+#ifdef CONFIG_DIFFTEST_REFILLEVENT
+  cmo_inval_event_record();
+#endif
+
   if (!has_commit) {
     return 0;
   }
@@ -726,22 +730,42 @@ int Difftest::do_refill_check(int cacheid) {
     for (int i = 0; i < 8; i++) {
       read_goldenmem(dut_refill->addr + i * 8, &buf, 8);
       if (dut_refill->data[i] != *((uint64_t *)buf)) {
-        printf("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->idtfr, realpaddr);
-        printf("addr: %lx\nGold: ", dut_refill->addr);
-        for (int j = 0; j < 8; j++) {
-          read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
-          printf("%016lx", *((uint64_t *)buf));
+        if (cmo_inval_event_set.find(dut_refill->addr) != cmo_inval_event_set.end()) {
+          // If the data inconsistency occurs in the cache block operated by CBO.INVAL,
+          // it is considered reasonable and the DUT data is used to update goldenMem.
+          printf("INFO: Sync GoldenMem using refill Data from DUT (Because of CBO.INVAL):\n");
+          printf("      cacheid=%d, addr: %lx\n      Gold: ", cacheid, dut_refill->addr);
+          for (int j = 0; j < 8; j++) {
+            read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
+            printf("%016lx", *((uint64_t *)buf));
+          }
+          printf("\n      Core: ");
+          for (int j = 0; j < 8; j++) {
+            printf("%016lx", dut_refill->data[j]);
+          }
+          printf("\n");
+          update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
+          proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
+          cmo_inval_event_set.erase(dut_refill->addr);
+          return 0;
+        } else {
+          printf("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->idtfr, realpaddr);
+          printf("addr: %lx\nGold: ", dut_refill->addr);
+          for (int j = 0; j < 8; j++) {
+            read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
+            printf("%016lx", *((uint64_t *)buf));
+          }
+          printf("\nCore: ");
+          for (int j = 0; j < 8; j++) {
+            printf("%016lx", dut_refill->data[j]);
+          }
+          printf("\n");
+          // continue run some cycle before aborted to dump wave
+          if (delay == 0) {
+            delay = 1;
+          }
+          return 0;
         }
-        printf("\nCore: ");
-        for (int j = 0; j < 8; j++) {
-          printf("%016lx", dut_refill->data[j]);
-        }
-        printf("\n");
-        // continue run some cycle before aborted to dump wave
-        if (delay == 0) {
-          delay = 1;
-        }
-        return 0;
       }
     }
   }
@@ -1131,6 +1155,15 @@ void Difftest::load_event_record() {
 }
 #endif // CONFIG_DIFFTEST_LOADEVENT
 #endif // CONFIG_DIFFTEST_SQUASH
+
+#ifdef CONFIG_DIFFTEST_REFILLEVENT
+  void Difftest::cmo_inval_event_record() {
+  if(dut->cmo_inval.valid) {
+    cmo_inval_event_set.insert(dut->cmo_inval.addr);
+    dut->cmo_inval.valid = 0;
+  }
+}
+#endif
 
 int Difftest::check_timeout() {
   uint64_t cycleCnt = get_trap_event()->cycleCnt;

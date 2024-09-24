@@ -23,6 +23,7 @@
 #include "refproxy.h"
 #include <queue>
 #include <vector>
+#include <unordered_set>
 #ifdef FUZZING
 #include "emu.h"
 #endif // FUZZING
@@ -330,6 +331,12 @@ protected:
   std::queue<DifftestStoreEvent> store_event_queue;
   void store_event_record();
 #endif
+
+#ifdef CONFIG_DIFFTEST_REFILLEVENT
+  std::unordered_set<uint64_t> cmo_inval_event_set;
+  void cmo_inval_event_record();
+#endif
+
   void update_last_commit() {
     last_commit = get_trap_event()->cycleCnt;
   }
