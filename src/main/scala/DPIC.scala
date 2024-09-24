@@ -31,18 +31,22 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   val enable = IO(Input(Bool()))
   val dut_zone = Option.when(config.hasDutZone)(IO(Input(UInt(config.dutZoneWidth.W))))
   val step = Option.when(config.hasInternalStep)(IO(Input(UInt(config.stepWidth.W))))
+  val fpga = config.fpgaEnable
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
   }
 
-  def getDPICArgString(argName: String, data: Data, isC: Boolean): String = {
+  def getDPICArgString(argName: String, data: Data, isC: Boolean, isFPGA: Boolean = false): String = {
     val typeString = data.getWidth match {
       case 1                                  => if (isC) "uint8_t" else "bit"
       case width if width > 1 && width <= 8   => if (isC) "uint8_t" else "byte"
       case width if width > 8 && width <= 32  => if (isC) "uint32_t" else "int"
       case width if width > 32 && width <= 64 => if (isC) "uint64_t" else "longint"
-      case width if width > 64                => if (isC) "const svBitVecVal" else s"bit[${width - 1}:0]"
+      case width if width > 64 =>
+        if (isC)
+          if (isFPGA) "uint32_t" else "const svBitVecVal" // Vcs/Palladium
+        else s"bit[${width - 1}:0]"
     }
     if (isC) {
       val width = data.getWidth
@@ -71,10 +75,19 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   def dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
   def dpicFuncArgs: Seq[Seq[(String, Data)]] =
     modPorts.filterNot(p => p.length == 1 && commonPorts.exists(_._1 == p.head._1))
+  def dpicBatchInfo: String = if (config.isBatch) {
+    s"""
+       |typedef struct BatchInfo {
+       |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true, fpga)).mkString(";\n  ")};
+       |} BatchInfo;
+    """.stripMargin
+  } else {
+    "".stripMargin
+  }
   def dpicFuncProto: String =
     s"""
        |extern "C" void $dpicFuncName (
-       |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
+       |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true, fpga)).mkString(",\n  ")}
        |)""".stripMargin
   def getPacketDecl(gen: DifftestBundle, prefix: String, config: GatewayConfig): String = {
     val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
@@ -311,7 +324,8 @@ object DPIC {
     module.control := control
     module.io := io
     val dpic = module.dpic
-    interfaces += ((dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc))
+    val batchproto = dpic.dpicBatchInfo + dpic.dpicFuncProto
+    interfaces += ((dpic.dpicFuncName, batchproto, dpic.dpicFunc))
   }
 
   def collect(): GatewayResult = {

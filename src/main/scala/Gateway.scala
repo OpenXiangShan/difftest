@@ -46,6 +46,7 @@ case class GatewayConfig(
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
   exitOnAssertions: Boolean = false,
+  fpgaEnable: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -127,6 +128,7 @@ object Gateway {
       case 'L' => config = config.copy(traceLoad = true)
       case 'H' => config = config.copy(hierarchicalWiring = true)
       case 'X' => config = config.copy(exitOnAssertions = true)
+      case 'F' => config = config.copy(fpgaEnable = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()
