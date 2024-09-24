@@ -30,23 +30,28 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
   val dut_zone = Option.when(config.hasDutZone)(IO(Input(UInt(config.dutZoneWidth.W))))
-  val step = Option.when(config.hasInternalStep)(IO(Input(UInt(config.stepWidth.W))))
 
   def getDirectionString(data: Data): String = {
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
   }
 
-  def getDPICArgString(argName: String, data: Data, isC: Boolean): String = {
+  def getDPICArgString(argName: String, data: Data, isC: Boolean, isDPIC: Boolean = true): String = {
     val typeString = data.getWidth match {
       case 1                                  => if (isC) "uint8_t" else "bit"
       case width if width > 1 && width <= 8   => if (isC) "uint8_t" else "byte"
       case width if width > 8 && width <= 32  => if (isC) "uint32_t" else "int"
       case width if width > 32 && width <= 64 => if (isC) "uint64_t" else "longint"
-      case width if width > 64                => if (isC) "const svBitVecVal" else s"bit[${width - 1}:0]"
+      case width if width > 64 =>
+        if (isC)
+          if (isDPIC) "const svBitVecVal" else "uint8_t"
+        else s"bit[${width - 1}:0]"
     }
     if (isC) {
       val width = data.getWidth
-      if (width > 64) f"$typeString $argName[${width / 32}]" else f"$typeString%-8s $argName"
+      val suffix = if (width > 64) {
+        if (isDPIC) s"[${(width + 31) / 32}]" else s"[${(width + 7) / 8}]"
+      } else ""
+      f"$typeString%-8s $argName$suffix"
     } else {
       val directionString = getDirectionString(data)
       f"$directionString $typeString%8s $argName"
@@ -63,7 +68,6 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   def modPorts: Seq[Seq[(String, Data)]] = {
     var ports = commonPorts
     if (config.hasDutZone) ports ++= Seq(("dut_zone", dut_zone.get))
-    if (config.hasInternalStep) ports ++= Seq(("step", step.get))
     ports.map(Seq(_))
   }
 
@@ -94,20 +98,12 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
        |""".stripMargin
   }
 
-  def internalStep: String = if (config.hasInternalStep)
-    """
-      |extern void simv_nstep(uint8_t step);
-      |simv_nstep(step);
-      |""".stripMargin
-  else ""
-
   def dpicFunc: String =
     s"""
        |$dpicFuncProto {
        |  if (!diffstate_buffer) return;
        |$perfCnt
        |  ${dpicFuncAssigns.mkString("\n  ")}
-       |  $internalStep
        |}
        |""".stripMargin
 
@@ -192,7 +188,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
 }
 
 class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: GatewayConfig) extends DPICBase(config) {
-  val io = IO(Input(batchIO))
+  val io = IO(Input(UInt(batchIO.getWidth.W)))
 
   def getDPICBundleUnpack(gen: DifftestBundle): String = {
     val unpack = ListBuffer.empty[String]
@@ -210,7 +206,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     unpack.toSeq.mkString("\n        ")
   }
 
-  override def modPorts = super.modPorts ++ Seq(Seq(("io_data", io.data)), Seq(("io_info", io.info)))
+  override def modPorts = super.modPorts ++ Seq(Seq(("io", io)))
 
   override def desiredName: String = "DifftestBatch"
   override def dpicFuncAssigns: Seq[String] = {
@@ -225,34 +221,42 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
         """.stripMargin
     }.mkString("")
 
-    def parseInfo(io_info: Data): (String, Int) = {
+    def parse(gen: BatchIO): (String, Int) = {
       val info = new BatchInfo
-      val infoLen = io_info.getWidth / info.getWidth
-      val infoDecl =
+      val infoLen = gen.info.getWidth / info.getWidth
+      val structDecl =
         s"""
-           |  static struct {
-           |    ${info.elements.toSeq.map { case (name, data) => getDPICArgString(name, data, true) }
+           |  typedef struct {
+           |    ${info.elements.toSeq.map { case (name, data) => getDPICArgString(name, data, true, false) }
             .mkString(";\n    ")};
-           |  } info[$infoLen];
+           |  } BatchInfo;
+           |  typedef struct {
+           |    ${gen.elements.toSeq.map { case (name, data) =>
+            if (name == "info") s"BatchInfo info[$infoLen]" else getDPICArgString(name, data, true, false)
+          }.mkString(";\n    ")};
+           |  } BatchPack;
+           |  BatchPack* batch = (BatchPack*)io;
+           |  BatchInfo* info = batch->info;
+           |  uint8_t* data = batch->data;
            |""".stripMargin
-      (infoDecl, infoLen)
+      (structDecl, infoLen)
     }
-    val (infoDecl, infoLen) = parseInfo(io.info)
+    val (batchDecl, infoLen) = parse(batchIO)
     Seq(s"""
            |  enum DifftestBundleType {
            |  ${bundleEnum.mkString(",\n  ")}
            |  };
-           |
-           |  uint64_t offset = 0;
+           |  extern void simv_nstep(uint8_t step);
            |  uint32_t dut_index = 0;
-           |  $infoDecl
-           |  memcpy(info, io_info, sizeof(info));
-           |  uint8_t* data = (uint8_t*)io_data;
+           |  $batchDecl
            |  for (int i = 0; i < $infoLen; i++) {
            |    uint8_t id = info[i].id;
            |    uint8_t num = info[i].num;
            |    uint32_t coreid, index, address;
            |    if (id == BatchFinish) {
+           |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
+           |      simv_nstep(num);
+           |#endif // CONFIG_DIFFTEST_INTERNAL_STEP
            |      break;
            |    }
            |    else if (id == BatchInterval && i != 0) {
@@ -288,8 +292,7 @@ private class DummyDPICBatchWrapper(
   dpic.clock := clock
   dpic.enable := control.enable
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
-  if (config.hasInternalStep) dpic.step.get := control.step.get
-  dpic.io := io
+  dpic.io := io.asUInt
 }
 
 object DPIC {

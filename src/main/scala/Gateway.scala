@@ -52,7 +52,7 @@ case class GatewayConfig(
   def dutBufLen: Int = if (isBatch) batchSize else 1
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
-  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3900, 92) else (7800, 192)
+  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3900, 100) else (7800, 200)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
@@ -84,6 +84,7 @@ case class GatewayConfig(
   def check(): Unit = {
     if (hasReplay) require(isSquash)
     if (hasInternalStep) require(isBatch)
+    if (isBatch) require(!hasDutZone)
     // TODO: support dump and load together
     require(!(traceDump && traceLoad))
   }
@@ -224,18 +225,8 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
 
   if (config.isBatch) {
     val batch = Batch(squashed, config)
-    if (config.hasInternalStep) {
-      step := batch.step
-      control.step.get := batch.step
-    } else {
-      step := RegNext(batch.step, 0.U)
-    }
+    step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
-    if (config.hasDutZone) {
-      zoneControl.get.enable := batch.enable
-      control.dut_zone.get := zoneControl.get.dut_zone
-    }
-
     GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
   } else {
     val squashed_enable = VecInit(squashed.map(_.valid).toSeq).asUInt.orR
@@ -281,7 +272,6 @@ object GatewaySink {
 class GatewaySinkControl(config: GatewayConfig) extends Bundle {
   val enable = Bool()
   val dut_zone = Option.when(config.hasDutZone)(UInt(config.dutZoneWidth.W))
-  val step = Option.when(config.hasInternalStep)(UInt(config.stepWidth.W))
 }
 
 object Preprocess {
