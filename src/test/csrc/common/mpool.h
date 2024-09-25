@@ -41,6 +41,21 @@ struct MemoryBlock {
     memset(ptr, 0, 4096);
     data = std::unique_ptr<char[], std::function<void(char *)>>(static_cast<char *>(ptr), [](char *p) { free(p); });
   }
+  // Move constructors
+  MemoryBlock(MemoryBlock &&other) noexcept : data(std::move(other.data)), is_free(other.is_free.load()) {}
+
+  // Move assignment operator
+  MemoryBlock &operator=(MemoryBlock &&other) noexcept {
+    if (this != &other) {
+      data = std::move(other.data);
+      is_free.store(other.is_free.load());
+    }
+    return *this;
+  }
+
+  // Disable the copy constructor and copy assignment operator
+  MemoryBlock(const MemoryBlock &) = delete;
+  MemoryBlock &operator=(const MemoryBlock &) = delete;
 };
 
 class MemoryPool {
@@ -75,18 +90,6 @@ public:
   void set_free_chunk();
 
 private:
-  struct MemoryBlock {
-    std::unique_ptr<char, std::function<void(char *)>> data;
-    bool is_free;
-
-    MemoryBlock() : is_free(true) {
-      void *ptr = nullptr;
-      if (posix_memalign(&ptr, MEMBLOCK_SIZE, MEMBLOCK_SIZE * 2) != 0) {
-        throw std::runtime_error("Failed to allocate aligned memory");
-      }
-      data = std::unique_ptr<char, std::function<void(char *)>>(static_cast<char *>(ptr), [](char *p) { free(p); });
-    }
-  };
   std::vector<MemoryBlock> memory_pool;              // Mempool
   std::vector<std::mutex> block_mutexes{NUM_BLOCKS}; // Partition lock array
   std::atomic<size_t> empty_blocks{NUM_BLOCKS};      // Free block count
@@ -101,7 +104,7 @@ private:
 
 static const size_t MAX_IDX = 256;
 static const size_t MAX_GROUPING_IDX = NUM_BLOCKS / MAX_IDX;
-static const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2; //窗口需要预留两个空闲空间
+static const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2; //The window needs to reserve two free Spaces
 static const size_t REM_MAX_IDX = (MAX_IDX - 1);
 static const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
 
