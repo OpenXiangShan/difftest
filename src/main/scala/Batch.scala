@@ -186,7 +186,7 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig, 
     }
   }
 
-  val BatchFinish = WireInit(0.U.asTypeOf(new BatchInfo))
+  val BatchFinish = Wire(new BatchInfo)
   BatchFinish.id := (Batch.getTemplate.length + 1).U
   BatchFinish.num := state_step_cnt
   val out = IO(Output(new BatchOutput(chiselTypeOf(state_data), chiselTypeOf(state_info), config)))
