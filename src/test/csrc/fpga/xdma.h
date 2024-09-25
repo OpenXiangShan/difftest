@@ -32,23 +32,15 @@
 #define WITH_FPGA
 
 typedef struct FpgaPackgeHead {
-  BatchInfo difftest_batch_info;
   uint8_t packge_idx;
+  char diff_batch_pack[CONFIG_DIFFTEST_BATCH_BYTELEN];
 } FpgaPackgeHead;
 
 class FpgaXdma {
 public:
-  struct FpgaPackgeHead *shmadd_recv;
-
   MemoryIdxPool xdma_mempool;
 
-  int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
-  int xdma_h2c_fd;
-
   bool running = false;
-
-  std::condition_variable diff_filled_cv;
-  std::condition_variable diff_empile_cv;
 
   std::atomic<uint32_t> diff_packge_count{0};
 
@@ -66,6 +58,9 @@ public:
 private:
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;
+
+  int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
+  int xdma_h2c_fd;
 
   static void handle_sigint(int sig);
 };
