@@ -135,15 +135,16 @@ public:
   REF_STORE_LOG(f)  \
   REF_DEBUG_MODE(f)
 
-#define REF_OPTIONAL(f)                                                       \
-  f(ref_status, difftest_status, int, )                                       \
-  f(ref_close, difftest_close, void, )                                        \
-  f(ref_set_ramsize, difftest_set_ramsize, void, size_t)                      \
-  f(ref_set_mhartid, difftest_set_mhartid, void, int)                         \
-  f(ref_put_gmaddr, difftest_put_gmaddr, void, void *)                        \
-  f(ref_skip_one, difftest_skip_one, void, bool, bool, uint32_t, uint64_t)    \
-  f(ref_guided_exec, difftest_guided_exec, void, void*)                       \
-  f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                      \
+#define REF_OPTIONAL(f)                                                                                     \
+  f(ref_status, difftest_status, int, )                                                                     \
+  f(ref_close, difftest_close, void, )                                                                      \
+  f(ref_set_ramsize, difftest_set_ramsize, void, size_t)                                                    \
+  f(ref_set_mhartid, difftest_set_mhartid, void, int)                                                       \
+  f(ref_put_gmaddr, difftest_put_gmaddr, void, void *)                                                      \
+  f(ref_skip_one, difftest_skip_one, void, bool, bool, uint32_t, uint64_t)                                  \
+  f(ref_guided_exec, difftest_guided_exec, void, void*)                                                     \
+  f(ref_memcpy_init, difftest_memcpy_init, void, uint64_t, void*, size_t, bool)                             \
+  f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                                                    \
   f(ref_virtual_interrupt_is_hvictl_inject, difftest_virtual_interrupt_is_hvictl_inject, void, bool)        \
   f(disambiguation_state, difftest_disambiguation_state, int, )
 
@@ -259,6 +260,14 @@ public:
   inline void set_illegal_mem_access(bool ignored = false) {
     config.ignore_illegal_mem_access = ignored;
     sync_config();
+  }
+                         
+  inline void mem_init(uint64_t dest, void* src, size_t n, bool direction) {
+    if (ref_memcpy_init) {
+      ref_memcpy_init(dest, src, n, direction);
+    } else {
+      ref_memcpy(dest, src, n, direction);
+    }
   }
 
 #ifdef ENABLE_STORE_LOG
