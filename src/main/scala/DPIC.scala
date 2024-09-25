@@ -78,7 +78,7 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   def dpicFuncProto: String =
     s"""
        |extern "C" void $dpicFuncName (
-       |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true)).mkString(",\n  ")}
+       |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true, !config.isFPGA)).mkString(",\n  ")}
        |)""".stripMargin
   def getPacketDecl(gen: DifftestBundle, prefix: String, config: GatewayConfig): String = {
     val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
