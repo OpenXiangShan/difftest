@@ -555,7 +555,7 @@ void Difftest::do_first_instr_commit() {
     simMemory->clone_on_demand(
         [this](uint64_t offset, void *src, size_t n) {
           uint64_t dest_addr = PMEM_BASE + offset;
-          proxy->ref_memcpy(dest_addr, src, n, DUT_TO_REF);
+          proxy->mem_init(dest_addr, src, n, DUT_TO_REF);
         },
         true);
     // Use a temp variable to store the current pc of dut
