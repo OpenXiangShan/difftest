@@ -66,7 +66,9 @@ int difftest_state() {
 }
 
 int difftest_nstep(int step, bool enable_diff) {
+#if CONFIG_DIFFTEST_ZONESIZE > 1
   difftest_switch_zone();
+#endif // CONFIG_DIFFTEST_ZONESIZE
   for (int i = 0; i < step; i++) {
     if (enable_diff) {
       if (difftest_step())
