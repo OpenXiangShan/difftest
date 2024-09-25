@@ -41,8 +41,8 @@ class BatchIO(dataType: UInt, infoType: UInt) extends Bundle {
   val info = infoType
 }
 
-class BatchOutput(data: UInt, info: UInt, config: GatewayConfig) extends Bundle {
-  val io = new BatchIO(chiselTypeOf(data), chiselTypeOf(info))
+class BatchOutput(dataType: UInt, infoType: UInt, config: GatewayConfig) extends Bundle {
+  val io = new BatchIO(dataType, infoType)
   val enable = Bool()
   val step = UInt(config.stepWidth.W)
 }
@@ -131,9 +131,7 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig, 
   }
 
   val BatchInterval = WireInit(0.U.asTypeOf(new BatchInfo))
-  val BatchFinish = WireInit(0.U.asTypeOf(new BatchInfo))
   BatchInterval.id := Batch.getTemplate.length.U
-  BatchFinish.id := (Batch.getTemplate.length + 1).U
   val step_data = dataCollect_vec.last
   val step_info = Cat(infoCollect_vec.last, BatchInterval.asUInt)
   val step_data_len = dataLenCollect_vec.last
@@ -188,7 +186,10 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig, 
     }
   }
 
-  val out = IO(Output(new BatchOutput(state_data, state_info, config)))
+  val BatchFinish = Wire(new BatchInfo)
+  BatchFinish.id := (Batch.getTemplate.length + 1).U
+  BatchFinish.num := state_step_cnt
+  val out = IO(Output(new BatchOutput(chiselTypeOf(state_data), chiselTypeOf(state_info), config)))
   out.io.data := state_data
   out.io.info := state_info | BatchFinish.asUInt << (state_info_len << 3)
   out.enable := should_tick

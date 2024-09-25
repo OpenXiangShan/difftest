@@ -46,13 +46,14 @@ case class GatewayConfig(
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
   exitOnAssertions: Boolean = false,
+  isFPGA: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
   def dutBufLen: Int = if (isBatch) batchSize else 1
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
-  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3900, 92) else (7800, 192)
+  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3900, 100) else (7800, 200)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
@@ -64,7 +65,12 @@ case class GatewayConfig(
     macros += s"CONFIG_DIFFTEST_${style.toUpperCase}"
     macros += s"CONFIG_DIFFTEST_ZONESIZE $dutZoneSize"
     macros += s"CONFIG_DIFFTEST_BUFLEN $dutBufLen"
-    if (isBatch) macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"CONFIG_DIFFTEST_BATCH_SIZE ${batchSize}")
+    if (isBatch)
+      macros ++= Seq(
+        "CONFIG_DIFFTEST_BATCH",
+        s"CONFIG_DIFFTEST_BATCH_SIZE ${batchSize}",
+        s"CONFIG_DIFFTEST_BATCH_BYTELEN ${batchArgByteLen._1 + batchArgByteLen._2}",
+      )
     if (isSquash) macros ++= Seq("CONFIG_DIFFTEST_SQUASH", s"CONFIG_DIFFTEST_SQUASH_STAMPSIZE 4096") // Stamp Width 12
     if (hasReplay) macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
@@ -84,6 +90,7 @@ case class GatewayConfig(
   def check(): Unit = {
     if (hasReplay) require(isSquash)
     if (hasInternalStep) require(isBatch)
+    if (isBatch) require(!hasDutZone)
     // TODO: support dump and load together
     require(!(traceDump && traceLoad))
   }
@@ -127,6 +134,7 @@ object Gateway {
       case 'L' => config = config.copy(traceLoad = true)
       case 'H' => config = config.copy(hierarchicalWiring = true)
       case 'X' => config = config.copy(exitOnAssertions = true)
+      case 'F' => config = config.copy(isFPGA = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()
@@ -224,18 +232,8 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
 
   if (config.isBatch) {
     val batch = Batch(squashed, config)
-    if (config.hasInternalStep) {
-      step := batch.step
-      control.step.get := batch.step
-    } else {
-      step := RegNext(batch.step, 0.U)
-    }
+    step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
-    if (config.hasDutZone) {
-      zoneControl.get.enable := batch.enable
-      control.dut_zone.get := zoneControl.get.dut_zone
-    }
-
     GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
   } else {
     val squashed_enable = VecInit(squashed.map(_.valid).toSeq).asUInt.orR
@@ -281,7 +279,6 @@ object GatewaySink {
 class GatewaySinkControl(config: GatewayConfig) extends Bundle {
   val enable = Bool()
   val dut_zone = Option.when(config.hasDutZone)(UInt(config.dutZoneWidth.W))
-  val step = Option.when(config.hasInternalStep)(UInt(config.stepWidth.W))
 }
 
 object Preprocess {
