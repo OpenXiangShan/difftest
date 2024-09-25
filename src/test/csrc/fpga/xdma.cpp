@@ -21,11 +21,10 @@
 
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
-static const int dma_channel = CONFIG_DMA_CHANNELS;
 
 FpgaXdma::FpgaXdma() {
   signal(SIGINT, handle_sigint);
-  for (int i = 0; i < dma_channel; i++) {
+  for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     char c2h_device[64];
     sprintf(c2h_device, "%s%d", XDMA_C2H_DEVICE, i);
     xdma_c2h_fd[i] = open(c2h_device, O_RDONLY);
@@ -55,7 +54,7 @@ void FpgaXdma::start_transmit_thread() {
   if (running == true)
     return;
 
-  for (int i = 0; i < dma_channel; i++) {
+  for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     printf("start channel %d \n", i);
     receive_thread[i] = std::thread(&FpgaXdma::read_xdma_thread, this, i);
   }
@@ -103,7 +102,7 @@ void FpgaXdma::write_difftest_thread() {
       assert(0);
     }
     // packge unpack
-    v_difftest_Batch(packge.difftest_batch_info.io_data, packge.difftest_batch_info.io_info);
+    v_difftest_Batch((uint8_t *)packge.diff_batch_pack);
     // difftest run
     diff_packge_count.fetch_add(1, std::memory_order_relaxed);
   }
