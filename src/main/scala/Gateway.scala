@@ -64,7 +64,12 @@ case class GatewayConfig(
     macros += s"CONFIG_DIFFTEST_${style.toUpperCase}"
     macros += s"CONFIG_DIFFTEST_ZONESIZE $dutZoneSize"
     macros += s"CONFIG_DIFFTEST_BUFLEN $dutBufLen"
-    if (isBatch) macros ++= Seq("CONFIG_DIFFTEST_BATCH", s"CONFIG_DIFFTEST_BATCH_SIZE ${batchSize}")
+    if (isBatch)
+      macros ++= Seq(
+        "CONFIG_DIFFTEST_BATCH",
+        s"CONFIG_DIFFTEST_BATCH_SIZE ${batchSize}",
+        s"CONFIG_DIFFTEST_BATCH_BYTELEN ${batchArgByteLen._1 + batchArgByteLen._2}",
+      )
     if (isSquash) macros ++= Seq("CONFIG_DIFFTEST_SQUASH", s"CONFIG_DIFFTEST_SQUASH_STAMPSIZE 4096") // Stamp Width 12
     if (hasReplay) macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
