@@ -1064,7 +1064,7 @@ void Emulator::snapshot_save(const char *filename) {
   stream.unbuf_write(&proxy->pc, sizeof(proxy->pc));
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  proxy->ref_memcpy(PMEM_BASE, buf, size, REF_TO_DUT);
+  proxy->mem_init(PMEM_BASE, buf, size, REF_TO_DUT);
   stream.unbuf_write(buf, size);
   munmap(buf, size);
 
@@ -1111,7 +1111,7 @@ void Emulator::snapshot_load(const char *filename) {
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   stream.read(buf, size);
-  proxy->ref_memcpy(PMEM_BASE, buf, size, DUT_TO_REF);
+  proxy->mem_init(PMEM_BASE, buf, size, DUT_TO_REF);
   munmap(buf, size);
 
   uint64_t csr_buf[4096];
