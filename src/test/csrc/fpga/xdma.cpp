@@ -16,14 +16,20 @@
 #include "xdma.h"
 #include "mpool.h"
 #include <fcntl.h>
+#include <fstream>
 #include <iostream>
 #include <signal.h>
+#include <sys/mman.h>
 
+#define XDMA_USER       "/dev/xdma0_user"
+#define XDMA_BYPASS     "/dev/xdma0_bypass"
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
 
-FpgaXdma::FpgaXdma() {
+FpgaXdma::FpgaXdma(const char *workload) {
   signal(SIGINT, handle_sigint);
+  ddr_load_workload(workload);
+
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     char c2h_device[64];
     sprintf(c2h_device, "%s%d", XDMA_C2H_DEVICE, i);
@@ -48,6 +54,47 @@ FpgaXdma::FpgaXdma() {
 void FpgaXdma::handle_sigint(int sig) {
   printf("Unlink sem success, exit success!\n");
   exit(1);
+}
+
+// write xdma_bypass memory or xdma_user
+int FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
+  uint64_t pg_size = sysconf(_SC_PAGE_SIZE);
+  uint64_t size = !is_bypass ? 0x1000 : 0x10000;
+  uint64_t aligned_size = (size + 0xffful) & ~0xffful;
+  uint64_t base = addr & ~0xffful;
+  uint32_t offset = addr & 0xfffu;
+  std::ifstream workload_fd;
+  int fd = -1;
+
+  if (base % pg_size != 0) {
+    printf("base must be a multiple of system page size\n");
+    return -1;
+  }
+
+  if (is_bypass)
+    fd = open(XDMA_BYPASS, O_RDWR | O_SYNC);
+  else
+    fd = open(XDMA_USER, O_RDWR | O_SYNC);
+  if (fd < 0) {
+    printf("failed to open %s\n", is_bypass ? XDMA_BYPASS : XDMA_USER);
+    return -1;
+  }
+
+  void *m_ptr = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, base);
+  if (m_ptr == MAP_FAILED) {
+    close(fd);
+    printf("failed to mmap\n");
+    return -1;
+  }
+
+  if (is_bypass) {
+    workload_fd.read(((char *)m_ptr) + offset, size);
+  } else {
+    ((volatile uint32_t *)m_ptr)[offset >> 2] = value;
+  }
+
+  munmap(m_ptr, aligned_size);
+  close(fd);
 }
 
 void FpgaXdma::start_transmit_thread() {

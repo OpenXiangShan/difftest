@@ -71,7 +71,7 @@ void set_diff_ref_so(char *s) {
 }
 
 void simv_init() {
-  xdma_device = new FpgaXdma;
+  xdma_device = new FpgaXdma(work_load);
   difftest_init();
 }
 
