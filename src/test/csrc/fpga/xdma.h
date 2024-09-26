@@ -44,11 +44,27 @@ public:
 
   std::atomic<uint32_t> diff_packge_count{0};
 
-  FpgaXdma();
+  FpgaXdma(const char *workload);
   ~FpgaXdma() {
     stop_thansmit_thread();
   };
 
+  int core_reset() {
+    device_write(false, nullptr, 0x100000, 0x1);
+    device_write(false, nullptr, 0x10000, 0x8);
+  }
+
+  int core_restart() {
+    device_write(false, nullptr, 0x100000, 0);
+  }
+
+  int ddr_load_workload(const char *workload) {
+    core_reset();
+    device_write(true, workload, 0, 0);
+    core_restart();
+  }
+
+  int device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);
   // thread api
   void start_transmit_thread();
   void stop_thansmit_thread();
