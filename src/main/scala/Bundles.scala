@@ -244,6 +244,10 @@ class AtomicEvent extends DifftestBaseBundle with HasValid {
   val out = UInt(64.W)
 }
 
+class CMOInvalEvent extends DifftestBaseBundle with HasValid {
+  val addr = UInt(64.W)
+}
+
 class L1TLBEvent extends DifftestBaseBundle with HasValid {
   val satp = UInt(64.W)
   val vpn = UInt(64.W)
