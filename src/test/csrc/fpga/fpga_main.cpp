@@ -18,6 +18,7 @@
 #include "difftest-dpic.h"
 #include "difftest.h"
 #include "mpool.h"
+#include "ram.h"
 #include "refproxy.h"
 #include "xdma.h"
 
@@ -60,6 +61,8 @@ int main(int argc, char *argv[]) {
     }
   }
   free(xdma_device);
+  printf("difftest releases the fpga device and exits\n");
+  exit(0);
 }
 
 void set_diff_ref_so(char *s) {
@@ -72,6 +75,7 @@ void set_diff_ref_so(char *s) {
 
 void simv_init() {
   xdma_device = new FpgaXdma(work_load);
+  init_ram(work_load, DEFAULT_EMU_RAM_SIZE);
   difftest_init();
 }
 
