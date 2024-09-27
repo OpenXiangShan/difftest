@@ -15,6 +15,7 @@
 ***************************************************************************************/
 #include "xdma.h"
 #include "mpool.h"
+#include "ram.h"
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
@@ -57,18 +58,17 @@ void FpgaXdma::handle_sigint(int sig) {
 }
 
 // write xdma_bypass memory or xdma_user
-int FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
+void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
   uint64_t pg_size = sysconf(_SC_PAGE_SIZE);
   uint64_t size = !is_bypass ? 0x1000 : 0x10000;
   uint64_t aligned_size = (size + 0xffful) & ~0xffful;
   uint64_t base = addr & ~0xffful;
   uint32_t offset = addr & 0xfffu;
-  std::ifstream workload_fd;
   int fd = -1;
 
   if (base % pg_size != 0) {
     printf("base must be a multiple of system page size\n");
-    return -1;
+    exit(-1);
   }
 
   if (is_bypass)
@@ -77,18 +77,23 @@ int FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, 
     fd = open(XDMA_USER, O_RDWR | O_SYNC);
   if (fd < 0) {
     printf("failed to open %s\n", is_bypass ? XDMA_BYPASS : XDMA_USER);
-    return -1;
+    exit(-1);
   }
 
   void *m_ptr = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, base);
   if (m_ptr == MAP_FAILED) {
     close(fd);
     printf("failed to mmap\n");
-    return -1;
+    exit(-1);
   }
 
   if (is_bypass) {
-    workload_fd.read(((char *)m_ptr) + offset, size);
+    if (simMemory->get_load_img_size() > aligned_size) {
+      printf("The loaded workload size exceeds the xdma bypass size");
+      exit(-1);
+    }
+    memcpy(static_cast<char *>(m_ptr) + offset, static_cast<const void *>(simMemory->as_ptr()),
+           simMemory->get_load_img_size());
   } else {
     ((volatile uint32_t *)m_ptr)[offset >> 2] = value;
   }
