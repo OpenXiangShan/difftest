@@ -110,6 +110,9 @@ public:
   uint64_t get_size() {
     return memory_size;
   }
+  uint64_t get_load_img_size() {
+    return get_img_size();
+  }
   bool in_range_u8(uint64_t address) {
     return address < memory_size;
   }
