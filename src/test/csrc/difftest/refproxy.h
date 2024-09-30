@@ -76,7 +76,7 @@ static const char *regs_name_fp_csr[] = {
 };
 
 static const char *regs_name_triggercsr[] = {
-  "tselect", "tdata1", "tinfo", "tcontol"
+  "tselect", "tdata1", "tinfo"
 };
 
 /* clang-format on */
