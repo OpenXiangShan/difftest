@@ -1276,6 +1276,7 @@ void Difftest::do_non_reg_interrupt_pending() {
     ip.localCounterOverflowInterruptReq = dut->non_reg_interrupt_pending.localCounterOverflowInterruptReq;
 
     proxy->non_reg_interrupt_pending(ip);
+    dut->non_reg_interrupt_pending.valid = 0;
   }
 }
 #endif
