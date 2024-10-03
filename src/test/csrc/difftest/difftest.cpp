@@ -92,7 +92,9 @@ void difftest_set_dut() {
   }
 }
 int difftest_step() {
+#ifndef WITH_FPGA
   difftest_set_dut();
+#endif
   for (int i = 0; i < NUM_CORES; i++) {
     int ret = difftest[i]->step();
     if (ret) {

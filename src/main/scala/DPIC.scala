@@ -297,6 +297,7 @@ private class DummyDPICBatchWrapper(
 
 object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
+  var defMacros = new StringBuilder()
 
   def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
     val module = Module(new DummyDPICWrapper(chiselTypeOf(io), config))
@@ -314,6 +315,12 @@ object DPIC {
     module.control := control
     module.io := io
     val dpic = module.dpic
+    if (!config.isFPGA)
+      defMacros ++=
+        s"""
+           |#ifdef CONFIG_DIFFTEST_BATCH
+           |#include "svdpi.h"
+           |#endif // CONFIG_DIFFTEST_BATCH""".stripMargin
     interfaces += ((dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc))
   }
 
@@ -328,12 +335,10 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#include <cstdint>"
     interfaceCpp += "#include \"diffstate.h\""
-    interfaceCpp += "#ifdef CONFIG_DIFFTEST_BATCH"
-    interfaceCpp += "#include \"svdpi.h\""
-    interfaceCpp += "#endif // CONFIG_DIFFTEST_BATCH"
     interfaceCpp += "#ifdef CONFIG_DIFFTEST_PERFCNT"
     interfaceCpp += "#include \"perf.h\""
     interfaceCpp += "#endif // CONFIG_DIFFTEST_PERFCNT"
+    interfaceCpp += defMacros.toString()
     interfaceCpp += ""
     interfaceCpp +=
       """
