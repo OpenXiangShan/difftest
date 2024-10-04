@@ -254,9 +254,6 @@ class BatchAssembler(
   val BatchInterval = Wire(new BatchInfo)
   BatchInterval.id := Batch.getTemplate.length.U
   BatchInterval.num := 0.U // unused
-  val BatchFinish = Wire(new BatchInfo)
-  BatchFinish.id := (Batch.getTemplate.length + 1).U
-  BatchFinish.num := state_step_cnt
 
   // Assemble step data/info into state in 3 stage
   // Stage 1:
@@ -274,10 +271,15 @@ class BatchAssembler(
   val info_exceed_vec = VecInit(step_stats_vec.map(_.info_len + (2 * param.infoWidth / 8).U > info_limit && enable))
   val exceed_vec = VecInit(data_exceed_vec.zip(info_exceed_vec).map { case (de, ie) => de | ie })
   // Extract last non-exceed stats
-  val concat_stats = VecInit(step_stats_vec.dropRight(1).zipWithIndex.map { case (stats, idx) =>
-    val mask = exceed_vec(idx) ^ exceed_vec(idx + 1)
-    Mux(mask, stats.asUInt, 0.U)
-  }).reduceTree(_ | _).asTypeOf(new BatchStats(param))
+  // When no stats exceeds, return step_stats to append whole step for state flushing
+  val concat_stats = Mux(
+    !exceed_vec.asUInt.orR,
+    step_stats_vec.last,
+    VecInit(step_stats_vec.dropRight(1).zipWithIndex.map { case (stats, idx) =>
+      val mask = exceed_vec(idx) ^ exceed_vec(idx + 1)
+      Mux(mask, stats.asUInt, 0.U)
+    }).reduceTree(_ | _).asTypeOf(new BatchStats(param)),
+  )
   val remain_stats = WireInit(0.U.asTypeOf(new BatchStats(param)))
   remain_stats.data_len := step_stats_vec.last.data_len -& concat_stats.data_len
   remain_stats.info_len := step_stats_vec.last.info_len -& concat_stats.info_len
@@ -310,24 +312,35 @@ class BatchAssembler(
       step_trace_info.get.trace_size
     ) +& collect_length.U >= config.replaySize.U)
   }
+  // Flush state to provide more space for peak data
+  val state_flush = enable && step_stats_vec.last.data_len > param.MaxDataByteLen.U
   if (config.hasBuiltInPerf) {
     DifftestPerf("BatchExceed_data", data_exceed_vec.asUInt.orR)
     DifftestPerf("BatchExceed_info", info_exceed_vec.asUInt.orR)
     DifftestPerf("BatchExceed_step", delay_step_exceed.asUInt)
+    DifftestPerf("BatchExceed_flush", state_flush.asUInt)
     if (config.hasReplay) DifftestPerf("BatchExceed_trace", delay_trace_exceed.get.asUInt)
   }
   val in_replay = Option.when(config.hasReplay)(step_trace_info.get.in_replay)
-  val should_tick =
-    delay_cont_exceed || delay_step_exceed || delay_trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
+  val should_tick = state_flush || delay_cont_exceed || delay_step_exceed ||
+    delay_trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
 
-  // When step equals batchSize(delay_step_exceed), last appended data will overwrite first step data
-  val has_append = RegNext(exceed_vec.asUInt.orR && !exceed_vec.asUInt.andR) && !delay_step_exceed
+  // Delay step can be partly appended to output for making full use of transmission param
+  // Avoid appending when step equals batchSize(delay_step_exceed), last appended data will overwrite first step data
+  val has_append =
+    delay_enable && (state_flush || delay_cont_exceed) && RegNext(!exceed_vec.asUInt.andR) && !delay_step_exceed
+  // When the whole step is appended to output, state_step should be 0, and output step + 1
+  val append_whole = has_append && !delay_cont_exceed
   val out = IO(Output(new BatchOutput(chiselTypeOf(state_data), chiselTypeOf(state_info), config)))
   out.io.data := state_data | Mux(
     has_append,
     delay_concat_data(param.TruncDataBitLen - 1, 0) << (state_data_len << 3),
     0.U,
   )
+  val finish_step = state_step_cnt + Mux(append_whole, 1.U, 0.U)
+  val BatchFinish = Wire(new BatchInfo)
+  BatchFinish.id := (Batch.getTemplate.length + 1).U
+  BatchFinish.num := finish_step
   val append_info = Mux(
     has_append,
     Cat(
@@ -339,43 +352,62 @@ class BatchAssembler(
   )
   out.io.info := state_info | append_info(param.TruncInfoBitLen - 1, 0) << (state_info_len << 3)
   out.enable := should_tick
-  out.step := Mux(out.enable, state_step_cnt, 0.U)
+  out.step := Mux(out.enable, finish_step, 0.U)
 
   // Stage 3: update state
   val next_state_data_len = Mux(
-    should_tick,
-    Mux(has_append, delay_remain_stats.data_len, delay_step_stats.data_len),
-    state_data_len + delay_step_stats.data_len,
+    delay_enable,
+    Mux(
+      should_tick,
+      Mux(has_append, delay_remain_stats.data_len, delay_step_stats.data_len),
+      state_data_len + delay_step_stats.data_len,
+    ),
+    0.U,
   )
+
   val next_state_info_len = Mux(
-    should_tick,
-    Mux(has_append, delay_remain_stats.info_len, delay_step_stats.info_len + (param.infoWidth / 8).U),
-    state_info_len + delay_step_stats.info_len + (param.infoWidth / 8).U,
+    delay_enable,
+    Mux(
+      should_tick,
+      Mux(has_append, delay_remain_stats.info_len, delay_step_stats.info_len + (param.infoWidth / 8).U),
+      state_info_len + delay_step_stats.info_len + (param.infoWidth / 8).U,
+    ),
+    0.U,
   )
-  // Calculate occupied space when enable(stage 1), delay_enable means previous step is in stage 2, use next_state_stats ahead
-  occupy_data_len := Mux(delay_enable, next_state_data_len, state_data_len)
-  occupy_info_len := Mux(delay_enable, next_state_info_len, state_info_len)
-  when(delay_enable) {
+
+  // Calculate occupied space when enable(stage 1), state_update means previous step is in stage 2, use next_state_stats ahead
+  val state_update = delay_enable || state_flush
+  occupy_data_len := Mux(state_update, next_state_data_len, state_data_len)
+  occupy_info_len := Mux(state_update, next_state_info_len, state_info_len)
+  when(state_update) {
     state_data_len := next_state_data_len
     state_info_len := next_state_info_len
-    when(should_tick) {
-      state_step_cnt := 1.U
-      when(has_append) {
-        state_data := delay_remain_data
-        state_info := delay_remain_info
+    when(delay_enable) {
+      when(should_tick) {
+        when(has_append) { // include state_flush with new-coming step
+          state_step_cnt := Mux(append_whole, 0.U, 1.U)
+          state_data := delay_remain_data
+          state_info := delay_remain_info
+        }.otherwise {
+          state_step_cnt := 1.U
+          state_data := delay_step_data
+          state_info := Cat(delay_step_info, BatchInterval.asUInt)
+        }
+        if (config.hasReplay) state_trace_size.get := RegNext(step_trace_info.get.trace_size)
       }.otherwise {
-        state_data := delay_step_data
-        state_info := Cat(delay_step_info, BatchInterval.asUInt)
+        state_step_cnt := state_step_cnt + 1.U
+        state_data := state_data | delay_step_data(param.TruncDataBitLen - 1, 0) << (state_data_len << 3)
+        state_info := state_info | Cat(
+          delay_step_info,
+          BatchInterval.asUInt,
+        )(param.TruncInfoBitLen - 1, 0) << (state_info_len << 3)
+        if (config.hasReplay) state_trace_size.get := state_trace_size.get + RegNext(step_trace_info.get.trace_size)
       }
-      if (config.hasReplay) state_trace_size.get := RegNext(step_trace_info.get.trace_size)
-    }.otherwise {
-      state_step_cnt := state_step_cnt + 1.U
-      state_data := state_data | delay_step_data(param.TruncDataBitLen - 1, 0) << (state_data_len << 3)
-      state_info := state_info | Cat(
-        delay_step_info,
-        BatchInterval.asUInt,
-      )(param.TruncInfoBitLen - 1, 0) << (state_info_len << 3)
-      if (config.hasReplay) state_trace_size.get := state_trace_size.get + RegNext(step_trace_info.get.trace_size)
+    }.otherwise { // state_flush without new-coming step
+      state_step_cnt := 0.U
+      state_data := 0.U
+      state_info := 0.U
+      if (config.hasReplay) state_trace_size.get := 0.U
     }
   }
 }
