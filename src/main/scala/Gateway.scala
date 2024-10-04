@@ -38,7 +38,7 @@ case class GatewayConfig(
   replaySize: Int = 1024,
   hasDutZone: Boolean = false,
   isBatch: Boolean = false,
-  batchSize: Int = 32,
+  batchSize: Int = 64,
   hasInternalStep: Boolean = false,
   isNonBlock: Boolean = false,
   hasBuiltInPerf: Boolean = false,
@@ -53,7 +53,7 @@ case class GatewayConfig(
   def dutBufLen: Int = if (isBatch) batchSize else 1
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
-  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3900, 100) else (7800, 200)
+  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3600, 400) else (7200, 800)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
