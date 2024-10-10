@@ -158,7 +158,7 @@ extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx) {
 /** Fake ICache */
 TraceICache *trace_icache = NULL;
 
-extern "C" void init_traceicache() {
+void init_traceicache() {
   trace_icache = new TraceICache();
 }
 
@@ -166,6 +166,13 @@ extern "C" uint64_t trace_icache_dword_helper(uint64_t addr) {
   uint64_t data;
   METHOD_TRACE();
   trace_icache->readDWord(data, addr);
+  return data;
+}
+
+extern "C" uint64_t trace_dyn_pt_dword_helper(uint64_t addr) {
+  METHOD_TRACE();
+  uint64_t data = trace_icache->dynPageRead(addr);
+  // printf("[TraceDynPT] addr: 0x%lx, data: 0x%016lx\n", addr, data);
   return data;
 }
 

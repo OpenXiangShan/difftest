@@ -22,7 +22,9 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <iostream>
+
 #include "trace_icache.h"
+#include "trace_common.h"
 
 TraceICache::TraceICache() {
   soft_tlb.clear();
@@ -81,7 +83,7 @@ uint64_t TraceICache::addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
     return (it->second << 12) | off;
   } else {
     METHOD_TRACE();
-    return 0x90000000 | off; // give a legal addr
+    return OUTOF_TRACE_PAGE_PADDR | off; // give a legal addr
   }
 }
 
@@ -106,10 +108,40 @@ void TraceICache::dumpICache() {
 }
 
 void TraceICache::dumpSoftTlb() {
-  fprintf(stderr, "TraceSoftTlb Content:\n");
+  // fprintf(stderr, "TraceSoftTlb Content:\n");
+  printf("TraceSoftTlb Content:\n");
   for (const auto &pair : soft_tlb) {
-    fprintf(stderr, "%016lx -> %09lx\n", pair.first, pair.second);
+    printf("  %016lx -> %09lx\n", pair.first, pair.second);
   }
+}
+
+void TraceICache::test() {
+  // test for icache
+
+  // test for soft_tlb
+
+  dumpSoftTlb();
+  dynamic_page_table.dumpInnerSoftTLB();
+
+  // test for dynPageTable
+  {
+    uint64_t vpn = 0xf63d;
+    uint64_t ppn_pt = dynPageTrans(vpn);
+    printf("DYN Test vpn = %016lx, ppn_pt = %016lx\n", vpn, ppn_pt);
+    fflush(stdout);
+  }
+  for (auto &pair : soft_tlb) {
+    uint64_t vpn = pair.first;
+    uint64_t ppn_tlb = pair.second;
+
+    uint64_t ppn_pt = dynPageTrans(vpn);
+    if (ppn_pt != ppn_tlb) {
+      printf("Error: vpn = %016lx, ppn_pt = %016lx, ppn_tlb = %016lx\n", vpn, ppn_pt, ppn_tlb);
+      exit(1);
+    }
+  }
+
+  // dynamic_page_table.dump();
 }
 
 TraceICache::~TraceICache() {

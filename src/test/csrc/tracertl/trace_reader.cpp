@@ -104,8 +104,10 @@ TraceReader::TraceReader(const char *trace_file_name)
     // construct trace_icache
     trace_icache->constructICache(inst.instr_pc_va, inst.instr);
     trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+    trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
     if (inst.memory_type != MEM_TYPE_None) {
       trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
+      trace_icache->dynPageWrite(inst.exu_data.memory_address.va >> 12, inst.exu_data.memory_address.pa >> 12);
     }
 
     // construct trace
@@ -116,6 +118,8 @@ TraceReader::TraceReader(const char *trace_file_name)
   delete[] instDecompressBuffer;
 
   last_interval_time = gen_cur_time();
+
+  trace_icache->test();
 }
 
 bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {

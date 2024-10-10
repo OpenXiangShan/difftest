@@ -22,6 +22,7 @@
 #include <map>
 #include <unordered_map>
 #include "trace_format.h"
+#include "trace_dynamic_page_table.h"
 
 struct TLBKeyType {
   uint64_t vaddr;
@@ -50,18 +51,41 @@ private:
   // std::unordered_map<TLBKeyType, uint64_t> soft_tlb;
   std::unordered_map<uint64_t, uint64_t> soft_tlb;
 
+  // ddr/dram image for pagetable
+  DynamicSoftPageTable dynamic_page_table;
+
 public:
   TraceICache();
   ~TraceICache();
+
   void constructSoftTLB(uint64_t vaddr, uint16_t asid, uint16_t vmid, uint64_t paddr);
-  void constructICache(uint64_t vaddr, uint32_t inst);
-  void readDWord(uint64_t &dest, uint64_t addr);
   uint64_t addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid);
   bool addrTrans_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid);
+
+  void constructICache(uint64_t vaddr, uint32_t inst);
+  void readDWord(uint64_t &dest, uint64_t addr);
   uint16_t readHWord(uint64_t key);
+
 
   void dumpICache();
   void dumpSoftTlb();
+
+  // test if the icache is working
+  void test();
+
+  // wrap function for DynamicSoftPageTable
+  uint64_t dynPageRead(uint64_t paddr) {
+    return dynamic_page_table.read(paddr, false);
+  }
+  void dynPageWrite(uint64_t vpn, uint64_t ppn) {
+    dynamic_page_table.write(vpn, ppn);
+  }
+  uint64_t dynPageTrans(uint64_t vpn) {
+    return dynamic_page_table.trans(vpn);
+  }
+  void dumpDynPageTable() {
+    dynamic_page_table.dump();
+  };
 };
 
 #endif
