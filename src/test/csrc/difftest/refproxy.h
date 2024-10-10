@@ -147,7 +147,8 @@ public:
   f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                                                    \
   f(ref_virtual_interrupt_is_hvictl_inject, difftest_virtual_interrupt_is_hvictl_inject, void, bool)        \
   f(disambiguation_state, difftest_disambiguation_state, int, )               \
-  f(ref_non_reg_interrupt_pending, difftest_non_reg_interrupt_pending, void, void*)
+  f(ref_non_reg_interrupt_pending, difftest_non_reg_interrupt_pending, void, void*) \
+  f(raise_mhpmevent_overflow, difftest_raise_mhpmevent_overflow, void, uint64_t)
 
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
@@ -248,6 +249,12 @@ public:
   inline void non_reg_interrupt_pending(struct NonRegInterruptPending &ip) {
     if (ref_non_reg_interrupt_pending) {
       ref_non_reg_interrupt_pending(&ip);
+    }
+  }
+
+  inline void mhpmevent_overflow(uint64_t mhpmeventOverflow) {
+    if (raise_mhpmevent_overflow) {
+      raise_mhpmevent_overflow(mhpmeventOverflow);
     }
   }
 

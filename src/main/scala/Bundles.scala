@@ -315,6 +315,10 @@ class NonRegInterruptPendingEvent extends DifftestBaseBundle with HasValid {
   val localCounterOverflowInterruptReq = Bool()
 }
 
+class MhpmeventOverflowEvent extends DifftestBaseBundle with HasValid {
+  val mhpmeventOverflow = UInt(64.W)
+}
+
 class TraceInfo extends DifftestBaseBundle with HasValid {
   val in_replay = Bool()
   val trace_head = UInt(16.W)

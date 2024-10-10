@@ -324,6 +324,10 @@ int Difftest::step() {
   do_non_reg_interrupt_pending();
 #endif
 
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  do_mhpmevent_overflow();
+#endif
+
   num_commit = 0; // reset num_commit this cycle to 0
   if (dut->event.valid) {
     // interrupt has a higher priority than exception
@@ -1277,6 +1281,15 @@ void Difftest::do_non_reg_interrupt_pending() {
 
     proxy->non_reg_interrupt_pending(ip);
     dut->non_reg_interrupt_pending.valid = 0;
+  }
+}
+#endif
+
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+void Difftest::do_mhpmevent_overflow() {
+  if (dut->mhpmevent_overflow.valid) {
+    proxy->mhpmevent_overflow(dut->mhpmevent_overflow.mhpmeventOverflow);
+    dut->mhpmevent_overflow.valid = 0;
   }
 }
 #endif
