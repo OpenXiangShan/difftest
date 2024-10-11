@@ -419,6 +419,9 @@ protected:
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
   void do_non_reg_interrupt_pending();
 #endif
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  void do_mhpmevent_overflow();
+#endif
 #ifdef CONFIG_DIFFTEST_REPLAY
   struct {
     bool in_replay = false;
