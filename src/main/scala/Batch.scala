@@ -322,9 +322,16 @@ class BatchAssembler(
     if (config.hasReplay) DifftestPerf("BatchExceed_trace", delay_trace_exceed.get.asUInt)
   }
   val in_replay = Option.when(config.hasReplay)(step_trace_info.get.in_replay)
-  val should_tick = state_flush || delay_cont_exceed || delay_step_exceed ||
+  val timeout_count = RegInit(0.U(32.W))
+  val timeout = timeout_count === 200000.U
+  val should_tick = timeout || state_flush || delay_cont_exceed || delay_step_exceed ||
     delay_trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
 
+  when(!should_tick) {
+    timeout_count := timeout_count + 1.U
+  }.otherwise {
+    timeout_count := 0.U
+  }
   // Delay step can be partly appended to output for making full use of transmission param
   // Avoid appending when step equals batchSize(delay_step_exceed), last appended data will overwrite first step data
   val has_append =
