@@ -166,8 +166,22 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig, 
     if (config.hasReplay) DifftestPerf("BatchExceed_trace", trace_exceed.get.asUInt)
   }
 
+  val time_exceed_count = RegInit(0.U(32.W))
+  val time_exceed = time_exceed_count === 200000.U
+
   val should_tick =
-    data_exceed || info_exceed || step_exceed || trace_exceed.getOrElse(false.B) || delayed_in_replay.getOrElse(false.B)
+    time_exceed || data_exceed || info_exceed || step_exceed || trace_exceed.getOrElse(
+      false.B
+    ) || delayed_in_replay.getOrElse(
+      false.B
+    )
+
+  when(!should_tick) {
+    time_exceed_count := time_exceed_count + 1.U
+  }.otherwise {
+    time_exceed_count := 0.U
+  }
+
   when(delayed_enable) {
     when(should_tick) {
       state_data := step_data

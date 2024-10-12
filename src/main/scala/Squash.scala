@@ -125,6 +125,14 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .reduce(_ || _)
   })
 
+  val time_exceed_count = RegInit(0.U(32.W))
+  val time_exceed = time_exceed_count === 200000.U
+  val or_want_tick = want_tick_vec.reduce(_ || _)
+  when(!or_want_tick) {
+    time_exceed_count := time_exceed_count + 1.U
+  }.otherwise {
+    time_exceed_count := 0.U
+  }
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
     val s_in = in.filter(_.bits.desiredCppName == u.desiredCppName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
@@ -135,7 +143,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
         .zip(group_tick_vec)
         .collect { case (n, gt) if u.squashGroup.contains(n) => gt }
         .foldLeft(false.B)(_ || _)
-    squasher.should_tick := wt || group_tick || global_tick
+    squasher.should_tick := wt || group_tick || global_tick || time_exceed
     squasher.out
   }
   // Flatten Seq[MixedVec[DifftestBundle]] to MixedVec[DifftestBundle]
