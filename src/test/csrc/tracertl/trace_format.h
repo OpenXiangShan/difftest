@@ -108,8 +108,8 @@ struct TraceInstruction {
   bool legalInst() {
     // when not exception, pc_va and inst should not be zero (when pc_pa is zero, vm not enable)
     if (exception == 0) return (instr_pc_va != 0) && (instr != 0);
-    // when exception, pc_va & target should not be zero
-    else if (isException()) return (instr_pc_va != 0) && (target != 0);
+    // when trap, pc_va & target should not be zero
+    else if (isTrap()) return (instr_pc_va != 0) && (target != 0);
     // when interrupt, target should not be zero
     return target != 0;
   }
@@ -118,12 +118,16 @@ struct TraceInstruction {
     return exception != 0;
   }
 
+  bool isTrap() {
+    return (exception != 0);
+  }
+
   bool isInterrupt() {
-    return (exception & 0x80) != 0;
+    return (exception != 0) && ((exception & 0x80) != 0);
   }
 
   bool isException() {
-    return (exception & 0x80) == 0;
+    return (exception != 0) && ((exception & 0x80) == 0);
   }
 
   void dump() {
