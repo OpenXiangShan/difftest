@@ -130,6 +130,12 @@ struct TraceInstruction {
     return (exception != 0) && ((exception & 0x80) == 0);
   }
 
+  bool isInstException() {
+    uint8_t exceptionCode = (exception & 0x7f);
+    bool instException = (exceptionCode == 0) || (exceptionCode == 1) || (exceptionCode == 2) || (exceptionCode == 12);
+    return isException() && instException;
+  }
+
   void dump() {
     // printf("Instr: TraceSize %ld memSize %02x PC 0x%016lx instr 0x%04x memAddr 0x%016lx\n", sizeof(TraceInstruction), memory_size, instr_pc, instr, memory_address);
     printf("PC 0x%08lx|%08lx instr 0x%08x(%s)", instr_pc_va, instr_pc_pa, instr, spike_dasm(instr));

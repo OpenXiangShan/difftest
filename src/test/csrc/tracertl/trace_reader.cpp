@@ -104,10 +104,20 @@ TraceReader::TraceReader(const char *trace_file_name)
     // construct trace_icache
     // inst.dump();
     // printf("inst legalInst: %d, isException: %d\n", inst.legalInst(), inst.isException());
-    trace_icache->constructICache(inst.instr_pc_va, inst.instr);
-    trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
-    if (!inst.isTrap()) {
+    // FIXME: when instr fault, skip construct icache/itlb
+    if (!inst.isTrap() || !inst.isInstException()) {
+      trace_icache->constructICache(inst.instr_pc_va, inst.instr);
+      trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
       trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
+    } else {
+      static bool unexcepted_inst = false;
+      if (!unexcepted_inst) {
+        printf("TraceRTL preread. Unexcepted that with instException:\n");
+        inst.dump();
+        unexcepted_inst = true;
+      }
+    }
+    if (!inst.isTrap()) {
       if (inst.memory_type != MEM_TYPE_None) {
         // if mem access lower than 0x80000000L, it is a vaddr or mmio access.
         // When vaddr, vpn should not equal ppn. When mmio, 0x38000000 to CLINT is filter out.
