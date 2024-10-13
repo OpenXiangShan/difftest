@@ -102,12 +102,26 @@ TraceReader::TraceReader(const char *trace_file_name)
     }
 
     // construct trace_icache
-    trace_icache->constructICache(inst.instr_pc_va, inst.instr);
-    trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
-    trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
-    if (inst.memory_type != MEM_TYPE_None) {
-      trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
-      trace_icache->dynPageWrite(inst.exu_data.memory_address.va >> 12, inst.exu_data.memory_address.pa >> 12);
+    // inst.dump();
+    // printf("inst legalInst: %d, isException: %d\n", inst.legalInst(), inst.isException());
+    if (!inst.isTrap()) {
+      trace_icache->constructICache(inst.instr_pc_va, inst.instr);
+      trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+      trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
+      if (inst.memory_type != MEM_TYPE_None) {
+        // if mem access lower than 0x80000000L, it is a vaddr or mmio access.
+        // When vaddr, vpn should not equal ppn. When mmio, 0x38000000 to CLINT is filter out.
+        if (inst.exu_data.memory_address.va < 0x80000000L && ((inst.exu_data.memory_address.va >> 24) != 0x38)) {
+          if (inst.exu_data.memory_address.va == inst.exu_data.memory_address.pa) {
+            printf("TraceRTL preread: va < 0x8000000L, but va == pa\n");
+            printf("If u are running bare-mode test, please disable this\n");
+            inst.dump();
+            exit(1);
+          }
+        }
+        trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
+        trace_icache->dynPageWrite(inst.exu_data.memory_address.va >> 12, inst.exu_data.memory_address.pa >> 12);
+      }
     }
 
     // construct trace
