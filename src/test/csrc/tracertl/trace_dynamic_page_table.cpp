@@ -46,14 +46,14 @@ void DynamicSoftPageTable::write(uint64_t vpn, uint64_t ppn) {
 
   uint64_t pgBase = baseAddr;
   static int count = 0;
-  printf("%d write vpn: %lx, ppn: %lx\n", count++, vpn, ppn);
+  // printf("%d write vpn: %lx, ppn: %lx\n", count++, vpn, ppn);
   for (int level = initLevel; level >= 0; level--) {
     uint64_t pteAddr = getPteAddr(vpn, level, pgBase);
-    printf("  level: %d, pteAddr: %lx pgBase: %lx\n", level, pteAddr, pgBase);
+    // printf("  level: %d, pteAddr: %lx pgBase: %lx\n", level, pteAddr, pgBase);
     uint64_t pteVal = read(pteAddr, true);
     TracePTE pte;
     pte.val = pteVal;
-    printf("    pte: %lx\n", pte.val);
+    // printf("    pte: %lx\n", pte.val);
     if (!pte.v) {
       if (pte.val != 0) {
         printf("Error: invalid pte should be 0. pte: %lx\n", pte.val);
@@ -61,7 +61,7 @@ void DynamicSoftPageTable::write(uint64_t vpn, uint64_t ppn) {
       }
       // not exist, create
       pte = (level == 0) ? genLeafPte(ppn) : genNonLeafPte(popCurAddr() >> 12);
-      printf("Insert level: %d, pteAddr: %lx, pte: %lx(ppn:%lx)\n", level, pteAddr, pte.val, pte.ppn);
+      // printf("Insert level: %d, pteAddr: %lx, pte: %lx(ppn:%lx)\n", level, pteAddr, pte.val, pte.ppn);
       page_level_map[pteAddr >> 12] = level;
       pageTable[pteAddr] = pte;
     }
@@ -114,7 +114,7 @@ void DynamicSoftPageTable::dump() {
 }
 
 void DynamicSoftPageTable::dumpInnerSoftTLB() {
-  printf("Dyn Soft TLB:\n");
+  printf("Dyn Inner Soft TLB:\n");
   for (auto &entry : soft_tlb) {
     printf("0x%lx->0x%lx\n", entry.first, entry.second);
   }

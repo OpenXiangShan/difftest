@@ -120,16 +120,16 @@ void TraceICache::test() {
 
   // test for soft_tlb
 
-  dumpSoftTlb();
-  dynamic_page_table.dumpInnerSoftTLB();
+  // dumpSoftTlb();
+  // dynamic_page_table.dumpInnerSoftTLB();
 
   // test for dynPageTable
-  {
-    uint64_t vpn = 0xf63d;
-    uint64_t ppn_pt = dynPageTrans(vpn);
-    printf("DYN Test vpn = %016lx, ppn_pt = %016lx\n", vpn, ppn_pt);
-    fflush(stdout);
-  }
+  // {
+  //   uint64_t vpn = 0xf63d;
+  //   uint64_t ppn_pt = dynPageTrans(vpn);
+    // printf("DYN Test vpn = %016lx, ppn_pt = %016lx\n", vpn, ppn_pt);
+  //   fflush(stdout);
+  // }
   for (auto &pair : soft_tlb) {
     uint64_t vpn = pair.first;
     uint64_t ppn_tlb = pair.second;
