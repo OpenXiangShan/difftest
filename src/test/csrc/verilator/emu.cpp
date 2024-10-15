@@ -121,6 +121,7 @@ static inline void print_help(const char *file) {
 #endif // WITH_DRAMSIM3
 #ifdef TRACERTL_MODE
   printf("      --tracertl-file=NAME      load trace from NAME\n");
+  printf("      --tracept-file=NAME       load trace page table from NAME\n");
 #endif // TRACERTL_MODE
 #if VM_COVERAGE == 1
   printf("      --dump-coverage        enable coverage dump\n");
@@ -172,6 +173,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dramsim3-ini",      1, NULL,  0  },
     { "overwrite-auto",    1, NULL,  0  },
     { "tracertl-file",     1, NULL,  0  },
+    { "tracept-file",     1, NULL,  0  },
     { "dump-chiselmap",    0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
@@ -279,6 +281,13 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             continue;
 #endif // TRACERTL_MODE
           case 28:
+#ifdef TRACERTL_MODE
+            args.tracept_file = optarg; continue;
+#else
+            printf("[WARN] tracertl is not enabled at compile time, ignore --tracept-file\n");
+            continue;
+#endif // TRACERTL_MODE
+          case 29:
 #ifdef ENABLE_CHISEL_MAP
             args.dump_chiselmap = true; continue;
 #else
@@ -421,7 +430,7 @@ Emulator::Emulator(int argc, const char *argv[])
   fflush(stdout);
   if (args.tracertl_file) {
     // traceicache's ram is constructed by tracertl's init method.
-    init_traceicache();
+    init_traceicache(args.tracept_file);
     init_tracertl(args.tracertl_file);
   } else {
     fprintf(stderr, "trace file not specified\n");

@@ -19,8 +19,11 @@
 
 // when address translation's vpn is not in trace, give 0xa0000000 as paddr
 // page (0xa0000000, 0xfff) for out of trace mmu
+#define TRACE_PAGE_SIZE (4096)
+#define TRACE_PAGE_SHIFT (12)
 #define OUTOF_TRACE_PAGE_PADDR (0xa0000000)
-#define OUTOF_TRACE_PPN (OUTOF_TRACE_PAGE_PADDR >> 12)
+#define OUTOF_TRACE_PPN (OUTOF_TRACE_PAGE_PADDR >> TRACE_PAGE_SHIFT)
 #define DYN_PAGE_TABLE_BASE_PADDR (0x90000000)
+#define TRACE_SATP64_PPN  (0x00000FFFFFFFFFFF)
 
 #endif // __TRACE_COMMON_H__

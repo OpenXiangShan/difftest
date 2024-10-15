@@ -23,12 +23,60 @@
 #include <sys/stat.h>
 #include <iostream>
 
+#include "trace_decompress.h"
 #include "trace_icache.h"
 #include "trace_common.h"
 
-TraceICache::TraceICache() {
+TraceICache::TraceICache(const char* tracept_file) {
   soft_tlb.clear();
   // uint64_t memory_size = 8 * 1024 * 1024 * 1024UL; // 8GB
+
+
+  if (tracept_file) {
+    // read tracept file and set DynamicPageTable
+    printf("TraceRTL: read trace page table file. %s\n", tracept_file);
+    std::ifstream *tracept_stream = new std::ifstream(tracept_file, std::ios::in);
+    if (!tracept_stream->is_open()) {
+      std::cout << "Error: can't open tracept file" << std::endl;
+      exit(1);
+    }
+
+    tracept_stream->seekg(0, std::ios::end);
+    std::streampos fileSize = tracept_stream->tellg();
+    tracept_stream->seekg(0, std::ios::beg);
+    char *fileBuffer = new char[fileSize];
+    tracept_stream->read(fileBuffer, fileSize);
+    tracept_stream->close();
+    delete tracept_stream;
+
+    if (fileSize == 0) {
+      std::cerr << "TracePT file is empty" << std::endl;
+      exit(1);
+    }
+
+    printf("TraceRTL: decompress trace page table file.\n");
+    size_t sizeAfterDC = traceDecompressSizeZSTD(fileBuffer, fileSize);
+    if ((sizeAfterDC % sizeof(TracePageEntry)) != 0) {
+      std::cerr << "TracePT file decompress result wrong. sizeAfterDC cannot be divided exactly\n" << std::endl;
+      exit(1);
+    }
+
+    uint64_t tracePtNum = sizeAfterDC / sizeof(TracePageEntry);
+    TracePageEntry *traceDecompressBuffer = new TracePageEntry[tracePtNum];
+    uint64_t decompressedSize = traceDecompressZSTD((char *)traceDecompressBuffer, sizeAfterDC, fileBuffer, fileSize);
+    if (decompressedSize != sizeAfterDC) {
+      std::cerr << "TracePT file decompress result wrong. decompressedSize != sizeAfterDC\n" << std::endl;
+      exit(1);
+    }
+
+    satp = traceDecompressBuffer[0].pte;
+    for (uint64_t i = 1; i < tracePtNum; i++) {
+      TracePageEntry entry = traceDecompressBuffer[i];
+      dynamic_page_table.setPte(entry.paddr, entry.pte, (uint8_t )entry.level);
+    }
+  }
+  uint64_t baseAddr = (satp & TRACE_SATP64_PPN) << TRACE_PAGE_SHIFT;
+  dynamic_page_table.setBaseAddr(baseAddr);
 }
 
 void TraceICache::constructSoftTLB(uint64_t vaddr, uint16_t asid, uint16_t vmid, uint64_t paddr) {
@@ -142,6 +190,10 @@ void TraceICache::test() {
   }
 
   // dynamic_page_table.dump();
+}
+
+uint64_t TraceICache::getSatpPpn() {
+  return satp & TRACE_SATP64_PPN;
 }
 
 TraceICache::~TraceICache() {

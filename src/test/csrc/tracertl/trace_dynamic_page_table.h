@@ -43,11 +43,17 @@ typedef union TracePageTableEntry {
   uint64_t val;
 } TracePTE;
 
+struct TracePageEntry {
+  uint64_t paddr;
+  uint64_t pte;
+  uint64_t level; // use uint64_t for align
+};
+
 #define TraceVPNi(vpn, i)        (((vpn) >> (9 * (i))) & 0x1ff)
 
 class DynamicSoftPageTable {
 private:
-  const uint64_t TRACE_PAGE_SIZE = 4096;
+  // const uint64_t TRACE_PAGE_SIZE = 4096;
   const int initLevel = 2;
 
   std::map<uint64_t, TracePTE> pageTable;
@@ -68,7 +74,7 @@ public:
     //   exit(1);
     // }
     for (int i = 0; i < initLevel; i++) {
-      page_level_map[getLevelNPage(i) >> 12] = i;
+      page_level_map[getDummyLevelNPage(i) >> 12] = i;
     }
   };
   void setBaseAddr(uint64_t addr) {
@@ -77,7 +83,7 @@ public:
       exit(1);
     }
     baseAddr = addr;
-    curAddr = addr;
+    // curAddr = addr;
   }
 
   // return pageTable as ddr ram, return value
@@ -87,6 +93,7 @@ public:
   void write(uint64_t vpn, uint64_t ppn);
   // translate vpn to ppn, for debug
   uint64_t trans(uint64_t vpn);
+  void setPte(uint64_t pteAddr, uint64_t pte, uint8_t level);
 
   bool exists(uint64_t vpn) {
     return soft_tlb.find(vpn) != soft_tlb.end();
@@ -113,7 +120,7 @@ public:
 private:
 
   // dummy page for out of trace vpn
-  inline uint64_t getLevelNPage(uint8_t level) {
+  inline uint64_t getDummyLevelNPage(uint8_t level) {
     return DYN_PAGE_TABLE_BASE_PADDR + level * TRACE_PAGE_SIZE;
   }
 

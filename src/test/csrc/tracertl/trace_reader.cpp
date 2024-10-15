@@ -25,6 +25,7 @@ TraceReader::TraceReader(const char *trace_file_name)
   printf("TraceRTL: check file exists %s...\n", trace_file_name);
   fflush(stdout);
   // preread trace
+  std::ifstream *trace_stream;
   trace_stream = new std::ifstream(trace_file_name, std::ios_base::in);
   if ((!trace_stream->is_open())) {
     printf("[TraceReader.TraceReader] Could not open file.\n");

@@ -52,10 +52,11 @@ private:
   std::unordered_map<uint64_t, uint64_t> soft_tlb;
 
   // ddr/dram image for pagetable
+  uint64_t satp = (DYN_PAGE_TABLE_BASE_PADDR + TRACE_PAGE_SIZE * 3) >> TRACE_PAGE_SHIFT;
   DynamicSoftPageTable dynamic_page_table;
 
 public:
-  TraceICache();
+  TraceICache(const char *tracept_file);
   ~TraceICache();
 
   void constructSoftTLB(uint64_t vaddr, uint16_t asid, uint16_t vmid, uint64_t paddr);
@@ -86,6 +87,8 @@ public:
   void dumpDynPageTable() {
     dynamic_page_table.dump();
   };
+
+  uint64_t getSatpPpn();
 };
 
 #endif

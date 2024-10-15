@@ -60,7 +60,6 @@ struct TraceCollectBufferEntry {
 #define TraceDriveBufferSize 8
 #define TraceReadBufferSize TraceFetchWidth
 class TraceReader {
-  std::ifstream *trace_stream;
   std::queue<Instruction> instList_preread;
 
   TraceStatus status;

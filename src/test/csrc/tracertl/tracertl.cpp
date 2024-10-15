@@ -158,8 +158,8 @@ extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx) {
 /** Fake ICache */
 TraceICache *trace_icache = NULL;
 
-void init_traceicache() {
-  trace_icache = new TraceICache();
+void init_traceicache(const char *tracept_file) {
+  trace_icache = new TraceICache(tracept_file);
 }
 
 extern "C" uint64_t trace_icache_dword_helper(uint64_t addr) {
@@ -191,3 +191,8 @@ extern "C" bool trace_tlb_ats_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid) 
   METHOD_TRACE();
   return trace_icache->addrTrans_hit(vaddr, 0, 0);
 }
+
+extern "C" uint64_t trace_get_satp_ppn() {
+  METHOD_TRACE();
+  return trace_icache->getSatpPpn();
+};

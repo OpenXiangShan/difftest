@@ -69,6 +69,18 @@ void DynamicSoftPageTable::write(uint64_t vpn, uint64_t ppn) {
   }
 }
 
+void DynamicSoftPageTable::setPte(uint64_t pteAddr, uint64_t pte_val, uint8_t level) {
+  if (level > initLevel) {
+    printf("Error: level %d should not be greater than initLevel\n", level);
+    printf("  initLevel: %d pteAddr: %lx pte_val: %lx\n", initLevel, pteAddr, pte_val);
+    exit(1);
+  }
+  TracePTE pte;
+  pte.val = pte_val;
+  page_level_map[pteAddr >> 12] = level;
+  pageTable[pteAddr] = pte;
+}
+
 uint64_t DynamicSoftPageTable::trans(uint64_t vpn) {
   uint64_t pgBase = baseAddr;
   int level = initLevel;
@@ -76,11 +88,10 @@ uint64_t DynamicSoftPageTable::trans(uint64_t vpn) {
   // printf("%d trans pgBase 0x%lx vpn: %lx\n", count++, pgBase, vpn);
   for (; level >= 0; level--) {
     uint64_t pteAddr = getPteAddr(vpn, level, pgBase);
-    // printf("  level: %d, pteAddr: %lx, pgBase: %lx\n", level, pteAddr, pgBase);
     uint64_t pteVal = read(pteAddr, false);
     TracePTE pte;
     pte.val = pteVal;
-    // printf("    pte: %lx\n", pte.val);
+    // printf("  level: %d, pteAddr: %lx, pgBase: %lx -> pte: %lx\n", level, pteAddr, pgBase, pteVal);
     if (!pte.v) {
       printf("Error: invalid pte entry for baseAddr: 0x%lx, vpn: 0x%lx, level: %d\n", baseAddr, vpn, level);
       exit(1);
@@ -97,7 +108,7 @@ inline TracePTE DynamicSoftPageTable::getDummyPte(uint8_t level) {
       return genLeafPte(OUTOF_TRACE_PPN);
     case 1:
     case 2:
-      return genNonLeafPte(getLevelNPage(level-1) >> 12);
+      return genNonLeafPte(getDummyLevelNPage(level-1) >> 12);
     default:
       printf("DynamicSoftPageTable::dummyPte: illegal level:%d\n", level);
       fflush(stdout);
