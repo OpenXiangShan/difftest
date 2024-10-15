@@ -103,7 +103,7 @@ public:
   f(ref_reg_display, difftest_display, void, )                                \
   f(update_config, update_dynamic_config, void, void*)                        \
   f(uarchstatus_sync, difftest_uarchstatus_sync, void, void*)                 \
-  f(store_commit, difftest_store_commit, int, uint64_t*, uint64_t*, uint8_t*) \
+  f(store_commit, difftest_store_commit, int, uint64_t*, uint64_t*, uint8_t*, uint64_t*) \
   f(raise_intr, difftest_raise_intr, void, uint64_t)                          \
   f(load_flash_bin, difftest_load_flash, void, void*, size_t)
 
