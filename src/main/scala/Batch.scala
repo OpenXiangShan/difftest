@@ -167,7 +167,7 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig, 
   }
 
   val time_exceed_count = RegInit(0.U(32.W))
-  val time_exceed = time_exceed_count === 100000.U
+  val time_exceed = time_exceed_count === 200000.U
 
   val should_tick =
     time_exceed || data_exceed || info_exceed || step_exceed || trace_exceed.getOrElse(
