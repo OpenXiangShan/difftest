@@ -25,26 +25,26 @@ import difftest.util.Delayer
 import scala.collection.mutable.ListBuffer
 
 case class BatchParam(config: GatewayConfig, collectDataWidth: Int, collectLength: Int) {
-  val infoWidth = (new BatchInfo).getWidth
+  def infoWidth = (new BatchInfo).getWidth
 
   // Maximum Byte length decided by transmission function
-  val MaxDataByteLen = config.batchArgByteLen._1
-  val MaxDataBitLen = MaxDataByteLen * 8
-  val MaxDataLenWidth = log2Ceil(MaxDataByteLen)
-  val MaxInfoByteLen = config.batchArgByteLen._2
-  val MaxInfoBitLen = MaxInfoByteLen * 8
-  val MaxInfoLenWidth = log2Ceil(MaxInfoByteLen)
+  def MaxDataByteLen = config.batchArgByteLen._1
+  def MaxDataBitLen = MaxDataByteLen * 8
+  def MaxDataLenWidth = log2Ceil(MaxDataByteLen)
+  def MaxInfoByteLen = config.batchArgByteLen._2
+  def MaxInfoBitLen = MaxInfoByteLen * 8
+  def MaxInfoLenWidth = log2Ceil(MaxInfoByteLen)
 
   // Width of statistic for data/info byte length
-  val StatsDataLenWidth = log2Ceil((collectDataWidth + 7) / 8)
-  val collectInfoWidth = collectLength * infoWidth
-  val StatsInfoLenWidth = log2Ceil((collectInfoWidth + 7) / 8)
+  def StatsDataLenWidth = log2Ceil((collectDataWidth + 7) / 8)
+  def collectInfoWidth = collectLength * infoWidth
+  def StatsInfoLenWidth = log2Ceil((collectInfoWidth + 7) / 8)
 
   // Truncate width when shifting to reduce useless gates
-  val TruncDataBitLen = math.min(MaxDataBitLen, collectDataWidth)
-  val TruncInfoBitLen = math.min(MaxInfoBitLen, collectInfoWidth)
-  val TruncDataLenWidth = math.min(MaxDataLenWidth, StatsDataLenWidth)
-  val TruncInfoLenWidth = math.min(MaxInfoLenWidth, StatsInfoLenWidth)
+  def TruncDataBitLen = math.min(MaxDataBitLen, collectDataWidth)
+  def TruncInfoBitLen = math.min(MaxInfoBitLen, collectInfoWidth)
+  def TruncDataLenWidth = math.min(MaxDataLenWidth, StatsDataLenWidth)
+  def TruncInfoLenWidth = math.min(MaxInfoLenWidth, StatsInfoLenWidth)
 }
 
 class BatchIO(dataType: UInt, infoType: UInt) extends Bundle {
