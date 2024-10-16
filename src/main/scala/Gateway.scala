@@ -27,6 +27,7 @@ import difftest.replay.Replay
 import difftest.trace.Trace
 import difftest.util.VerificationExtractor
 import difftest.validate.Validate
+import difftest.DifftestModule.streamToFile
 
 import scala.collection.mutable.ListBuffer
 
@@ -119,6 +120,7 @@ case class GatewayResult(
 object Gateway {
   private val instanceWithDelay = ListBuffer.empty[(DifftestBundle, Int)]
   private var config = GatewayConfig()
+  private var numCores: Int = 0
 
   def setConfig(cfg: String): Unit = {
     cfg.foreach {
@@ -142,6 +144,7 @@ object Gateway {
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
     val bundle = WireInit(0.U.asTypeOf(gen))
+    numCores = instanceWithDelay.count { case (bundle, _) => bundle.isUniqueIdentifier }
     if (!config.traceLoad) {
       if (config.needEndpoint) {
         val packed = WireInit(bundle.asUInt)
@@ -176,6 +179,7 @@ object Gateway {
       }
       val endpoint = Module(new GatewayEndpoint(instanceWithDelay.toSeq, config))
       endpoint.in := gatewayIn
+      generateSvhMacros(endpoint.in)
       GatewayResult(
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
@@ -189,6 +193,48 @@ object Gateway {
       vMacros = config.vMacros,
       exit = exit,
     )
+  }
+
+  private def generateSvhMacros(vec: MixedVec[UInt]): Unit = {
+    val cores_ionum = vec.length / numCores
+    val writer = ListBuffer.empty[String]
+    val interface1 = ListBuffer.empty[String]
+    val interface2 = ListBuffer.empty[String]
+    val interface_assign = ListBuffer.empty[String]
+    val core_io = ListBuffer.empty[String]
+    val core_in = ListBuffer.empty[String]
+    val gateway_io = ListBuffer.empty[String]
+    vec.zipWithIndex.foreach { case (signal, idx) =>
+      val width = signal.getWidth - 1
+      writer += s"`define gateway_${idx}_len $width"
+      if (idx / cores_ionum == 0) {
+        core_io += s"gateway_${idx}"
+        interface1 += s" logic [${width}:0] gateway_${idx};"
+      }
+      interface2 += s" logic [${width}:0] gateway_${idx};"
+      gateway_io += s"gateway_${idx}"
+    }
+    for (i <- 0 until numCores) {
+      core_in += s"""|modport core_in_$i (
+                     | input core[$i].core_in\n);""".stripMargin
+      for (j <- 0 until cores_ionum)
+        interface_assign += s"assign gateway_${i * cores_ionum + j} = core[$i].core_port_out[$j];"
+    }
+    writer += s"""|interface Core_sig;
+                  |${interface1.mkString("\n")}
+                  | modport core_in (
+                  |   input ${core_io.mkString(", ")}\n);
+                  | modport core_out (
+                  |   output ${core_io.mkString(", ")}\n);
+                  |endinterface\n
+                  |interface Gateway_interface;
+                  |${interface2.mkString("\n")}
+                  | Core_sig core[$numCores]();
+                  | modport diff_top (
+                  |  output ${gateway_io.mkString(", ")}\n);
+                  |${interface_assign.mkString("\n")}
+                  |endinterface\n""".stripMargin
+    streamToFile(writer, "gateway_io_def.svh")
   }
 }
 
