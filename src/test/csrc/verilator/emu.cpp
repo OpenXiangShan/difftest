@@ -74,6 +74,7 @@ static inline void print_help(const char *file) {
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --jtag-test            test jtag using testcases in jtag-testcase.h\n");
   printf("  -h, --help                 print program help info\n");
+  printf("  -M, --dse_max-instr=NUM    the max number of instructions for DSE\n");
   printf("\n");
 }
 
@@ -107,6 +108,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "log-end",           1, NULL, 'e' },
     { "flash",             1, NULL, 'F' },
     { "help",              0, NULL, 'h' },
+    { "dse-max-instr",     1, NULL, 'M' },
     { 0,                   0, NULL,  0  }
   };
 
@@ -170,6 +172,9 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
       case 'F': args.flash_bin = optarg; break;
+#ifdef DSE
+      case 'M': args.dse_max_instr = atoll_strict(optarg, "dse-max-instr"); break;
+#endif
     }
   }
 
@@ -228,6 +233,9 @@ Emulator::Emulator(int argc, const char *argv[]):
 
   // init core
   reset_ncycles(10);
+
+  // init dse
+  reset_dse_ncycles(10);
 
   // init ram
   init_ram(args.image);
@@ -291,6 +299,17 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 #endif
   }
   dut_ptr->reset = 0;
+}
+
+inline void Emulator::reset_dse_ncycles(size_t cycles) {
+  dut_ptr->io_dse_rst = 1;
+  for (int i = 0; i < cycles; i++) {
+    dut_ptr->clock = 0;
+    dut_ptr->eval();
+  }
+  dut_ptr->clock = 1;
+  dut_ptr->eval();
+  dut_ptr->io_dse_rst = 0;
 }
 
 inline void Emulator::single_cycle() {
@@ -414,6 +433,17 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         trapCode = STATE_LIMIT_EXCEEDED;
         break;
       }
+
+    // DSE instruction limitation
+    for (int i = 0; i < NUM_CORES; i++) {
+      uint64_t instrCnt = dut_ptr->io_instrCnt;
+      if (instrCnt >= args.dse_max_instr) {
+        printf("DSE instruction limit exceeded\n");
+        trapCode = STATE_LIMIT_EXCEEDED;
+        break;
+      }
+    }
+    }
     }
     // assertions
     if (assert_count > 0) {

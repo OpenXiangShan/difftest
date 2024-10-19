@@ -33,7 +33,7 @@ ifneq ($(CCACHE),)
 export OBJCACHE = ccache
 endif
 
-VEXTRA_FLAGS += -I$(abspath $(BUILD_DIR)) --x-assign unique -O3 -CFLAGS "$(EMU_CXXFLAGS) $(EMU_CXX_EXTRA_FLAGS)" -LDFLAGS "$(EMU_LDFLAGS)"
+VEXTRA_FLAGS += -I$(abspath $(BUILD_DIR)) --x-assign unique -O1 -CFLAGS "$(EMU_CXXFLAGS) $(EMU_CXX_EXTRA_FLAGS)" -LDFLAGS "$(EMU_LDFLAGS)"
 
 # REF SELECTION
 ifeq ($(REF),spike)
@@ -130,7 +130,7 @@ EMU_COMPILE_FILTER =
 build_emu_local: $(EMU_MK)
 	@echo "\n[g++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) $(MAKE) CXX=clang++ LINK=clang++  VM_PARALLEL_BUILDS=1 OPT_FAST="-O3" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
+	$(TIME_CMD) $(MAKE) CXX=clang++ LINK=clang++  VM_PARALLEL_BUILDS=1 OPT_FAST="-O1" -C $(<D) -f $(<F) $(EMU_COMPILE_FILTER)
 
 $(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS) $(REF_SO)
 ifeq ($(REMOTE),localhost)

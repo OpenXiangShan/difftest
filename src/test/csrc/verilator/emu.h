@@ -40,6 +40,9 @@ struct EmuArgs {
 #ifdef DEBUG_REFILL
   uint64_t track_instr;
 #endif
+#ifdef DSE
+  uint64_t dse_max_instr;
+#endif
   const char *image;
   const char *snapshot_path;
   const char *wave_path;
@@ -64,6 +67,9 @@ struct EmuArgs {
     log_end = -1;
 #ifdef DEBUG_REFILL
     track_instr = 0;
+#endif
+#ifdef DSE
+    uint64_t dse_max_instr = 10;
 #endif
     snapshot_path = NULL;
     wave_path = NULL;
@@ -107,6 +113,7 @@ private:
   int trapCode;
 
   inline void reset_ncycles(size_t cycles);
+  inline void reset_dse_ncycles(size_t cycles);
   inline void single_cycle();
   void trigger_stat_dump();
   void display_trapinfo();

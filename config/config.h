@@ -177,3 +177,7 @@ extern unsigned long EMU_FLASH_SIZE;
 #endif
 
 #endif
+
+
+// for DSE
+#define DSE
