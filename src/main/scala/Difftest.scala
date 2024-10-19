@@ -529,7 +529,7 @@ object DifftestModule {
     difftest
   }
 
-  def generateSvhMacros(vec: MixedVec[UInt],numCores :Int): Unit = {
+  def generateSvhMacros(vec: MixedVec[UInt], numCores: Int): Unit = {
     if (needSvh) {
       val cores_ionum = vec.length / numCores
       val writer = ListBuffer.empty[String]
@@ -537,38 +537,37 @@ object DifftestModule {
       val interface2 = ListBuffer.empty[String]
       val interface_assign = ListBuffer.empty[String]
       val core_io = ListBuffer.empty[String]
-      val core_in = ListBuffer.empty[String]
       val gateway_io = ListBuffer.empty[String]
       vec.zipWithIndex.foreach { case (signal, idx) =>
         val width = signal.getWidth - 1
-        writer += s"`define gateway_${idx}_len $width"
         if (idx / cores_ionum == 0) {
           core_io += s"gateway_${idx}"
           interface1 += s" logic [${width}:0] gateway_${idx};"
         }
         interface2 += s" logic [${width}:0] gateway_${idx};"
         gateway_io += s"gateway_${idx}"
+        interface_assign += s"assign gateway_out.gateway_${idx} = core_in[${idx / cores_ionum}].gateway_${idx % cores_ionum};"
       }
-      for (i <- 0 until numCores) {
-        core_in += s"""|modport core_in_$i (
-                      | input core[$i].core_in\n);""".stripMargin
-        for (j <- 0 until cores_ionum)
-          interface_assign += s"assign gateway_${i * cores_ionum + j} = core[$i].core_port_out[$j];"
-      }
-      writer += s"""|interface Core_sig;
+      writer += s"""|interface core_if;
                     |${interface1.mkString("\n")}
                     | modport core_in (
-                    |   input ${core_io.mkString(", ")}\n);
+                    |  input ${core_io.mkString(", ")}\n);
                     | modport core_out (
-                    |   output ${core_io.mkString(", ")}\n);
+                    |  output ${core_io.mkString(", ")}\n);
                     |endinterface\n
-                    |interface Gateway_interface;
+                    |interface gateway_if;
                     |${interface2.mkString("\n")}
-                    | Core_sig core[$numCores]();
-                    | modport diff_top (
+                    | modport core_out (
                     |  output ${gateway_io.mkString(", ")}\n);
+                    | modport diff_in (
+                    |  input ${gateway_io.mkString(", ")}\n);
+                    |endinterface\n
+                    |module CoreToGateway (
+                    | gateway_if.core_out gateway_out,
+                    | core_if.core_in core_in[$numCores]
+                    |);
                     |${interface_assign.mkString("\n")}
-                    |endinterface\n""".stripMargin
+                    |endmodule""".stripMargin
       streamToFile(writer, "gateway_io_def.svh")
     }
   }

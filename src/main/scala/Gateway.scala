@@ -27,7 +27,6 @@ import difftest.replay.Replay
 import difftest.trace.Trace
 import difftest.util.VerificationExtractor
 import difftest.validate.Validate
-import difftest.DifftestModule.streamToFile
 
 import scala.collection.mutable.ListBuffer
 
