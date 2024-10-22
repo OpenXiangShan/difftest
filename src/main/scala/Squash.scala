@@ -103,11 +103,18 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .filter(_.desiredCppName == "trace_info")
       .map(_.asInstanceOf[DiffTraceInfo].in_replay)
       .foldLeft(false.B)(_ || _)
-  val global_tick = !control.enable || in_replay
+  val timeout_count = RegInit(0.U(32.W))
+  val timeout = timeout_count === 200000.U
+  val global_tick = !control.enable || in_replay || timeout
 
   val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredCppName)
   // Tick and Submit the pending non-squashable events immediately.
   val want_tick_vec = WireInit(VecInit.fill(uniqBundles.length)(false.B))
+  when(!want_tick_vec.asUInt.orR) {
+    timeout_count := timeout_count + 1.U
+  }.otherwise {
+    timeout_count := 0.U
+  }
   // Record Tick Cause for each SquashGroup
   val group_name_vec = uniqBundles.flatMap(_.squashGroup).distinct
   val group_tick_vec = VecInit(group_name_vec.map { g =>
@@ -125,14 +132,6 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .reduce(_ || _)
   })
 
-  val timeout_count = RegInit(0.U(32.W))
-  val timeout = timeout_count === 200000.U
-  val or_want_tick = want_tick_vec.reduce(_ || _)
-  when(!or_want_tick) {
-    timeout_count := timeout_count + 1.U
-  }.otherwise {
-    timeout_count := 0.U
-  }
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
     val s_in = in.filter(_.bits.desiredCppName == u.desiredCppName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
@@ -143,7 +142,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
         .zip(group_tick_vec)
         .collect { case (n, gt) if u.squashGroup.contains(n) => gt }
         .foldLeft(false.B)(_ || _)
-    squasher.should_tick := wt || group_tick || global_tick || timeout
+    squasher.should_tick := wt || group_tick || global_tick
     squasher.out
   }
   // Flatten Seq[MixedVec[DifftestBundle]] to MixedVec[DifftestBundle]
