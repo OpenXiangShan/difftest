@@ -314,17 +314,25 @@ class BatchAssembler(
   }
   // Flush state to provide more space for peak data
   val state_flush = enable && step_stats_vec.last.data_len > param.MaxDataByteLen.U
+  val timeout_count = RegInit(0.U(32.W))
+  val timeout = timeout_count === 200000.U
   if (config.hasBuiltInPerf) {
     DifftestPerf("BatchExceed_data", data_exceed_vec.asUInt.orR)
     DifftestPerf("BatchExceed_info", info_exceed_vec.asUInt.orR)
     DifftestPerf("BatchExceed_step", delay_step_exceed.asUInt)
     DifftestPerf("BatchExceed_flush", state_flush.asUInt)
+    DifftestPerf("BatchExceed_timeout", timeout.asUInt)
     if (config.hasReplay) DifftestPerf("BatchExceed_trace", delay_trace_exceed.get.asUInt)
   }
   val in_replay = Option.when(config.hasReplay)(step_trace_info.get.in_replay)
-  val should_tick = state_flush || delay_cont_exceed || delay_step_exceed ||
-    delay_trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
 
+  val should_tick = timeout || state_flush || delay_cont_exceed || delay_step_exceed ||
+    delay_trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
+  when(!should_tick) {
+    timeout_count := timeout_count + 1.U
+  }.otherwise {
+    timeout_count := 0.U
+  }
   // Delay step can be partly appended to output for making full use of transmission param
   // Avoid appending when step equals batchSize(delay_step_exceed), last appended data will overwrite first step data
   val has_append =
@@ -376,7 +384,7 @@ class BatchAssembler(
   )
 
   // Calculate occupied space when enable(stage 1), state_update means previous step is in stage 2, use next_state_stats ahead
-  val state_update = delay_enable || state_flush
+  val state_update = delay_enable || state_flush || timeout
   occupy_data_len := Mux(state_update, next_state_data_len, state_data_len)
   occupy_info_len := Mux(state_update, next_state_info_len, state_info_len)
   when(state_update) {

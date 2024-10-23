@@ -103,11 +103,18 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .filter(_.desiredCppName == "trace_info")
       .map(_.asInstanceOf[DiffTraceInfo].in_replay)
       .foldLeft(false.B)(_ || _)
-  val global_tick = !control.enable || in_replay
+  val timeout_count = RegInit(0.U(32.W))
+  val timeout = timeout_count === 200000.U
+  val global_tick = !control.enable || in_replay || timeout
 
   val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredCppName)
   // Tick and Submit the pending non-squashable events immediately.
   val want_tick_vec = WireInit(VecInit.fill(uniqBundles.length)(false.B))
+  when(!want_tick_vec.asUInt.orR) {
+    timeout_count := timeout_count + 1.U
+  }.otherwise {
+    timeout_count := 0.U
+  }
   // Record Tick Cause for each SquashGroup
   val group_name_vec = uniqBundles.flatMap(_.squashGroup).distinct
   val group_tick_vec = VecInit(group_name_vec.map { g =>
