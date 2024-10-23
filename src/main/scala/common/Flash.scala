@@ -35,6 +35,18 @@ class FlashHelper extends ExtModule with HasExtModuleInline {
   val clock = IO(Input(Clock()))
   val r = IO(new DifftestFlashRead)
 
+  val cppExtModule =
+    """
+      |void FlashHelper (
+      |  uint8_t   r_en,
+      |  uint32_t  r_addr,
+      |  uint64_t& r_data
+      |) {
+      |  if (r_en) flash_read(r_addr, r_data);
+      |}
+      |""".stripMargin
+  difftest.DifftestModule.createCppExtModule("FlashHelper", cppExtModule, Some("\"flash.h\""))
+
   setInline(
     "FlashHelper.v",
     """

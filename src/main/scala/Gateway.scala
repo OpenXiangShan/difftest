@@ -47,6 +47,7 @@ case class GatewayConfig(
   hierarchicalWiring: Boolean = false,
   exitOnAssertions: Boolean = false,
   isFPGA: Boolean = false,
+  isGSIM: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -59,6 +60,7 @@ case class GatewayConfig(
   def needEndpoint: Boolean =
     hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring || traceDump || traceLoad
   def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo
+  def useDPICtype: Boolean = !isFPGA && !isGSIM
   // Macros Generation for Cpp and Verilog
   def cppMacros: Seq[String] = {
     val macros = ListBuffer.empty[String]
@@ -101,6 +103,7 @@ case class GatewayResult(
   vMacros: Seq[String] = Seq(),
   instances: Seq[DifftestBundle] = Seq(),
   structPacked: Option[Boolean] = None,
+  cppExtModule: Option[Boolean] = None,
   exit: Option[UInt] = None,
   step: Option[UInt] = None,
 ) {
@@ -110,6 +113,7 @@ case class GatewayResult(
       vMacros = vMacros ++ that.vMacros,
       instances = instances ++ that.instances,
       structPacked = if (structPacked.isDefined) structPacked else that.structPacked,
+      cppExtModule = if (cppExtModule.isDefined) cppExtModule else that.cppExtModule,
       exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
     )
@@ -135,6 +139,7 @@ object Gateway {
       case 'H' => config = config.copy(hierarchicalWiring = true)
       case 'X' => config = config.copy(exitOnAssertions = true)
       case 'F' => config = config.copy(isFPGA = true)
+      case 'G' => config = config.copy(isGSIM = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()
@@ -187,6 +192,7 @@ object Gateway {
     sink + GatewayResult(
       cppMacros = config.cppMacros,
       vMacros = config.vMacros,
+      cppExtModule = Some(config.isGSIM),
       exit = exit,
     )
   }
