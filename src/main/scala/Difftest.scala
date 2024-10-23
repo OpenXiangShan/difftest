@@ -450,6 +450,8 @@ object DifftestModule {
   private val enabled = true
   private val instances = ListBuffer.empty[DifftestBundle]
   private val cppMacros = ListBuffer.empty[String]
+  private val cppExtModules = ListBuffer.empty[(String, String)]
+  private val cppExtHeaders = ListBuffer.empty[String]
   private val vMacros = ListBuffer.empty[String]
   private val jsonProfiles = ListBuffer.empty[Map[String, Any]]
 
@@ -491,6 +493,9 @@ object DifftestModule {
     instances ++= gateway.instances
 
     generateCppHeader(cpu, gateway.structPacked.getOrElse(false))
+    if (gateway.cppExtModule.getOrElse(false)) {
+      generateCppExtModules()
+    }
     generateVeriogHeader()
     generateJsonProfile(cpu)
 
@@ -611,6 +616,29 @@ object DifftestModule {
     streamToFile(difftestCpp, "diffstate.h")
   }
 
+  def createCppExtModule(name: String, func: String, header: Option[String]): Unit = {
+    // generate external modules only once
+    if (!cppExtModules.exists(_._1 == name)) {
+      cppExtModules += ((name, func))
+      // Some cpp external module may have header dependency
+      if (header.isDefined && !cppExtHeaders.contains(header.get)) {
+        cppExtHeaders += header.get
+      }
+    }
+  }
+  def createCppExtModule(name: String, func: String): Unit = createCppExtModule(name, func, None)
+
+  def generateCppExtModules(): Unit = {
+    val difftestCppExts = ListBuffer.empty[String]
+    difftestCppExts +=
+      """
+        |//#include <SimTop.h>
+        |#include <cstdint>
+        |""".stripMargin
+    cppExtHeaders.foreach(h => difftestCppExts += s"#include $h")
+    cppExtModules.foreach(m => difftestCppExts += m._2)
+    streamToFile(difftestCppExts, "difftest-extmodule.cpp")
+  }
   def generateVeriogHeader(): Unit = {
     val difftestVeriog = ListBuffer.empty[String]
     vMacros.foreach(m => difftestVeriog += s"`define $m")

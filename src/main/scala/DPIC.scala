@@ -19,7 +19,7 @@ import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.reflect.DataMirror
 import chisel3.util._
-import difftest.DifftestModule.streamToFile
+import difftest.DifftestModule.{createCppExtModule, streamToFile}
 import difftest._
 import difftest.batch.{BatchInfo, BatchIO}
 import difftest.gateway.{GatewayConfig, GatewayResult, GatewaySinkControl}
@@ -72,13 +72,15 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   }
 
   def desiredName: String
-  def dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
+  def dpicFuncName: String = s"v_difftest_${desiredName.replace("DiffExt", "")}"
   def dpicFuncArgs: Seq[Seq[(String, Data)]] =
     modPorts.filterNot(p => p.length == 1 && commonPorts.exists(_._1 == p.head._1))
   def dpicFuncProto: String =
     s"""
        |extern "C" void $dpicFuncName (
-       |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true, !config.isFPGA)).mkString(",\n  ")}
+       |  ${dpicFuncArgs.flatten
+        .map(arg => getDPICArgString(arg._1, arg._2, true, config.useDPICtype))
+        .mkString(",\n  ")}
        |)""".stripMargin
   def getPacketDecl(gen: DifftestBundle, prefix: String, config: GatewayConfig): String = {
     val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
@@ -145,12 +147,25 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
          |""".stripMargin
     modDef
   }
+
+  def cppExtModule: String = {
+    val extArgs = modPorts.flatten.filterNot(_._1 == "clock").map(arg => getDPICArgString(arg._1, arg._2, true, false))
+    s"""
+       |extern void $desiredName(
+       |  ${extArgs.mkString(",\n  ")}
+       |) {
+       |  if (enable) {
+       |    $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
+       |  }
+       |}
+       |""".stripMargin
+  }
 }
 
 class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(config) with DifftestModule[T] {
   val io = IO(Input(gen))
 
-  override def desiredName: String = gen.desiredModuleName
+  override def desiredName: String = gen.desiredModuleName.replace("Difftest", "DiffExt")
   override def modPorts: Seq[Seq[(String, Data)]] = {
     super.modPorts ++ io.elements.toSeq.reverse.map { case (name, data) =>
       data match {
@@ -184,6 +199,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
     packetDecl ++ validAssign ++ body
   }
 
+  createCppExtModule(desiredName, cppExtModule, Some("\"difftest-dpic.h\""))
   setInline(s"$desiredName.v", moduleBody)
 }
 
@@ -208,7 +224,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
 
   override def modPorts = super.modPorts ++ Seq(Seq(("io", io)))
 
-  override def desiredName: String = "DifftestBatch"
+  override def desiredName: String = "DiffExtBatch"
   override def dpicFuncAssigns: Seq[String] = {
     val bundleEnum = template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchInterval", "BatchFinish")
     val bundleAssign = template.zipWithIndex.map { case (t, idx) =>
@@ -268,6 +284,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |""".stripMargin)
   }
 
+  createCppExtModule(desiredName, cppExtModule, Some("\"difftest-dpic.h\""))
   setInline(s"$desiredName.v", moduleBody)
 }
 
@@ -365,15 +382,6 @@ object DPIC {
         |  }
         |};
         |""".stripMargin
-    interfaceCpp +=
-      s"""
-         |#ifdef CONFIG_DIFFTEST_PERFCNT
-         |enum DIFFSTATE_PERF {
-         |  ${(interfaces.map("perf_" + _._1) ++ Seq("DIFFSTATE_PERF_NUM")).mkString(",\n  ")}
-         |};
-         |long long dpic_calls[DIFFSTATE_PERF_NUM] = {0}, dpic_bytes[DIFFSTATE_PERF_NUM] = {0};
-         |#endif // CONFIG_DIFFTEST_PERFCNT
-         |""".stripMargin
     interfaceCpp += interfaces.map(_._2 + ";").mkString("\n")
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
@@ -409,6 +417,10 @@ object DPIC {
     interfaceCpp +=
       s"""
          |#ifdef CONFIG_DIFFTEST_PERFCNT
+         |enum DIFFSTATE_PERF {
+         |  ${(interfaces.map("perf_" + _._1) ++ Seq("DIFFSTATE_PERF_NUM")).mkString(",\n  ")}
+         |};
+         |long long dpic_calls[DIFFSTATE_PERF_NUM] = {0}, dpic_bytes[DIFFSTATE_PERF_NUM] = {0};
          |void diffstate_perfcnt_init() {
          |  for (int i = 0; i < DIFFSTATE_PERF_NUM; i++) {
          |    dpic_calls[i] = 0;
