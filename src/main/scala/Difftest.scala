@@ -452,7 +452,7 @@ object DifftestModule {
   private val cppMacros = ListBuffer.empty[String]
   private val vMacros = ListBuffer.empty[String]
   private val jsonProfiles = ListBuffer.empty[Map[String, Any]]
-
+  private var needSvh = false
   def parseArgs(args: Array[String]): Array[String] = {
     @tailrec
     def nextOption(args: Array[String], list: List[String]): Array[String] = {
@@ -471,6 +471,7 @@ object DifftestModule {
     gen: T,
     dontCare: Boolean = false,
     delay: Int = 0,
+    useJson: Boolean = false,
   ): T = {
     val difftest: T = Wire(gen)
     if (enabled) {
@@ -481,6 +482,7 @@ object DifftestModule {
       difftest.bits.getValidOption.foreach(_ := false.B)
     }
     jsonProfiles += (gen.toJsonProfile ++ Map("delay" -> delay))
+    needSvh = useJson
     difftest
   }
 
@@ -525,6 +527,49 @@ object DifftestModule {
     require(DifftestWiring.isEmpty, s"pending wires left: ${DifftestWiring.getPending}")
 
     difftest
+  }
+
+  def generateSvhMacros(vec: MixedVec[UInt], numCores: Int): Unit = {
+    if (needSvh) {
+      val cores_ionum = vec.length / numCores
+      val writer = ListBuffer.empty[String]
+      val interface1 = ListBuffer.empty[String]
+      val interface2 = ListBuffer.empty[String]
+      val interface_assign = ListBuffer.empty[String]
+      val core_io = ListBuffer.empty[String]
+      val gateway_io = ListBuffer.empty[String]
+      vec.zipWithIndex.foreach { case (signal, idx) =>
+        val width = signal.getWidth - 1
+        if (idx / cores_ionum == 0) {
+          core_io += s"gateway_${idx}"
+          interface1 += s" logic [${width}:0] gateway_${idx};"
+        }
+        interface2 += s" logic [${width}:0] gateway_${idx};"
+        gateway_io += s"gateway_${idx}"
+        interface_assign += s"assign gateway_out.gateway_${idx} = core_in[${idx / cores_ionum}].gateway_${idx % cores_ionum};"
+      }
+      writer += s"""|interface core_if;
+                    |${interface1.mkString("\n")}
+                    | modport core_in (
+                    |  input ${core_io.mkString(", ")}\n);
+                    | modport core_out (
+                    |  output ${core_io.mkString(", ")}\n);
+                    |endinterface\n
+                    |interface gateway_if;
+                    |${interface2.mkString("\n")}
+                    | modport core_out (
+                    |  output ${gateway_io.mkString(", ")}\n);
+                    | modport diff_in (
+                    |  input ${gateway_io.mkString(", ")}\n);
+                    |endinterface\n
+                    |module CoreToGateway (
+                    | gateway_if.core_out gateway_out,
+                    | core_if.core_in core_in[$numCores]
+                    |);
+                    |${interface_assign.mkString("\n")}
+                    |endmodule""".stripMargin
+      streamToFile(writer, "gateway_io_def.svh")
+    }
   }
 
   def generateCppHeader(cpu: String, structPacked: Boolean): Unit = {
