@@ -95,6 +95,12 @@ EMU_OPTIMIZE ?= -O3
 # C optimization
 OPT_FAST ?= -O3
 
+# SparseMM
+ifeq ($(CONFIG_USE_SPARSEMM), 1)
+$(warning "NOTE: Sparse Memory is enable")
+EMU_CXXFLAGS += -DCONFIG_USE_SPARSEMM
+endif
+
 VERILATOR_FLAGS =                   \
   --exe $(EMU_OPTIMIZE)             \
   --cc --top-module $(EMU_TOP)      \

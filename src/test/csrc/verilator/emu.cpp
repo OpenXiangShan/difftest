@@ -119,6 +119,9 @@ static inline void print_help(const char *file) {
   printf("      --dump-footprints=NAME dump memory access footprints to NAME\n");
   printf("      --as-footprints        load the image as memory access footprints\n");
   printf("      --dump-linearized=NAME dump the linearized footprints to NAME\n");
+#ifdef CONFIG_USE_SPARSEMM
+  printf("      --disable-spram        disable spram (spram support ELF file load)\n");
+#endif
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -154,6 +157,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "as-footprints",     0, NULL,  0  },
     { "dump-linearized",   1, NULL,  0  },
     { "dump-wave-full",    0, NULL,  0  },
+    { "disable-spram",     0, NULL,  0  },
     { "overwrite-nbytes",  1, NULL,  0  },
     { "remote-jtag-port",  1, NULL,  0  },
     { "iotrace-name",      1, NULL,  0  },
@@ -238,16 +242,17 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             args.enable_waveform = true;
             args.enable_waveform_full = true;
             continue;
-          case 22: args.overwrite_nbytes = atoll_strict(optarg, "overwrite_nbytes"); continue;
-          case 23: remote_jtag_port = atoll_strict(optarg, "remote-jtag-port"); continue;
-          case 24:
+          case 22: args.enable_spram = false;continue;
+          case 23: args.overwrite_nbytes = atoll_strict(optarg, "overwrite_nbytes"); continue;
+          case 24: remote_jtag_port = atoll_strict(optarg, "remote-jtag-port"); continue;
+          case 25:
 #ifdef CONFIG_DIFFTEST_IOTRACE
             set_iotrace_name(optarg);
 #else
             printf("[WARN] iotrace is not enabled at compile time, ignore --iotrace-name");
 #endif // CONFIG_DIFFTEST_IOTRACE
             continue;
-          case 25:
+          case 26:
 #ifdef WITH_DRAMSIM3
             args.dramsim3_ini = optarg;
             continue;
@@ -256,7 +261,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             exit(1);
             break;
 #endif
-          case 26: args.overwrite_nbytes_autoset = true; continue;
+          case 27: args.overwrite_nbytes_autoset = true; continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -389,6 +394,19 @@ Emulator::Emulator(int argc, const char *argv[])
   if (args.ram_size) {
     ram_size = parse_and_update_ramsize(args.ram_size);
   }
+
+#ifdef CONFIG_USE_SPARSEMM
+  if (args.enable_spram){
+    if(args.image_as_footprints || args.footprints_name){
+      Info("Hint: --dump-footprints and --as-footprints is conflict with spram, please use --disable-spram (disable ELF support)\n");
+      exit(0);
+    }
+    simMemory = new SparseMemory(args.image, ram_size);
+  }
+#else
+  args.enable_spram = false;
+#endif
+
   // footprints
   if (args.image_as_footprints) {
     if (args.linearized_name) {
@@ -398,10 +416,11 @@ Emulator::Emulator(int argc, const char *argv[])
     }
   }
   // normal linear memory
-  else {
+  else if (!args.enable_spram){
     if (args.footprints_name) {
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
     } else {
+      simMemory = new MmapMemory(args.image, ram_size);
       init_ram(args.image, ram_size);
 #ifdef WITH_DRAMSIM3
       dramsim3_init(args.dramsim3_ini);
@@ -539,6 +558,7 @@ Emulator::~Emulator() {
     goldenmem_finish();
   }
 #endif // CONFIG_NO_DIFFTEST
+
   flash_finish();
 #ifndef CONFIG_NO_DIFFTEST
   difftest_finish();
