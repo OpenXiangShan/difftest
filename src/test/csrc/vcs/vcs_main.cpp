@@ -168,6 +168,12 @@ extern "C" uint8_t simv_init() {
   }
   common_init("simv");
 
+#ifdef CONFIG_USE_SPARSEMM
+  simMemory = new SparseMemory(bin_file, DEFAULT_EMU_RAM_SIZE);
+#else
+  simMemory = new MmapMemory(bin_file, DEFAULT_EMU_RAM_SIZE);
+#endif
+
   init_ram(bin_file, DEFAULT_EMU_RAM_SIZE);
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr);
