@@ -23,11 +23,10 @@
 #include <sys/mman.h>
 #include <time.h>
 
-
-void* sparse_gd_mm = NULL;
-void * get_gd_sparsemm(){
+void *sparse_gd_mm = NULL;
+void *get_gd_sparsemm() {
 #ifdef CONFIG_USE_SPARSEMM
-  if (sparse_gd_mm==NULL){
+  if (sparse_gd_mm == NULL) {
     sparse_gd_mm = sparse_mem_new(4, 1024); //4kB
   }
   assert(sparse_gd_mm != NULL);
@@ -38,35 +37,34 @@ void * get_gd_sparsemm(){
 uint8_t *pmem;
 static uint64_t pmem_size;
 
-void* guest_to_host(uint64_t addr) { 
-  if (simMemory->get_type() == T_SparseMemory){
+void *guest_to_host(uint64_t addr) {
+  if (simMemory->get_type() == T_SparseMemory) {
     Info("Sparse Memory do not support \"guest_to_host\" convert\n");
     assert(0);
   }
-  return &pmem[addr]; 
+  return &pmem[addr];
 }
 
 void init_goldenmem() {
   pmem_size = simMemory->get_size();
-  if (simMemory->get_type() == T_SparseMemory){
+  if (simMemory->get_type() == T_SparseMemory) {
     sparse_mem_copy(get_gd_sparsemm(), simMemory->as_ptr());
-    ref_golden_mem = (uint8_t *) get_gd_sparsemm();
-  }else{
+    ref_golden_mem = (uint8_t *)get_gd_sparsemm();
+  } else {
     pmem = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
     if (pmem == (uint8_t *)MAP_FAILED) {
       printf("ERROR allocating physical memory. \n");
     }
-    simMemory->clone_on_demand([](uint64_t offset, void *src, size_t n) {
-      nonzero_large_memcpy(pmem + offset, src, n);
-    }, true);
-    ref_golden_mem = pmem;  
+    simMemory->clone_on_demand(
+        [](uint64_t offset, void *src, size_t n) { nonzero_large_memcpy(pmem + offset, src, n); }, true);
+    ref_golden_mem = pmem;
   }
 }
 
 void goldenmem_finish() {
-  if(sparse_gd_mm!=NULL){
+  if (sparse_gd_mm != NULL) {
     sparse_mem_del(sparse_gd_mm);
-  }else{
+  } else {
     munmap(pmem, pmem_size);
     pmem = NULL;
   }
@@ -86,14 +84,14 @@ void read_goldenmem(uint64_t addr, void *data, uint64_t len) {
 }
 
 bool in_pmem(uint64_t addr) {
-  if (simMemory->get_type() == T_SparseMemory){
+  if (simMemory->get_type() == T_SparseMemory) {
     return true;
   }
   return (PMEM_BASE <= addr) && (addr <= PMEM_BASE + simMemory->get_size() - 1);
 }
 
 static inline word_t pmem_read(uint64_t addr, int len) {
-  if (simMemory->get_type() == T_SparseMemory){
+  if (simMemory->get_type() == T_SparseMemory) {
     return sparse_mem_wread(get_gd_sparsemm(), addr, len);
   }
   void *p = &pmem[addr - PMEM_BASE];
@@ -110,7 +108,7 @@ static inline void pmem_write(uint64_t addr, word_t data, int len) {
 #ifdef DIFFTEST_STORE_COMMIT
   store_commit_queue_push(addr, data, len);
 #endif
-  if (simMemory->get_type() == T_SparseMemory){
+  if (simMemory->get_type() == T_SparseMemory) {
     return sparse_mem_wwrite(get_gd_sparsemm(), addr, len, data);
   }
   void *p = &pmem[addr - PMEM_BASE];

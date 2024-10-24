@@ -32,7 +32,7 @@ CoDRAMsim3 *dram = NULL;
 
 #ifdef CONFIG_USE_SPARSEMM
 #if defined(WITH_DRAMSIM3) || defined(TLB_UNITTEST)
-  #error Now, SparseMM is not support with DRAMSIM3, TLB_TEST
+#error Now, SparseMM is not support with DRAMSIM3, TLB_TEST
 #endif
 #endif
 
@@ -318,9 +318,9 @@ extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
   }
 #endif // PMEM_CHECK
   uint64_t rdata = 0;
-  if (simMemory->get_type() == T_SparseMemory){
-    rdata = ((SparseMemory*)simMemory)->read(rIdx);
-  }else{
+  if (simMemory->get_type() == T_SparseMemory) {
+    rdata = ((SparseMemory *)simMemory)->read(rIdx);
+  } else {
     rIdx %= simMemory->get_size() / sizeof(uint64_t);
     rdata = simMemory->at(rIdx);
   }
@@ -337,9 +337,9 @@ extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask
       printf("ERROR: ram wIdx = 0x%lx out of bound!\n", wIdx);
       return;
     }
-    if (simMemory->get_type() == T_SparseMemory){
-      ((SparseMemory*)simMemory)->write(wIdx, (((SparseMemory*)simMemory)->read(wIdx) & ~wmask) | (wdata & wmask));
-    }else{
+    if (simMemory->get_type() == T_SparseMemory) {
+      ((SparseMemory *)simMemory)->write(wIdx, (((SparseMemory *)simMemory)->read(wIdx) & ~wmask) | (wdata & wmask));
+    } else {
       simMemory->at(wIdx) = (simMemory->at(wIdx) & ~wmask) | (wdata & wmask);
     }
   }

@@ -242,7 +242,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             args.enable_waveform = true;
             args.enable_waveform_full = true;
             continue;
-          case 22: args.enable_spram = false;continue;
+          case 22: args.enable_spram = false; continue;
           case 23: args.overwrite_nbytes = atoll_strict(optarg, "overwrite_nbytes"); continue;
           case 24: remote_jtag_port = atoll_strict(optarg, "remote-jtag-port"); continue;
           case 25:
@@ -396,9 +396,11 @@ Emulator::Emulator(int argc, const char *argv[])
   }
 
 #ifdef CONFIG_USE_SPARSEMM
-  if (args.enable_spram){
-    if(args.image_as_footprints || args.footprints_name){
-      Info("Hint: --dump-footprints and --as-footprints is conflict with spram, please use --disable-spram (disable ELF support)\n");
+  if (args.enable_spram) {
+    if (args.image_as_footprints || args.footprints_name) {
+      Info(
+          "Hint: --dump-footprints and --as-footprints is conflict with spram, please use --disable-spram (disable ELF "
+          "support)\n");
       exit(0);
     }
     simMemory = new SparseMemory(args.image, ram_size);
@@ -416,7 +418,7 @@ Emulator::Emulator(int argc, const char *argv[])
     }
   }
   // normal linear memory
-  else if (!args.enable_spram){
+  else if (!args.enable_spram) {
     if (args.footprints_name) {
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
     } else {

@@ -18,6 +18,7 @@
 #define __RAM_H
 
 #include "common.h"
+#include "sparseram.h"
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -25,20 +26,19 @@
 #include <set>
 #include <unordered_map>
 #include <vector>
-#include "sparseram.h"
 
 #ifndef DEFAULT_EMU_RAM_SIZE
 #define DEFAULT_EMU_RAM_SIZE (256 * 1024 * 1024UL)
 #endif
 
 enum mem_type {
- // type: 0->SimMemory, 1->MmapMemory, 2->MmapMemoryWithFootprints, 3->FootprintsMemory 4->LinearizedFootprintsMemory, 5->SparseMemory
- T_SimMemory,
- T_MmapMemory,
- T_MmapMemoryWithFootprints,
- T_FootprintsMemory,
- T_LinearizedFootprintsMemory,
- T_SparseMemory,
+  // type: 0->SimMemory, 1->MmapMemory, 2->MmapMemoryWithFootprints, 3->FootprintsMemory 4->LinearizedFootprintsMemory, 5->SparseMemory
+  T_SimMemory,
+  T_MmapMemory,
+  T_MmapMemoryWithFootprints,
+  T_FootprintsMemory,
+  T_LinearizedFootprintsMemory,
+  T_SparseMemory,
 };
 
 uint64_t pmem_read(uint64_t raddr);
@@ -118,7 +118,9 @@ protected:
 public:
   SimMemory(uint64_t n_bytes) : memory_size(n_bytes) {}
   virtual ~SimMemory();
-  virtual mem_type get_type() { return T_SimMemory; }
+  virtual mem_type get_type() {
+    return T_SimMemory;
+  }
   uint64_t get_size() {
     return memory_size;
   }
@@ -140,34 +142,42 @@ public:
   void display_stats();
 };
 
-class SparseMemory: public SimMemory {
+class SparseMemory : public SimMemory {
   SparseRam ram;
+
 protected:
-  virtual inline uint64_t get_img_size() {return memory_size; }
+  virtual inline uint64_t get_img_size() {
+    return memory_size;
+  }
+
 public:
-  SparseMemory(const char *image, uint64_t n_bytes): SimMemory(n_bytes) {
-    if(file_is_elf(image)){
+  SparseMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes) {
+    if (file_is_elf(image)) {
       ram.load_elf(image);
       Info("[sp-mem] load %s (ELF) to sparse mem complete\n", image);
-    }else{
+    } else {
       ram.load_bin(image, PMEM_BASE);
       Info("[sp-mem] load %s (BIN) to sparse mem(0x%lx) complete\n", image, PMEM_BASE);
     }
   }
-  ~SparseMemory(){};
+  ~SparseMemory() {};
   // APIs
-  mem_type get_type() { return T_SparseMemory;}
+  mem_type get_type() {
+    return T_SparseMemory;
+  }
   bool in_range_u8(uint64_t address) {
     return true;
   }
   bool in_range_u64(uint64_t index) {
     return true;
   }
-  void display_stats(){
+  void display_stats() {
     this->ram.print_info();
   }
-  uint64_t& at(uint64_t index) {assert(0);}
-  void clone(std::function<void(void*, uint64_t)> func, bool skip_zero = false) {
+  uint64_t &at(uint64_t index) {
+    assert(0);
+  }
+  void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
     func(&this->ram, this->memory_size);
   }
   uint64_t read(uint64_t index) {
@@ -178,7 +188,9 @@ public:
     auto addr = PMEM_BASE + index * sizeof(uint64_t);
     return ram.write(addr, sizeof(uint64_t), data);
   }
-  uint64_t *as_ptr() { return (uint64_t *)&ram; }
+  uint64_t *as_ptr() {
+    return (uint64_t *)&ram;
+  }
 };
 
 class MmapMemory : public SimMemory {
@@ -194,7 +206,9 @@ protected:
 public:
   MmapMemory(const char *image, uint64_t n_bytes);
   virtual ~MmapMemory();
-  mem_type get_type() { return T_MmapMemory; }
+  mem_type get_type() {
+    return T_MmapMemory;
+  }
   void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
     uint64_t n_bytes = skip_zero ? img_size : get_size();
     func(ram, n_bytes);
@@ -215,7 +229,9 @@ private:
   std::ofstream footprints_file;
 
 public:
-  mem_type get_type() { return T_MmapMemoryWithFootprints; }
+  mem_type get_type() {
+    return T_MmapMemoryWithFootprints;
+  }
   MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name);
   ~MmapMemoryWithFootprints();
   uint64_t &at(uint64_t index);
@@ -240,7 +256,9 @@ protected:
 public:
   FootprintsMemory(const char *footprints_name, uint64_t n_bytes);
   ~FootprintsMemory();
-  mem_type get_type() { return T_FootprintsMemory; }
+  mem_type get_type() {
+    return T_FootprintsMemory;
+  }
   uint64_t &at(uint64_t index);
   void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
     printf("clone_instant not support by FootprintsMemory\n");
@@ -262,7 +280,9 @@ private:
   uint64_t n_touched; // for performance opt
 
 public:
-  mem_type get_type() { return T_LinearizedFootprintsMemory; }
+  mem_type get_type() {
+    return T_LinearizedFootprintsMemory;
+  }
   LinearizedFootprintsMemory(const char *footprints_name, uint64_t n_bytes, const char *linear_name);
   ~LinearizedFootprintsMemory();
   void save_linear_memory(const char *filename);
