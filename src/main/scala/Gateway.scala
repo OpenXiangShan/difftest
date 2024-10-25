@@ -119,7 +119,6 @@ case class GatewayResult(
 object Gateway {
   private val instanceWithDelay = ListBuffer.empty[(DifftestBundle, Int)]
   private var config = GatewayConfig()
-  private var numCores: Int = 0
 
   def setConfig(cfg: String): Unit = {
     cfg.foreach {
@@ -143,7 +142,6 @@ object Gateway {
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
     val bundle = WireInit(0.U.asTypeOf(gen))
-    numCores = instanceWithDelay.count { case (bundle, _) => bundle.isUniqueIdentifier }
     if (!config.traceLoad) {
       if (config.needEndpoint) {
         val packed = WireInit(bundle.asUInt)
@@ -178,7 +176,6 @@ object Gateway {
       }
       val endpoint = Module(new GatewayEndpoint(instanceWithDelay.toSeq, config))
       endpoint.in := gatewayIn
-      DifftestModule.generateSvhMacros(endpoint.in, numCores)
       GatewayResult(
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
@@ -193,7 +190,6 @@ object Gateway {
       exit = exit,
     )
   }
-
 }
 
 class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: GatewayConfig) extends Module {

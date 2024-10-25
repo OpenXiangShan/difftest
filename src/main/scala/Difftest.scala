@@ -452,7 +452,7 @@ object DifftestModule {
   private val cppMacros = ListBuffer.empty[String]
   private val vMacros = ListBuffer.empty[String]
   private val jsonProfiles = ListBuffer.empty[Map[String, Any]]
-  private var needSvh = false
+
   def parseArgs(args: Array[String]): Array[String] = {
     @tailrec
     def nextOption(args: Array[String], list: List[String]): Array[String] = {
@@ -471,7 +471,6 @@ object DifftestModule {
     gen: T,
     dontCare: Boolean = false,
     delay: Int = 0,
-    useJson: Boolean = false,
   ): T = {
     val difftest: T = Wire(gen)
     if (enabled) {
@@ -482,7 +481,6 @@ object DifftestModule {
       difftest.bits.getValidOption.foreach(_ := false.B)
     }
     jsonProfiles += (gen.toJsonProfile ++ Map("delay" -> delay))
-    needSvh = useJson
     difftest
   }
 
@@ -529,47 +527,51 @@ object DifftestModule {
     difftest
   }
 
-  def generateSvhMacros(vec: MixedVec[UInt], numCores: Int): Unit = {
-    if (needSvh) {
-      val cores_ionum = vec.length / numCores
-      val writer = ListBuffer.empty[String]
-      val interface1 = ListBuffer.empty[String]
-      val interface2 = ListBuffer.empty[String]
-      val interface_assign = ListBuffer.empty[String]
-      val core_io = ListBuffer.empty[String]
-      val gateway_io = ListBuffer.empty[String]
-      vec.zipWithIndex.foreach { case (signal, idx) =>
-        val width = signal.getWidth - 1
-        if (idx / cores_ionum == 0) {
-          core_io += s"gateway_${idx}"
-          interface1 += s" logic [${width}:0] gateway_${idx};"
-        }
-        interface2 += s" logic [${width}:0] gateway_${idx};"
-        gateway_io += s"gateway_${idx}"
-        interface_assign += s"assign gateway_out.gateway_${idx} = core_in[${idx / cores_ionum}].gateway_${idx % cores_ionum};"
-      }
-      writer += s"""|interface core_if;
-                    |${interface1.mkString("\n")}
-                    | modport core_in (
-                    |  input ${core_io.mkString(", ")}\n);
-                    | modport core_out (
-                    |  output ${core_io.mkString(", ")}\n);
-                    |endinterface\n
-                    |interface gateway_if;
-                    |${interface2.mkString("\n")}
-                    | modport core_out (
-                    |  output ${gateway_io.mkString(", ")}\n);
-                    | modport diff_in (
-                    |  input ${gateway_io.mkString(", ")}\n);
-                    |endinterface\n
-                    |module CoreToGateway (
-                    | gateway_if.core_out gateway_out,
-                    | core_if.core_in core_in[$numCores]
-                    |);
-                    |${interface_assign.mkString("\n")}
-                    |endmodule""".stripMargin
-      streamToFile(writer, "gateway_io_def.svh")
+  def generateSvhInterface(numCores: Int): Unit = {
+    // generate interface by jsonProfile, single-core interface will be copied numCore times
+    val difftestSvh = ListBuffer.empty[String]
+    val core_if_len = instances.length / numCores
+    val gateway_args = instances.toSeq.zipWithIndex.map { case (b, idx) =>
+      val typeString = s"logic [${b.getWidth - 1}: 0]"
+      val argName = s"gateway_$idx"
+      (typeString, argName)
     }
+    val core_args = gateway_args.take(core_if_len)
+    def getInterface(args: Seq[(String, String)]): String = {
+      args.map { case (t, name) => s"$t $name;" }.mkString("\n")
+    }
+    def getModPort(args: Seq[(String, String)]): String = {
+      args.map(_._2).mkString(", ")
+    }
+    val if_assigns = Seq
+      .tabulate(numCores) { coreid =>
+        val offset = coreid * core_if_len
+        Seq.tabulate(core_if_len) { idx =>
+          s"assign gateway_out.gateway_${offset + idx} = core_in[$coreid].gateway_$idx"
+        }
+      }
+      .flatten
+      .mkString("\n")
+    difftestSvh +=
+      s"""|interface core_if;
+          |${getInterface(core_args)}
+          |modport in (input ${getModPort(core_args)});
+          |modport out (output ${getModPort(core_args)});
+          |endinterface
+          |
+          |interface gateway_if;
+          |${getInterface(gateway_args)}
+          |modport in (input ${getModPort(gateway_args)});
+          |modport out (output ${getModPort(gateway_args)});
+          |endinterface
+          |
+          |module CoreToGateway (
+          |  gateway_if.out gateway_out,
+          |  core_if.in core_in[$numCores]
+          |);
+          |$if_assigns
+          |endmodule""".stripMargin
+    streamToFile(difftestSvh, "gateway_interface.svh")
   }
 
   def generateCppHeader(cpu: String, structPacked: Boolean): Unit = {

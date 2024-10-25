@@ -77,11 +77,12 @@ class SimTop(profileName: String, numCores: Int) extends Module {
       val constructor = Class.forName(prof("className").toString).getConstructors()(0)
       val args = constructor.getParameters().toSeq.map { param => prof(param.getName.toString) }
       val inst = constructor.newInstance(args: _*).asInstanceOf[DifftestBundle]
-      DifftestModule(inst, true, prof("delay").asInstanceOf[Int], useJson = true).suggestName(s"gateway_${coreid}_$idx")
+      DifftestModule(inst, true, prof("delay").asInstanceOf[Int]).suggestName(s"gateway_${coreid}_$idx")
     }
   }
   val dutInfo = profiles.find(_.contains("cpu")).get
   DifftestModule.finish(dutInfo("cpu").asInstanceOf[String])
+  DifftestModule.generateSvhInterface(numCores)
 }
 
 abstract class DifftestApp extends App {
