@@ -527,6 +527,53 @@ object DifftestModule {
     difftest
   }
 
+  def generateSvhInterface(numCores: Int): Unit = {
+    // generate interface by jsonProfile, single-core interface will be copied numCore times
+    val difftestSvh = ListBuffer.empty[String]
+    val core_if_len = instances.length / numCores
+    val gateway_args = instances.toSeq.zipWithIndex.map { case (b, idx) =>
+      val typeString = s"logic [${b.getWidth - 1}: 0]"
+      val argName = s"gateway_$idx"
+      (typeString, argName)
+    }
+    val core_args = gateway_args.take(core_if_len)
+    def getInterface(args: Seq[(String, String)]): String = {
+      args.map { case (t, name) => s"$t $name;" }.mkString("\n")
+    }
+    def getModPort(args: Seq[(String, String)]): String = {
+      args.map(_._2).mkString(", ")
+    }
+    val if_assigns = Seq
+      .tabulate(numCores) { coreid =>
+        val offset = coreid * core_if_len
+        Seq.tabulate(core_if_len) { idx =>
+          s"assign gateway_out.gateway_${offset + idx} = core_in[$coreid].gateway_$idx"
+        }
+      }
+      .flatten
+      .mkString("\n")
+    difftestSvh +=
+      s"""|interface core_if;
+          |${getInterface(core_args)}
+          |modport in (input ${getModPort(core_args)});
+          |modport out (output ${getModPort(core_args)});
+          |endinterface
+          |
+          |interface gateway_if;
+          |${getInterface(gateway_args)}
+          |modport in (input ${getModPort(gateway_args)});
+          |modport out (output ${getModPort(gateway_args)});
+          |endinterface
+          |
+          |module CoreToGateway (
+          |  gateway_if.out gateway_out,
+          |  core_if.in core_in[$numCores]
+          |);
+          |$if_assigns
+          |endmodule""".stripMargin
+    streamToFile(difftestSvh, "gateway_interface.svh")
+  }
+
   def generateCppHeader(cpu: String, structPacked: Boolean): Unit = {
     val difftestCpp = ListBuffer.empty[String]
     difftestCpp += "#ifndef __DIFFSTATE_H__"

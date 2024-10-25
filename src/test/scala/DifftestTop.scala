@@ -82,6 +82,7 @@ class SimTop(profileName: String, numCores: Int) extends Module {
   }
   val dutInfo = profiles.find(_.contains("cpu")).get
   DifftestModule.finish(dutInfo("cpu").asInstanceOf[String])
+  DifftestModule.generateSvhInterface(numCores)
 }
 
 abstract class DifftestApp extends App {
