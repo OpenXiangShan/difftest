@@ -547,7 +547,7 @@ object DifftestModule {
       .tabulate(numCores) { coreid =>
         val offset = coreid * core_if_len
         Seq.tabulate(core_if_len) { idx =>
-          s"assign gateway_out.gateway_${offset + idx} = core_in[$coreid].gateway_$idx"
+          s"assign gateway_out.gateway_${offset + idx} = core_in[$coreid].gateway_$idx;"
         }
       }
       .flatten
