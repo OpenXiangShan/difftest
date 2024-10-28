@@ -16,6 +16,7 @@
 #ifndef __ELFLOADER_H
 #define __ELFLOADER_H
 
+#include "config.h"
 #include <assert.h>
 #include <cstring>
 #include <fcntl.h>
@@ -165,16 +166,7 @@ struct ElfBinary {
   uint64_t entry;
   std::vector<ElfSection> sections;
 
-  void load() {
-    assert(size >= sizeof(Elf64_Ehdr));
-    eh64 = (const Elf64_Ehdr *)raw;
-    assert(IS_ELF32(*eh64) || IS_ELF64(*eh64));
-
-    if (IS_ELF32(*eh64))
-      parse(data32);
-    else
-      parse(data64);
-  }
+  void load();
 
   template <typename ehdr_t, typename phdr_t, typename shdr_t, typename sym_t>
   void parse(ElfBinaryData<ehdr_t, phdr_t, shdr_t, sym_t> &data);
@@ -183,24 +175,9 @@ struct ElfBinary {
 struct ElfBinaryFile : public ElfBinary {
   const std::string filename;
 
-  ElfBinaryFile(const char *filename) : filename(filename) {
-    int fd = open(filename, O_RDONLY);
-    struct stat s;
-    assert(fd != -1);
-    assert(fstat(fd, &s) >= 0);
-    size = s.st_size;
+  ElfBinaryFile(const char *filename);
 
-    raw = (uint8_t *)mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-    assert(raw != MAP_FAILED);
-    close(fd);
-
-    load();
-  }
-
-  ~ElfBinaryFile() {
-    if (raw)
-      munmap((void *)raw, size);
-  }
+  ~ElfBinaryFile();
 };
 
 // Is the file at the given path an Elf file
