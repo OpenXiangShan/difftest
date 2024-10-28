@@ -527,11 +527,11 @@ object DifftestModule {
     difftest
   }
 
-  def generateSvhInterface(numCores: Int): Unit = {
+  def generateSvhInterface(instances: Seq[DifftestBundle], numCores: Int): Unit = {
     // generate interface by jsonProfile, single-core interface will be copied numCore times
     val difftestSvh = ListBuffer.empty[String]
     val core_if_len = instances.length / numCores
-    val gateway_args = instances.toSeq.zipWithIndex.map { case (b, idx) =>
+    val gateway_args = instances.zipWithIndex.map { case (b, idx) =>
       val typeString = s"logic [${b.getWidth - 1}: 0]"
       val argName = s"gateway_$idx"
       (typeString, argName)
