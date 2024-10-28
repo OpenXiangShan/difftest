@@ -40,6 +40,10 @@ void ElfBinary::parse(ElfBinaryData<ehdr_t, phdr_t, shdr_t, sym_t> &data) {
 bool isElfFile(const char *filename) {
   int fd = -1;
 
+#ifdef NO_IMAGE_ELF
+  return false;
+#endif
+
   fd = open(filename, O_RDONLY);
   assert(fd);
 

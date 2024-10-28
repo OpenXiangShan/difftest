@@ -166,6 +166,12 @@ else
 SIM_LDFLAGS  += -lzstd
 endif
 
+# Elf image support
+IMAGE_ELF ?= 1
+ifeq ($(IMAGE_ELF),0)
+SIM_CXXFLAGS += -DNO_IMAGE_ELF
+endif
+
 # spike-dasm plugin
 WITH_SPIKE_DASM ?= 1
 ifeq ($(WITH_SPIKE_DASM),1)
