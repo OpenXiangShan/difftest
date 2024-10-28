@@ -324,3 +324,7 @@ class TraceInfo extends DifftestBaseBundle with HasValid {
   val trace_head = UInt(16.W)
   val trace_size = UInt(16.W)
 }
+
+class CriticalErrorEvent extends DifftestBaseBundle with HasValid {
+  val criticalError = Bool()
+}
