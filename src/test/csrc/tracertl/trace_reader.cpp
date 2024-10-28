@@ -105,7 +105,6 @@ TraceReader::TraceReader(const char *trace_file_name)
     // construct trace_icache
     // inst.dump();
     // printf("inst legalInst: %d, isException: %d\n", inst.legalInst(), inst.isException());
-    // FIXME: when instr fault, skip construct icache/itlb
     if (!inst.isTrap() || !inst.isInstException()) {
       trace_icache->constructICache(inst.instr_pc_va, inst.instr);
       trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
@@ -113,13 +112,25 @@ TraceReader::TraceReader(const char *trace_file_name)
     } else {
       static bool unexcepted_inst = false;
       if (!unexcepted_inst) {
-        printf("TraceRTL preread. Unexcepted that with instException:\n");
+        printf("TraceRTL preread. Unexcepted that with instException: %d\n", inst.exception);
         inst.dump();
         unexcepted_inst = true;
       }
+      if (inst.exception == 12 /*inst page fault*/) {
+        // page fault, then not need construct
+      } else if (inst.exception == 1 /*inst access fault*/) {
+        // access fault, inst code is wrong. mmu is right
+        trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+        trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
+      } else {
+        // other trap, ifetch is OK.
+        trace_icache->constructICache(inst.instr_pc_va, inst.instr);
+        trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+        trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
+      }
     }
-    if (!inst.isTrap()) {
-      if (inst.memory_type != MEM_TYPE_None) {
+    if (inst.memory_type != MEM_TYPE_None) {
+      if (!inst.isTrap()) {
         // if mem access lower than 0x80000000L, it is a vaddr or mmio access.
         // When vaddr, vpn should not equal ppn. When mmio, 0x38000000 to CLINT is filter out.
         if (inst.exu_data.memory_address.va < 0x80000000L && ((inst.exu_data.memory_address.va >> 24) != 0x38)) {
@@ -132,7 +143,16 @@ TraceReader::TraceReader(const char *trace_file_name)
         }
         trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
         trace_icache->dynPageWrite(inst.exu_data.memory_address.va >> 12, inst.exu_data.memory_address.pa >> 12);
+      } else {
+        if (inst.exception == 13/*lpf*/ || inst.exception == 15) {
+          // memory page fault, no need to construct
+        } else {
+          // FIXME: there may be other higher priority exception happened, and make memory trans invalid(not happened)
+          trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
+          trace_icache->dynPageWrite(inst.exu_data.memory_address.va >> 12, inst.exu_data.memory_address.pa >> 12);
+        }
       }
+
     }
 
     // construct trace
