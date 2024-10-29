@@ -20,6 +20,7 @@ import chisel3._
 
 import java.nio.file.{Files, Paths}
 import scala.annotation.tailrec
+import scala.collection.mutable.ListBuffer
 import org.json4s.DefaultFormats
 import org.json4s.native.JsonMethods.parse
 
@@ -64,6 +65,7 @@ class DifftestTop extends Module {
 
 // Generate simulation interface based on Profile describing the instantiated information of design
 class SimTop(profileName: String, numCores: Int) extends Module {
+  val instances = ListBuffer.empty[DifftestBundle]
   val profileStr = new String(Files.readAllBytes(Paths.get(profileName)))
   val profiles = parse(profileStr).extract[List[Map[String, Any]]](DefaultFormats, manifest[List[Map[String, Any]]])
   for (coreid <- 0 until numCores) {
@@ -77,12 +79,13 @@ class SimTop(profileName: String, numCores: Int) extends Module {
       val constructor = Class.forName(prof("className").toString).getConstructors()(0)
       val args = constructor.getParameters().toSeq.map { param => prof(param.getName.toString) }
       val inst = constructor.newInstance(args: _*).asInstanceOf[DifftestBundle]
+      instances += inst
       DifftestModule(inst, true, prof("delay").asInstanceOf[Int]).suggestName(s"gateway_${coreid}_$idx")
     }
   }
   val dutInfo = profiles.find(_.contains("cpu")).get
+  DifftestModule.generateSvhInterface(instances.toSeq, numCores)
   DifftestModule.finish(dutInfo("cpu").asInstanceOf[String])
-  DifftestModule.generateSvhInterface(numCores)
 }
 
 abstract class DifftestApp extends App {
