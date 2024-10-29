@@ -222,10 +222,12 @@ class SbufferEvent extends DifftestBaseBundle with HasValid {
   val mask = UInt(64.W)
 }
 
-class StoreEvent extends DifftestBaseBundle with HasValid {
-  val addr = UInt(64.W)
-  val data = UInt(64.W)
-  val mask = UInt(8.W)
+class StoreEvent(val EnablePCInfo: Boolean = false) extends DifftestBaseBundle with HasValid {
+  val addr   = UInt(64.W)
+  val data   = UInt(64.W)
+  val mask   = UInt(8.W)
+  val pc     = UInt(64.W)
+  val robidx = UInt(10.W)
 }
 
 class LoadEvent extends DifftestBaseBundle with HasValid {

@@ -21,6 +21,8 @@
 #include "goldenmem.h"
 #include "ram.h"
 #include "spikedasm.h"
+#include <SDL2/SDL_stdinc.h>
+#include <cstdint>
 #ifdef CONFIG_DIFFTEST_SQUASH
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH
@@ -680,10 +682,15 @@ int Difftest::do_store_check() {
         return 0;
       }
 #endif
+      uint64_t pc = store_event.pc;
       display();
+
+      printf("\n==============  Store Commit Event (Core %d)  ==============\n", this->id);
+      proxy->get_store_event_other_info(&pc);
       printf("Mismatch for store commits \n");
-      printf("  REF commits addr 0x%lx, data 0x%lx, mask 0x%x\n", addr, data, mask);
-      printf("  DUT commits addr 0x%lx, data 0x%lx, mask 0x%x\n", store_event.addr, store_event.data, store_event.mask);
+      printf("  REF commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx\n", addr, data, mask, pc);
+      printf("  DUT commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx, robidx 0x%x\n", 
+            store_event.addr, store_event.data, store_event.mask, store_event.pc, store_event.robidx);
 
       store_event_queue.pop();
       return 1;
