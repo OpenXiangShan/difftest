@@ -34,7 +34,7 @@ long get_flash_size() {
   return flash_bin_size;
 }
 
-extern "C" void flash_read(uint32_t addr, uint64_t *data) {
+void flash_read(uint32_t addr, uint64_t *data) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_flash_read]++;
   difftest_bytes[perf_flash_read] += 12;

@@ -14,8 +14,8 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "vga.h"
 #include "common.h"
-
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -33,7 +33,7 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 
-extern "C" void put_pixel(uint32_t pixel) {
+void put_pixel(uint32_t pixel) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_put_pixel]++;
   difftest_bytes[perf_put_pixel] += 4;
@@ -44,7 +44,7 @@ extern "C" void put_pixel(uint32_t pixel) {
     i = 0;
 }
 
-extern "C" void vmem_sync(void) {
+void vmem_sync(void) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_vmem_sync]++;
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -65,6 +65,6 @@ void finish_sdl() {
   memset(vmem, 0, sizeof(vmem));
 }
 #else
-extern "C" void put_pixel(uint32_t pixel) {}
-extern "C" void vmem_sync(void) {}
+void put_pixel(uint32_t pixel) {}
+void vmem_sync(void) {}
 #endif

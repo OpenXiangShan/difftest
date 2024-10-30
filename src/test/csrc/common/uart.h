@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
+* Copyright (c) 2024 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -14,14 +14,12 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __SDCARD_H
-#define __SDCARD_H
+#ifndef __UART_H
+#define __UART_H
 
 #include "common.h"
 
-extern FILE *fp;
-extern "C" void sd_setaddr(uint32_t addr);
-extern "C" void sd_read(uint32_t *data);
-void init_sd(void);
-void finish_sd(void);
-#endif // __SDCARD_H
+extern "C" void uart_getc_legacy(uint8_t *ch);
+void init_uart(void);
+void finish_uart(void);
+#endif // __UART_H

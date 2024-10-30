@@ -15,18 +15,15 @@
 ***************************************************************************************/
 
 #include "device.h"
+#include "flash.h"
+#include "sdcard.h"
+#include "uart.h"
+#include "vga.h"
 #ifdef SHOW_SCREEN
 #include <SDL2/SDL.h>
 #endif
 
 void send_key(uint8_t, bool);
-void init_sdl(void);
-
-void init_uart(void);
-void finish_uart(void);
-extern "C" void init_sd(void);
-extern "C" void finish_sd(void);
-extern "C" void init_flash(void);
 
 void init_device(void) {
 #ifdef SHOW_SCREEN

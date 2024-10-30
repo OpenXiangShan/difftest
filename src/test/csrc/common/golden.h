@@ -24,6 +24,7 @@
 
 // REF Models
 extern "C" uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_t *level);
+extern "C" uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask);
 
 typedef union PageTableEntry {
   struct {

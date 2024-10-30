@@ -32,6 +32,8 @@
 
 uint64_t pmem_read(uint64_t raddr);
 void pmem_write(uint64_t waddr, uint64_t wdata);
+extern "C" uint64_t difftest_ram_read(uint64_t rIdx);
+extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask);
 
 class InputReader {
 public:

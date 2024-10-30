@@ -303,7 +303,7 @@ MmapMemory::~MmapMemory() {
 #endif
 }
 
-extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
+uint64_t difftest_ram_read(uint64_t rIdx) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_difftest_ram_read]++;
   difftest_bytes[perf_difftest_ram_read] += 8;
@@ -321,7 +321,7 @@ extern "C" uint64_t difftest_ram_read(uint64_t rIdx) {
   return rdata;
 }
 
-extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask) {
+void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_difftest_ram_write]++;
   difftest_bytes[perf_difftest_ram_write] += 24;
