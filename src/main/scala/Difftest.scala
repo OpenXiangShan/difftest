@@ -298,6 +298,7 @@ class DiffVecWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
 class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "regs_int"
   override val desiredOffset: Int = 0
+  override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
 abstract class DiffArchDelayedUpdate(numRegs: Int)
@@ -318,11 +319,13 @@ class DiffArchFpDelayedUpdate extends DiffArchDelayedUpdate(32) {
 class DiffArchFpRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "regs_fp"
   override val desiredOffset: Int = 2
+  override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
   override val desiredCppName: String = "regs_vec"
   override val desiredOffset: Int = 4
+  override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
