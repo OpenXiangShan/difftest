@@ -411,6 +411,7 @@ protected:
 
 extern Difftest **difftest;
 int difftest_init();
+int difftest_finish();
 int difftest_step();
 int difftest_state();
 int init_nemuproxy();

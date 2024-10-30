@@ -46,7 +46,9 @@ extern const char *difftest_ref_so;
 class NemuProxy : public RefProxy {
 public:
   NemuProxy(int coreid);
+  ~NemuProxy();
 private:
+  void *handle;
 };
 
 #define SPIKE_ENV_VARIABLE "SPIKE_HOME"

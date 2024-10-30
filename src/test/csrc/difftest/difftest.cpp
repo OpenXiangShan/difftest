@@ -50,6 +50,15 @@ int difftest_init() {
   return 0;
 }
 
+int difftest_finish() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    delete difftest[i]->proxy;
+    delete difftest[i];
+  }
+  delete[] difftest;
+  return 0;
+}
+
 int init_nemuproxy() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->update_nemuproxy(i);

@@ -47,7 +47,7 @@ NemuProxy::NemuProxy(int coreid) {
 
   printf("NemuProxy using %s\n", difftest_ref_so);
 
-  void *handle = dlmopen(LM_ID_NEWLM, difftest_ref_so, RTLD_LAZY | RTLD_DEEPBIND);
+  handle = dlmopen(LM_ID_NEWLM, difftest_ref_so, RTLD_LAZY | RTLD_DEEPBIND);
   if(!handle){
     printf("%s\n", dlerror());
     assert(0);
@@ -108,6 +108,13 @@ NemuProxy::NemuProxy(int coreid) {
   check_and_assert(nemu_init);
 
   nemu_init();
+}
+
+NemuProxy::~NemuProxy() {
+  if (handle) {
+    dlclose(handle);
+    handle = nullptr;
+  }
 }
 
 void ref_misc_put_gmaddr(uint8_t* ptr) {

@@ -62,6 +62,18 @@ void init_flash(const char *flash_bin) {
     // jr      t0
     flash_base[0] = 0x01f292930010029b;
     flash_base[1] = 0x00028067;
+
+    // flash_base[0] = 0x00006298390026b7;
+    // flash_base[1] = 0x0017c6130ff77793;
+    // flash_base[2] = 0x0000cf890000e290;
+    // flash_base[3] = 0x140687930000cf89;
+    // flash_base[4] = 0x0000e39408000693;
+    // flash_base[5] = 0x04078793390027b7;
+    // flash_base[6] = 0x000045010000e398;
+    // flash_base[7] = 0x390027b700008082;
+    // flash_base[8] = 0x0800069310078793;
+    // flash_base[9] = 0x0010029b0000e394;
+    // flash_base[10]= 0x01f2929300028067;
     return;
   }
 

@@ -433,18 +433,40 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         trapCode = STATE_LIMIT_EXCEEDED;
         break;
       }
+    }
+
+    // printf("cycle: %ld\n", cycles);
+
+    auto diff = difftest[0];
+    // auto proxy = diff->proxy;
+    // bool force_difftest_reset = false;
 
     // DSE instruction limitation
     for (int i = 0; i < NUM_CORES; i++) {
       uint64_t instrCnt = dut_ptr->io_instrCnt;
       if (instrCnt >= args.dse_max_instr) {
         printf("DSE instruction limit exceeded\n");
-        trapCode = STATE_LIMIT_EXCEEDED;
+        // trapCode = STATE_LIMIT_EXCEEDED;
+        printf("pc:%lx\n", diff->get_dut()->commit[0].pc);
+        reset_ncycles(10);
+        // force_difftest_reset = true;
+
+        // reset ram
+        init_ram("/nfs/home/wujiabin/work/xs-env/XiangShan/ready-to-run/coremark-2-iteration.bin");
+        difftest_finish();
+        difftest_init();
+        init_device();
+        if (args.enable_diff) {
+          init_goldenmem();
+          init_nemuproxy();
+        }
+        if(args.enable_runahead){
+          runahead_init();
+        }
         break;
       }
     }
-    }
-    }
+
     // assertions
     if (assert_count > 0) {
       eprintf("The simulation stopped. There might be some assertion failed.\n");
@@ -474,6 +496,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     }
 
     single_cycle();
+
+    // // NEMU reset
+    // if (force_difftest_reset) {
+    //   proxy->regcpy(&diff->get_dut()->regs, DIFFTEST_TO_REF);
+    //   proxy->csrcpy(&diff->get_dut()->csr, DIFFTEST_TO_REF);
+    //   printf("pc:%lx\n", diff->get_dut()->commit[0].pc);
+    //   force_difftest_reset = false;
+    // }
 
     max_cycle --;
     dut_ptr->io_perfInfo_clean = 0;

@@ -74,6 +74,7 @@ struct EmuArgs {
     snapshot_path = NULL;
     wave_path = NULL;
     image = NULL;
+    // flash_bin = "/nfs/home/wujiabin/work/xs-env/nexus-am/test/dse/dse";
     flash_bin = NULL;
     enable_waveform = false;
     enable_snapshot = true;
