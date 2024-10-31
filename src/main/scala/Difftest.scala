@@ -423,6 +423,10 @@ class DiffMhpmeventOverflowEvent extends MhpmeventOverflowEvent with DifftestBun
   override val desiredCppName: String = "mhpmevent_overflow"
 }
 
+class DiffCriticalErrorEvent extends CriticalErrorEvent with DifftestBundle {
+  override val desiredCppName: String = "critical_error"
+}
+
 class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 

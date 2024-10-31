@@ -329,6 +329,9 @@ int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
   do_mhpmevent_overflow();
 #endif
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  do_raise_critical_error();
+#endif
 
   num_commit = 0; // reset num_commit this cycle to 0
   if (dut->event.valid) {
@@ -1292,6 +1295,16 @@ void Difftest::do_mhpmevent_overflow() {
   if (dut->mhpmevent_overflow.valid) {
     proxy->mhpmevent_overflow(dut->mhpmevent_overflow.mhpmeventOverflow);
     dut->mhpmevent_overflow.valid = 0;
+  }
+}
+#endif
+
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+void Difftest::do_raise_critical_error() {
+  if (dut->critical_error.valid) {
+    display();
+    Info("Core %d dump: critical_error raise \n", this->id);
+    raise_trap(STATE_ABORT);
   }
 }
 #endif

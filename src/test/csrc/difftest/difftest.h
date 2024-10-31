@@ -422,6 +422,9 @@ protected:
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
   void do_mhpmevent_overflow();
 #endif
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  void do_raise_critical_error();
+#endif
 #ifdef CONFIG_DIFFTEST_REPLAY
   struct {
     bool in_replay = false;
