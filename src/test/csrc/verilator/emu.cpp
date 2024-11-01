@@ -231,6 +231,9 @@ Emulator::Emulator(int argc, const char *argv[]):
   }
 #endif
 
+  // init reset vector
+  dut_ptr->io_reset_vector = 0x10000000;
+  
   // init core
   reset_ncycles(10);
 
