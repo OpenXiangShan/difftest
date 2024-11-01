@@ -99,9 +99,8 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
       write_count++;
       // Proceed to the next group
       if (write_count == MAX_IDX) {
-        memory_pool[page_w_idx].is_free.store(false);
         memcpy(memory_pool[page_w_idx].data.get(), data, 4096);
-
+        memory_pool[page_w_idx].is_free.store(false);
         size_t next_w_idx = wait_next_free_group();
         group_w_offset = (next_w_idx & REM_MAX_GROUPING_IDX) * MAX_IDX;
         write_count = write_next_count;
@@ -132,13 +131,11 @@ bool MemoryIdxPool::read_busy_chunk(char *data) {
 
   memcpy(data, memory_pool[page_r_idx].data.get(), 4096);
   memory_pool[page_r_idx].is_free.store(true);
-
   return true;
 }
 
 size_t MemoryIdxPool::wait_next_free_group() {
-  empty_blocks.fetch_sub(1);
-  size_t free_num = empty_blocks.load();
+  size_t free_num = empty_blocks.fetch_sub(1, std::memory_order_relaxed) + 1;
   cv_filled.notify_all();
   //Reserve at least two free blocks
   if (free_num <= 2) {
@@ -149,8 +146,7 @@ size_t MemoryIdxPool::wait_next_free_group() {
 }
 
 size_t MemoryIdxPool::wait_next_full_group() {
-  empty_blocks.fetch_add(1);
-  size_t free_num = empty_blocks.load();
+  size_t free_num = empty_blocks.fetch_add(1, std::memory_order_relaxed) + 1;
   cv_empty.notify_all();
 
   if (free_num >= MAX_GROUP_READ) {
