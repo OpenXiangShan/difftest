@@ -24,8 +24,8 @@
 #include <mutex>
 #include <vector>
 
-#define MEMPOOL_SIZE   4096 * 1024 // 4M page
-#define MEMBLOCK_SIZE  4096        // 4K packge
+#define MEMPOOL_SIZE   16384 * 1024 // 16M memory
+#define MEMBLOCK_SIZE  4096         // 4K packge
 #define NUM_BLOCKS     (MEMPOOL_SIZE / MEMBLOCK_SIZE)
 #define REM_NUM_BLOCKS (NUM_BLOCKS - 1)
 
@@ -35,7 +35,7 @@ struct MemoryBlock {
 
   MemoryBlock() : is_free(true) {
     void *ptr = nullptr;
-    if (posix_memalign(&ptr, 4096, 4096) != 0) {
+    if (posix_memalign(&ptr, 4096, 4096 + MEMBLOCK_SIZE) != 0) {
       throw std::runtime_error("Failed to allocate aligned memory");
     }
     memset(ptr, 0, 4096);
@@ -102,15 +102,16 @@ private:
   size_t page_end = 0;
 };
 
-static const size_t MAX_IDX = 256;
-static const size_t MAX_GROUPING_IDX = NUM_BLOCKS / MAX_IDX;
-static const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2; //The window needs to reserve two free Spaces
-static const size_t REM_MAX_IDX = (MAX_IDX - 1);
-static const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
-
 // Split the memory pool into sliding Windows based on the index width
 // Support multi-thread out-of-order write sequential read
 class MemoryIdxPool {
+private:
+  const size_t MAX_IDX = 256;
+  const size_t MAX_GROUPING_IDX = NUM_BLOCKS / MAX_IDX;
+  const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2; //The window needs to reserve two free Spaces
+  const size_t REM_MAX_IDX = (MAX_IDX - 1);
+  const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
+
 public:
   MemoryIdxPool() {
     initMemoryPool();
