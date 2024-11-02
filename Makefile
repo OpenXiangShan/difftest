@@ -28,6 +28,7 @@ BUILD_DIR  = $(DESIGN_DIR)/build
 RTL_DIR = $(BUILD_DIR)/rtl
 RTL_SUFFIX ?= sv
 SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
+SIM_TOP_FIR = $(RTL_DIR)/$(SIM_TOP).fir
 
 # generate difftest files for non-chisel design.
 .DEFAULT_GOAL := difftest_verilog
@@ -228,6 +229,7 @@ SIM_CXXFLAGS += -Werror
 endif
 
 include verilator.mk
+include gsim.mk
 include vcs.mk
 include palladium.mk
 include libso.mk

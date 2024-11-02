@@ -325,13 +325,16 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
   args.ipc_file = fopen(ipc_file, "w");
 #endif
 
+#ifdef VERILATOR
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
+#endif
   return args;
 }
 
 Emulator::Emulator(int argc, const char *argv[])
-    : dut_ptr(new VSimTop), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
+    : dut_ptr(new DUT_TOP), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
 
+#ifdef VERILATOR
 #if !defined(VERILATOR_VERSION_INTEGER) || VERILATOR_VERSION_INTEGER < 5026000
   // Large designs may cause segmentation fault due to stack overflow.
   // Legacy versions of Verilator do not automatically set the stack size.
@@ -344,17 +347,20 @@ Emulator::Emulator(int argc, const char *argv[])
     printf("[warning] cannot set stack size. Large designs may cause SIGSEGV.\n");
   }
 #endif
+#endif // VERILATOR
 
   args = parse_args(argc, argv);
 #ifdef ENABLE_CONSTANTIN
   void constantinLoad();
   constantinLoad();
 #endif // CONSTANTIN
+#ifdef VERILATOR
   // srand
   srand(args.seed);
   srand48(args.seed);
   Verilated::randSeed(args.seed);
   Verilated::randReset(2);
+#endif // VERILATOR
 
   // init remote-bitbang
   if (enable_simjtag) {
@@ -434,8 +440,14 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif
 
   // set log time range and log level
+#ifdef VERILATOR
   dut_ptr->difftest_logCtrl_begin = args.log_begin;
   dut_ptr->difftest_logCtrl_end = args.log_end;
+#endif // VERILATOR
+#ifdef GSIM
+  dut_ptr->set_difftest$$logCtrl$$begin(args.log_begin);
+  dut_ptr->set_difftest$$logCtrl$$end(args.log_end);
+#endif // GSIM
 
 #ifndef CONFIG_NO_DIFFTEST
   // init difftest
@@ -580,6 +592,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     return;
   }
   for (int i = 0; i < cycles; i++) {
+#ifdef VERILATOR
     dut_ptr->reset = 1;
 #ifdef COVERAGE_PORT_RESET
     dut_ptr->coverage_reset = dut_ptr->reset;
@@ -612,6 +625,14 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 #ifdef COVERAGE_PORT_RESET
     dut_ptr->coverage_reset = dut_ptr->reset;
 #endif // COVERAGE_PORT_RESET
+#endif // VERILATOR
+
+#ifdef GSIM
+    dut_ptr->set_reset(1);
+    dut_ptr->step();
+    dut_ptr->set_reset(0);
+    dut_ptr->step();
+#endif // GSIM
   }
 }
 
@@ -620,11 +641,13 @@ inline void Emulator::single_cycle() {
     goto end_single_cycle;
   }
 
+#ifdef VERILATOR
   dut_ptr->clock = 1;
 #ifdef COVERAGE_PORT_CLOCK
   dut_ptr->coverage_clock = dut_ptr->clock;
 #endif // COVERAGE_PORT_CLOCK
   dut_ptr->eval();
+#endif // VERILATOR
 
 #if VM_TRACE == 1
   if (args.enable_waveform) {
@@ -649,6 +672,7 @@ inline void Emulator::single_cycle() {
   dramsim3_step();
 #endif
 
+#ifdef VERILATOR
   if (dut_ptr->difftest_uart_out_valid) {
     printf("%c", dut_ptr->difftest_uart_out_ch);
     fflush(stdout);
@@ -663,6 +687,20 @@ inline void Emulator::single_cycle() {
   dut_ptr->coverage_clock = dut_ptr->clock;
 #endif // COVERAGE_PORT_CLOCK
   dut_ptr->eval();
+#endif // VERILATOR
+
+#ifdef GSIM
+  dut_ptr->step();
+  if (dut_ptr->get_difftest$$uart$$out$$valid()) {
+    printf("%c", dut_ptr->get_difftest$$uart$$out$$ch());
+    fflush(stdout);
+  }
+  if (dut_ptr->get_difftest$$uart$$in$$valid()) {
+    extern uint8_t uart_getc();
+    uint8_t ch = uart_getc();
+    dut_ptr->set_difftest$$uart$$in$$ch(ch);
+  }
+#endif // GSIM
 
 #if VM_TRACE == 1
   if (args.enable_waveform && args.enable_waveform_full) {
@@ -749,11 +787,17 @@ int Emulator::tick() {
   }
 
   // exit signal: non-zero exit exits the simulation. exit all 1's indicates good.
-  if (dut_ptr->difftest_exit) {
-    if (dut_ptr->difftest_exit == -1UL) {
+#ifdef VERILATOR
+  uint64_t difftest_exit = dut_ptr->difftest_exit;
+#endif
+#ifdef GSIM
+  uint64_t difftest_exit = 0; // TODO: gsim API
+#endif
+  if (difftest_exit) {
+    if (difftest_exit == -1UL) {
       trapCode = STATE_SIM_EXIT;
     } else {
-      Info("The simulation aborted via the top-level exit of 0x%lx.\n", dut_ptr->difftest_exit);
+      Info("The simulation aborted via the top-level exit of 0x%lx.\n", difftest_exit);
       trapCode = STATE_ABORT;
     }
   }
@@ -766,13 +810,25 @@ int Emulator::tick() {
     auto trap = difftest[i]->get_trap_event();
     if (trap->instrCnt >= args.warmup_instr) {
       Info("Warmup finished. The performance counters will be dumped and then reset.\n");
+#ifdef VERILATOR
       dut_ptr->difftest_perfCtrl_clean = 1;
       dut_ptr->difftest_perfCtrl_dump = 1;
+#endif // VERILATOR
+#ifdef GSIM
+      dut_ptr->set_difftest$$perfCtrl$$clean(1);
+      dut_ptr->set_difftest$$perfCtrl$$dump(1);
+#endif // GSIM
       args.warmup_instr = -1;
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
+#ifdef VERILATOR
       dut_ptr->difftest_perfCtrl_clean = 1;
       dut_ptr->difftest_perfCtrl_dump = 1;
+#endif // VERILATOR
+#ifdef GSIM
+      dut_ptr->set_difftest$$perfCtrl$$clean(1);
+      dut_ptr->set_difftest$$perfCtrl$$dump(1);
+#endif // GSIM
     }
 #ifdef ENABLE_IPC
     if (trap->instrCnt >= args.ipc_times * args.ipc_interval &&
@@ -807,16 +863,26 @@ int Emulator::tick() {
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles--;
 #endif // CONFIG_NO_DIFFTEST
+#ifdef VERILATOR
   dut_ptr->difftest_perfCtrl_clean = 0;
   dut_ptr->difftest_perfCtrl_dump = 0;
-
+#endif // VERILATOR
+#ifdef GSIM
+  dut_ptr->set_difftest$$perfCtrl$$clean(0);
+  dut_ptr->set_difftest$$perfCtrl$$dump(0);
+#endif // GSIM
 #ifndef CONFIG_NO_DIFFTEST
   int step = 0;
   if (args.trace_name && args.trace_is_read) {
     step = 1;
     difftest_trace_read();
   } else {
+#ifdef VERILATOR
     step = dut_ptr->difftest_step;
+#endif // VERILATOR
+#ifdef GSIM
+    step = 1; // TODO: gsim API
+#endif        // GSIM
   }
 
   static uint64_t stuck_timer = 0;
@@ -906,7 +972,11 @@ int Emulator::tick() {
 }
 
 int Emulator::is_finished() {
-  return Verilated::gotFinish() || trapCode != STATE_RUNNING;
+  return
+#ifdef VERILATOR
+      Verilated::gotFinish() ||
+#endif // VERILATOR
+      trapCode != STATE_RUNNING;
 }
 
 int Emulator::is_good() {
@@ -992,10 +1062,18 @@ inline void Emulator::save_coverage(time_t t) {
 #endif
 
 void Emulator::trigger_stat_dump() {
+#ifdef VERILATOR
   dut_ptr->difftest_perfCtrl_dump = 1;
   if (get_args().force_dump_result) {
     dut_ptr->difftest_logCtrl_end = -1;
   }
+#endif // VERILATOR
+#ifdef GSIM
+  dut_ptr->set_difftest$$perfCtrl$$dump(1);
+  if (get_args().force_dump_result) {
+    dut_ptr->set_difftest$$logCtrl$$end(-1);
+  }
+#endif // GSIM
   single_cycle();
 }
 
