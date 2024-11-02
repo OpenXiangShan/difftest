@@ -137,6 +137,32 @@ private:
     return lightsss->is_child();
   }
 
+#define MAX_PROGRAM_SIZE 0x8000000
+uint8_t program[MAX_PROGRAM_SIZE];
+int program_sz = 0;
+
+void load_program(const char* filename){
+
+  memset(&program, 0, sizeof(program));
+  if(!filename){
+    printf("No input program\n");
+    return;
+  }
+
+  FILE* fp = fopen(filename, "rb");
+  assert(fp);
+
+  fseek(fp, 0, SEEK_END);
+  program_sz = ftell(fp);
+  assert(program_sz < MAX_PROGRAM_SIZE);
+
+  fseek(fp, 0, SEEK_SET);
+  int ret = fread(program, program_sz, 1, fp);
+  assert(ret == 1);
+  printf("load program size: 0x%x\n", program_sz);
+  return;
+}
+
 public:
   Emulator(int argc, const char *argv[]);
   ~Emulator();

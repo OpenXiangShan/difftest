@@ -415,6 +415,9 @@ Emulator::Emulator(int argc, const char *argv[])
     }
   }
 
+  load_program(args.image);
+  memcpy(&dut_ptr->mem$rdata_mem, program, program_sz);
+
   if (args.gcpt_restore) {
     if (args.overwrite_nbytes_autoset) {
       FILE *fp = fopen(args.gcpt_restore, "rb");
