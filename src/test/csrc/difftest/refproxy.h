@@ -146,9 +146,10 @@ public:
   f(ref_memcpy_init, difftest_memcpy_init, void, uint64_t, void*, size_t, bool)                             \
   f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                                                    \
   f(ref_virtual_interrupt_is_hvictl_inject, difftest_virtual_interrupt_is_hvictl_inject, void, bool)        \
-  f(disambiguation_state, difftest_disambiguation_state, int, )               \
-  f(ref_non_reg_interrupt_pending, difftest_non_reg_interrupt_pending, void, void*) \
-  f(raise_mhpmevent_overflow, difftest_raise_mhpmevent_overflow, void, uint64_t)
+  f(disambiguation_state, difftest_disambiguation_state, int, )                                             \
+  f(ref_non_reg_interrupt_pending, difftest_non_reg_interrupt_pending, void, void*)                         \
+  f(raise_mhpmevent_overflow, difftest_raise_mhpmevent_overflow, void, uint64_t)                            \
+  f(ref_raise_critical_error, difftest_raise_critical_error, bool)
 
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
@@ -256,6 +257,10 @@ public:
     if (raise_mhpmevent_overflow) {
       raise_mhpmevent_overflow(mhpmeventOverflow);
     }
+  }
+
+  inline bool raise_critical_error() {
+    return ref_raise_critical_error ? ref_raise_critical_error() : false;
   }
 
   inline void guided_exec(struct ExecutionGuide &guide) {
