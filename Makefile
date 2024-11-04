@@ -80,9 +80,6 @@ SIM_VSRC = $(shell find $(VSRC_DIR) -name "*.v" -or -name "*.sv")
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)
 # FPGA-Difftest support
 FPGA ?= 0
-ifeq ($(FPGA),1)
-DIFFTEST_CSRC_DIR += $(abspath ./src/test/csrc/fpga)
-endif
 
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 ifeq ($(NO_DIFF), 1)
@@ -96,7 +93,9 @@ endif
 endif
 
 # ChiselDB
+ifneq ($(FPGA),1)
 WITH_CHISELDB ?= 1
+endif
 ifeq ($(WITH_CHISELDB), 1)
 SIM_CXXFILES += $(BUILD_DIR)/chisel_db.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
@@ -104,7 +103,9 @@ SIM_LDFLAGS  += -lsqlite3
 endif
 
 # ConstantIn
+ifneq ($(FPGA),1)
 WITH_CONSTANTIN ?= 1
+endif
 ifeq ($(WITH_CONSTANTIN), 1)
 SIM_CXXFILES += $(BUILD_DIR)/constantin.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
