@@ -14,6 +14,8 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include <mutex>
+#include <condition_variable>
 #include "diffstate.h"
 #include "difftest-dpic.h"
 #include "difftest.h"
@@ -29,7 +31,9 @@ enum {
 } simv_state;
 
 static char work_load[256] = "/dev/zero";
-static uint8_t simv_result = SIMV_RUN;
+static std::atomic<uint8_t> simv_result {SIMV_RUN};
+static std::mutex simv_mtx;
+static std::condition_variable simv_cv;
 static uint64_t max_instrs = 0;
 
 struct core_end_info_t {
@@ -49,17 +53,13 @@ FpgaXdma *xdma_device = NULL;
 
 int main(int argc, char *argv[]) {
   args_parsingniton(argc, argv);
+    
   simv_init();
-
-  while (simv_result == SIMV_RUN) {
-    // wait get xdma data
-    if (xdma_device->diff_packge_count.load(std::memory_order_seq_cst) > 0) {
-      // run difftest
-      simv_step();
-      cpu_endtime_check();
-      xdma_device->diff_packge_count.fetch_sub(1, std::memory_order_relaxed);
-    }
+  std::unique_lock <std::mutex> lock(simv_mtx);
+  while (simv_result.load() == SIMV_RUN) {
+    simv_cv.wait(lock);
   }
+  xdma_device->running = false;
   free(xdma_device);
   printf("difftest releases the fpga device and exits\n");
   exit(0);
@@ -79,9 +79,17 @@ void simv_init() {
   difftest_init();
 }
 
+extern "C" void simv_nstep(uint8_t step) {
+  for (int i = 0; i < step; i++) {
+    simv_step();
+  }
+}
+
 void simv_step() {
-  if (difftest_step())
-    simv_result = SIMV_FAIL;
+  if (difftest_step()) {
+    simv_result.store(SIMV_FAIL);
+    simv_cv.notify_one();
+  }
   if (difftest_state() != -1) {
     int trapCode = difftest_state();
     for (int i = 0; i < NUM_CORES; i++) {
@@ -94,10 +102,12 @@ void simv_step() {
       difftest[i]->display_stats();
     }
     if (trapCode == 0)
-      simv_result = SIMV_DONE;
+      simv_result.store(SIMV_DONE);
     else
-      simv_result = SIMV_FAIL;
+      simv_result.store(SIMV_FAIL);
+    simv_cv.notify_one();
   }
+  cpu_endtime_check();
 }
 
 void cpu_endtime_check() {
@@ -113,7 +123,8 @@ void cpu_endtime_check() {
         difftest[i]->display_stats();
         core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
         if (core_end_info.core_trap_num == NUM_CORES) {
-          simv_result = SIMV_DONE;
+          simv_result.store(SIMV_DONE);
+          simv_cv.notify_one();
         }
       }
     }
