@@ -7,8 +7,8 @@ FPGA_RUN_DIR   = $(abspath $(BUILD_DIR)/$(notdir $(RUN_BIN)))
 FPGA_CSRC_DIR   = $(abspath ./src/test/csrc/fpga)
 FPGA_CONFIG_DIR = $(abspath ./config)
 
-FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp")
-FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
+FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp") -include cstring
+FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DNUM_CORES=$(NUM_CORES) -O2
 FPGA_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
 DMA_CHANNELS?=1

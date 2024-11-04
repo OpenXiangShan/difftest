@@ -53,7 +53,7 @@ case class GatewayConfig(
   def dutBufLen: Int = if (isBatch) batchSize else 1
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
-  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3600, 400) else (7200, 800)
+  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3600, 400) else if (isFPGA) (3650, 445) else (7200, 800)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
