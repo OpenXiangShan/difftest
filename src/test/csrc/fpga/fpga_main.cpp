@@ -14,8 +14,6 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include <mutex>
-#include <condition_variable>
 #include "diffstate.h"
 #include "difftest-dpic.h"
 #include "difftest.h"
@@ -23,6 +21,8 @@
 #include "ram.h"
 #include "refproxy.h"
 #include "xdma.h"
+#include <condition_variable>
+#include <mutex>
 
 enum {
   SIMV_RUN,
@@ -31,7 +31,7 @@ enum {
 } simv_state;
 
 static char work_load[256] = "/dev/zero";
-static std::atomic<uint8_t> simv_result {SIMV_RUN};
+static std::atomic<uint8_t> simv_result{SIMV_RUN};
 static std::mutex simv_mtx;
 static std::condition_variable simv_cv;
 static uint64_t max_instrs = 0;
@@ -53,9 +53,9 @@ FpgaXdma *xdma_device = NULL;
 
 int main(int argc, char *argv[]) {
   args_parsingniton(argc, argv);
-    
+
   simv_init();
-  std::unique_lock <std::mutex> lock(simv_mtx);
+  std::unique_lock<std::mutex> lock(simv_mtx);
   while (simv_result.load() == SIMV_RUN) {
     simv_cv.wait(lock);
   }
