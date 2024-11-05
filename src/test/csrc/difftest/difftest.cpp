@@ -1302,9 +1302,15 @@ void Difftest::do_mhpmevent_overflow() {
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
 void Difftest::do_raise_critical_error() {
   if (dut->critical_error.valid) {
-    display();
-    Info("Core %d dump: critical_error raise \n", this->id);
-    raise_trap(STATE_ABORT);
+    bool ref_critical_error = proxy->raise_critical_error();
+    if (ref_critical_error == dut->critical_error.criticalError) {
+      Info("Core %d dump: critical_error raise \n", this->id);
+      raise_trap(STATE_GOODTRAP);
+    } else {
+      display();
+      Info("Core %d dump: DUT critical_error diff REF \n", this->id);
+      raise_trap(STATE_ABORT);
+    }
   }
 }
 #endif
