@@ -55,9 +55,12 @@ int main(int argc, char *argv[]) {
   args_parsingniton(argc, argv);
 
   simv_init();
-  std::unique_lock<std::mutex> lock(simv_mtx);
-  while (simv_result.load() == SIMV_RUN) {
-    simv_cv.wait(lock);
+  {
+    std::unique_lock<std::mutex> lock(simv_mtx);
+    xdma_device->start_transmit_thread();
+    while (simv_result.load() == SIMV_RUN) {
+      simv_cv.wait(lock);
+    }
   }
   xdma_device->running = false;
   free(xdma_device);
@@ -136,7 +139,8 @@ void args_parsingniton(int argc, char *argv[]) {
     if (strcmp(argv[i], "--diff") == 0) {
       set_diff_ref_so(argv[++i]);
     } else if (strcmp(argv[i], "-i") == 0) {
-      memcpy(work_load, argv[++i], sizeof(argv[++i]));
+      i++;
+      memcpy(work_load, argv[i], strlen(argv[i]));
     } else if (strcmp(argv[i], "--max-instrs") == 0) {
       max_instrs = std::stoul(argv[++i], nullptr, 16);
     }

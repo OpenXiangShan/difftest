@@ -153,7 +153,7 @@ private:
 
   size_t group_r_offset = 0; // The offset used by the current consumer
   size_t group_w_offset = 0; // The offset used by the current producer
-  size_t read_count = 0;
+  size_t read_count = MAX_IDX - 1;
   size_t write_count = 0;
   size_t write_next_count = 0;
 
