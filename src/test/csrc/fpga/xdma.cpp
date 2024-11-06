@@ -76,7 +76,7 @@ void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr,
   else
     fd = open(XDMA_USER, O_RDWR | O_SYNC);
   if (fd < 0) {
-    printf("failed to open %s\n", is_bypass ? XDMA_BYPASS : XDMA_USER);
+    printf("Failed to open %s\n", is_bypass ? XDMA_BYPASS : XDMA_USER);
     exit(-1);
   }
 
