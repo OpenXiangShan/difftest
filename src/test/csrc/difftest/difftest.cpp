@@ -198,13 +198,14 @@ void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
 #ifdef CONFIG_DIFFTEST_REPLAY
 bool Difftest::can_replay() {
   auto info = dut->trace_info;
-  return !info.in_replay && info.trace_size > 1;
+  return info.valid && !info.in_replay && info.trace_size > 1;
 }
 
 bool Difftest::in_replay_range() {
-  if (dut->trace_info.trace_size > 1)
+  auto info = dut->trace_info;
+  if (!info.valid || !info.in_replay || info.trace_size > 1)
     return false;
-  int pos = dut->trace_info.trace_head;
+  int pos = info.trace_head;
   int head = replay_status.trace_head;
   int tail = (head + replay_status.trace_size - 1) % CONFIG_DIFFTEST_REPLAY_SIZE;
   if (tail < head) { // consider ring queue
@@ -225,33 +226,65 @@ void Difftest::replay_snapshot() {
 }
 
 void Difftest::do_replay() {
+  auto info = dut->trace_info;
   replay_status.in_replay = true;
-  replay_status.trace_head = dut->trace_info.trace_head;
-  replay_status.trace_size = dut->trace_info.trace_size;
+  replay_status.trace_head = info.trace_head;
+  replay_status.trace_size = info.trace_size;
   memcpy(state, state_ss, sizeof(DiffState));
   memcpy(&proxy->regs_int, proxy_reg_ss, proxy_reg_size);
   proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
   proxy->ref_store_log_restore();
   goldenmem_store_log_restore();
-  difftest_replay_head(dut->trace_info.trace_head);
+  difftest_replay_head(info.trace_head);
+  // clear buffered queue
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  while (!store_event_queue.empty())
+    store_event_queue.pop();
+#endif // CONFIG_DIFFTEST_STOREEVENT
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
+  while (!load_event_queue.empty())
+    load_event_queue.pop();
+#endif
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
-  progress = false;
-
 #ifdef CONFIG_DIFFTEST_REPLAY
-  if (replay_status.in_replay && !in_replay_range()) {
-    return 0;
+  static int replay_step = 0;
+  if (replay_status.in_replay) {
+    if (!in_replay_range()) {
+      return 0;
+    } else {
+      replay_step++;
+      if (replay_step > replay_status.trace_size) {
+        Info("*** DUT run out of replay range, failed to get error location ***\n");
+        return 1;
+      }
+    }
   }
-  if (can_replay()) {
+  bool canReplay = can_replay();
+  if (canReplay) {
     replay_snapshot();
   } else {
     proxy->set_store_log(false);
     goldenmem_set_store_log(false);
   }
+  int ret = check_all();
+  if (ret && canReplay) {
+    Info("\n**** Start replay for more accurate error location ****\n");
+    do_replay();
+    return 0;
+  } else {
+    return ret;
+  }
+#else
+  return check_all();
 #endif // CONFIG_DIFFTEST_REPLAY
+}
+
+inline int Difftest::check_all() {
+  progress = false;
 
   if (check_timeout()) {
     return 1;
@@ -391,12 +424,6 @@ int Difftest::step() {
       return 0;
     }
 #endif
-#ifdef CONFIG_DIFFTEST_REPLAY
-    if (can_replay()) {
-      do_replay();
-      return 0;
-    }
-#endif // CONFIG_DIFFTEST_REPLAY
     display();
     proxy->display(dut);
 #ifdef FUZZER_LIB
