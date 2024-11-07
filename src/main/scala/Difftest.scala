@@ -425,6 +425,10 @@ class DiffCriticalErrorEvent extends CriticalErrorEvent with DifftestBundle {
   override val desiredCppName: String = "critical_error"
 }
 
+class DiffAIAXtopeiEvent extends AIAXtopeiEvent with DifftestBundle {
+  override val desiredCppName: String = "aia_xtopei"
+}
+
 class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 

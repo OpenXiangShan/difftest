@@ -57,6 +57,7 @@ class DifftestTop extends Module {
   val difftest_non_reg_interrupt_pending_event = DifftestModule(new DiffNonRegInterruptPendingEvent, dontCare = true)
   val difftest_mhpmevent_overflow_event = DifftestModule(new DiffMhpmeventOverflowEvent, dontCare = true)
   val difftest_critical_error_event = DifftestModule(new DiffCriticalErrorEvent, dontCare = true)
+  val difftest_aia_xtopei_event = DifftestModule(new DiffAIAXtopeiEvent, dontCare = true)
 
   DifftestModule.finish("demo")
 }
