@@ -678,7 +678,7 @@ object DifftestModule {
     streamToFile(difftestJson, "difftest_profile.json")
   }
 
-  def streamToFile(fileStream: ListBuffer[String], fileName: String, append: Boolean = false) {
+  def streamToFile(fileStream: ListBuffer[String], fileName: String, append: Boolean = false): Unit = {
     val outputDir = sys.env("NOOP_HOME") + "/build/generated-src/"
     Files.createDirectories(Paths.get(outputDir))
     val outputFile = outputDir + fileName
