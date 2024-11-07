@@ -330,3 +330,10 @@ class TraceInfo extends DifftestBaseBundle with HasValid {
 class CriticalErrorEvent extends DifftestBaseBundle with HasValid {
   val criticalError = Bool()
 }
+
+
+class AIAXtopeiEvent extends DifftestBaseBundle with HasValid {
+  val mtopei = UInt(64.W)
+  val stopei = UInt(64.W)
+  val vstopei = UInt(64.W)
+}

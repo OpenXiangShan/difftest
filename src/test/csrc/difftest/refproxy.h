@@ -150,7 +150,8 @@ public:
   f(ref_non_reg_interrupt_pending, difftest_non_reg_interrupt_pending, void, void*)                         \
   f(raise_mhpmevent_overflow, difftest_raise_mhpmevent_overflow, void, uint64_t)                            \
   f(ref_raise_critical_error, difftest_raise_critical_error, bool)                                          \
-  f(ref_get_store_event_other_info, difftest_get_store_event_other_info, void, void*)     
+  f(ref_get_store_event_other_info, difftest_get_store_event_other_info, void, void*)                       \
+  f(ref_aia_xtopei, difftest_aia_xtopei, void, void*)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -261,6 +262,12 @@ public:
 
   inline bool raise_critical_error() {
     return ref_raise_critical_error ? ref_raise_critical_error() : false;
+  }
+
+  inline void aia_xtopei(struct AIAXtopei &xtopei) {
+    if (ref_aia_xtopei) {
+      ref_aia_xtopei(&xtopei);
+    }
   }
 
   inline void guided_exec(struct ExecutionGuide &guide) {
@@ -389,6 +396,12 @@ struct NonRegInterruptPending {
   bool platformIRPVseip;
   bool platformIRPVstip;
   bool localCounterOverflowInterruptReq;
+};
+
+struct AIAXtopei {
+  uint64_t mtopei;
+  uint64_t stopei;
+  uint64_t vstopei;
 };
 
 extern const char *difftest_ref_so;
