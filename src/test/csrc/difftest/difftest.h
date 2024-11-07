@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "difftrace.h"
+#include "dut.h"
 #include "golden.h"
 #include "refproxy.h"
 #include <queue>
@@ -221,7 +222,11 @@ public:
     return dut->trap.hasTrap;
   }
   inline int get_trap_code() {
-    return dut->trap.code;
+    if (dut->trap.code > STATE_FUZZ_COND && dut->trap.code < STATE_RUNNING) {
+      return STATE_BADTRAP;
+    } else {
+      return dut->trap.code;
+    }
   }
 
   void display();
