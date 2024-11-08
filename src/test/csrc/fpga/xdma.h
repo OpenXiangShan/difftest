@@ -42,8 +42,6 @@ public:
 
   bool running = false;
 
-  std::atomic<uint32_t> diff_packge_count{0};
-
   FpgaXdma(const char *workload);
   ~FpgaXdma() {
     stop_thansmit_thread();
