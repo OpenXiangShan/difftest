@@ -115,6 +115,11 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
   return true;
 }
 
+void MemoryIdxPool::wait_mempool_start() {
+  std::unique_lock<std::mutex> lock(window_mutexes);
+  cv_filled.wait(lock);
+}
+
 bool MemoryIdxPool::read_busy_chunk(char *data) {
   size_t page_r_idx = read_count + group_r_offset;
   size_t this_r_idx = ++read_count;

@@ -134,7 +134,6 @@ void FpgaXdma::stop_thansmit_thread() {
 
 void FpgaXdma::read_xdma_thread(int channel) {
   FpgaPackgeHead packge;
-  bool result = true;
   while (running) {
     size_t size = read(xdma_c2h_fd[channel], &packge, sizeof(FpgaPackgeHead));
     uint8_t idx = packge.packge_idx;
@@ -147,15 +146,19 @@ void FpgaXdma::read_xdma_thread(int channel) {
 
 void FpgaXdma::write_difftest_thread() {
   FpgaPackgeHead packge;
-  bool result = true;
+  uint8_t recv_count = 0;
+  xdma_mempool.wait_mempool_start();
   while (running) {
     if (xdma_mempool.read_busy_chunk((char *)&packge) == false) {
       printf("Failed to read data from the XDMA memory pool\n");
       assert(0);
     }
+    if (packge.packge_idx != recv_count) {
+      printf("read mempool idx failed\n");
+      assert(0);
+    }
+    recv_count ++;
     // packge unpack
     v_difftest_Batch((uint8_t *)packge.diff_batch_pack);
-    // difftest run
-    diff_packge_count.fetch_add(1, std::memory_order_relaxed);
   }
 }
