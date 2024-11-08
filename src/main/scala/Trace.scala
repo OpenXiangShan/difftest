@@ -20,7 +20,7 @@ import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util._
 import difftest._
-import difftest.DifftestModule.streamToFile
+import difftest.common.FileControl
 
 import scala.collection.mutable.ListBuffer
 
@@ -71,7 +71,7 @@ object Trace {
     difftestCpp += dpicFuncProto + ";"
     difftestCpp += "#endif // __DIFFTEST_TRACE_H__"
     difftestCpp += ""
-    streamToFile(difftestCpp, "difftest-iotrace.h")
+    FileControl.write(difftestCpp, "difftest-iotrace.h")
 
     difftestCpp.clear()
     difftestCpp += "#include \"difftest-iotrace.h\""
@@ -120,7 +120,7 @@ object Trace {
          |  difftest_iotrace->${traceFunc}((DiffTestIOTrace *)io);
          |}
          |""".stripMargin
-    streamToFile(difftestCpp, "difftest-iotrace.cpp")
+    FileControl.write(difftestCpp, "difftest-iotrace.cpp")
   }
 }
 

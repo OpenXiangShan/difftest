@@ -19,9 +19,9 @@ import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.reflect.DataMirror
 import chisel3.util._
-import difftest.DifftestModule.streamToFile
 import difftest._
 import difftest.batch.{BatchInfo, BatchIO}
+import difftest.common.FileControl
 import difftest.gateway.{GatewayConfig, GatewayResult, GatewaySinkControl}
 
 import scala.collection.mutable.ListBuffer
@@ -378,7 +378,7 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
     interfaceCpp += ""
-    streamToFile(interfaceCpp, "difftest-dpic.h")
+    FileControl.write(interfaceCpp, "difftest-dpic.h")
 
     interfaceCpp.clear()
     interfaceCpp += "#ifndef CONFIG_NO_DIFFTEST"
@@ -433,7 +433,7 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#endif // CONFIG_NO_DIFFTEST"
     interfaceCpp += ""
-    streamToFile(interfaceCpp, "difftest-dpic.cpp")
+    FileControl.write(interfaceCpp, "difftest-dpic.cpp")
 
     GatewayResult(
       cppMacros = Seq("CONFIG_DIFFTEST_DPIC"),
