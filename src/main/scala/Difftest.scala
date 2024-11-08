@@ -21,8 +21,7 @@ import chisel3.reflect.DataMirror
 import chisel3.util._
 import difftest.common.{DifftestWiring, FileControl}
 import difftest.gateway.{Gateway, GatewayConfig}
-import org.json4s.DefaultFormats
-import org.json4s.native.Serialization.writePretty
+import difftest.util.Profile
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
@@ -132,7 +131,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     cpp.mkString("\n")
   }
 
-  def toJsonProfile: Map[String, Any] = Map("className" -> this.getClass.getName)
+  // TODO: this should be implemented using reflection.
+  def classArgs: Map[String, Any] = Map()
 
   // returns a Seq indicating the udpate dependencies. Default: empty
   // Only when one of the dependencies is valid, this bundle is updated.
@@ -241,7 +241,7 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with Dif
     squashed
   }
 
-  override def toJsonProfile: Map[String, Any] = super.toJsonProfile ++ Map("nPhyRegs" -> nPhyRegs)
+  override def classArgs: Map[String, Any] = Map("nPhyRegs" -> nPhyRegs)
 }
 
 class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
@@ -282,7 +282,7 @@ class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with Di
   override protected val needFlatten: Boolean = true
   // It is required for MMIO/Load(only for multi-core) data synchronization, and commit instr trace record
   override def supportsSquashBase: Bool = true.B
-  override def toJsonProfile: Map[String, Any] = super.toJsonProfile ++ Map("numRegs" -> numRegs)
+  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
 }
 
 class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
@@ -303,7 +303,7 @@ abstract class DiffArchDelayedUpdate(numRegs: Int)
   extends ArchDelayedUpdate(numRegs)
   with DifftestBundle
   with DifftestWithIndex {
-  override def toJsonProfile: Map[String, Any] = super.toJsonProfile ++ Map("numRegs" -> numRegs)
+  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
 }
 
 class DiffArchIntDelayedUpdate extends DiffArchDelayedUpdate(32) {
@@ -456,7 +456,7 @@ object DifftestModule {
   private val instances = ListBuffer.empty[DifftestBundle]
   private val cppMacros = ListBuffer.empty[String]
   private val vMacros = ListBuffer.empty[String]
-  private val jsonProfiles = ListBuffer.empty[Map[String, Any]]
+  private val interfaces = ListBuffer.empty[(DifftestBundle, Int)]
 
   def parseArgs(args: Array[String]): Array[String] = {
     @tailrec
@@ -485,7 +485,7 @@ object DifftestModule {
       difftest := DontCare
       difftest.bits.getValidOption.foreach(_ := false.B)
     }
-    jsonProfiles += (gen.toJsonProfile ++ Map("delay" -> delay))
+    interfaces.append((gen, delay))
     difftest
   }
 
@@ -497,7 +497,7 @@ object DifftestModule {
 
     generateCppHeader(cpu, gateway.structPacked.getOrElse(false))
     generateVeriogHeader()
-    generateJsonProfile(cpu)
+    Profile.generateJson(cpu, interfaces.toSeq)
 
     Option.when(createTopIO) {
       if (enabled) {
@@ -664,11 +664,6 @@ object DifftestModule {
   }
 
   def generateVeriogHeader(): Unit = FileControl.write(vMacros.map(m => s"`define $m"), "DifftestMacros.v")
-
-  def generateJsonProfile(cpu: String): Unit = {
-    val profile = jsonProfiles ++ Map("cpu" -> cpu)
-    FileControl.write(Seq(writePretty(profile)(DefaultFormats)), "difftest_profile.json")
-  }
 }
 
 // Difftest emulator top. Will be created by DifftestModule.finish
