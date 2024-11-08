@@ -17,17 +17,15 @@
 package difftest
 
 import chisel3._
-import chisel3.util._
 import chisel3.reflect.DataMirror
-import difftest.common.DifftestWiring
+import chisel3.util._
+import difftest.common.{DifftestWiring, FileControl}
 import difftest.gateway.{Gateway, GatewayConfig}
-
-import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths, StandardOpenOption}
-import scala.annotation.tailrec
-import scala.collection.mutable.ListBuffer
 import org.json4s.DefaultFormats
 import org.json4s.native.Serialization.writePretty
+
+import scala.annotation.tailrec
+import scala.collection.mutable.ListBuffer
 
 trait DifftestWithCoreid {
   val coreid = UInt(8.W)
@@ -578,7 +576,7 @@ object DifftestModule {
           |);
           |$if_assigns
           |endmodule""".stripMargin
-    streamToFile(difftestSvh, "gateway_interface.svh")
+    FileControl.write(difftestSvh, "gateway_interface.svh")
   }
 
   def generateCppHeader(cpu: String, structPacked: Boolean): Unit = {
@@ -662,36 +660,14 @@ object DifftestModule {
          |""".stripMargin
     difftestCpp += "#endif // __DIFFSTATE_H__"
     difftestCpp += ""
-    streamToFile(difftestCpp, "diffstate.h")
+    FileControl.write(difftestCpp, "diffstate.h")
   }
 
-  def generateVeriogHeader(): Unit = {
-    val difftestVeriog = ListBuffer.empty[String]
-    vMacros.foreach(m => difftestVeriog += s"`define $m")
-    streamToFile(difftestVeriog, "DifftestMacros.v")
-  }
+  def generateVeriogHeader(): Unit = FileControl.write(vMacros.map(m => s"`define $m"), "DifftestMacros.v")
 
   def generateJsonProfile(cpu: String): Unit = {
-    val difftestJson = ListBuffer.empty[String]
     val profile = jsonProfiles ++ Map("cpu" -> cpu)
-    difftestJson += writePretty(profile)(DefaultFormats)
-    streamToFile(difftestJson, "difftest_profile.json")
-  }
-
-  def streamToFile(fileStream: ListBuffer[String], fileName: String, append: Boolean = false): Unit = {
-    val outputDir = sys.env("NOOP_HOME") + "/build/generated-src/"
-    Files.createDirectories(Paths.get(outputDir))
-    val outputFile = outputDir + fileName
-    val options = if (append) {
-      Seq(StandardOpenOption.CREATE, StandardOpenOption.APPEND)
-    } else {
-      Seq(StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
-    }
-    Files.write(
-      Paths.get(outputFile),
-      (fileStream.mkString("\n") + "\n").getBytes(StandardCharsets.UTF_8),
-      options: _*
-    )
+    FileControl.write(Seq(writePretty(profile)(DefaultFormats)), "difftest_profile.json")
   }
 }
 
