@@ -138,7 +138,8 @@ TraceReader::TraceReader(const char *trace_file_name)
             printf("TraceRTL preread: va < 0x8000000L, but va == pa\n");
             printf("If u are running bare-mode test, please disable this\n");
             inst.dump();
-            exit(1);
+            // s-mode/m-mode will print
+            // exit(1);
           }
         }
         trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
