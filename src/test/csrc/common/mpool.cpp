@@ -140,7 +140,7 @@ bool MemoryIdxPool::read_busy_chunk(char *data) {
 }
 
 size_t MemoryIdxPool::wait_next_free_group() {
-  size_t free_num = empty_blocks.fetch_sub(1, std::memory_order_relaxed) + 1;
+  size_t free_num = empty_blocks.fetch_sub(1, std::memory_order_relaxed) - 1;
   cv_filled.notify_all();
   //Reserve at least two free blocks
   if (free_num <= 2) {
