@@ -453,9 +453,6 @@ trait DifftestModule[T <: DifftestBundle] {
 
 object DifftestModule {
   private val enabled = true
-  private val instances = ListBuffer.empty[DifftestBundle]
-  private val cppMacros = ListBuffer.empty[String]
-  private val vMacros = ListBuffer.empty[String]
   private val interfaces = ListBuffer.empty[(DifftestBundle, Int)]
 
   def parseArgs(args: Array[String]): Array[String] = {
@@ -466,7 +463,7 @@ object DifftestModule {
         case "--difftest-config" :: config :: tail =>
           Gateway.setConfig(config)
           nextOption(args.patch(args.indexOf("--difftest-config"), Nil, 2), tail)
-        case option :: tail => nextOption(args, tail)
+        case _ :: tail => nextOption(args, tail)
       }
     }
     nextOption(args, args.toList)
@@ -491,12 +488,9 @@ object DifftestModule {
 
   def finish(cpu: String, createTopIO: Boolean): Option[DifftestTopIO] = {
     val gateway = Gateway.collect()
-    cppMacros ++= gateway.cppMacros
-    vMacros ++= gateway.vMacros
-    instances ++= gateway.instances
 
-    generateCppHeader(cpu, gateway.structPacked.getOrElse(false))
-    generateVeriogHeader()
+    generateCppHeader(cpu, gateway.instances, gateway.cppMacros, gateway.structPacked.getOrElse(false))
+    generateVeriogHeader(gateway.vMacros)
     Profile.generateJson(cpu, interfaces.toSeq)
 
     Option.when(createTopIO) {
@@ -579,7 +573,12 @@ object DifftestModule {
     FileControl.write(difftestSvh, "gateway_interface.svh")
   }
 
-  def generateCppHeader(cpu: String, structPacked: Boolean): Unit = {
+  def generateCppHeader(
+    cpu: String,
+    instances: Seq[DifftestBundle],
+    macros: Seq[String],
+    structPacked: Boolean,
+  ): Unit = {
     val difftestCpp = ListBuffer.empty[String]
     difftestCpp += "#ifndef __DIFFSTATE_H__"
     difftestCpp += "#define __DIFFSTATE_H__"
@@ -587,7 +586,7 @@ object DifftestModule {
     difftestCpp += "#include <cstdint>"
     difftestCpp += ""
 
-    cppMacros.foreach(m => difftestCpp += s"#define $m")
+    macros.foreach(m => difftestCpp += s"#define $m")
     difftestCpp += ""
 
     val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
@@ -609,7 +608,7 @@ object DifftestModule {
         val macroName = bundleType.desiredCppName.toUpperCase
         if (bundleType.isInstanceOf[DifftestWithIndex]) {
           val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
-          require(bundles.length % numCores == 0, s"Cores seem to have different # of ${macroName}")
+          require(bundles.length % numCores == 0, s"Cores seem to have different # of $macroName")
           difftestCpp += s"#define $configWidthName ${bundles.length / numCores}"
         }
         if (bundleType.isFlatten) {
@@ -628,8 +627,8 @@ object DifftestModule {
       val cppIsArray = bundleType.isInstanceOf[DifftestWithIndex] || bundleType.isFlatten
       val nInstances = cppInstances.length
       val instanceCount = if (bundleType.isFlatten) bundleType.bits.getNumElements else nInstances / numCores
-      require(nInstances % numCores == 0, s"Cores seem to have different # of ${instanceName}")
-      require(cppIsArray || nInstances == numCores, s"# of ${instanceName} should not be ${nInstances}")
+      require(nInstances % numCores == 0, s"Cores seem to have different # of $instanceName")
+      require(cppIsArray || nInstances == numCores, s"# of $instanceName should not be $nInstances")
       val arrayWidth = if (cppIsArray) s"[$instanceCount]" else ""
       difftestCpp += f"  $className%-30s $instanceName$arrayWidth;"
     }
@@ -663,7 +662,9 @@ object DifftestModule {
     FileControl.write(difftestCpp, "diffstate.h")
   }
 
-  def generateVeriogHeader(): Unit = FileControl.write(vMacros.map(m => s"`define $m"), "DifftestMacros.v")
+  def generateVeriogHeader(macros: Seq[String]): Unit = {
+    FileControl.write(macros.map(m => s"`define $m"), "DifftestMacros.v")
+  }
 }
 
 // Difftest emulator top. Will be created by DifftestModule.finish
