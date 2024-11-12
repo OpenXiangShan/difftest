@@ -210,8 +210,8 @@ class BatchCollector(
 
   val data_site = WireInit(0.U((alignWidth * length).W))
   data_site := VecInit(delay_data.zipWithIndex.map { case (d, idx) =>
-    val offset = if (idx == 0) 0.U else MuxLookup(PopCount(delay_valid.take(idx)), 0.U)(offset_map)
-    Mux(delay_valid(idx), (d << offset).asUInt, 0.U)
+    val offset = MuxLookup(PopCount(delay_valid.take(idx)), 0.U)(offset_map)
+    Mux(idx.U === 0.U, (d << offset).asUInt, 0.U)
   }.toSeq).reduce(_ | _)
 
   when(delay_valid.asUInt.orR) {
@@ -314,8 +314,8 @@ class BatchAssembler(
   }
   // Flush state to provide more space for peak data
   val state_flush = enable && step_stats_vec.last.data_len > param.MaxDataByteLen.U
-  val timeout_count = RegInit(0.U(32.W))
-  val timeout = timeout_count === 200000.U
+  val timeout_count = RegInit(0.U(18.W))
+  val timeout = timeout_count === 0x3ffff.U
   if (config.hasBuiltInPerf) {
     DifftestPerf("BatchExceed_data", data_exceed_vec.asUInt.orR)
     DifftestPerf("BatchExceed_info", info_exceed_vec.asUInt.orR)

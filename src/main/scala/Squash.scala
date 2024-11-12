@@ -103,8 +103,8 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .filter(_.desiredCppName == "trace_info")
       .map(_.asInstanceOf[DiffTraceInfo].in_replay)
       .foldLeft(false.B)(_ || _)
-  val timeout_count = RegInit(0.U(32.W))
-  val timeout = timeout_count === 200000.U
+  val timeout_count = RegInit(0.U(18.W))
+  val timeout = timeout_count === 0x3ffff.U
   val global_tick = !control.enable || in_replay || timeout
 
   val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredCppName)
