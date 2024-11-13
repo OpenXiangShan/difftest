@@ -52,8 +52,10 @@ case class DifftestProfile(
 object DifftestProfile {
   def fromBundles(cpu: String, bundles: Seq[(DifftestBundle, Int)]): DifftestProfile = {
     val numCores = bundles.count(_._1.isUniqueIdentifier)
-    require(bundles.length % numCores == 0, "cannot create the profile if cores are not symmetric")
-    val bundleProfiles = bundles.take(bundles.length / numCores).map { case (b, d) => BundleProfile.fromBundle(b, d) }
+    // Note: numCores may be 0 when difftest interfaces are not connected
+    require(numCores == 0 || bundles.length % numCores == 0, "cannot create the profile if cores are not symmetric")
+    val nBundles = if (numCores > 0) bundles.length / numCores else 0
+    val bundleProfiles = bundles.take(nBundles).map { case (b, d) => BundleProfile.fromBundle(b, d) }
     DifftestProfile(cpu, numCores, bundleProfiles)
   }
 
