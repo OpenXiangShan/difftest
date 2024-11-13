@@ -21,7 +21,7 @@ This list is not complete as we are still working on improving the documentation
   - ELF files are supported, determined by leading magic numbers of the image file. Use `IMAGE_ELF=0` to disable it at build-time.
 
   - [Footprint inputs](https://doi.org/10.1145/3649329.3655911) are supported by the run-time argument `--as-footprints`.
-    Basically, every time when a new address is accessed by the CPU, a new data block is readed from the image file and put at the accessed address.
+    Basically, every time when a new address is accessed by the CPU, a new data block is read from the image file and put at the accessed address.
 
 For more details on compile-time arguments, see the Makefiles.
 For more details and a full list of supported run-time command-line arguments, run `emu --help`.
