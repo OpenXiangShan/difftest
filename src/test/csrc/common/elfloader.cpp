@@ -120,5 +120,8 @@ long readFromElf(void *ptr, const char *file_name, long buf_size) {
     std::memcpy((uint8_t *)ptr + offset, section.data_src, section.data_len);
     len_written += len;
   }
-  return len_written;
+  // Since we are unpacking the sections, the total amount of bytes is the last
+  // section offset plus its size.
+  auto last_section = elf_file.sections.back();
+  return last_section.data_dst - base_addr + last_section.data_len + last_section.zero_len;
 }
