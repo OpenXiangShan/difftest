@@ -104,10 +104,12 @@ NemuProxy::NemuProxy(int coreid) {
     nemu_misc_put_gmaddr(goldenMem);
   }
 
-  auto nemu_init = (void (*)(void))dlsym(handle, "difftest_init");
+  nemu_init = (void (*)(uint64_t))dlsym(handle, "difftest_init");
+  // auto nemu_init = (void (*)(void))dlsym(handle, "difftest_init");
+
   check_and_assert(nemu_init);
 
-  nemu_init();
+  // nemu_init();
 }
 
 NemuProxy::~NemuProxy() {

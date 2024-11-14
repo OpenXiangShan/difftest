@@ -43,6 +43,8 @@ enum { ICACHEID, DCACHEID };
 #define DEBUG_MODE_SKIP(v, f, instr) false
 #endif
 
+extern uint64_t reset_vector;
+
 // Difftest structures
 // trap events: self-defined traps
 typedef struct {

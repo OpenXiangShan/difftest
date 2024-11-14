@@ -38,6 +38,7 @@ public:
   void (*query)(void *result_buffer, uint64_t type) = NULL;
   void (*debug_mem_sync)(paddr_t addr, void *bytes, size_t size) = NULL;
   void (*load_flash_bin)(void *flash_bin, size_t size) = NULL;
+  void (*nemu_init)(uint64_t reset_vector) = NULL;
 };
 extern const char *difftest_ref_so;
 

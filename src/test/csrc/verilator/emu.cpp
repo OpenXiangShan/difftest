@@ -232,13 +232,16 @@ Emulator::Emulator(int argc, const char *argv[]):
 #endif
 
   // init reset vector
-  dut_ptr->io_reset_vector = 0x10000000;
+  dut_ptr->io_reset_vector = reset_vector;
   
+
   // init core
   reset_ncycles(10);
 
   // init dse
   reset_dse_ncycles(10);
+
+  printf("reset dse complete\n");
 
   // init ram
   init_ram(args.image);
@@ -305,13 +308,25 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 }
 
 inline void Emulator::reset_dse_ncycles(size_t cycles) {
+  static uint64_t wave_ticks = 10;
   dut_ptr->io_dse_rst = 1;
   for (int i = 0; i < cycles; i++) {
     dut_ptr->clock = 0;
     dut_ptr->eval();
+#if VM_TRACE == 1
+    if (enable_waveform && args.log_begin == 0) {
+      tfp->dump(2 * wave_ticks);
+    }
+#endif
+    dut_ptr->clock = 1;
+    dut_ptr->eval();
+#if VM_TRACE == 1
+    if (enable_waveform && args.log_begin == 0) {
+      tfp->dump(2 * wave_ticks + 1);
+    }
+    wave_ticks++;
+#endif
   }
-  dut_ptr->clock = 1;
-  dut_ptr->eval();
   dut_ptr->io_dse_rst = 0;
 }
 
@@ -380,6 +395,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   if (args.enable_diff) {
     init_goldenmem();
     init_nemuproxy();
+    auto proxy = difftest[0]->proxy;
+    proxy->nemu_init(reset_vector);
+    // proxy->nemu_init();
   }
   if(args.enable_runahead){
     runahead_init();
@@ -416,6 +434,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   time_t coverage_start_time = time(NULL);
 #endif
 
+  bool lastCycleDSEReset = false;
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
       FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
@@ -441,27 +460,55 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     // printf("cycle: %ld\n", cycles);
 
     auto diff = difftest[0];
-    // auto proxy = diff->proxy;
+    auto proxy = diff->proxy;
     // bool force_difftest_reset = false;
 
-    // DSE instruction limitation
-    for (int i = 0; i < NUM_CORES; i++) {
-      uint64_t instrCnt = dut_ptr->io_instrCnt;
-      if (instrCnt >= args.dse_max_instr) {
-        printf("DSE instruction limit exceeded\n");
-        // trapCode = STATE_LIMIT_EXCEEDED;
-        printf("pc:%lx\n", diff->get_dut()->commit[0].pc);
-        reset_ncycles(10);
-        // force_difftest_reset = true;
+    // // DSE instruction limitation
+    // for (int i = 0; i < NUM_CORES; i++) {
+    //   uint64_t instrCnt = dut_ptr->io_instrCnt;
+    //   if (instrCnt >= args.dse_max_instr) {
+    //     printf("DSE instruction limit exceeded\n");
+    //     // trapCode = STATE_LIMIT_EXCEEDED;
+    //     printf("pc:%lx\n", diff->get_dut()->commit[0].pc);
+    //     reset_ncycles(10);
+    //     // force_difftest_reset = true;
 
+    //     // reset ram
+    //     init_ram("/nfs/home/wujiabin/work/xs-env/XiangShan/ready-to-run/coremark-2-iteration.bin");
+    //     difftest_finish();
+    //     difftest_init();
+    //     init_device();
+    //     if (args.enable_diff) {
+    //       init_goldenmem();
+    //       init_nemuproxy();
+    //     }
+    //     if(args.enable_runahead){
+    //       runahead_init();
+    //     }
+    //     break;
+    //   }
+    // }
+
+
+    // DSECtrl reset valid
+    for (int i = 0; i < NUM_CORES; i++) {
+      if (dut_ptr->io_dse_reset_valid && !lastCycleDSEReset) {
+        printf("DSE reset start at pc: %lx\n", diff->get_dut()->commit[0].pc);
+        reset_vector = dut_ptr->io_dse_reset_vec;
+        lastCycleDSEReset = true;
+      }
+      if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
+        lastCycleDSEReset = false;
+        printf("DSE reset finish at pc: %lx, reset vector: %lx\n", diff->get_dut()->commit[0].pc, reset_vector);
         // reset ram
-        init_ram("/nfs/home/wujiabin/work/xs-env/XiangShan/ready-to-run/coremark-2-iteration.bin");
+        init_ram(args.image);
         difftest_finish();
         difftest_init();
         init_device();
         if (args.enable_diff) {
           init_goldenmem();
           init_nemuproxy();
+          proxy->nemu_init(reset_vector);
         }
         if(args.enable_runahead){
           runahead_init();
@@ -469,6 +516,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         break;
       }
     }
+
 
     // assertions
     if (assert_count > 0) {
@@ -517,7 +565,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       break;
     }
 
-    if (args.enable_diff) {
+    if (args.enable_diff && !dut_ptr->io_dse_reset_valid) {
       if (difftest_step()) {
         trapCode = STATE_ABORT;
         break;

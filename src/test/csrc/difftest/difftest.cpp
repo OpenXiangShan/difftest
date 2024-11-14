@@ -42,6 +42,8 @@ static const char *reg_name[DIFFTEST_NR_REG+1] = {
 
 Difftest **difftest = NULL;
 
+uint64_t reset_vector = FIRST_INST_ADDRESS;
+
 int difftest_init() {
   difftest = new Difftest*[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
@@ -358,15 +360,19 @@ void Difftest::do_instr_commit(int i) {
 }
 
 void Difftest::do_first_instr_commit() {
+  // printf("has_commit: %d, dut.commit[0].valid: %d\n", has_commit, dut.commit[0].valid);
   if (!has_commit && dut.commit[0].valid) {
+#ifndef DSE
 #ifndef BASIC_DIFFTEST_ONLY
-    if (dut.commit[0].pc != FIRST_INST_ADDRESS) {
+    if (dut.commit[0].pc != reset_vector) {
+      printf("The first instruction of core %d is not at 0x%lx, but at 0x%lx\n", id, reset_vector, dut.commit[0].pc);
       return;
     }
 #endif
+#endif
     printf("The first instruction of core %d has commited. Difftest enabled. \n", id);
     has_commit = 1;
-    nemu_this_pc = FIRST_INST_ADDRESS;
+    nemu_this_pc = reset_vector;
 
     if (proxy->load_flash_bin) {
         proxy->load_flash_bin(get_flash_path(), get_flash_size());
@@ -375,7 +381,7 @@ void Difftest::do_first_instr_commit() {
     // Use a temp variable to store the current pc of dut
     uint64_t dut_this_pc = dut.csr.this_pc;
     // NEMU should always start at FIRST_INST_ADDRESS
-    dut.csr.this_pc = FIRST_INST_ADDRESS;
+    dut.csr.this_pc = reset_vector;
     proxy->regcpy(dut_regs_ptr, DIFFTEST_TO_REF);
     dut.csr.this_pc = dut_this_pc;
     // Do not reconfig simulator 'proxy->update_config(&nemu_config)' here:
