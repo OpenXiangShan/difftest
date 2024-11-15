@@ -50,6 +50,7 @@ import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
 import "DPI-C" function void set_overwrite_autoset();
+import "DPI-C" context function void set_warmup_insts(longint workload_inst, longint cmn_inst);
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -81,6 +82,8 @@ longint overwrite_nbytes;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
+reg [63:0] warmup_instrs;
+reg [63:0] cmn_instrs;
 reg [63:0] stuck_limit;
 
 initial begin
@@ -101,10 +104,22 @@ initial begin
   stuck_limit = 0;
 `ifndef TB_NO_DPIC
   stuck_limit = get_stuck_limit();
+  warmup_instrs = 0;
+  cmn_instrs = 0;
   // workload: bin file
   if ($test$plusargs("workload")) begin
     $value$plusargs("workload=%s", bin_file);
     set_bin_file(bin_file);
+  end
+  // warmup for instrs
+  if ($test$plusargs("warmup-inst")) begin
+    $value$plusargs("warmup-inst=%d", warmup_instrs);
+  end
+  if ($test$plusargs("cmn-instrs")) begin
+    $value$plusargs("cmn-instrs=%d,", cmn_instrs);
+  end
+  if (warmup_instrs != 0 || cmn_instrs != 0) begin
+    set_warmup_insts(warmup_instrs, cmn_instrs);
   end
   // boot flash image: bin file
   if ($test$plusargs("flash")) begin
@@ -170,11 +185,32 @@ initial begin
   end
 end
 
+reg dpi_perfCtrl_clean;
 assign difftest_logCtrl_begin = difftest_logCtrl_begin_r;
 assign difftest_logCtrl_end = difftest_logCtrl_end_r;
 assign difftest_logCtrl_level = 0;
-assign difftest_perfCtrl_clean = 0;
+assign difftest_perfCtrl_clean = dpi_perfCtrl_clean;
 assign difftest_uart_in_ch = 8'hff;
+
+export "DPI-C" task claer_perfcnt;
+task claer_perfcnt();
+  dpi_perfCtrl_clean <= 1'b1;
+endtask
+
+reg clear_perf_cnt;
+always @(posedge clock) begin
+  if (reset) begin
+    dpi_perfCtrl_clean <= 1'b0;
+  end else begin
+    if (dpi_perfCtrl_clean) begin
+      if (clear_perf_cnt == 'd1) begin
+        dpi_perfCtrl_clean <= 1'b0;
+        $display("claer perfCnt");
+      end
+      clear_perf_cnt <= clear_perf_cnt + 1'b1;  
+    end
+  end
+end
 
 always @(posedge clock) begin
   if (!reset && difftest_uart_out_valid) begin

@@ -26,11 +26,9 @@
 #ifndef CONFIG_NO_DIFFTEST
 #include "refproxy.h"
 #endif // CONFIG_NO_DIFFTEST
+#include "svdpi.h"
 #include <common.h>
 #include <locale.h>
-#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
-#include "svdpi.h"
-#endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -44,6 +42,9 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
+static uint64_t cmn_instrs = 0;
+static uint64_t warmup_instrs = 0;
+static svScope wamupScope;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   double core_cpi[NUM_CORES];
@@ -56,6 +57,8 @@ enum {
   SIMV_DONE,
   SIMV_FAIL,
 } simv_state;
+
+extern "C" void claer_perfcnt();
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n", s);
@@ -82,6 +85,18 @@ extern "C" void set_overwrite_autoset() {
   fseek(fp, 4, SEEK_SET);
   fread(&overwrite_nbytes, sizeof(uint32_t), 1, fp);
   fclose(fp);
+}
+
+// The workload warms up and clears the instruction counter
+extern "C" void set_warmup_insts(uint64_t warmup_inst, uint64_t cmn_inst) {
+  warmup_instrs = warmup_inst;
+  cmn_instrs = cmn_inst;
+  wamupScope = svGetScope();
+  if (wamupScope == NULL) {
+    printf("Error: Could not retrieve wamup scope, set first\n");
+    assert(wamupScope);
+  }
+  printf("set warmp insts %ld, cmn insts %ld\n", warmup_inst, cmn_inst);
 }
 
 extern "C" void set_gcpt_bin(char *s) {
@@ -239,11 +254,21 @@ extern "C" uint8_t simv_step() {
       return SIMV_FAIL;
   }
 
-  if (max_instrs != 0) { // 0 for no limit
-    for (int i = 0; i < NUM_CORES; i++) {
+  for (int i = 0; i < NUM_CORES; i++) {
+    auto trap = difftest[i]->get_trap_event();
+    if (warmup_instrs != 0 && trap->instrCnt > warmup_instrs) {
+      svSetScope(wamupScope);
+      claer_perfcnt();
+      warmup_instrs = 0;
+    } else if (cmn_instrs != 0 && trap->instrCnt > warmup_instrs) {
+      svSetScope(wamupScope);
+      claer_perfcnt();
+      cmn_instrs = 0;
+    }
+
+    if (max_instrs != 0) { // 0 for no limit
       if (core_end_info.core_trap[i])
         continue;
-      auto trap = difftest[i]->get_trap_event();
       if (max_instrs < trap->instrCnt) {
         core_end_info.core_trap[i] = true;
         core_end_info.core_trap_num++;
