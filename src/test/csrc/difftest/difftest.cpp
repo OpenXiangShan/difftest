@@ -1309,7 +1309,9 @@ void Difftest::do_raise_critical_error() {
   if (dut->critical_error.valid) {
     bool ref_critical_error = proxy->raise_critical_error();
     if (ref_critical_error == dut->critical_error.criticalError) {
-      Info("Core %d dump: critical_error raise \n", this->id);
+      eprintf("Core %d dump: " ANSI_COLOR_RED
+              "HIT CRITICAL ERROR: please check if software cause a double trap. \n" ANSI_COLOR_RESET,
+              this->id);
       raise_trap(STATE_GOODTRAP);
     } else {
       display();
