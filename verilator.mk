@@ -164,7 +164,7 @@ else
 					   PGO_LDFLAGS="'"$(PGO_LDFLAGS)"'"'
 endif
 
-$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
+$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS) $(VERSION_HEADER)
 	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 ifdef PGO_WORKLOAD

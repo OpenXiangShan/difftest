@@ -29,6 +29,10 @@ RTL_DIR = $(BUILD_DIR)/rtl
 RTL_SUFFIX ?= sv
 SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
 
+# get design version info
+VERSION_COMMIT_ID := $(shell git -C $(DESIGN_DIR) rev-parse --short HEAD)
+VERSION_IS_DIRTY := $(shell git -C $(DESIGN_DIR) diff --quiet HEAD || echo "-dirty")
+
 # generate difftest files for non-chisel design.
 .DEFAULT_GOAL := difftest_verilog
 ifeq ($(MFC), 1)
@@ -226,6 +230,12 @@ endif
 ifeq ($(CXX_NO_WARNING),1)
 SIM_CXXFLAGS += -Werror
 endif
+
+# Generate Version Info File (Always)
+VERSION_HEADER = $(GEN_CSRC_DIR)/version.h
+.PHONY: $(VERSION_HEADER)
+$(VERSION_HEADER):
+	@echo "#define STR_COMMIT_ID \"$(VERSION_COMMIT_ID)\"\n#define STR_IS_DIRTY \"$(VERSION_IS_DIRTY)\"" > $@
 
 include verilator.mk
 include vcs.mk
