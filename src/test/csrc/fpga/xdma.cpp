@@ -42,7 +42,7 @@ FpgaXdma::FpgaXdma(const char *workload) {
     }
     std::cout << "XDMA link " << c2h_device << std::endl;
   }
-
+#ifdef CONFIG_USE_XDMA_H2C
   xdma_h2c_fd = open(XDMA_H2C_DEVICE, O_WRONLY);
   if (xdma_h2c_fd == -1) {
     std::cout << XDMA_H2C_DEVICE << std::endl;
@@ -50,6 +50,7 @@ FpgaXdma::FpgaXdma(const char *workload) {
     exit(-1);
   }
   std::cout << "XDMA link " << XDMA_H2C_DEVICE << std::endl;
+#endif
 }
 
 void FpgaXdma::handle_sigint(int sig) {
@@ -127,8 +128,9 @@ void FpgaXdma::stop_thansmit_thread() {
 
   if (process_thread.joinable())
     process_thread.join();
-
+#ifdef CONFIG_USE_XDMA_H2C
   close(xdma_h2c_fd);
+#endif
   xdma_mempool.cleanupMemoryPool();
 }
 
