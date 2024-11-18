@@ -146,6 +146,7 @@ public:
 
   // Wait mempool have data
   void wait_mempool_start();
+
 private:
   MemoryBlock memory_pool[NUM_BLOCKS]; // Mempool
   std::mutex window_mutexes;           // window sliding protection
