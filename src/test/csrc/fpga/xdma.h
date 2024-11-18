@@ -75,7 +75,9 @@ private:
   std::thread process_thread;
 
   int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
+#ifdef CONFIG_USE_XDMA_H2C
   int xdma_h2c_fd;
+#endif
 
   static void handle_sigint(int sig);
 };
