@@ -114,6 +114,7 @@ private:
   int trapCode;
 
   inline void reset_ncycles(size_t cycles);
+  inline void first_reset_ncycles(size_t cycles);
   inline void reset_dse_ncycles(size_t cycles);
   inline void single_cycle();
   void trigger_stat_dump();

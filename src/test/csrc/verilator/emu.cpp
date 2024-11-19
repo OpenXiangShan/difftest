@@ -33,6 +33,9 @@
 #include "compress.h"
 #include "lightsss.h"
 #include "remote_bitbang.h"
+// #include "dse.h"
+
+uint64_t old_cycles = 0;
 
 extern remote_bitbang_t * jtag;
 
@@ -235,13 +238,15 @@ Emulator::Emulator(int argc, const char *argv[]):
   dut_ptr->io_reset_vector = reset_vector;
   
 
-  // init core
-  reset_ncycles(10);
-
   // init dse
   reset_dse_ncycles(10);
 
   printf("reset dse complete\n");
+
+  // init core
+  // first_reset_ncycles(10);
+
+  printf("core reset complete\n");
 
   // init ram
   init_ram(args.image);
@@ -307,9 +312,9 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   dut_ptr->reset = 0;
 }
 
-inline void Emulator::reset_dse_ncycles(size_t cycles) {
+inline void Emulator::first_reset_ncycles(size_t cycles) {
   static uint64_t wave_ticks = 10;
-  dut_ptr->io_dse_rst = 1;
+  dut_ptr->reset = 1;
   for (int i = 0; i < cycles; i++) {
     dut_ptr->clock = 0;
     dut_ptr->eval();
@@ -327,7 +332,30 @@ inline void Emulator::reset_dse_ncycles(size_t cycles) {
     wave_ticks++;
 #endif
   }
+  dut_ptr->reset = 0;
+}
+
+inline void Emulator::reset_dse_ncycles(size_t cycles) {
+  dut_ptr->io_dse_rst = 1;
+  dut_ptr->reset = 1;
+  for (int i = 0; i < cycles; i++) {
+    dut_ptr->clock = 0;
+    dut_ptr->eval();
+#if VM_TRACE == 1
+    if (enable_waveform && args.log_begin == 0) {
+      tfp->dump(2 * i);
+    }
+#endif
+    dut_ptr->clock = 1;
+    dut_ptr->eval();
+#if VM_TRACE == 1
+    if (enable_waveform && args.log_begin == 0) {
+      tfp->dump(2 * i + 1);
+    }
+#endif
+  }
   dut_ptr->io_dse_rst = 0;
+  dut_ptr->reset = 0;
 }
 
 inline void Emulator::single_cycle() {
@@ -457,38 +485,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       }
     }
 
-    // printf("cycle: %ld\n", cycles);
-
     auto diff = difftest[0];
     auto proxy = diff->proxy;
-    // bool force_difftest_reset = false;
-
-    // // DSE instruction limitation
-    // for (int i = 0; i < NUM_CORES; i++) {
-    //   uint64_t instrCnt = dut_ptr->io_instrCnt;
-    //   if (instrCnt >= args.dse_max_instr) {
-    //     printf("DSE instruction limit exceeded\n");
-    //     // trapCode = STATE_LIMIT_EXCEEDED;
-    //     printf("pc:%lx\n", diff->get_dut()->commit[0].pc);
-    //     reset_ncycles(10);
-    //     // force_difftest_reset = true;
-
-    //     // reset ram
-    //     init_ram("/nfs/home/wujiabin/work/xs-env/XiangShan/ready-to-run/coremark-2-iteration.bin");
-    //     difftest_finish();
-    //     difftest_init();
-    //     init_device();
-    //     if (args.enable_diff) {
-    //       init_goldenmem();
-    //       init_nemuproxy();
-    //     }
-    //     if(args.enable_runahead){
-    //       runahead_init();
-    //     }
-    //     break;
-    //   }
-    // }
-
 
     // DSECtrl reset valid
     for (int i = 0; i < NUM_CORES; i++) {
@@ -496,6 +494,12 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         printf("DSE reset start at pc: %lx\n", diff->get_dut()->commit[0].pc);
         reset_vector = dut_ptr->io_dse_reset_vec;
         lastCycleDSEReset = true;
+
+        auto trap = difftest[i]->get_trap_event();
+        uint64_t cycleCnt = trap->cycleCnt;
+        double ipc = (double)args.dse_max_instr / (cycleCnt);
+        printf("ipc: %f\n", ipc);
+        printf("instrCnt: %ld cycles: %ld\n", args.dse_max_instr, cycleCnt);
       }
       if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
         lastCycleDSEReset = false;
@@ -509,9 +513,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           init_goldenmem();
           init_nemuproxy();
           proxy->nemu_init(reset_vector);
-        }
-        if(args.enable_runahead){
-          runahead_init();
         }
         break;
       }
@@ -547,14 +548,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     }
 
     single_cycle();
-
-    // // NEMU reset
-    // if (force_difftest_reset) {
-    //   proxy->regcpy(&diff->get_dut()->regs, DIFFTEST_TO_REF);
-    //   proxy->csrcpy(&diff->get_dut()->csr, DIFFTEST_TO_REF);
-    //   printf("pc:%lx\n", diff->get_dut()->commit[0].pc);
-    //   force_difftest_reset = false;
-    // }
 
     max_cycle --;
     dut_ptr->io_perfInfo_clean = 0;
