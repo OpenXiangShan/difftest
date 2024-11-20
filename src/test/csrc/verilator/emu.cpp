@@ -238,7 +238,7 @@ Emulator::Emulator(int argc, const char *argv[]):
   dut_ptr->io_reset_vector = reset_vector;
   
 
-  // init dse
+  // init dse & core
   reset_dse_ncycles(10);
 
   printf("reset dse complete\n");
@@ -307,29 +307,6 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     if (enable_waveform && args.log_begin == 0) {
       tfp->dump(2 * i + 1);
     }
-#endif
-  }
-  dut_ptr->reset = 0;
-}
-
-inline void Emulator::first_reset_ncycles(size_t cycles) {
-  static uint64_t wave_ticks = 10;
-  dut_ptr->reset = 1;
-  for (int i = 0; i < cycles; i++) {
-    dut_ptr->clock = 0;
-    dut_ptr->eval();
-#if VM_TRACE == 1
-    if (enable_waveform && args.log_begin == 0) {
-      tfp->dump(2 * wave_ticks);
-    }
-#endif
-    dut_ptr->clock = 1;
-    dut_ptr->eval();
-#if VM_TRACE == 1
-    if (enable_waveform && args.log_begin == 0) {
-      tfp->dump(2 * wave_ticks + 1);
-    }
-    wave_ticks++;
 #endif
   }
   dut_ptr->reset = 0;
