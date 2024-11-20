@@ -440,6 +440,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
 
   bool lastCycleDSEReset = false;
+  uint64_t instrCnt = 0;
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
       FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
@@ -465,6 +466,11 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     auto diff = difftest[0];
     auto proxy = diff->proxy;
 
+    if (!dut_ptr->io_dse_reset_valid) {
+      auto trap = difftest[0]->get_trap_event();
+      instrCnt = trap->instrCnt;
+    }
+
     // DSECtrl reset valid
     for (int i = 0; i < NUM_CORES; i++) {
       if (dut_ptr->io_dse_reset_valid && !lastCycleDSEReset) {
@@ -474,9 +480,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
         auto trap = difftest[i]->get_trap_event();
         uint64_t cycleCnt = trap->cycleCnt;
-        double ipc = (double)args.dse_max_instr / (cycleCnt);
+        double ipc = (double)instrCnt / (cycleCnt);
         printf("ipc: %f\n", ipc);
-        printf("instrCnt: %ld cycles: %ld\n", args.dse_max_instr, cycleCnt);
+        printf("instrCnt: %ld cycles: %ld\n", instrCnt, cycleCnt);
       }
       if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
         lastCycleDSEReset = false;
@@ -531,6 +537,38 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     dut_ptr->io_perfInfo_dump = 0;
 
     trapCode = difftest_state();
+
+    // workload finish before reaching dse_max_instr
+    if (trapCode == STATE_GOODTRAP) {
+        auto trap = difftest[0]->get_trap_event();
+        uint64_t instrCnt = trap->instrCnt;
+        uint64_t cycleCnt = trap->cycleCnt;
+
+        if (instrCnt < args.dse_max_instr) {
+          printf("Hit good trap at pc = 0x%lx, instrCnt = %ld, cycleCnt = %ld\n", trap->pc, instrCnt, cycleCnt);
+          double ipc = (double)instrCnt / (cycleCnt);
+          printf("ipc: %f\n", ipc);
+
+          printf("Core start to reset at pc = 0x%lx\n", trap->pc);
+          reset_vector = 0x10000000;
+          dut_ptr->io_reset_vector = reset_vector;
+          reset_ncycles(10);
+          printf("Core reset complete\n");
+
+          init_ram(args.image);
+          difftest_finish();
+          difftest_init();
+          init_device();
+          if (args.enable_diff) {
+            init_goldenmem();
+            init_nemuproxy();
+            proxy->nemu_init(reset_vector);
+          }
+
+          trapCode = STATE_RUNNING;
+        }
+    }
+
     if (trapCode != STATE_RUNNING) {
       break;
     }
