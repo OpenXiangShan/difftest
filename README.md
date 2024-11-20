@@ -3,6 +3,8 @@ Difftest Submodule
 
 Difftest (差分测试) co-sim framework
 
+This is the Difftest Version for agile Design Space Exploration(DSE) framework only, for Nanhu-G Core.
+
 # Usage
 
 1. Init this submodule in your design, add it to dependency list.
