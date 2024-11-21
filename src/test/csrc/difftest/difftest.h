@@ -430,6 +430,9 @@ protected:
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
   void do_raise_critical_error();
 #endif
+#ifdef CONFIG_DIFFTEST_AIAXTOPEIEVENT
+  void do_aia_xtopei();
+#endif
 #ifdef CONFIG_DIFFTEST_REPLAY
   struct {
     bool in_replay = false;

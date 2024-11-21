@@ -332,6 +332,9 @@ int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
   do_raise_critical_error();
 #endif
+#ifdef CONFIG_DIFFTEST_AIAXTOPEIEVENT
+  do_aia_xtopei();
+#endif
 
   num_commit = 0; // reset num_commit this cycle to 0
   if (dut->event.valid) {
@@ -1318,6 +1321,19 @@ void Difftest::do_raise_critical_error() {
       Info("Core %d dump: DUT critical_error diff REF \n", this->id);
       raise_trap(STATE_ABORT);
     }
+  }
+}
+#endif
+
+#ifdef CONFIG_DIFFTEST_AIAXTOPEIEVENT
+void Difftest::do_aia_xtopei() {
+  if (dut->aia_xtopei.valid) {
+    struct AIAXtopei xtopei;
+    xtopei.mtopei = dut->aia_xtopei.mtopei;
+    xtopei.stopei = dut->aia_xtopei.stopei;
+    xtopei.vstopei = dut->aia_xtopei.vstopei;
+    proxy->aia_xtopei(xtopei);
+    dut->aia_xtopei.valid = 0;
   }
 }
 #endif
