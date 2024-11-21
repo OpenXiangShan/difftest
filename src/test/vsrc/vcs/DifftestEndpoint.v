@@ -83,7 +83,7 @@ longint overwrite_nbytes;
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
 reg [63:0] warmup_instrs;
-reg [63:0] cmn_instrs;
+reg [63:0] warmup_cmn_instrs;
 reg [63:0] stuck_limit;
 
 initial begin
@@ -105,7 +105,7 @@ initial begin
 `ifndef TB_NO_DPIC
   stuck_limit = get_stuck_limit();
   warmup_instrs = 0;
-  cmn_instrs = 0;
+  warmup_cmn_instrs = 0;
   // workload: bin file
   if ($test$plusargs("workload")) begin
     $value$plusargs("workload=%s", bin_file);
@@ -116,10 +116,10 @@ initial begin
     $value$plusargs("warmup-inst=%d", warmup_instrs);
   end
   if ($test$plusargs("cmn-instrs")) begin
-    $value$plusargs("cmn-instrs=%d,", cmn_instrs);
+    $value$plusargs("cmn-instrs=%d,", warmup_cmn_instrs);
   end
-  if (warmup_instrs != 0 || cmn_instrs != 0) begin
-    set_warmup_insts(warmup_instrs, cmn_instrs);
+  if (warmup_instrs != 0 || warmup_cmn_instrs != 0) begin
+    set_warmup_insts(warmup_instrs, warmup_cmn_instrs);
   end
   // boot flash image: bin file
   if ($test$plusargs("flash")) begin
@@ -192,23 +192,19 @@ assign difftest_logCtrl_level = 0;
 assign difftest_perfCtrl_clean = dpi_perfCtrl_clean;
 assign difftest_uart_in_ch = 8'hff;
 
-export "DPI-C" task claer_perfcnt;
-task claer_perfcnt();
+export "DPI-C" task clear_perfcnt;
+task clear_perfcnt();
   dpi_perfCtrl_clean <= 1'b1;
 endtask
 
-reg clear_perf_cnt;
 always @(posedge clock) begin
   if (reset) begin
     dpi_perfCtrl_clean <= 1'b0;
   end else begin
     if (dpi_perfCtrl_clean) begin
-      if (clear_perf_cnt == 'd1) begin
         dpi_perfCtrl_clean <= 1'b0;
         $display("claer perfCnt");
       end
-      clear_perf_cnt <= clear_perf_cnt + 1'b1;  
-    end
   end
 end
 

@@ -42,7 +42,6 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
-static uint64_t cmn_instrs = 0;
 static uint64_t warmup_instrs = 0;
 static svScope wamupScope;
 struct core_end_info_t {
@@ -58,7 +57,7 @@ enum {
   SIMV_FAIL,
 } simv_state;
 
-extern "C" void claer_perfcnt();
+extern "C" void clear_perfcnt();
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n", s);
@@ -89,8 +88,7 @@ extern "C" void set_overwrite_autoset() {
 
 // The workload warms up and clears the instruction counter
 extern "C" void set_warmup_insts(uint64_t warmup_inst, uint64_t cmn_inst) {
-  warmup_instrs = warmup_inst;
-  cmn_instrs = cmn_inst;
+  warmup_instrs = warmup_inst + cmn_inst;
   wamupScope = svGetScope();
   if (wamupScope == NULL) {
     printf("Error: Could not retrieve wamup scope, set first\n");
@@ -258,12 +256,10 @@ extern "C" uint8_t simv_step() {
     auto trap = difftest[i]->get_trap_event();
     if (warmup_instrs != 0 && trap->instrCnt > warmup_instrs) {
       svSetScope(wamupScope);
-      claer_perfcnt();
+      clear_perfcnt();
       warmup_instrs = 0;
-    } else if (cmn_instrs != 0 && trap->instrCnt > warmup_instrs) {
-      svSetScope(wamupScope);
-      claer_perfcnt();
-      cmn_instrs = 0;
+      Info("Warmup finished. The performance counters will be reset.\n");
+      eprintf("core-%d warmup-cycle %ld warmup-instrs %ld\n", i, trap->cycleCnt, trap->instrCnt);
     }
 
     if (max_instrs != 0) { // 0 for no limit
