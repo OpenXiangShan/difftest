@@ -69,13 +69,13 @@ struct EmuArgs {
     track_instr = 0;
 #endif
 #ifdef DSE
-    uint64_t dse_max_instr = 10;
+    uint64_t dse_max_instr = 1000000000;
 #endif
     snapshot_path = NULL;
     wave_path = NULL;
     image = NULL;
-    // flash_bin = "/nfs/home/wujiabin/work/xs-env/nexus-am/test/dse/dse";
-    flash_bin = NULL;
+    flash_bin = "./dse-driver/build/dse.bin";
+    // flash_bin = NULL;
     enable_waveform = false;
     enable_snapshot = true;
     force_dump_result = false;
