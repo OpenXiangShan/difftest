@@ -346,6 +346,7 @@ protected:
     last_commit = get_trap_event()->cycleCnt;
   }
   int check_timeout();
+  int check_all();
   void do_first_instr_commit();
   void do_interrupt();
   void do_exception();
