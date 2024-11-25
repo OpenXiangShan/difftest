@@ -50,7 +50,7 @@ import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
 import "DPI-C" function void set_overwrite_autoset();
-import "DPI-C" context function void set_warmup_insts(longint workload_inst, longint cmn_inst);
+import "DPI-C" context function void set_warmup_insts(longint workload_inst);
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -83,7 +83,6 @@ longint overwrite_nbytes;
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
 reg [63:0] warmup_instrs;
-reg [63:0] warmup_cmn_instrs;
 reg [63:0] stuck_limit;
 
 initial begin
@@ -105,7 +104,6 @@ initial begin
 `ifndef TB_NO_DPIC
   stuck_limit = get_stuck_limit();
   warmup_instrs = 0;
-  warmup_cmn_instrs = 0;
   // workload: bin file
   if ($test$plusargs("workload")) begin
     $value$plusargs("workload=%s", bin_file);
@@ -114,12 +112,7 @@ initial begin
   // warmup for instrs
   if ($test$plusargs("warmup-inst")) begin
     $value$plusargs("warmup-inst=%d", warmup_instrs);
-  end
-  if ($test$plusargs("cmn-instrs")) begin
-    $value$plusargs("cmn-instrs=%d", warmup_cmn_instrs);
-  end
-  if (warmup_instrs != 0 || warmup_cmn_instrs != 0) begin
-    set_warmup_insts(warmup_instrs, warmup_cmn_instrs);
+    set_warmup_insts(warmup_instrs);
   end
   // boot flash image: bin file
   if ($test$plusargs("flash")) begin

@@ -87,14 +87,14 @@ extern "C" void set_overwrite_autoset() {
 }
 
 // The workload warms up and clears the instruction counter
-extern "C" void set_warmup_insts(uint64_t warmup_inst, uint64_t cmn_inst) {
-  warmup_instrs = warmup_inst + cmn_inst;
+extern "C" void set_warmup_insts(uint64_t warmup_inst) {
+  warmup_instrs = warmup_inst;
   wamupScope = svGetScope();
   if (wamupScope == NULL) {
     printf("Error: Could not retrieve wamup scope, set first\n");
     assert(wamupScope);
   }
-  printf("set warmp insts %ld, cmn insts %ld\n", warmup_inst, cmn_inst);
+  printf("set warmp insts %ld\n", warmup_inst);
 }
 
 extern "C" void set_gcpt_bin(char *s) {
