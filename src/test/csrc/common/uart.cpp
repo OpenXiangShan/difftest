@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "uart.h"
 #include "common.h"
 #include "stdlib.h"
 
@@ -63,7 +64,7 @@ uint8_t uart_getc() {
   return ch;
 }
 
-extern "C" void uart_getc_legacy(uint8_t *ch) {
+void uart_getc_legacy(uint8_t *ch) {
   static uint32_t lasttime = 0;
   uint32_t now = uptime();
 

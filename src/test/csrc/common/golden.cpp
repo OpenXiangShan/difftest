@@ -23,7 +23,7 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
-extern "C" uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_t *level) {
+uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_t *level) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_pte_helper]++;
   difftest_bytes[perf_pte_helper] += 25;
@@ -68,7 +68,7 @@ enum {
 #define GET_LOWER32(data) ((data) & ((1UL << 32) - 1))
 #define GET_UPPER32(data) ((data) >> 32)
 
-extern "C" uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
+uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_amo_helper]++;
   difftest_bytes[perf_amo_helper] += 18;
