@@ -26,11 +26,9 @@
 #ifndef CONFIG_NO_DIFFTEST
 #include "refproxy.h"
 #endif // CONFIG_NO_DIFFTEST
+#include "svdpi.h"
 #include <common.h>
 #include <locale.h>
-#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
-#include "svdpi.h"
-#endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -44,6 +42,8 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
+static uint64_t warmup_instr = 0;
+static svScope difftest_endpoint_scope;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   double core_cpi[NUM_CORES];
@@ -84,6 +84,12 @@ extern "C" void set_overwrite_autoset() {
   fclose(fp);
 }
 
+// Support workload warms up and clean LogPerf after warmup instrs
+extern "C" void set_warmup_instr(uint64_t instrs) {
+  warmup_instr = instrs;
+  printf("Warmup instrs:%ld\n", instrs);
+}
+
 extern "C" void set_gcpt_bin(char *s) {
   gcpt_restore_bin = (char *)malloc(256);
   strcpy(gcpt_restore_bin, s);
@@ -92,6 +98,10 @@ extern "C" void set_gcpt_bin(char *s) {
 extern "C" void set_max_instrs(uint64_t mc) {
   printf("set max instrs: %lu\n", mc);
   max_instrs = mc;
+}
+
+extern "C" void set_difftest_endpoint_scope() {
+  difftest_endpoint_scope = svGetScope();
 }
 
 extern "C" uint64_t get_stuck_limit() {
@@ -159,6 +169,17 @@ extern "C" void set_no_diff() {
 
 extern "C" void set_simjtag() {
   enable_simjtag = true;
+}
+
+extern "C" void set_perfCtrl_clean();
+
+void difftest_perfCtrl_clean() {
+  if (difftest_endpoint_scope == NULL) {
+    printf("Error: Could not retrieve DifftestEndpoint scope, set first\n");
+    assert(difftest_endpoint_scope);
+  }
+  svSetScope(difftest_endpoint_scope);
+  set_perfCtrl_clean();
 }
 
 extern "C" uint8_t simv_init() {
@@ -239,11 +260,17 @@ extern "C" uint8_t simv_step() {
       return SIMV_FAIL;
   }
 
-  if (max_instrs != 0) { // 0 for no limit
-    for (int i = 0; i < NUM_CORES; i++) {
+  for (int i = 0; i < NUM_CORES; i++) {
+    auto trap = difftest[i]->get_trap_event();
+    if (warmup_instr != 0 && trap->instrCnt > warmup_instr) {
+      difftest_perfCtrl_clean();
+      warmup_instr = 0;
+      Info("Warmup finished. The performance counters will be reset.\n");
+    }
+
+    if (max_instrs != 0) { // 0 for no limit
       if (core_end_info.core_trap[i])
         continue;
-      auto trap = difftest[i]->get_trap_event();
       if (max_instrs < trap->instrCnt) {
         core_end_info.core_trap[i] = true;
         core_end_info.core_trap_num++;
