@@ -53,7 +53,7 @@ case class GatewayConfig(
   def dutBufLen: Int = if (isBatch) batchSize else 1
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
-  def batchArgByteLen: (Int, Int) = if (isNonBlock | isFPGA) (3600, 400) else (7200, 800)
+  def batchArgByteLen: (Int, Int) = if (isNonBlock || isFPGA) (3600, 400) else (7200, 800)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
@@ -114,16 +114,6 @@ case class GatewayResult(
       step = if (step.isDefined) step else that.step,
     )
   }
-}
-
-class GatewayIO(dataType: UInt, infoType: UInt) extends Bundle {
-  val data = Output(dataType)
-  val info = Output(infoType)
-}
-
-class GatewayOutput(data: UInt, info: UInt, config: GatewayConfig) extends Bundle {
-  val io = new GatewayIO(chiselTypeOf(data), chiselTypeOf(info))
-  val enable = Output(Bool())
 }
 
 object Gateway {
@@ -244,7 +234,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     val batch = Batch(squashed, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
-    GatewaySink.batch(batch.enable, Batch.getTemplate, control, batch.io, config)
+    GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
   } else {
     val squashed_enable = VecInit(squashed.map(_.valid).toSeq).asUInt.orR
     step := RegNext(squashed_enable, 0.U)
@@ -271,23 +261,21 @@ object GatewaySink {
     }
   }
 
-  def batch(
-    enable: Bool,
-    template: Seq[DifftestBundle],
-    control: GatewaySinkControl,
-    io: BatchIO,
-    config: GatewayConfig,
-  ): Unit = {
+  def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
     config.style match {
       case "dpic" => DPIC.batch(template, control, io, config)
       case _      => DPIC.batch(template, control, io, config) // Default: DPI-C
     }
+    val out = Option.when(config.isFPGA) {
+      IO(new Bundle {
+        val batch = Output(chiselTypeOf(io))
+        val enable = Output(Bool())
+      })
+    }
     if (config.isFPGA) {
-      val out = IO(Output(new GatewayOutput(io.data, io.info, config)))
-      out.io.data := io.data
-      out.io.info := io.info
-      out.enable := enable
-      dontTouch(out)
+      out.get.batch := io
+      out.get.enable := control.enable
+      dontTouch(out.get)
     }
   }
 
