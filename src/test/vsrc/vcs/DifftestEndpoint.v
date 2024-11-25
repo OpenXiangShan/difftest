@@ -50,7 +50,8 @@ import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
 import "DPI-C" function void set_overwrite_autoset();
-import "DPI-C" context function void set_warmup_insts(longint workload_inst);
+import "DPI-C" function void set_warmup_instr(longint instrs);
+import "DPI-C" context function void set_difftest_endpoint_scope();
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -82,7 +83,7 @@ longint overwrite_nbytes;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
-reg [63:0] warmup_instrs;
+reg [63:0] warmup_instr;
 reg [63:0] stuck_limit;
 
 initial begin
@@ -102,17 +103,18 @@ initial begin
   end
   stuck_limit = 0;
 `ifndef TB_NO_DPIC
+  set_difftest_endpoint_scope();
   stuck_limit = get_stuck_limit();
-  warmup_instrs = 0;
   // workload: bin file
   if ($test$plusargs("workload")) begin
     $value$plusargs("workload=%s", bin_file);
     set_bin_file(bin_file);
   end
   // warmup for instrs
-  if ($test$plusargs("warmup-inst")) begin
-    $value$plusargs("warmup-inst=%d", warmup_instrs);
-    set_warmup_insts(warmup_instrs);
+  warmup_instr = 0;
+  if ($test$plusargs("warmup_instr")) begin
+    $value$plusargs("warmup_instr=%d", warmup_instr);
+    set_warmup_instr(warmup_instr);
   end
   // boot flash image: bin file
   if ($test$plusargs("flash")) begin
@@ -178,21 +180,25 @@ initial begin
   end
 end
 
-reg dpic_perfCtrl_clean;
+reg difftest_perfCtrl_clean_r;
 assign difftest_logCtrl_begin = difftest_logCtrl_begin_r;
 assign difftest_logCtrl_end = difftest_logCtrl_end_r;
 assign difftest_logCtrl_level = 0;
-assign difftest_perfCtrl_clean = dpic_perfCtrl_clean;
+assign difftest_perfCtrl_clean = difftest_perfCtrl_clean_r;
 assign difftest_uart_in_ch = 8'hff;
 
-export "DPI-C" task clear_perfcnt;
-task clear_perfcnt();
-  dpic_perfCtrl_clean = 1'b1;
+export "DPI-C" task set_perfCtrl_clean;
+task set_perfCtrl_clean();
+  difftest_perfCtrl_clean_r <= 1'b1;
 endtask
 
 always @(posedge clock) begin
-  if (dpic_perfCtrl_clean == 1'b1)
-    dpic_perfCtrl_clean = 1'b0;
+  if (reset) begin
+    difftest_perfCtrl_clean_r <= 1'b0;
+  end
+  else if (difftest_perfCtrl_clean_r) begin
+    difftest_perfCtrl_clean_r <= 1'b0;
+  end
 end
 
 always @(posedge clock) begin
