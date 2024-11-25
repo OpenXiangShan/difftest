@@ -22,8 +22,6 @@
 
 FILE *fp = NULL;
 
-extern "C" {
-
 void check_sdcard() {
   if (!fp) {
     eprintf(ANSI_COLOR_MAGENTA "[warning] sdcard img not found\n");
@@ -67,5 +65,4 @@ void finish_sd(void) {
 #ifdef SDCARD_IMAGE
   fclose(fp);
 #endif
-}
 }

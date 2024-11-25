@@ -99,4 +99,6 @@ void common_finish();
 
 uint32_t uptime(void);
 
+extern "C" void xs_assert(long long line);
+extern "C" void xs_assert_v2(const char *filename, long long line);
 #endif // __COMMON_H

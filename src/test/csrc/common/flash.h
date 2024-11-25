@@ -25,4 +25,5 @@ long get_flash_size();
 void init_flash(const char *flash_bin);
 void flash_finish();
 
+extern "C" void flash_read(uint32_t addr, uint64_t *data);
 #endif // __FLASH_H
