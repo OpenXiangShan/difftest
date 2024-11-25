@@ -124,7 +124,6 @@ class GatewayIO(dataType: UInt, infoType: UInt) extends Bundle {
 class GatewayOutput(data: UInt, info: UInt, config: GatewayConfig) extends Bundle {
   val io = new GatewayIO(chiselTypeOf(data), chiselTypeOf(info))
   val enable = Output(Bool())
-  val step = Output(UInt(config.stepWidth.W))
 }
 
 object Gateway {
@@ -245,16 +244,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     val batch = Batch(squashed, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
-    if (!config.isFPGA) {
-      GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
-    } else {
-      val out = IO(Output(new GatewayOutput(batch.io.data, batch.io.info, config)))
-      out.io.data := batch.io.data
-      out.io.info := batch.io.info
-      out.enable := batch.enable
-      out.step := RegNext(batch.step)
-      dontTouch(out)
-    }
+    GatewaySink.batch(batch.enable, Batch.getTemplate, control, batch.io, config)
   } else {
     val squashed_enable = VecInit(squashed.map(_.valid).toSeq).asUInt.orR
     step := RegNext(squashed_enable, 0.U)
@@ -281,10 +271,23 @@ object GatewaySink {
     }
   }
 
-  def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
+  def batch(
+    enable: Bool,
+    template: Seq[DifftestBundle],
+    control: GatewaySinkControl,
+    io: BatchIO,
+    config: GatewayConfig,
+  ): Unit = {
     config.style match {
       case "dpic" => DPIC.batch(template, control, io, config)
       case _      => DPIC.batch(template, control, io, config) // Default: DPI-C
+    }
+    if (config.isFPGA) {
+      val out = IO(Output(new GatewayOutput(io.data, io.info, config)))
+      out.io.data := io.data
+      out.io.info := io.info
+      out.enable := enable
+      dontTouch(out)
     }
   }
 
