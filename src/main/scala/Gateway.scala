@@ -53,7 +53,7 @@ case class GatewayConfig(
   def dutBufLen: Int = if (isBatch) batchSize else 1
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
-  def batchArgByteLen: (Int, Int) = if (isNonBlock) (3600, 400) else (7200, 800)
+  def batchArgByteLen: (Int, Int) = if (isNonBlock | isFPGA) (3600, 400) else (7200, 800)
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
@@ -114,6 +114,17 @@ case class GatewayResult(
       step = if (step.isDefined) step else that.step,
     )
   }
+}
+
+class GatewayIO(dataType: UInt, infoType: UInt) extends Bundle {
+  val data = Output(dataType)
+  val info = Output(infoType)
+}
+
+class GatewayOutput(data: UInt, info: UInt, config: GatewayConfig) extends Bundle {
+  val io = new GatewayIO(chiselTypeOf(data), chiselTypeOf(info))
+  val enable = Output(Bool())
+  val step = Output(UInt(config.stepWidth.W))
 }
 
 object Gateway {
@@ -234,7 +245,16 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     val batch = Batch(squashed, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
-    GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
+    if (!config.isFPGA) {
+      GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
+    } else {
+      val out = IO(Output(new GatewayOutput(batch.io.data, batch.io.info, config)))
+      out.io.data := batch.io.data
+      out.io.info := batch.io.info
+      out.enable := batch.enable
+      out.step := RegNext(batch.step)
+      dontTouch(out)
+    }
   } else {
     val squashed_enable = VecInit(squashed.map(_.valid).toSeq).asUInt.orR
     step := RegNext(squashed_enable, 0.U)
