@@ -116,7 +116,7 @@ initial begin
     $value$plusargs("warmup-inst=%d", warmup_instrs);
   end
   if ($test$plusargs("cmn-instrs")) begin
-    $value$plusargs("cmn-instrs=%d,", warmup_cmn_instrs);
+    $value$plusargs("cmn-instrs=%d", warmup_cmn_instrs);
   end
   if (warmup_instrs != 0 || warmup_cmn_instrs != 0) begin
     set_warmup_insts(warmup_instrs, warmup_cmn_instrs);
@@ -185,27 +185,21 @@ initial begin
   end
 end
 
-reg dpi_perfCtrl_clean;
+reg dpic_perfCtrl_clean;
 assign difftest_logCtrl_begin = difftest_logCtrl_begin_r;
 assign difftest_logCtrl_end = difftest_logCtrl_end_r;
 assign difftest_logCtrl_level = 0;
-assign difftest_perfCtrl_clean = dpi_perfCtrl_clean;
+assign difftest_perfCtrl_clean = dpic_perfCtrl_clean;
 assign difftest_uart_in_ch = 8'hff;
 
 export "DPI-C" task clear_perfcnt;
 task clear_perfcnt();
-  dpi_perfCtrl_clean <= 1'b1;
+  dpic_perfCtrl_clean = 1'b1;
 endtask
 
 always @(posedge clock) begin
-  if (reset) begin
-    dpi_perfCtrl_clean <= 1'b0;
-  end else begin
-    if (dpi_perfCtrl_clean) begin
-        dpi_perfCtrl_clean <= 1'b0;
-        $display("claer perfCnt");
-      end
-  end
+  if (dpic_perfCtrl_clean == 1'b1)
+    dpic_perfCtrl_clean = 1'b0;
 end
 
 always @(posedge clock) begin
