@@ -243,7 +243,7 @@ class AtomicEvent extends DifftestBaseBundle with HasValid {
   val mask = UInt(16.W)
   val cmp = Vec(2, UInt(64.W))
   val fuop = UInt(8.W)
-  val out = UInt(64.W)
+  val out = Vec(2, UInt(64.W))
 }
 
 class CMOInvalEvent extends DifftestBaseBundle with HasValid {
