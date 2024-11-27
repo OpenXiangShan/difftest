@@ -490,7 +490,7 @@ object DifftestModule {
     difftest
   }
 
-  def get_all_interfaces(): Seq[(DifftestBundle, Int)] = interfaces.toSeq
+  def get_current_interfaces(): Seq[(DifftestBundle, Int)] = interfaces.toSeq
 
   def finish(cpu: String, createTopIO: Boolean): Option[DifftestTopIO] = {
     val gateway = Gateway.collect()
