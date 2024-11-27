@@ -29,6 +29,9 @@
 #ifdef EMU_THREAD
 #include <verilated_threads.h>
 #endif
+#ifdef CONDUCT_DSE
+#include "dse.h"
+#endif
 
 struct EmuArgs {
   uint32_t seed;
@@ -40,7 +43,7 @@ struct EmuArgs {
 #ifdef DEBUG_REFILL
   uint64_t track_instr;
 #endif
-#ifdef DSE
+#ifdef CONDUCT_DSE
   uint64_t dse_max_instr;
 #endif
   const char *image;
@@ -68,7 +71,7 @@ struct EmuArgs {
 #ifdef DEBUG_REFILL
     track_instr = 0;
 #endif
-#ifdef DSE
+#ifdef CONDUCT_DSE
     uint64_t dse_max_instr = 1000000000;
 #endif
     snapshot_path = NULL;
@@ -99,6 +102,9 @@ private:
 #endif
   EmuArgs args;
   LightSSS lightsss;
+#ifdef CONDUCT_DSE
+  DSE dse = DSE();
+#endif
 
   enum {
     STATE_GOODTRAP = 0,

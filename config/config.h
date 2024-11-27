@@ -180,4 +180,4 @@ extern unsigned long EMU_FLASH_SIZE;
 
 
 // for DSE
-#define DSE
+#define CONDUCT_DSE

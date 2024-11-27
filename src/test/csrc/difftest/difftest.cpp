@@ -362,7 +362,7 @@ void Difftest::do_instr_commit(int i) {
 void Difftest::do_first_instr_commit() {
   // printf("has_commit: %d, dut.commit[0].valid: %d\n", has_commit, dut.commit[0].valid);
   if (!has_commit && dut.commit[0].valid) {
-#ifndef DSE
+#ifndef CONDUCT_DSE
 #ifndef BASIC_DIFFTEST_ONLY
     if (dut.commit[0].pc != reset_vector) {
       printf("The first instruction of core %d is not at 0x%lx, but at 0x%lx\n", id, reset_vector, dut.commit[0].pc);

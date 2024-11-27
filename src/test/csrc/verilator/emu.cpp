@@ -33,7 +33,9 @@
 #include "compress.h"
 #include "lightsss.h"
 #include "remote_bitbang.h"
+// #ifdef CONDUCT_DSE
 // #include "dse.h"
+// #endif
 
 uint64_t old_cycles = 0;
 
@@ -175,7 +177,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
       case 'F': args.flash_bin = optarg; break;
-#ifdef DSE
+#ifdef CONDUCT_DSE
       case 'M': args.dse_max_instr = atoll_strict(optarg, "dse-max-instr"); break;
 #endif
     }
@@ -239,14 +241,15 @@ Emulator::Emulator(int argc, const char *argv[]):
   
 
   // init dse & core
+#ifdef CONDUCT_DSE
   reset_dse_ncycles(10);
-
   printf("reset dse complete\n");
+#endif
 
-  // init core
-  // first_reset_ncycles(10);
-
+#ifndef CONDUCT_DSE
+  reset_ncycles(10);
   printf("core reset complete\n");
+#endif
 
   // init ram
   init_ram(args.image);
@@ -472,17 +475,23 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     }
 
     // DSECtrl reset valid
+#ifdef CONDUCT_DSE
     for (int i = 0; i < NUM_CORES; i++) {
       if (dut_ptr->io_dse_reset_valid && !lastCycleDSEReset) {
         printf("DSE reset start at pc: %lx\n", diff->get_dut()->commit[0].pc);
         reset_vector = dut_ptr->io_dse_reset_vec;
         lastCycleDSEReset = true;
 
-        auto trap = difftest[i]->get_trap_event();
-        uint64_t cycleCnt = trap->cycleCnt;
-        double ipc = (double)instrCnt / (cycleCnt);
-        printf("ipc: %f\n", ipc);
-        printf("instrCnt: %ld cycles: %ld\n", instrCnt, cycleCnt);
+        // only calculate ipc for workloads
+        if (reset_vector == 0x10000000) {
+          auto trap = difftest[i]->get_trap_event();
+          uint64_t cycleCnt = trap->cycleCnt;
+          double ipc = (double)instrCnt / (cycleCnt);
+          uint64_t epoch = dut_ptr->io_dse_epoch;
+          printf("epoch: %ld\n", epoch);
+          printf("ipc: %f\n", ipc);
+          printf("instrCnt: %ld cycles: %ld\n", instrCnt, cycleCnt);
+        }
       }
       if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
         lastCycleDSEReset = false;
@@ -500,7 +509,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         break;
       }
     }
-
+#endif
 
     // assertions
     if (assert_count > 0) {
@@ -539,14 +548,18 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     trapCode = difftest_state();
 
     // workload finish before reaching dse_max_instr
+#ifdef CONDUCT_DSE
     if (trapCode == STATE_GOODTRAP) {
         auto trap = difftest[0]->get_trap_event();
         uint64_t instrCnt = trap->instrCnt;
         uint64_t cycleCnt = trap->cycleCnt;
+        uint64_t epoch = dut_ptr->io_dse_epoch;
+        uint64_t max_epoch = dut_ptr->io_dse_max_epoch;
 
-        if (instrCnt < args.dse_max_instr) {
+        if (instrCnt < args.dse_max_instr && epoch <= max_epoch) {
           printf("Hit good trap at pc = 0x%lx, instrCnt = %ld, cycleCnt = %ld\n", trap->pc, instrCnt, cycleCnt);
           double ipc = (double)instrCnt / (cycleCnt);
+          printf("epoch: %ld\n", epoch);
           printf("ipc: %f\n", ipc);
 
           printf("Core start to reset at pc = 0x%lx\n", trap->pc);
@@ -568,6 +581,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           trapCode = STATE_RUNNING;
         }
     }
+#endif
 
     if (trapCode != STATE_RUNNING) {
       break;
