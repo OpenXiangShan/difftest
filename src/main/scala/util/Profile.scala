@@ -15,7 +15,7 @@
 
 package difftest.util
 
-import difftest.DifftestBundle
+import difftest.{DifftestBundle, DifftestModule}
 import difftest.common.FileControl
 import org.json4s.DefaultFormats
 import org.json4s.native._
@@ -85,5 +85,11 @@ object Profile {
   def generateJson(cpu: String, bundles: Seq[(DifftestBundle, Int)], profileName: String = "difftest"): Unit = {
     val difftestProfile = DifftestProfile.fromBundles(cpu, bundles)
     FileControl.write(Seq(difftestProfile.toJsonString), s"${profileName}_profile.json")
+  }
+
+  // This function generates the json profile for current DiffTest interfaces.
+  def generateJson(cpu: String): Unit = {
+    val bundles = DifftestModule.get_current_interfaces()
+    generateJson(cpu, bundles)
   }
 }
