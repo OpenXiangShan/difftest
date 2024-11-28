@@ -1130,7 +1130,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
     uint64_t meml, memh;
     uint64_t retl, reth;
     read_goldenmem(atomicAddr, &meml, 8);
-    read_goldenmem(atomicAddr+8, &memh, 8);
+    read_goldenmem(atomicAddr + 8, &memh, 8);
     if (meml != atomicOut[0] || memh != atomicOut[1]) {
       printf("Core %d atomic instr mismatch goldenMem, mem: 0x%lx 0x%lx, t: 0x%lx 0x%lx, op: 0x%x, addr: 0x%lx\n",
              coreid, memh, meml, atomicOut[1], atomicOut[0], atomicFuop, atomicAddr);
@@ -1146,7 +1146,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
     update_goldenmem(atomicAddr, &retl, 0xff, 8);
-    update_goldenmem(atomicAddr+8, &reth, 0xff, 8);
+    update_goldenmem(atomicAddr + 8, &reth, 0xff, 8);
   }
   return 0;
 }
@@ -1191,9 +1191,8 @@ int Difftest::do_golden_memory_update() {
 #ifdef CONFIG_DIFFTEST_ATOMICEVENT
   if (dut->atomic.valid) {
     dut->atomic.valid = 0;
-    int ret =
-        handle_atomic(id, dut->atomic.addr, (uint64_t*)dut->atomic.data, dut->atomic.mask, (uint64_t*)dut->atomic.cmp, dut->atomic.fuop,
-          (uint64_t*)dut->atomic.out);
+    int ret = handle_atomic(id, dut->atomic.addr, (uint64_t *)dut->atomic.data, dut->atomic.mask,
+                            (uint64_t *)dut->atomic.cmp, dut->atomic.fuop, (uint64_t *)dut->atomic.out);
     if (dut->atomic.addr == track_instr) {
       dumpGoldenMem("Atmoic", track_instr, cycleCnt);
     }
