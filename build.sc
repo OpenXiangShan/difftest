@@ -13,7 +13,6 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-import os.Path
 import mill._
 import mill.api.PathRef
 import scalalib._
@@ -43,7 +42,7 @@ object design extends Cross[DiffTestModule](ivys.chiselCrossVersions.keys.toSeq)
 
 trait DiffTestModule extends CommonDiffTest {
 
-  override def millSourcePath = os.pwd
+  override def millSourcePath = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
 
   override def scalacOptions = super.scalacOptions() ++
     Seq("-Xfatal-warnings", "-deprecation:false", "-unchecked", "-Xlint")
@@ -53,9 +52,9 @@ trait DiffTestModule extends CommonDiffTest {
 object difftest extends Cross[Difftest](ivys.chiselCrossVersions.keys.toSeq)
 trait Difftest extends CommonDiffTest { outer =>
 
-  override def millSourcePath = os.pwd
+  override def millSourcePath = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
 
-  object test extends SbtModuleTests with TestModule.ScalaTest {
+  object test extends SbtTests with TestModule.ScalaTest {
     override def millSourcePath = outer.millSourcePath
     override def sources = T.sources {
       super.sources() ++ Seq(PathRef(millSourcePath / "src" / "generator" / s"$crossValue"))
