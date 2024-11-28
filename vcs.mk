@@ -108,7 +108,7 @@ VCS_FLAGS += $(EXTRA)
 
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
-$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES) $(VERSION_HEADER)
 	$(VCS) $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 ifeq ($(VCS),verilator)
 	$(MAKE) -s -C $(VCS_BUILD_DIR) -f V$(VCS_TOP).mk
