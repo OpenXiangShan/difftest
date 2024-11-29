@@ -557,13 +557,12 @@ int Difftest::do_instr_commit(int i) {
   }
 #endif
 
-  bool realWen = (dut->commit[i].rfwen && dut->commit[i].wdest != 0) || (dut->commit[i].fpwen);
-
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
   if (dut->commit[i].skip || (DEBUG_MODE_SKIP(dut->commit[i].valid, dut->commit[i].pc, dut->commit[i].inst))) {
     // We use the physical register file to get wdata
-    proxy->skip_one(dut->commit[i].isRVC, realWen, dut->commit[i].wdest, get_commit_data(i));
+    proxy->skip_one(dut->commit[i].isRVC, (dut->commit[i].rfwen && dut->commit[i].wdest != 0), dut->commit[i].fpwen,
+                    dut->commit[i].vecwen, dut->commit[i].wdest, get_commit_data(i));
     return 0;
   }
 
