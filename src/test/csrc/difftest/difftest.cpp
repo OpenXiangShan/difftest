@@ -1058,9 +1058,9 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       case 047: ret = (t < rs) ? t : rs; break;
       case 052:
       case 053: ret = (t > rs) ? t : rs; break;
-      case 074:
-      case 076:
-      case 077: ret = (t == cmp) ? rs : t; break;
+      case 054:
+      case 056:
+      case 057: ret = (t == cmp) ? rs : t; break;
       default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
     update_goldenmem(atomicAddr, &ret, atomicMask, 8);
@@ -1115,9 +1115,9 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       case 047: ret = (t < rs) ? t : rs; break;
       case 052:
       case 053: ret = (t > rs) ? t : rs; break;
-      case 074:
-      case 076:
-      case 077: ret = (t == cmp) ? rs : t; break;
+      case 054:
+      case 056:
+      case 057: ret = (t == cmp) ? rs : t; break;
       default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
     ret_sel = ret;
@@ -1137,7 +1137,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       return 1;
     }
     switch (atomicFuop) {
-      case 074: {
+      case 054: {
         bool success = atomicOut[0] == atomicCmp[0] && atomicOut[1] == atomicCmp[1];
         retl = success ? atomicData[0] : atomicOut[0];
         reth = success ? atomicData[1] : atomicOut[1];
