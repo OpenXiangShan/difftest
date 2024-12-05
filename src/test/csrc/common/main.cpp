@@ -17,6 +17,13 @@
 #include "common.h"
 #include "dut.h"
 
+
+uint64_t global_sim_tick = 0;
+std::string riscv_disasm(uint64_t code, uint64_t pc)
+{
+  return "";
+}
+
 #ifdef VERILATOR
 #include "emu.h"
 #define DUT_MODEL Emulator
@@ -45,6 +52,7 @@ int main(int argc, const char *argv[]) {
   // main simulation loop
   while (!emu->is_finished()) {
     emu->tick();
+    global_sim_tick++;
   }
   bool is_good = emu->is_good();
   delete emu;
