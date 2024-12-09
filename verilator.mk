@@ -86,7 +86,7 @@ endif
 # Verilator coverage
 EMU_COVERAGE ?=
 ifeq ($(EMU_COVERAGE),1)
-VEXTRA_FLAGS += --coverage-line --coverage-toggle
+VEXTRA_FLAGS += --coverage-line --coverage-toggle --coverage-user
 endif
 
 # Verilator optimization

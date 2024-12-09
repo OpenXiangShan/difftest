@@ -15,6 +15,7 @@ import "DPI-C" function int jtag_tick
 );
 `endif // DISABLE_SIMJTAG_DPIC
 
+/*verilator coverage_off*/
 module SimJTAG #(
                  parameter TICK_DELAY = 50
                  )(
@@ -98,3 +99,4 @@ module SimJTAG #(
 `endif // DISABLE_SIMJTAG_DPIC
 
 endmodule
+/*verilator coverage_on*/
