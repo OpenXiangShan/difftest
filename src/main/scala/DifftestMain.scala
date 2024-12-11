@@ -17,8 +17,8 @@
 package difftest
 
 import chisel3._
-import chisel3.util._
-import chisel3.stage._
+import circt.stage.ChiselStage
+import chisel3.stage.ChiselGeneratorAnnotation
 
 // Main class to generat difftest modules when design is not written in chisel.
 class DifftestTop extends Module {
