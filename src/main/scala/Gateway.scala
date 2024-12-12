@@ -254,11 +254,13 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
 }
 
 object GatewaySink {
+  private val ports = ListBuffer.empty[Valid[DifftestBundle]]
   def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
     config.style match {
       case "dpic" => DPIC(control, io, config)
       case _      => DPIC(control, io, config) // Default: DPI-C
     }
+    ports += io
   }
 
   def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
@@ -269,9 +271,23 @@ object GatewaySink {
   }
 
   def collect(config: GatewayConfig): GatewayResult = {
+    val collected = MixedVecInit(
+      ports.toSeq.map { gen => Seq(gen.valid.asTypeOf(UInt(8.W)), gen.bits.getByteAlign) }.flatten.toSeq
+    ).asUInt
+    val out = Option.when(config.isFPGA && !config.isBatch) {
+      IO(new Bundle {
+        val data = Output(UInt(collected.getWidth.W))
+        val enable = Output(Bool())
+      })
+    }
+    if (config.isFPGA && !config.isBatch) {
+      out.get.data := collected
+      out.get.enable := VecInit(ports.toSeq.map(_.valid)).asUInt.orR
+      dontTouch(out.get)
+    }
     config.style match {
       case "dpic" => DPIC.collect()
-      case _      => DPIC.collect() // Default: DPI-C
+      case _ => DPIC.collect() // Default: DPI-C
     }
   }
 }
