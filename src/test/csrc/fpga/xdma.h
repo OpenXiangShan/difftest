@@ -29,11 +29,17 @@
 #include <thread>
 #include <vector>
 
-#define WITH_FPGA
-
+#ifdef CONFIG_DIFFTEST_BATCH
+#define DMA_DIFF_PACKGE_LEN CONFIG_DIFFTEST_BATCH_BYTELEN
+#elif defined(CONFIG_DIFFTEST_SQUASH)
+#define DMA_DIFF_PACKGE_LEN 1216
+#endif
 typedef struct FpgaPackgeHead {
   uint8_t packge_idx;
-  char diff_batch_pack[CONFIG_DIFFTEST_BATCH_BYTELEN];
+  uint8_t diff_packge[DMA_DIFF_PACKGE_LEN];
+#ifdef CONFIG_DIFFTEST_BATCH
+  uint8_t zero[95];
+#endif // CONFIG_DIFFTEST_BATCH
 } FpgaPackgeHead;
 
 class FpgaXdma {
@@ -48,11 +54,13 @@ public:
   };
 
   void core_reset() {
+    device_write(false, nullptr, 0x20000, 0x1);
     device_write(false, nullptr, 0x100000, 0x1);
     device_write(false, nullptr, 0x10000, 0x8);
   }
 
   void core_restart() {
+    device_write(false, nullptr, 0x20000, 0);
     device_write(false, nullptr, 0x100000, 0);
   }
 

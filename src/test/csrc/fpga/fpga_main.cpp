@@ -55,6 +55,7 @@ int main(int argc, char *argv[]) {
   args_parsingniton(argc, argv);
 
   simv_init();
+  printf("simv init\n");
   {
     std::unique_lock<std::mutex> lock(simv_mtx);
     xdma_device->start_transmit_thread();
@@ -82,7 +83,7 @@ void simv_init() {
   difftest_init();
 }
 
-extern "C" void simv_nstep(uint8_t step) {
+void simv_nstep(uint8_t step) {
   for (int i = 0; i < step; i++) {
     simv_step();
   }

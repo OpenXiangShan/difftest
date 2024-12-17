@@ -20,7 +20,14 @@
 #include <fstream>
 #include <iostream>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string>
 #include <sys/mman.h>
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+#include "diff_unpack.h"
+#endif // CONFIG_DIFFTEST_SQUASH
 
 #define XDMA_USER       "/dev/xdma0_user"
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
@@ -61,7 +68,7 @@ void FpgaXdma::handle_sigint(int sig) {
 // write xdma_bypass memory or xdma_user
 void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
   uint64_t pg_size = sysconf(_SC_PAGE_SIZE);
-  uint64_t size = !is_bypass ? 0x1000 : 0x10000;
+  uint64_t size = !is_bypass ? 0x1000 : 0x100000;
   uint64_t aligned_size = (size + 0xffful) & ~0xffful;
   uint64_t base = addr & ~0xffful;
   uint32_t offset = addr & 0xfffu;
@@ -159,8 +166,12 @@ void FpgaXdma::write_difftest_thread() {
       printf("read mempool idx failed\n");
       assert(0);
     }
-    recv_count ++;
+    recv_count++;
     // packge unpack
-    v_difftest_Batch((uint8_t *)packge.diff_batch_pack);
+#ifdef CONFIG_DIFFTEST_BATCH
+    v_difftest_Batch(packge.diff_packge);
+#elif defined(CONFIG_DIFFTEST_SQUASH)
+    squash_unpackge(packge.diff_packge);
+#endif
   }
 }
