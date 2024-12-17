@@ -19,5 +19,4 @@
 #include "difftest-dpic.h"
 void squash_unpackge(uint8_t *packge);
 
-
 #endif
