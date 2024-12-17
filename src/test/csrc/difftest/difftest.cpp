@@ -22,7 +22,9 @@
 #include "ram.h"
 #include "spikedasm.h"
 #ifdef CONFIG_DIFFTEST_SQUASH
+#ifndef WITH_FPGA
 #include "svdpi.h"
+#endif // WITH_FPGA
 #endif // CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
@@ -135,6 +137,7 @@ void difftest_finish() {
 }
 
 #ifdef CONFIG_DIFFTEST_SQUASH
+#ifndef WITH_FPGA
 svScope squashScope;
 void set_squash_scope() {
   squashScope = svGetScope();
@@ -149,6 +152,7 @@ void difftest_squash_enable(int enable) {
   svSetScope(squashScope);
   set_squash_enable(enable);
 }
+#endif // WITH_FPGA
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #ifdef CONFIG_DIFFTEST_REPLAY
