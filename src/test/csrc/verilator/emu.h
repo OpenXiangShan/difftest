@@ -93,7 +93,7 @@ private:
   inline void reset_ncycles(size_t cycles);
   inline void single_cycle();
   void trigger_stat_dump();
-  void display_trapinfo();
+  void display_stats();
 
   inline const char *logdb_filename() {
     return create_noop_filename(".db");
