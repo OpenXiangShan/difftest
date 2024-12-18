@@ -84,7 +84,7 @@ static inline void print_help(const char *file) {
 #ifdef ENABLE_IPC
   printf("  -R, --ipc-interval=NUM     the interval insts of drawing IPC curve\n");
 #endif
-  printf("  -X, --fork-interval=NUM    LightSSS snapshot interval (in seconds)\n");
+  printf("  -X, --fork-interval=NUM    LightSSS snapshot interval (in seconds), default: 10\n");
   printf("      --overwrite-nbytes=N   set valid bytes, but less than 0xf00, default: 0xe00\n");
   printf("      --overwrite-auto       overwrite size is automatically set of the new gcpt\n");
   printf("      --force-dump-result    force dump performance counter result in the end\n");
