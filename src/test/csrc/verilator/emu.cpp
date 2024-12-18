@@ -488,9 +488,15 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           uint64_t cycleCnt = trap->cycleCnt;
           double ipc = (double)instrCnt / (cycleCnt);
           uint64_t epoch = dut_ptr->io_dse_epoch;
+          uint64_t max_epoch = dut_ptr->io_dse_max_epoch;
           printf("epoch: %ld\n", epoch);
+          printf("max epoch: %ld\n", max_epoch);
           printf("ipc: %f\n", ipc);
           printf("instrCnt: %ld cycles: %ld\n", instrCnt, cycleCnt);
+          if (epoch == max_epoch) {
+            trapCode = STATE_GOODTRAP;
+            break;
+          }
         }
       }
       if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
