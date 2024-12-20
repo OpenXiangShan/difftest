@@ -234,54 +234,66 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
   val state_step_cnt = RegInit(0.U(config.stepWidth.W))
   val state_trace_size = Option.when(config.hasReplay)(RegInit(0.U(config.replayWidth.W)))
 
+  // Assemble step data/info into state in 3 stage
+  // Stage 1:
+  //   1. RegNext signal from BatchCollector to cut of combination logic path
+  //   1. data/info_exceed_vec: mark whether different length fragments of step data/info exceed available space
+  //   2. concat/remain_stats: record statistic for data/info to be concatenated to output or remained to state
+  val delay_step_data = RegNext(step_data)
+  val delay_step_info = RegNext(step_info)
+  val delay_step_status = RegNext(step_status)
+  val delay_step_enable = RegNext(step_enable)
+  val delay_step_trace_info = Option.when(config.hasReplay)(RegNext(step_trace_info.get))
   val data_grain_avail = param.MaxDataGrains.U -& state_status.data_grains
   // Always leave a space for BatchFinish, use MaxInfoSize - 1
   val info_size_avail = (param.MaxInfoSize - 1).U -& state_status.info_size
-  val data_exceed_v = VecInit(step_status.map(_.data_grains > data_grain_avail && step_enable))
+  val data_exceed_v = VecInit(delay_step_status.map(_.data_grains > data_grain_avail && delay_step_enable))
   // Note: BatchInterval already contains in step_stautus, we consider BatchFinish
-  val info_exceed_v = VecInit(step_status.map(_.info_size > info_size_avail && step_enable))
+  val info_exceed_v = VecInit(delay_step_status.map(_.info_size > info_size_avail && delay_step_enable))
   val exceed_v = VecInit(data_exceed_v.zip(info_exceed_v).map{ case (de, ie) => de | ie})
   // Extract last non-exceed stats
   // When no stats exceeds, return step_stats to append whole step for state flushing
-  val concat_stats = Mux(!exceed_v.asUInt.orR, step_status.last,
-    VecInit(step_status.dropRight(1).zipWithIndex.map { case (stats, idx) =>
+  val concat_stats = Mux(!exceed_v.asUInt.orR, delay_step_status.last,
+    VecInit(delay_step_status.dropRight(1).zipWithIndex.map { case (stats, idx) =>
       val mask = exceed_v(idx) ^ exceed_v(idx + 1)
       Mux(mask, stats.asUInt, 0.U)
     }).reduceTree(_ | _).asTypeOf(new BatchStats(param))
   )
   val remain_stats = Wire(new BatchStats(param))
-  remain_stats.data_grains := step_status.last.data_grains -& concat_stats.data_grains
-  remain_stats.info_size := step_status.last.info_size -& concat_stats.info_size
+  remain_stats.data_grains := delay_step_status.last.data_grains -& concat_stats.data_grains
+  remain_stats.info_size := delay_step_status.last.info_size -& concat_stats.info_size
   assert(remain_stats.data_grains <= param.MaxDataGrains.U)
   assert(remain_stats.info_size + 1.U <= param.MaxInfoSize.U)
 
   val concat_data_map = step_grains_hint.map{ g =>
-    val data_low = if (g == 0) 0.U else step_data(g * param.grainBytes * 8 - 1, 0)
+    val data_low = if (g == 0) 0.U else delay_step_data(g * param.grainBytes * 8 - 1, 0)
     (g.U, data_low)
   }
   // InfoSize range: 0 ~ StepGroupSize + 1(including BatchInterval)
   val concat_info_map = Seq.tabulate(param.StepGroupSize + 2){g =>
-    val info_low = if (g == 0) 0.U else step_info(g * param.infoWidth - 1, 0)
+    val info_low = if (g == 0) 0.U else delay_step_info(g * param.infoWidth - 1, 0)
     (g.U, info_low)
   }
   val concat_data = LookupTree(concat_stats.data_grains, concat_data_map)
   val concat_info = LookupTree(concat_stats.info_size, concat_info_map)
 
   val remain_data_map = step_grains_hint.map{g =>
-    val data_high = (step_data >> (g * param.grainBytes * 8)).asUInt
+    val data_high = (delay_step_data >> (g * param.grainBytes * 8)).asUInt
     (g.U, data_high)
   }
   val remain_info_map = Seq.tabulate(param.StepGroupSize + 2){ g =>
-    val info_high = (step_info >> (g * param.infoWidth)).asUInt
+    val info_high = (delay_step_info >> (g * param.infoWidth)).asUInt
     (g.U, info_high)
   }
   val remain_data = LookupTree(concat_stats.data_grains, remain_data_map)
   val remain_info = LookupTree(concat_stats.info_size, remain_info_map)
 
-  val step_exceed = step_enable && (state_step_cnt === config.batchSize.U)
+  // Stage 2:
+  // update state
+  val step_exceed = delay_step_enable && (state_step_cnt === config.batchSize.U)
   val cont_exceed = exceed_v.asUInt.orR
   val trace_exceed = Option.when(config.hasReplay){
-    step_enable && (state_trace_size.get +& step_trace_info.get.trace_size >= config.replaySize.U)
+    delay_step_enable && (state_trace_size.get +& delay_step_trace_info.get.trace_size >= config.replaySize.U)
   }
   val state_flush = false.B
   val timeout_count = RegInit(0.U(32.W))
@@ -306,7 +318,7 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
   // Delay step can be partly appended to output for making full use of transmission param
   // Avoid appending when step equals batchSize(delay_step_exceed), last appended data will overwrite first step data
   val has_append =
-  step_enable && (state_flush || cont_exceed) && RegNext(!exceed_v.asUInt.andR) && !step_exceed
+  delay_step_enable && (state_flush || cont_exceed) && RegNext(!exceed_v.asUInt.andR) && !step_exceed
   // When the whole step is appended to output, state_step should be 0, and output step + 1
   val append_whole = has_append && !cont_exceed
   val finish_step = state_step_cnt + Mux(append_whole, 1.U, 0.U)
@@ -334,28 +346,28 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
   out.step := Mux(out.enable, finish_step, 0.U)
 
   val next_state_data_grains = Mux(
-    step_enable,
+    delay_step_enable,
     Mux(
       should_tick,
-      Mux(has_append, remain_stats.data_grains, step_status.last.data_grains),
-      state_status.data_grains + step_status.last.data_grains,
+      Mux(has_append, remain_stats.data_grains, delay_step_status.last.data_grains),
+      state_status.data_grains + delay_step_status.last.data_grains,
     ),
     0.U,
   )
   val next_state_info_size = Mux(
-    step_enable,
+    delay_step_enable,
     Mux(
       should_tick,
-      Mux(has_append, remain_stats.info_size, step_status.last.info_size),
-      state_status.info_size + step_status.last.info_size,
+      Mux(has_append, remain_stats.info_size, delay_step_status.last.info_size),
+      state_status.info_size + delay_step_status.last.info_size,
     ),
     0.U,
   )
-  val state_update = step_enable || state_flush || timeout
+  val state_update = delay_step_enable || state_flush || timeout
   when(state_update) {
     state_status.data_grains := next_state_data_grains
     state_status.info_size := next_state_info_size
-    when(step_enable) {
+    when(delay_step_enable) {
       when(should_tick) {
         when(has_append) { // include state_flush with new-coming step
           state_step_cnt := Mux(append_whole, 0.U, 1.U)
@@ -363,21 +375,21 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
           state_info := remain_info
         }.otherwise {
           state_step_cnt := 1.U
-          state_data := step_data
-          state_info := step_info
+          state_data := delay_step_data
+          state_info := delay_step_info
         }
-        if (config.hasReplay) state_trace_size.get := step_trace_info.get.trace_size
+        if (config.hasReplay) state_trace_size.get := delay_step_trace_info.get.trace_size
       }.otherwise {
         state_step_cnt := state_step_cnt + 1.U
         val step_data_map = Seq.tabulate(param.MaxDataGrains + 1){g =>
-          (g.U, (step_data << (g * param.grainBytes * 8)).asUInt)
+          (g.U, (delay_step_data << (g * param.grainBytes * 8)).asUInt)
         }
         val step_info_map = Seq.tabulate(param.MaxInfoSize + 1){ g =>
-          (g.U, (step_info << (g * param.infoWidth)).asUInt)
+          (g.U, (delay_step_info << (g * param.infoWidth)).asUInt)
         }
         state_data := state_data | LookupTree(state_status.data_grains, step_data_map)
         state_info := state_info | LookupTree(state_status.info_size, step_info_map)
-        if (config.hasReplay) state_trace_size.get := state_trace_size.get + step_trace_info.get.trace_size
+        if (config.hasReplay) state_trace_size.get := state_trace_size.get + delay_step_trace_info.get.trace_size
       }
     }.otherwise { // state_flush without new-coming step
       state_step_cnt := 0.U
