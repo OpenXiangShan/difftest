@@ -201,7 +201,9 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     }
     unpack += getPacketDecl(gen, "", config)
     unpack += s"memcpy(packet, data, sizeof(${gen.desiredModuleName}));"
-    unpack += s"data += ${elem_bytes.sum};"
+    val grainBytes = difftest.batch.Batch.grainByte
+    val grainedSize = (elem_bytes.sum + grainBytes - 1) / grainBytes * grainBytes
+    unpack += s"data += ${grainedSize};"
     unpack.toSeq.mkString("\n        ")
   }
 
@@ -251,6 +253,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |  for (int i = 0; i < $infoLen; i++) {
            |    uint8_t id = info[i].id;
            |    uint8_t num = info[i].num;
+           |    // printf("%d %d\\n", id, num);
            |    uint32_t coreid, index, address;
            |    if (id == BatchFinish) {
            |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
