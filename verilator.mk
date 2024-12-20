@@ -25,6 +25,9 @@ EMU_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(EMU_CSRC_DIR)
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES) --std=c++17
 EMU_LDFLAGS   = $(SIM_LDFLAGS) -ldl
 
+COVERAGE_VSRC = $(BUILD_DIR)/rtl/verification/*.sv
+COVERAGE_VSRC += $(BUILD_DIR)/rtl/verification/cover/*.sv
+
 # DiffTest support
 ifneq ($(NO_DIFF), 1)
 VEXTRA_FLAGS += +define+DIFFTEST
@@ -136,7 +139,7 @@ endif
 	@mkdir -p $(@D)
 	@echo -e "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) verilator $(VERILATOR_FLAGS) -Mdir $(@D) $^ $(EMU_DEPS)
+	$(TIME_CMD) verilator $(COVERAGE_VSRC) $(VERILATOR_FLAGS) -Mdir $(@D) $^ $(EMU_DEPS)
 ifneq ($(VERILATOR_5_000),1)
 	@sed -i 's/private/public/g' $(EMU_DIR)/VSimTop.h
 	@sed -i 's/const vlSymsp/vlSymsp/g' $(EMU_DIR)/VSimTop.h
