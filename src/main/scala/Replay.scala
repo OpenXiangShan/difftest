@@ -42,7 +42,7 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   control.reset := reset
 
   val buffer = Mem(config.replaySize, chiselTypeOf(appendIn))
-  val ptr = RegInit(0.U(log2Ceil(config.replaySize).W))
+  val ptr = RegInit(0.U(config.replayWidth.W))
 
   // write
   // ignore useless data when hasGlobalEnable
@@ -85,7 +85,7 @@ class ReplayControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
   val clock = IO(Input(Clock()))
   val reset = IO(Input(Reset()))
   val replay = IO(Output(Bool()))
-  val replay_head = IO(Output(UInt(log2Ceil(config.replaySize).W)))
+  val replay_head = IO(Output(UInt(config.replayWidth.W)))
 
   setInline(
     "ReplayControl.v",
@@ -94,7 +94,7 @@ class ReplayControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |  input clock,
        |  input reset,
        |  output reg replay,
-       |  output reg [${log2Ceil(config.replaySize) - 1}:0] replay_head
+       |  output reg [${config.replayWidth - 1}:0] replay_head
        |);
        |
        |`ifndef SYNTHESIS
@@ -104,7 +104,7 @@ class ReplayControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |initial begin
        |  set_replay_scope();
        |  replay = 1'b0;
-       |  replay_head = ${log2Ceil(config.replaySize)}'b0;
+       |  replay_head = ${config.replayWidth}'b0;
        |end
        |
        |// For the C/C++ interface
