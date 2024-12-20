@@ -295,7 +295,7 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
   val trace_exceed = Option.when(config.hasReplay){
     delay_step_enable && (state_trace_size.get +& delay_step_trace_info.get.trace_size >= config.replaySize.U)
   }
-  val state_flush = false.B
+  val state_flush = step_status.last.data_grains >= param.MaxDataGrains.U // use Stage 1 grains to flush ahead
   val timeout_count = RegInit(0.U(32.W))
   val timeout = timeout_count === 200000.U
   if (config.hasBuiltInPerf) {
