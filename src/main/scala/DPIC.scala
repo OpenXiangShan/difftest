@@ -201,7 +201,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     }
     unpack += getPacketDecl(gen, "", config)
     unpack += s"memcpy(packet, data, sizeof(${gen.desiredModuleName}));"
-    val grainBytes = difftest.batch.Batch.grainByte
+    val grainBytes = config.batchGrainBytes
     val grainedSize = (elem_bytes.sum + grainBytes - 1) / grainBytes * grainBytes
     unpack += s"data += ${grainedSize};"
     unpack.toSeq.mkString("\n        ")

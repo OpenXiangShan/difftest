@@ -20,29 +20,35 @@ import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.common.DifftestPerf
-import difftest.util.Delayer
+import difftest.util.{Delayer, LookupTree}
 
 import scala.collection.mutable.ListBuffer
 
+// Only instantiated once, use val instead of def
 case class BatchParam(config: GatewayConfig, bundles: Seq[DifftestBundle]) {
+  val grainBytes = config.batchGrainBytes
   val infoWidth = (new BatchInfo).getWidth
-//  val grainByte = 16 // each bundle will be aligned to m * grainByte to simplify offset logic
 
   // Maximum Byte length decided by transmission function
   val MaxDataByteLen = config.batchArgByteLen._1
   val MaxDataBitLen = MaxDataByteLen * 8
-  val MaxDataLenWidth = log2Ceil(MaxDataByteLen)
+//  val MaxDataLenWidth = log2Ceil(MaxDataByteLen)
   val MaxInfoByteLen = config.batchArgByteLen._2
   val MaxInfoBitLen = MaxInfoByteLen * 8
-  val MaxInfoLenWidth = log2Ceil(MaxInfoByteLen)
+//  val MaxInfoLenWidth = log2Ceil(MaxInfoByteLen)
 
+  val StepGroupSize = bundles.distinctBy(_.desiredCppName).length
   val StepDataByteLen = bundles.map(_.getByteAlignWidth).map{ w =>
-    val g = Batch.grainByte
-    (w / 8 + g - 1) / g * g
+    (w / 8 + grainBytes - 1) / grainBytes * grainBytes
   }.sum
   val StepDataBitLen = StepDataByteLen * 8
   // Include BatchInterval
-  val StepInfoBitLen = (bundles.distinctBy(_.desiredCppName).length + 2) * infoWidth
+  val StepInfoByteLen = (StepGroupSize + 2) * (infoWidth / 8)
+  val StepInfoBitLen = StepInfoByteLen * 8
+
+
+  val StatsDataWidth = log2Ceil(math.max(MaxDataByteLen, StepDataByteLen))
+  val StatsInfoWidth = log2Ceil(math.max(MaxInfoByteLen, StepInfoByteLen))
 //  // Width of statistic for data/info byte length
 //  def StatsDataLenWidth = log2Ceil((collectDataWidth + 7) / 8)
 //  def collectInfoWidth = collectLength * infoWidth
@@ -60,10 +66,10 @@ class BatchIO(dataType: UInt, infoType: UInt) extends Bundle {
   val info = infoType
 }
 
-//class BatchStats(param: BatchParam) extends Bundle {
-//  val data_len = UInt(param.StatsDataLenWidth.W)
-//  val info_len = UInt(param.StatsInfoLenWidth.W)
-//}
+class BatchStats(param: BatchParam) extends Bundle {
+  val data_len = UInt(param.StatsDataWidth.W)
+  val info_len = UInt(param.StatsInfoWidth.W)
+}
 
 class BatchOutput(dataType: UInt, infoType: UInt, config: GatewayConfig) extends Bundle {
   val io = new BatchIO(dataType, infoType)
@@ -77,7 +83,6 @@ class BatchInfo extends Bundle {
 }
 
 object Batch {
-  val grainByte = 16 // each bundle will be aligned to m * grainByte to simplify offset logic
   private val template = ListBuffer.empty[DifftestBundle]
 
   def apply(bundles: MixedVec[Valid[DifftestBundle]], config: GatewayConfig): BatchOutput = {
@@ -96,11 +101,11 @@ object Batch {
 
 class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
-//  def vecAlignWidth = (vec: Seq[Valid[DifftestBundle]]) => vec.head.bits.getByteAlign.getWidth * vec.length
-
-  // Collect bundles with valid of same cycle in Pipeline
-//  val global_enable = VecInit(in.map(_.valid).toSeq).asUInt.orR
   val param = BatchParam(config, in.map(_.bits))
+
+  // Collect bundles with valid of same cycle in parallel
+//  val global_enable = VecInit(in.map(_.valid).toSeq).asUInt.orR
+
   val collector = Module(new BatchCollector(bundles, param))
   collector.in := in
   val step_data = collector.step_data
@@ -108,6 +113,7 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   val step_enable = collector.step_enable
 
   val step_info = collector.step_info
+
 
   val out = IO(Output(new BatchOutput(chiselTypeOf(step_data), chiselTypeOf(step_info), config)))
   out.io.data := step_data
@@ -141,25 +147,25 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   val in = IO(Input(MixedVec(bundles)))
   val step_data = IO(Output(UInt(param.StepDataBitLen.W)))
   val step_info = IO(Output(UInt(param.StepInfoBitLen.W)))
+  val step_status = IO(Output(Vec(param.StepGroupSize, new BatchStats(param))))
   val step_enable = IO(Output(Bool()))
 
-  def LookupTree(key: UInt, mapping: Seq[(UInt, UInt)]): UInt = {
-    Mux1H(mapping.map(p => (p._1 === key, p._2)))
-  }
   val sorted = in.groupBy(_.bits.desiredCppName).values.toSeq.sortBy(_.head.bits.getByteAlignWidth).reverse
   val aligned = sorted.flatten.map(_.bits.getByteAlign)
   val valids = sorted.flatten.map(_.valid)
   // Number of grainBytes of each bundle
-  val n_grains = aligned.map(_.getWidth).map{w => (w / 8 + Batch.grainByte - 1) / Batch.grainByte }
+  val n_grains = aligned.map(_.getWidth).map{w => (w / 8 + param.grainBytes - 1) / param.grainBytes }
+  // Optional sum of grains according to prefix bundle, less choice than simply sum up
+  // i.e. for idx = 2, opt grains is opt_grains(0-2), as 0, n_g(0), n_g(0+1),
+  val opt_grains = Seq.tabulate(n_grains.length + 1){idx => n_grains.take(idx).sum}
   val v_grains = valids.zip(n_grains).map{ case (v, n) => Mux(v, n.U, 0.U)}
+  val v_grain_sums = VecInit.tabulate(v_grains.length){ idx => v_grains.take(idx + 1).reduce(_ +& _)}
   step_data := VecInit(valids.zip(aligned).zipWithIndex.map{ case ((v, gen), idx) =>
     val shifted = if (idx != 0) {
-      val offset_grain = v_grains.take(idx).reduce(_ +& _)
-      // Optional sum of grains according to prefix bundle, less choice than simply sum up
-      // i.e. for idx = 2, opt grains is 0, v_g(0), v_g(0+1)
-      val opt_grains = Seq.tabulate(idx + 1){i => n_grains.take(i).sum}
-      val offset_map = opt_grains.map { g => (g.U, (gen << (g * Batch.grainByte * 8)).asUInt)}
-      LookupTree(offset_grain, offset_map)
+//      val offset_grain = v_grains.take(idx).reduce(_ +& _)
+//      val opt_grains = Seq.tabulate(idx + 1){i => n_grains.take(i).sum}
+      val offset_map = opt_grains.take(idx + 1).map { g => (g.U, (gen << (g * param.grainBytes * 8)).asUInt)}
+      LookupTree(v_grain_sums(idx - 1), offset_map)
     } else gen
 //    dontTouch(shifted)
 //    shifted
@@ -167,30 +173,38 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   }.toSeq).reduceTree(_ | _)
 
   val v_infos = sorted.map{ vgens => vgens.map(_.valid).reduce(_ | _)}
+//  val v_info_cnt = PopCount(VecInit(v_infos).asUInt)
+  val v_info_sums = VecInit.tabulate(v_infos.length){idx => PopCount(VecInit(v_infos.take(idx + 1)).asUInt)}
   val collect_info = VecInit(sorted.zipWithIndex.map{ case (vgens, idx) =>
     val info = Wire(new BatchInfo)
     info.id := Batch.getBundleID(vgens.head.bits).U
     info.num := PopCount(VecInit(vgens.map(_.valid).toSeq).asUInt)
     val shifted = if (idx != 0) {
-      val offset_info = v_infos.map(_.asUInt).take(idx).reduce(_ +& _)
+//      val offset_info = PopCount(VecInit(v_infos.take(idx)).asUInt)
       val offset_map = Seq.tabulate(idx + 1){ g => (g.U, (info.asUInt << (g * param.infoWidth)).asUInt)}
-      LookupTree(offset_info, offset_map)
+      LookupTree(v_info_sums(idx - 1), offset_map)
     } else info.asUInt
     Mux(v_infos(idx), shifted, 0.U)
   }.toSeq).reduceTree(_ | _)
   val BatchInterval = Wire(new BatchInfo)
   BatchInterval.id := Batch.getTemplate.length.U
-  BatchInterval.num := v_infos.map(_.asUInt).reduce(_ +& _) // unused, only for debugging
-//  val cated = Cat(collect_info, BatchInterval.asUInt)
+  BatchInterval.num := v_info_sums.last // unused, only for debugging
+
   val BatchFinish = Wire(new BatchInfo)
   BatchFinish.id := (Batch.getTemplate.length + 1).U
   BatchFinish.num := 1.U
-  val offset = (v_infos.map(_.asUInt).reduce(_ +& _) + 1.U) * param.infoWidth.U
-  dontTouch(offset)
-  step_info := Cat(collect_info, BatchInterval.asUInt) | (BatchFinish.asUInt << offset).asUInt
 
-  step_enable := VecInit(v_infos).asUInt.orR
-  println(n_grains)
+//  step_info := Cat(collect_info, BatchInterval.asUInt)
+  step_info := Cat((collect_info | (BatchFinish.asUInt << (v_info_sums.last * param.infoWidth.U)).asUInt), BatchInterval.asUInt)
+
+  step_enable := v_info_sums.last =/= 0.U
+  step_status.zipWithIndex.foreach{ case (status, idx) =>
+    val bundle_cnt = sorted.take(idx + 1).flatten.length
+    status.data_len := v_grain_sums(bundle_cnt - 1) * param.grainBytes.U
+    status.info_len := v_info_sums(idx) * (param.infoWidth / 8).U
+  }
+
+//  println(n_grains)
 //  when(step_enable) {
 //    printf("data %x\n", step_data)
 //    sorted.zip(aligned).foreach{ case (s, gen) =>
@@ -201,6 +215,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
 //  }
 }
 
+//class BatchAssembler(step_data_t: UInt, step_info_t: UInt, )
 //class BatchAssembler(
 //  step_data_w: Int,
 //  step_info_w: Int,
