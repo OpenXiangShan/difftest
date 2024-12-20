@@ -557,13 +557,12 @@ int Difftest::do_instr_commit(int i) {
   }
 #endif
 
-  bool realWen = (dut->commit[i].rfwen && dut->commit[i].wdest != 0) || (dut->commit[i].fpwen);
-
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
   if (dut->commit[i].skip || (DEBUG_MODE_SKIP(dut->commit[i].valid, dut->commit[i].pc, dut->commit[i].inst))) {
     // We use the physical register file to get wdata
-    proxy->skip_one(dut->commit[i].isRVC, realWen, dut->commit[i].wdest, get_commit_data(i));
+    proxy->skip_one(dut->commit[i].isRVC, (dut->commit[i].rfwen && dut->commit[i].wdest != 0), dut->commit[i].fpwen,
+                    dut->commit[i].vecwen, dut->commit[i].wdest, get_commit_data(i));
     return 0;
   }
 
@@ -1011,17 +1010,18 @@ int Difftest::do_l2tlb_check() {
   return 0;
 }
 
-inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, uint64_t atomicMask, uint8_t atomicFuop,
-                         uint64_t atomicOut) {
+inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[], uint64_t atomicMask,
+                         uint64_t atomicCmp[], uint8_t atomicFuop, uint64_t atomicOut[]) {
   // We need to do atmoic operations here so as to update goldenMem
-  if (!(atomicMask == 0xf || atomicMask == 0xf0 || atomicMask == 0xff)) {
+  if (!(atomicMask == 0xf || atomicMask == 0xf0 || atomicMask == 0xff || atomicMask == 0xffff)) {
     printf("Unrecognized mask: %lx\n", atomicMask);
     return 1;
   }
 
   if (atomicMask == 0xff) {
-    uint64_t rs = atomicData; // rs2
-    uint64_t t = atomicOut;   // original value
+    uint64_t rs = atomicData[0]; // rs2
+    uint64_t t = atomicOut[0];   // original value
+    uint64_t cmp = atomicCmp[0]; // rd, data to be compared
     uint64_t ret;
     uint64_t mem;
     read_goldenmem(atomicAddr, &mem, 8);
@@ -1058,14 +1058,18 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, u
       case 047: ret = (t < rs) ? t : rs; break;
       case 052:
       case 053: ret = (t > rs) ? t : rs; break;
+      case 054:
+      case 056:
+      case 057: ret = (t == cmp) ? rs : t; break;
       default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
     update_goldenmem(atomicAddr, &ret, atomicMask, 8);
   }
 
   if (atomicMask == 0xf || atomicMask == 0xf0) {
-    uint32_t rs = (uint32_t)atomicData; // rs2
-    uint32_t t = (uint32_t)atomicOut;   // original value
+    uint32_t rs = (uint32_t)atomicData[0]; // rs2
+    uint32_t t = (uint32_t)atomicOut[0];   // original value
+    uint32_t cmp = (uint32_t)atomicCmp[0]; // rd, data to be compared
     uint32_t ret;
     uint32_t mem;
     uint64_t mem_raw;
@@ -1111,12 +1115,38 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData, u
       case 047: ret = (t < rs) ? t : rs; break;
       case 052:
       case 053: ret = (t > rs) ? t : rs; break;
+      case 054:
+      case 056:
+      case 057: ret = (t == cmp) ? rs : t; break;
       default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
     ret_sel = ret;
     if (atomicMask == 0xf0)
       ret_sel = (ret_sel << 32);
     update_goldenmem(atomicAddr, &ret_sel, atomicMask, 8);
+  }
+
+  if (atomicMask == 0xffff) {
+    uint64_t meml, memh;
+    uint64_t retl, reth;
+    read_goldenmem(atomicAddr, &meml, 8);
+    read_goldenmem(atomicAddr + 8, &memh, 8);
+    if (meml != atomicOut[0] || memh != atomicOut[1]) {
+      printf("Core %d atomic instr mismatch goldenMem, mem: 0x%lx 0x%lx, t: 0x%lx 0x%lx, op: 0x%x, addr: 0x%lx\n",
+             coreid, memh, meml, atomicOut[1], atomicOut[0], atomicFuop, atomicAddr);
+      return 1;
+    }
+    switch (atomicFuop) {
+      case 054: {
+        bool success = atomicOut[0] == atomicCmp[0] && atomicOut[1] == atomicCmp[1];
+        retl = success ? atomicData[0] : atomicOut[0];
+        reth = success ? atomicData[1] : atomicOut[1];
+        break;
+      }
+      default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
+    }
+    update_goldenmem(atomicAddr, &retl, 0xff, 8);
+    update_goldenmem(atomicAddr + 8, &reth, 0xff, 8);
   }
   return 0;
 }
@@ -1161,8 +1191,8 @@ int Difftest::do_golden_memory_update() {
 #ifdef CONFIG_DIFFTEST_ATOMICEVENT
   if (dut->atomic.valid) {
     dut->atomic.valid = 0;
-    int ret =
-        handle_atomic(id, dut->atomic.addr, dut->atomic.data, dut->atomic.mask, dut->atomic.fuop, dut->atomic.out);
+    int ret = handle_atomic(id, dut->atomic.addr, (uint64_t *)dut->atomic.data, dut->atomic.mask,
+                            (uint64_t *)dut->atomic.cmp, dut->atomic.fuop, (uint64_t *)dut->atomic.out);
     if (dut->atomic.addr == track_instr) {
       dumpGoldenMem("Atmoic", track_instr, cycleCnt);
     }
