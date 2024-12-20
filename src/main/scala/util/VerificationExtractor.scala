@@ -126,11 +126,11 @@ class VerificationExtractor extends Phase {
 
   private def onSourceModule(m: DefModule, c: CircuitName): (Option[AssertionTracker], DefModule) = {
     m match {
-      case Module(info, name, ports, body) =>
+      case Module(info, name, public, layer, ports, body) =>
         val tracker = new AssertionTracker(ModuleName(name, c))
         val (regDefs, newBody) = onStmt(body)(tracker)
         val bodyTail = tracker.bodyTail.getOrElse(EmptyStmt)
-        (Some(tracker), Module(info, name, ports, Block(regDefs :+ newBody :+ bodyTail)))
+        (Some(tracker), Module(info, name, public, layer, ports, Block(regDefs :+ newBody :+ bodyTail)))
       case other: DefModule => (None, other)
     }
   }
