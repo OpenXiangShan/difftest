@@ -104,8 +104,7 @@ public:
   f(update_config, update_dynamic_config, void, void*)                        \
   f(uarchstatus_sync, difftest_uarchstatus_sync, void, void*)                 \
   f(store_commit, difftest_store_commit, int, uint64_t*, uint64_t*, uint8_t*) \
-  f(raise_intr, difftest_raise_intr, void, uint64_t)                          \
-  f(load_flash_bin, difftest_load_flash, void, void*, size_t)
+  f(raise_intr, difftest_raise_intr, void, uint64_t)
 
 #ifdef ENABLE_RUNHEAD
 #define REF_RUN_AHEAD(f)                                                      \
@@ -136,6 +135,8 @@ public:
   REF_DEBUG_MODE(f)
 
 #define REF_OPTIONAL(f)                                                                                     \
+  f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
+  f(load_flash_bin_v2, difftest_load_flash_v2, void, uint8_t*, size_t)                                      \
   f(ref_status, difftest_status, int, )                                                                     \
   f(ref_close, difftest_close, void, )                                                                      \
   f(ref_set_ramsize, difftest_set_ramsize, void, size_t)                                                    \
@@ -307,6 +308,8 @@ public:
       ref_memcpy(dest, src, n, direction);
     }
   }
+
+  void flash_init(const char *flash_bin, size_t size);
 
   inline void get_store_event_other_info(void *info) {
     if (ref_get_store_event_other_info) {
