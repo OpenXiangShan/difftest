@@ -75,6 +75,10 @@ static const char *regs_name_fp_csr[] = {
   "fcsr"
 };
 
+static const char *regs_name_matrix_csr[] = {
+  "mtype", "mtilem", "mtilen", "mtilek", "mlenb", "mrlenb", "mamul", "mstart", "mcsr"
+};
+
 static const char *regs_name_triggercsr[] = {
   "tselect", "tdata1", "tinfo"
 };

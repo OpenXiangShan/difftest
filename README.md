@@ -151,6 +151,7 @@ coherence via RefillTest.
 | `DiffVecCSRState` | CSRs for the Vector extension | No |
 | `DiffHCSRState` | CSRs for the Hypervisor extension | No |
 | `DiffTriggerCSRState` | CSRs for the Trigger support | No |
+| `DiffMatrixCSRState` | CSRs for the Matrix extension | No |
 | `DiffDebugMode` | Debug mode registers | No |
 | `DiffArchIntDelayedUpdate` | Delayed general-purpose writeback | No |
 | `DiffArchFpDelayedUpdate` | Delayed floating-point writeback | No |

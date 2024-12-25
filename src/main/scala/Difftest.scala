@@ -402,6 +402,12 @@ class DiffFpCSRState extends FpCSRState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
+class DiffMatrixCSRState extends MatrixCSRState with DifftestBundle {
+  override val desiredCppName: String = "mcsr"
+  override val desiredRegOffset: Option[Int] = Some(8)
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+}
+
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
