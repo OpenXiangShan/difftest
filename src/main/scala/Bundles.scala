@@ -232,6 +232,18 @@ class FpCSRState extends DifftestBaseBundle {
   val fcsr = UInt(64.W)
 }
 
+class MatrixCSRState extends DifftestBaseBundle {
+  val mtype = UInt(64.W)
+  val mtilem = UInt(64.W)
+  val mtilen = UInt(64.W)
+  val mtilek = UInt(64.W)
+  val mlenb = UInt(64.W)
+  val mrlenb = UInt(64.W)
+  val mamul = UInt(64.W)
+  val mstart = UInt(64.W)
+  val mcsr = UInt(64.W)
+}
+
 class SbufferEvent extends DifftestBaseBundle with HasValid {
   val addr = UInt(64.W)
   val data = Vec(64, UInt(8.W))
