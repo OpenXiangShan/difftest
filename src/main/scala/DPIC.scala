@@ -66,8 +66,8 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
 
   protected val commonPorts = Seq(("clock", clock), ("enable", enable))
   def modPorts: Seq[Seq[(String, Data)]] = {
-    var ports = commonPorts
-    if (config.hasDutZone) ports ++= Seq(("dut_zone", dut_zone.get))
+    val dutZonePorts = dut_zone.map(zone => ("dut_zone", zone))
+    val ports = commonPorts ++ dutZonePorts
     ports.map(Seq(_))
   }
 
@@ -152,11 +152,10 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
 
   override def desiredName: String = gen.desiredModuleName
   override def modPorts: Seq[Seq[(String, Data)]] = {
-    super.modPorts ++ io.elements.toSeq.reverse.map { case (name, data) =>
-      data match {
-        case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"io_${name}_$i", v) }
-        case _           => Seq((s"io_$name", data))
-      }
+    super.modPorts ++ io.elementsInSeqUInt.map { case (name, dataSeq) =>
+      val prefixName = s"io_$name"
+      val finalName = (i: Int) => if (dataSeq.length == 1) prefixName else s"${prefixName}_$i"
+      dataSeq.zipWithIndex.map { case (d, i) => (finalName(i), d) }
     }
   }
   override def dpicFuncArgs: Seq[Seq[(String, Data)]] = if (gen.bits.hasValid) {
