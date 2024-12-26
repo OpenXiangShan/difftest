@@ -77,23 +77,31 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   protected val needFlatten: Boolean = false
   def isFlatten: Boolean = hasAddress && this.needFlatten
 
-  // Elements without clock, coreid, and index.
-  def diffElements: Seq[(String, Seq[UInt])] = {
-    val filteredElements = Seq("clock", "coreid", "index")
-    val raw = elements.toSeq.reverse.filterNot(e => filteredElements.contains(e._1))
-    raw.map { case (s, data) =>
+  // Convert elements into flatten UInt/Vec[UInt]
+  private def seqUIntHelper(in: Seq[(String, Data)]): Seq[(String, Seq[UInt])] = {
+    in.flatMap { case (s, data) =>
       data match {
-        case v: Vec[_] => (s, Some(v.asInstanceOf[Vec[UInt]]))
-        case u: UInt   => (s, Some(Seq(u)))
-        case _ =>
-          println(s"Unknown type: ($s, $data)")
-          (s, None)
+        case v: Vec[_] =>
+          v.foreach(e => require(e.isInstanceOf[UInt], s"Vec of $e is not supported yet"))
+          Some((s, v.asInstanceOf[Vec[UInt]]))
+        case u: UInt   => Some((s, Seq(u)))
+        case b: Bundle => seqUIntHelper(b.elements.toSeq.reverse).map(x => (s"${s}_${x._1}", x._2))
+        case _         => throw new Exception(s"Unsupported data type: ($s, $data)")
       }
-    }.map(x => (x._1, x._2.get))
+    }
   }
-  // Sizes of the DiffTest elements.
-  private def diffSizes(round: Int): Seq[Seq[Int]] = {
-    diffElements.map(_._2.map(u => (u.getWidth + round - 1) / round))
+
+  def elementsInSeqUInt: Seq[(String, Seq[UInt])] = seqUIntHelper(elements.toSeq.reverse)
+
+  // return (name, data_width_in_byte, data_seq) for all elements except coreid and index
+  def dataElements: Seq[(String, Int, Seq[UInt])] = {
+    val nonDataElements = Seq("coreid", "index")
+    elementsInSeqUInt.filterNot(e => nonDataElements.contains(e._1)).map { case (name, dataSeq) =>
+      val width = dataSeq.map(_.getWidth).distinct
+      require(width.length == 1, "should not have different width")
+      require(width.head <= 64, s"do not support DifftestBundle element with width (${width.head}) >= 64")
+      (name, (width.head + 7) / 8, dataSeq)
+    }
   }
 
   def toCppDeclMacro: String = {
@@ -104,10 +112,10 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     val cpp = ListBuffer.empty[String]
     val attribute = if (packed) "__attribute__((packed))" else ""
     cpp += s"typedef struct $attribute {"
-    for (((name, elem), size) <- diffElements.zip(diffSizes(8))) {
+    for ((name, size, elem) <- dataElements) {
       val isRemoved = isFlatten && Seq("valid", "address").contains(name)
       if (!isRemoved) {
-        val arrayType = s"uint${size.head * 8}_t"
+        val arrayType = s"uint${size * 8}_t"
         val arrayWidth = if (elem.length == 1) "" else s"[${elem.length}]"
         cpp += f"  $arrayType%-8s $name$arrayWidth;"
       }
