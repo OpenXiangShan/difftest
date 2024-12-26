@@ -81,7 +81,9 @@ object DifftestWiring {
 
   def addSink[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
     val info = getWire(data, name, isHierarchical).addSink()
-    if (isHierarchical && !isChisel3) {
+    if (info.data.isVisible) {
+      data := info.data
+    } else if (isHierarchical && !isChisel3) {
       require(!info.isPending, s"[${info.name}]: Hierarchical wiring requires addSource before addSink")
       data := WiringControl.tapAndRead(info.data)
     } else {
