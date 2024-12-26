@@ -27,7 +27,7 @@ static char *flash_path = NULL;
 
 unsigned long EMU_FLASH_SIZE = DEFAULT_EMU_FLASH_SIZE;
 
-char *get_flash_path() {
+const char *get_flash_path() {
   return flash_path;
 }
 long get_flash_size() {

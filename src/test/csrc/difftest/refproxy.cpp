@@ -16,7 +16,10 @@
 
 #include "refproxy.h"
 #include <dlfcn.h>
+#include <fstream>
+#include <iostream>
 #include <unistd.h>
+#include <vector>
 
 uint8_t *ref_golden_mem = NULL;
 const char *difftest_ref_so = NULL;
@@ -246,6 +249,26 @@ void RefProxy::display(DiffTestState *dut) {
     ref_reg_display();
   }
 };
+
+void RefProxy::flash_init(const char *flash_bin, size_t size) {
+  if (!flash_bin)
+    return;
+  if (load_flash_bin) {
+    load_flash_bin(flash_bin, size);
+  } else if (load_flash_bin_v2) {
+    std::ifstream file(flash_bin, std::ios::binary);
+    if (!file) {
+      std::cout << "Error loading flash file " << flash_bin << std::endl;
+      assert(0);
+    }
+    std::vector<uint8_t> flash_data(size);
+    file.read(reinterpret_cast<char *>(flash_data.data()), size);
+    load_flash_bin_v2(flash_data.data(), size);
+  } else {
+    std::cout << "Require load_flash_bin or load_flash_bin_v2 to initialize the flash" << std::endl;
+    assert(0);
+  }
+}
 
 #ifdef CPU_ROCKET_CHIP
 // similar function as encodeVirtualAddress@RocketCore.scala: 1151
