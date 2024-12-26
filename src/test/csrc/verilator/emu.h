@@ -43,9 +43,6 @@ struct EmuArgs {
 #ifdef DEBUG_REFILL
   uint64_t track_instr;
 #endif
-#ifdef CONDUCT_DSE
-  uint64_t dse_max_instr;
-#endif
   const char *image;
   const char *snapshot_path;
   const char *wave_path;
@@ -70,9 +67,6 @@ struct EmuArgs {
     log_end = -1;
 #ifdef DEBUG_REFILL
     track_instr = 0;
-#endif
-#ifdef CONDUCT_DSE
-    uint64_t dse_max_instr = 1000000000;
 #endif
     snapshot_path = NULL;
     wave_path = NULL;

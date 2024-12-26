@@ -177,9 +177,6 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
       case 'F': args.flash_bin = optarg; break;
-#ifdef CONDUCT_DSE
-      case 'M': args.dse_max_instr = atoll_strict(optarg, "dse-max-instr"); break;
-#endif
     }
   }
 
@@ -561,8 +558,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         uint64_t cycleCnt = trap->cycleCnt;
         uint64_t epoch = dut_ptr->io_dse_epoch;
         uint64_t max_epoch = dut_ptr->io_dse_max_epoch;
+        uint64_t dse_max_instr = dut_ptr->io_dse_max_instr;
 
-        if (instrCnt < args.dse_max_instr && epoch <= max_epoch) {
+        if (instrCnt < dse_max_instr && epoch <= max_epoch) {
           printf("Hit good trap at pc = 0x%lx, instrCnt = %ld, cycleCnt = %ld\n", trap->pc, instrCnt, cycleCnt);
           double ipc = (double)instrCnt / (cycleCnt);
           printf("epoch: %ld\n", epoch);
