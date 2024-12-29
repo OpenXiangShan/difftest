@@ -109,6 +109,7 @@ SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_IPC
 endif
 
 # REF SELECTION
+REF ?= Nemu
 ifneq ($(REF),)
 ifneq ($(wildcard $(REF)),)
 SIM_CXXFLAGS += -DREF_PROXY=LinkedProxy -DLINKED_REFPROXY_LIB=\\\"$(REF)\\\"
