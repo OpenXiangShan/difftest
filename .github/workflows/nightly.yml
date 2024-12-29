@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  schedule:
+    # run at 01:00 UTC (9:00 UTC+8) so that we can debug it immediately
+    - cron: '00 01 * * *'
+
+jobs:
+  test-difftest-fuzzing:
+    # This test runs on ubuntu-20.04 for two reasons:
+    # (1) riscv-arch-test can be built with riscv-linux-gnu toolchain 9.4.0,
+    #     which is the default apt-installed version on ubuntu 20.04.
+    #     On ubuntu 22.04, toolchain 11.4.0 won't compile riscv-arch-test.
+    # (2) to test whether difftest compiles correctly on ubuntu 20.04
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable -Werror for EMU Build
+        run: |
+          echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
+
+      - name: Prepare environment
+        run: |
+            cd $GITHUB_WORKSPACE/..
+            git config --global url."https://github.com/".insteadOf git@github.com:
+            git config --global url."https://".insteadOf git://
+            git clone https://github.com/OpenXiangShan/xs-env
+            cd xs-env
+            sudo -s ./setup-tools.sh
+
+      - name: Build the coverage-guided fuzzer - xfuzz
+        run: |
+            cd $GITHUB_WORKSPACE/..
+            git clone https://github.com/OpenXiangShan/xfuzz.git
+            cargo install cargo-make
+            cd xfuzz && make init && make build
+
+      - name: Build the fuzzing corpus - riscv-arch-test
+        run: |
+            cd $GITHUB_WORKSPACE/..
+            git clone https://github.com/OpenXiangShan/riscv-arch-test.git
+            cd riscv-arch-test/riscv-test-suite
+            make build_I CROSS=riscv64-linux-gnu- RISCV_ARCH=rv64gc -j2
+            rm build/*.elf build/*.txt
+
+      - name: Build the REF - LLVM instrumented Spike
+        run: |
+            cd $GITHUB_WORKSPACE/..
+            git clone https://github.com/OpenXiangShan/riscv-isa-sim.git
+            export SPIKE_HOME=$(pwd)/riscv-isa-sim
+            make -C riscv-isa-sim/difftest CPU=ROCKET_CHIP SANCOV=1 -j2
+
+      - name: Build and run the rocket-chip fuzzer
+        run: |
+            cd $GITHUB_WORKSPACE/..
+            export SPIKE_HOME=$(pwd)/riscv-isa-sim
+            export XFUZZ_HOME=$(pwd)/xfuzz
+            export NOOP_HOME=$(pwd)/rocket-chip
+            export CORPUS=$(pwd)/riscv-arch-test/riscv-test-suite/build
+            git clone -b dev-difftest --single-branch https://github.com/OpenXiangShan/rocket-chip.git
+            cd rocket-chip && make init
+            rm -r difftest
+            cp -r $GITHUB_WORKSPACE .
+            make bootrom CROSS=riscv64-linux-gnu-
+            make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1 -j2
+            ./build/fuzzer -v -- $CORPUS/I-add-01.bin
+            ./build/fuzzer -f --max-runs 100 --corpus-input $CORPUS -- --max-cycles 10000 | grep max_runs
