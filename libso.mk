@@ -10,10 +10,26 @@ ifeq ($(WITH_DRAMSIM3),1)
 LD_LIB  	 = -L $(DRAMSIM3_HOME)/ -ldramsim3 -Wl,-rpath-link=$(DRAMSIM3_HOME)/libdramsim3.so
 endif
 
+# Include headers that are implicitly included by RTL simulators
+# Priority: (1) VCS, (2) Verilator
+ifneq ($(VCS_HOME),)
+LIB_CXXFLAGS += -I$(VCS_HOME)/include
+else
+VERILATOR_ROOT = $(shell verilator -V 2>/dev/null | awk '/VERILATOR_ROOT/ {print $$3; exit}')
+ifneq ($(VERILATOR_ROOT),)
+LIB_CXXFLAGS += -I$(VERILATOR_ROOT)/include/vltstd
+else
+LIBSO_WARNING_MISSING_HEADERS = 1
+endif
+endif
+
 $(CC_OBJ_DIR):
 	mkdir -p $(CC_OBJ_DIR)
 
 difftest-so: $(CC_OBJ_DIR)
+ifeq ($(LIBSO_WARNING_MISSING_HEADERS),1)
+	@echo "No available RTL simulators. Headers may be missing. Still try to build it."
+endif
 	cd $(CC_OBJ_DIR) 					&& \
 	$(CC) $(LIB_CXXFLAGS) $(LIB_CXXFILES)			&& \
 	$(CC) -o $(LIBDIFFTEST_SO) -m64 -shared *.o $(LD_LIB)
