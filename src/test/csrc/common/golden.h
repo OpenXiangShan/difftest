@@ -69,4 +69,5 @@ typedef union atpStruct {
 #define VPNiSHFT(i)         (12 + 9 * (i))
 #define GVPNi(addr, i, max) (((addr) >> (9 * (i) + 12)) & ((i == 3 || (i == 2 && max == 2)) ? 0x7ff : 0x1ff))
 #define VPNi(vpn, i)        (((vpn) >> (9 * (i))) & 0x1ff)
+#define NAPOTSHFT           (12 + 4) // only support 64kb page
 #endif
