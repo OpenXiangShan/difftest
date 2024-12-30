@@ -309,9 +309,9 @@ inline int Difftest::check_all() {
   }
 #endif
 
-#ifdef CONFIG_DIFFTEST_REFILLEVENT
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
   cmo_inval_event_record();
-#endif
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
 
   if (!has_commit) {
     return 0;
@@ -772,6 +772,7 @@ int Difftest::do_refill_check(int cacheid) {
     for (int i = 0; i < 8; i++) {
       read_goldenmem(dut_refill->addr + i * 8, &buf, 8);
       if (dut_refill->data[i] != *((uint64_t *)buf)) {
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
         if (cmo_inval_event_set.find(dut_refill->addr) != cmo_inval_event_set.end()) {
           // If the data inconsistency occurs in the cache block operated by CBO.INVAL,
           // it is considered reasonable and the DUT data is used to update goldenMem.
@@ -791,6 +792,7 @@ int Difftest::do_refill_check(int cacheid) {
           cmo_inval_event_set.erase(dut_refill->addr);
           return 0;
         } else {
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
           printf("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->idtfr, realpaddr);
           printf("addr: %lx\nGold: ", dut_refill->addr);
           for (int j = 0; j < 8; j++) {
@@ -807,7 +809,9 @@ int Difftest::do_refill_check(int cacheid) {
             delay = 1;
           }
           return 0;
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
         }
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
       }
     }
   }
@@ -1229,14 +1233,14 @@ void Difftest::load_event_record() {
 #endif // CONFIG_DIFFTEST_LOADEVENT
 #endif // CONFIG_DIFFTEST_SQUASH
 
-#ifdef CONFIG_DIFFTEST_REFILLEVENT
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
 void Difftest::cmo_inval_event_record() {
   if (dut->cmo_inval.valid) {
     cmo_inval_event_set.insert(dut->cmo_inval.addr);
     dut->cmo_inval.valid = 0;
   }
 }
-#endif
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
 
 int Difftest::check_timeout() {
   uint64_t cycleCnt = get_trap_event()->cycleCnt;

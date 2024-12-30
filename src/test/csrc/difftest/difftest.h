@@ -337,7 +337,7 @@ protected:
   void store_event_record();
 #endif
 
-#ifdef CONFIG_DIFFTEST_REFILLEVENT
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
   std::unordered_set<uint64_t> cmo_inval_event_set;
   void cmo_inval_event_record();
 #endif
