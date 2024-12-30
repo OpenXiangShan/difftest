@@ -251,8 +251,6 @@ void RefProxy::display(DiffTestState *dut) {
 };
 
 void RefProxy::flash_init(const char *flash_bin, size_t size) {
-  if (!flash_bin)
-    return;
   if (load_flash_bin) {
     load_flash_bin(flash_bin, size);
   } else if (load_flash_bin_v2) {
