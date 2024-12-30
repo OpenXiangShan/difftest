@@ -19,12 +19,12 @@
 
 #include "common.h"
 
-typedef struct {
+struct flash_device_t {
   uint64_t *base;
   uint64_t size;
   char *img_path;
   uint64_t img_size;
-} flash_device_t;
+};
 
 extern flash_device_t flash_dev;
 

@@ -21,7 +21,12 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
-flash_device_t flash_dev = {.size = DEFAULT_EMU_FLASH_SIZE, .img_path = NULL};
+flash_device_t flash_dev = {
+  nullptr,                // base
+  DEFAULT_EMU_FLASH_SIZE, // size
+  nullptr,                // img_path
+  0                       // img_size
+};
 
 void flash_read(uint32_t addr, uint64_t *data) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
