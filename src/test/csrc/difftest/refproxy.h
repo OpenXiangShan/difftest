@@ -136,7 +136,7 @@ public:
 
 #define REF_OPTIONAL(f)                                                                                     \
   f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
-  f(load_flash_bin_v2, difftest_load_flash_v2, void, uint8_t*, size_t)                                      \
+  f(load_flash_bin_v2, difftest_load_flash_v2, void, const uint8_t*, size_t)                                \
   f(ref_status, difftest_status, int, )                                                                     \
   f(ref_close, difftest_close, void, )                                                                      \
   f(ref_set_ramsize, difftest_set_ramsize, void, size_t)                                                    \
@@ -309,7 +309,7 @@ public:
     }
   }
 
-  void flash_init(const char *flash_bin, size_t size);
+  void flash_init(const uint8_t *flash_base, size_t size, const char *flash_bin);
 
   inline void get_store_event_other_info(void *info) {
     if (ref_get_store_event_other_info) {

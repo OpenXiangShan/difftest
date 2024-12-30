@@ -593,7 +593,7 @@ void Difftest::do_first_instr_commit() {
     has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;
 
-    proxy->flash_init(get_flash_path(), get_flash_size());
+    proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
     simMemory->clone_on_demand(
         [this](uint64_t offset, void *src, size_t n) {
           uint64_t dest_addr = PMEM_BASE + offset;

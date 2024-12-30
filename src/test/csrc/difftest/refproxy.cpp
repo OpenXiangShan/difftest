@@ -250,18 +250,12 @@ void RefProxy::display(DiffTestState *dut) {
   }
 };
 
-void RefProxy::flash_init(const char *flash_bin, size_t size) {
-  if (load_flash_bin) {
+void RefProxy::flash_init(const uint8_t *flash_base, size_t size, const char *flash_bin) {
+  if (load_flash_bin_v2) {
+    load_flash_bin_v2(flash_base, size);
+  } else if (load_flash_bin) {
+    // This API is deprecated because flash_bin may be an empty pointer
     load_flash_bin(flash_bin, size);
-  } else if (load_flash_bin_v2) {
-    std::ifstream file(flash_bin, std::ios::binary);
-    if (!file) {
-      std::cout << "Error loading flash file " << flash_bin << std::endl;
-      assert(0);
-    }
-    std::vector<uint8_t> flash_data(size);
-    file.read(reinterpret_cast<char *>(flash_data.data()), size);
-    load_flash_bin_v2(flash_data.data(), size);
   } else {
     std::cout << "Require load_flash_bin or load_flash_bin_v2 to initialize the flash" << std::endl;
     assert(0);

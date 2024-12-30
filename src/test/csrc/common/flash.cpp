@@ -21,85 +21,74 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
-static uint64_t *flash_base;
-static long flash_bin_size = 0;
-static char *flash_path = NULL;
-
-unsigned long EMU_FLASH_SIZE = DEFAULT_EMU_FLASH_SIZE;
-
-const char *get_flash_path() {
-  return flash_path;
-}
-long get_flash_size() {
-  return flash_bin_size;
-}
+flash_device_t flash_dev = {.size = DEFAULT_EMU_FLASH_SIZE, .img_path = NULL};
 
 void flash_read(uint32_t addr, uint64_t *data) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_flash_read]++;
   difftest_bytes[perf_flash_read] += 12;
 #endif // CONFIG_DIFFTEST_PERFCNT
-  if (!flash_base) {
+  if (!flash_dev.base) {
     return;
   }
   //addr must be 8 bytes aligned first
   uint32_t aligned_addr = addr & FLASH_ALIGH_MASK;
   uint64_t rIdx = aligned_addr / sizeof(uint64_t);
-  if (rIdx >= EMU_FLASH_SIZE / sizeof(uint64_t)) {
+  if (rIdx >= flash_dev.size / sizeof(uint64_t)) {
     printf("[warning] read addr %x is out of bound\n", addr);
     *data = 0;
   } else {
-    *data = flash_base[rIdx];
+    *data = flash_dev.base[rIdx];
   }
 }
 
 void init_flash(const char *flash_bin) {
-  flash_base = (uint64_t *)mmap(NULL, EMU_FLASH_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  if (flash_base == (uint64_t *)MAP_FAILED) {
+  flash_dev.base = (uint64_t *)mmap(NULL, flash_dev.size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+  if (flash_dev.base == (uint64_t *)MAP_FAILED) {
     printf("Warning: Insufficient phisical memory for flash\n");
-    EMU_FLASH_SIZE = 10 * 1024UL; //10 KB
-    flash_base = (uint64_t *)mmap(NULL, EMU_FLASH_SIZE, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-    if (flash_base == (uint64_t *)MAP_FAILED) {
-      printf("Error: Cound not mmap 0x%lx bytes for flash\n", EMU_FLASH_SIZE);
+    flash_dev.size = 10 * 1024UL; //10 KB
+    flash_dev.base = (uint64_t *)mmap(NULL, flash_dev.size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (flash_dev.base == (uint64_t *)MAP_FAILED) {
+      printf("Error: Cound not mmap 0x%lx bytes for flash\n", flash_dev.size);
       assert(0);
     }
   }
-  Info("Using simulated %luB flash\n", EMU_FLASH_SIZE);
+  Info("Using simulated %luB flash\n", flash_dev.size);
 
   if (!flash_bin) {
-    /** no specified flash_path ,use defualt 3 instructions*/
+    /** no specified flash_path, use defualt 3 instructions */
     // addiw   t0,zero,1
     // slli    to,to,  0x1f
     // jr      t0
-    flash_base[0] = 0x01f292930010029b;
-    flash_base[1] = 0x00028067;
+    flash_dev.base[0] = 0x01f292930010029b;
+    flash_dev.base[1] = 0x00028067;
+    flash_dev.img_size = 2 * sizeof(uint64_t);
     return;
   }
 
-  /** no specified flash_path ,use defualt 3 instructions*/
-  flash_path = (char *)flash_bin;
-  Info("use %s as flash bin\n", flash_path);
+  flash_dev.img_path = (char *)flash_bin;
+  Info("use %s as flash bin\n", flash_dev.img_path);
 
-  FILE *flash_fp = fopen(flash_path, "r");
+  FILE *flash_fp = fopen(flash_dev.img_path, "r");
   if (!flash_fp) {
     eprintf(ANSI_COLOR_MAGENTA "[error] flash img not found\n");
     exit(1);
   }
 
   fseek(flash_fp, 0, SEEK_END);
-  flash_bin_size = ftell(flash_fp);
-  if (flash_bin_size > EMU_FLASH_SIZE) {
-    printf("[warning] flash image size %ld bytes is out of bound, cut the image into %ld bytes\n", flash_bin_size,
-           EMU_FLASH_SIZE);
-    flash_bin_size = EMU_FLASH_SIZE;
+  flash_dev.img_size = ftell(flash_fp);
+  if (flash_dev.img_size > flash_dev.size) {
+    printf("[warning] flash image size %ld bytes is out of bound, cut the image into %ld bytes\n", flash_dev.img_size,
+           flash_dev.size);
+    flash_dev.img_size = flash_dev.size;
   }
   fseek(flash_fp, 0, SEEK_SET);
-  int ret = fread(flash_base, flash_bin_size, 1, flash_fp);
+  int ret = fread(flash_dev.base, flash_dev.img_size, 1, flash_fp);
   assert(ret == 1);
   fclose(flash_fp);
 }
 
 void flash_finish() {
-  munmap(flash_base, EMU_FLASH_SIZE);
-  flash_base = NULL;
+  munmap(flash_dev.base, flash_dev.size);
+  flash_dev.base = NULL;
 }
