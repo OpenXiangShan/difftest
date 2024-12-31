@@ -22,30 +22,6 @@ import sys
 import argparse
 import os
 
-def remove_trailing_comma_if_needed(content):
-    """Remove trailing comma from the last line starting with input or output if it ends with a comma."""
-    # Split the content into lines
-    lines = content.splitlines()
-    last_input_output_index = -1
-
-    # Find the last line that starts with 'input' or 'output'
-    for i in range(len(lines)):
-        if lines[i].strip().startswith("input") or lines[i].strip().startswith("output"):
-            last_input_output_index = i  # Update to the last matching line
-
-    # If we found a line that starts with input or output
-    if last_input_output_index != -1:
-        last_line = lines[last_input_output_index].rstrip()  # Get the last line and strip whitespace
-        # Check if the last line ends with a comma
-        if last_line.endswith(','):
-            print(f"Removing trailing comma from line {last_input_output_index}: '{lines[last_input_output_index]}'")  # Debugging
-            # Remove the trailing comma
-            lines[last_input_output_index] = last_line[:-1]
-
-    # Join the lines back together
-    updated_content = '\n'.join(lines)
-    return updated_content
-
 def process_file(filename, use_core_mode):
     try:
         with open(filename, 'r') as file:
@@ -57,20 +33,17 @@ def process_file(filename, use_core_mode):
         # Replace IO with interface
         if use_core_mode:
             # Check if any "output gateway_*" line exists
-            if re.search(r'output\s+.*\s+gateway_\d+', content):
+            if re.search(r' output\s+.*\s+gateway_\d+', content):
                 pattern_found = True
                 # Remove existing output gateway line and add the replacement pattern
-                content = re.sub(r'output\s+.*\s+gateway.*\n', '', content)
-                new_line = "  core_if.out gateway_out,"
+                content = re.sub(r'  output\s+.*\s+gateway.*\n', '', content)
+                new_line = "  core_if.out gateway_out"
 
                 replace_pattern = r'gateway_out.gateway_\1'
                 # Ensure "Core_sig.core_out gateway_out" is added only once
                 if new_line not in content:
-                    # Add new_line after "reset" line but only once
-                    content = re.sub(r'(.*reset,.*\n)', lambda m: m.group(1) + new_line + '\n', content, count=1)
-                
-                # Remove trailing comma if needed from the last output line
-                content = remove_trailing_comma_if_needed(content)
+                    # Add new_line before the line containing ");"
+                    content = re.sub(r'^(.*\n)(?=.*\);)', lambda m: m.group(1) + new_line + '\n', content, count=1, flags=re.MULTILINE)
 
                 # Perform the replacement pattern
                 content = re.sub(r'gateway_(\d+)', replace_pattern, content)
@@ -83,17 +56,14 @@ def process_file(filename, use_core_mode):
             if re.search(r'\bin_\d+', content):
                 pattern_found = True
                 # Remove existing in_* line and add the replacement pattern
-                content = re.sub(r'.*\s+in_\d+,.*\n?', '', content, flags=re.MULTILINE)
-                new_line = "  gateway_if.in gateway_in,"
+                new_line = "  gateway_if.in gateway_in"
                 replace_pattern = r'(gateway_in.gateway_\1'
                 # Ensure "Gateway_interface.diff_top gateway_in" is added only once
+                content = re.sub(r'^(.*)(?=\n.*\);)', lambda m: re.sub(r'(.*\s)(//.*)', r'\1,\2', m.group(1)), content, flags=re.MULTILINE)
                 if new_line not in content:
-                    content = re.sub(r'(.*reset,.*\n)', lambda m: m.group(1) + new_line + '\n', content, count=1)
+                    # Add new_line before the line containing ");"
+                    content = re.sub(r'^(.*\n)(?=.*\);)', lambda m: m.group(1) + new_line + '\n', content, count=1, flags=re.MULTILINE)
 
-                # Remove trailing comma if needed after adding new_line
-                content = remove_trailing_comma_if_needed(content)
-                #content = re.sub(r'(.*reset,.*\n)', r'\1' + new_line + '\n', content, flags=re.MULTILINE)
-                
                 content = re.sub(r'\(in_(\d+)', replace_pattern, content)
                 print("'in_*' found and pattern replaced.")
             else:
