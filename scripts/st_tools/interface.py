@@ -59,7 +59,7 @@ def process_file(filename, use_core_mode):
                 new_line = "  gateway_if.in gateway_in"
                 replace_pattern = r'(gateway_in.gateway_\1'
                 # Ensure "Gateway_interface.diff_top gateway_in" is added only once
-                content = re.sub(r'^(.*)(?=\n.*\);)', lambda m: re.sub(r'(.*\s)(//.*)', r'\1,\2', m.group(1)), content, flags=re.MULTILINE)
+                content = re.sub(r'^(.*)(?=\n.*\);)', lambda m: re.sub(r'(.*\s)(//.*)', r'\1,\2', m.group(1)), content, count=1, flags=re.MULTILINE)
                 if new_line not in content:
                     # Add new_line before the line containing ");"
                     content = re.sub(r'^(.*\n)(?=.*\);)', lambda m: m.group(1) + new_line + '\n', content, count=1, flags=re.MULTILINE)
