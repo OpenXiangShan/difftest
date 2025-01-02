@@ -15,7 +15,7 @@ endif
 ifneq ($(VCS_HOME),)
 LIB_CXXFLAGS += -I$(VCS_HOME)/include
 else
-VERILATOR_ROOT ?= $(shell verilator --getenv VERILATOR_ROOT)
+VERILATOR_ROOT ?= $(shell verilator --getenv VERILATOR_ROOT 2> /dev/null)
 ifneq ($(VERILATOR_ROOT),)
 LIB_CXXFLAGS += -I$(VERILATOR_ROOT)/include/vltstd
 else
