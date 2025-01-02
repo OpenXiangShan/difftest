@@ -609,8 +609,12 @@ object DifftestModule {
 
     val numCores = instances.count(_.isUniqueIdentifier)
     if (instances.nonEmpty) {
-      difftestCpp += s"#define NUM_CORES $numCores"
-      difftestCpp += ""
+      difftestCpp +=
+        s"""
+           |#ifndef NUM_CORES
+           |#define NUM_CORES $numCores
+           |#endif
+           |""".stripMargin
     }
 
     val uniqBundles = instances.groupBy(_.desiredModuleName)
