@@ -15,7 +15,7 @@ endif
 ifneq ($(VCS_HOME),)
 LIB_CXXFLAGS += -I$(VCS_HOME)/include
 else
-VERILATOR_ROOT = $(shell verilator -V 2>/dev/null | awk '/VERILATOR_ROOT/ {print $$3; exit}')
+VERILATOR_ROOT ?= $(shell verilator --getenv VERILATOR_ROOT)
 ifneq ($(VERILATOR_ROOT),)
 LIB_CXXFLAGS += -I$(VERILATOR_ROOT)/include/vltstd
 else
