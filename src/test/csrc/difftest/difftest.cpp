@@ -880,6 +880,7 @@ int Difftest::do_l1tlb_check() {
     uint64_t paddr;
     uint8_t difftest_level;
     r_s2xlate r_s2;
+    bool isNapot = false;
 
     Satp *satp = (Satp *)&dut->l1tlb[i].satp;
     Satp *vsatp = (Satp *)&dut->l1tlb[i].vsatp;
@@ -900,6 +901,9 @@ int Difftest::do_l1tlb_check() {
         if (hasAllStage) {
           r_s2 = do_s2xlate(hgatp, paddr);
           uint64_t pg_mask = ((1ull << VPNiSHFT(r_s2.level)) - 1);
+          if (r_s2.level == 0 && r_s2.pte.n) {
+            pg_mask = ((1ull << NAPOTSHFT) - 1);
+          }
           pg_base = (r_s2.pte.ppn << 12 & ~pg_mask) | (paddr & pg_mask & ~PAGE_MASK);
           paddr = pg_base | (paddr & PAGE_MASK);
         }
@@ -912,15 +916,26 @@ int Difftest::do_l1tlb_check() {
       if (difftest_level > 0 && pte.v) {
         uint64_t pg_mask = ((1ull << VPNiSHFT(difftest_level)) - 1);
         pg_base = (pte.ppn << 12 & ~pg_mask) | (dut->l1tlb[i].vpn << 12 & pg_mask & ~PAGE_MASK);
+      } else if (difftest_level == 0 && pte.n) {
+        isNapot = true;
+        uint64_t pg_mask = ((1ull << NAPOTSHFT) - 1);
+        pg_base = (pte.ppn << 12 & ~pg_mask) | (dut->l1tlb[i].vpn << 12 & pg_mask & ~PAGE_MASK);
       }
       if (hasAllStage && pte.v) {
         r_s2 = do_s2xlate(hgatp, pg_base);
         pte = r_s2.pte;
         difftest_level = r_s2.level;
+        if (difftest_level == 0 && pte.n) {
+          isNapot = true;
+        }
       }
     }
-
-    dut->l1tlb[i].ppn = dut->l1tlb[i].ppn >> difftest_level * 9 << difftest_level * 9;
+    if (isNapot) {
+      dut->l1tlb[i].ppn = dut->l1tlb[i].ppn >> 4 << 4;
+      pte.difftest_ppn = pte.difftest_ppn >> 4 << 4;
+    } else {
+      dut->l1tlb[i].ppn = dut->l1tlb[i].ppn >> difftest_level * 9 << difftest_level * 9;
+    }
     if (pte.difftest_ppn != dut->l1tlb[i].ppn) {
       printf("Warning: l1tlb resp test of core %d index %d failed! vpn = %lx\n", id, i, dut->l1tlb[i].vpn);
       printf("  REF commits pte.val: 0x%lx, dut s2xlate: %d\n", pte.val, dut->l1tlb[i].s2xlate);
