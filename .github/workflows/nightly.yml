@@ -95,9 +95,10 @@ jobs:
       - name: Build libdifftest.so
         run: |
           make -C $NOOP_HOME/difftest difftest-so
+          mv $NOOP_HOME/build/libdifftest.so $GITHUB_WORKSPACE/libdifftest.so
 
       - name: Release libdifftest.so to artifacts
         uses: actions/upload-artifact@v4
         with:
           name: libdifftest-${{ matrix.os }}-xiangshan.so
-          path: $NOOP_HOME/build/libdifftest.so
+          path: libdifftest.so
