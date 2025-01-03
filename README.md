@@ -241,4 +241,5 @@ Feel free to change the `--prefix=` argument to where you have access to, such a
   * [Paper 1](https://ieeexplore.ieee.org/document/9923860), [Paper 2](https://jcst.ict.ac.cn/en/article/doi/10.1007/s11390-023-3285-8)
   * SMP-DiffTest 支持多处理器的差分测试方法: [PPT](https://github.com/OpenXiangShan/XiangShan-doc/blob/main/slides/20210624-RVWC-SMP-Difftest%20%E6%94%AF%E6%8C%81%E5%A4%9A%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%B7%AE%E5%88%86%E6%B5%8B%E8%AF%95%E6%96%B9%E6%B3%95.pdf), [视频](https://www.bilibili.com/video/BV1NM4y1T7Hz/)
 * Next-generation DiffTest / DiffTest 的下一步演进
-  * DiffTest on Cadence Palladium: to be released soon
+  * DiffTest on Cadence Palladium: [Slides (in Chinese, 中文版)](https://github.com/OpenXiangShan/XiangShan-doc/raw/main/slides/20240827-CadenceLIVEChina-%E9%9D%A2%E5%90%91Palladium%E7%9A%84%E9%AB%98%E6%80%A7%E8%83%BD%E5%A4%84%E7%90%86%E5%99%A8%E8%BD%AF%E7%A1%AC%E4%BB%B6%E5%8D%8F%E5%90%8C%E9%AA%8C%E8%AF%81%E6%A1%86%E6%9E%B6%E9%83%A8%E7%BD%B2%E4%B8%8E%E5%8A%A0%E9%80%9F%E6%96%B9%E6%B3%95.pdf)
+  * Integrating DiffTest with Coverage-Guided Fuzzing: [Slides](https://github.com/OpenXiangShan/XiangShan-doc/raw/main/slides/20241130-Finding-More-Bugs-with-DiffTest-and-XFUZZ.pdf)
