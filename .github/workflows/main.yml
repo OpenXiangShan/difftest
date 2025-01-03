@@ -306,3 +306,40 @@ jobs:
             make simv VCS=verilator -j2
             ./build/simv +workload=$WORKLOAD +b=0 +e=-1 +diff=$REF_SO +max-instrs=5000 +warmup_instr=1000
             make clean
+
+  test-difftest-xiangshan:
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/install-verilator.sh
+          wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/setup-tools.sh
+          sudo bash setup-tools.sh
+
+      - name: Prepare XiangShan
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          git clone --depth 1 https://github.com/OpenXiangShan/XiangShan.git
+          cd XiangShan && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
+          echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
+
+      - name: Chisel Elaboration
+        run: |
+          make -C $NOOP_HOME sim-verilog CHISEL_TARGET=chirrtl JVM_XMX=10G
+
+      - name: Build libdifftest.so
+        run: |
+          make -C $NOOP_HOME/difftest difftest-so
+          mv $NOOP_HOME/build/libdifftest.so $GITHUB_WORKSPACE/libdifftest.so
+
+      - name: Release libdifftest.so to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libdifftest-${{ matrix.os }}-xiangshan.so
+          path: libdifftest.so
