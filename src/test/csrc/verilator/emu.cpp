@@ -440,7 +440,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 #endif
 
   bool lastCycleDSEReset = false;
-  uint64_t instrCnt = 0;
+  bool doDSEReset = false;
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
       FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
@@ -466,11 +466,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
     auto diff = difftest[0];
     auto proxy = diff->proxy;
 
-    if (!dut_ptr->io_dse_reset_valid) {
-      auto trap = difftest[0]->get_trap_event();
-      instrCnt = trap->instrCnt;
-    }
-
     // DSECtrl reset valid
 #ifdef CONDUCT_DSE
     for (int i = 0; i < NUM_CORES; i++) {
@@ -483,6 +478,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         if (reset_vector == 0x10000000) {
           auto trap = difftest[i]->get_trap_event();
           uint64_t cycleCnt = trap->cycleCnt;
+          uint64_t instrCnt = trap->instrCnt;
           double ipc = (double)instrCnt / (cycleCnt);
           uint64_t epoch = dut_ptr->io_dse_epoch;
           uint64_t max_epoch = dut_ptr->io_dse_max_epoch;
@@ -496,8 +492,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           }
         }
       }
-      if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
-        lastCycleDSEReset = false;
+      if (doDSEReset) {
+        doDSEReset = false;
         printf("DSE reset finish at pc: %lx, reset vector: %lx\n", diff->get_dut()->commit[0].pc, reset_vector);
         // reset ram
         init_ram(args.image);
@@ -510,6 +506,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           proxy->nemu_init(reset_vector);
         }
         break;
+      }
+      if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
+        lastCycleDSEReset = false;
+        doDSEReset = true;
       }
     }
 #endif
