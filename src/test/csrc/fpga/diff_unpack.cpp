@@ -21,6 +21,10 @@
 #include <unistd.h>
 #include <assert.h>
 extern void simv_nstep(uint8_t step);
+#pragma pack(1)
+typedef struct {
+  uint8_t io_step;
+} SquashStep;
 
 typedef struct {
   uint8_t io_valid;
@@ -145,118 +149,104 @@ typedef struct {
   uint8_t coreid;
   uint8_t index;
 } SquashInstrCommit;
+#pragma pack()
 
-// XIANG SHAN
-// void squash_unpackge(uint8_t *packge) {
-//   uint8_t have_step = 0;
-//   // PACKGE HEAD
-//   {
-//     memcpy(&have_step, packge, sizeof(uint8_t));
-//   }
-//   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-//     SquashInstrCommit temp;
-//     memcpy(&temp, packge, sizeof(SquashInstrCommit));
-//     packge += sizeof(SquashInstrCommit);
-//     v_difftest_InstrCommit(temp.skip, temp.isRVC, temp.rfwen, temp.fpwen, temp.vecwen, temp.wpdest, temp.wdest, temp.pc,
-//                            temp.instr, temp.robIdx, temp.lqIdx, temp.sqIdx, temp.isLoad, temp.isStore, temp.nFused,
-//                            temp.special, temp.coreid, temp.index);
-//   }
-//   {
-//     SquashTrapEvent temp;
-//     memcpy(&temp, packge, sizeof(SquashTrapEvent));
-//     packge += sizeof(SquashTrapEvent);
-//     v_difftest_TrapEvent(temp.hasTrap, temp.cycleCnt, temp.instrCnt, temp.hasWFI, temp.code, temp.pc, temp.coreid);
-//   }
-//   {
-//     SquashArchFpRegState temp;
-//     memcpy(&temp, packge, sizeof(SquashArchFpRegState));
-//     packge += sizeof(SquashArchFpRegState);
-//     v_difftest_ArchFpRegState(
-//         temp.io_value[0], temp.io_value[1], temp.io_value[2], temp.io_value[3], temp.io_value[4], temp.io_value[5],
-//         temp.io_value[6], temp.io_value[7], temp.io_value[8], temp.io_value[9], temp.io_value[10], temp.io_value[11],
-//         temp.io_value[12], temp.io_value[13], temp.io_value[14], temp.io_value[15], temp.io_value[16],
-//         temp.io_value[17], temp.io_value[18], temp.io_value[19], temp.io_value[20], temp.io_value[21],
-//         temp.io_value[22], temp.io_value[23], temp.io_value[24], temp.io_value[25], temp.io_value[26],
-//         temp.io_value[27], temp.io_value[28], temp.io_value[29], temp.io_value[30], temp.io_value[31], temp.io_coreid);
-//   }
-//   {
-//     SquashArchIntRegState temp;
-//     memcpy(&temp, packge, sizeof(SquashArchIntRegState));
-//     packge += sizeof(SquashArchIntRegState);
-//     v_difftest_ArchIntRegState(
-//         temp.io_value[0], temp.io_value[1], temp.io_value[2], temp.io_value[3], temp.io_value[4], temp.io_value[5],
-//         temp.io_value[6], temp.io_value[7], temp.io_value[8], temp.io_value[9], temp.io_value[10], temp.io_value[11],
-//         temp.io_value[12], temp.io_value[13], temp.io_value[14], temp.io_value[15], temp.io_value[16],
-//         temp.io_value[17], temp.io_value[18], temp.io_value[19], temp.io_value[20], temp.io_value[21],
-//         temp.io_value[22], temp.io_value[23], temp.io_value[24], temp.io_value[25], temp.io_value[26],
-//         temp.io_value[27], temp.io_value[28], temp.io_value[29], temp.io_value[30], temp.io_value[31], temp.io_coreid);
-//   }
-//   {
-//     SquashArchEvent temp;
-//     memcpy(&temp, packge, sizeof(SquashArchEvent));
-//     packge += sizeof(SquashArchEvent);
-//     v_difftest_ArchEvent(temp.io_interrupt, temp.io_exception, temp.io_exceptionPC, temp.io_exceptionInst,
-//                          temp.io_hasNMI, temp.io_virtualInterruptIsHvictlInject, temp.io_coreid);
-//   }
-//   {
-//     SquashCSRState temp;
-//     memcpy(&temp, packge, sizeof(SquashCSRState));
-//     packge += sizeof(SquashCSRState);
-//     v_difftest_CSRState(temp.io_privilegeMode, temp.io_mstatus, temp.io_sstatus, temp.io_mepc, temp.io_sepc,
-//                         temp.io_mtval, temp.io_stval, temp.io_mtvec, temp.io_stvec, temp.io_mcause, temp.io_scause,
-//                         temp.io_satp, temp.io_mip, temp.io_mie, temp.io_mscratch, temp.io_sscratch, temp.io_mideleg,
-//                         temp.io_medeleg, temp.io_coreid);
-//   }
-//   {
-//     SquashFpCSRState temp;
-//     memcpy(&temp, packge, sizeof(SquashFpCSRState));
-//     packge += sizeof(SquashFpCSRState);
-//     v_difftest_FpCSRState(temp.io_fcsr, temp.io_coreid);
-//   }
-//   {
-//     SquashHCSRState temp;
-//     memcpy(&temp, packge, sizeof(SquashHCSRState));
-//     packge += sizeof(SquashHCSRState);
-//     v_difftest_HCSRState(temp.io_virtMode, temp.io_mtval2, temp.io_mtinst, temp.io_hstatus, temp.io_hideleg,
-//                          temp.io_hedele, temp.io_hcounteren, temp.io_htval, temp.io_htinst, temp.io_hgatp,
-//                          temp.io_vsstatus, temp.io_vstvec, temp.io_vsepc, temp.io_vscause, temp.io_vstval,
-//                          temp.io_vsatp, temp.io_vsscratch, temp.io_coreid);
-//   }
-//   {
-//     SquashLrScEvent temp;
-//     memcpy(&temp, packge, sizeof(SquashLrScEvent));
-//     packge += sizeof(SquashLrScEvent);
-//     v_difftest_LrScEvent(temp.io_success, temp.io_coreid);
-//   }
-//   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_DATA_WIDTH; i++) {
-//     SquashCommitData temp;
-//     memcpy(&temp, packge, sizeof(SquashCommitData));
-//     packge += sizeof(SquashCommitData);
-//     v_difftest_CommitData(temp.io_data, temp.io_coreid, temp.io_index);
-//   }
-//   // PACKGE END
-//   if (have_step != 0) {
-//     simv_nstep(have_step);
-//   }
-// }
-
-//NUT SHELL
 void squash_unpackge(uint8_t *packge) {
   uint8_t have_step = 0;
-  printf("squash packge size sum %lx \n", sizeof(SquashArchIntRegState) + sizeof(SquashCSRState) + sizeof(SquashArchEvent) + sizeof(SquashTrapEvent) + sizeof(SquashCommitData) + sizeof(SquashInstrCommit) + 1);
   // PACKGE HEAD
   {
-    memcpy(&have_step, packge, sizeof(uint8_t));
-    packge += 1;
+    SquashStep temp;
+    memcpy(&temp, packge, sizeof(SquashStep));
+    packge += sizeof(SquashStep);
+    have_step = temp.io_step;
+  }
+#if defined(CPU_XIANGSHAN)
+  for (size_t i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    SquashInstrCommit temp;
+    memcpy(&temp, packge, sizeof(SquashInstrCommit));
+    packge += sizeof(SquashInstrCommit);
+    v_difftest_InstrCommit(temp.skip, temp.isRVC, temp.rfwen, temp.fpwen, temp.vecwen, temp.wpdest, temp.wdest, temp.pc,
+                           temp.instr, temp.robIdx, temp.lqIdx, temp.sqIdx, temp.isLoad, temp.isStore, temp.nFused,
+                           temp.special, temp.coreid, temp.index);
+  }
+  {
+    SquashTrapEvent temp;
+    memcpy(&temp, packge, sizeof(SquashTrapEvent));
+    packge += sizeof(SquashTrapEvent);
+    v_difftest_TrapEvent(temp.hasTrap, temp.cycleCnt, temp.instrCnt, temp.hasWFI, temp.code, temp.pc, temp.coreid);
+  }
+  {
+    SquashArchFpRegState temp;
+    memcpy(&temp, packge, sizeof(SquashArchFpRegState));
+    packge += sizeof(SquashArchFpRegState);
+    v_difftest_ArchFpRegState(
+        temp.io_value[0], temp.io_value[1], temp.io_value[2], temp.io_value[3], temp.io_value[4], temp.io_value[5],
+        temp.io_value[6], temp.io_value[7], temp.io_value[8], temp.io_value[9], temp.io_value[10], temp.io_value[11],
+        temp.io_value[12], temp.io_value[13], temp.io_value[14], temp.io_value[15], temp.io_value[16],
+        temp.io_value[17], temp.io_value[18], temp.io_value[19], temp.io_value[20], temp.io_value[21],
+        temp.io_value[22], temp.io_value[23], temp.io_value[24], temp.io_value[25], temp.io_value[26],
+        temp.io_value[27], temp.io_value[28], temp.io_value[29], temp.io_value[30], temp.io_value[31], temp.io_coreid);
   }
   {
     SquashArchIntRegState temp;
     memcpy(&temp, packge, sizeof(SquashArchIntRegState));
     packge += sizeof(SquashArchIntRegState);
-
-    if (temp.io_coreid + 1 > NUM_CORES) {
-      assert(0);
-    }
+    v_difftest_ArchIntRegState(
+        temp.io_value[0], temp.io_value[1], temp.io_value[2], temp.io_value[3], temp.io_value[4], temp.io_value[5],
+        temp.io_value[6], temp.io_value[7], temp.io_value[8], temp.io_value[9], temp.io_value[10], temp.io_value[11],
+        temp.io_value[12], temp.io_value[13], temp.io_value[14], temp.io_value[15], temp.io_value[16],
+        temp.io_value[17], temp.io_value[18], temp.io_value[19], temp.io_value[20], temp.io_value[21],
+        temp.io_value[22], temp.io_value[23], temp.io_value[24], temp.io_value[25], temp.io_value[26],
+        temp.io_value[27], temp.io_value[28], temp.io_value[29], temp.io_value[30], temp.io_value[31], temp.io_coreid);
+  }
+  {
+    SquashArchEvent temp;
+    memcpy(&temp, packge, sizeof(SquashArchEvent));
+    packge += sizeof(SquashArchEvent);
+    v_difftest_ArchEvent(temp.io_interrupt, temp.io_exception, temp.io_exceptionPC, temp.io_exceptionInst,
+                         temp.io_hasNMI, temp.io_virtualInterruptIsHvictlInject, temp.io_coreid);
+  }
+  {
+    SquashCSRState temp;
+    memcpy(&temp, packge, sizeof(SquashCSRState));
+    packge += sizeof(SquashCSRState);
+    v_difftest_CSRState(temp.io_privilegeMode, temp.io_mstatus, temp.io_sstatus, temp.io_mepc, temp.io_sepc,
+                        temp.io_mtval, temp.io_stval, temp.io_mtvec, temp.io_stvec, temp.io_mcause, temp.io_scause,
+                        temp.io_satp, temp.io_mip, temp.io_mie, temp.io_mscratch, temp.io_sscratch, temp.io_mideleg,
+                        temp.io_medeleg, temp.io_coreid);
+  }
+  {
+    SquashFpCSRState temp;
+    memcpy(&temp, packge, sizeof(SquashFpCSRState));
+    packge += sizeof(SquashFpCSRState);
+    v_difftest_FpCSRState(temp.io_fcsr, temp.io_coreid);
+  }
+  {
+    SquashHCSRState temp;
+    memcpy(&temp, packge, sizeof(SquashHCSRState));
+    packge += sizeof(SquashHCSRState);
+    v_difftest_HCSRState(temp.io_virtMode, temp.io_mtval2, temp.io_mtinst, temp.io_hstatus, temp.io_hideleg,
+                         temp.io_hedele, temp.io_hcounteren, temp.io_htval, temp.io_htinst, temp.io_hgatp,
+                         temp.io_vsstatus, temp.io_vstvec, temp.io_vsepc, temp.io_vscause, temp.io_vstval,
+                         temp.io_vsatp, temp.io_vsscratch, temp.io_coreid);
+  }
+  {
+    SquashLrScEvent temp;
+    memcpy(&temp, packge, sizeof(SquashLrScEvent));
+    packge += sizeof(SquashLrScEvent);
+    v_difftest_LrScEvent(temp.io_success, temp.io_coreid);
+  }
+  for (size_t i = 0; i < CONFIG_DIFF_COMMIT_DATA_WIDTH; i++) {
+    SquashCommitData temp;
+    memcpy(&temp, packge, sizeof(SquashCommitData));
+    packge += sizeof(SquashCommitData);
+    v_difftest_CommitData(temp.io_data, temp.io_coreid, temp.io_index);
+  }
+#elif defined(CPU_NUTSHELL)
+  {
+    SquashArchIntRegState temp;
+    memcpy(&temp, packge, sizeof(SquashArchIntRegState));
+    packge += sizeof(SquashArchIntRegState);
     if (temp.io_valid) {
       v_difftest_ArchIntRegState(
         temp.io_value[0], temp.io_value[1], temp.io_value[2], temp.io_value[3], temp.io_value[4], temp.io_value[5],
@@ -265,9 +255,6 @@ void squash_unpackge(uint8_t *packge) {
         temp.io_value[17], temp.io_value[18], temp.io_value[19], temp.io_value[20], temp.io_value[21],
         temp.io_value[22], temp.io_value[23], temp.io_value[24], temp.io_value[25], temp.io_value[26],
         temp.io_value[27], temp.io_value[28], temp.io_value[29], temp.io_value[30], temp.io_value[31], temp.io_coreid);
-        for (size_t i = 0; i < 32; i++) {
-          printf("get Int-Reg[%d]:%lx\n", i, temp.io_value[i]);
-        }
     }
   }
   {
@@ -279,7 +266,7 @@ void squash_unpackge(uint8_t *packge) {
                         temp.io_mtval, temp.io_stval, temp.io_mtvec, temp.io_stvec, temp.io_mcause, temp.io_scause,
                         temp.io_satp, temp.io_mip, temp.io_mie, temp.io_mscratch, temp.io_sscratch, temp.io_mideleg,
                         temp.io_medeleg, temp.io_coreid);
-      printf("get SquashCSRState CORE_ID:%x\n", temp.io_coreid);
+      //printf("get SquashCSRState CORE_ID:%x\n", temp.io_coreid);
     }             
   }
   {
@@ -289,7 +276,7 @@ void squash_unpackge(uint8_t *packge) {
     if (temp.io_valid) {
       v_difftest_ArchEvent(temp.io_interrupt, temp.io_exception, temp.io_exceptionPC, temp.io_exceptionInst,
                          temp.io_hasNMI, temp.io_virtualInterruptIsHvictlInject, temp.io_coreid);
-      printf("get SquashArchEvent CORE_ID:%x\n", temp.io_coreid);
+      //printf("get SquashArchEvent io_exceptionPC:%x\n", temp.io_exceptionPC);
     }
   }
   {
@@ -298,7 +285,7 @@ void squash_unpackge(uint8_t *packge) {
     packge += sizeof(SquashTrapEvent);
     if (temp.io_valid) {
       v_difftest_TrapEvent(temp.hasTrap, temp.cycleCnt, temp.instrCnt, temp.hasWFI, temp.code, temp.pc, temp.coreid);
-      printf("get SquashTrapEvent  PC = %lx, cyclecnt = %lx\n",temp.pc, temp.cycleCnt);
+      printf("get SquashTrapEvent  PC = %lx, instrCnt %lx\n", temp.pc, temp.instrCnt);
     }
   }
   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
@@ -309,7 +296,7 @@ void squash_unpackge(uint8_t *packge) {
       v_difftest_InstrCommit(temp.skip, temp.isRVC, temp.rfwen, temp.fpwen, temp.vecwen, temp.wpdest, temp.wdest, temp.pc,
                            temp.instr, temp.robIdx, temp.lqIdx, temp.sqIdx, temp.isLoad, temp.isStore, temp.nFused,
                            temp.special, temp.coreid, temp.index);
-      printf("get SquashInstrCommit\n");
+      //printf("get SquashInstrCommit\n");
     }
   }
   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_DATA_WIDTH; i++) {
@@ -321,11 +308,11 @@ void squash_unpackge(uint8_t *packge) {
       printf("get SquashCommitData\n");
     }
   }
+#endif
   // PACKGE END
   if (have_step != 0) {
-    printf("run step\n");
+    printf("step %d\n", have_step);
     simv_nstep(have_step);
   }
-  sleep(1);
-  printf("end squash\n");
+  usleep(50000);
 }
