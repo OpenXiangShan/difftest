@@ -486,6 +486,11 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           printf("max epoch: %ld\n", max_epoch);
           printf("ipc: %f\n", ipc);
           printf("instrCnt: %ld cycles: %ld\n", instrCnt, cycleCnt);
+          std::vector<uint64_t> perfCnts = getIOPerfCnts(dut_ptr);
+          std::vector<std::string> perfNames = getIOPerfNames();
+          for (int i = 0; i < perfCnts.size(); i++) {
+              printf("%s: %lu\n", perfNames[i].c_str(), perfCnts[i]);
+          }
           if (epoch == max_epoch) {
             trapCode = STATE_GOODTRAP;
             break;

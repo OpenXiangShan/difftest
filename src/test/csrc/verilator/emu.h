@@ -149,3 +149,5 @@ public:
 
 void init_cmd(void);
 extern bool enable_jtag_testcase;
+extern std::vector<uint64_t> getIOPerfCnts(VSimTop *dut_ptr);
+extern std::vector<std::string> getIOPerfNames();
