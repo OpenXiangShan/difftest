@@ -143,7 +143,7 @@ void args_parsingniton(int argc, char *argv[]) {
       i++;
       memcpy(work_load, argv[i], strlen(argv[i]));
     } else if (strcmp(argv[i], "--max-instrs") == 0) {
-      max_instrs = std::stoul(argv[++i], nullptr, 16);
+      max_instrs = std::stoul(argv[++i], nullptr, 10);
     }
   }
 }
