@@ -17,6 +17,11 @@
 #include "diffstate.h"
 #include "difftest-dpic.h"
 #include "difftest.h"
+#include "flash.h"
+#include "device.h"
+#include "goldenmem.h"
+#include "ram.h"
+#include "refproxy.h"
 #include "mpool.h"
 #include "ram.h"
 #include "refproxy.h"
@@ -71,7 +76,6 @@ int main(int argc, char *argv[]) {
 
 void set_diff_ref_so(char *s) {
   extern const char *difftest_ref_so;
-  printf("diff-test ref so:%s\n", s);
   char *buf = (char *)malloc(256);
   strcpy(buf, s);
   difftest_ref_so = buf;
@@ -80,10 +84,17 @@ void set_diff_ref_so(char *s) {
 void simv_init() {
   xdma_device = new FpgaXdma(work_load);
   init_ram(work_load, DEFAULT_EMU_RAM_SIZE);
+  init_flash(NULL);
+
   difftest_init();
+
+  init_device();
+  init_goldenmem();
+  init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
 }
 
 void simv_nstep(uint8_t step) {
+  difftest_switch_zone();
   for (int i = 0; i < step; i++) {
     simv_step();
   }
@@ -91,6 +102,7 @@ void simv_nstep(uint8_t step) {
 
 void simv_step() {
   if (difftest_step()) {
+    printf("SIMV_FAIL\n");
     simv_result.store(SIMV_FAIL);
     simv_cv.notify_one();
   }
