@@ -152,14 +152,10 @@ typedef struct {
 #pragma pack()
 
 void squash_unpackge(uint8_t *packge) {
-  uint8_t have_step = 0;
+#ifdef USE_THREAD_MEMPOOL
+  packge += sizeof(uint8_t);
+#endif
   // PACKGE HEAD
-  {
-    SquashStep temp;
-    memcpy(&temp, packge, sizeof(SquashStep));
-    packge += sizeof(SquashStep);
-    have_step = temp.io_step;
-  }
 #if defined(CPU_XIANGSHAN)
   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     SquashInstrCommit temp;
@@ -266,7 +262,6 @@ void squash_unpackge(uint8_t *packge) {
                         temp.io_mtval, temp.io_stval, temp.io_mtvec, temp.io_stvec, temp.io_mcause, temp.io_scause,
                         temp.io_satp, temp.io_mip, temp.io_mie, temp.io_mscratch, temp.io_sscratch, temp.io_mideleg,
                         temp.io_medeleg, temp.io_coreid);
-      //printf("get SquashCSRState CORE_ID:%x\n", temp.io_coreid);
     }             
   }
   {
@@ -276,7 +271,6 @@ void squash_unpackge(uint8_t *packge) {
     if (temp.io_valid) {
       v_difftest_ArchEvent(temp.io_interrupt, temp.io_exception, temp.io_exceptionPC, temp.io_exceptionInst,
                          temp.io_hasNMI, temp.io_virtualInterruptIsHvictlInject, temp.io_coreid);
-      //printf("get SquashArchEvent io_exceptionPC:%x\n", temp.io_exceptionPC);
     }
   }
   {
@@ -285,7 +279,6 @@ void squash_unpackge(uint8_t *packge) {
     packge += sizeof(SquashTrapEvent);
     if (temp.io_valid) {
       v_difftest_TrapEvent(temp.hasTrap, temp.cycleCnt, temp.instrCnt, temp.hasWFI, temp.code, temp.pc, temp.coreid);
-      printf("get SquashTrapEvent  PC = %lx, instrCnt %lx\n", temp.pc, temp.instrCnt);
     }
   }
   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
@@ -296,7 +289,6 @@ void squash_unpackge(uint8_t *packge) {
       v_difftest_InstrCommit(temp.skip, temp.isRVC, temp.rfwen, temp.fpwen, temp.vecwen, temp.wpdest, temp.wdest, temp.pc,
                            temp.instr, temp.robIdx, temp.lqIdx, temp.sqIdx, temp.isLoad, temp.isStore, temp.nFused,
                            temp.special, temp.coreid, temp.index);
-      //printf("get SquashInstrCommit\n");
     }
   }
   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_DATA_WIDTH; i++) {
@@ -305,14 +297,10 @@ void squash_unpackge(uint8_t *packge) {
     packge += sizeof(SquashCommitData);
     if (temp.io_valid) {
       v_difftest_CommitData(temp.io_data, temp.io_coreid, temp.io_index);
-      printf("get SquashCommitData\n");
     }
   }
 #endif
-  // PACKGE END
-  if (have_step != 0) {
-    printf("step %d\n", have_step);
-    simv_nstep(have_step);
-  }
+// PACKGE END   
+  simv_nstep(1);
   usleep(50000);
 }

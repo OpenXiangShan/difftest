@@ -142,15 +142,26 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
-  FpgaPackgeHead packge;
+  FpgaPackgeHead* packge = (FpgaPackgeHead*)malloc(sizeof(FpgaPackgeHead));
+  // TODO: The first packet may be repeated twice, and if it is, drop the first packet
+  size_t size = read(xdma_c2h_fd[channel], packge->diff_packge, DMA_DIFF_PACKGE_LEN);
   while (running) {
-    size_t size = read(xdma_c2h_fd[channel], &packge, sizeof(FpgaPackgeHead));
-    uint8_t idx = packge.packge_idx;
+    memset(packge, 0, sizeof(FpgaPackgeHead));
+    size_t size = read(xdma_c2h_fd[channel], packge->diff_packge, DMA_DIFF_PACKGE_LEN);
+#ifdef USE_THREAD_MEMPOOL
     if (xdma_mempool.write_free_chunk(idx, (char *)&packge) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
     }
+#endif // USE_THREAD_MEMPOOL
+
+#ifdef CONFIG_DIFFTEST_BATCH
+    v_difftest_Batch(packge->diff_packge);
+#elif defined(CONFIG_DIFFTEST_SQUASH)
+    squash_unpackge(packge->diff_packge);
+#endif
   }
+  free(packge);
 }
 
 void FpgaXdma::write_difftest_thread() {
@@ -162,7 +173,7 @@ void FpgaXdma::write_difftest_thread() {
       printf("Failed to read data from the XDMA memory pool\n");
       assert(0);
     }
-    if (packge.packge_idx != recv_count) {
+    if (packge.diff_packge[0] != recv_count) {
       printf("read mempool idx failed\n");
       assert(0);
     }
