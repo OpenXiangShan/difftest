@@ -96,9 +96,7 @@ void difftest_set_dut() {
   }
 }
 int difftest_step() {
-#ifndef WITH_FPGA
   difftest_set_dut();
-#endif
   for (int i = 0; i < NUM_CORES; i++) {
     int ret = difftest[i]->step();
     if (ret) {
@@ -560,16 +558,18 @@ int Difftest::do_instr_commit(int i) {
 }
 
 void Difftest::do_first_instr_commit() {
+  printf("dut->commit[0].pc %lx\n", dut->commit[0].pc);
   if (!has_commit && dut->commit[0].valid) {
 #ifndef BASIC_DIFFTEST_ONLY
     if (dut->commit[0].pc != FIRST_INST_ADDRESS) {
+      assert(0);
       return;
     }
 #endif
     Info("The first instruction of core %d has commited. Difftest enabled. \n", id);
     has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;
-
+    printf("load falsh\n");
     proxy->load_flash_bin(get_flash_path(), get_flash_size());
     simMemory->clone_on_demand(
         [this](uint64_t offset, void *src, size_t n) {
