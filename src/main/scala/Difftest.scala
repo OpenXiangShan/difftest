@@ -437,6 +437,10 @@ class DiffAIAXtopeiEvent extends AIAXtopeiEvent with DifftestBundle {
   override val desiredCppName: String = "aia_xtopei"
 }
 
+class DiffSyncCustomMflushpwrEvent extends SyncCustomMflushpwrEvent with DifftestBundle {
+  override val desiredCppName: String = "sync_custom_mflushpwr"
+}
+
 class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 
