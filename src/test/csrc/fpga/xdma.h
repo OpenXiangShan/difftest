@@ -32,14 +32,11 @@
 #ifdef CONFIG_DIFFTEST_BATCH
 #define DMA_DIFF_PACKGE_LEN CONFIG_DIFFTEST_BATCH_BYTELEN
 #elif defined(CONFIG_DIFFTEST_SQUASH)
-#define DMA_DIFF_PACKGE_LEN 1216
+#define DMA_DIFF_PACKGE_LEN 1280
 #endif
+
 typedef struct FpgaPackgeHead {
-  uint8_t packge_idx;
   uint8_t diff_packge[DMA_DIFF_PACKGE_LEN];
-#ifdef CONFIG_DIFFTEST_BATCH
-  uint8_t zero[95];
-#endif // CONFIG_DIFFTEST_BATCH
 } FpgaPackgeHead;
 
 class FpgaXdma {

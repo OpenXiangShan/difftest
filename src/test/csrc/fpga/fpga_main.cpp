@@ -94,7 +94,6 @@ void simv_init() {
 }
 
 void simv_nstep(uint8_t step) {
-  difftest_switch_zone();
   for (int i = 0; i < step; i++) {
     simv_step();
   }

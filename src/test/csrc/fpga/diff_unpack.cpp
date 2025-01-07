@@ -152,14 +152,10 @@ typedef struct {
 #pragma pack()
 
 void squash_unpackge(uint8_t *packge) {
-  uint8_t have_step = 0;
+#ifdef USE_THREAD_MEMPOOL
+  packge += sizeof(uint8_t);
+#endif
   // PACKGE HEAD
-  {
-    SquashStep temp;
-    memcpy(&temp, packge, sizeof(SquashStep));
-    packge += sizeof(SquashStep);
-    have_step = temp.io_step;
-  }
 #if defined(CPU_XIANGSHAN)
   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     SquashInstrCommit temp;
@@ -309,10 +305,7 @@ void squash_unpackge(uint8_t *packge) {
     }
   }
 #endif
-  // PACKGE END
-  if (have_step != 0) {
-    printf("step %d\n", have_step);
-    simv_nstep(have_step);
-  }
+// PACKGE END   
+  simv_nstep(1);
   usleep(50000);
 }
