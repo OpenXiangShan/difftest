@@ -36,30 +36,30 @@ typedef struct {
 
 typedef struct {
   uint8_t io_valid;
-  uint8_t io_success;
   uint8_t io_bits_valid;
+  uint8_t io_success;
   uint8_t io_coreid;
 } SquashLrScEvent;
 
 typedef struct {
   uint8_t io_valid;
-  uint64_t io_vsscratch;
-  uint64_t io_vsatp;
-  uint64_t io_vstval;
-  uint64_t io_vscause;
-  uint64_t io_vsepc;
-  uint64_t io_vstvec;
-  uint64_t io_vsstatus;
-  uint64_t io_hgatp;
-  uint64_t io_htinst;
-  uint64_t io_htval;
-  uint64_t io_hcounteren;
-  uint64_t io_hedele;
-  uint64_t io_hideleg;
-  uint64_t io_hstatus;
-  uint64_t io_mtinst;
-  uint64_t io_mtval2;
   uint64_t io_virtMode;
+  uint64_t io_mtval2;
+  uint64_t io_mtinst;
+  uint64_t io_hstatus;
+  uint64_t io_hideleg;
+  uint64_t io_hedele;
+  uint64_t io_hcounteren;
+  uint64_t io_htval;
+  uint64_t io_htinst;
+  uint64_t io_hgatp;
+  uint64_t io_vsstatus;
+  uint64_t io_vstvec;
+  uint64_t io_vsepc;
+  uint64_t io_vscause;
+  uint64_t io_vstval;
+  uint64_t io_vsatp;
+  uint64_t io_vsscratch;
   uint8_t io_coreid;
 } SquashHCSRState;
 
