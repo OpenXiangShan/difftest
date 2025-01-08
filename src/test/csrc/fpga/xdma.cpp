@@ -26,7 +26,7 @@
 #include <sys/mman.h>
 
 #ifdef CONFIG_DIFFTEST_SQUASH
-#include "diff_unpack.h"
+#include "xdma_unpack.h"
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #define XDMA_USER       "/dev/xdma0_user"

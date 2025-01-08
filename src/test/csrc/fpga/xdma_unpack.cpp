@@ -13,7 +13,7 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-#include "diff_unpack.h"
+#include "squash_unpack.h"
 #include "diffstate.h"
 #include "difftest-dpic.h"
 #include <string.h>
