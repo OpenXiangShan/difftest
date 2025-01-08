@@ -14,14 +14,12 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "device.h"
 #include "diffstate.h"
 #include "difftest-dpic.h"
 #include "difftest.h"
 #include "flash.h"
-#include "device.h"
 #include "goldenmem.h"
-#include "ram.h"
-#include "refproxy.h"
 #include "mpool.h"
 #include "ram.h"
 #include "refproxy.h"

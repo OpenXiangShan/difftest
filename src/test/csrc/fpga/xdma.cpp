@@ -142,7 +142,7 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
-  FpgaPackgeHead* packge = (FpgaPackgeHead*)malloc(sizeof(FpgaPackgeHead));
+  FpgaPackgeHead *packge = (FpgaPackgeHead *)malloc(sizeof(FpgaPackgeHead));
   // TODO: The first packet may be repeated twice, and if it is, drop the first packet
   size_t size = read(xdma_c2h_fd[channel], packge->diff_packge, DMA_DIFF_PACKGE_LEN);
   while (running) {

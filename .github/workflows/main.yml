@@ -306,7 +306,6 @@ jobs:
             make simv VCS=verilator -j2
             ./build/simv +workload=$WORKLOAD +b=0 +e=-1 +diff=$REF_SO +max-instrs=5000 +warmup_instr=1000
             make clean
-            ./build/simv +workload=./ready-to-run/microbench.bin +b=0 +e=-1 +diff=./ready-to-run/riscv64-nemu-interpreter-so +max-instrs=5000 +warmup_instr=1000
 
   test-difftest-fpga:
     runs-on: ubuntu-22.04
@@ -344,4 +343,4 @@ jobs:
             make clean
             make sim-verilog MILL_ARGS="--difftest-config SF" -j2
             cd ./difftest
-            make fpga-build WITH_CHISELDB=0 WITH_CONSTANTIN=0
+            make fpga-build FPGA=1

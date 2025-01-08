@@ -13,13 +13,13 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-#include "squash_unpack.h"
+#include "xdma_unpack.h"
 #include "diffstate.h"
 #include "difftest-dpic.h"
-#include <string.h>
-#include <cstdio>
-#include <unistd.h>
 #include <assert.h>
+#include <cstdio>
+#include <string.h>
+#include <unistd.h>
 extern void simv_nstep(uint8_t step);
 #pragma pack(1)
 typedef struct {
@@ -245,12 +245,13 @@ void squash_unpackge(uint8_t *packge) {
     packge += sizeof(SquashArchIntRegState);
     if (temp.io_valid) {
       v_difftest_ArchIntRegState(
-        temp.io_value[0], temp.io_value[1], temp.io_value[2], temp.io_value[3], temp.io_value[4], temp.io_value[5],
-        temp.io_value[6], temp.io_value[7], temp.io_value[8], temp.io_value[9], temp.io_value[10], temp.io_value[11],
-        temp.io_value[12], temp.io_value[13], temp.io_value[14], temp.io_value[15], temp.io_value[16],
-        temp.io_value[17], temp.io_value[18], temp.io_value[19], temp.io_value[20], temp.io_value[21],
-        temp.io_value[22], temp.io_value[23], temp.io_value[24], temp.io_value[25], temp.io_value[26],
-        temp.io_value[27], temp.io_value[28], temp.io_value[29], temp.io_value[30], temp.io_value[31], temp.io_coreid);
+          temp.io_value[0], temp.io_value[1], temp.io_value[2], temp.io_value[3], temp.io_value[4], temp.io_value[5],
+          temp.io_value[6], temp.io_value[7], temp.io_value[8], temp.io_value[9], temp.io_value[10], temp.io_value[11],
+          temp.io_value[12], temp.io_value[13], temp.io_value[14], temp.io_value[15], temp.io_value[16],
+          temp.io_value[17], temp.io_value[18], temp.io_value[19], temp.io_value[20], temp.io_value[21],
+          temp.io_value[22], temp.io_value[23], temp.io_value[24], temp.io_value[25], temp.io_value[26],
+          temp.io_value[27], temp.io_value[28], temp.io_value[29], temp.io_value[30], temp.io_value[31],
+          temp.io_coreid);
     }
   }
   {
@@ -259,10 +260,10 @@ void squash_unpackge(uint8_t *packge) {
     packge += sizeof(SquashCSRState);
     if (temp.io_valid) {
       v_difftest_CSRState(temp.io_privilegeMode, temp.io_mstatus, temp.io_sstatus, temp.io_mepc, temp.io_sepc,
-                        temp.io_mtval, temp.io_stval, temp.io_mtvec, temp.io_stvec, temp.io_mcause, temp.io_scause,
-                        temp.io_satp, temp.io_mip, temp.io_mie, temp.io_mscratch, temp.io_sscratch, temp.io_mideleg,
-                        temp.io_medeleg, temp.io_coreid);
-    }             
+                          temp.io_mtval, temp.io_stval, temp.io_mtvec, temp.io_stvec, temp.io_mcause, temp.io_scause,
+                          temp.io_satp, temp.io_mip, temp.io_mie, temp.io_mscratch, temp.io_sscratch, temp.io_mideleg,
+                          temp.io_medeleg, temp.io_coreid);
+    }
   }
   {
     SquashArchEvent temp;
@@ -270,7 +271,7 @@ void squash_unpackge(uint8_t *packge) {
     packge += sizeof(SquashArchEvent);
     if (temp.io_valid) {
       v_difftest_ArchEvent(temp.io_interrupt, temp.io_exception, temp.io_exceptionPC, temp.io_exceptionInst,
-                         temp.io_hasNMI, temp.io_virtualInterruptIsHvictlInject, temp.io_coreid);
+                           temp.io_hasNMI, temp.io_virtualInterruptIsHvictlInject, temp.io_coreid);
     }
   }
   {
@@ -286,9 +287,9 @@ void squash_unpackge(uint8_t *packge) {
     memcpy(&temp, packge, sizeof(SquashInstrCommit));
     packge += sizeof(SquashInstrCommit);
     if (temp.valid) {
-      v_difftest_InstrCommit(temp.skip, temp.isRVC, temp.rfwen, temp.fpwen, temp.vecwen, temp.wpdest, temp.wdest, temp.pc,
-                           temp.instr, temp.robIdx, temp.lqIdx, temp.sqIdx, temp.isLoad, temp.isStore, temp.nFused,
-                           temp.special, temp.coreid, temp.index);
+      v_difftest_InstrCommit(temp.skip, temp.isRVC, temp.rfwen, temp.fpwen, temp.vecwen, temp.wpdest, temp.wdest,
+                             temp.pc, temp.instr, temp.robIdx, temp.lqIdx, temp.sqIdx, temp.isLoad, temp.isStore,
+                             temp.nFused, temp.special, temp.coreid, temp.index);
     }
   }
   for (size_t i = 0; i < CONFIG_DIFF_COMMIT_DATA_WIDTH; i++) {
@@ -300,7 +301,7 @@ void squash_unpackge(uint8_t *packge) {
     }
   }
 #endif
-// PACKGE END   
+  // PACKGE END
   simv_nstep(1);
   usleep(50000);
 }

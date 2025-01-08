@@ -282,23 +282,29 @@ object GatewaySink {
   }
 
   def collect(config: GatewayConfig): GatewayResult = {
-    val collected = MixedVecInit(
-      ports.toSeq.map { gen => Seq(gen.valid.asTypeOf(UInt(8.W)), gen.bits.getByteAlign) }.flatten.toSeq
-    ).asUInt
-    val out = Option.when(config.isFPGA && !config.isBatch) {
-      IO(new Bundle {
+    val collected = if (config.isFPGA && !config.isBatch && config.isSquash) {
+      MixedVecInit(
+        ports.toSeq.map { gen => Seq(gen.valid.asTypeOf(UInt(8.W)), gen.bits.getByteAlign) }.flatten.toSeq
+      ).asUInt
+    } else {
+      0.U
+    }
+    val out = if (config.isFPGA && !config.isBatch && config.isSquash) {
+      Some(IO(new Bundle {
         val data = Output(UInt(collected.getWidth.W))
         val enable = Output(Bool())
-      })
+      }))
+    } else {
+      None
     }
-    if (config.isFPGA && !config.isBatch) {
+    if (config.isFPGA && !config.isBatch && config.isSquash) {
       out.get.data := collected
       out.get.enable := VecInit(ports.toSeq.map(_.valid)).asUInt.orR
       dontTouch(out.get)
     }
     config.style match {
       case "dpic" => DPIC.collect()
-      case _ => DPIC.collect() // Default: DPI-C
+      case _      => DPIC.collect() // Default: DPI-C
     }
   }
 }
