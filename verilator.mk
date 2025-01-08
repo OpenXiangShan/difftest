@@ -134,7 +134,7 @@ build_emu_local: $(EMU_MK)
 
 $(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS) $(REF_SO)
 ifeq ($(REMOTE),localhost)
-	$(MAKE) build_emu_local
+	$(MAKE) build_emu_local -j128
 else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); export NEMU_HOME=$(NEMU_HOME); $(MAKE) -C $(NOOP_HOME)/difftest -j230 build_emu_local'
 endif

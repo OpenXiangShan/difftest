@@ -60,10 +60,12 @@ sim-verilog: $(SIM_TOP_V)
 SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
 SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
 
-# generated-src
-GEN_CSRC_DIR  = $(BUILD_DIR)
-SIM_CXXFILES += $(shell find $(GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null)
-SIM_CXXFLAGS += -I$(GEN_CSRC_DIR)
+# HardenPerf
+WITH_HARDENPERF ?= 1
+ifeq ($(WITH_HARDENPERF), 1)
+SIM_CXXFILES += $(BUILD_DIR)/HardenPerf.cpp
+SIM_CXXFLAGS += -I$(BUILD_DIR)
+endif
 
 PLUGIN_CSRC_DIR =  $(abspath ./src/test/csrc/plugin)
 PLUGIN_CXXFILES = $(shell find $(PLUGIN_CSRC_DIR) -name "*.cpp")
