@@ -21,6 +21,16 @@
 
 // first instruction vaddr
 #define RESET_VECTOR 0x80000000
+// #define TRACE_METHOD_TRACE
+#define PRINT_SIMULATION_SPEED
+
+#define Log() printf("file: %s, line: %d\n", __FILE__, __LINE__); fflush(stdout)
+
+#ifdef TRACE_METHOD_TRACE
+#define METHOD_TRACE() Log()
+#else
+#define METHOD_TRACE()
+#endif
 
 // when address translation's vpn is not in trace, give 0xa0000000 as paddr
 // page (0xa0000000, 0xfff) for out of trace mmu

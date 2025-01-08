@@ -19,18 +19,7 @@
 #include <cstdint>
 #include <stdio.h>
 #include "spikedasm.h"
-
-// #define TRACE_METHOD_TRACE
-#define PRINT_SIMULATION_SPEED
-
-
-#define Log() printf("file: %s, line: %d\n", __FILE__, __LINE__); fflush(stdout)
-
-#ifdef TRACE_METHOD_TRACE
-#define METHOD_TRACE() Log()
-#else
-#define METHOD_TRACE()
-#endif
+#include "trace_common.h"
 
 #define TraceFetchWidth 16
 

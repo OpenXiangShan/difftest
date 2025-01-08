@@ -21,9 +21,9 @@
 #include "trace_reader.h"
 #include "trace_writer.h"
 #include "trace_icache.h"
+#include "trace_fastsim.h"
 
 TraceReader *trace_reader = NULL;
-// TraceWriter *trace_writer = NULL;
 
 /** Used By Emulator */
 
@@ -197,3 +197,36 @@ extern "C" uint64_t trace_get_satp_ppn() {
   METHOD_TRACE();
   return trace_icache->getSatpPpn();
 };
+
+/******* Trace Fast Sim Checker ******/
+TraceFastSimManager *trace_fastsim = NULL;
+
+void init_tracefastsim(bool fastwarmup_enable) {
+  trace_fastsim = new TraceFastSimManager(fastwarmup_enable);
+}
+
+/** Called by dut*/
+extern "C" uint8_t tracertl_get_fastsim_state() {
+  return (uint8_t)trace_fastsim->get_fastsim_state();
+}
+
+/** Called by Emulator */
+void tracertl_set_fastsim_state(uint64_t new_state) {
+  METHOD_TRACE();
+  trace_fastsim->set_fastsim_state((FastSimState)new_state);
+}
+
+void tracertl_set_fastsim_state_enable() {
+  METHOD_TRACE();
+  trace_fastsim->set_fastsim_state();
+}
+
+void tracertl_clear_fastsim_state() {
+  METHOD_TRACE();
+  trace_fastsim->clear_fastsim_state();
+}
+
+void tracertl_check_and_change_fastsim_state(uint64_t inst_count, uint64_t cycle_count) {
+  METHOD_TRACE();
+  trace_fastsim->check_and_change_fastsim_state(inst_count, cycle_count);
+}

@@ -120,8 +120,9 @@ static inline void print_help(const char *file) {
   printf("      --dramsim3-ini         specify the ini file for DRAMSim3\n");
 #endif // WITH_DRAMSIM3
 #ifdef TRACERTL_MODE
-  printf("      --tracertl-file=NAME      load trace from NAME\n");
-  printf("      --tracept-file=NAME       load trace page table from NAME\n");
+  printf("      --tracertl-file=NAME    load trace from NAME\n");
+  printf("      --tracept-file=NAME     load trace page table from NAME\n");
+  printf("      --fastwarmup            fast warmup mode\n");
   printf("      --gen-paddr            generate physical address\n");
 #endif // TRACERTL_MODE
 #if VM_COVERAGE == 1
@@ -177,6 +178,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "tracept-file",      1, NULL,  0  },
     { "gen-paddr",         0, NULL,  0  },
     { "dump-chiselmap",    0, NULL,  0  },
+    { "fast-warmup",       0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -303,6 +305,13 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             printf("[WARN] chiselmap is not enabled at compile time, ignore --dump-chiselmap\n");
             continue;
 #endif // ENABLE_CHISEL_MAP
+          case 31:
+#ifdef TRACERTL_MODE
+            args.fast_warmup = true; continue;
+#else
+            printf("[WARN] tracertl is not enabled, ignore --fast-warmup\n");
+            continue;
+#endif // TRACERTL_MODE
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -441,6 +450,7 @@ Emulator::Emulator(int argc, const char *argv[])
     // traceicache's ram is constructed by tracertl's init method.
     init_traceicache(args.tracept_file);
     init_tracertl(args.tracertl_file, args.enable_gen_paddr);
+    init_tracefastsim(args.fast_warmup);
   } else {
     fprintf(stderr, "trace file not specified\n");
     fflush(stderr);
@@ -943,6 +953,13 @@ int Emulator::tick() {
       trapCode = STATE_ABORT;
       return trapCode;
     }
+
+    if (args.fast_warmup && trap->instrCnt >= args.warmup_instr) {
+      args.fast_warmup = false;
+      tracertl_set_fastsim_state_enable();
+    }
+
+    // tracertl_check_and_change_fastsim_state(trap->instrCnt, trap->cycleCnt);
 
   } while(0);
 #endif // TRACERTL_MODE

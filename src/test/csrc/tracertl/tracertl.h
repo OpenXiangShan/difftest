@@ -20,9 +20,11 @@
 #include "trace_format.h"
 #include "trace_reader.h"
 #include "trace_icache.h"
+#include "trace_fastsim.h"
 
 //TraceReader *trace_reader = NULL;
 extern TraceICache *trace_icache;
+extern TraceFastSimManager *trace_fastsim;
 
 /*             called by emu              */
 void init_tracertl(const char *tracefile_name, bool enable_gen_paddr);
@@ -39,6 +41,13 @@ void tracertl_error_dump();
 void tracertl_assert_dump();
 void tracertl_success_dump();
 void tracertl_error_drive_dump();
+
+// FastSim
+void init_tracefastsim(bool fastwarmup_enable);
+void tracertl_set_fastsim_state(uint64_t new_state);
+void tracertl_clear_fastsim_state();
+void tracertl_set_fastsim_state_enable();
+void tracertl_check_and_change_fastsim_state(uint64_t inst_count, uint64_t cycle_count);
 
 /*             called by dut              */
 void __attribute__((noinline)) trace_read_insts(uint8_t enable, ManyInstruction_t insts);
@@ -62,5 +71,8 @@ extern "C" bool trace_tlb_ats_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid);
 
 extern "C" uint64_t trace_dyn_pt_dword_helper(uint64_t addr);
 extern "C" uint64_t trace_get_satp_ppn();
+
+// FastSim
+extern "C" uint8_t tracertl_get_fastsim_state();
 
 #endif
