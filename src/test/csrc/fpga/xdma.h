@@ -32,7 +32,7 @@
 #ifdef CONFIG_DIFFTEST_BATCH
 #define DMA_DIFF_PACKGE_LEN CONFIG_DIFFTEST_BATCH_BYTELEN
 #elif defined(CONFIG_DIFFTEST_SQUASH)
-#define DMA_DIFF_PACKGE_LEN 1280
+#define DMA_DIFF_PACKGE_LEN 1280 // XDMA Min size
 #endif
 
 typedef struct FpgaPackgeHead {

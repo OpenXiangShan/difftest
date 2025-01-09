@@ -25,10 +25,6 @@
 #include <string>
 #include <sys/mman.h>
 
-#ifdef CONFIG_DIFFTEST_SQUASH
-#include "xdma_unpack.h"
-#endif // CONFIG_DIFFTEST_SQUASH
-
 #define XDMA_USER       "/dev/xdma0_user"
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
@@ -158,7 +154,7 @@ void FpgaXdma::read_xdma_thread(int channel) {
 #ifdef CONFIG_DIFFTEST_BATCH
     v_difftest_Batch(packge->diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
-    squash_unpackge(packge->diff_packge);
+    //TODO: need automatically generates squash data parsing implementations
 #endif
   }
   free(packge);
@@ -182,7 +178,7 @@ void FpgaXdma::write_difftest_thread() {
 #ifdef CONFIG_DIFFTEST_BATCH
     v_difftest_Batch(packge.diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
-    squash_unpackge(packge.diff_packge);
+    //TODO: need automatically generates squash data parsing implementations
 #endif
   }
 }

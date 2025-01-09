@@ -332,6 +332,6 @@ jobs:
       - name: FPGA-difftest Build
         run: |
             cd $NOOP_HOME
-            make sim-verilog MILL_ARGS="--difftest-config SF" -j2
+            make sim-verilog MILL_ARGS="--difftest-config BF" -j2
             cd ./difftest
             make fpga-build FPGA=1
