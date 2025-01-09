@@ -99,7 +99,6 @@ protected:
   std::set<uint64_t> accessed_indices;
 #endif
   InputReader *createInputReader(const char *image);
-  virtual uint64_t get_img_size() = 0;
   void inline on_access(uint64_t index) {
 #ifdef FUZZING
     accessed_indices.insert(index);
@@ -109,6 +108,7 @@ protected:
 public:
   SimMemory(uint64_t n_bytes) : memory_size(n_bytes) {}
   virtual ~SimMemory();
+  virtual uint64_t get_img_size() = 0;
   uint64_t get_size() {
     return memory_size;
   }
@@ -135,11 +135,6 @@ private:
   uint64_t *ram;
   uint64_t img_size;
 
-protected:
-  virtual inline uint64_t get_img_size() {
-    return img_size;
-  }
-
 public:
   MmapMemory(const char *image, uint64_t n_bytes);
   virtual ~MmapMemory();
@@ -154,6 +149,9 @@ public:
 
   uint64_t *as_ptr() {
     return ram;
+  }
+  virtual inline uint64_t get_img_size() {
+    return img_size;
   }
 };
 
@@ -177,9 +175,6 @@ private:
   uint64_t n_accessed;
 
 protected:
-  virtual inline uint64_t get_img_size() {
-    return reader->len();
-  }
   void add_callback(std::function<void(uint64_t, uint64_t)> func) {
     callbacks.push_back(func);
   }
@@ -198,6 +193,9 @@ public:
       cb(i->first, i->second);
     }
     add_callback(cb);
+  }
+  virtual inline uint64_t get_img_size() {
+    return reader->len();
   }
 };
 
