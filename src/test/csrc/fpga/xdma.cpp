@@ -92,12 +92,12 @@ void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr,
   }
 
   if (is_bypass) {
-    if (simMemory->get_load_img_size() > aligned_size) {
+    if (simMemory->get_img_size() > aligned_size) {
       printf("The loaded workload size exceeds the xdma bypass size");
       exit(-1);
     }
     memcpy(static_cast<char *>(m_ptr) + offset, static_cast<const void *>(simMemory->as_ptr()),
-           simMemory->get_load_img_size());
+           simMemory->get_img_size());
   } else {
     ((volatile uint32_t *)m_ptr)[offset >> 2] = value;
   }
