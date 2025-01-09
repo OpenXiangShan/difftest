@@ -1,7 +1,8 @@
+FPGA_TARGET = $(BUILD_DIR)/fpga-host
 FPGA_CSRC_DIR   = $(abspath ./src/test/csrc/fpga)
 FPGA_CONFIG_DIR = $(abspath ./config) # Reserve storage for xdma configuration
 
-FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp") -include cstring
+FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp")
 FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DNUM_CORES=$(NUM_CORES) -DCONFIG_PLATFORM_FPGA -O2
 FPGA_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
@@ -10,8 +11,13 @@ FPGA_LDFLAGS += -DCONFIG_DMA_CHANNELS=$(DMA_CHANNELS)
 
 fpga-build: fpga-clean fpga-host
 
-fpga-host:
-	$(CXX) $(FPGA_CXXFLAGS) $(FPGA_CXXFILES) $^ -o $@ $(FPGA_LDFLAGS)
+$(FPGA_TARGET): $(FPGA_CXXFILES) | $(FPGA_TARGET_DIR)
+	$(CXX) $(FPGA_CXXFLAGS) $(FPGA_CXXFILES) -o $@ $(FPGA_LDFLAGS)
+
+$(FPGA_TARGET_DIR):
+	mkdir -p $(FPGA_TARGET_DIR)
+
+fpga-host: $(FPGA_TARGET)
 
 fpga-clean:
-	rm -f fpga-host
+	rm -f $(FPGA_TARGET)

@@ -96,16 +96,16 @@ SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
 endif
 endif
 
-WITH_CHISELDB ?= 1
 # ChiselDB
+WITH_CHISELDB ?= 1
 ifeq ($(WITH_CHISELDB), 1)
 SIM_CXXFILES += $(BUILD_DIR)/chisel_db.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
 SIM_LDFLAGS  += -lsqlite3
 endif
 
-WITH_CONSTANTIN ?= 1
 # ConstantIn
+WITH_CONSTANTIN ?= 1
 ifeq ($(WITH_CONSTANTIN), 1)
 SIM_CXXFILES += $(BUILD_DIR)/constantin.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
@@ -241,7 +241,7 @@ include palladium.mk
 include libso.mk
 include fpga.mk
 
-clean: vcs-clean pldm-clean
+clean: vcs-clean pldm-clean fpga-clean
 	rm -rf $(BUILD_DIR)
 
 format: scala-format clang-format
