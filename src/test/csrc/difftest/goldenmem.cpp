@@ -34,7 +34,7 @@ void init_goldenmem() {
   pmem_size = simMemory->get_size();
   pmem = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (pmem == (uint8_t *)MAP_FAILED) {
-    printf("ERROR allocating physical memory. \n");
+    Info("ERROR allocating physical memory. \n");
   }
   simMemory->clone_on_demand([](uint64_t offset, void *src, size_t n) { nonzero_large_memcpy(pmem + offset, src, n); },
                              true);
@@ -134,7 +134,7 @@ inline word_t paddr_read(uint64_t addr, int len) {
   if (in_pmem(addr))
     return pmem_read(addr, len);
   else {
-    printf("[Hint] read not in pmem, maybe in speculative state! addr: %lx\n", addr);
+    Info("[Hint] read not in pmem, maybe in speculative state! addr: %lx\n", addr);
     return 0;
   }
   return 0;

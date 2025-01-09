@@ -109,15 +109,15 @@ public:
 
 protected:
   void display_custom() {
-    printf(" wen %d dst %02d data %016lx idx %03x", wen, dest, data, robidx);
+    Info(" wen %d dst %02d data %016lx idx %03x", wen, dest, data, robidx);
     if (isLoad) {
-      printf(" (%02x)", lqidx);
+      Info(" (%02x)", lqidx);
     }
     if (isStore) {
-      printf(" (%02x)", sqidx);
+      Info(" (%02x)", sqidx);
     }
     if (tag) {
-      printf(" (%c)", tag);
+      Info(" (%c)", tag);
     }
   }
 
@@ -142,7 +142,7 @@ public:
 
 protected:
   void display_custom() {
-    printf(" cause %016lx", cause);
+    Info(" cause %016lx", cause);
   }
 };
 
