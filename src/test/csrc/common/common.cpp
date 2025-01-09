@@ -100,6 +100,22 @@ void common_finish() {
   fflush(stdout);
 }
 
+static eprintf_handle_t eprintf_handle = vprintf;
+
+extern "C" void common_enable_log(eprintf_handle_t h) {
+  assert(h != NULL);
+  eprintf_handle = h;
+}
+
+int eprintf(const char *fmt, ...) {
+  va_list args;
+  int ret;
+  va_start(args, fmt);
+  ret = (*eprintf_handle)(fmt, args);
+  va_end(args);
+  return ret;
+}
+
 bool sim_verbose = true;
 
 extern "C" void enable_sim_verbose() {
