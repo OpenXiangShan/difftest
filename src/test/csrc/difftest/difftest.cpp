@@ -721,12 +721,12 @@ int Difftest::do_store_check() {
       uint64_t pc = store_event.pc;
       display();
 
-      printf("\n==============  Store Commit Event (Core %d)  ==============\n", this->id);
+      Info("\n==============  Store Commit Event (Core %d)  ==============\n", this->id);
       proxy->get_store_event_other_info(&pc);
-      printf("Mismatch for store commits \n");
-      printf("  REF commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx\n", addr, data, mask, pc);
-      printf("  DUT commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx, robidx 0x%x\n", store_event.addr,
-             store_event.data, store_event.mask, store_event.pc, store_event.robidx);
+      Info("Mismatch for store commits \n");
+      Info("  REF commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx\n", addr, data, mask, pc);
+      Info("  DUT commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx, robidx 0x%x\n", store_event.addr,
+           store_event.data, store_event.mask, store_event.pc, store_event.robidx);
 
       store_event_queue.pop();
       return 1;
@@ -776,34 +776,34 @@ int Difftest::do_refill_check(int cacheid) {
         if (cmo_inval_event_set.find(dut_refill->addr) != cmo_inval_event_set.end()) {
           // If the data inconsistency occurs in the cache block operated by CBO.INVAL,
           // it is considered reasonable and the DUT data is used to update goldenMem.
-          printf("INFO: Sync GoldenMem using refill Data from DUT (Because of CBO.INVAL):\n");
-          printf("      cacheid=%d, addr: %lx\n      Gold: ", cacheid, dut_refill->addr);
+          Info("INFO: Sync GoldenMem using refill Data from DUT (Because of CBO.INVAL):\n");
+          Info("      cacheid=%d, addr: %lx\n      Gold: ", cacheid, dut_refill->addr);
           for (int j = 0; j < 8; j++) {
             read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
-            printf("%016lx", *((uint64_t *)buf));
+            Info("%016lx", *((uint64_t *)buf));
           }
-          printf("\n      Core: ");
+          Info("\n      Core: ");
           for (int j = 0; j < 8; j++) {
-            printf("%016lx", dut_refill->data[j]);
+            Info("%016lx", dut_refill->data[j]);
           }
-          printf("\n");
+          Info("\n");
           update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
           proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
           cmo_inval_event_set.erase(dut_refill->addr);
           return 0;
         } else {
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
-          printf("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->idtfr, realpaddr);
-          printf("addr: %lx\nGold: ", dut_refill->addr);
+          Info("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->idtfr, realpaddr);
+          Info("addr: %lx\nGold: ", dut_refill->addr);
           for (int j = 0; j < 8; j++) {
             read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
-            printf("%016lx", *((uint64_t *)buf));
+            Info("%016lx", *((uint64_t *)buf));
           }
-          printf("\nCore: ");
+          Info("\nCore: ");
           for (int j = 0; j < 8; j++) {
-            printf("%016lx", dut_refill->data[j]);
+            Info("%016lx", dut_refill->data[j]);
           }
-          printf("\n");
+          Info("\n");
           // continue run some cycle before aborted to dump wave
           if (delay == 0) {
             delay = 1;
@@ -937,10 +937,10 @@ int Difftest::do_l1tlb_check() {
       dut->l1tlb[i].ppn = dut->l1tlb[i].ppn >> difftest_level * 9 << difftest_level * 9;
     }
     if (pte.difftest_ppn != dut->l1tlb[i].ppn) {
-      printf("Warning: l1tlb resp test of core %d index %d failed! vpn = %lx\n", id, i, dut->l1tlb[i].vpn);
-      printf("  REF commits pte.val: 0x%lx, dut s2xlate: %d\n", pte.val, dut->l1tlb[i].s2xlate);
-      printf("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut->l1tlb[i].ppn);
-      printf("  REF commits perm 0x%02x, level %d, pf %d\n", pte.difftest_perm, difftest_level, !pte.difftest_v);
+      Info("Warning: l1tlb resp test of core %d index %d failed! vpn = %lx\n", id, i, dut->l1tlb[i].vpn);
+      Info("  REF commits pte.val: 0x%lx, dut s2xlate: %d\n", pte.val, dut->l1tlb[i].s2xlate);
+      Info("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut->l1tlb[i].ppn);
+      Info("  REF commits perm 0x%02x, level %d, pf %d\n", pte.difftest_perm, difftest_level, !pte.difftest_v);
       return 0;
     }
   }
@@ -1008,18 +1008,18 @@ int Difftest::do_l2tlb_check() {
                                               r_s2.level != dut->l2tlb[i].g_level || difftest_gpf != dut->l2tlb[i].gpf
                                         : false;
         if (s1_check_fail || s2_check_fail) {
-          printf("Warning: L2TLB resp test of core %d index %d sector %d failed! vpn = %lx\n", id, i, j,
-                 dut->l2tlb[i].vpn + j);
-          printf("  REF commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", pte.difftest_ppn, pte.difftest_perm,
-                 difftest_level, difftest_pf);
+          Info("Warning: L2TLB resp test of core %d index %d sector %d failed! vpn = %lx\n", id, i, j,
+               dut->l2tlb[i].vpn + j);
+          Info("  REF commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", pte.difftest_ppn, pte.difftest_perm,
+               difftest_level, difftest_pf);
           if (hasS2xlate)
-            printf("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", r_s2.pte.difftest_ppn,
-                   r_s2.pte.difftest_perm, r_s2.level, difftest_gpf);
-          printf("  DUT commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", dut->l2tlb[i].ppn[j], dut->l2tlb[i].perm,
-                 dut->l2tlb[i].level, dut->l2tlb[i].pf);
+            Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", r_s2.pte.difftest_ppn,
+                 r_s2.pte.difftest_perm, r_s2.level, difftest_gpf);
+          Info("  DUT commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", dut->l2tlb[i].ppn[j], dut->l2tlb[i].perm,
+               dut->l2tlb[i].level, dut->l2tlb[i].pf);
           if (hasS2xlate)
-            printf("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", dut->l2tlb[i].s2ppn, dut->l2tlb[i].g_perm,
-                   dut->l2tlb[i].g_level, dut->l2tlb[i].gpf);
+            Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", dut->l2tlb[i].s2ppn, dut->l2tlb[i].g_perm,
+                 dut->l2tlb[i].g_level, dut->l2tlb[i].gpf);
           return 1;
         }
       }
@@ -1033,7 +1033,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
                          uint64_t atomicCmp[], uint8_t atomicFuop, uint64_t atomicOut[]) {
   // We need to do atmoic operations here so as to update goldenMem
   if (!(atomicMask == 0xf || atomicMask == 0xf0 || atomicMask == 0xff || atomicMask == 0xffff)) {
-    printf("Unrecognized mask: %lx\n", atomicMask);
+    Info("Unrecognized mask: %lx\n", atomicMask);
     return 1;
   }
 
@@ -1045,8 +1045,8 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
     uint64_t mem;
     read_goldenmem(atomicAddr, &mem, 8);
     if (mem != t && atomicFuop != 007 && atomicFuop != 003) { // ignore sc_d & lr_d
-      printf("Core %d atomic instr mismatch goldenMem, mem: 0x%lx, t: 0x%lx, op: 0x%x, addr: 0x%lx\n", coreid, mem, t,
-             atomicFuop, atomicAddr);
+      Info("Core %d atomic instr mismatch goldenMem, mem: 0x%lx, t: 0x%lx, op: 0x%x, addr: 0x%lx\n", coreid, mem, t,
+           atomicFuop, atomicAddr);
       return 1;
     }
     switch (atomicFuop) {
@@ -1080,7 +1080,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       case 054:
       case 056:
       case 057: ret = (t == cmp) ? rs : t; break;
-      default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
+      default: Info("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
     update_goldenmem(atomicAddr, &ret, atomicMask, 8);
   }
@@ -1102,8 +1102,8 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       mem = (uint32_t)(mem_raw >> 32);
 
     if (mem != t && atomicFuop != 006 && atomicFuop != 002) { // ignore sc_w & lr_w
-      printf("Core %d atomic instr mismatch goldenMem, rawmem: 0x%lx mem: 0x%x, t: 0x%x, op: 0x%x, addr: 0x%lx\n",
-             coreid, mem_raw, mem, t, atomicFuop, atomicAddr);
+      Info("Core %d atomic instr mismatch goldenMem, rawmem: 0x%lx mem: 0x%x, t: 0x%x, op: 0x%x, addr: 0x%lx\n", coreid,
+           mem_raw, mem, t, atomicFuop, atomicAddr);
       return 1;
     }
     switch (atomicFuop) {
@@ -1137,7 +1137,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       case 054:
       case 056:
       case 057: ret = (t == cmp) ? rs : t; break;
-      default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
+      default: Info("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
     ret_sel = ret;
     if (atomicMask == 0xf0)
@@ -1151,8 +1151,8 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
     read_goldenmem(atomicAddr, &meml, 8);
     read_goldenmem(atomicAddr + 8, &memh, 8);
     if (meml != atomicOut[0] || memh != atomicOut[1]) {
-      printf("Core %d atomic instr mismatch goldenMem, mem: 0x%lx 0x%lx, t: 0x%lx 0x%lx, op: 0x%x, addr: 0x%lx\n",
-             coreid, memh, meml, atomicOut[1], atomicOut[0], atomicFuop, atomicAddr);
+      Info("Core %d atomic instr mismatch goldenMem, mem: 0x%lx 0x%lx, t: 0x%lx 0x%lx, op: 0x%x, addr: 0x%lx\n", coreid,
+           memh, meml, atomicOut[1], atomicOut[0], atomicFuop, atomicAddr);
       return 1;
     }
     switch (atomicFuop) {
@@ -1162,7 +1162,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
         reth = success ? atomicData[1] : atomicOut[1];
         break;
       }
-      default: printf("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
+      default: Info("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
     update_goldenmem(atomicAddr, &retl, 0xff, 8);
     update_goldenmem(atomicAddr + 8, &reth, 0xff, 8);
@@ -1176,12 +1176,12 @@ void dumpGoldenMem(const char *banner, uint64_t addr, uint64_t time) {
   if (addr == 0) {
     return;
   }
-  printf("============== %s =============== time = %ld\ndata: ", banner, time);
+  Info("============== %s =============== time = %ld\ndata: ", banner, time);
   for (int i = 0; i < 8; i++) {
     read_goldenmem(addr + i * 8, &buf, 8);
-    printf("%016lx", *((uint64_t *)buf));
+    Info("%016lx", *((uint64_t *)buf));
   }
-  printf("\n");
+  Info("\n");
 #endif
 }
 
@@ -1388,9 +1388,9 @@ void Difftest::do_raise_critical_error() {
   if (dut->critical_error.valid) {
     bool ref_critical_error = proxy->raise_critical_error();
     if (ref_critical_error == dut->critical_error.criticalError) {
-      eprintf("Core %d dump: " ANSI_COLOR_RED
-              "HIT CRITICAL ERROR: please check if software cause a double trap. \n" ANSI_COLOR_RESET,
-              this->id);
+      Info("Core %d dump: " ANSI_COLOR_RED
+           "HIT CRITICAL ERROR: please check if software cause a double trap. \n" ANSI_COLOR_RESET,
+           this->id);
       raise_trap(STATE_GOODTRAP);
     } else {
       display();
@@ -1415,23 +1415,23 @@ void Difftest::do_aia_xtopei() {
 #endif
 
 void Difftest::display() {
-  printf("\n==============  In the last commit group  ==============\n");
-  printf("the first commit instr pc of DUT is 0x%016lx\nthe first commit instr pc of REF is 0x%016lx\n",
-         dut_commit_first_pc, ref_commit_first_pc);
+  Info("\n==============  In the last commit group  ==============\n");
+  Info("the first commit instr pc of DUT is 0x%016lx\nthe first commit instr pc of REF is 0x%016lx\n",
+       dut_commit_first_pc, ref_commit_first_pc);
 
   state->display(this->id);
 
-  printf("\n==============  REF Regs  ==============\n");
+  Info("\n==============  REF Regs  ==============\n");
   fflush(stdout);
   proxy->ref_reg_display();
-  printf("privilegeMode: %lu\n", dut->csr.privilegeMode);
+  Info("privilegeMode: %lu\n", dut->csr.privilegeMode);
 }
 
 void CommitTrace::display(bool use_spike) {
-  printf("%s pc %016lx inst %08x", get_type(), pc, inst);
+  Info("%s pc %016lx inst %08x", get_type(), pc, inst);
   display_custom();
   if (use_spike) {
-    printf(" %s", spike_dasm(inst));
+    Info(" %s", spike_dasm(inst));
   }
 }
 
@@ -1440,14 +1440,14 @@ void Difftest::display_stats() {
   uint64_t instrCnt = trap->instrCnt;
   uint64_t cycleCnt = trap->cycleCnt;
   double ipc = (double)instrCnt / cycleCnt;
-  eprintf(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
-          this->id, instrCnt, cycleCnt, ipc);
+  Info(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
+       this->id, instrCnt, cycleCnt, ipc);
 }
 
 void DiffState::display_commit_count(int i) {
   auto retire_pointer = (retire_group_pointer + DEBUG_GROUP_TRACE_SIZE - 1) % DEBUG_GROUP_TRACE_SIZE;
-  printf("commit group [%02d]: pc %010lx cmtcnt %d%s\n", i, retire_group_pc_queue[i], retire_group_cnt_queue[i],
-         (i == retire_pointer) ? " <--" : "");
+  Info("commit group [%02d]: pc %010lx cmtcnt %d%s\n", i, retire_group_pc_queue[i], retire_group_cnt_queue[i],
+       (i == retire_pointer) ? " <--" : "");
 }
 
 void DiffState::display_commit_instr(int i) {
@@ -1459,19 +1459,19 @@ void DiffState::display_commit_instr(int i, bool use_spike) {
   if (!commit_trace[i]) {
     return;
   }
-  printf("[%02d] ", i);
+  Info("[%02d] ", i);
   commit_trace[i]->display(use_spike);
   auto retire_pointer = (retire_inst_pointer + DEBUG_INST_TRACE_SIZE - 1) % DEBUG_INST_TRACE_SIZE;
-  printf("%s\n", (i == retire_pointer) ? " <--" : "");
+  Info("%s\n", (i == retire_pointer) ? " <--" : "");
 }
 
 void DiffState::display(int coreid) {
-  printf("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
+  Info("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
   for (int j = 0; j < DEBUG_GROUP_TRACE_SIZE; j++) {
     display_commit_count(j);
   }
 
-  printf("\n============== Commit Instr Trace ==============\n");
+  Info("\n============== Commit Instr Trace ==============\n");
   bool use_spike = spike_valid();
   for (int j = 0; j < DEBUG_INST_TRACE_SIZE; j++) {
     display_commit_instr(j, use_spike);

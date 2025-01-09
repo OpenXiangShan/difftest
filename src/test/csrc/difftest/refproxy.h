@@ -247,7 +247,7 @@ public:
     if (raise_nmi_intr) {
       raise_nmi_intr(hasNMI);
     } else {
-      printf("No NMI interrupt is triggered.\n");
+      Info("No NMI interrupt is triggered.\n");
     }
   }
 
@@ -255,7 +255,7 @@ public:
     if (ref_virtual_interrupt_is_hvictl_inject) {
       ref_virtual_interrupt_is_hvictl_inject(virtualInterruptIsHvictlInject);
     } else {
-      printf("Virtual interrupt without hvictl register injection.\n");
+      Info("Virtual interrupt without hvictl register injection.\n");
     }
   }
 
@@ -279,7 +279,7 @@ public:
     if (ref_aia_xtopei) {
       ref_aia_xtopei(&xtopei);
     } else {
-      printf("Does not support the out-of-core part of AIA.\n");
+      Info("Does not support the out-of-core part of AIA.\n");
     }
   }
 
@@ -315,7 +315,7 @@ public:
     if (ref_get_store_event_other_info) {
       ref_get_store_event_other_info(info);
     } else {
-      printf(
+      Info(
           "This version of 'REF' does not support the 'PC' value of store commit event. Please use a newer version of "
           "'REF'.\n");
     }
