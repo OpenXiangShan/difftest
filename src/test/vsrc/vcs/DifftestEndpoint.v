@@ -237,16 +237,12 @@ assign difftest_perfCtrl_dump = 0;
 
 reg [63:0] n_cycles;
 reg [63:0] stuck_timer;
-`define MACRO aa.bb.cc
 always @(posedge clock) begin
   if (reset) begin
     n_cycles <= 64'h0;
     stuck_timer <= 64'h0;
   end
   else begin
-    if (n_cycles == 64'h1) begin
-      $display("suf `MACRO suf");
-    end
     n_cycles <= n_cycles + 64'h1;
 
     // max cycles

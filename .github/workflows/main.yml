@@ -318,29 +318,20 @@ jobs:
       - name: Prepare environment
         run: |
             cd $GITHUB_WORKSPACE/..
-            git config --global url."https://github.com/".insteadOf git@github.com:
-            git config --global url."https://".insteadOf git://
-            git clone https://github.com/OpenXiangShan/xs-env
-            cd xs-env
-            sudo -s ./setup-tools.sh
-            source ./setup.sh
+            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/install-verilator.sh
+            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/setup-tools.sh
+            sudo bash setup-tools.sh
 
       - name: Prepare NutShell
         run: |
-            cd $GITHUB_WORKSPACE/../xs-env
-            rm -r NutShell
+            cd $GITHUB_WORKSPACE/..
             git clone -b dev-difftest --single-branch https://github.com/OSCPU/NutShell.git
-            cd NutShell && git submodule update --init
-            rm -r difftest
-            cp -r $GITHUB_WORKSPACE .
+            cd NutShell && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
+            echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
 
       - name: FPGA-difftest Build
         run: |
-            cd $GITHUB_WORKSPACE/../xs-env
-            source ./env.sh
-            cd $GITHUB_WORKSPACE/../xs-env/NutShell
-            source ./env.sh
-            make clean
+            cd $NOOP_HOME
             make sim-verilog MILL_ARGS="--difftest-config SF" -j2
             cd ./difftest
             make fpga-build FPGA=1

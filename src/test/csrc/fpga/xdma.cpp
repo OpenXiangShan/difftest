@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2024 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -61,7 +61,7 @@ FpgaXdma::FpgaXdma(const char *workload) {
 }
 
 void FpgaXdma::handle_sigint(int sig) {
-  printf("Unlink sem success, exit success!\n");
+  printf("handle sigint unlink pcie success, exit fpga-host!\n");
   exit(1);
 }
 

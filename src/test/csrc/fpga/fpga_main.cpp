@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2024 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -25,16 +25,17 @@
 #include "refproxy.h"
 #include "xdma.h"
 #include <condition_variable>
+#include <getopt.h>
 #include <mutex>
 
 enum {
-  SIMV_RUN,
-  SIMV_DONE,
-  SIMV_FAIL,
+  FPGA_RUN,
+  FPGA_DONE,
+  FPGA_FAIL,
 } simv_state;
 
 static char work_load[256] = "/dev/zero";
-static std::atomic<uint8_t> simv_result{SIMV_RUN};
+static std::atomic<uint8_t> simv_result{FPGA_RUN};
 static std::mutex simv_mtx;
 static std::condition_variable simv_cv;
 static uint64_t max_instrs = 0;
@@ -46,30 +47,30 @@ struct core_end_info_t {
 };
 static core_end_info_t core_end_info;
 
-void simv_init();
-void simv_step();
+void fpga_init();
+void fpga_step();
 void cpu_endtime_check();
 void set_diff_ref_so(char *s);
-void args_parsingniton(int argc, char *argv[]);
+void args_parsing(int argc, char *argv[]);
 
 FpgaXdma *xdma_device = NULL;
 
 int main(int argc, char *argv[]) {
-  args_parsingniton(argc, argv);
+  args_parsing(argc, argv);
 
-  simv_init();
+  fpga_init();
   printf("simv init\n");
   {
     std::unique_lock<std::mutex> lock(simv_mtx);
     xdma_device->start_transmit_thread();
-    while (simv_result.load() == SIMV_RUN) {
+    while (simv_result.load() == FPGA_RUN) {
       simv_cv.wait(lock);
     }
   }
   xdma_device->running = false;
   free(xdma_device);
   printf("difftest releases the fpga device and exits\n");
-  exit(0);
+  return 0;
 }
 
 void set_diff_ref_so(char *s) {
@@ -79,7 +80,7 @@ void set_diff_ref_so(char *s) {
   difftest_ref_so = buf;
 }
 
-void simv_init() {
+void fpga_init() {
   xdma_device = new FpgaXdma(work_load);
   init_ram(work_load, DEFAULT_EMU_RAM_SIZE);
   init_flash(NULL);
@@ -91,16 +92,16 @@ void simv_init() {
   init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
 }
 
-void simv_nstep(uint8_t step) {
+void fpga_nstep(uint8_t step) {
   for (int i = 0; i < step; i++) {
-    simv_step();
+    fpga_step();
   }
 }
 
-void simv_step() {
+void fpga_step() {
   if (difftest_step()) {
-    printf("SIMV_FAIL\n");
-    simv_result.store(SIMV_FAIL);
+    printf("FPGA_FAIL\n");
+    simv_result.store(FPGA_FAIL);
     simv_cv.notify_one();
   }
   if (difftest_state() != -1) {
@@ -115,9 +116,9 @@ void simv_step() {
       difftest[i]->display_stats();
     }
     if (trapCode == 0)
-      simv_result.store(SIMV_DONE);
+      simv_result.store(FPGA_DONE);
     else
-      simv_result.store(SIMV_FAIL);
+      simv_result.store(FPGA_FAIL);
     simv_cv.notify_one();
   }
   cpu_endtime_check();
@@ -136,7 +137,7 @@ void cpu_endtime_check() {
         difftest[i]->display_stats();
         core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
         if (core_end_info.core_trap_num == NUM_CORES) {
-          simv_result.store(SIMV_DONE);
+          simv_result.store(FPGA_DONE);
           simv_cv.notify_one();
         }
       }
@@ -144,15 +145,25 @@ void cpu_endtime_check() {
   }
 }
 
-void args_parsingniton(int argc, char *argv[]) {
-  for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--diff") == 0) {
-      set_diff_ref_so(argv[++i]);
-    } else if (strcmp(argv[i], "-i") == 0) {
-      i++;
-      memcpy(work_load, argv[i], strlen(argv[i]));
-    } else if (strcmp(argv[i], "--max-instrs") == 0) {
-      max_instrs = std::stoul(argv[++i], nullptr, 10);
+void args_parsing(int argc, char *argv[]) {
+  int opt;
+  int option_index = 0;
+  static struct option long_options[] = {
+    {"diff", required_argument, 0, 0}, {"max-instrs", required_argument, 0, 0}, {0, 0, 0, 0}};
+
+  while ((opt = getopt_long(argc, argv, "i:", long_options, &option_index)) != -1) {
+    switch (opt) {
+      case 0:
+        if (strcmp(long_options[option_index].name, "diff") == 0) {
+          set_diff_ref_so(optarg);
+        } else if (strcmp(long_options[option_index].name, "max-instrs") == 0) {
+          max_instrs = std::stoul(optarg, nullptr, 10);
+        }
+        break;
+      case 'i': strncpy(work_load, optarg, sizeof(work_load) - 1); break;
+      default:
+        std::cerr << "Usage: " << argv[0] << " [--diff <path>] [-i <workload>] [--max-instrs <num>]" << std::endl;
+        exit(EXIT_FAILURE);
     }
   }
 }

@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2024 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -20,7 +20,8 @@
 #include <cstdio>
 #include <string.h>
 #include <unistd.h>
-extern void simv_nstep(uint8_t step);
+
+extern void fpga_nstep(uint8_t step);
 #pragma pack(1)
 typedef struct {
   uint8_t io_step;
@@ -302,6 +303,5 @@ void squash_unpackge(uint8_t *packge) {
   }
 #endif
   // PACKGE END
-  simv_nstep(1);
-  usleep(50000);
+  fpga_nstep(1);
 }
