@@ -16,12 +16,13 @@
 #ifndef __MPOOL_H__
 #define __MPOOL_H__
 
+#include "common.h"
 #include <atomic>
 #include <condition_variable>
-#include <cstring>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <vector>
 
 #define MEMPOOL_SIZE   16384 * 1024 // 16M memory
