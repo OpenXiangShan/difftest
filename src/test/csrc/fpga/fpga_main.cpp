@@ -16,7 +16,6 @@
 
 #include "device.h"
 #include "diffstate.h"
-#include "difftest-dpic.h"
 #include "difftest.h"
 #include "flash.h"
 #include "goldenmem.h"
@@ -27,6 +26,8 @@
 #include <condition_variable>
 #include <getopt.h>
 #include <mutex>
+
+void fpga_finish();
 
 enum {
   FPGA_RUN,
@@ -68,7 +69,7 @@ int main(int argc, char *argv[]) {
     }
   }
   xdma_device->running = false;
-  free(xdma_device);
+  fpga_finish();
   printf("difftest releases the fpga device and exits\n");
   return 0;
 }
@@ -91,6 +92,18 @@ void fpga_init() {
   init_goldenmem();
   init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
   xdma_device->ddr_load_workload(work_load);
+}
+
+void fpga_finish() {
+  free(xdma_device);
+  common_finish();
+
+  difftest_finish();
+  goldenmem_finish();
+  finish_device();
+
+  delete simMemory;
+  simMemory = nullptr;
 }
 
 void fpga_nstep(uint8_t step) {
