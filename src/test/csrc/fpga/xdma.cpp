@@ -30,9 +30,8 @@
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
 
-FpgaXdma::FpgaXdma(const char *workload) {
+FpgaXdma::FpgaXdma() {
   signal(SIGINT, handle_sigint);
-  ddr_load_workload(workload);
 
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     char c2h_device[64];

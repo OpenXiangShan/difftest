@@ -81,7 +81,7 @@ void set_diff_ref_so(char *s) {
 }
 
 void fpga_init() {
-  xdma_device = new FpgaXdma(work_load);
+  xdma_device = new FpgaXdma();
   init_ram(work_load, DEFAULT_EMU_RAM_SIZE);
   init_flash(NULL);
 
@@ -90,6 +90,7 @@ void fpga_init() {
   init_device();
   init_goldenmem();
   init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
+  xdma_device->ddr_load_workload(work_load);
 }
 
 void fpga_nstep(uint8_t step) {

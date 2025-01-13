@@ -45,7 +45,7 @@ public:
 
   bool running = false;
 
-  FpgaXdma(const char *workload);
+  FpgaXdma();
   ~FpgaXdma() {
     stop_thansmit_thread();
   };
