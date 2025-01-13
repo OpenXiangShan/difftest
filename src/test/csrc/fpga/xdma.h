@@ -18,7 +18,6 @@
 
 #include "common.h"
 #include "diffstate.h"
-#include "difftest-dpic.h"
 #include "mpool.h"
 #include <atomic>
 #include <queue>
