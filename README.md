@@ -171,7 +171,7 @@ coherence via RefillTest.
 | `DiffNonRegInterruptPengingEvent` | Non-register interrupts pending | No |
 | `DiffMhpmeventOverflowEvent` | Mhpmevent-register overflow | No |
 | `DiffCriticalErrorEvent` | Raise critical-error | No |
-| `DiffAIAXtopeiEvent` | xtopei from IMSIC | No |
+| `DiffSyncAIAEvent` | Synchronization of AIA | No |
 | `DiffSyncCustomMflushpwrEvent` | custom CSR mflushpwr | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
