@@ -21,9 +21,9 @@
 #include <iostream>
 #include <queue>
 #include "trace_format.h"
+#include "trace_paddr_allocator.h"
 #include "emu.h"
 
-#define RESET_VECTOR 0x80000000
 
 enum TraceStatus {
   TRACE_IDLE,
@@ -125,9 +125,13 @@ class TraceReader {
   }
 
 public:
-  TraceReader(const char *trace_file_name);
+  TraceReader(const char *trace_file_name, bool enable_gen_paddr);
   ~TraceReader() {
   }
+  // Physical Address Allocator
+  TracePAddrAllocator<TRACE_PADDR_INST_BASE> iPaddrAllocator;
+  TracePAddrAllocator<TRACE_PADDR_DATA_BASE> dPaddrAllocator;
+
   /* get an instruction from file */
   // Used by dut to read
   bool readFromBuffer(Instruction &inst, uint8_t idx);

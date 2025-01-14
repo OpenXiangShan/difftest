@@ -54,11 +54,11 @@ struct TracePageEntry {
 class DynamicSoftPageTable {
 private:
   // const uint64_t TRACE_PAGE_SIZE = 4096;
-  const int initLevel = 2;
+  const int initLevel = TRACE_MAX_PAGE_LEVEL-1;
 
   std::map<uint64_t, TracePTE> pageTable;
   // set the baseAddr to maxSize of paddr from trace.
-  uint64_t baseAddr = DYN_PAGE_TABLE_BASE_PADDR + TRACE_PAGE_SIZE * (initLevel + 1); // 4KB aligned
+  uint64_t baseAddr = DYN_PAGE_TABLE_BASE_PADDR + TRACE_PAGE_SIZE * initLevel; // 4KB aligned
   uint64_t curAddr = baseAddr  + TRACE_PAGE_SIZE; // 4KB aligned
 
   std::map<uint64_t, uint64_t> soft_tlb;

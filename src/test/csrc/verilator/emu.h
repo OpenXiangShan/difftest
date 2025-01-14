@@ -78,6 +78,7 @@ struct EmuArgs {
   bool enable_diff = true;
   bool enable_fork = false;
   bool enable_runahead = false;
+  bool enable_gen_paddr = false;
   bool dump_db = false;
   bool dump_chiselmap = false;
   bool trace_is_read = true;

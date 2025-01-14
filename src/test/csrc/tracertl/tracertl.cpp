@@ -27,10 +27,11 @@ TraceReader *trace_reader = NULL;
 
 /** Used By Emulator */
 
-void init_tracertl(const char *trace_file_name) {
+void init_tracertl(const char *trace_file_name, bool enable_gen_paddr) {
   printf("init_tracertl: %s\n", trace_file_name);
+  printf("dynamic generate paddr(for instruction and data): %d\n", enable_gen_paddr);
   fflush(stdout);
-  trace_reader = new TraceReader(trace_file_name);
+  trace_reader = new TraceReader(trace_file_name, enable_gen_paddr);
 
   trace_reader->prepareRead();
 }

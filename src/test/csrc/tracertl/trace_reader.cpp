@@ -20,9 +20,9 @@
 #include "tracertl.h"
 #include "trace_decompress.h"
 
-TraceReader::TraceReader(const char *trace_file_name)
+TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
 {
-  printf("TraceRTL: check file exists %s...\n", trace_file_name);
+  printf("TraceRTL: check file exists...\n");
   fflush(stdout);
   // preread trace
   std::ifstream *trace_stream;
@@ -74,11 +74,20 @@ TraceReader::TraceReader(const char *trace_file_name)
   commit_inst_num.pop(); // set init id to 1
 
   if (instDecompressBuffer[0].instr_pc_va != RESET_VECTOR) {
+    // gen jump instr
     TraceInstruction static_inst;
     static_inst.setToForceJump(RESET_VECTOR, instDecompressBuffer[0].instr_pc_va);
     Instruction inst;
     inst.fromTraceInst(static_inst);
     inst.inst_id = inst_id_preread.pop();
+
+    // gen new paddr
+    if (enable_gen_paddr) {
+      inst.instr_pc_pa = iPaddrAllocator.va2pa(inst.instr_pc_va);
+      if (inst.memory_type != MEM_TYPE_None) {
+        inst.exu_data.memory_address.pa = dPaddrAllocator.va2pa(inst.exu_data.memory_address.va);
+      }
+    }
 
     if (!inst.legalInst()) {
       setError();
@@ -91,10 +100,19 @@ TraceReader::TraceReader(const char *trace_file_name)
   }
 
   for (uint64_t idx = 0; idx < traceInstNum; idx ++) {
+    // trans to XS Trace Format
     TraceInstruction static_inst = instDecompressBuffer[idx];
     Instruction inst;
     inst.fromTraceInst(static_inst);
     inst.inst_id = inst_id_preread.pop();
+
+    // gen new paddr
+    if (enable_gen_paddr) {
+      inst.instr_pc_pa = iPaddrAllocator.va2pa(inst.instr_pc_va);
+      if (inst.memory_type != MEM_TYPE_None) {
+        inst.exu_data.memory_address.pa = dPaddrAllocator.va2pa(inst.exu_data.memory_address.va);
+      }
+    }
 
     if (!inst.legalInst()) {
       setError();
@@ -166,6 +184,10 @@ TraceReader::TraceReader(const char *trace_file_name)
   last_interval_time = gen_cur_time();
 
   trace_icache->test();
+#ifdef TRACE_VERBOSE
+  iPaddrAllocator.dump();
+  dPaddrAllocator.dump();
+#endif
 }
 
 bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {

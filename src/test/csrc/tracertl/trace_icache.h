@@ -52,7 +52,7 @@ private:
   std::unordered_map<uint64_t, uint64_t> soft_tlb;
 
   // ddr/dram image for pagetable
-  uint64_t satp = (DYN_PAGE_TABLE_BASE_PADDR + TRACE_PAGE_SIZE * 3) >> TRACE_PAGE_SHIFT;
+  uint64_t satp = (DYN_PAGE_TABLE_BASE_PADDR + TRACE_PAGE_SIZE * TRACE_MAX_PAGE_LEVEL) >> TRACE_PAGE_SHIFT;
   DynamicSoftPageTable dynamic_page_table;
 
 public:

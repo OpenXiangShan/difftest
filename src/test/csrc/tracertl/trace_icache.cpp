@@ -168,8 +168,10 @@ void TraceICache::test() {
 
   // test for soft_tlb
 
-  // dumpSoftTlb();
-  // dynamic_page_table.dumpInnerSoftTLB();
+#ifdef TRACE_VERBOSE
+  dumpSoftTlb();
+  dynamic_page_table.dumpInnerSoftTLB();
+#endif
 
   // test for dynPageTable
   // {
@@ -189,7 +191,9 @@ void TraceICache::test() {
     }
   }
 
-  // dynamic_page_table.dump();
+#ifdef TRACE_VERBOSE
+  dynamic_page_table.dump();
+#endif
 }
 
 uint64_t TraceICache::getSatpPpn() {
