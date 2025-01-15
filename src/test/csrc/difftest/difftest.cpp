@@ -368,6 +368,9 @@ inline int Difftest::check_all() {
 #ifdef CONFIG_DIFFTEST_AIAXTOPEIEVENT
   do_aia_xtopei();
 #endif
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+  do_sync_custom_mflushpwr();
+#endif
 
   num_commit = 0; // reset num_commit this cycle to 0
   if (dut->event.valid) {
@@ -1410,6 +1413,15 @@ void Difftest::do_aia_xtopei() {
     xtopei.vstopei = dut->aia_xtopei.vstopei;
     proxy->aia_xtopei(xtopei);
     dut->aia_xtopei.valid = 0;
+  }
+}
+#endif
+
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+void Difftest::do_sync_custom_mflushpwr() {
+  if (dut->sync_custom_mflushpwr.valid) {
+    proxy->sync_custom_mflushpwr(dut->sync_custom_mflushpwr.l2FlushDone);
+    dut->sync_custom_mflushpwr.valid = 0;
   }
 }
 #endif

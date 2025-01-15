@@ -152,7 +152,8 @@ public:
   f(raise_mhpmevent_overflow, difftest_raise_mhpmevent_overflow, void, uint64_t)                            \
   f(ref_raise_critical_error, difftest_raise_critical_error, bool)                                          \
   f(ref_get_store_event_other_info, difftest_get_store_event_other_info, void, void*)                       \
-  f(ref_aia_xtopei, difftest_aia_xtopei, void, void*)
+  f(ref_aia_xtopei, difftest_aia_xtopei, void, void*)                                                       \
+  f(ref_sync_custom_mflushpwr, difftest_sync_custom_mflushpwr, void, bool)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -280,6 +281,14 @@ public:
       ref_aia_xtopei(&xtopei);
     } else {
       Info("Does not support the out-of-core part of AIA.\n");
+    }
+  }
+
+  inline void sync_custom_mflushpwr(bool l2FlushDone) {
+    if (ref_sync_custom_mflushpwr) {
+      ref_sync_custom_mflushpwr(l2FlushDone);
+    } else {
+      printf("Does not support sync custom CSR mflushpwr.\n");
     }
   }
 

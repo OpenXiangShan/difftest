@@ -337,3 +337,7 @@ class AIAXtopeiEvent extends DifftestBaseBundle with HasValid {
   val stopei = UInt(64.W)
   val vstopei = UInt(64.W)
 }
+
+class SyncCustomMflushpwrEvent extends DifftestBaseBundle with HasValid {
+  val l2FlushDone = Bool()
+}
