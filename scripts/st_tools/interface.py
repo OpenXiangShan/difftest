@@ -29,43 +29,44 @@ def process_file(filename, use_core_mode):
 
         content = '`include "gateway_interface.svh"\n\n' + content
         pattern_found = False  # Flag to track if a matching pattern is detected
-
+        port_pattern = r'module\s+[^\(]*\(([^)]*)\)'
+        org_port_content = re.search(port_pattern, content, flags=re.DOTALL).group(1)
+        port_content = org_port_content
         # Replace IO with interface
         if use_core_mode:
             # Check if any "output gateway_*" line exists
-            if re.search(r' output\s+.*\s+gateway_\d+', content):
+            pattern = r'.*\s+gateway_\d+.*?\n'
+            if re.search(pattern, port_content):
                 pattern_found = True
-                # Remove existing output gateway line and add the replacement pattern
-                content = re.sub(r'  output\s+.*\s+gateway.*\n', '', content)
-                new_line = "  core_if.out gateway_out"
-
-                replace_pattern = r'gateway_out.gateway_\1'
-                # Ensure "Core_sig.core_out gateway_out" is added only once
-                if new_line not in content:
-                    # Add new_line before the line containing ");"
-                    content = re.sub(r'^(.*\n)(?=.*\);)', lambda m: m.group(1) + new_line + '\n', content, count=1, flags=re.MULTILINE)
-
-                # Perform the replacement pattern
-                content = re.sub(r'gateway_(\d+)', replace_pattern, content)
+                # trailing comma if pattern not found in last line
+                trail_comma = re.search(pattern, port_content.splitlines()[-1]+'\n') is None
+                new_line = "  core_if.out gateway_out" + (',' if trail_comma else '') + '\n'
+                # Replace first existing output gateway line and with replacement pattern, keep trailing comma if any
+                port_content = re.sub(pattern, new_line, port_content, count = 1)
+                # Remove remaining lines
+                port_content = re.sub(pattern, '', port_content)
+                content = content.replace(org_port_content, port_content)
+                # Modify usage
+                content = re.sub(r'(?<!\.)gateway_(\d+)', r'gateway_out.gateway_\1', content)
                 print("'output gateway_*' found and pattern replaced.")
             else:
                 print("No 'output gateway_*' found. No changes made.")
 
         else:
             # Check if any "in_*" pattern exists
-            if re.search(r'\bin_\d+', content):
+            pattern = r'.*in_\d+.*?\n'
+            if re.search(pattern, port_content):
                 pattern_found = True
-                # Remove existing in_* line and add the replacement pattern
-                new_line = "  gateway_if.in gateway_in"
-                replace_pattern = r'(gateway_in.gateway_\1'
-                # Ensure "Gateway_interface.diff_top gateway_in" is added only once
-                content = re.sub(r'^(.*)(?=\n.*\);)', lambda m: re.sub(r'(.*\s)(//.*)', r'\1,\2', m.group(1)), content, count=1, flags=re.MULTILINE)
-                if new_line not in content:
-                    # Add new_line before the line containing ");"
-                    content = re.sub(r'^(.*\n)(?=.*\);)', lambda m: m.group(1) + new_line + '\n', content, count=1, flags=re.MULTILINE)
-
-                content = re.sub(r'\(in_(\d+)', replace_pattern, content)
-                print("'in_*' found and pattern replaced.")
+                trail_comma = re.search(pattern, port_content.splitlines()[-1]+'\n') is None
+                new_line = "  gateway_if.in gateway_in" + (',' if trail_comma else '') + '\n'
+                # Replace first existing in_* line and with replacement pattern, keep trailing comma if any
+                port_content = re.sub(pattern, new_line, port_content, count = 1)
+                # Remove remaining lines
+                port_content = re.sub(pattern, '', port_content)
+                content = content.replace(org_port_content, port_content)
+                # Modify usage
+                content = re.sub(r'(?<!\.)in_(\d+)', r'gateway_in.gateway_\1', content)
+                print("'input in_*' found and pattern replaced.")
             else:
                 print("No 'in_*' found. No changes made.")
 
