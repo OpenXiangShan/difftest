@@ -365,8 +365,8 @@ inline int Difftest::check_all() {
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
   do_raise_critical_error();
 #endif
-#ifdef CONFIG_DIFFTEST_AIAXTOPEIEVENT
-  do_aia_xtopei();
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+  do_sync_aia();
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
   do_sync_custom_mflushpwr();
@@ -1404,15 +1404,16 @@ void Difftest::do_raise_critical_error() {
 }
 #endif
 
-#ifdef CONFIG_DIFFTEST_AIAXTOPEIEVENT
-void Difftest::do_aia_xtopei() {
-  if (dut->aia_xtopei.valid) {
-    struct AIAXtopei xtopei;
-    xtopei.mtopei = dut->aia_xtopei.mtopei;
-    xtopei.stopei = dut->aia_xtopei.stopei;
-    xtopei.vstopei = dut->aia_xtopei.vstopei;
-    proxy->aia_xtopei(xtopei);
-    dut->aia_xtopei.valid = 0;
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+void Difftest::do_sync_aia() {
+  if (dut->sync_aia.valid) {
+    struct FromAIA aia;
+    aia.mtopei = dut->sync_aia.mtopei;
+    aia.stopei = dut->sync_aia.stopei;
+    aia.vstopei = dut->sync_aia.vstopei;
+    aia.hgeip = dut->sync_aia.hgeip;
+    proxy->sync_aia(aia);
+    dut->sync_aia.valid = 0;
   }
 }
 #endif

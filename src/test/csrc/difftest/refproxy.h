@@ -152,7 +152,7 @@ public:
   f(raise_mhpmevent_overflow, difftest_raise_mhpmevent_overflow, void, uint64_t)                            \
   f(ref_raise_critical_error, difftest_raise_critical_error, bool)                                          \
   f(ref_get_store_event_other_info, difftest_get_store_event_other_info, void, void*)                       \
-  f(ref_aia_xtopei, difftest_aia_xtopei, void, void*)                                                       \
+  f(ref_sync_aia, difftest_sync_aia, void, void*)                                                           \
   f(ref_sync_custom_mflushpwr, difftest_sync_custom_mflushpwr, void, bool)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
@@ -276,9 +276,9 @@ public:
     return ref_raise_critical_error ? ref_raise_critical_error() : false;
   }
 
-  inline void aia_xtopei(struct AIAXtopei &xtopei) {
-    if (ref_aia_xtopei) {
-      ref_aia_xtopei(&xtopei);
+  inline void sync_aia(struct FromAIA &src) {
+    if (ref_sync_aia) {
+      ref_sync_aia(&src);
     } else {
       Info("Does not support the out-of-core part of AIA.\n");
     }
@@ -422,10 +422,11 @@ struct NonRegInterruptPending {
   bool localCounterOverflowInterruptReq;
 };
 
-struct AIAXtopei {
+struct FromAIA {
   uint64_t mtopei;
   uint64_t stopei;
   uint64_t vstopei;
+  uint64_t hgeip;
 };
 
 extern const char *difftest_ref_so;

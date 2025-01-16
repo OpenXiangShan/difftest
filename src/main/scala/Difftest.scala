@@ -433,8 +433,8 @@ class DiffCriticalErrorEvent extends CriticalErrorEvent with DifftestBundle {
   override val desiredCppName: String = "critical_error"
 }
 
-class DiffAIAXtopeiEvent extends AIAXtopeiEvent with DifftestBundle {
-  override val desiredCppName: String = "aia_xtopei"
+class DiffSyncAIAEvent extends AIAEvent with DifftestBundle {
+  override val desiredCppName: String = "sync_aia"
 }
 
 class DiffSyncCustomMflushpwrEvent extends SyncCustomMflushpwrEvent with DifftestBundle {
