@@ -69,7 +69,8 @@ class SimTop(profileName: String, numCoresOption: Option[Int]) extends Module {
   val numCores = numCoresOption.getOrElse(profile.numCores)
   val bundles = (0 until numCores).flatMap(coreid =>
     profile.bundles.zipWithIndex.map { case (p, i) =>
-      DifftestModule(p.toBundle, true, p.delay).suggestName(s"gateway_${coreid}_$i")
+      val io = DifftestModule(p.toBundle, true, p.delay).suggestName(s"gateway_${coreid}_$i")
+      dontTouch(io)
     }
   )
   DifftestModule.generateSvhInterface(bundles, numCores)
