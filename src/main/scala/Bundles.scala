@@ -315,6 +315,8 @@ class NonRegInterruptPendingEvent extends DifftestBaseBundle with HasValid {
   val platformIRPStip = Bool()
   val platformIRPVseip = Bool()
   val platformIRPVstip = Bool()
+  val fromAIAMeip = Bool()
+  val fromAIASeip = Bool()
   val localCounterOverflowInterruptReq = Bool()
 }
 

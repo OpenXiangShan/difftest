@@ -419,6 +419,8 @@ struct NonRegInterruptPending {
   bool platformIRPStip;
   bool platformIRPVseip;
   bool platformIRPVstip;
+  bool fromAIAMeip;
+  bool fromAIASeip;
   bool localCounterOverflowInterruptReq;
 };
 
