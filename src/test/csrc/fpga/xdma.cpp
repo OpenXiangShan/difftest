@@ -138,8 +138,6 @@ void FpgaXdma::stop_thansmit_thread() {
 
 void FpgaXdma::read_xdma_thread(int channel) {
   FpgaPackgeHead *packge = (FpgaPackgeHead *)malloc(sizeof(FpgaPackgeHead));
-  // TODO: The first packet may be repeated twice, and if it is, drop the first packet
-  size_t size = read(xdma_c2h_fd[channel], packge->diff_packge, DMA_DIFF_PACKGE_LEN);
   while (running) {
     memset(packge, 0, sizeof(FpgaPackgeHead));
     size_t size = read(xdma_c2h_fd[channel], packge->diff_packge, DMA_DIFF_PACKGE_LEN);
@@ -148,13 +146,13 @@ void FpgaXdma::read_xdma_thread(int channel) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
     }
-#endif // USE_THREAD_MEMPOOL
-
+#else
 #ifdef CONFIG_DIFFTEST_BATCH
     v_difftest_Batch(packge->diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
     //TODO: need automatically generates squash data parsing implementations
-#endif
+#endif // CONFIG_DIFFTEST_BATCH
+#endif // USE_THREAD_MEMPOOL
   }
   free(packge);
 }
