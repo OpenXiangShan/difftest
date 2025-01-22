@@ -1369,6 +1369,8 @@ void Difftest::do_non_reg_interrupt_pending() {
     ip.platformIRPStip = dut->non_reg_interrupt_pending.platformIRPStip;
     ip.platformIRPVseip = dut->non_reg_interrupt_pending.platformIRPVseip;
     ip.platformIRPVstip = dut->non_reg_interrupt_pending.platformIRPVstip;
+    ip.fromAIAMeip = dut->non_reg_interrupt_pending.fromAIAMeip;
+    ip.fromAIASeip = dut->non_reg_interrupt_pending.fromAIASeip;
     ip.localCounterOverflowInterruptReq = dut->non_reg_interrupt_pending.localCounterOverflowInterruptReq;
 
     proxy->non_reg_interrupt_pending(ip);
