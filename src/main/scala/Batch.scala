@@ -113,11 +113,15 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   // Collect bundles with valid of same cycle in parallel
   val collector = Module(new BatchCollector(bundles, param))
   collector.in := in
+  val step_data_head = collector.step_data_head
+  val step_data_tail = collector.step_data_tail
+  val step_info_head = collector.step_info_head
+  val step_info_tail = collector.step_info_tail
   val step_data = collector.step_data
   val step_info = collector.step_info
   val step_enable = collector.step_enable
   val step_status = collector.step_status
-  val step_grains_hint = collector.step_grains_hint
+//  val step_grains_hint = collector.step_grains_hint
 
 
 //  val out = IO(Output(new BatchOutput(param, config)))
@@ -127,9 +131,13 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 //  out.enable := step_enable
 
   // Assemble collected data from different cycles
-  val assembler = Module(new BatchAssembler(step_grains_hint, param, config))
+  val assembler = Module(new BatchAssembler(chiselTypeOf(step_data_head), chiselTypeOf(step_data_tail), param, config))
   assembler.step_data := step_data
   assembler.step_info := step_info
+  assembler.step_data_head := step_data_head
+  assembler.step_data_tail := step_data_tail
+  assembler.step_info_head := step_info_head
+  assembler.step_info_tail := step_info_tail
   assembler.step_status := step_status
   assembler.step_enable := step_enable
   if (config.hasReplay) {
@@ -143,8 +151,7 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 
 class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) extends Module {
   val in = IO(Input(MixedVec(bundles)))
-  val step_data = IO(Output(UInt(param.StepDataBitLen.W)))
-  val step_info = IO(Output(UInt(param.StepInfoBitLen.W)))
+  // vec of step_data split in different loc
   val step_status = IO(Output(Vec(param.StepGroupSize, new BatchStats(param))))
   val step_enable = IO(Output(Bool()))
 
@@ -154,17 +161,20 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
     (v_gens.head.bits.getByteAlignWidth / 8 + param.grainBytes - 1 ) / param.grainBytes
   }
   val group_length = sorted.map(_.length)
-  val group_info = WireInit(0.U.asTypeOf(Vec(param.StepGroupSize, UInt(param.infoWidth.W))))
-  val group_status = WireInit(0.U.asTypeOf(Vec(param.StepGroupSize, new BatchStats(param))))
-  val group_data = WireInit(0.U.asTypeOf(MixedVec(Seq.tabulate(param.StepGroupSize){idx =>
-    UInt((group_length(idx) * group_grain(idx) * param.grainBytes * 8).W)})))
-  val grains_set = collection.mutable.Set(0)
-  // Hint to shift group data, sum of grains of a random subset of bundles
-  val group_grains_hint = ListBuffer.empty[Seq[Int]]
+  val group_info = Wire(Vec(param.StepGroupSize, UInt(param.infoWidth.W)))
+  val group_status = Wire(Vec(param.StepGroupSize, new BatchStats(param)))
+  val group_data = Wire(MixedVec(Seq.tabulate(param.StepGroupSize){idx =>
+    UInt((group_length(idx) * group_grain(idx) * param.grainBytes * 8).W)}
+  ))
+  val group_vsize = Wire(Vec(param.StepGroupSize, UInt(8.W)))
+//  val grains_set = collection.mutable.Set(0)
+//  // Hint to shift group data, sum of grains of a random subset of bundles
+//  val group_grains_hint = ListBuffer.empty[Seq[Int]]
   sorted.zipWithIndex.foreach{ case (v_gens, idx) =>
     val aligned = v_gens.map(_.bits.getByteAlign)
     val valids = v_gens.map(_.valid)
     val v_size = PopCount(VecInit(valids).asUInt)
+    group_vsize(idx) := v_size
     val info = Wire(new BatchInfo)
     info.id := Batch.getBundleID(v_gens.head.bits).U
     info.num := v_size
@@ -191,46 +201,77 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
       }
       Mux(v, shifted, 0.U)
     }.toSeq).reduce(_ | _)
-    val base_grains = grains_set.toSeq
-    base_grains.foreach { base =>
-      (1 to v_gens.length).foreach{ n =>
-        grains_set.add(base + n * group_grain(idx))
-      }
-    }
-    group_grains_hint.addOne(grains_set.toSeq)
+//    val base_grains = grains_set.toSeq
+//    base_grains.foreach { base =>
+//      (1 to v_gens.length).foreach{ n =>
+//        grains_set.add(base + n * group_grain(idx))
+//      }
+//    }
+//    group_grains_hint.addOne(grains_set.toSeq)
   }
-  val step_grains_hint = group_grains_hint.last
+//  val step_grains_hint = group_grains_hint.last
 
   // Stage 2: delay grouped data, concat different group
   val delay_group_data = RegNext(group_data)
   val delay_group_info = RegNext(group_info)
   val delay_group_status = RegNext(group_status)
-  step_data := MixedVecInit(delay_group_data.zipWithIndex.map{ case (gens, idx) =>
-    if (idx != 0) {
-      val offset_map = group_grains_hint(idx - 1).map{g =>
-        (g.U, (gens << (g * param.grainBytes * 8)).asUInt)
-      }
-      LookupTree(delay_group_status(idx - 1).data_grains, offset_map)
-    } else {
-      gens
-    }
-  }).reduce(_ | _)
-  val collect_info = MixedVecInit(delay_group_info.zipWithIndex.map{ case (info, idx) =>
-    if (idx != 0) {
-      val offset_map = (1 to (idx+1)).map{ g =>
-        (g.U, (info << (g * param.infoWidth)).asUInt)
-      }
-      LookupTree(delay_group_status(idx - 1).info_size, offset_map)
-    } else {
-      (info << param.infoWidth).asUInt
-    }
-  }).reduce(_ | _)
+  val delay_group_vsize = RegNext(group_vsize)
   // Use BatchInterval to update index of software buffer
   val info_num = delay_group_status.last.info_size
   val BatchInterval = Wire(new BatchInfo)
   BatchInterval.id := Batch.getTemplate.length.U
   BatchInterval.num := info_num // unused, only for debugging
-  step_info := collect_info | BatchInterval.asUInt
+  // head(i) contains group 0~i, tail(i) contains group i+1~groupsize-1
+  val step_data = IO(Output(UInt(param.StepDataBitLen.W)))
+  val step_info = IO(Output(UInt(param.StepInfoBitLen.W)))
+  val step_data_head_w = Seq.tabulate(param.StepGroupSize - 1){idx => delay_group_data.take(idx + 1).map(_.getWidth).sum}
+  val step_data_head = IO(Output(MixedVec(step_data_head_w.map{hw => UInt(hw.W)})))
+  val step_data_tail = IO(Output(MixedVec(step_data_head_w.map{hw => UInt((param.StepDataBitLen - hw).W)})))
+  val step_info_head_w = Seq.tabulate(param.StepGroupSize - 1){idx => (idx + 2) * param.infoWidth} // include Interval
+  val step_info_head = IO(Output(MixedVec(step_info_head_w.map{hw => UInt(hw.W)})))
+  val collect_info_head = Wire(MixedVec(step_info_head_w.map{hw => UInt((hw - param.infoWidth).W)}))
+  val step_info_tail = IO(Output(MixedVec(step_info_head_w.map{hw => UInt((param.StepInfoBitLen - hw).W)})))
+  // Collect from head
+  step_data_head(0) := delay_group_data(0)
+  collect_info_head(0) := delay_group_info(0)
+  step_info_head(0) := Cat(delay_group_info(0), BatchInterval.asUInt)
+  (1 until param.StepGroupSize).foreach{idx =>
+    val cat_map = Seq.tabulate(group_length(idx) + 1){ len =>
+      (len.U, Cat(step_data_head(idx - 1),
+        delay_group_data(idx)(len * group_grain(idx) * param.grainBytes * 8 - 1, 0)))
+    }
+    val collect_data = LookupTree(delay_group_vsize(idx), cat_map)
+    val collect_info = Mux(delay_group_vsize(idx) =/= 0.U,
+      Cat(collect_info_head(idx - 1), delay_group_info(idx)),
+      collect_info_head(idx - 1))
+    if (idx != param.StepGroupSize - 1) {
+      step_data_head(idx) := collect_data
+      collect_info_head(idx) := collect_info
+      step_info_head(idx) := Cat(collect_info, BatchInterval.asUInt)
+    } else {
+      step_data := collect_data
+      step_info := Cat(collect_info, BatchInterval.asUInt)
+    }
+  }
+  // Collect from tail
+  step_data_tail(param.StepGroupSize - 2) := delay_group_data(param.StepGroupSize - 1)
+  step_info_tail(param.StepGroupSize - 2) := delay_group_info(param.StepGroupSize - 1)
+  (1 until param.StepGroupSize - 1).foreach{ idx =>
+    val cat_map = Seq.tabulate(group_length(idx) + 1){ len =>
+      (len.U, Cat(step_data_tail(idx), delay_group_data(idx)(len * group_grain(idx) * param.grainBytes * 8 - 1, 0)))
+    }
+    step_data_tail(idx - 1) := LookupTree(delay_group_vsize(idx), cat_map)
+    step_info_tail(idx - 1) :=
+      Mux(delay_group_vsize(idx) =/= 0.U,
+        Cat(step_info_tail(idx), delay_group_info(idx)),
+        step_info_tail(idx))
+  }
+//  (0 until param.StepGroupSize - 1).map{ idx =>
+//    when(step_enable){
+//      printf("%x\n",step_info_head(idx))
+//      printf("%x\n",step_info_tail(idx))
+//    }
+//  }
   step_enable := info_num =/= 1.U // BatchInterval, at least 1.U
   step_status := delay_group_status
 //  delay_group_info.zip(delay_group_status).foreach{ case(info, status) =>
@@ -251,9 +292,17 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
 //  }
 }
 
-class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: GatewayConfig) extends Module {
+class BatchAssembler(
+                      step_data_head_t: MixedVec[UInt], step_data_tail_t: MixedVec[UInt],
+//                      step_grains_hint: Seq[Int],
+          param: BatchParam, config: GatewayConfig) extends Module {
   val step_data = IO(Input(UInt(param.StepDataBitLen.W)))
   val step_info = IO(Input(UInt(param.StepInfoBitLen.W)))
+  val step_data_head = IO(Input(step_data_head_t))
+  val step_data_tail = IO(Input(step_data_tail_t))
+  val step_info_head_w = Seq.tabulate(param.StepGroupSize - 1) { idx => (idx + 2) * param.infoWidth } // include Interval
+  val step_info_head = IO(Input(MixedVec(step_info_head_w.map { hw => UInt(hw.W) })))
+  val step_info_tail = IO(Input(MixedVec(step_info_head_w.map { hw => UInt((param.StepInfoBitLen - hw).W) })))
   val step_status = IO(Input(Vec(param.StepGroupSize, new BatchStats(param))))
   val step_enable = IO(Input(Bool()))
   val step_trace_info = Option.when(config.hasReplay)(IO(Input(new DiffTraceInfo(config))))
@@ -272,6 +321,10 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
   //   2. concat/remain_stats: record statistic for data/info to be concatenated to output or remained to state
   val delay_step_data = RegNext(step_data)
   val delay_step_info = RegNext(step_info)
+  val delay_step_data_head = RegNext(step_data_head)
+  val delay_step_data_tail = RegNext(step_data_tail)
+  val delay_step_info_head = RegNext(step_info_head)
+  val delay_step_info_tail = RegNext(step_info_tail)
   val delay_step_status = RegNext(step_status)
   val delay_step_enable = RegNext(step_enable)
   val delay_step_trace_info = Option.when(config.hasReplay)(RegNext(step_trace_info.get))
@@ -284,11 +337,12 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
   val exceed_v = VecInit(data_exceed_v.zip(info_exceed_v).map{ case (de, ie) => de | ie})
   // Extract last non-exceed stats
   // When no stats exceeds, return step_stats to append whole step for state flushing
-  val concat_stats = Mux(!exceed_v.asUInt.orR, delay_step_status.last,
-    VecInit(delay_step_status.dropRight(1).zipWithIndex.map { case (stats, idx) =>
-      val mask = exceed_v(idx) ^ exceed_v(idx + 1)
+  val concat_mask = VecInit.tabulate(param.StepGroupSize - 1){ idx => exceed_v(idx) ^ exceed_v(idx + 1)}
+  val none_exceed = !exceed_v.asUInt.orR
+  val concat_stats = Mux(none_exceed, delay_step_status.last,
+    VecInit(delay_step_status.dropRight(1).zip(concat_mask).map{ case (stats, mask) =>
       Mux(mask, stats.asUInt, 0.U)
-    }).reduceTree(_ | _).asTypeOf(new BatchStats(param))
+    }).reduce(_ | _).asTypeOf(new BatchStats(param))
   )
   val remain_stats = Wire(new BatchStats(param))
   remain_stats.data_grains := delay_step_status.last.data_grains -& concat_stats.data_grains
@@ -296,28 +350,33 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
   assert(remain_stats.data_grains <= param.MaxDataGrains.U)
   assert(remain_stats.info_size + 1.U <= param.MaxInfoSize.U)
 
-  val concat_data_map = step_grains_hint.map{ g =>
-    val data_low = if (g == 0) 0.U else delay_step_data(g * param.grainBytes * 8 - 1, 0)
-    (g.U, data_low)
-  }
-  // InfoSize range: 0 ~ StepGroupSize + 1(including BatchInterval)
-  val concat_info_map = Seq.tabulate(param.StepGroupSize + 2){g =>
-    val info_low = if (g == 0) 0.U else delay_step_info(g * param.infoWidth - 1, 0)
-    (g.U, info_low)
-  }
-  val concat_data = LookupTree(concat_stats.data_grains, concat_data_map)
-  val concat_info = LookupTree(concat_stats.info_size, concat_info_map)
-
-  val remain_data_map = step_grains_hint.map{g =>
-    val data_high = (delay_step_data >> (g * param.grainBytes * 8)).asUInt
-    (g.U, data_high)
-  }
-  val remain_info_map = Seq.tabulate(param.StepGroupSize + 2){ g =>
-    val info_high = (delay_step_info >> (g * param.infoWidth)).asUInt
-    (g.U, info_high)
-  }
-  val remain_data = LookupTree(concat_stats.data_grains, remain_data_map)
-  val remain_info = LookupTree(concat_stats.info_size, remain_info_map)
+//  val concat_data_map = step_grains_hint.map{ g =>
+//    val data_low = if (g == 0) 0.U else delay_step_data(g * param.grainBytes * 8 - 1, 0)
+//    (g.U, data_low)
+//  }
+//  // InfoSize range: 0 ~ StepGroupSize + 1(including BatchInterval)
+//  val concat_info_map = Seq.tabulate(param.StepGroupSize + 2){g =>
+//    val info_low = if (g == 0) 0.U else delay_step_info(g * param.infoWidth - 1, 0)
+//    (g.U, info_low)
+//  }
+//  val concat_data = LookupTree(concat_stats.data_grains, concat_data_map)
+//  val concat_info = LookupTree(concat_stats.info_size, concat_info_map)
+  val concat_data = Mux(none_exceed, delay_step_data,
+    VecInit(delay_step_data_head.zip(concat_mask).map{ case (gen, mask) => Mux(mask, gen, 0.U)}).reduceTree(_ | _))
+  val concat_info = Mux(none_exceed, delay_step_info,
+    VecInit(delay_step_info_head.zip(concat_mask).map{ case (info, mask) => Mux(mask, info, 0.U)}).reduceTree(_ | _))
+  val remain_data = VecInit(delay_step_data_tail.zip(concat_mask).map{ case (gen, mask) => Mux(mask, gen, 0.U)}).reduceTree(_ | _)
+  val remain_info = VecInit(delay_step_info_tail.zip(concat_mask).map{ case (info, mask) => Mux(mask, info, 0.U)}).reduceTree(_ | _)
+  //  val remain_data_map = step_grains_hint.map{g =>
+//    val data_high = (delay_step_data >> (g * param.grainBytes * 8)).asUInt
+//    (g.U, data_high)
+//  }
+//  val remain_info_map = Seq.tabulate(param.StepGroupSize + 2){ g =>
+//    val info_high = (delay_step_info >> (g * param.infoWidth)).asUInt
+//    (g.U, info_high)
+//  }
+//  val remain_data = LookupTree(concat_stats.data_grains, remain_data_map)
+//  val remain_info = LookupTree(concat_stats.info_size, remain_info_map)
 
   // Stage 2:
   // update state
@@ -349,7 +408,7 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
   // Delay step can be partly appended to output for making full use of transmission param
   // Avoid appending when step equals batchSize(delay_step_exceed), last appended data will overwrite first step data
   val has_append =
-  delay_step_enable && (state_flush || cont_exceed) && RegNext(!exceed_v.asUInt.andR) && !step_exceed
+  delay_step_enable && (state_flush || cont_exceed) && !exceed_v.asUInt.andR && !step_exceed
   // When the whole step is appended to output, state_step should be 0, and output step + 1
   val append_whole = has_append && !cont_exceed
   val finish_step = state_step_cnt + Mux(append_whole, 1.U, 0.U)
@@ -373,6 +432,7 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
     Mux(has_append, LookupTree(state_status.data_grains, append_data_map), 0.U)
   out.io.info := state_info |
     LookupTree(state_status.info_size, append_info_map)
+
   out.enable := should_tick
   out.step := Mux(out.enable, finish_step, 0.U)
 
@@ -395,6 +455,10 @@ class BatchAssembler(step_grains_hint: Seq[Int], param: BatchParam, config: Gate
     0.U,
   )
   val state_update = delay_step_enable || state_flush || timeout
+//  when(state_update){
+//    printf("info %d\n%x\n%x\n%x\n", state_status.info_size, state_info, concat_info, remain_info)
+//    printf("%x %x %b\n", has_append, append_whole, exceed_v.asUInt)
+//  }
   when(state_update) {
     state_status.data_grains := next_state_data_grains
     state_status.info_size := next_state_info_size
