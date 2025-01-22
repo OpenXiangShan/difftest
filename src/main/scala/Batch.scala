@@ -418,20 +418,21 @@ class BatchAssembler(
   val append_finish_map = Seq.tabulate(param.StepGroupSize + 1) { g =>
     (g.U, (BatchFinish.asUInt << (g * param.infoWidth)).asUInt)
   }
-  val append_info = Mux(has_append,
-    concat_info | LookupTree(concat_stats.info_size, append_finish_map),
-    BatchFinish.asUInt
-  )
-  val append_data_map = Seq.tabulate(param.MaxDataGrains + 1){g =>
-    (g.U, (concat_data << (g * param.grainBytes * 8)).asUInt)
-  }
-  val append_info_map = Seq.tabulate(param.MaxInfoSize + 1) {g =>
-    (g.U, (append_info << (g * param.infoWidth)).asUInt)
-  }
+  val append_info =
+    (Mux(has_append,
+      concat_info | LookupTree(concat_stats.info_size, append_finish_map),
+      BatchFinish.asUInt
+      ) << (state_status.info_size * param.infoWidth.U)).asUInt
+//  val append_data_map = Seq.tabulate(param.MaxDataGrains + 1){g =>
+//    (g.U, (concat_data << (g * param.grainBytes * 8)).asUInt)
+//  }
+//  val append_info_map = Seq.tabulate(param.MaxInfoSize + 1) {g =>
+//    (g.U, (append_info << (g * param.infoWidth)).asUInt)
+//  }
+  val append_data = (concat_data << (state_status.data_grains * (param.grainBytes * 8).U)).asUInt
   out.io.data := state_data |
-    Mux(has_append, LookupTree(state_status.data_grains, append_data_map), 0.U)
-  out.io.info := state_info |
-    LookupTree(state_status.info_size, append_info_map)
+    Mux(has_append, append_data, 0.U)
+  out.io.info := state_info | append_info
 
   out.enable := should_tick
   out.step := Mux(out.enable, finish_step, 0.U)
@@ -476,14 +477,16 @@ class BatchAssembler(
         if (config.hasReplay) state_trace_size.get := delay_step_trace_info.get.trace_size
       }.otherwise {
         state_step_cnt := state_step_cnt + 1.U
-        val step_data_map = Seq.tabulate(param.MaxDataGrains + 1){g =>
-          (g.U, (delay_step_data << (g * param.grainBytes * 8)).asUInt)
-        }
-        val step_info_map = Seq.tabulate(param.MaxInfoSize + 1){ g =>
-          (g.U, (delay_step_info << (g * param.infoWidth)).asUInt)
-        }
-        state_data := state_data | LookupTree(state_status.data_grains, step_data_map)
-        state_info := state_info | LookupTree(state_status.info_size, step_info_map)
+//        val step_data_map = Seq.tabulate(param.MaxDataGrains + 1){g =>
+//          (g.U, (delay_step_data << (g * param.grainBytes * 8)).asUInt)
+//        }
+//        val step_info_map = Seq.tabulate(param.MaxInfoSize + 1){ g =>
+//          (g.U, (delay_step_info << (g * param.infoWidth)).asUInt)
+//        }
+        val append_step_data = (delay_step_data << (state_status.data_grains * (param.grainBytes * 8).U)).asUInt
+        val append_step_info = (delay_step_info << (state_status.info_size * param.infoWidth.U)).asUInt
+        state_data := state_data | append_step_data
+        state_info := state_info | append_step_info
         if (config.hasReplay) state_trace_size.get := state_trace_size.get + delay_step_trace_info.get.trace_size
       }
     }.otherwise { // state_flush without new-coming step
