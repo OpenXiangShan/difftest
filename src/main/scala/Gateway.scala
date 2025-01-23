@@ -55,9 +55,6 @@ case class GatewayConfig(
   def stepWidth: Int = log2Ceil(maxStep + 1)
   def replayWidth: Int = log2Ceil(replaySize + 1)
   def batchArgByteLen: (Int, Int) = if (isNonBlock || isFPGA) (3600, 400) else (7200, 800)
-//  def batchArgByteLen: (Int, Int) = (800, 100)
-  def batchGrainBytes: Int = 16 // each Bundle padding to times of grainBytes to simplify offset logic
-  require(isPow2(batchGrainBytes)) // require power of 2 to simplify shift logic
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
