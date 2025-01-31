@@ -23,6 +23,7 @@ import difftest._
 import difftest.batch.{BatchInfo, BatchIO}
 import difftest.common.FileControl
 import difftest.gateway.{GatewayConfig, GatewayResult, GatewaySinkControl}
+import difftest.util.Query
 
 import scala.collection.mutable.ListBuffer
 
@@ -180,7 +181,13 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
     val body = lhs.zip(rhs.flatten).map { case (l, r) => s"packet->$l = $r;" }
     val packetDecl = Seq(getPacketDecl(gen, "io_", config))
     val validAssign = if (!gen.bits.hasValid || gen.isFlatten) Seq() else Seq("packet->valid = true;")
-    packetDecl ++ validAssign ++ body
+    val query =
+      Seq(s"""
+             |#ifdef CONFIG_DIFFTEST_QUERY
+             |  ${Query.writeInvoke(gen)}
+             |#endif // CONFIG_DIFFTEST_QUERY
+             |""".stripMargin)
+    packetDecl ++ validAssign ++ body ++ query
   }
 
   setInline(s"$desiredName.v", moduleBody)
@@ -202,6 +209,12 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     unpack += getPacketDecl(gen, "", config)
     unpack += s"memcpy(packet, data, sizeof(${gen.desiredModuleName}));"
     unpack += s"data += ${elem_bytes.sum};"
+    unpack +=
+      s"""
+         |#ifdef CONFIG_DIFFTEST_QUERY
+         |  ${Query.writeInvoke(gen)}
+         |#endif // CONFIG_DIFFTEST_QUERY
+         |""".stripMargin
     unpack.toSeq.mkString("\n        ")
   }
 
@@ -260,6 +273,9 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |    }
            |    else if (id == BatchInterval) {
            |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
+           |#ifdef CONFIG_DIFFTEST_QUERY
+           |      difftest_query_step();
+           |#endif // CONFIG_DIFFTEST_QUERY
            |      continue;
            |    }
            |    $bundleAssign
@@ -298,7 +314,9 @@ object DPIC {
   val interfaces = ListBuffer.empty[(String, String, String)]
 
   def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
-    val module = Module(new DummyDPICWrapper(chiselTypeOf(io), config))
+    val bundleType = chiselTypeOf(io)
+    Query.register(bundleType.bits, "io_")
+    val module = Module(new DummyDPICWrapper(bundleType, config))
     module.control := control
     module.io := io
     val dpic = module.dpic
@@ -309,6 +327,7 @@ object DPIC {
   }
 
   def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
+    Query.register(template, "")
     val module = Module(new DummyDPICBatchWrapper(template, chiselTypeOf(io), config))
     module.control := control
     module.io := io
@@ -320,6 +339,7 @@ object DPIC {
     if (interfaces.isEmpty) {
       return GatewayResult()
     }
+    Query.collect()
 
     val interfaceCpp = ListBuffer.empty[String]
     interfaceCpp += "#ifndef __DIFFTEST_DPIC_H__"
@@ -384,6 +404,7 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#include \"difftest.h\""
     interfaceCpp += "#include \"difftest-dpic.h\""
+    interfaceCpp += "#include \"difftest-query.h\""
     interfaceCpp += ""
     interfaceCpp +=
       s"""
