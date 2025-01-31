@@ -165,6 +165,13 @@ jobs:
             ./build/emu -i $WORKLOAD --diff $REF_SO
             make clean
 
+      - name: Difftest with Squash Batch GlobalEnable and Query
+        run: |
+            cd $NOOP_HOME
+            make emu MILL_ARGS="--difftest-config ESB" DIFFTEST_QUERY=1 -j2
+            ./build/emu -i $WORKLOAD --diff $REF_SO
+            make clean
+
       - name: Difftest with JsonProfile and DiffTestIOTrace
         run: |
             cd $NOOP_HOME
@@ -237,10 +244,10 @@ jobs:
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO
             make clean
 
-      - name: Verilator Build with VCS Top (with DutZone PerfCnt)
+      - name: Verilator Build with VCS Top (with DutZone PerfCnt Query)
         run: |
             cd $NOOP_HOME
-            make simv MILL_ARGS="--difftest-config ZP" DIFFTEST_PERFCNT=1 VCS=verilator -j2
+            make simv MILL_ARGS="--difftest-config ZP" DIFFTEST_PERFCNT=1 DIFFTEST_QUERY=1 VCS=verilator -j2
             ./build/simv +workload=$WORKLOAD +no-diff +max-cycles=100000
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO
             make clean
@@ -261,10 +268,10 @@ jobs:
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO
             make clean
 
-      - name: Verilator Build with VCS Top (with GlobalEnable Squash Replay Batch InternalStep NonBlock PerfCnt)
+      - name: Verilator Build with VCS Top (with GlobalEnable Squash Replay Batch InternalStep NonBlock PerfCnt Query)
         run: |
             cd $NOOP_HOME
-            make simv MILL_ARGS="--difftest-config ESRBINP" DIFFTEST_PERFCNT=1 VCS=verilator -j2
+            make simv MILL_ARGS="--difftest-config ESRBINP" DIFFTEST_PERFCNT=1 DIFFTEST_QUERY=1 VCS=verilator -j2
             ./build/simv +workload=$WORKLOAD +no-diff +max-cycles=100000
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO
             make clean
