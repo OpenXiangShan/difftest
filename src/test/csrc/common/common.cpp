@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "common.h"
+#include "version.h"
 #include <locale.h>
 #include <signal.h>
 
@@ -69,6 +70,8 @@ void common_init_without_assertion(const char *program_name) {
   const char *elf_name = strrchr(program_name, '/');
   elf_name = elf_name ? elf_name + 1 : program_name;
   Info("%s compiled at %s, %s\n", elf_name, __DATE__, __TIME__);
+
+  Info("Source Code Version: %s%s\n", STR_COMMIT_ID, STR_IS_DIRTY);
 
   // set buffer for stderr
   setbuf(stderr, mybuf);
