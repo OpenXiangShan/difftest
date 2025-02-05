@@ -81,7 +81,16 @@ class PreprocessEndpoint(bundles: Seq[DifftestBundle]) extends Module {
     cd
   }
 
-  val withCommitData = MixedVecInit((in.filterNot(_.desiredCppName.contains("wb")) ++ commitData).toSeq)
-  val out = IO(Output(chiselTypeOf(withCommitData)))
-  out := withCommitData
+  val withCommitData = in.filterNot(_.desiredCppName.contains("wb")) ++ commitData
+
+  // LoadEvent will not be checked when single-core
+  val skipLoad = if (in.count(_.isUniqueIdentifier) == 1) {
+    withCommitData.filterNot(_.desiredCppName == "load")
+  } else {
+    withCommitData
+  }
+
+  val preprocessed = MixedVecInit(skipLoad.toSeq)
+  val out = IO(Output(chiselTypeOf(preprocessed)))
+  out := preprocessed
 }
