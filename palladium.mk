@@ -80,7 +80,7 @@ DPILIB_EMU    	 = $(PLDM_BUILD_DIR)/libdpi_emu.so
 PLDM_CSRC_DIR 	 = $(abspath ./src/test/csrc/vcs)
 PLDM_CXXFILES 	 = $(SIM_CXXFILES) $(shell find $(PLDM_CSRC_DIR) -name "*.cpp")
 PLDM_CXXFLAGS 	 = -m64 -c -fPIC -g -std=c++11 -I$(PLDM_IXCOM) -I$(PLDM_SIMTOOL)
-PLDM_CXXFLAGS 	+= $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
+PLDM_CXXFLAGS 	+= $(subst \\\",\", $(SIM_CXXFLAGS)) $(SIM_LDFLAGS) -I$(PLDM_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
 
 ifeq ($(WITH_DRAMSIM3),1)
 PLDM_LD_LIB  	 = -L $(DRAMSIM3_HOME)/ -ldramsim3 -Wl,-rpath-link=$(DRAMSIM3_HOME)/libdramsim3.so
