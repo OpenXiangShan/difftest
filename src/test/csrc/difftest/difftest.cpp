@@ -27,6 +27,9 @@
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
+#ifdef CONFIG_DIFFTEST_QUERY
+#include "query.h"
+#endif // CONFIG_DIFFTEST_QUERY
 
 Difftest **difftest = NULL;
 
@@ -37,6 +40,9 @@ int difftest_init() {
 #ifdef CONFIG_DIFFTEST_IOTRACE
   difftest_iotrace_init();
 #endif // CONFIG_DIFFTEST_IOTRACE
+#ifdef CONFIG_DIFFTEST_QUERY
+  difftest_query_init();
+#endif // CONFIG_DIFFTEST_QUERY
   diffstate_buffer_init();
   difftest = new Difftest *[NUM_CORES];
   for (int i = 0; i < NUM_CORES; i++) {
@@ -95,6 +101,9 @@ void difftest_set_dut() {
 }
 int difftest_step() {
   difftest_set_dut();
+#if defined(CONFIG_DIFFTEST_QUERY) && !defined(CONFIG_DIFFTEST_BATCH)
+  difftest_query_step();
+#endif // CONFIG_DIFFTEST_QUERY
   for (int i = 0; i < NUM_CORES; i++) {
     int ret = difftest[i]->step();
     if (ret) {
@@ -124,6 +133,9 @@ void difftest_finish() {
 #ifdef CONFIG_DIFFTEST_IOTRACE
   difftest_iotrace_free();
 #endif // CONFIG_DIFFTEST_IOTRACE
+#ifdef CONFIG_DIFFTEST_QUERY
+  difftest_query_finish();
+#endif // CONFIG_DIFFTEST_QUERY
   diffstate_buffer_free();
   for (int i = 0; i < NUM_CORES; i++) {
     delete difftest[i];
