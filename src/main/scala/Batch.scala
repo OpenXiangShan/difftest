@@ -39,12 +39,12 @@ case class BatchParam(config: GatewayConfig, bundles: Seq[DifftestBundle]) {
   val StepGroupSize = bundles.distinctBy(_.desiredCppName).length
   val StepDataByteLen = bundles.map(_.getByteAlignWidth).map { w => w / 8 }.sum
   val StepDataBitLen = StepDataByteLen * 8
-  val StepInfoByteLen = StepGroupSize * (infoWidth / 8)
+  val StepInfoByteLen = (StepGroupSize + 1) * (infoWidth / 8) // Including BatchStep to update buffer index
   val StepInfoBitLen = StepInfoByteLen * 8
 
   // Width of statistic for data/info byte length
   val StatsDataWidth = log2Ceil(math.max(MaxDataByteLen, StepDataByteLen))
-  val StatsInfoWidth = log2Ceil(math.max(MaxInfoSize, StepGroupSize))
+  val StatsInfoWidth = log2Ceil(math.max(MaxInfoSize, StepGroupSize + 1))
 
   // Truncate width when shifting to reduce useless gates
   val TruncDataBitLen = math.min(MaxDataBitLen, StepDataBitLen)
@@ -153,7 +153,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
     val info_size = Mux(VecInit(valids.toSeq).asUInt.orR, 1.U, 0.U)
     if (gid == 0) {
       group_status(gid).data_bytes := data_bytes
-      group_status(gid).info_size := info_size
+      group_status(gid).info_size := info_size + 1.U // Including BatchStep
     } else {
       group_status(gid).data_bytes := group_status(gid - 1).data_bytes +& data_bytes
       group_status(gid).info_size := group_status(gid - 1).info_size +& info_size
@@ -174,17 +174,21 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   val delay_group_status = RegNext(group_status)
   val delay_group_vsize = RegNext(group_vsize)
   val info_num = delay_group_status.last.info_size
-  step_enable := info_num =/= 0.U
+  step_enable := info_num =/= 1.U // BatchStep, at least 1.U
+  // Use BatchInterval to update index of software buffer
+  val BatchStep = Wire(new BatchInfo)
+  BatchStep.id := Batch.getTemplate.length.U
+  BatchStep.num := info_num // unused, only for debugging
   step_status := delay_group_status
   val collect_data = Wire(MixedVec(Seq.tabulate(param.StepGroupSize) { idx =>
     UInt(delay_group_data.take(idx + 1).map(_.getWidth).sum.W)
   }))
   val collect_info = Wire(MixedVec(Seq.tabulate(param.StepGroupSize) { idx =>
-    UInt(((idx + 1) * param.infoWidth).W)
+    UInt(((idx + 2) * param.infoWidth).W)
   }))
   // Collect from head, collect(i) include 0~i
   collect_data(0) := delay_group_data(0)
-  collect_info(0) := delay_group_info(0)
+  collect_info(0) := Mux(delay_group_vsize(0) =/= 0.U, Cat(BatchStep.asUInt, delay_group_info(0)), BatchStep.asUInt)
   (1 until param.StepGroupSize).foreach { idx =>
     val cat_map = Seq.tabulate(group_length(idx) + 1) { len =>
       (len.U, Cat(collect_data(idx - 1), delay_group_data(idx)(len * group_bitlen(idx) - 1, 0)))
@@ -228,8 +232,8 @@ class BatchAssembler(
   val delay_step_enable = RegNext(step_enable)
   val delay_step_trace_info = Option.when(config.hasReplay)(RegNext(step_trace_info.get))
   val data_bytes_avail = param.MaxDataByteLen.U -& state_status.data_bytes
-  // Always leave space for BatchFinish and BatchInterval, use MaxInfoSize - 2
-  val info_size_avail = (param.MaxInfoSize - 2).U -& state_status.info_size
+  // Always leave space for BatchFinish, use MaxInfoSize - 1
+  val info_size_avail = (param.MaxInfoSize - 1).U -& state_status.info_size
   val data_exceed_v = VecInit(delay_step_status.map(_.data_bytes > data_bytes_avail && delay_step_enable))
   val info_exceed_v = VecInit(delay_step_status.map(_.info_size > info_size_avail && delay_step_enable))
   val exceed_v = VecInit(data_exceed_v.zip(info_exceed_v).map { case (de, ie) => de | ie })
@@ -294,14 +298,10 @@ class BatchAssembler(
   val BatchFinish = Wire(new BatchInfo)
   BatchFinish.id := (Batch.getTemplate.length + 1).U
   BatchFinish.num := finish_step
-  // Use BatchInterval to update index of software buffer
-  val BatchInterval = Wire(new BatchInfo)
-  BatchInterval.id := Batch.getTemplate.length.U
-  BatchInterval.num := delay_step_status.last.info_size // unused, only for debugging
   val append_finish_map = Seq.tabulate(param.StepGroupSize) { g =>
     (g.U, (BatchFinish.asUInt << (g * param.infoWidth)).asUInt)
   }
-  val append_info = Cat(concat_info | LookupTree(concat_stats.info_size, append_finish_map), BatchInterval.asUInt)
+  val append_info = concat_info | LookupTree(concat_stats.info_size, append_finish_map)
 
   out.io.data := state_data |
     Mux(has_append, (concat_data(param.TruncDataBitLen - 1, 0) << (state_status.data_bytes << 3).asUInt).asUInt, 0.U)
@@ -327,8 +327,8 @@ class BatchAssembler(
     delay_step_enable,
     Mux(
       should_tick,
-      Mux(has_append, remain_stats.info_size, delay_step_status.last.info_size + 1.U),
-      state_status.info_size + delay_step_status.last.info_size + 1.U,
+      Mux(has_append, remain_stats.info_size, delay_step_status.last.info_size),
+      state_status.info_size + delay_step_status.last.info_size,
     ),
     0.U,
   )
@@ -345,7 +345,7 @@ class BatchAssembler(
         }.otherwise {
           state_step_cnt := 1.U
           state_data := delay_step_data
-          state_info := Cat(delay_step_info, BatchInterval.asUInt)
+          state_info := delay_step_info
         }
         if (config.hasReplay) state_trace_size.get := delay_step_trace_info.get.trace_size
       }.otherwise {
@@ -353,8 +353,7 @@ class BatchAssembler(
         val append_step_data =
           (delay_step_data(param.TruncDataBitLen - 1, 0) << (state_status.data_bytes << 3).asUInt).asUInt
         val append_step_info =
-          (Cat(delay_step_info(param.TruncInfoBitLen - 1, 0), BatchInterval.asUInt)
-            << (state_status.info_size * param.infoWidth.U)).asUInt
+          (delay_step_info(param.TruncInfoBitLen - 1, 0) << (state_status.info_size * param.infoWidth.U)).asUInt
         state_data := state_data | append_step_data
         state_info := state_info | append_step_info
         if (config.hasReplay) state_trace_size.get := state_trace_size.get + delay_step_trace_info.get.trace_size
