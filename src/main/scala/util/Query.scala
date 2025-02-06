@@ -74,19 +74,23 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String) {
     argList.toSeq
   }
   private val dataArgs: Seq[(String, String)] = {
-    val dataPrefix = "packet->"
-    val argList = ListBuffer.empty[(String, String)]
-    for ((name, _, elem) <- gen.dataElements) {
-      val isRemoved = gen.isFlatten && Seq("valid", "address").contains(name)
-      if (!isRemoved) {
-        if (elem.length == 1) argList += ((name.toUpperCase, dataPrefix + name))
-        else
-          Seq.tabulate(elem.length) { idx =>
-            argList += (((name + s"_$idx").toUpperCase, dataPrefix + name + s"[$idx]"))
-          }
+    if (gen.isDeltaElem) {
+      Seq(("DATA", "packet"))
+    } else {
+      val dataPrefix = "packet->"
+      val argList = ListBuffer.empty[(String, String)]
+      for ((name, _, elem) <- gen.dataElements) {
+        val isRemoved = gen.isFlatten && Seq("valid", "address").contains(name)
+        if (!isRemoved) {
+          if (elem.length == 1) argList += ((name.toUpperCase, dataPrefix + name))
+          else
+            Seq.tabulate(elem.length) { idx =>
+              argList += (((name + s"_$idx").toUpperCase, dataPrefix + name + s"[$idx]"))
+            }
+        }
       }
+      argList.toSeq
     }
-    argList.toSeq
   }
   private val sqlArgs: Seq[(String, String)] = stepArgs ++ locArgs ++ dataArgs
 
@@ -103,9 +107,10 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String) {
        |  }
        |""".stripMargin
   val initInvoke = s"${tableName}_init();"
+  val packetType = if (gen.isDeltaElem) "uint64_t" else gen.desiredModuleName
   val writeDecl =
     s"""
-       |  void ${tableName}_write(${locArgs.map("uint8_t " + _._2).mkString(", ")}, ${gen.desiredModuleName}* packet) {
+       |  void ${tableName}_write(${locArgs.map("uint8_t " + _._2).mkString(", ")}, ${packetType}* packet) {
        |    query_${tableName}->write(${sqlArgs.length}, ${sqlArgs.map(_._2).mkString(", ")});
        |  }
        |""".stripMargin
