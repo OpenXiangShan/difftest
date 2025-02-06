@@ -20,8 +20,9 @@ import chisel3.experimental.ExtModule
 import chisel3.reflect.DataMirror
 import chisel3.util._
 import difftest._
-import difftest.batch.{BatchInfo, BatchIO}
+import difftest.batch.{BatchIO, BatchInfo}
 import difftest.common.FileControl
+import difftest.delta.Delta
 import difftest.gateway.{GatewayConfig, GatewayResult, GatewaySinkControl}
 import difftest.util.Query
 
@@ -84,7 +85,11 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   def getPacketDecl(gen: DifftestBundle, prefix: String, config: GatewayConfig): String = {
     val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
     val dut_index = if (config.isBatch) "dut_index" else "0"
-    val packet = s"DUT_BUF(${prefix}coreid, $dut_zone, $dut_index)->${gen.desiredCppName}"
+    val packet = if (config.isDelta && gen.isDelta){
+      s"DELTA_BUF(${prefix}coreid)->${gen.desiredCppName}"
+    } else {
+      s"DUT_BUF(${prefix}coreid, $dut_zone, $dut_index)->${gen.desiredCppName}"
+    }
     val index = if (gen.isIndexed) s"[${prefix}index]" else if (gen.isFlatten) s"[${prefix}address]" else ""
     s"auto packet = &($packet$index);"
   }
@@ -207,12 +212,17 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
       }
     }
     unpack += getPacketDecl(gen, "", config)
-    unpack += s"memcpy(packet, data, sizeof(${gen.desiredModuleName}));"
+    val size = if(config.isDelta && gen.isDelta) {
+      "sizeof(uint64_t)"
+    } else {
+      s"sizeof(${gen.desiredModuleName})"
+    }
+    unpack += s"memcpy(packet, data, $size);"
     unpack += s"data += ${elem_bytes.sum};"
     unpack +=
       s"""
          |#ifdef CONFIG_DIFFTEST_QUERY
-         |  ${Query.writeInvoke(gen)}
+         |        ${Query.writeInvoke(gen)}
          |#endif // CONFIG_DIFFTEST_QUERY
          |""".stripMargin
     unpack.toSeq.mkString("\n        ")
@@ -278,6 +288,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |      break;
            |    }
            |    else if (id == BatchStep) {
+           |      ${if (config.isDelta) "dStats->sync(0, dut_index);" else ""}
            |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
            |#ifdef CONFIG_DIFFTEST_QUERY
            |      difftest_query_step();
@@ -317,7 +328,8 @@ private class DummyDPICBatchWrapper(
 }
 
 object DPIC {
-  val interfaces = ListBuffer.empty[(String, String, String)]
+  private val interfaces = ListBuffer.empty[(String, String, String)]
+  private val deltaInstances = ListBuffer.empty[DifftestBundle]
   private val perfs = ListBuffer.empty[String]
 
   def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
@@ -332,6 +344,9 @@ object DPIC {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
+    if (io.bits.doDelta && !deltaInstances.contains(io.bits)) {
+      deltaInstances += io.bits
+    }
   }
 
   def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
@@ -343,9 +358,10 @@ object DPIC {
     interfaces += ((dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc))
     perfs += dpic.dpicFuncName
     perfs ++= template.map("Batch_" + _.desiredModuleName.replace("Difftest", ""))
+    deltaInstances ++= template.filter(_.doDelta)
   }
 
-  def collect(): GatewayResult = {
+  def collect(config: GatewayConfig): GatewayResult = {
     if (interfaces.isEmpty) {
       return GatewayResult()
     }
@@ -363,6 +379,10 @@ object DPIC {
     interfaceCpp += "#ifdef CONFIG_DIFFTEST_PERFCNT"
     interfaceCpp += "#include \"perf.h\""
     interfaceCpp += "#endif // CONFIG_DIFFTEST_PERFCNT"
+    if (config.isDelta) {
+      Delta.collect()
+      interfaceCpp += "#include \"difftest-delta.h\""
+    }
     interfaceCpp += ""
     interfaceCpp +=
       """
@@ -394,6 +414,7 @@ object DPIC {
         |  }
         |};
         |""".stripMargin
+
     interfaceCpp +=
       s"""
          |#ifdef CONFIG_DIFFTEST_PERFCNT
@@ -416,6 +437,14 @@ object DPIC {
     interfaceCpp += "#include \"difftest-dpic.h\""
     interfaceCpp += "#include \"difftest-query.h\""
     interfaceCpp += ""
+    if (config.isDelta) {
+      interfaceCpp +=
+        s"""
+           |#include \"difftest-delta.h\"
+           |DeltaStats* dStats = nullptr;
+           |#define DELTA_BUF(core_id) (dStats->get(core_id))
+           |""".stripMargin
+    }
     interfaceCpp +=
       s"""
          |DiffStateBuffer** diffstate_buffer = nullptr;
@@ -426,6 +455,7 @@ object DPIC {
          |  for (int i = 0; i < NUM_CORES; i++) {
          |    diffstate_buffer[i] = new DPICBuffer;
          |  }
+         |  ${if (config.isDelta) "dStats = new DeltaStats;" else ""}
          |}
          |
          |void diffstate_buffer_free() {
@@ -434,6 +464,7 @@ object DPIC {
          |  }
          |  delete[] diffstate_buffer;
          |  diffstate_buffer = nullptr;
+         |  ${if (config.isDelta) "delete dStats;" else ""}
          |}
       """.stripMargin
     val diffstate_perfhead = if (perfs.head.contains("Batch")) 1 else 0
