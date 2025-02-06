@@ -167,6 +167,9 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   }
   def genValidBundle: Valid[DifftestBundle] = genValidBundle(this.getValid)
 
+  val doDelta: Boolean = false
+  def isDelta: Boolean = this.isInstanceOf[DiffDeltaElem]
+
   // Byte align all elements
   def getByteAlignElems(isTrace: Boolean): Seq[(String, Data)] = {
     def byteAlign(data: Data): UInt = {
@@ -221,6 +224,11 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   }
 }
 
+class DiffDeltaElem(gen: DifftestBundle) extends DeltaElem with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = gen.desiredCppName + "_elem"
+  override def desiredModuleName: String = gen.desiredModuleName + "Elem"
+}
+
 class DiffArchEvent extends ArchEvent with DifftestBundle {
   // DiffArchEvent must be instantiated once for each core.
   override def isUniqueIdentifier: Boolean = true
@@ -266,23 +274,28 @@ class DiffCSRState extends CSRState with DifftestBundle {
   override val desiredCppName: String = "csr"
   override val desiredOffset: Int = 1
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 class DiffHCSRState extends HCSRState with DifftestBundle {
   override val desiredCppName: String = "hcsr"
   override val desiredOffset: Int = 6
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 //class DiffHCSRStateValidate extends DiffHCSRState with DifftestIsValidated
 
 class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
   override val desiredCppName: String = "dmregs"
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
   override val desiredCppName: String = "triggercsr"
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
@@ -305,6 +318,7 @@ class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "regs_int"
   override val desiredOffset: Int = 0
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 abstract class DiffArchDelayedUpdate(numRegs: Int)
@@ -326,24 +340,28 @@ class DiffArchFpRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "regs_fp"
   override val desiredOffset: Int = 2
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
   override val desiredCppName: String = "regs_vec"
   override val desiredOffset: Int = 4
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val desiredCppName: String = "vcsr"
   override val desiredOffset: Int = 5
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 class DiffFpCSRState extends FpCSRState with DifftestBundle {
   override val desiredCppName: String = "fcsr"
   override val desiredOffset: Int = 7
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val doDelta: Boolean = true
 }
 
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
