@@ -107,7 +107,7 @@ VCS_FLAGS += +incdir+$(GEN_VSRC_DIR)
 VCS_FLAGS += $(EXTRA)
 
 VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
-VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v")
+VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v" -or -name "*.sv")
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 	$(VCS) $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 ifeq ($(VCS),verilator)

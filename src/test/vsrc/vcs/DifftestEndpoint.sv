@@ -269,6 +269,13 @@ DeferredControl deferred(
 );
 `else
 reg [7:0] simv_result;
+`ifdef PALLADIUM
+/*
+ * In PALLADIUM, we delay the step signal to next cycle to make sure
+ * `simv_step` was triggered after other DPI calls, which needs more
+ * trick to be correct. Such as introducing `ping-pong buffer` to
+ * handle the delay-step, and dpics at the next cycle coming together.
+ */
 always @(posedge clock) begin
   if (reset || simv_result == `SIMV_DONE) begin
     simv_result <= 8'b0;
@@ -279,6 +286,40 @@ always @(posedge clock) begin
     end
   end
 end
+`else
+/*
+ * for other platform, we introduce a delayed difftest step
+ * mechanism to make sure all difftest state was updated properly
+ * before `simv_step()` called.
+ */
+reg [7:0] _res;
+event simv_step_event;
+// check difftest_step
+always @(posedge clock) begin
+  if (!reset) begin
+    if (n_cycles && |difftest_step) begin
+      // delay a little before trigger the simv step event
+      #0.1 -> simv_step_event;
+    end
+  end
+end
+// all difftest state was updated, step difftest by `simv_nstep()`
+always @(simv_step_event or posedge reset) begin
+  if (reset)
+    _res <= 8'b0;
+  else
+    _res <= simv_nstep(difftest_step);
+end
+// update to `simv_result` at next cycle
+always @(posedge clock) begin
+  if (reset || simv_result == `SIMV_DONE) begin
+    simv_result <= 8'b0;
+  end
+  else begin
+    simv_result <= _res;
+  end
+end
+`endif // PALLADIUM
 `endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
 /*
