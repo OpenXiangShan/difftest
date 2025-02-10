@@ -14,6 +14,7 @@
 ***************************************************************************************/
 
 #include "elfloader.h"
+#include <algorithm>
 
 void ElfBinary::load() {
   assert(size >= sizeof(Elf64_Ehdr));
@@ -46,6 +47,8 @@ void ElfBinary::parse(ElfBinaryData<ehdr_t, phdr_t, shdr_t, sym_t> &data) {
       }
     }
   }
+  std::sort(sections.begin(), sections.end(),
+            [](const ElfSection &a, const ElfSection &b) { return a.data_dst < b.data_dst; });
 }
 
 ElfBinaryFile::ElfBinaryFile(const char *filename) : filename(filename) {
@@ -102,8 +105,8 @@ long readFromElf(void *ptr, const char *file_name, long buf_size) {
 
   if (base_addr != PMEM_BASE) {
     printf(
-        "The first address in the elf does not match the base of the physical memory. It is likely that execution "
-        "leads to unexpected behaviour.");
+        "The first address in the elf does not match the base of the physical memory.\n"
+        "It is likely that execution leads to unexpected behaviour.\n");
   }
 
   for (auto section: elf_file.sections) {
