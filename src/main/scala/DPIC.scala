@@ -222,7 +222,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
 
   override def desiredName: String = "DifftestBatch"
   override def dpicFuncAssigns: Seq[String] = {
-    val bundleEnum = template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchInterval", "BatchFinish")
+    val bundleEnum = template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchStep", "BatchFinish")
     val bundleAssign = template.zipWithIndex.map { case (t, idx) =>
       val bundleName = bundleEnum(idx)
       val perfName = "perf_Batch_" + bundleName
@@ -265,7 +265,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |  ${bundleEnum.mkString(",\n  ")}
            |  };
            |  extern void simv_nstep(uint8_t step);
-           |  static int dut_index = -1;
+           |  static int dut_index = 0;
            |  $batchDecl
            |  for (int i = 0; i < $infoLen; i++) {
            |    uint8_t id = info[i].id;
@@ -277,7 +277,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |#endif // CONFIG_DIFFTEST_INTERNAL_STEP
            |      break;
            |    }
-           |    else if (id == BatchInterval) {
+           |    else if (id == BatchStep) {
            |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
            |#ifdef CONFIG_DIFFTEST_QUERY
            |      difftest_query_step();
