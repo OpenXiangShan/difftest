@@ -441,6 +441,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
   bool lastCycleDSEReset = false;
   bool doDSEReset = false;
+  bool deg_record = false;
+  Perfprocess* perfprocess = new Perfprocess(dut_ptr, 6);
+  std::vector<std::string> perfNames = getIOPerfNames();
+
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
       FORK_PRINTF("checkpoint has reached the main process abort point: %lu\n", cycles)
@@ -476,25 +480,23 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
         // only calculate ipc for workloads
         if (reset_vector == 0x10000000) {
+          deg_record = false;
           auto trap = difftest[i]->get_trap_event();
           uint64_t cycleCnt = trap->cycleCnt;
           uint64_t instrCnt = trap->instrCnt;
-          double ipc = (double)instrCnt / (cycleCnt);
+          // double ipc = (double)instrCnt / (cycleCnt);
           uint64_t epoch = dut_ptr->io_dse_epoch;
           uint64_t max_epoch = dut_ptr->io_dse_max_epoch;
           printf("epoch: %ld\n", epoch);
           printf("max epoch: %ld\n", max_epoch);
+          auto ipc = perfprocess->get_ipc();
           printf("ipc: %f\n", ipc);
-          printf("instrCnt: %ld cycles: %ld\n", instrCnt, cycleCnt);
-          std::vector<uint64_t> perfCnts = getIOPerfCnts(dut_ptr);
-          std::vector<std::string> perfNames = getIOPerfNames();
-          for (int i = 0; i < perfCnts.size(); i++) {
-              printf("%s: %lu\n", perfNames[i].c_str(), perfCnts[i]);
-          }
           if (epoch == max_epoch) {
             trapCode = STATE_GOODTRAP;
             break;
           }
+        } else {
+          deg_record = true;
         }
       }
       if (doDSEReset) {
@@ -515,6 +517,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
         lastCycleDSEReset = false;
         doDSEReset = true;
+      }
+      if (deg_record) {
+        // perfprocess->update_deg();
+        perfprocess->update_deg_v2();
       }
     }
 #endif
