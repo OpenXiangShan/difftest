@@ -31,6 +31,7 @@
 #endif
 #ifdef CONDUCT_DSE
 #include "dse.h"
+#include "perfprocess.h"
 #endif
 
 struct EmuArgs {
