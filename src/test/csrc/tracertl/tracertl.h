@@ -44,11 +44,11 @@ void tracertl_success_dump();
 void tracertl_error_drive_dump();
 
 // FastSim
-void init_tracefastsim(bool fastwarmup_enable);
+void init_tracefastsim(bool fastwarmup_enable, uint64_t warmup_inst);
 void tracertl_set_fastsim_state(uint64_t new_state);
 void tracertl_clear_fastsim_state();
 void tracertl_set_fastsim_state_enable();
-void tracertl_check_and_change_fastsim_state(uint64_t inst_count, uint64_t cycle_count);
+void tracertl_prepare_fastsim_memaddr();
 
 /*             called by dut              */
 void __attribute__((noinline)) trace_read_insts(uint8_t enable, ManyInstruction_t insts);
@@ -57,8 +57,9 @@ extern "C" void trace_read_one_instr(
   uint64_t *target, uint32_t *instr,
   uint8_t *memory_type, uint8_t *memory_size,
   uint8_t *branch_type, uint8_t *branch_taken,
-  uint8_t *exception,
-  uint64_t *instID, uint8_t idx);
+  uint8_t *exception, uint8_t *fast_simulation,
+  uint64_t *instID,
+  uint8_t idx);
 extern "C" void trace_redirect(uint64_t inst_id);
 extern "C" void trace_collect_commit(uint64_t pc, uint32_t instr, uint8_t instNum, uint8_t idx);
 extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx);
@@ -75,5 +76,10 @@ extern "C" uint64_t trace_get_satp_ppn();
 
 // FastSim
 extern "C" uint8_t tracertl_get_fastsim_state();
+extern "C" void trace_fastsim_mem_addr_reader(
+  uint8_t idx,
+  uint8_t* valid,
+  uint64_t* vaddr, uint64_t* paddr);
+// extern "C" uint8_t trace_fastsim_mem_addr_empty();
 
 #endif

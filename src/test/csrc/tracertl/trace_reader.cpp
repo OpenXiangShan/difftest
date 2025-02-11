@@ -174,12 +174,25 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
 
     }
 
+    // add memory address to trace fastsim manager
+    if (trace_fastsim->is_fastsim_enable() && !trace_fastsim->enoughFastSimInst()) {
+      trace_fastsim->plusFastSimInst();
+      if (!inst.isTrap() && !inst.isInstException() && inst.memory_type != MEM_TYPE_None) {
+        trace_fastsim->addMemAddr(inst.exu_data.memory_address.va, inst.exu_data.memory_address.pa);
+      }
+    }
+
     // construct trace
     instList_preread.push(inst);
   }
   printf("TraceRTL: preparse tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());
   fflush(stdout);
   delete[] instDecompressBuffer;
+
+  // fast sim manager merge/squash mem addr
+  if (trace_fastsim->is_fastsim_enable()) {
+    trace_fastsim->mergeMemAddr();
+  }
 
   last_interval_time = gen_cur_time();
 
@@ -236,6 +249,12 @@ bool TraceReader::read(Instruction &inst) {
   } else if (!instList_preread.empty()) {
     METHOD_TRACE();
     inst = instList_preread.front();
+    if (trace_fastsim == NULL) {
+      printf("TraceRTL: trace_fastsim is NULL\n");
+      fflush(stdout);
+    }
+    inst.fast_simulation = trace_fastsim->is_fastsim_enable() ? 1 : 0;
+
     instList_preread.pop();
     counterReadFromInstList ++;
 
@@ -409,7 +428,7 @@ void TraceReader::checkCommit(uint64_t tick) {
     last_interval_inst = commit_inst_num.get();
     next_print_inst += PRINT_INST_INTERVAL;
 
-    printf("Current Finished Inst Num %ld. Simulation Speed: %ld cycle/s %ld inst/s\r ", commit_inst_num.get(), cycle_per_second, inst_per_second);
+    printf("\rCurrent Finished Inst Num %ld. Simulation Speed: %ld cycle/s %ld inst/s", commit_inst_num.get(), cycle_per_second, inst_per_second);
     fflush(stdout);
 
     if (slow_count > 3) {

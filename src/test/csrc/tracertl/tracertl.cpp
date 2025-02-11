@@ -32,8 +32,6 @@ void init_tracertl(const char *trace_file_name, bool enable_gen_paddr) {
   printf("dynamic generate paddr(for instruction and data): %d\n", enable_gen_paddr);
   fflush(stdout);
   trace_reader = new TraceReader(trace_file_name, enable_gen_paddr);
-
-  trace_reader->prepareRead();
 }
 
 bool tracertl_prepare_read() {
@@ -119,7 +117,7 @@ extern "C" void trace_read_one_instr(
   uint64_t *target, uint32_t *instr,
   uint8_t *memory_type, uint8_t *memory_size,
   uint8_t *branch_type, uint8_t *branch_taken,
-  uint8_t *exception,
+  uint8_t *exception, uint8_t *fast_simulation,
   uint64_t *InstID, uint8_t idx) {
   METHOD_TRACE();
 
@@ -140,6 +138,7 @@ extern "C" void trace_read_one_instr(
   *branch_type = inst.branch_type;
   *branch_taken = inst.branch_taken;
   *exception = inst.exception;
+  *fast_simulation = inst.fast_simulation;
   *InstID = inst.inst_id;
   METHOD_TRACE();
 }
@@ -204,14 +203,27 @@ extern "C" uint64_t trace_get_satp_ppn() {
 /******* Trace Fast Sim Checker ******/
 TraceFastSimManager *trace_fastsim = NULL;
 
-void init_tracefastsim(bool fastwarmup_enable) {
-  trace_fastsim = new TraceFastSimManager(fastwarmup_enable);
+void init_tracefastsim(bool fastwarmup_enable, uint64_t warmup_inst) {
+  trace_fastsim = new TraceFastSimManager(fastwarmup_enable, warmup_inst);
 }
 
 /** Called by dut*/
 extern "C" uint8_t tracertl_get_fastsim_state() {
   return (uint8_t)trace_fastsim->get_fastsim_state();
 }
+
+extern "C" void trace_fastsim_mem_addr_reader(
+  uint8_t idx,
+  uint8_t* valid,
+  uint64_t* vaddr, uint64_t* paddr) {
+  METHOD_TRACE();
+
+  trace_fastsim->read_mem_addr(idx, valid, vaddr, paddr);
+}
+
+// extern "C" uint8_t tracertl_fastsim_mem_addr_empty() {
+//   return trace_fastsim->memAddrEmpty();
+// }
 
 /** Called by Emulator */
 void tracertl_set_fastsim_state(uint64_t new_state) {
@@ -229,7 +241,7 @@ void tracertl_clear_fastsim_state() {
   trace_fastsim->clear_fastsim_state();
 }
 
-void tracertl_check_and_change_fastsim_state(uint64_t inst_count, uint64_t cycle_count) {
+void tracertl_prepare_fastsim_memaddr() {
   METHOD_TRACE();
-  trace_fastsim->check_and_change_fastsim_state(inst_count, cycle_count);
+  trace_fastsim->prepareMemAddrBuffer();
 }

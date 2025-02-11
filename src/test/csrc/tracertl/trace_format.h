@@ -147,6 +147,8 @@ struct TraceInstruction {
 struct Instruction : TraceInstruction {
   // TraceInstruction static_inst;
   uint64_t inst_id;
+  // currently, only used for fast warmup
+  uint8_t fast_simulation = 0;
 
   void dump() {
     printf("[0x%08lx]: ", inst_id);
@@ -166,6 +168,10 @@ struct Instruction : TraceInstruction {
     branch_type = t.branch_type;
     branch_taken = t.branch_taken;
     exception = t.exception;
+  }
+
+  inline void setFastWarmup() {
+    fast_simulation = 1;
   }
 
   bool legalInst() {

@@ -19,6 +19,7 @@
 
 #include <cstdio>
 #include <cstdint>
+#include <vector>
 #include "trace_common.h"
 
 enum FastSimState {
@@ -26,40 +27,53 @@ enum FastSimState {
   FASTSIM_ENABLE,
 };
 
+struct FastSimMemAddr {
+  uint64_t vaddr;
+  uint64_t paddr;
+};
+
+struct FastSimMemAddrBuf : public FastSimMemAddr {
+  uint8_t valid = 0;
+};
+
 class TraceFastSimManager {
 private:
   FastSimState state = FASTSIM_DISABLE;
-  uint64_t reverse_interval = -1; // 20M
+  uint64_t warmupInst = 0;
+
+  uint64_t fastsimInstCount = 0;
+
+  FastSimMemAddrBuf mem_addr_buffer[4];
+  std::vector<FastSimMemAddr> mem_addr_list;
+  std::vector<FastSimMemAddr> mem_addr_list_before_merge;
+  uint64_t cur_mem_addr_idx = 0;
+  uint64_t mem_addr_list_size = 0;
+
+  bool addrSameBlock(uint64_t addr1, uint64_t addr2);
 
 public:
-  TraceFastSimManager(bool fastwarmup_enable) {
+  TraceFastSimManager(bool fastwarmup_enable, uint64_t warmup_inst) {
+    printf("TraceFastSimManager: fastwarmup_enable %d\n", fastwarmup_enable);
+    fflush(stdout);
     if (fastwarmup_enable) {
       state = FASTSIM_ENABLE;
+      warmupInst = warmup_inst;
     }
   }
   FastSimState get_fastsim_state() { return state; }
+  bool is_fastsim_enable() { return state == FASTSIM_ENABLE; }
   void set_fastsim_state(FastSimState new_state) { state = new_state; }
   void set_fastsim_state() { state = FASTSIM_ENABLE; }
   void clear_fastsim_state() { state = FASTSIM_DISABLE; }
 
-  void check_and_change_fastsim_state(uint64_t inst_count, uint64_t cycle_count) {
-    static uint64_t last_inst_count = 0;
-    static uint64_t last_cycle_count = 0;
-    if (inst_count > last_inst_count + reverse_interval) {
-      float ipc = 1.0 * (inst_count - last_inst_count) / (cycle_count - last_cycle_count);
-      printf("FastSim: reverse state at inst_count %lu, ipc %0.2f ", inst_count, ipc);
-      last_inst_count = inst_count;
-      last_cycle_count = cycle_count;
-      if (state == FASTSIM_DISABLE) {
-        printf("from disable to enable\n");
-        state = FASTSIM_ENABLE;
-      } else {
-        printf("from enable to disable\n");
-        state = FASTSIM_DISABLE;
-      }
-      fflush(stdout);
-    }
-  }
+  void prepareMemAddrBuffer();
+  void read_mem_addr(uint8_t idx, uint8_t* valid, uint64_t* vaddr, uint64_t* paddr);
+  void plusFastSimInst() { fastsimInstCount++; };
+  bool enoughFastSimInst() { return fastsimInstCount >= warmupInst; };
+  void addMemAddr(uint64_t vaddr, uint64_t paddr);
+  void mergeMemAddr();
+
+  bool memAddrEmpty() { return cur_mem_addr_idx >= mem_addr_list_size; }
 };
 
 #endif // __TRACE_FASTSIM_H__

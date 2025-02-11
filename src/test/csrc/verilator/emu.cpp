@@ -122,7 +122,7 @@ static inline void print_help(const char *file) {
 #ifdef TRACERTL_MODE
   printf("      --tracertl-file=NAME    load trace from NAME\n");
   printf("      --tracept-file=NAME     load trace page table from NAME\n");
-  printf("      --fastwarmup            fast warmup mode\n");
+  printf("      --fast-warmup            fast warmup mode\n");
   printf("      --gen-paddr            generate physical address\n");
 #endif // TRACERTL_MODE
 #if VM_COVERAGE == 1
@@ -448,9 +448,11 @@ Emulator::Emulator(int argc, const char *argv[])
   fflush(stdout);
   if (args.tracertl_file) {
     // traceicache's ram is constructed by tracertl's init method.
+    init_tracefastsim(args.fast_warmup, args.warmup_instr);
     init_traceicache(args.tracept_file);
     init_tracertl(args.tracertl_file, args.enable_gen_paddr);
-    init_tracefastsim(args.fast_warmup);
+    tracertl_prepare_read();
+    tracertl_prepare_fastsim_memaddr();
   } else {
     fprintf(stderr, "trace file not specified\n");
     fflush(stderr);
@@ -912,6 +914,7 @@ int Emulator::tick() {
 #ifdef TRACERTL_MODE
   do {
     tracertl_prepare_read();
+    tracertl_prepare_fastsim_memaddr();
   } while (0);
 #endif // TRACERTL_MODE
 
@@ -961,11 +964,11 @@ int Emulator::tick() {
     }
 
     if (args.fast_warmup && trap->instrCnt >= args.warmup_instr) {
+      if (args.fast_warmup)
+        printf("Warmup finished. instrCnt: %lu cycleCnt: %lu\n", trap->instrCnt, trap->cycleCnt);
       args.fast_warmup = false;
-      tracertl_set_fastsim_state_enable();
+      tracertl_clear_fastsim_state();
     }
-
-    // tracertl_check_and_change_fastsim_state(trap->instrCnt, trap->cycleCnt);
 
   } while(0);
 #endif // TRACERTL_MODE
