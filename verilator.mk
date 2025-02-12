@@ -23,7 +23,7 @@ EMU_CXXFILES = $(shell find $(EMU_CSRC_DIR) -name "*.cpp") $(SIM_CXXFILES) $(DIF
 EMU_CXXFLAGS += -std=c++14 -static -Wall -I$(EMU_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES)
 EMU_CXXFLAGS += $(shell sdl2-config --cflags) -fPIE
-EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
+EMU_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3 /usr/lib/x86_64-linux-gnu/libboost_filesystem.a
 EMU_CXX_EXTRA_FLAGS ?= 
 
 EMU_VFILES    = $(SIM_VSRC)

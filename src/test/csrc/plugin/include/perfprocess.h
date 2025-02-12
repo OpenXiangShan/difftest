@@ -14,6 +14,9 @@
 #include <iomanip>
 #include "verilated.h"
 #include "VSimTop.h"
+#include "deg/o3.h"
+#include "deg/utils.h"
+#include "deg/riscv_instruction.h"
 
 extern std::vector<uint64_t> getIOPerfCnts(VSimTop *dut_ptr);
 extern std::vector<std::string> getIOPerfNames();
@@ -26,9 +29,11 @@ public:
   double get_ipc();
   double get_cpi();
   void update_deg();
-  void update_deg_v2();
+  int update_deg_v2();
+  void finalize_deg();
 private:
   VSimTop *dut_ptr = nullptr;
+  O3Graph *o3graph = nullptr; 
   std::vector<std::string> perfNames = getIOPerfNames();
   int commit_width = 6;
 };

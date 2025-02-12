@@ -442,6 +442,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   bool lastCycleDSEReset = false;
   bool doDSEReset = false;
   bool deg_record = false;
+  int deg_record_num = 100;
   Perfprocess* perfprocess = new Perfprocess(dut_ptr, 6);
   std::vector<std::string> perfNames = getIOPerfNames();
 
@@ -495,8 +496,6 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
             trapCode = STATE_GOODTRAP;
             break;
           }
-        } else {
-          deg_record = true;
         }
       }
       if (doDSEReset) {
@@ -512,6 +511,12 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           init_nemuproxy();
           proxy->nemu_init(reset_vector);
         }
+        if (reset_vector == 0x80000000) {
+          printf("[Do DEG Record]\n");
+          if (deg_record_num > 0) {
+            deg_record = true;
+          }
+        }
         break;
       }
       if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
@@ -520,7 +525,11 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       }
       if (deg_record) {
         // perfprocess->update_deg();
-        perfprocess->update_deg_v2();
+        deg_record_num -= perfprocess->update_deg_v2();
+        if (deg_record_num <= 0) {
+          perfprocess->finalize_deg();
+          deg_record = false;
+        }
       }
     }
 #endif

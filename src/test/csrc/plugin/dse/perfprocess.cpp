@@ -4,6 +4,11 @@ Perfprocess::Perfprocess(VSimTop *dut_ptr, int commit_width) {
   this->dut_ptr = dut_ptr;
   this->commit_width = commit_width;
   this->perfNames = getIOPerfNames();
+  auto args = deg_parse_args(0, nullptr);
+  args["output"] = "output";
+  this->o3graph = new O3Graph(
+    args, new RiscvInstructionStream("")
+  );
 }
 
 Perfprocess::~Perfprocess() {
@@ -126,10 +131,12 @@ std::string exec(const char* cmd) {
   return result;
 }
 
-void Perfprocess::update_deg_v2() {
+int Perfprocess::update_deg_v2() {
+  int commit_count = 0;
   for (int i = 0; i < commit_width; i++) {
     auto do_update = find_perfCnt("isCommit_" + std::to_string(i));
     if (do_update != 0) {
+      commit_count++;
       uint64_t cycle = find_perfCnt("cf_" + std::to_string(i));
       uint64_t pc = find_perfCnt("pc_" + std::to_string(i));
       uint64_t instr = find_perfCnt("instr_" + std::to_string(i));
@@ -207,12 +214,17 @@ void Perfprocess::update_deg_v2() {
             << " : IQ=" << find_perfCnt("RS_" + std::to_string(i))
             << " : FU=" << find_perfCnt("FU_" + std::to_string(i))
             << " : SRC=" << src_str
-            << " : DST=" << (dest == 0 ? "" : std::to_string(dest))
-            << "\n";
+            << " : DST=" << (dest == 0 ? "" : std::to_string(dest));
         
         if (true) {
-            std::cerr << trace.str();
+            std::cerr << trace.str() << std::endl;
         }
+        this->o3graph->step(trace.str());
     }
   }
+  return commit_count;
+}
+
+void Perfprocess::finalize_deg() {
+  this->o3graph->finalize();
 }
