@@ -32,8 +32,8 @@ extern uint8_t *pmem;
 void init_goldenmem();
 void goldenmem_finish();
 
-void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len);
-void read_goldenmem(uint64_t addr, void *data, uint64_t len);
+extern "C" void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len);
+extern "C" void read_goldenmem(uint64_t addr, void *data, uint64_t len);
 
 /* convert the guest physical address in the guest program to host virtual address in NEMU */
 void *guest_to_host(uint64_t addr);
