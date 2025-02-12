@@ -574,8 +574,19 @@ int Difftest::do_instr_commit(int i) {
 
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
+  // as now store can be rob-compressed; we should not skip instructions before store in the same group
   if (dut->commit[i].skip || (DEBUG_MODE_SKIP(dut->commit[i].valid, dut->commit[i].pc, dut->commit[i].inst))) {
     // We use the physical register file to get wdata
+     for (int j = 0; j < dut->commit[i].nFused ; j++) {
+        proxy->ref_exec(1);
+    #ifdef CONFIG_DIFFTEST_SQUASH
+        commit_stamp = (commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+        do_load_check(i);
+        if (do_store_check()) {
+          return 1;
+        }
+    #endif // CONFIG_DIFFTEST_SQUASH
+     }
     proxy->skip_one(dut->commit[i].isRVC, (dut->commit[i].rfwen && dut->commit[i].wdest != 0), dut->commit[i].fpwen,
                     dut->commit[i].vecwen, dut->commit[i].wdest, get_commit_data(i));
     return 0;
