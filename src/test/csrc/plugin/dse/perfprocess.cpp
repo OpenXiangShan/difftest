@@ -6,6 +6,7 @@ Perfprocess::Perfprocess(VSimTop *dut_ptr, int commit_width) {
   this->perfNames = getIOPerfNames();
   auto args = deg_parse_args(0, nullptr);
   args["output"] = "output";
+  args["view"] = "1";
   this->o3graph = new O3Graph(
     args, new RiscvInstructionStream("")
   );
