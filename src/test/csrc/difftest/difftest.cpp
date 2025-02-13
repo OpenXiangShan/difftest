@@ -251,9 +251,12 @@ int Difftest::step() {
   }
 #endif // CONFIG_DIFFTEST_REPLAY
 
+#ifndef TRACERTL_MODE
+  // when in tracertl mode, check timeout by tracertl
   if (check_timeout()) {
     return 1;
   }
+#endif
   do_first_instr_commit();
 
   // Each cycle is checked for an store event, and recorded in queue.

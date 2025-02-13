@@ -28,6 +28,7 @@ void TraceFastSimManager::prepareMemAddrBuffer() {
       cur_mem_addr_idx ++;
     } else {
       mem_addr_buffer[i].valid = 0;
+      setFastsimMemoryFinish();
     }
   }
 }
@@ -61,7 +62,7 @@ bool TraceFastSimManager::addrSameBlock(uint64_t addr1, uint64_t addr2) {
 
 void TraceFastSimManager::mergeMemAddr() {
   int num = 0;
-  int check_size = 32*1024 / 64;
+  int check_size = 64*1024 / 64;
   for (auto &mem_addr : mem_addr_list_before_merge) {
     int check_count = 0;
     bool merged = false;
@@ -85,3 +86,4 @@ void TraceFastSimManager::mergeMemAddr() {
   // }
   // printf("\n");
 }
+

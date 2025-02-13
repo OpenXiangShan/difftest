@@ -175,8 +175,8 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
     }
 
     // add memory address to trace fastsim manager
-    if (trace_fastsim->is_fastsim_enable() && !trace_fastsim->enoughFastSimInst()) {
-      trace_fastsim->plusFastSimInst();
+    if (!trace_fastsim->isFastSimFinished() && !trace_fastsim->preCollectEnoughFastSimInst()) {
+      trace_fastsim->preCollectFastSimInst();
       if (!inst.isTrap() && !inst.isInstException() && inst.memory_type != MEM_TYPE_None) {
         trace_fastsim->addMemAddr(inst.exu_data.memory_address.va, inst.exu_data.memory_address.pa);
       }
@@ -190,7 +190,7 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
   delete[] instDecompressBuffer;
 
   // fast sim manager merge/squash mem addr
-  if (trace_fastsim->is_fastsim_enable()) {
+  if (!trace_fastsim->isFastSimMemoryFinished()) {
     trace_fastsim->mergeMemAddr();
   }
 
@@ -249,11 +249,7 @@ bool TraceReader::read(Instruction &inst) {
   } else if (!instList_preread.empty()) {
     METHOD_TRACE();
     inst = instList_preread.front();
-    if (trace_fastsim == NULL) {
-      printf("TraceRTL: trace_fastsim is NULL\n");
-      fflush(stdout);
-    }
-    inst.fast_simulation = trace_fastsim->is_fastsim_enable() ? 1 : 0;
+    inst.fast_simulation = trace_fastsim->isFastSimInstFinished() ? 0 : 1;
 
     instList_preread.pop();
     counterReadFromInstList ++;
@@ -407,7 +403,15 @@ void TraceReader::checkCommit(uint64_t tick) {
     commit_inst_num.add(instNum);
   }
 
-  update_tick(tick);
+  static bool lastAvoidStuck = false;
+  if (trace_fastsim->avoidInstStuck()) lastAvoidStuck = true;
+  if (lastAvoidStuck && !trace_fastsim->avoidInstStuck()) {
+    last_commit_tick = tick; // when fastsim finished, update the last_commit_tick, to pass stuck check
+    lastAvoidStuck = false;
+  }
+  if (!trace_fastsim->avoidInstStuck()) {
+    check_tracertl_timeout(tick);
+  }
 
 #ifdef PRINT_SIMULATION_SPEED
   if (commit_inst_num.get() > next_print_inst) {
@@ -508,7 +512,7 @@ bool TraceReader::traceOver() {
   return redirectInstList.empty() && instList_preread.empty();
 }
 
-bool TraceReader::update_tick(uint64_t tick) {
+bool TraceReader::check_tracertl_timeout(uint64_t tick) {
   METHOD_TRACE();
   uint64_t threa;
   if (commit_inst_num.get() == 1) threa = FIRST_BLOCK_THREASHOLD;

@@ -29,7 +29,7 @@ TraceReader *trace_reader = NULL;
 
 void init_tracertl(const char *trace_file_name, bool enable_gen_paddr) {
   printf("init_tracertl: %s\n", trace_file_name);
-  printf("dynamic generate paddr(for instruction and data): %d\n", enable_gen_paddr);
+  printf("dynamic generate paddr(for instruction and data): %s\n", enable_gen_paddr ? "enable" : "disable");
   fflush(stdout);
   trace_reader = new TraceReader(trace_file_name, enable_gen_paddr);
 }
@@ -221,26 +221,7 @@ extern "C" void trace_fastsim_mem_addr_reader(
   trace_fastsim->read_mem_addr(idx, valid, vaddr, paddr);
 }
 
-// extern "C" uint8_t tracertl_fastsim_mem_addr_empty() {
-//   return trace_fastsim->memAddrEmpty();
-// }
-
 /** Called by Emulator */
-void tracertl_set_fastsim_state(uint64_t new_state) {
-  METHOD_TRACE();
-  trace_fastsim->set_fastsim_state((FastSimState)new_state);
-}
-
-void tracertl_set_fastsim_state_enable() {
-  METHOD_TRACE();
-  trace_fastsim->set_fastsim_state();
-}
-
-void tracertl_clear_fastsim_state() {
-  METHOD_TRACE();
-  trace_fastsim->clear_fastsim_state();
-}
-
 void tracertl_prepare_fastsim_memaddr() {
   METHOD_TRACE();
   trace_fastsim->prepareMemAddrBuffer();

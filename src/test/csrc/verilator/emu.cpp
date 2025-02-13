@@ -964,14 +964,21 @@ int Emulator::tick() {
     }
 
     if (args.fast_warmup && trap->instrCnt >= args.warmup_instr) {
-      if (args.fast_warmup)
-        printf("Warmup finished. instrCnt: %lu cycleCnt: %lu\n", trap->instrCnt, trap->cycleCnt);
       args.fast_warmup = false;
-      tracertl_clear_fastsim_state();
+      trace_fastsim->setFastsimInstFinish();
     }
 
   } while(0);
 #endif // TRACERTL_MODE
+
+  do {
+    auto trap = difftest[0]->get_trap_event();
+    static bool warmup_finished = false;
+    if (!warmup_finished && trap->instrCnt >= args.warmup_instr) {
+      warmup_finished = true;
+      printf("Warmup finished. instrCnt: %lu cycleCnt: %lu\n", trap->instrCnt, trap->cycleCnt);
+    }
+  } while (0);
 
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles--;

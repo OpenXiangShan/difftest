@@ -148,7 +148,7 @@ public:
   /* if the trace is over */
   bool traceOver();
 
-  bool update_tick(uint64_t tick);
+  bool check_tracertl_timeout(uint64_t tick);
   void dump_uncommited_inst();
   void dump_committed_inst();
   void dump_dut_committed_inst();

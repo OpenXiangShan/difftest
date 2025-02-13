@@ -22,11 +22,6 @@
 #include <vector>
 #include "trace_common.h"
 
-enum FastSimState {
-  FASTSIM_DISABLE,
-  FASTSIM_ENABLE,
-};
-
 struct FastSimMemAddr {
   uint64_t vaddr;
   uint64_t paddr;
@@ -38,10 +33,10 @@ struct FastSimMemAddrBuf : public FastSimMemAddr {
 
 class TraceFastSimManager {
 private:
-  FastSimState state = FASTSIM_DISABLE;
+  // FastSimState state = FASTSIM_DISABLE;
   uint64_t warmupInst = 0;
 
-  uint64_t fastsimInstCount = 0;
+  uint64_t fastsimInstIdx = 0;
 
   FastSimMemAddrBuf mem_addr_buffer[4];
   std::vector<FastSimMemAddr> mem_addr_list;
@@ -51,29 +46,39 @@ private:
 
   bool addrSameBlock(uint64_t addr1, uint64_t addr2);
 
+  bool fastSimInstFinish = true;
+  bool fastSimMemoryFinish = true;
+
 public:
   TraceFastSimManager(bool fastwarmup_enable, uint64_t warmup_inst) {
     printf("TraceFastSimManager: fastwarmup_enable %d\n", fastwarmup_enable);
     fflush(stdout);
     if (fastwarmup_enable) {
-      state = FASTSIM_ENABLE;
+      // state = FASTSIM_ENABLE;
       warmupInst = warmup_inst;
+      fastSimInstFinish = false;
+      fastSimMemoryFinish = false;
     }
   }
-  FastSimState get_fastsim_state() { return state; }
-  bool is_fastsim_enable() { return state == FASTSIM_ENABLE; }
-  void set_fastsim_state(FastSimState new_state) { state = new_state; }
-  void set_fastsim_state() { state = FASTSIM_ENABLE; }
-  void clear_fastsim_state() { state = FASTSIM_DISABLE; }
+
+  bool isFastSimFinished() { return fastSimInstFinish && fastSimMemoryFinish; };
+  bool isFastSimInstFinished() { return fastSimInstFinish; };
+  bool isFastSimMemoryFinished() { return fastSimMemoryFinish; };
+  void setFastsimInstFinish() { fastSimInstFinish = true; };
+  void setFastsimMemoryFinish() { fastSimMemoryFinish = true; };
+  bool avoidInstStuck() { return fastSimInstFinish && !fastSimMemoryFinish; };
+
+  bool get_fastsim_state() { return !isFastSimFinished(); };
 
   void prepareMemAddrBuffer();
   void read_mem_addr(uint8_t idx, uint8_t* valid, uint64_t* vaddr, uint64_t* paddr);
-  void plusFastSimInst() { fastsimInstCount++; };
-  bool enoughFastSimInst() { return fastsimInstCount >= warmupInst; };
+  void preCollectFastSimInst() { fastsimInstIdx++; };
+  bool preCollectEnoughFastSimInst() { return fastsimInstIdx >= warmupInst; };
   void addMemAddr(uint64_t vaddr, uint64_t paddr);
   void mergeMemAddr();
 
   bool memAddrEmpty() { return cur_mem_addr_idx >= mem_addr_list_size; }
 };
+
 
 #endif // __TRACE_FASTSIM_H__

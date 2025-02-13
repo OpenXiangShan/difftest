@@ -45,9 +45,6 @@ void tracertl_error_drive_dump();
 
 // FastSim
 void init_tracefastsim(bool fastwarmup_enable, uint64_t warmup_inst);
-void tracertl_set_fastsim_state(uint64_t new_state);
-void tracertl_clear_fastsim_state();
-void tracertl_set_fastsim_state_enable();
 void tracertl_prepare_fastsim_memaddr();
 
 /*             called by dut              */
