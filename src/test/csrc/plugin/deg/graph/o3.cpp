@@ -1680,8 +1680,7 @@ bool O3Graph::from_c_to_sink(Vertex& vertex, Vertex& sink, std::vector<Vertex>& 
 
 void O3Graph::visualize() {
     if (view) {
-        auto name = get_dir_path(output_file) + '/' + \
-            get_plain_file_name(output_file) + ".dot";
+        auto name = get_plain_file_name(output_file) + ".dot";
 
         INFO("construct dot for visualization: %s\n", name);
 
