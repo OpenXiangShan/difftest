@@ -444,7 +444,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   bool deg_record = false;
   int deg_record_num = 100;
   Perfprocess* perfprocess = new Perfprocess(dut_ptr, 6);
+  ArchExplorerEngine* engine = new ArchExplorerEngine();
   std::vector<std::string> perfNames = getIOPerfNames();
+  std::vector<int> embedding;
+  embedding = engine->get_design_space().get_init_embedding();
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
@@ -525,10 +528,20 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
       }
       if (deg_record) {
         // perfprocess->update_deg();
-        deg_record_num -= perfprocess->update_deg_v2();
+        int commit_count = perfprocess->update_deg_v2();
+        deg_record_num -= commit_count;
+        for (int i = 0; i < commit_count; i++) {
+          engine->step(perfprocess->get_trace(i).c_str());
+        }
         if (deg_record_num <= 0) {
-          perfprocess->finalize_deg();
+          engine->finalize_deg();
           deg_record = false;
+          std::vector<int> embedding_new;
+          printf("[Do bottleneck_analysis]\n");
+          embedding_new = engine->bottleneck_analysis(embedding);
+          printf("[Finish bottleneck_analysis]\n");
+          engine->get_design_space().compare_embeddings(embedding, embedding_new);
+          embedding = embedding_new;
         }
       }
     }

@@ -11,6 +11,7 @@
 latency PipelineDelay::icache_hit_latency = 2;
 latency PipelineDelay::dcache_int_latency = 2;
 
+std::vector<std::string> O3Graph::bottlenecks;
 
 O3Graph::O3Graph(
     std::unordered_map<std::string, std::string>& args,
@@ -559,6 +560,7 @@ void O3Graph::analyze_window() {
     runtime = timestamp();
     auto path = longest_path();
     time_stats.analysis_runtime += (timestamp() - runtime).count();
+    printf("critical path: ");
 
     profiling_critical_path(path);
 }

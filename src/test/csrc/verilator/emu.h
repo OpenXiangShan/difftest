@@ -32,6 +32,7 @@
 #ifdef CONDUCT_DSE
 #include "dse.h"
 #include "perfprocess.h"
+#include "ArchExplorerEngine.h"
 #endif
 
 struct EmuArgs {
