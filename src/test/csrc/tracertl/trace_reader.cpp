@@ -406,6 +406,7 @@ void TraceReader::checkCommit(uint64_t tick) {
   static bool lastAvoidStuck = false;
   if (trace_fastsim->avoidInstStuck()) lastAvoidStuck = true;
   if (lastAvoidStuck && !trace_fastsim->avoidInstStuck()) {
+    printf("TraceRTL: FastSim avoidInstStuck finished tick: %ld\n", tick);
     last_commit_tick = tick; // when fastsim finished, update the last_commit_tick, to pass stuck check
     lastAvoidStuck = false;
   }

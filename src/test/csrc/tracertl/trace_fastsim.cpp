@@ -17,11 +17,16 @@
 #include "trace_fastsim.h"
 
 void TraceFastSimManager::prepareMemAddrBuffer() {
-  if (cur_mem_addr_idx >= mem_addr_list_size || mem_addr_buffer[0].valid) {
+  if (cur_mem_addr_idx >= mem_addr_list_size) {
+    // finished
     if (!isFastSimMemoryFinished()) {
       printf("Set FastSim Memory Finish\n");
       setFastsimMemoryFinish();
     }
+    return;
+  }
+  if (mem_addr_buffer[0].valid) {
+    // not consumed
     return;
   }
   for (int i = 0; i < 4; i++) {
@@ -32,6 +37,7 @@ void TraceFastSimManager::prepareMemAddrBuffer() {
       cur_mem_addr_idx ++;
     } else {
       mem_addr_buffer[i].valid = 0;
+      // finished
       if (!isFastSimMemoryFinished()) {
         printf("Set FastSim Memory Finish\n");
         setFastsimMemoryFinish();
@@ -70,6 +76,8 @@ bool TraceFastSimManager::addrSameBlock(uint64_t addr1, uint64_t addr2) {
 void TraceFastSimManager::mergeMemAddr() {
   int num = 0;
   int check_size = 64*1024 / 64;
+  // std::vector<FastSimMemAddr> mem_addr_list;
+  // TODO: maybe the merge is useless, just filter is enough
   for (auto &mem_addr : mem_addr_list_before_merge) {
     int check_count = 0;
     bool merged = false;
@@ -84,10 +92,24 @@ void TraceFastSimManager::mergeMemAddr() {
     if (!merged) {
       // printf("TraceFastSimManager.mergeMemAddr push %lx\n", mem_addr.vaddr);
       mem_addr_list.push_back(mem_addr);
-      mem_addr_list_size ++;
     }
   }
-  printf("TraceFastSimManager: mergeMemAddr %lu -> %lu\n", mem_addr_list_before_merge.size(), mem_addr_list.size());
+
+  for (auto &mem_addr : std::vector<FastSimMemAddr>(mem_addr_list.rbegin(), mem_addr_list.rend())) {
+    bool merged = false;
+    for (auto it : mem_addr_list_after_filter) {
+      if (addrSameBlock(mem_addr.vaddr, it.vaddr)) {
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) {
+      mem_addr_list_after_filter.insert(mem_addr_list_after_filter.begin(), mem_addr);
+    }
+  }
+
+  mem_addr_list_size = mem_addr_list.size();
+  printf("TraceFastSimManager: mergeMemAddr %lu ->(merge) %lu ->(filter) %lu\n", mem_addr_list_before_merge.size(), mem_addr_list.size(), mem_addr_list_after_filter.size());
   // for (auto &mem_addr : mem_addr_list) {
   //   printf("%lx ", mem_addr.vaddr);
   // }
