@@ -14,9 +14,6 @@
 #include <iomanip>
 #include "verilated.h"
 #include "VSimTop.h"
-#include "deg/o3.h"
-#include "deg/utils.h"
-#include "deg/riscv_instruction.h"
 
 extern std::vector<uint64_t> getIOPerfCnts(VSimTop *dut_ptr);
 extern std::vector<std::string> getIOPerfNames();
