@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <vector>
+#include <deque>
 #include "trace_common.h"
 
 struct FastSimMemAddr {
@@ -39,8 +40,8 @@ private:
   uint64_t fastsimInstIdx = 0;
 
   FastSimMemAddrBuf mem_addr_buffer[4];
+  // std::deque<FastSimMemAddr> mem_addr_list;
   std::vector<FastSimMemAddr> mem_addr_list;
-  std::vector<FastSimMemAddr> mem_addr_list_after_filter;
   std::vector<FastSimMemAddr> mem_addr_list_before_merge;
   uint64_t cur_mem_addr_idx = 0;
   uint64_t mem_addr_list_size = 0;
