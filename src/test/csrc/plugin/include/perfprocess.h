@@ -40,7 +40,6 @@ public:
 
 private:
   VSimTop *dut_ptr = nullptr;
-  O3Graph *o3graph = nullptr; 
   std::vector<std::string> perfNames = getIOPerfNames();
   int commit_width = 6;
   std::vector<std::string> traces;

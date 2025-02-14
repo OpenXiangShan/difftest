@@ -4,12 +4,6 @@ Perfprocess::Perfprocess(VSimTop *dut_ptr, int commit_width) {
   this->dut_ptr = dut_ptr;
   this->commit_width = commit_width;
   this->perfNames = getIOPerfNames();
-  auto args = deg_parse_args(0, nullptr);
-  args["output"] = "output";
-  args["view"] = "1";
-  this->o3graph = new O3Graph(
-    args, new RiscvInstructionStream("")
-  );
 }
 
 Perfprocess::~Perfprocess() {
@@ -222,7 +216,6 @@ int Perfprocess::update_deg_v2() {
         if (true) {
             std::cerr << trace.str() << std::endl;
         }
-        this->o3graph->step(trace.str());
     }
   }
   return commit_count;

@@ -321,6 +321,7 @@ void ArchExplorerEngine::init() {
     // 创建O3Graph实例
     auto args = deg_parse_args(0, nullptr);
     args["output"] = "output";
+    args["view"] = "1";
     this->o3graph = new O3Graph(
       args, new RiscvInstructionStream("")
     );
