@@ -280,13 +280,45 @@ public:
             ) / CYCLE_PER_TICK;
         };
 
+        /*
+        #7 tick fetch_cache_line,
+        #8 tick process_cache_completion,
+        #9 tick fetch,
+        #10 tick decode_sort_insts,
+        #11 tick decode,
+        #12 tick rename_sort_insts,
+        #13 tick block_from_rob,
+        #14 tick block_from_rf,
+        #15 tick block_from_iq,
+        #16 tick block_from_lq,
+        #17 tick block_from_sq,
+        #18 tick rename,
+        #19 tick dispatch,
+        #20 tick insert_ready_list,
+        #21 tick issue,
+        #22 tick memory,
+        #23 tick complete,
+        #24 tick complete_memory,
+        #25 tick commit_head,
+        #26 tick commit
+        */
+       if (f(19) != 0 && f(20) == 0 && f(26) != 0) {  // move elimination
         event_tick = new Tick(
             f(7), f(8), f(9), f(10),
             f(11), f(12), f(13), f(14),
             f(15), f(16), f(17), f(18),
-            f(19), f(20), f(21), f(22),
-            f(23), f(24), f(25), f(26)
+            f(19), f(19), f(19), f(19),
+            f(19), f(19), f(25), f(26)
         );
+        } else {
+            event_tick = new Tick(
+                f(7), f(8), f(9), f(10),
+                f(11), f(12), f(13), f(14),
+                f(15), f(16), f(17), f(18),
+                f(19), f(20), f(21), f(22),
+                f(23), f(24), f(25), f(26)
+            );
+        }
     }
 
     void set_rob(const std::string& line) {
