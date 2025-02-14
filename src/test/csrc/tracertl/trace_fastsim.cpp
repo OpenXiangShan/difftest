@@ -18,6 +18,10 @@
 
 void TraceFastSimManager::prepareMemAddrBuffer() {
   if (cur_mem_addr_idx >= mem_addr_list_size || mem_addr_buffer[0].valid) {
+    if (!isFastSimMemoryFinished()) {
+      printf("Set FastSim Memory Finish\n");
+      setFastsimMemoryFinish();
+    }
     return;
   }
   for (int i = 0; i < 4; i++) {
@@ -28,7 +32,10 @@ void TraceFastSimManager::prepareMemAddrBuffer() {
       cur_mem_addr_idx ++;
     } else {
       mem_addr_buffer[i].valid = 0;
-      setFastsimMemoryFinish();
+      if (!isFastSimMemoryFinished()) {
+        printf("Set FastSim Memory Finish\n");
+        setFastsimMemoryFinish();
+      }
     }
   }
 }

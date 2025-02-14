@@ -965,6 +965,7 @@ int Emulator::tick() {
 
     if (args.fast_warmup && trap->instrCnt >= args.warmup_instr) {
       args.fast_warmup = false;
+      printf("Set FastSim Inst Finish\n");
       trace_fastsim->setFastsimInstFinish();
     }
 
