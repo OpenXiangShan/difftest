@@ -66,6 +66,9 @@ public:
     void run();
     void step(std::string line);
     void finalize();
+    static const std::vector<std::string>& get_bottlenecks() {
+        return bottlenecks;
+    }
 
 protected:
     struct VertexHash {
@@ -241,7 +244,7 @@ private:
     pred_t pred;
     inst_to_vertex_t inst_to_vertex;
     std::deque<RiscvInstruction*> inst_window;
-    std::vector<std::string> bottlenecks;
+    static std::vector<std::string> bottlenecks;
 };
 
 

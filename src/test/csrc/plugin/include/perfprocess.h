@@ -30,12 +30,20 @@ public:
   double get_cpi();
   void update_deg();
   int update_deg_v2();
-  void finalize_deg();
+  std::string get_trace(int i) const { 
+    if (i >= traces.size()) {
+      throw std::out_of_range("Index out of range");
+    }
+    return traces[i];
+  }
+  void clear_traces() { traces.clear(); }
+
 private:
   VSimTop *dut_ptr = nullptr;
   O3Graph *o3graph = nullptr; 
   std::vector<std::string> perfNames = getIOPerfNames();
   int commit_width = 6;
+  std::vector<std::string> traces;
 };
 
 #endif

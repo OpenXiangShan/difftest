@@ -134,6 +134,7 @@ std::string exec(const char* cmd) {
 
 int Perfprocess::update_deg_v2() {
   int commit_count = 0;
+  clear_traces();
   for (int i = 0; i < commit_width; i++) {
     auto do_update = find_perfCnt("isCommit_" + std::to_string(i));
     if (do_update != 0) {
@@ -217,6 +218,7 @@ int Perfprocess::update_deg_v2() {
             << " : SRC=" << src_str
             << " : DST=" << (dest == 0 ? "" : std::to_string(dest));
         
+        traces.push_back(trace.str());
         if (true) {
             std::cerr << trace.str() << std::endl;
         }
@@ -224,8 +226,4 @@ int Perfprocess::update_deg_v2() {
     }
   }
   return commit_count;
-}
-
-void Perfprocess::finalize_deg() {
-  this->o3graph->finalize();
 }
