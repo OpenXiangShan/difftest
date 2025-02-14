@@ -141,7 +141,7 @@ $(error DRAMSIM3_HOME is not set)
 endif
 SIM_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
 SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
-SIM_LDFLAGS  += $(DRAMSIM3_HOME)/build/libdramsim3.a
+SIM_LDFLAGS  += -L$(DRAMSIM3_HOME)/build -ldramsim3
 endif
 
 # out ipc info on temporary txt file, mainly applied to support qemu multi-core sampled data
