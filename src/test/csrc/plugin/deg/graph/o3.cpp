@@ -1652,6 +1652,7 @@ void O3Graph::from_i_to_i_dcache(Vertex& _I, Vertex& I) {
 void O3Graph::from_i_to_i_raw(Vertex& _I, Vertex& I) {
     latency weight;
 
+    assert(I.inst->issue() > _I.inst->issue());
     weight = I.inst->issue() - _I.inst->issue();
     add_edge(_I, OutgoingEdge(I, weight, weight, RAW()));
     add_edge(I, IngoingEdge(_I));
