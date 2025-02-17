@@ -30,7 +30,6 @@
 #include <verilated_threads.h>
 #endif
 #ifdef CONDUCT_DSE
-#include "dse.h"
 #include "perfprocess.h"
 #include "ArchExplorerEngine.h"
 #endif
@@ -98,9 +97,6 @@ private:
 #endif
   EmuArgs args;
   LightSSS lightsss;
-#ifdef CONDUCT_DSE
-  DSE dse = DSE();
-#endif
 
   enum {
     STATE_GOODTRAP = 0,

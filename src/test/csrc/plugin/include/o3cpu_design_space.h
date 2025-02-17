@@ -7,7 +7,7 @@
 #include "deg/utils.h"
 
 enum EMDIdx {
-    FTQ,
+    FTQ = 0,
     IBUF,
     INTDQ,
     FPDQ,
@@ -18,7 +18,10 @@ enum EMDIdx {
     L2MSHRS,
     L2SETS,
     L3MSHRS,
-    L3SETS
+    L3SETS,
+
+    // size
+    EMD_SIZE
 };
 
 

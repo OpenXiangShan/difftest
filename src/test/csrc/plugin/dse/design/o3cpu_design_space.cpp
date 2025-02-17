@@ -40,7 +40,7 @@ std::vector<int> O3CPUDesignSpace::get_component_params(
 
 std::vector<int> O3CPUDesignSpace::get_init_embedding() const {
     // 初始化向量大小为12(EMDIdx的大小)
-    std::vector<int> embedding(12, 0);  
+    std::vector<int> embedding(EMDIdx::EMD_SIZE, 0);  
     embedding[EMDIdx::FTQ] = 16;
     embedding[EMDIdx::IBUF] = 16;
     embedding[EMDIdx::INTDQ] = 12;
