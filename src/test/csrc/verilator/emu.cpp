@@ -36,6 +36,7 @@
 // #ifdef CONDUCT_DSE
 // #include "dse.h"
 // #endif
+#include "uparam.h"
 
 uint64_t old_cycles = 0;
 
@@ -395,6 +396,7 @@ inline void Emulator::single_cycle() {
 
 uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
+
   difftest_init();
   init_device();
   if (args.enable_diff) {
@@ -446,8 +448,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   Perfprocess* perfprocess = new Perfprocess(dut_ptr, 6);
   ArchExplorerEngine* engine = new ArchExplorerEngine();
   std::vector<std::string> perfNames = getIOPerfNames();
-  std::vector<int> embedding;
-  embedding = engine->get_design_space().get_init_embedding();
+  init_uparam();
+  std::vector<int> embedding = uparam_to_embedding();
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
@@ -542,6 +544,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           printf("[Finish bottleneck_analysis]\n");
           engine->get_design_space().compare_embeddings(embedding, embedding_new);
           embedding = embedding_new;
+          embedding_to_uparam(embedding);
         }
       }
     }
