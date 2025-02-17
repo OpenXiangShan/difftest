@@ -3,4 +3,3 @@
 * $finish TB_IMPORT
 * $fatal TB_IMPORT
 * $random TB_IMPORT
-* $fwrite GFIFO

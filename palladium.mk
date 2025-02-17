@@ -41,7 +41,7 @@ endif
 
 # Compiler Args
 IXCOM_FLAGS 	+= -xecompile compilerOptions=$(PLDM_SCRIPTS_DIR)/compilerOptions.qel
-IXCOM_FLAGS 	+= +gfifoDisp+tb_top
+IXCOM_FLAGS 	+= +gfifoDisp+tb_top +gfifoDisp+DifftestEndpoint
 IXCOM_FLAGS 	+= $(addprefix -incdir , $(PLDM_VSRC_DIR))
 IXCOM_FLAGS 	+= $(PLDM_MACRO_FLAGS)
 IXCOM_FLAGS 	+= +dut+$(PLDM_TB_TOP)
