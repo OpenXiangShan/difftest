@@ -36,6 +36,7 @@ class ArchExplorerEngine {
         void finalize_deg() {
             o3graph->finalize();
         }
+        int max_epoch = 3;
 
         
     private:

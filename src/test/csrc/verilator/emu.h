@@ -57,6 +57,7 @@ struct EmuArgs {
   bool enable_runahead;
   bool dump_tl;
   bool jtag_test;
+  const char *init_params;
 
   EmuArgs() {
     seed = 0;
@@ -83,6 +84,7 @@ struct EmuArgs {
     enable_runahead = false;
     dump_tl = false;
     jtag_test = false;
+    init_params = NULL;
   }
 };
 

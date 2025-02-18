@@ -20,22 +20,28 @@ struct uparam_t {
     int l3sets;
 };
 
+extern uint64_t max_epoch;
+
 extern uparam_t uparam;
 
-#define ROBSIZE_ADDR 0x0000
-#define LQSIZE_ADDR 0x0008
-#define SQSIZE_ADDR 0x0010
-#define FTQSIZE_ADDR 0x0018
-#define IBUFSIZE_ADDR 0x0020
-#define INTDQSIZE_ADDR 0x0028
-#define FPDQSIZE_ADDR 0x0030
-#define LSDQSIZE_ADDR 0x0038
-#define L2MSHRS_ADDR 0x0040
-#define L3MSHRS_ADDR 0x0048
-#define L2SETS_ADDR 0x0050
-#define L3SETS_ADDR 0x0058
+#define UPARAM_BASE         0x31310000
 
-void init_uparam(void);
+#define ROBSIZE_ADDR        0x0000
+#define LQSIZE_ADDR         0x0008
+#define SQSIZE_ADDR         0x0010
+#define FTQSIZE_ADDR        0x0018
+#define IBUFSIZE_ADDR       0x0020
+#define INTDQSIZE_ADDR      0x0028
+#define FPDQSIZE_ADDR       0x0030
+#define LSDQSIZE_ADDR       0x0038
+#define L2MSHRS_ADDR        0x0040
+#define L3MSHRS_ADDR        0x0048
+#define L2SETS_ADDR         0x0050
+#define L3SETS_ADDR         0x0058
+
+#define MAX_EPOCH_ADDR      0x1000
+
+void init_uparam(std::vector<int> embedding, int epoch);
 void embedding_to_uparam(std::vector<int> embedding);
 void set_uparam(uint64_t addr, uint64_t data);
 std::vector<int> uparam_to_embedding();
