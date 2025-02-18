@@ -60,6 +60,7 @@ class ArchEvent extends DifftestBaseBundle with HasValid {
 class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasValid {
   val skip = Bool()
   val isRVC = Bool()
+  val hasStore = Bool()
   val rfwen = Bool()
   val fpwen = Bool()
   val vecwen = Bool()

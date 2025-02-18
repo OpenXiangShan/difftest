@@ -587,7 +587,7 @@ int Difftest::do_instr_commit(int i) {
         }
     #endif // CONFIG_DIFFTEST_SQUASH
      }
-    proxy->skip_one(dut->commit[i].isRVC, (dut->commit[i].rfwen && dut->commit[i].wdest != 0), dut->commit[i].fpwen,
+    proxy->skip_one(dut->commit[i].isRVC, dut->commit[i].hasStore, (dut->commit[i].rfwen && dut->commit[i].wdest != 0), dut->commit[i].fpwen,
                     dut->commit[i].vecwen, dut->commit[i].wdest, get_commit_data(i));
     return 0;
   }
