@@ -113,6 +113,9 @@ void ArchExplorerEngine::decrease_hardware_resource(std::vector<int>& embedding,
         else if (btnk_name == "Virtual") {
             continue;
         }
+        else if (btnk_name == "Serial") {
+            continue;
+        }
         else {
             ERROR("Unknown bottleneck: %s\n", btnk_name.c_str());
         }
@@ -186,6 +189,9 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
             adjust = false;
         }
         else if (btnk_name == "Virtual") {
+            adjust = false;
+        }
+        else if (btnk_name == "Serial") {
             adjust = false;
         }
         else {

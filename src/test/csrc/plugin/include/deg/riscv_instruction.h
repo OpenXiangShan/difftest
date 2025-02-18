@@ -70,6 +70,7 @@ struct Tick {
     tick complete_memory;
     tick commit_head;
     tick commit;
+    tick block_from_serial;
 
     Tick() = default;
     ~Tick() = default;
@@ -93,7 +94,8 @@ struct Tick {
         tick complete,
         tick complete_memory,
         tick commit_head,
-        tick commit
+        tick commit,
+        tick block_from_serial
     ):
         fetch_cache_line(fetch_cache_line),
         process_cache_completion(process_cache_completion),
@@ -114,7 +116,8 @@ struct Tick {
         complete(complete),
         complete_memory(complete_memory),
         commit_head(commit_head),
-        commit(commit)
+        commit(commit),
+        block_from_serial(block_from_serial)
      {}
      Tick(const Tick& tick):
         fetch_cache_line(tick.fetch_cache_line),
@@ -136,7 +139,8 @@ struct Tick {
         complete(tick.complete),
         complete_memory(tick.complete_memory),
         commit_head(tick.commit_head),
-        commit(tick.commit)
+        commit(tick.commit),
+        block_from_serial(tick.block_from_serial)
     {}
 
 public:
@@ -160,7 +164,8 @@ public:
             this->complete == tick.complete && \
             this->complete_memory == tick.complete_memory && \
             this->commit_head == tick.commit_head && \
-            this->commit == tick.commit
+            this->commit == tick.commit && \
+            this->block_from_serial == tick.block_from_serial
         ) {
             return true;
         }
@@ -280,6 +285,12 @@ public:
             ) / CYCLE_PER_TICK;
         };
 
+        auto f_raw = [&segments] (int idx) -> tick {
+            return std::stoull(
+                segments[idx].substr(segments[idx].find('=') + 1)
+            );
+        };
+
         /*
         #7 tick fetch_cache_line,
         #8 tick process_cache_completion,
@@ -301,22 +312,25 @@ public:
         #24 tick complete_memory,
         #25 tick commit_head,
         #26 tick commit
+        #35 tick block_from_serial
         */
        if (f(19) != 0 && f(20) == 0 && f(26) != 0) {  // move elimination
         event_tick = new Tick(
             f(7), f(8), f(9), f(10),
-            f(11), f(12), f(13), f(14),
-            f(15), f(16), f(17), f(18),
+            f(11), f(12), f_raw(13), f_raw(14),
+            f_raw(15), f_raw(16), f_raw(17), f(18),
             f(19), f(19), f(19), f(19),
-            f(19), f(19), f(25), f(26)
+            f(19), f(19), f(25), f(26),
+            f_raw(35)
         );
         } else {
             event_tick = new Tick(
                 f(7), f(8), f(9), f(10),
-                f(11), f(12), f(13), f(14),
-                f(15), f(16), f(17), f(18),
+                f(11), f(12), f_raw(13), f_raw(14),
+                f_raw(15), f_raw(16), f_raw(17), f(18),
                 f(19), f(20), f(21), f(22),
-                f(23), f(24), f(25), f(26)
+                f(23), f(24), f(25), f(26),
+                f_raw(35)
             );
         }
     }
@@ -360,7 +374,7 @@ public:
 
     void set_dst_reg(const std::string& line) {
         auto pos = line.find('=') + 1;
-        if (pos == line.length()) {
+        if (pos == line.length() || line.substr(pos) == " ") {
             dst = -1;
         } else {
             dst = std::stoi(line.substr(pos));
@@ -446,6 +460,10 @@ public:
 
     tick commit() const {
         return this->event_tick->commit;
+    }
+
+    tick block_from_serial() const {
+        return this->event_tick->block_from_serial;
     }
 
 public:

@@ -145,6 +145,7 @@ private:
     bool war_dep(RiscvInstruction*, RiscvInstruction*);
     bool wrw_dep(RiscvInstruction*, RiscvInstruction*);
     void model_miss_bp_interaction_impl(RiscvInstruction*);
+    void model_serial_interaction_impl(RiscvInstruction*);
     void model_rob_interaction_impl(RiscvInstruction*);
     void model_lq_interaction_impl(RiscvInstruction*);
     void model_sq_interaction_impl(RiscvInstruction*);
@@ -180,6 +181,7 @@ private:
     void add_edge(Vertex&, OutgoingEdge&&);
     void add_edge(Vertex&, IngoingEdge&);
     void add_edge(Vertex&, IngoingEdge&&);
+    void register_vertex(Vertex&);
     std::string hash_inst(RiscvInstruction*, VertexType&);
     std::string hash_inst(RiscvInstruction*, VertexType&&);
     Vertex get_vertex_from_inst(RiscvInstruction*, VertexType&);
@@ -212,6 +214,7 @@ private:
     void from_i_to_i_dcache(Vertex&, Vertex&);
     void from_i_to_i_raw(Vertex&, Vertex&);
     bool from_c_to_sink(Vertex&, Vertex&, std::vector<Vertex>&);
+    void from_c_to_ds_serial(Vertex&, Vertex&);
     void visualize();
     void dump_time_stats();
     void clear_time_stats();

@@ -31,5 +31,6 @@ std::vector<std::string> register_bottlenecks() {
     register_bottleneck(bottlenecks, RdWrPort());
     register_bottleneck(bottlenecks, RAW());
     register_bottleneck(bottlenecks, Virtual());
+    register_bottleneck(bottlenecks, Serial());
     return bottlenecks;
 }
