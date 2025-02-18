@@ -44,15 +44,21 @@ void ArchExplorerEngine::decrease_hardware_resource(std::vector<int>& embedding,
         }
     }
 
+
     // 随机抽样：如果候选数超过 top_k，则抽样 size 为 top_k，否则全部抽样
     std::random_device rd;
     std::mt19937 gen(rd());
     std::shuffle(candidates.begin(), candidates.end(), gen);
-    size_t sample_num = std::min(static_cast<size_t>(top_k), candidates.size());
-    candidates.resize(sample_num);
+    // size_t sample_num = std::min(static_cast<size_t>(top_k), candidates.size());
+    // candidates.resize(sample_num);
 
+    int adjust_num = 0;
     for (const auto& btnk_name : candidates) {
         bool adjust = false;
+
+        if (adjust_num >= top_k) {
+            break;
+        }
 
         if (btnk_name == "Base") {
             // Base瓶颈不需要调整
@@ -116,6 +122,9 @@ void ArchExplorerEngine::decrease_hardware_resource(std::vector<int>& embedding,
         else {
             ERROR("Unknown bottleneck: %s\n", btnk_name.c_str());
         }
+        if (adjust) {
+            adjust_num++;
+        }
     }
 }
 
@@ -124,7 +133,7 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
     for (const auto& [btnk_name, contrib] : contribution) {
         bool adjust = false;
 
-        if (num_of_adjust >= top_k) {
+        if (num_of_adjust >= top_k || contrib == 0) {
             break;
         }
         
@@ -264,6 +273,11 @@ std::vector<std::tuple<std::string, int>> ArchExplorerEngine::get_bottleneck_con
               [](const auto& a, const auto& b) {
                   return std::get<1>(a) > std::get<1>(b);
               });
+
+    std::cout << "\nFinal contribution values:" << std::endl;
+    for (const auto& [name, value] : summary) {
+        std::cout << "  " << name << ": " << value << "%" << std::endl;
+    }
               
     return summary;
 }
@@ -303,10 +317,6 @@ std::map<std::string, double> ArchExplorerEngine::calc_bottleneck_contribution(
         contribution[btnk_name] = normalized * 100; // 转换为百分比
     }
     
-    std::cout << "\nFinal contribution values:" << std::endl;
-    for (const auto& [name, value] : contribution) {
-        std::cout << "  " << name << ": " << value << "%" << std::endl;
-    }
     
     return contribution;
 }

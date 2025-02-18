@@ -80,7 +80,7 @@ static inline void print_help(const char *file) {
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --jtag-test            test jtag using testcases in jtag-testcase.h\n");
   printf("  -h, --help                 print program help info\n");
-  printf("  -M, --dse_max-instr=NUM    the max number of instructions for DSE\n");
+  printf("  -P, --init-params=FILE     the file to initialize the design space\n");
   printf("\n");
 }
 
@@ -114,7 +114,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "log-end",           1, NULL, 'e' },
     { "flash",             1, NULL, 'F' },
     { "help",              0, NULL, 'h' },
-    { "dse-max-instr",     1, NULL, 'M' },
+    { "init-params",       1, NULL, 'P' },
     { 0,                   0, NULL,  0  }
   };
 
@@ -178,6 +178,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'b': args.log_begin = atoll_strict(optarg, "log-begin");  break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
       case 'F': args.flash_bin = optarg; break;
+      case 'P': args.init_params = optarg; break;
     }
   }
 
@@ -448,8 +449,13 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   Perfprocess* perfprocess = new Perfprocess(dut_ptr, 6);
   ArchExplorerEngine* engine = new ArchExplorerEngine();
   std::vector<std::string> perfNames = getIOPerfNames();
-  init_uparam();
-  std::vector<int> embedding = uparam_to_embedding();
+  std::vector<int> embedding;
+  if (args.init_params != NULL) {
+    embedding = engine->get_design_space().get_embedding_from_file(args.init_params);
+  } else {
+    embedding = engine->get_design_space().get_init_embedding();
+  }
+  init_uparam(embedding, engine->max_epoch);
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {

@@ -24,6 +24,9 @@ enum EMDIdx {
     EMD_SIZE
 };
 
+// const parameters
+#define RenameWidth 4
+#define PredictWidth 16
 
 class O3CPUDesignSpace {
 protected:
@@ -35,8 +38,14 @@ public:
     void insert_component(const std::string& component, const std::vector<int>& params);
     std::vector<int> get_component_params(const std::string& component) const;
     std::vector<int> get_init_embedding() const;
+    std::vector<int> get_embedding_from_file(const std::string& filename) const;
     void print_embedding(const std::vector<int>& embedding) const;
     void compare_embeddings(const std::vector<int>& emb1, const std::vector<int>& emb2) const;
+    bool check_embedding(const std::vector<int>& embedding) const;
+    const std::vector<std::string> param_names = {
+        "FTQ", "IBUF", "INTDQ", "FPDQ", "LSDQ", "LQ", "SQ", "ROB", 
+        "L2MSHRS", "L2SETS", "L3MSHRS", "L3SETS"
+    };
 };
 
 

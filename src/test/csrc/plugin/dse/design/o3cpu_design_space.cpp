@@ -17,13 +17,13 @@ void O3CPUDesignSpace::insert_component(
 
 void O3CPUDesignSpace::initialize() {
     components_params["FTQ"] = {2, 4, 8, 12, 16, 32, 64, 128};
-    components_params["IBUF"] = {2, 4, 8, 12, 16, 32, 64, 128, 256}; 
-    components_params["INTDQ"] = {2, 4, 8, 12};
-    components_params["FPDQ"] = {2, 4, 8, 12};
-    components_params["LSDQ"] = {2, 4, 8, 12};
-    components_params["LQ"] = {2, 4, 8, 12, 16, 32, 64, 128, 256};
-    components_params["SQ"] = {2, 4, 8, 12, 16, 32, 64, 128, 256};
-    components_params["ROB"] = {2, 4, 8, 16, 32, 64, 128, 256};
+    components_params["IBUF"] = {20, 32, 64, 128, 256}; 
+    components_params["INTDQ"] = {6, 8, 12};
+    components_params["FPDQ"] = {6, 8, 12};
+    components_params["LSDQ"] = {6, 8, 12};
+    components_params["LQ"] = {4, 8, 12, 16, 24, 32, 64, 128, 256};
+    components_params["SQ"] = {4, 8, 12, 16, 24, 32, 64, 128, 256};
+    components_params["ROB"] = {6, 8, 16, 32, 64, 128, 256};
     components_params["L2MSHRS"] = {1, 6, 14};
     components_params["L2SETS"] = {64, 128};
     components_params["L3MSHRS"] = {1, 6, 14};
@@ -42,7 +42,7 @@ std::vector<int> O3CPUDesignSpace::get_init_embedding() const {
     // 初始化向量大小为12(EMDIdx的大小)
     std::vector<int> embedding(EMDIdx::EMD_SIZE, 0);  
     embedding[EMDIdx::FTQ] = 16;
-    embedding[EMDIdx::IBUF] = 16;
+    embedding[EMDIdx::IBUF] = 20;
     embedding[EMDIdx::INTDQ] = 12;
     embedding[EMDIdx::FPDQ] = 12;
     embedding[EMDIdx::LSDQ] = 12;
@@ -52,8 +52,125 @@ std::vector<int> O3CPUDesignSpace::get_init_embedding() const {
     embedding[EMDIdx::L2MSHRS] = 14;
     embedding[EMDIdx::L2SETS] = 64;
     embedding[EMDIdx::L3MSHRS] = 14;
-    embedding[EMDIdx::L3SETS] = 64;
+    embedding[EMDIdx::L3SETS] = 512;
+    check_embedding(embedding);
     return embedding;
+}
+
+std::vector<int> O3CPUDesignSpace::get_embedding_from_file(const std::string& filename) const {
+    // 初始化向量
+    std::vector<int> embedding(EMDIdx::EMD_SIZE, 0);
+    
+    // 打开文件
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        throw std::runtime_error("Unable to open file: " + filename);
+    }
+
+
+    std::string line;
+    // 读取每一行
+    while (std::getline(file, line)) {
+        // 跳过空行和注释行
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        // 移除空白字符
+        line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
+        
+        // 查找分隔符
+        size_t pos = line.find(':');
+        if (pos == std::string::npos) {
+            continue;
+        }
+
+        // 提取参数名和值
+        std::string param = line.substr(0, pos);
+        std::string value_str = line.substr(pos + 1);
+        
+        // 查找参数索引
+        auto it = std::find(param_names.begin(), param_names.end(), param);
+        if (it != param_names.end()) {
+            int index = std::distance(param_names.begin(), it);
+            try {
+                embedding[index] = std::stoi(value_str);
+            } catch (const std::exception& e) {
+                throw std::runtime_error("Invalid value for parameter " + param + ": " + value_str);
+            }
+        }
+    }
+
+    file.close();
+
+    // 验证embedding是否有效
+    if (!check_embedding(embedding)) {
+        throw std::runtime_error("Invalid embedding configuration in file: " + filename);
+    }
+
+    return embedding;
+}
+
+bool O3CPUDesignSpace::check_embedding(const std::vector<int>& embedding) const {
+    const std::vector<std::string> param_names = {
+        "FTQ", "IBUF", "INTDQ", "FPDQ", "LSDQ", "LQ", "SQ", "ROB", 
+        "L2MSHRS", "L2SETS", "L3MSHRS", "L3SETS"
+    };
+
+    // 检查向量大小
+    if (embedding.size() != EMDIdx::EMD_SIZE) {
+        std::cout << "Invalid embedding size: " << embedding.size() 
+                 << ", expected: " << EMDIdx::EMD_SIZE << std::endl;
+        return false;
+    }
+
+    // 检查每个参数值是否在有效范围内 
+    for (size_t i = 0; i < embedding.size(); ++i) {
+        const auto& valid_params = components_params.at(param_names[i]);
+        if (std::find(valid_params.begin(), valid_params.end(), embedding[i]) 
+            == valid_params.end()) {
+            std::cout << "Invalid value for " << param_names[i] << ": " 
+                     << embedding[i] << std::endl;
+            std::cout << "Valid values are: ";
+            for (const auto& val : valid_params) {
+                std::cout << val << " ";
+            }
+            std::cout << std::endl;
+            return false;
+        }
+    }
+
+    // 检查特定参数关系
+    if (embedding[EMDIdx::ROB] <= RenameWidth) {
+        std::cout << "ROB size must be greater than RenameWidth" << std::endl;
+        return false;
+    }
+    if (embedding[EMDIdx::LQ] <= 2) {
+        std::cout << "LQ size must be greater than 2" << std::endl;
+        return false;
+    }
+    if (embedding[EMDIdx::SQ] <= 2) {
+        std::cout << "SQ size must be greater than 2" << std::endl;
+        return false;
+    }
+    if (embedding[EMDIdx::IBUF] <= PredictWidth) {
+        std::cout << "IBUF size must be greater than PredictWidth" << std::endl;
+        return false;
+    }
+    if (embedding[EMDIdx::INTDQ] <= RenameWidth) {
+        std::cout << "INTDQ size must be greater than RenameWidth" << std::endl;
+        return false;
+    }
+    if (embedding[EMDIdx::FPDQ] <= RenameWidth) {
+        std::cout << "FPDQ size must be greater than RenameWidth" << std::endl;
+        return false;
+    }
+    if (embedding[EMDIdx::LSDQ] <= RenameWidth) {
+        std::cout << "LSDQ size must be greater than RenameWidth" << std::endl;
+        return false;
+    }
+
+    return true;
 }
 
 

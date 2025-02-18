@@ -1,21 +1,12 @@
 #include "uparam.h"
 
 uparam_t uparam;
+uint64_t max_epoch;
 
-void init_uparam() {
+void init_uparam(std::vector<int> embedding, int epoch) {
     printf("init_uparam\n");
-    uparam.robsize = 64;
-    uparam.lqsize = 32;
-    uparam.sqsize = 24;
-    uparam.ftqsize = 16;
-    uparam.ibufsize = 16;
-    uparam.intdqsize = 12;
-    uparam.fpdqsize = 12;
-    uparam.lsdqsize = 12;
-    uparam.l2mshrs = 14;
-    uparam.l3mshrs = 14;
-    uparam.l2sets = 128;
-    uparam.l3sets = 512;
+    embedding_to_uparam(embedding);
+    max_epoch = epoch;
 }
 
 void set_uparam(uint64_t addr, uint64_t data) {
@@ -135,6 +126,9 @@ extern "C" void uparam_read(uint64_t addr, uint64_t *data) {
         case L3SETS_ADDR:
             *data = uparam.l3sets;
             break;
+        case MAX_EPOCH_ADDR:
+            *data = max_epoch;
+            break;
         default:
             break;
     }
@@ -176,6 +170,9 @@ extern "C" void uparam_read(uint64_t addr, uint64_t *data) {
             break;
         case L3SETS_ADDR:
             printf("uparam_read: L3SETS = %d\n", *data);
+            break;
+        case MAX_EPOCH_ADDR:
+            printf("uparam_read: MAX_EPOCH = %d\n", *data);
             break;
         default:
             break;
