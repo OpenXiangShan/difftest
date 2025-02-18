@@ -29,7 +29,8 @@ enum BIdx {
     BTK_FpMultDiv,      // 13
     BTK_RdWrPort,       // 14
     BTK_RAW,            // 15
-    BTK_Virtual         // 16
+    BTK_Virtual,        // 16
+    BTK_Serial          // 17
 };
 
 
@@ -203,6 +204,15 @@ public:
 };
 
 
+class Serial : public Bottleneck
+{
+public:
+    Serial() : Bottleneck("Serial") {}
+    ~Serial() = default;
+
+};
+
+
 class BottleneckReport {
 public:
     BottleneckReport() {
@@ -223,6 +233,7 @@ public:
         lack_rd_wr_port = 0;
         raw = 0;
         _virtual = 0;
+        serial = 0;
     };
     ~BottleneckReport() = default;
 
@@ -293,6 +304,10 @@ public:
 
     void incr_virtual(latency delay) {
         _virtual += delay;
+    }
+
+    void incr_serial(latency delay) {
+        serial += delay;
     }
 
     void set_length(latency _length) {
@@ -371,6 +386,10 @@ public:
         return _virtual;
     }
 
+    latency get_serial() {
+        return serial;
+    }
+
 private:
     latency length;
 
@@ -391,6 +410,7 @@ private:
     latency lack_rd_wr_port;
     latency raw;
     latency _virtual;
+    latency serial;
 };
 
 

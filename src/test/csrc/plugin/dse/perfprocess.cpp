@@ -210,7 +210,9 @@ int Perfprocess::update_deg_v2() {
             << " : IQ=" << find_perfCnt("RS_" + std::to_string(i))
             << " : FU=" << find_perfCnt("FU_" + std::to_string(i))
             << " : SRC=" << src_str
-            << " : DST=" << (dest == 0 ? "" : std::to_string(dest));
+            << " : DST=" << (dest == 0 ? "" : std::to_string(dest))
+            << " : BlockFromDPQ=" << find_perfCnt("BlockFromDPQ_" + std::to_string(i))
+            << " : BlockFromSerial=" << find_perfCnt("BlockFromSerial_" + std::to_string(i));
         
         traces.push_back(trace.str());
         if (true) {
