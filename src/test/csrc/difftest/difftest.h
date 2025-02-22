@@ -262,6 +262,13 @@ public:
 #endif
               dut->regs_int.value + src;
   }
+
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+  inline uint64_t *arch_vecreg(uint8_t src) {
+    return dut->regs_vec.value + src;
+  }
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+
   inline DiffTestState *get_dut() {
     return dut;
   }
@@ -351,6 +358,9 @@ protected:
   void do_interrupt();
   void do_exception();
   int do_instr_commit(int index);
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
+  void do_vec_load_check(int index, DifftestLoadEvent load_event);
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
   void do_load_check(int index);
   int do_store_check();
   int do_refill_check(int cacheid);
@@ -379,7 +389,17 @@ protected:
         if (dut->commit[i].vecwen) {
       return
 #ifdef CONFIG_DIFFTEST_VECWRITEBACK
-          dut->wb_vec[dut->commit[i].wpdest].data;
+          dut->wb_vec[dut->commit[i].wpdest].data[0];
+#else
+          dut->regs_vec.value[dut->commit[i].wdest];
+#endif // CONFIG_DIFFTEST_VECWRITEBACK
+    } else
+#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+        if (dut->commit[i].v0wen) {
+      return
+#ifdef CONFIG_DIFFTEST_VECWRITEBACK
+          dut->wb_v0[dut->commit[i].wpdest].data[0];
 #else
           dut->regs_vec.value[dut->commit[i].wdest];
 #endif // CONFIG_DIFFTEST_VECWRITEBACK

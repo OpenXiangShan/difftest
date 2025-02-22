@@ -297,8 +297,15 @@ class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
   override val desiredCppName: String = "wb_fp"
 }
 
-class DiffVecWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
+class DiffVecWriteback(numRegs: Int = 32) extends VecDataWriteback(numRegs) with DifftestBundle {
   override val desiredCppName: String = "wb_vec"
+  override protected val needFlatten: Boolean = true
+  override def supportsSquashBase: Bool = true.B
+  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
+}
+
+class DiffVecV0Writeback(numRegs: Int = 32) extends DiffVecWriteback(numRegs) {
+  override val desiredCppName: String = "wb_v0"
 }
 
 class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
@@ -366,9 +373,12 @@ class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex
 
 class DiffLoadEventQueue extends DiffLoadEvent with DifftestWithStamp with DiffTestIsInherited {
   val commitData = UInt(64.W)
+  val vecCommitData = Vec(16, UInt(64.W))
   val regWen = Bool()
   val wdest = UInt(8.W)
   val fpwen = Bool()
+  val vecwen = Bool()
+  val v0wen = Bool()
   override val squashQueue: Boolean = true
 }
 

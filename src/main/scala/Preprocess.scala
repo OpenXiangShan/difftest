@@ -59,6 +59,65 @@ object Preprocess {
       Seq.fill(commits.length)(0.U)
     }
   }
+
+  def getVecCommitData(
+    bundles: MixedVec[DifftestBundle],
+    commits: Seq[DiffInstrCommit],
+  ): Seq[Seq[Vec[UInt]]] = {
+    if (bundles.exists(_.desiredCppName == "wb_vec")) {
+      val numCores = bundles.count(_.isUniqueIdentifier)
+      val vecWriteBacks = bundles.filter(_.desiredCppName == "wb_vec").map(_.asInstanceOf[DiffVecWriteback])
+      val v0WriteBacks = bundles.filter(_.desiredCppName == "wb_v0").map(_.asInstanceOf[DiffVecWriteback])
+      val vecPhyRf = Reg(Vec(numCores, Vec(vecWriteBacks.head.numElements, Vec(2, UInt(64.W)))))
+      val v0PhyRf = Reg(Vec(numCores, Vec(v0WriteBacks.head.numElements, Vec(2, UInt(64.W)))))
+
+      for (vecWb <- vecWriteBacks) {
+        when(vecWb.valid) {
+          vecPhyRf(vecWb.coreid)(vecWb.address) := vecWb.data
+        }
+      }
+      for (v0Wb <- v0WriteBacks) {
+        when(v0Wb.valid) {
+          v0PhyRf(v0Wb.coreid)(v0Wb.address) := v0Wb.data
+        }
+      }
+
+      commits.map { c =>
+        val otherData = c.otherwpdest.map { case pdest =>
+          WireInit(vecPhyRf(c.coreid)(pdest))
+        }
+
+        when(c.valid) {
+          c.otherwpdest.zipWithIndex.map { case (pdest, i) =>
+            for (vecWb <- vecWriteBacks) {
+              when(vecWb.valid && vecWb.coreid === c.coreid && vecWb.address === pdest) {
+                otherData(i) := vecWb.data
+              }
+            }
+          }
+        }
+
+        // v0 register will only be used as the first register
+        when(c.v0wen) {
+          otherData(0) := v0PhyRf(c.coreid)(c.otherwpdest(0))
+          when(c.valid) {
+            for (v0Wb <- v0WriteBacks) {
+              when(v0Wb.valid && v0Wb.coreid === c.coreid && v0Wb.address === c.otherwpdest(0)) {
+                otherData(0) := v0Wb.data
+              }
+            }
+          }
+        }
+
+        otherData
+      }
+
+    } else {
+      Seq.fill(commits.length)(Seq.fill(8)(VecInit(Seq.fill(2)(0.U(64.W)))))
+    }
+
+  }
+
 }
 
 class PreprocessEndpoint(bundles: Seq[DifftestBundle]) extends Module {
@@ -70,14 +129,21 @@ class PreprocessEndpoint(bundles: Seq[DifftestBundle]) extends Module {
   // So we buffer writeBacks until instrCommit, and submit corresponding data
   val commits = in.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit]).toSeq
   val fpData = Preprocess.getCommitData(in, commits, "wb_fp", "regs_fp")
-  val vecData = Preprocess.getCommitData(in, commits, "wb_vec", "regs_vec")
   val intData = Preprocess.getCommitData(in, commits, "wb_int", "regs_int")
+  val vecData = Preprocess.getVecCommitData(in, commits)
   val commitData = commits.zip(fpData).zip(vecData).zip(intData).map { case (((c, f), v), i) =>
     val cd = WireInit(0.U.asTypeOf(new DiffCommitData))
+    val vectorWen = c.v0wen || c.vecwen
     cd.coreid := c.coreid
     cd.index := c.index
     cd.valid := c.valid
-    cd.data := Mux(c.fpwen, f, Mux(c.vecwen, v, i))
+    cd.data := Mux(c.fpwen, f, i)
+    when(vectorWen) {
+      for (index <- 0 until 8) {
+        cd.vecData(2 * index) := v(index)(0)
+        cd.vecData(2 * index + 1) := v(index)(1)
+      }
+    }
     cd
   }
 

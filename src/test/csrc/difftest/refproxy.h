@@ -153,7 +153,10 @@ public:
   f(ref_raise_critical_error, difftest_raise_critical_error, bool)                                          \
   f(ref_get_store_event_other_info, difftest_get_store_event_other_info, void, void*)                       \
   f(ref_sync_aia, difftest_sync_aia, void, void*)                                                           \
-  f(ref_sync_custom_mflushpwr, difftest_sync_custom_mflushpwr, void, bool)
+  f(ref_sync_custom_mflushpwr, difftest_sync_custom_mflushpwr, void, bool)                                  \
+  f(ref_get_vec_load_vdNum, difftest_get_vec_load_vdNum, int, )                                                 \
+  f(ref_get_vec_load_dual_goldenmem_reg, difftest_get_vec_load_dual_goldenmem_reg, void*, )                                                       \
+  f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -212,6 +215,11 @@ public:
               regs_int.value + src;
   }
 
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+  inline uint64_t *arch_vecreg(uint8_t src) {
+    return regs_vec.value + src;
+  }
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
   inline void sync(bool is_from_dut = false) {
     ref_regcpy(&regs_int, is_from_dut, is_from_dut);
   }
@@ -289,6 +297,36 @@ public:
       ref_sync_custom_mflushpwr(l2FlushDone);
     } else {
       printf("Does not support sync custom CSR mflushpwr.\n");
+    }
+  }
+
+  inline bool check_ref_vec_load_goldenmem() {
+    return ref_get_vec_load_vdNum && ref_get_vec_load_dual_goldenmem_reg && ref_update_vec_load_goldenmen;
+  }
+
+  inline int get_ref_vdNum() {
+    if (ref_get_vec_load_vdNum) {
+      return ref_get_vec_load_vdNum();
+    } else {
+      Info("Does not support the get vec load vd num.\n");
+      return 0;
+    }
+  }
+
+  inline void *get_vec_goldenmem_reg() {
+    if (ref_get_vec_load_dual_goldenmem_reg) {
+      return ref_get_vec_load_dual_goldenmem_reg();
+    } else {
+      Info("Does not support the get vec load goldenmem reg.\n");
+      return nullptr;
+    }
+  }
+
+  inline void vec_update_goldenmem() {
+    if (ref_update_vec_load_goldenmen) {
+      ref_update_vec_load_goldenmen();
+    } else {
+      Info("Does not support the get vec update goldenmem.\n");
     }
   }
 
