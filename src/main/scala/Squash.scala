@@ -67,9 +67,12 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
     lq.inheritFrom(ld)
     lq.bits.stamp := stamp(ld.bits.coreid) + sum
     lq.bits.commitData := cd.bits.data
+    lq.bits.vecCommitData := cd.bits.vecData
     lq.bits.regWen := ((c.bits.rfwen && c.bits.wdest =/= 0.U) || c.bits.fpwen) && !c.bits.vecwen
     lq.bits.wdest := c.bits.wdest
     lq.bits.fpwen := c.bits.fpwen
+    lq.bits.vecwen := c.bits.vecwen
+    lq.bits.v0wen := c.bits.v0wen
     lq
   }
 
