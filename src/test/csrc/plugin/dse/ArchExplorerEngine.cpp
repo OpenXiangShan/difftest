@@ -83,12 +83,10 @@ void ArchExplorerEngine::decrease_hardware_resource(std::vector<int>& embedding,
             adjust = adjust_component("SQ", embedding, EMDIdx::SQ, false);
         }
         else if (btnk_name == "Lack INT RF") {
-            adjust = false;
-            INFO("We do not support Int RF adjustment\n");
+            adjust = adjust_component("INTPHYREGS", embedding, EMDIdx::INTPHYREGS, false);
         }
         else if (btnk_name == "Lack FP RF") {
-            adjust = false;
-            INFO("We do not support FP RF adjustment\n");
+            adjust = adjust_component("FPPHYREGS", embedding, EMDIdx::FPPHYREGS, false);
         }
         else if (btnk_name == "Lack IQ") {
             adjust = adjust_component("IBUF", embedding, EMDIdx::IBUF, false);
@@ -163,12 +161,10 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
             adjust = adjust_component("SQ", embedding, EMDIdx::SQ, true);
         }
         else if (btnk_name == "Lack INT RF") {
-            adjust = false;
-            INFO("We do not support Int RF adjustment\n");
+            adjust = adjust_component("INTPHYREGS", embedding, EMDIdx::INTPHYREGS, true);
         }
         else if (btnk_name == "Lack FP RF") {
-            adjust = false;
-            INFO("We do not support FP RF adjustment\n");
+            adjust = adjust_component("FPPHYREGS", embedding, EMDIdx::FPPHYREGS, true);
         }
         else if (btnk_name == "Lack IQ") {
             adjust = adjust_component("IBUF", embedding, EMDIdx::IBUF, true);

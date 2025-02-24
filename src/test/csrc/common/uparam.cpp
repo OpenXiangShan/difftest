@@ -48,6 +48,15 @@ void set_uparam(uint64_t addr, uint64_t data) {
         case L3SETS_ADDR:
             uparam.l3sets = data;
             break;
+        case MAX_EPOCH_ADDR:
+            max_epoch = data;
+            break;
+        case INTPHYREGS_ADDR:
+            uparam.intphyregs = data;
+            break;
+        case FPPHYREGS_ADDR:
+            uparam.fpphyregs = data;
+            break;
         default:
             break;
     }
@@ -67,6 +76,8 @@ void embedding_to_uparam(std::vector<int> embedding) {
     uparam.l2sets = embedding[EMDIdx::L2SETS];
     uparam.l3mshrs = embedding[EMDIdx::L3MSHRS];
     uparam.l3sets = embedding[EMDIdx::L3SETS];
+    uparam.intphyregs = embedding[EMDIdx::INTPHYREGS];
+    uparam.fpphyregs = embedding[EMDIdx::FPPHYREGS];
 }
 
 std::vector<int> uparam_to_embedding() {
@@ -84,6 +95,8 @@ std::vector<int> uparam_to_embedding() {
     embedding[EMDIdx::L2SETS] = uparam.l2sets;
     embedding[EMDIdx::L3MSHRS] = uparam.l3mshrs;
     embedding[EMDIdx::L3SETS] = uparam.l3sets;
+    embedding[EMDIdx::INTPHYREGS] = uparam.intphyregs;
+    embedding[EMDIdx::FPPHYREGS] = uparam.fpphyregs;
     return embedding;
 }
 
@@ -129,7 +142,14 @@ extern "C" void uparam_read(uint64_t addr, uint64_t *data) {
         case MAX_EPOCH_ADDR:
             *data = max_epoch;
             break;
+        case INTPHYREGS_ADDR:
+            *data = uparam.intphyregs;
+            break;
+        case FPPHYREGS_ADDR:
+            *data = uparam.fpphyregs;
+            break;
         default:
+            assert("uparam_read: invalid address");
             break;
     }
 
@@ -173,6 +193,12 @@ extern "C" void uparam_read(uint64_t addr, uint64_t *data) {
             break;
         case MAX_EPOCH_ADDR:
             printf("uparam_read: MAX_EPOCH = %d\n", *data);
+            break;
+        case INTPHYREGS_ADDR:
+            printf("uparam_read: INTPHYREGS = %d\n", *data);
+            break;
+        case FPPHYREGS_ADDR:
+            printf("uparam_read: FPPHYREGS = %d\n", *data);
             break;
         default:
             break;
