@@ -55,7 +55,8 @@ case class GatewayConfig(
   def maxStep: Int = if (isBatch) batchSize else 1
   def stepWidth: Int = log2Ceil(maxStep + 1)
   def replayWidth: Int = log2Ceil(replaySize + 1)
-  def batchArgByteLen: (Int, Int) = if (isNonBlock || isFPGA) (3600, 400) else (7200, 800)
+  def batchArgByteLen: (Int, Int) = if (isFPGA) (1900, 100) else if (isNonBlock) (3600, 400) else (7200, 800)
+  def batchBitWidth: Int = batchArgByteLen match { case (len1, len2) => (len1 + len2) * 8 }
   def batchSplit: Boolean = !isFPGA // Disable split for FPGA to reduce gates
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
@@ -84,6 +85,7 @@ case class GatewayConfig(
   def vMacros: Seq[String] = {
     val macros = ListBuffer.empty[String]
     macros += s"CONFIG_DIFFTEST_STEPWIDTH ${stepWidth}"
+    macros += s"CONFIG_DIFFTEST_BATCH_IO_WITDH ${batchBitWidth}"
     if (isNonBlock) macros += "CONFIG_DIFFTEST_NONBLOCK"
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
@@ -271,12 +273,12 @@ object GatewaySink {
     }
     val out = Option.when(config.isFPGA) {
       IO(new Bundle {
-        val batch = Output(chiselTypeOf(io))
+        val data = Output(UInt(config.batchBitWidth.W))
         val enable = Output(Bool())
       })
     }
     if (config.isFPGA) {
-      out.get.batch := io
+      out.get.data := Cat(io.data, io.info)
       out.get.enable := control.enable
       dontTouch(out.get)
     }
