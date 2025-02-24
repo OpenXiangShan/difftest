@@ -43,7 +43,6 @@ static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
 static uint64_t warmup_instr = 0;
-static svScope difftest_endpoint_scope;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   double core_cpi[NUM_CORES];
@@ -55,6 +54,7 @@ enum {
   SIMV_RUN,
   SIMV_DONE,
   SIMV_FAIL,
+  SIMV_WARMUP,
 } simv_state;
 
 extern "C" void set_bin_file(char *s) {
@@ -98,10 +98,6 @@ extern "C" void set_gcpt_bin(char *s) {
 extern "C" void set_max_instrs(uint64_t mc) {
   printf("set max instrs: %lu\n", mc);
   max_instrs = mc;
-}
-
-extern "C" void set_difftest_endpoint_scope() {
-  difftest_endpoint_scope = svGetScope();
 }
 
 extern "C" uint64_t get_stuck_limit() {
@@ -169,17 +165,6 @@ extern "C" void set_no_diff() {
 
 extern "C" void set_simjtag() {
   enable_simjtag = true;
-}
-
-extern "C" void set_perfCtrl_clean();
-
-void difftest_perfCtrl_clean() {
-  if (difftest_endpoint_scope == NULL) {
-    printf("Error: Could not retrieve DifftestEndpoint scope, set first\n");
-    assert(difftest_endpoint_scope);
-  }
-  svSetScope(difftest_endpoint_scope);
-  set_perfCtrl_clean();
 }
 
 extern "C" uint8_t simv_init() {
@@ -263,9 +248,9 @@ extern "C" uint8_t simv_step() {
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
     if (warmup_instr != 0 && trap->instrCnt > warmup_instr) {
-      difftest_perfCtrl_clean();
       warmup_instr = 0;
       Info("Warmup finished. The performance counters will be reset.\n");
+      return SIMV_WARMUP;
     }
 
     if (max_instrs != 0) { // 0 for no limit
@@ -363,7 +348,7 @@ extern "C" uint8_t simv_nstep(uint8_t step) {
 
   for (int i = 0; i < step; i++) {
     int ret = simv_step();
-    if (ret) {
+    if (ret == SIMV_DONE || ret == SIMV_FAIL) {
       simv_result = ret;
       simv_finish();
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT

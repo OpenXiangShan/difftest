@@ -51,7 +51,6 @@ import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
 import "DPI-C" function void set_overwrite_autoset();
 import "DPI-C" function void set_warmup_instr(longint instrs);
-import "DPI-C" context function void set_difftest_endpoint_scope();
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -69,9 +68,11 @@ import "DPI-C" function void set_iotrace_name(string name);
 
 `define SIMV_DONE     8'h1
 `define SIMV_FAIL     8'h2
+`define SIMV_WARMUP   8'h3
 
 reg  [63:0] difftest_logCtrl_begin_r;
 reg  [63:0] difftest_logCtrl_end_r;
+reg difftest_perfCtrl_clean_r;
 
 string bin_file;
 string flash_bin_file;
@@ -103,7 +104,6 @@ initial begin
   end
   stuck_limit = 0;
 `ifndef TB_NO_DPIC
-  set_difftest_endpoint_scope();
   stuck_limit = get_stuck_limit();
   // workload: bin file
   if ($test$plusargs("workload")) begin
@@ -362,29 +362,15 @@ end
 /*
  * perf/log ctrl
  */
-reg difftest_perfCtrl_clean_r;
 assign difftest_logCtrl_begin = difftest_logCtrl_begin_r;
 assign difftest_logCtrl_end = difftest_logCtrl_end_r;
 assign difftest_logCtrl_level = 0;
-assign difftest_perfCtrl_clean = difftest_perfCtrl_clean_r;
-
-export "DPI-C" task set_perfCtrl_clean;
-task set_perfCtrl_clean();
-  difftest_perfCtrl_clean_r <= 1'b1;
-endtask
-
-always @(posedge clock) begin
-  if (reset) begin
-    difftest_perfCtrl_clean_r <= 1'b0;
-  end
-  else if (difftest_perfCtrl_clean_r) begin
-    difftest_perfCtrl_clean_r <= 1'b0;
-  end
-end
 
 `ifndef TB_NO_DPIC
-assign difftest_perfCtrl_dump = simv_result != 0;
+assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP;
+assign difftest_perfCtrl_dump = simv_result == `SIMV_DONE || simv_result == `SIMV_FAIL;
 `else
+assign difftest_perfCtrl_clean = 0;
 assign difftest_perfCtrl_dump = 0;
 `endif // TB_NO_DPIC
 
