@@ -114,6 +114,32 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   out := assembler.out
 }
 
+class BatchCluster(alignWidth: Int, length: Int, param: BatchParam) extends Module {
+  val in_data = IO(Input(Vec(length, UInt(alignWidth.W))))
+  val in_valids = IO(Input(Vec(length, Bool())))
+  val out = IO(Output(UInt((length * alignWidth).W)))
+  val data_bytes = IO(Output(UInt(param.StatsDataWidth.W)))
+  val info_size = IO(Output(UInt(param.StatsInfoWidth.W)))
+  val v_size = IO(Output(UInt(8.W)))
+  val valid_sum = Seq.tabulate(length) { idx =>
+    VecInit(in_valids.map(_.asUInt).take(idx + 1).toSeq).reduce(_ +& _)
+  }
+  v_size := valid_sum.last
+
+  val offset_map = Seq.tabulate(length + 1) { vi => (vi.U, (alignWidth / 8 * vi).U) }
+  data_bytes := LookupTree(v_size, offset_map)
+  info_size := Mux(v_size =/= 0.U, 1.U, 0.U)
+
+  val v_aligned = in_data.zip(in_valids).map { case (gen, v) => Mux(v, gen, 0.U) }
+  val collect_data = Wire(Vec(length, UInt(alignWidth.W)))
+  collect_data.zipWithIndex.foreach { case (gen, vid) =>
+    gen := VecInit((vid until length).map { idx =>
+      Mux(valid_sum(idx) === (vid + 1).U, v_aligned(idx), 0.U)
+    }).reduce(_ | _)
+  }
+  out := collect_data.asUInt
+}
+
 class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val step_data = IO(Output(UInt(param.StepDataBitLen.W)))
@@ -134,22 +160,17 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   }))
   val group_vsize = Wire(Vec(param.StepGroupSize, UInt(8.W)))
   sorted.zipWithIndex.foreach { case (v_gens, gid) =>
-    val aligned = v_gens.map(_.bits.getByteAlign)
-    val valids = v_gens.map(_.valid)
-    val valid_sum = Seq.tabulate(valids.length) { idx =>
-      VecInit(valids.map(_.asUInt).take(idx + 1).toSeq).reduce(_ +& _)
-    }
-    val v_size = valid_sum.last
+    val cluster = Module(new BatchCluster(group_bitlen(gid), group_length(gid), param))
+    cluster.in_data := v_gens.map(_.bits.getByteAlign)
+    cluster.in_valids := v_gens.map(_.valid)
+    val v_size = cluster.v_size
+    val data_bytes = cluster.data_bytes
+    val info_size = cluster.info_size
     group_vsize(gid) := v_size
     val info = Wire(new BatchInfo)
     info.id := Batch.getBundleID(v_gens.head.bits).U
     info.num := v_size
     group_info(gid) := Mux(v_size =/= 0.U, info.asUInt, 0.U)
-    val data_bytes = {
-      val offset_map = Seq.tabulate(valids.length + 1) { vi => (vi.U, (group_bitlen(gid) / 8 * vi).U) }
-      LookupTree(v_size, offset_map)
-    }
-    val info_size = Mux(VecInit(valids.toSeq).asUInt.orR, 1.U, 0.U)
     if (gid == 0) {
       group_status(gid).data_bytes := data_bytes
       group_status(gid).info_size := info_size
@@ -157,14 +178,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
       group_status(gid).data_bytes := group_status(gid - 1).data_bytes +& data_bytes
       group_status(gid).info_size := group_status(gid - 1).info_size +& info_size
     }
-    val v_aligned = aligned.zip(valids).map { case (gen, v) => Mux(v, gen, 0.U) }
-    val collect_data = Wire(Vec(group_length(gid), UInt(group_bitlen(gid).W)))
-    collect_data.zipWithIndex.foreach { case (gen, vid) =>
-      gen := VecInit((vid until group_length(gid)).map { idx =>
-        Mux(valid_sum(idx) === (vid + 1).U, v_aligned(idx), 0.U)
-      }).reduce(_ | _)
-    }
-    group_data(gid) := collect_data.asUInt
+    group_data(gid) := cluster.out
   }
 
   // Stage 2: delay grouped data, concat different group
@@ -177,8 +191,9 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   BatchStep.id := Batch.getTemplate.length.U
   BatchStep.num := info_num // unused, only for debugging
   // Collect from tail, collect(i) include last 0~i
-  val toCollect_delays = Seq.tabulate(param.StepGroupSize){idx => group_length.reverse.map(log2Up(_)).take(idx).sum / 2}
+//  val toCollect_delays = Seq.tabulate(param.StepGroupSize){idx => group_length.reverse.map(log2Up(_)).take(idx).sum / 2}
 //  val toCollect_delays = Seq.fill(param.StepGroupSize){0}
+  val toCollect_delays = (0 until param.StepGroupSize)
   val toCollect_data = delay_group_data.reverse.zip(toCollect_delays).map{case (gen, delay) => Delayer(gen, delay, true)}
   val toCollect_info = delay_group_info.reverse.zip(toCollect_delays).map{case (gen, delay) => Delayer(gen, delay, true)}
   val toCollect_vsize = delay_group_vsize.reverse.zip(toCollect_delays).map{case (gen, delay) => Delayer(gen, delay, true)}
