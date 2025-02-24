@@ -18,6 +18,8 @@ struct uparam_t {
     int l3mshrs;
     int l2sets;
     int l3sets;
+    int intphyregs;
+    int fpphyregs;
 };
 
 extern uint64_t max_epoch;
@@ -38,6 +40,8 @@ extern uparam_t uparam;
 #define L3MSHRS_ADDR        0x0048
 #define L2SETS_ADDR         0x0050
 #define L3SETS_ADDR         0x0058
+#define INTPHYREGS_ADDR     0x0060
+#define FPPHYREGS_ADDR      0x0068
 
 #define MAX_EPOCH_ADDR      0x1000
 
