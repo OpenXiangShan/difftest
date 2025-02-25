@@ -45,7 +45,10 @@ static uint32_t overwrite_nbytes = 0xe00;
 static uint64_t warmup_instr = 0;
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
+  bool core_warmup[NUM_CORES];
   double core_cpi[NUM_CORES];
+  uint64_t core_warmup_instr[NUM_CORES];
+  uint64_t core_warmup_cycle[NUM_CORES];
   uint8_t core_trap_num;
 };
 static core_end_info_t core_end_info;
@@ -247,9 +250,11 @@ extern "C" uint8_t simv_step() {
 
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
-    if (warmup_instr != 0 && trap->instrCnt > warmup_instr) {
+    // TODO: Take the first triggered core as the baseline for now
+    if (warmup_instr != 0 && !core_end_info.core_warmup[i] && trap->instrCnt > warmup_instr) {
+      Info("Warmup finished. The performance counters will be reset on %lx.\n", trap->instrCnt);
       warmup_instr = 0;
-      Info("Warmup finished. The performance counters will be reset.\n");
+      core_end_info.core_warmup[i] = true;
       return SIMV_WARMUP;
     }
 
@@ -261,7 +266,13 @@ extern "C" uint8_t simv_step() {
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
         difftest[i]->display_stats();
-        core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
+        if (core_end_info.core_warmup[i]) {
+          core_end_info.core_cpi[i] = (double)(trap->cycleCnt - core_end_info.core_warmup_cycle[i]) /
+                                      (double)(trap->instrCnt - core_end_info.core_warmup_instr[i]);
+          Info(ANSI_COLOR_MAGENTA "Core-%d final_ipc: %f\n" ANSI_COLOR_RESET, i, 1.0 / core_end_info.core_cpi[i]);
+        } else {
+          core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
+        }
         if (core_end_info.core_trap_num == NUM_CORES) {
 #ifdef OUTPUT_CPI_TO_FILE
           if (output_cpi_to_file())
