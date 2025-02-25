@@ -75,6 +75,7 @@ void ArchExplorerEngine::decrease_hardware_resource(std::vector<int>& embedding,
         }
         else if (btnk_name == "BP miss") {
             adjust = adjust_component("FTQ", embedding, EMDIdx::FTQ, false);
+            adjust = adjust_component("RASSIZE", embedding, EMDIdx::RASSIZE, false);
         }
         else if (btnk_name == "Lack LQ") {
             adjust = adjust_component("LQ", embedding, EMDIdx::LQ, false);
@@ -153,6 +154,7 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
         }
         else if (btnk_name == "BP miss") {
             adjust = adjust_component("FTQ", embedding, EMDIdx::FTQ, true);
+            adjust = adjust_component("RASSIZE", embedding, EMDIdx::RASSIZE, true);
         }
         else if (btnk_name == "Lack LQ") {
             adjust = adjust_component("LQ", embedding, EMDIdx::LQ, true);

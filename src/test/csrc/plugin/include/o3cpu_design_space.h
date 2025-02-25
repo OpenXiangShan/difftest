@@ -21,6 +21,7 @@ enum EMDIdx {
     L3SETS,
     INTPHYREGS,
     FPPHYREGS,
+    RASSIZE,
 
     // size
     EMD_SIZE
@@ -46,7 +47,8 @@ public:
     bool check_embedding(const std::vector<int>& embedding) const;
     const std::vector<std::string> param_names = {
         "FTQ", "IBUF", "INTDQ", "FPDQ", "LSDQ", "LQ", "SQ", "ROB", 
-        "L2MSHRS", "L2SETS", "L3MSHRS", "L3SETS", "INTPHYREGS", "FPPHYREGS"
+        "L2MSHRS", "L2SETS", "L3MSHRS", "L3SETS", "INTPHYREGS", "FPPHYREGS",
+        "RASSIZE"
     };
 };
 
