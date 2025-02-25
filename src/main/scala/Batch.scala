@@ -94,7 +94,7 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 
   // Collect valid bundles of same cycle
   val collector = Module(new BatchCollector(bundles, param))
-  collector.in := in
+  collector.in := RegNext(in)
   val step_data = collector.step_data
   val step_info = collector.step_info
   val step_enable = collector.step_enable
