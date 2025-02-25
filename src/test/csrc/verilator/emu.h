@@ -58,6 +58,8 @@ struct EmuArgs {
   bool dump_tl;
   bool jtag_test;
   const char *init_params;
+  uint64_t max_deg_instrs;
+  bool enable_deg_visualize;
 
   EmuArgs() {
     seed = 0;
@@ -85,6 +87,8 @@ struct EmuArgs {
     dump_tl = false;
     jtag_test = false;
     init_params = NULL;
+    max_deg_instrs = 100;
+    enable_deg_visualize = false;
   }
 };
 

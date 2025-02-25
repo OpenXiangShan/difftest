@@ -16,14 +16,14 @@ void O3CPUDesignSpace::insert_component(
 }
 
 void O3CPUDesignSpace::initialize() {
-    components_params["FTQ"] = {2, 4, 8, 12, 16, 32, 64, 128};
+    components_params["FTQ"] = {2, 4, 8, 12, 16, 32, 64};
     components_params["IBUF"] = {20, 32, 64, 128, 256}; 
     components_params["INTDQ"] = {6, 8, 12};
     components_params["FPDQ"] = {6, 8, 12};
     components_params["LSDQ"] = {6, 8, 12};
     components_params["LQ"] = {4, 8, 12, 16, 24, 32, 64, 128, 256};
     components_params["SQ"] = {4, 8, 12, 16, 24, 32, 64, 128, 256};
-    components_params["ROB"] = {6, 8, 16, 32, 64, 128, 256};
+    components_params["ROB"] = {6, 8, 16, 24, 32, 48, 64, 80, 96, 128, 256};
     components_params["L2MSHRS"] = {1, 6, 14};
     components_params["L2SETS"] = {64, 128};
     components_params["L3MSHRS"] = {1, 6, 14};
