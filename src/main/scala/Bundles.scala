@@ -48,6 +48,10 @@ sealed trait DifftestBaseBundle extends Bundle {
   }
 }
 
+class DeltaElem extends DifftestBaseBundle {
+  val data = UInt(64.W)
+}
+
 class ArchEvent extends DifftestBaseBundle with HasValid {
   val interrupt = UInt(32.W)
   val exception = UInt(32.W)
