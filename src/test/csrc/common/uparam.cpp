@@ -57,6 +57,9 @@ void set_uparam(uint64_t addr, uint64_t data) {
         case FPPHYREGS_ADDR:
             uparam.fpphyregs = data;
             break;
+        case RASSIZE_ADDR:
+            uparam.rasssize = data;
+            break;
         default:
             break;
     }
@@ -78,6 +81,7 @@ void embedding_to_uparam(std::vector<int> embedding) {
     uparam.l3sets = embedding[EMDIdx::L3SETS];
     uparam.intphyregs = embedding[EMDIdx::INTPHYREGS];
     uparam.fpphyregs = embedding[EMDIdx::FPPHYREGS];
+    uparam.rasssize = embedding[EMDIdx::RASSIZE];
 }
 
 std::vector<int> uparam_to_embedding() {
@@ -97,6 +101,7 @@ std::vector<int> uparam_to_embedding() {
     embedding[EMDIdx::L3SETS] = uparam.l3sets;
     embedding[EMDIdx::INTPHYREGS] = uparam.intphyregs;
     embedding[EMDIdx::FPPHYREGS] = uparam.fpphyregs;
+    embedding[EMDIdx::RASSIZE] = uparam.rasssize;
     return embedding;
 }
 
@@ -147,6 +152,9 @@ extern "C" void uparam_read(uint64_t addr, uint64_t *data) {
             break;
         case FPPHYREGS_ADDR:
             *data = uparam.fpphyregs;
+            break;
+        case RASSIZE_ADDR:
+            *data = uparam.rasssize;
             break;
         default:
             assert("uparam_read: invalid address");
@@ -199,6 +207,9 @@ extern "C" void uparam_read(uint64_t addr, uint64_t *data) {
             break;
         case FPPHYREGS_ADDR:
             printf("uparam_read: FPPHYREGS = %d\n", *data);
+            break;
+        case RASSIZE_ADDR:
+            printf("uparam_read: RASSSIZE = %d\n", *data);
             break;
         default:
             break;

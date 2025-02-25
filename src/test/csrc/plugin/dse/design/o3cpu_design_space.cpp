@@ -30,6 +30,7 @@ void O3CPUDesignSpace::initialize() {
     components_params["L3SETS"] = {512, 1024};
     components_params["INTPHYREGS"] = {64, 48, 96, 128};
     components_params["FPPHYREGS"] = {64, 48, 96};
+    components_params["RASSIZE"] = {8, 16, 32};
 }
 
 std::vector<int> O3CPUDesignSpace::get_component_params(
@@ -57,6 +58,7 @@ std::vector<int> O3CPUDesignSpace::get_init_embedding() const {
     embedding[EMDIdx::L3SETS] = 512;
     embedding[EMDIdx::INTPHYREGS] = 128;
     embedding[EMDIdx::FPPHYREGS] = 96;
+    embedding[EMDIdx::RASSIZE] = 32;
     check_embedding(embedding);
     return embedding;
 }
