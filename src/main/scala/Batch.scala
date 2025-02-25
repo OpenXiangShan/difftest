@@ -192,8 +192,8 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   BatchStep.num := info_num // unused, only for debugging
   // Collect from tail, collect(i) include last 0~i
 //  val toCollect_delays = Seq.tabulate(param.StepGroupSize){idx => group_length.reverse.map(log2Up(_)).take(idx).sum / 2}
-//  val toCollect_delays = Seq.fill(param.StepGroupSize){0}
-  val toCollect_delays = (0 until param.StepGroupSize)
+  val toCollect_delays = Seq.fill(param.StepGroupSize){0}
+//  val toCollect_delays = (0 until param.StepGroupSize)
   val toCollect_data = delay_group_data.reverse.zip(toCollect_delays).map{case (gen, delay) => Delayer(gen, delay, true)}
   val toCollect_info = delay_group_info.reverse.zip(toCollect_delays).map{case (gen, delay) => Delayer(gen, delay, true)}
   val toCollect_vsize = delay_group_vsize.reverse.zip(toCollect_delays).map{case (gen, delay) => Delayer(gen, delay, true)}
@@ -204,34 +204,44 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   // append BatchStep to last step_status
   toCollect_status.last.info_size := delay_group_status.last.info_size + 1.U
   step_status := Delayer(toCollect_status, step_delay, true)
-//  step_status := delay_group_status
-//  // append BatchStep to last step_status
-//  step_status.last.info_size := delay_group_status.last.info_size + 1.U
-  // Use BatchStep to update index of software buffer
-  val collect_data = Wire(MixedVec(Seq.tabulate(param.StepGroupSize) { idx =>
-    UInt(toCollect_data.take(idx + 1).map(_.getWidth).sum.W)
-  }))
+
+//  val collect_data = Wire(MixedVec(Seq.tabulate(param.StepGroupSize) { idx =>
+//    UInt(toCollect_data.take(idx + 1).map(_.getWidth).sum.W)
+//  }))
   val collect_info = Wire(MixedVec(Seq.tabulate(param.StepGroupSize) { idx =>
     UInt(((idx + 2) * param.infoWidth).W)
   }))
 
-  collect_data(0) := toCollect_data(0)
+//  collect_data(0) := toCollect_data(0)
   collect_info(0) := Mux(toCollect_vsize(0) =/= 0.U, Cat(BatchStep.asUInt, toCollect_info(0)), BatchStep.asUInt)
   (1 until param.StepGroupSize).foreach { idx =>
     val base_delay = toCollect_delays(idx) - toCollect_delays(idx - 1)
-    val data_base = Delayer(collect_data(idx - 1), base_delay, true)
+//    val data_base = Delayer(collect_data(idx - 1), base_delay, true)
     val info_base = Delayer(collect_info(idx - 1), base_delay, true)
-    val cat_map = Seq.tabulate(group_length.reverse(idx) + 1) { len =>
-      (len.U, Cat(data_base, toCollect_data(idx)(len * group_bitlen.reverse(idx) - 1, 0)))
-    }
-    collect_data(idx) := LookupTree(toCollect_vsize(idx), cat_map)
+//    val cat_map = Seq.tabulate(group_length.reverse(idx) + 1) { len =>
+//      (len.U, Cat(data_base, toCollect_data(idx)(len * group_bitlen.reverse(idx) - 1, 0)))
+//    }
+//    collect_data(idx) := LookupTree(toCollect_vsize(idx), cat_map)
     collect_info(idx) := Mux(
       toCollect_vsize(idx) =/= 0.U,
       Cat(info_base, toCollect_info(idx)),
       info_base,
     )
   }
-  step_data := collect_data.last
+  step_data := MixedVecInit(
+    delay_group_data.zipWithIndex.map{ case (gen, idx) =>
+      val maxWidth = delay_group_data.take(idx).map(_.getWidth).sum
+      val offset = Wire(UInt(log2Up(maxWidth + 1).W))
+      if (idx == 0) {
+        offset := 0.U
+      }
+      else {
+        offset := delay_group_status(idx - 1).data_bytes << 3
+      }
+      (gen << offset).asUInt
+    }
+  ).reduce(_ | _)
+//  step_data := collect_data.last
   step_info := collect_info.last
 }
 
