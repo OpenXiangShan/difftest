@@ -657,13 +657,34 @@ void Difftest::do_load_check(int i) {
         int len = 0;
         if (load_event.isLoad) {
           switch (load_event.opType) {
-            case 0: len = 1; break;
-            case 1: len = 2; break;
-            case 2: len = 4; break;
-            case 3: len = 8; break;
-            case 4: len = 1; break;
-            case 5: len = 2; break;
-            case 6: len = 4; break;
+            case 0:  // lb
+            case 4:  // lbu
+            case 16: // hlvb
+            case 20: // hlvbu
+              len = 1;
+              break;
+
+            case 1:  // lh
+            case 5:  // lhu
+            case 17: // hlvh
+            case 21: // hlvhu
+            case 29: // hlvxhu
+              len = 2;
+              break;
+
+            case 2:  // lw
+            case 6:  // lwu
+            case 18: // hlvw
+            case 22: // hlvwu
+            case 30: // hlvxwu
+              len = 4;
+              break;
+
+            case 3:  // ld
+            case 19: // hlvd
+              len = 8;
+              break;
+
             default: Info("Unknown fuOpType: 0x%x\n", load_event.opType);
           }
         } else if (load_event.isAtomic) {
@@ -675,10 +696,10 @@ void Difftest::do_load_check(int i) {
         }
         read_goldenmem(load_event.paddr, &golden, len);
         if (load_event.isLoad) {
-          switch (load_event.opType) {
-            case 0: golden = (int64_t)(int8_t)golden; break;
-            case 1: golden = (int64_t)(int16_t)golden; break;
-            case 2: golden = (int64_t)(int32_t)golden; break;
+          switch (len) {
+            case 1: golden = (int64_t)(int8_t)golden; break;
+            case 2: golden = (int64_t)(int16_t)golden; break;
+            case 4: golden = (int64_t)(int32_t)golden; break;
           }
         }
         if (golden == commitData || load_event.isAtomic) { //  atomic instr carefully handled
