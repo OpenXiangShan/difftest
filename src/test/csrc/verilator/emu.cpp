@@ -81,6 +81,8 @@ static inline void print_help(const char *file) {
   printf("      --jtag-test            test jtag using testcases in jtag-testcase.h\n");
   printf("  -h, --help                 print program help info\n");
   printf("  -P, --init-params=FILE     the file to initialize the design space\n");
+  printf("      --deg-instrs=NUM       the max instr number used by deg analysis");
+  printf("      --deg-visualize        visualize deg graph\n");
   printf("\n");
 }
 
@@ -101,6 +103,8 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "sim-run-ahead",     0, NULL,  0  },
     { "dump-tl",           0, NULL,  0  },
     { "jtag-test",         0, NULL,  0  },
+    { "deg-instrs",        1, NULL,  0  },
+    { "deg-visualize",     0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "max-instr",         1, NULL, 'I' },
@@ -149,6 +153,10 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             continue;
           case 11:
             args.jtag_test = true; continue;
+          case 12:
+            args.max_deg_instrs = atoll_strict(optarg, "deg-instrs"); continue;
+          case 13:
+            args.enable_deg_visualize = true; continue;
         }
         // fall through
       default:
@@ -445,17 +453,20 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   bool lastCycleDSEReset = false;
   bool doDSEReset = false;
   bool deg_record = false;
-  int deg_record_num = 100;
+  int deg_record_num = args.max_deg_instrs;
   Perfprocess* perfprocess = new Perfprocess(dut_ptr, 6);
   ArchExplorerEngine* engine = new ArchExplorerEngine();
   std::vector<std::string> perfNames = getIOPerfNames();
   std::vector<int> embedding;
   if (args.init_params != NULL) {
-    embedding = engine->get_design_space().get_embedding_from_file(args.init_params);
+    embedding = engine->design_space.get_embedding_from_file(args.init_params);
   } else {
-    embedding = engine->get_design_space().get_init_embedding();
+    embedding = engine->design_space.get_init_embedding();
   }
   init_uparam(embedding, engine->max_epoch);
+  engine->initial_embedding = embedding;
+  engine->visualize = args.enable_deg_visualize;
+  engine->start_epoch(1);
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
@@ -504,9 +515,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           auto ipc = perfprocess->get_ipc();
           printf("ipc: %f\n", ipc);
           if (epoch == max_epoch) {
+            // compare initial and last embeddings
+            printf("Final embedding of microarch parameters after %d epochs:\n", max_epoch);
+            engine->design_space.compare_embeddings(engine->initial_embedding, embedding);
             trapCode = STATE_GOODTRAP;
             break;
           }
+          deg_record_num = args.max_deg_instrs;
+          engine->start_epoch(epoch + 1);
         }
       }
       if (doDSEReset) {
@@ -546,9 +562,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           deg_record = false;
           std::vector<int> embedding_new;
           printf("[Do bottleneck_analysis]\n");
-          embedding_new = engine->bottleneck_analysis(embedding);
+          embedding_new = engine->bottleneck_analysis(embedding, "output_" + std::to_string(dut_ptr->io_dse_epoch));
           printf("[Finish bottleneck_analysis]\n");
-          engine->get_design_space().compare_embeddings(embedding, embedding_new);
+          engine->design_space.compare_embeddings(embedding, embedding_new);
           embedding = embedding_new;
           embedding_to_uparam(embedding);
         }

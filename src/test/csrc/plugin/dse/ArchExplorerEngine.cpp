@@ -68,13 +68,13 @@ void ArchExplorerEngine::decrease_hardware_resource(std::vector<int>& embedding,
             adjust = adjust_component("ROB", embedding, EMDIdx::ROB, false);
         }
         else if (btnk_name == "I-cache miss") {
+            adjust = adjust_component("FTQ", embedding, EMDIdx::FTQ, false);
             adjust = adjust_component("L2SETS", embedding, EMDIdx::L2SETS, false);
         }
         else if (btnk_name == "D-cache miss") {
             adjust = adjust_component("L2SETS", embedding, EMDIdx::L2SETS, false);
         }
         else if (btnk_name == "BP miss") {
-            adjust = adjust_component("FTQ", embedding, EMDIdx::FTQ, false);
             adjust = adjust_component("RASSIZE", embedding, EMDIdx::RASSIZE, false);
         }
         else if (btnk_name == "Lack LQ") {
@@ -147,13 +147,13 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
             adjust = adjust_component("ROB", embedding, EMDIdx::ROB, true);
         }
         else if (btnk_name == "I-cache miss") {
+            adjust = adjust_component("FTQ", embedding, EMDIdx::FTQ, true);
             adjust = adjust_component("L2SETS", embedding, EMDIdx::L2SETS, true);
         }
         else if (btnk_name == "D-cache miss") {
             adjust = adjust_component("L2SETS", embedding, EMDIdx::L2SETS, true);
         }
         else if (btnk_name == "BP miss") {
-            adjust = adjust_component("FTQ", embedding, EMDIdx::FTQ, true);
             adjust = adjust_component("RASSIZE", embedding, EMDIdx::RASSIZE, true);
         }
         else if (btnk_name == "Lack LQ") {
@@ -217,9 +217,8 @@ std::vector<int> ArchExplorerEngine::bottleneck_removal(std::vector<int>& embedd
     return embedding;
 }
 
-std::vector<std::tuple<std::string, int>> ArchExplorerEngine::get_bottleneck_contribution(int idx) {
+std::vector<std::tuple<std::string, int>> ArchExplorerEngine::get_bottleneck_contribution(int idx, std::string btnk_rpt) {
     std::string simulator_root = ".";
-    std::string btnk_rpt = "output";
     std::map<std::string, int> btnk;
     
     if (if_file_exist(btnk_rpt)) {
@@ -325,37 +324,20 @@ std::map<std::string, double> ArchExplorerEngine::calc_bottleneck_contribution(
     return contribution;
 }
 
-std::vector<int> ArchExplorerEngine::bottleneck_analysis(std::vector<int> embedding) {
-    auto contribution = get_bottleneck_contribution(0);
+std::vector<int> ArchExplorerEngine::bottleneck_analysis(std::vector<int> embedding, std::string btnk_rpt) {
+    auto contribution = get_bottleneck_contribution(0, btnk_rpt);
     return bottleneck_removal(embedding, contribution);
     // return embedding;
 }
 
-void ArchExplorerEngine::init() {
+void ArchExplorerEngine::init(std::string output_file) {
     // 创建O3Graph实例
     auto args = deg_parse_args(0, nullptr);
-    args["output"] = "output";
-    args["view"] = "1";
+    args["output"] = output_file;
+    if (visualize) {
+        args["view"] = "1";
+    }
     this->o3graph = new O3Graph(
       args, new RiscvInstructionStream("")
     );
-}
-
-void ArchExplorerEngine::run() {
-    if (!o3graph) {
-        std::cerr << "Error: O3Graph not initialized" << std::endl;
-        return;
-    }
-    
-    // 运行O3Graph分析
-    o3graph->run();
-
-    printf("=== Bottleneck Analysis ===\n");
-    
-    // 获取新的微架构参数
-    std::vector<int> embedding, init_embedding;
-    init_embedding = design_space.get_init_embedding();
-    printf("Initial embedding:\n");
-    embedding = bottleneck_analysis(init_embedding);
-    design_space.compare_embeddings(init_embedding, embedding);
 }

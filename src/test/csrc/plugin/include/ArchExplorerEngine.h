@@ -15,28 +15,35 @@
 class ArchExplorerEngine {
     public:
         ArchExplorerEngine() {
-            init();
         }
         ~ArchExplorerEngine() {
             if (o3graph) delete o3graph;
         }
     
-        void init();
-        void run();
+        void init(std::string output_file = "output");
         
-        std::vector<std::tuple<std::string, int>> get_bottleneck_contribution(int idx);
+        std::vector<std::tuple<std::string, int>> get_bottleneck_contribution(int idx, std::string btnk_rpt);
         std::vector<int> bottleneck_removal(std::vector<int>& embedding, std::vector<std::tuple<std::string, int>>& contribution);
         void increase_hardware_resource(std::vector<int>& embedding, std::vector<std::tuple<std::string, int>>& contribution);
         void decrease_hardware_resource(std::vector<int>& embedding, std::vector<std::tuple<std::string, int>>& contribution);
-        std::vector<int> bottleneck_analysis(std::vector<int> embedding);
-        O3CPUDesignSpace get_design_space() { return design_space; }
+        std::vector<int> bottleneck_analysis(std::vector<int> embedding, std::string btnk_rpt);
         void step(std::string line) {
             o3graph->step(line);
         }
         void finalize_deg() {
             o3graph->finalize();
         }
-        int max_epoch = 2;
+        void start_epoch(int epoch) {
+            if (o3graph) delete o3graph;
+            std::string output = "output_" + std::to_string(epoch);
+            init(output);
+        }
+        int max_epoch = 10;
+        int top_k = 3;  // default
+        bool visualize = false;
+        O3Graph* o3graph = nullptr;
+        O3CPUDesignSpace design_space;
+        std::vector<int> initial_embedding;
 
         
     private:
@@ -46,8 +53,6 @@ class ArchExplorerEngine {
             std::vector<int>& embedding, 
             EMDIdx idx,
             bool increase);
-    
-        O3Graph* o3graph = nullptr;
-        O3CPUDesignSpace design_space;
-        int top_k = 3;  // default
+        
+        
 };
