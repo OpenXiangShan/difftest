@@ -4,3 +4,4 @@
 * $fatal TB_IMPORT
 * $random TB_IMPORT
 * $fwrite GFIFO
+LogPerfEndpoint $fwrite TB_IMPORT
