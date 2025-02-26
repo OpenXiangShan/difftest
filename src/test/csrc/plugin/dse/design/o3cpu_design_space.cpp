@@ -28,8 +28,8 @@ void O3CPUDesignSpace::initialize() {
     components_params["L2SETS"] = {64, 128};
     components_params["L3MSHRS"] = {1, 6, 14};
     components_params["L3SETS"] = {512, 1024};
-    components_params["INTPHYREGS"] = {64, 48, 96, 128};
-    components_params["FPPHYREGS"] = {64, 48, 96};
+    components_params["INTPHYREGS"] = {48, 64, 80, 96, 128};
+    components_params["FPPHYREGS"] = {48, 64, 80, 96};
     components_params["RASSIZE"] = {8, 16, 32};
 }
 
