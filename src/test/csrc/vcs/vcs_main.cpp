@@ -43,6 +43,7 @@ static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
 static uint64_t warmup_instr = 0;
+
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   bool core_warmup[NUM_CORES];
@@ -248,14 +249,15 @@ extern "C" uint8_t simv_step() {
       return SIMV_FAIL;
   }
 
+  bool need_warmup = false;
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
-    // TODO: Take the first triggered core as the baseline for now
     if (warmup_instr != 0 && !core_end_info.core_warmup[i] && trap->instrCnt > warmup_instr) {
-      Info("Warmup finished. The performance counters will be reset on %lx.\n", trap->instrCnt);
-      warmup_instr = 0;
+      Info("Warmup finished. The performance counters will be reset on %ld.\n", trap->instrCnt);
       core_end_info.core_warmup[i] = true;
-      return SIMV_WARMUP;
+      core_end_info.core_warmup_cycle[i] = trap->cycleCnt;
+      core_end_info.core_warmup_instr[i] = trap->instrCnt;
+      need_warmup = true;
     }
 
     if (max_instrs != 0) { // 0 for no limit
@@ -283,6 +285,9 @@ extern "C" uint8_t simv_step() {
       }
     }
   }
+
+  if (need_warmup)
+    return SIMV_WARMUP;
 #endif // CONFIG_NO_DIFFTEST
   return 0;
 }
