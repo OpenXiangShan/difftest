@@ -17,6 +17,7 @@
 #define __MPOOL_H__
 
 #include "common.h"
+#include "diffstate.h"
 #include <atomic>
 #include <condition_variable>
 #include <functional>
@@ -30,17 +31,26 @@
 #define NUM_BLOCKS     (MEMPOOL_SIZE / MEMBLOCK_SIZE)
 #define REM_NUM_BLOCKS (NUM_BLOCKS - 1)
 
-struct MemoryBlock {
+class MemoryBlock {
+public:
   std::unique_ptr<char[], std::function<void(char *)>> data;
   std::atomic<bool> is_free;
+  uint64_t mem_block_size = MEMBLOCK_SIZE;
+  // Default constructor
+  MemoryBlock() : MemoryBlock(MEMBLOCK_SIZE) {}
 
-  MemoryBlock() : is_free(true) {
+  // Parameterized constructor
+  MemoryBlock(uint64_t size) : is_free(true) {
+    mem_block_size = size < MEMBLOCK_SIZE ? MEMBLOCK_SIZE : size;
     void *ptr = nullptr;
-    if (posix_memalign(&ptr, 4096, 4096 + MEMBLOCK_SIZE) != 0) {
+    if (posix_memalign(&ptr, 4096, mem_block_size) != 0) {
       throw std::runtime_error("Failed to allocate aligned memory");
     }
-    memset(ptr, 0, 4096);
+    memset(ptr, 0, mem_block_size);
     data = std::unique_ptr<char[], std::function<void(char *)>>(static_cast<char *>(ptr), [](char *p) { free(p); });
+  }
+  ~MemoryBlock() {
+    data.reset();
   }
   // Move constructors
   MemoryBlock(MemoryBlock &&other) noexcept : data(std::move(other.data)), is_free(other.is_free.load()) {}
@@ -112,12 +122,14 @@ private:
   const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2; //The window needs to reserve two free Spaces
   const size_t REM_MAX_IDX = (MAX_IDX - 1);
   const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
+  uint64_t mem_block_size = 4096;
 
 public:
-  MemoryIdxPool() {
+  MemoryIdxPool(uint64_t block_size) {
+    mem_block_size = block_size;
     initMemoryPool();
   }
-
+  MemoryIdxPool() : MemoryIdxPool(4096) {}
   ~MemoryIdxPool() {
     cleanupMemoryPool();
   }
@@ -125,7 +137,13 @@ public:
   MemoryIdxPool(const MemoryIdxPool &) = delete;
   MemoryIdxPool &operator=(const MemoryIdxPool &) = delete;
 
-  void initMemoryPool() {}
+  void initMemoryPool() {
+    memory_pool.clear();
+    memory_pool.reserve(MEMBLOCK_SIZE);
+    for (size_t i = 0; i < MEMBLOCK_SIZE; ++i) {
+      memory_pool.emplace_back(mem_block_size);
+    }
+  }
 
   // Cleaning up memory pools
   void cleanupMemoryPool();
@@ -149,11 +167,11 @@ public:
   void wait_mempool_start();
 
 private:
-  MemoryBlock memory_pool[NUM_BLOCKS]; // Mempool
-  std::mutex window_mutexes;           // window sliding protection
-  std::mutex offset_mutexes;           // w/r offset protection
-  std::condition_variable cv_empty;    // Free block condition variable
-  std::condition_variable cv_filled;   // Filled block condition variable
+  std::vector<MemoryBlock> memory_pool; // Mempool
+  std::mutex window_mutexes;            // window sliding protection
+  std::mutex offset_mutexes;            // w/r offset protection
+  std::condition_variable cv_empty;     // Free block condition variable
+  std::condition_variable cv_filled;    // Filled block condition variable
 
   size_t group_r_offset = 0; // The offset used by the current consumer
   size_t group_w_offset = 0; // The offset used by the current producer

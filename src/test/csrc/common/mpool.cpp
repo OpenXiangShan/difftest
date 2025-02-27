@@ -99,7 +99,7 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
       write_count++;
       // Proceed to the next group
       if (write_count == MAX_IDX) {
-        memcpy(memory_pool[page_w_idx].data.get(), data, 4096);
+        memcpy(memory_pool[page_w_idx].data.get(), data, mem_block_size);
         memory_pool[page_w_idx].is_free.store(false);
         size_t next_w_idx = wait_next_free_group();
         group_w_offset = (next_w_idx & REM_MAX_GROUPING_IDX) * MAX_IDX;
@@ -110,7 +110,7 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
     }
     memory_pool[page_w_idx].is_free.store(false);
   }
-  memcpy(memory_pool[page_w_idx].data.get(), data, 4096);
+  memcpy(memory_pool[page_w_idx].data.get(), data, mem_block_size);
 
   return true;
 }
@@ -134,7 +134,7 @@ bool MemoryIdxPool::read_busy_chunk(char *data) {
     return false;
   }
 
-  memcpy(data, memory_pool[page_r_idx].data.get(), 4096);
+  memcpy(data, memory_pool[page_r_idx].data.get(), mem_block_size);
   memory_pool[page_r_idx].is_free.store(true);
   return true;
 }
