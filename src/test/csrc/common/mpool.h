@@ -17,6 +17,7 @@
 #define __MPOOL_H__
 
 #include "common.h"
+#include "diffstate.h"
 #include <atomic>
 #include <condition_variable>
 #include <functional>
@@ -29,17 +30,22 @@
 #define MEMBLOCK_SIZE  4096         // 4K packge
 #define NUM_BLOCKS     (MEMPOOL_SIZE / MEMBLOCK_SIZE)
 #define REM_NUM_BLOCKS (NUM_BLOCKS - 1)
+#ifdef CONFIG_DIFFTEST_BATCH
+#define PACKGE_SIZE (CONFIG_DIFFTEST_BATCH_BYTELEN + 1)
+#else
+#define PACKGE_SIZE 4096
+#endif
 
 struct MemoryBlock {
   std::unique_ptr<char[], std::function<void(char *)>> data;
   std::atomic<bool> is_free;
-
+  const uint64_t mem_block_size = PACKGE_SIZE < 4096 ? 4096 : PACKGE_SIZE;
   MemoryBlock() : is_free(true) {
     void *ptr = nullptr;
-    if (posix_memalign(&ptr, 4096, 4096 + MEMBLOCK_SIZE) != 0) {
+    if (posix_memalign(&ptr, 4096, mem_block_size) != 0) {
       throw std::runtime_error("Failed to allocate aligned memory");
     }
-    memset(ptr, 0, 4096);
+    memset(ptr, 0, mem_block_size);
     data = std::unique_ptr<char[], std::function<void(char *)>>(static_cast<char *>(ptr), [](char *p) { free(p); });
   }
   // Move constructors

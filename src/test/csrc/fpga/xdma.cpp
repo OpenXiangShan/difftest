@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 #include "xdma.h"
+#include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
 #include <fcntl.h>
