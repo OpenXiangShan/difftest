@@ -31,7 +31,7 @@
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
 
-FpgaXdma::FpgaXdma() {
+FpgaXdma::FpgaXdma() : xdma_mempool(DMA_DIFF_PACKGE_LEN) {
   signal(SIGINT, handle_sigint);
 
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
