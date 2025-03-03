@@ -17,24 +17,30 @@
 #ifndef __EMU_H
 #define __EMU_H
 
+#ifdef VERILATOR
 #include "VSimTop.h"
 #include "VSimTop__Syms.h"
+#define DUT_TOP VSimTop
+#endif // VERILATOR
+#ifdef GSIM
+#include "SimTop.h"
+#define DUT_TOP SSimTop
+#endif
 #include "common.h"
 #include "dut.h"
 #include "lightsss.h"
 #include "snapshot.h"
 #include <sys/types.h>
-#ifdef ENABLE_FST
-#include <verilated_fst_c.h>
-#else
-#include <verilated_vcd_c.h> // Trace file format header
-#endif
 #ifdef EMU_THREAD
 #include <verilated_threads.h>
 #endif
 #if VM_TRACE == 1
-#include <verilated_vcd_c.h> // Trace file format header
-#endif
+#ifdef ENABLE_FST
+#include <verilated_fst_c.h>
+#else
+#include <verilated_vcd_c.h>
+#endif // ENABLE_FST
+#endif // VM_TRACE
 
 struct EmuArgs {
   uint32_t reset_cycles = 50;
@@ -85,12 +91,14 @@ struct EmuArgs {
 
 class Emulator final : public DUT {
 private:
-  VSimTop *dut_ptr;
+  DUT_TOP *dut_ptr;
+#if VM_TRACE == 1
 #ifdef ENABLE_FST
   VerilatedFstC *tfp;
 #else
   VerilatedVcdC *tfp;
 #endif
+#endif // VM_TRACE == 1
   bool force_dump_wave = false;
 #ifdef VM_SAVABLE
   VerilatedSaveMem *snapshot_slot = nullptr;
