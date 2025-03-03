@@ -67,6 +67,9 @@
 #endif
 extern unsigned long EMU_FLASH_SIZE;
 
+#define DIFFTEST_VLEN 128
+#define VLENE_64 DIFFTEST_VLEN/64
+
 // Use sdl to show screen
 // Note: It does not work well with clang, to use that, switch to gcc
 // uncomment the following line to enable this feature

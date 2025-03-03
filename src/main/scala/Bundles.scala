@@ -63,8 +63,11 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
   val rfwen = Bool()
   val fpwen = Bool()
   val vecwen = Bool()
+  val v0wen = Bool()
   val wpdest = UInt(log2Ceil(numPhyRegs).W)
   val wdest = UInt(8.W)
+  val otherwpdest = Vec(8, UInt(8.W))
+  val otherV0Wen = Vec(8, Bool())
 
   val pc = UInt(64.W)
   val instr = UInt(32.W)
@@ -87,6 +90,7 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
 // Instantiate inside DiffTest, work for get_commit_data specially
 class CommitData extends DifftestBaseBundle with HasValid {
   val data = UInt(64.W)
+  val vecData = Vec(16, UInt(64.W))
 }
 
 class TrapEvent extends DifftestBaseBundle {
@@ -166,6 +170,10 @@ class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasVal
   val data = UInt(64.W)
 }
 
+class VecDataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
+  val data = Vec(2, UInt(64.W))
+}
+
 class ArchIntRegState extends DifftestBaseBundle {
   val value = Vec(32, UInt(64.W))
 
@@ -234,7 +242,8 @@ class LoadEvent extends DifftestBaseBundle with HasValid {
   val paddr = UInt(64.W)
   val opType = UInt(8.W)
   val isAtomic = Bool()
-  val isLoad = Bool() // Todo: support vector load
+  val isLoad = Bool()
+  val isVLoad = Bool()
 }
 
 class AtomicEvent extends DifftestBaseBundle with HasValid {
