@@ -199,8 +199,15 @@ Difftest::~Difftest() {
 #endif // CONFIG_DIFFTEST_REPLAY
 }
 
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
+bool enable_vec_load_goldenmem_check = true;
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
+
 void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   proxy = new REF_PROXY(coreid, ram_size);
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
+  enable_vec_load_goldenmem_check = proxy->check_ref_vec_load_goldenmem();
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_REPLAY
   proxy_reg_size = proxy->get_reg_size();
   proxy_reg_ss = (uint8_t *)malloc(proxy_reg_size);
@@ -628,6 +635,129 @@ void Difftest::do_first_instr_commit() {
   }
 }
 
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
+void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
+  if (!enable_vec_load_goldenmem_check) {
+    return;
+  }
+
+  // ===============================================================
+  //                      Comparison data
+  // ===============================================================
+  uint32_t vdNum = proxy->get_ref_vdNum();
+
+  proxy->sync();
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+  auto vecFirstLdest = load_event.wdest;
+#else
+  auto vecFirstLdest = dut->commit[index].wdest;
+#endif // CONFIG_DIFFTEST_SQUASH
+
+  bool reg_mismatch = false;
+
+  for (int vdidx = 0; vdidx < vdNum; vdidx++) {
+#ifndef CONFIG_DIFFTEST_COMMITDATA
+    bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
+    auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
+    uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vec[vecNextPdest].data;
+#endif // !CONFIG_DIFFTEST_COMMITDATA
+
+    auto vecNextLdest = vecFirstLdest + vdidx;
+
+    for (int i = 0; i < VLENE_64; i++) {
+#ifdef CONFIG_DIFFTEST_COMMITDATA
+#ifdef CONFIG_DIFFTEST_SQUASH
+      uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
+#else
+      uint64_t dutRegData = dut->commit_data[index].vecData[VLENE_64 * vdidx + i];
+#endif // CONFIG_DIFFTEST_SQUASH
+#else
+      uint64_t dutRegData = dutRegPtr[i];
+#endif // CONFIG_DIFFTEST_COMMITDATA
+
+      uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
+      reg_mismatch |= dutRegData != *refRegPtr;
+    }
+  }
+
+  // ===============================================================
+  //                      Regs Mismatch handle
+  // ===============================================================
+  bool goldenmem_mismatch = false;
+
+  if (reg_mismatch) {
+    // ===============================================================
+    //                      Check golden memory
+    // ===============================================================
+    uint64_t *vec_goldenmem_regPtr = (uint64_t *)proxy->get_vec_goldenmem_reg();
+
+    if (vec_goldenmem_regPtr == nullptr) {
+      Info("Vector Load comparison failed and no consistency check with golden mem was performed.\n");
+      return;
+    }
+
+    for (int vdidx = 0; vdidx < vdNum; vdidx++) {
+#ifndef CONFIG_DIFFTEST_COMMITDATA
+      bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
+      auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
+      uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vec[vecNextPdest].data;
+#endif // !CONFIG_DIFFTEST_COMMITDATA
+
+      for (int i = 0; i < VLENE_64; i++) {
+#ifdef CONFIG_DIFFTEST_COMMITDATA
+#ifdef CONFIG_DIFFTEST_SQUASH
+        uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
+#else
+        uint64_t dutRegData = dut->commit_data[index].vecData[VLENE_64 * vdidx + i];
+#endif // CONFIG_DIFFTEST_SQUASH
+#else
+        uint64_t dutRegData = dutRegPtr[i];
+#endif // CONFIG_DIFFTEST_COMMITDATA
+
+        goldenmem_mismatch |= dutRegData != vec_goldenmem_regPtr[VLENE_64 * vdidx + i];
+      }
+    }
+
+    if (!goldenmem_mismatch) {
+      // ===============================================================
+      //                      sync memory and regs
+      // ===============================================================
+      proxy->vec_update_goldenmem();
+
+      for (int vdidx = 0; vdidx < vdNum; vdidx++) {
+#ifndef CONFIG_DIFFTEST_COMMITDATA
+        bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
+        auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
+        uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vec[vecNextPdest].data;
+#endif // !CONFIG_DIFFTEST_COMMITDATA
+
+        auto vecNextLdest = vecFirstLdest + vdidx;
+
+        for (int i = 0; i < VLENE_64; i++) {
+#ifdef CONFIG_DIFFTEST_COMMITDATA
+#ifdef CONFIG_DIFFTEST_SQUASH
+          uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
+#else
+          uint64_t dutRegData = dut->commit_data[index].vecData[VLENE_64 * vdidx + i];
+#endif // CONFIG_DIFFTEST_SQUASH
+#else
+          uint64_t dutRegData = dutRegPtr[i];
+#endif // CONFIG_DIFFTEST_COMMITDATA
+
+          uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
+          *refRegPtr = dutRegData;
+        }
+      }
+
+      proxy->sync(true);
+    } else {
+      Info("Vector Load register and golden memory mismatch\n");
+    }
+  }
+}
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
+
 void Difftest::do_load_check(int i) {
   // Handle load instruction carefully for SMP
 #ifdef CONFIG_DIFFTEST_LOADEVENT
@@ -650,6 +780,19 @@ void Difftest::do_load_check(int i) {
     auto refRegPtr = proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen);
     auto commitData = get_commit_data(i);
 #endif // CONFIG_DIFFTEST_SQUASH
+
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
+    if (load_event.isVLoad) {
+      do_vec_load_check(i, load_event);
+#ifdef CONFIG_DIFFTEST_SQUASH
+      load_event_queue.pop();
+#else
+      dut->load[i].valid = 0;
+#endif // CONFIG_DIFFTEST_SQUASH
+      return;
+    }
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
+
     if (load_event.isLoad || load_event.isAtomic) {
       proxy->sync();
       if (regWen && *refRegPtr != commitData) {
