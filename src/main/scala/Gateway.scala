@@ -24,6 +24,7 @@ import difftest.dpic.DPIC
 import difftest.preprocess.Preprocess
 import difftest.squash.Squash
 import difftest.batch.{Batch, BatchIO}
+import difftest.delta.Delta
 import difftest.replay.Replay
 import difftest.trace.Trace
 import difftest.util.VerificationExtractor
@@ -38,6 +39,7 @@ case class GatewayConfig(
   hasReplay: Boolean = false,
   replaySize: Int = 1024,
   hasDutZone: Boolean = false,
+  isDelta: Boolean = false,
   isBatch: Boolean = false,
   batchSize: Int = 64,
   hasInternalStep: Boolean = false,
@@ -76,6 +78,7 @@ case class GatewayConfig(
         s"CONFIG_DIFFTEST_BATCH_BYTELEN ${batchArgByteLen._1 + batchArgByteLen._2}",
       )
     if (isSquash) macros ++= Seq("CONFIG_DIFFTEST_SQUASH", s"CONFIG_DIFFTEST_SQUASH_STAMPSIZE 4096") // Stamp Width 12
+    if (isDelta) macros += "CONFIG_DIFFTEST_DELTA"
     if (hasReplay) macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
@@ -96,6 +99,8 @@ case class GatewayConfig(
     if (hasReplay) require(isSquash)
     if (hasInternalStep) require(isBatch)
     if (isBatch) require(!hasDutZone)
+    // Currently Delta depends on Batch to ensure update and sync order
+    if (isDelta) require(isBatch)
     // TODO: support dump and load together
     require(!(traceDump && traceLoad))
   }
@@ -106,6 +111,7 @@ case class GatewayResult(
   vMacros: Seq[String] = Seq(),
   instances: Seq[DifftestBundle] = Seq(),
   structPacked: Option[Boolean] = None,
+  structAligned: Option[Boolean] = None, // Align struct Elem to 8 bytes for Delta Feature
   exit: Option[UInt] = None,
   step: Option[UInt] = None,
 ) {
@@ -115,6 +121,7 @@ case class GatewayResult(
       vMacros = vMacros ++ that.vMacros,
       instances = instances ++ that.instances,
       structPacked = if (structPacked.isDefined) structPacked else that.structPacked,
+      structAligned = if (structAligned.isDefined) structAligned else that.structAligned,
       exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
     )
@@ -131,6 +138,7 @@ object Gateway {
       case 'S' => config = config.copy(isSquash = true)
       case 'R' => config = config.copy(hasReplay = true)
       case 'Z' => config = config.copy(hasDutZone = true)
+      case 'D' => config = config.copy(isDelta = true)
       case 'B' => config = config.copy(isBatch = true)
       case 'I' => config = config.copy(hasInternalStep = true)
       case 'N' => config = config.copy(isNonBlock = true)
@@ -184,6 +192,7 @@ object Gateway {
       GatewayResult(
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
+        structAligned = Some(config.isDelta),
         step = Some(endpoint.step),
       )
     } else {
@@ -230,27 +239,33 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     WireInit(validated)
   }
   val instances = chiselTypeOf(squashed).map(_.bits).toSeq
+  val deltas = if (config.isDelta) {
+    WireInit(Delta(squashed, config))
+  } else {
+    WireInit(squashed)
+  }
+  val toSink = deltas
 
   val zoneControl = Option.when(config.hasDutZone)(Module(new ZoneControl(config)))
   val step = IO(Output(UInt(config.stepWidth.W)))
   val control = Wire(new GatewaySinkControl(config))
 
   if (config.isBatch) {
-    val batch = Batch(squashed, config)
+    val batch = Batch(toSink, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
     GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
   } else {
-    val squashed_enable = VecInit(squashed.map(_.valid).toSeq).asUInt.orR
-    step := RegNext(squashed_enable, 0.U)
-    control.enable := squashed_enable
+    val sink_enable = VecInit(toSink.map(_.valid).toSeq).asUInt.orR
+    step := RegNext(sink_enable, 0.U)
+    control.enable := sink_enable
     if (config.hasDutZone) {
-      zoneControl.get.enable := squashed_enable
+      zoneControl.get.enable := sink_enable
       control.dut_zone.get := zoneControl.get.dut_zone
     }
 
-    for (id <- 0 until squashed.length) {
-      GatewaySink(control, squashed(id), config)
+    for (id <- 0 until toSink.length) {
+      GatewaySink(control, toSink(id), config)
     }
   }
 
@@ -286,8 +301,8 @@ object GatewaySink {
 
   def collect(config: GatewayConfig): GatewayResult = {
     config.style match {
-      case "dpic" => DPIC.collect()
-      case _      => DPIC.collect() // Default: DPI-C
+      case "dpic" => DPIC.collect(config)
+      case _      => DPIC.collect(config) // Default: DPI-C
     }
   }
 }
