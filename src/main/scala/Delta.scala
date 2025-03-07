@@ -34,10 +34,9 @@ object Delta {
   }
   def collect(): Unit = {
     val deltaCpp = ListBuffer.empty[String]
-    val numCores = instances.count(_.isUniqueIdentifier)
-    val deltaInsts = instances.filter(_.supportsDelta)
+    val deltaInsts = instances.filter(_.supportsDelta).distinct
     val deltaDecl = deltaInsts.map { inst =>
-      val len = inst.dataElements.flatMap(_._3).length / numCores
+      val len = inst.dataElements.flatMap(_._3).length
       s"uint64_t ${inst.desiredCppName}_elem[$len];"
     }
 
