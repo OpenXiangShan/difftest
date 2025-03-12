@@ -16,6 +16,7 @@
 
 #include <stdexcept>
 #include <sstream>
+#include <cstdlib>
 #include "trace_reader.h"
 #include "tracertl.h"
 #include "trace_decompress.h"
@@ -96,9 +97,11 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
     }
 
     // construct trace
-    instList_preread.push(inst);
+    instList_preread.push_back(inst);
   }
 
+  uint64_t lastLoopBodyLength = 0;
+  bool inLoop = false;
   for (uint64_t idx = 0; idx < traceInstNum; idx ++) {
     // trans to XS Trace Format
     TraceInstruction static_inst = instDecompressBuffer[idx];
@@ -119,6 +122,7 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
       printf("TraceRTL preread: read from trace file, but illegal inst. Dump the inst:\n");
       inst.dump();
     }
+
 
     // construct trace_icache
     // inst.dump();
@@ -176,14 +180,51 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
 
     // add memory address to trace fastsim manager
     if (!trace_fastsim->isFastSimFinished() && !trace_fastsim->preCollectEnoughFastSimInst()) {
-      trace_fastsim->preCollectFastSimInst();
+      trace_fastsim->preCollectFastSimInst(inst);
+
+      lastLoopBodyLength ++;
+      if (!inLoop) {
+        inst.isLoopFirstInst = true;
+        inLoop = true;
+      }
+      if (inst.branch_type != 0 && inst.branch_taken != 0) {
+        inLoop = false;
+        if (lastLoopBodyLength == 1) {
+          inst.loopBodyLength = 1;
+
+        } else {
+          if (lastLoopBodyLength == 0) {
+            printf("Error: lastLoopBodyLength == 0\n");
+            exit(1);
+          }
+          instList_preread[instList_preread.size() - lastLoopBodyLength + 1].loopBodyLength = lastLoopBodyLength;
+          if (!instList_preread[instList_preread.size() - lastLoopBodyLength + 1].isLoopFirstInst) {
+            printf("Error: loop first inst not set 0x%lx %lu\n",instList_preread.size(), lastLoopBodyLength);
+            int pNum = std::max(20, (int)lastLoopBodyLength);
+            for (int i = 0; i < pNum; i++) {
+              printf("Idx %lx ", instList_preread.size() - pNum + i);
+              instList_preread[instList_preread.size() - pNum + i].dump();
+
+            }
+            inst.dump();
+            // for (int i = 0; i < lastLoopBodyLength; i++) {
+              // instList_preread[instList_preread.size() - lastLoopBodyLength + 1 + i].dump();
+            // }
+            exit(1);
+          }
+
+        }
+        lastLoopBodyLength = 0;
+      }
+
+
       if (!inst.isTrap() && !inst.isInstException() && inst.memory_type != MEM_TYPE_None) {
         trace_fastsim->addMemAddr(inst.exu_data.memory_address.va, inst.exu_data.memory_address.pa);
       }
     }
 
     // construct trace
-    instList_preread.push(inst);
+    instList_preread.push_back(inst);
   }
   printf("TraceRTL: preparse tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());
   fflush(stdout);
@@ -192,6 +233,10 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
   // fast sim manager merge/squash mem addr
   if (!trace_fastsim->isFastSimMemoryFinished()) {
     trace_fastsim->mergeMemAddr();
+  }
+  if (!trace_fastsim->isFastSimInstFinished()) {
+    trace_fastsim->instDedup.trace_inst_dedup(
+      instList_preread, trace_fastsim->getWarmupInstNum());
   }
 
   last_interval_time = gen_cur_time();
@@ -246,23 +291,29 @@ bool TraceReader::read(Instruction &inst) {
     inst = redirectInstList.front();
     redirectInstList.pop_front();
     counterReadFromRedirect ++;
-  } else if (!instList_preread.empty()) {
-    METHOD_TRACE();
-    inst = instList_preread.front();
-    inst.fast_simulation = trace_fastsim->isFastSimInstFinished() ? 0 : 1;
-
-    instList_preread.pop();
-    counterReadFromInstList ++;
-
-    // dynamic update constructedICache to hanlder thread changes
-    trace_icache->constructICache(inst.instr_pc_va, inst.instr);
   } else {
-    setOver();
-    memset(reinterpret_cast<char *> (&inst), 0, sizeof(Instruction));
-    METHOD_TRACE();
-    return false;
-  }
+    while(instReadIdx < instList_preread.size() && instList_preread[instReadIdx].is_squashed) {
+      instReadIdx ++;
+    }
+    if (instReadIdx < instList_preread.size()) {
+      METHOD_TRACE();
+      // inst = instList_preread.front();
+      inst = instList_preread[instReadIdx++];
+      // inst.fast_simulation = trace_fastsim->isFastSimInstFinished() ? 0 : 1;
+      inst.fast_simulation = trace_fastsim->isFastSimInstByIdx(instReadIdx) ? 1 : 0;
 
+      // instList_preread.pop();
+      counterReadFromInstList ++;
+
+      // dynamic update constructedICache to hanlder thread changes
+      trace_icache->constructICache(inst.instr_pc_va, inst.instr);
+    } else {
+      setOver();
+      memset(reinterpret_cast<char *> (&inst), 0, sizeof(Instruction));
+      METHOD_TRACE();
+      return false;
+    }
+  }
 
   pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
@@ -510,7 +561,7 @@ void TraceReader::dump_committed_inst() {
 bool TraceReader::traceOver() {
   METHOD_TRACE();
   // end of file or add signal into the trace
-  return redirectInstList.empty() && instList_preread.empty();
+  return redirectInstList.empty() && (instReadIdx == instList_preread.size());
 }
 
 bool TraceReader::check_tracertl_timeout(uint64_t tick) {

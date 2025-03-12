@@ -17,6 +17,8 @@
 #ifndef __TRACE_COMMON_H__
 #define __TRACE_COMMON_H__
 
+#include <cstdint>
+
 // #define TRACE_VERBOSE
 
 // first instruction vaddr

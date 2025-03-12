@@ -451,6 +451,15 @@ Emulator::Emulator(int argc, const char *argv[])
     init_tracefastsim(args.fast_warmup, args.warmup_instr);
     init_traceicache(args.tracept_file);
     init_tracertl(args.tracertl_file, args.enable_gen_paddr);
+    if (args.fast_warmup) {
+      uint64_t dedupInstNUm = trace_fastsim->getSquashedInstNum();
+      printf("Fast warmup Squash Duplicate Instructions: %lu\n", dedupInstNUm);
+      printf("  Original warmup %lu insts, max %lu insts ->\n", args.warmup_instr, args.max_instr);
+      args.warmup_instr -= trace_fastsim->getSquashedInstNum();
+      args.max_instr -= trace_fastsim->getSquashedInstNum();
+      printf("  New warmup %lu insts, max %lu insts\n", args.warmup_instr, args.max_instr);
+    }
+
     tracertl_prepare_read();
     tracertl_prepare_fastsim_memaddr();
   } else {
@@ -965,7 +974,7 @@ int Emulator::tick() {
 
     if (args.fast_warmup && trap->instrCnt >= args.warmup_instr) {
       args.fast_warmup = false;
-      printf("Set FastSim Inst Finish\n");
+      printf("Set FastSim Inst Finish at Commit End\n");
       trace_fastsim->setFastsimInstFinish();
     }
 
