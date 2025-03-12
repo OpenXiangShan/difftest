@@ -44,8 +44,8 @@ class FlashHelper extends ExtModule with HasExtModuleInline {
       |`ifndef DISABLE_DIFFTEST_FLASH_DPIC
       |import "DPI-C" function void flash_read
       |(
-      |  input int addr,
-      |  output longint data
+      |  input int unsigned addr,
+      |  output longint unsigned data
       |);
       |`endif // DISABLE_DIFFTEST_FLASH_DPIC
       |
