@@ -32,9 +32,7 @@ object VerificationExtractor {
     val reset = chisel3.compatibility.currentReset
     require(clock.isDefined || index > 0, "Clock must exist for orR sink")
     require(reset.isDefined || index > 0, "Reset must exist for orR sink")
-    chisel3.experimental.annotate(new chisel3.experimental.ChiselAnnotation {
-      override def toFirrtl: Annotation = VerificationExtractorSink(cond.toTarget, index, clock, reset)
-    })
+    chisel3.experimental.annotate(cond)(Seq(VerificationExtractorSink(cond.toTarget, index, clock, reset)))
   }
 
   def sink(cond: chisel3.Bool): Unit = sink(cond, -1)
