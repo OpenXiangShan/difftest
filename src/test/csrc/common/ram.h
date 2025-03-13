@@ -218,7 +218,7 @@ void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes);
 
 #ifdef WITH_DRAMSIM3
 
-void dramsim3_init(const char *config_file);
+void dramsim3_init(const char *config_file, const char *out_dir);
 void dramsim3_step();
 void dramsim3_finish();
 

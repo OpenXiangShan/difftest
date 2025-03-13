@@ -109,6 +109,7 @@ static inline void print_help(const char *file) {
   printf("      --remote-jtag-port     specify remote bitbang port\n");
 #ifdef WITH_DRAMSIM3
   printf("      --dramsim3-ini         specify the ini file for DRAMSim3\n");
+  printf("      --dramsim3-outdir      specify the output dir for DRAMSim3\n");
 #endif
 #if VM_COVERAGE == 1
   printf("      --dump-coverage        enable coverage dump\n");
@@ -158,6 +159,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "remote-jtag-port",  1, NULL,  0  },
     { "iotrace-name",      1, NULL,  0  },
     { "dramsim3-ini",      1, NULL,  0  },
+    { "dramsim3-outdir",   1, NULL,  0  },
     { "overwrite-auto",    1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
@@ -256,7 +258,16 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             exit(1);
             break;
 #endif
-          case 26: args.overwrite_nbytes_autoset = true; continue;
+          case 26:
+#ifdef WITH_DRAMSIM3
+            args.dramsim3_outdir = optarg;
+            continue;
+#else
+            printf("Dramsim3 is not enabled, but --dramsim3-outdir is specified\n");
+            exit(1);
+            break;
+#endif
+          case 27: args.overwrite_nbytes_autoset = true; continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -404,7 +415,7 @@ Emulator::Emulator(int argc, const char *argv[])
     } else {
       init_ram(args.image, ram_size);
 #ifdef WITH_DRAMSIM3
-      dramsim3_init(args.dramsim3_ini);
+      dramsim3_init(args.dramsim3_ini, args.dramsim3_outdir);
 #endif
     }
   }
