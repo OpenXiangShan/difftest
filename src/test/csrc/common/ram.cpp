@@ -447,7 +447,7 @@ void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes) {
 }
 
 #ifdef WITH_DRAMSIM3
-void dramsim3_init(const char *config_file) {
+void dramsim3_init(const char *config_file, const char *out_dir) {
 #if !defined(DRAMSIM3_CONFIG) || !defined(DRAMSIM3_OUTDIR)
 #error DRAMSIM3_CONFIG or DRAMSIM3_OUTDIR is not defined
 #endif
@@ -463,8 +463,11 @@ void dramsim3_init(const char *config_file) {
   }
   ifs.close();
 
+  out_dir = (out_dir == nullptr) ? DRAMSIM3_OUTDIR : out_dir;
+
   std::cout << "DRAMSIM3 config: " << config_file << std::endl;
-  dram = new ComplexCoDRAMsim3(config_file, DRAMSIM3_OUTDIR);
+  std::cout << "DRAMSIM3 outdir: " << out_dir << std::endl;
+  dram = new ComplexCoDRAMsim3(config_file, out_dir);
   // dram = new SimpleCoDRAMsim3(90);
 }
 
