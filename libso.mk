@@ -31,5 +31,5 @@ ifeq ($(LIBSO_WARNING_MISSING_HEADERS),1)
 	@echo "No available RTL simulators. Headers may be missing. Still try to build it."
 endif
 	cd $(CC_OBJ_DIR) 					&& \
-	$(CC) $(LIB_CXXFLAGS) $(LIB_CXXFILES)			&& \
-	$(CC) -o $(LIBDIFFTEST_SO) -m64 -shared *.o $(LD_LIB)
+	$(CC) $(LIB_CXXFLAGS) $(EXTRA_CXXFLAGS) $(LIB_CXXFILES)			&& \
+	$(CC) -o $(LIBDIFFTEST_SO) -m64 -shared *.o $(LD_LIB) $(filter -l%,$(LIB_CXXFLAGS))

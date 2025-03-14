@@ -518,6 +518,7 @@ object DifftestModule {
     val gateway = Gateway.collect()
 
     generateCppHeader(cpu, gateway.instances, gateway.cppMacros, gateway.structPacked.getOrElse(false))
+    generateSwigHeader(gateway.instances)
     generateVeriogHeader(gateway.vMacros)
     Profile.generateJson(cpu, interfaces.toSeq)
 
@@ -599,6 +600,82 @@ object DifftestModule {
           |$if_assigns
           |endmodule""".stripMargin
     FileControl.write(difftestSvh, "gateway_interface.svh")
+  }
+
+  def generateSwigHeader(
+    instances: Seq[DifftestBundle]
+  ): Unit = {
+    val uniqBundles = instances.groupBy(_.desiredModuleName)
+    val difftestSwig = ListBuffer.empty[String]
+
+    difftestSwig +=
+      s"""
+         |%module difftest
+         |
+         |%{
+         |#include "difftest.h"
+         |#include "swig_export.h"
+         |#include "ram.h"
+         |#include "flash.h"
+         |#include "device.h"
+         |#include "diffstate.h"
+         |%}
+         |
+         |%apply unsigned long long {u_int64_t}
+         |%apply unsigned int {u_uint32_t}
+         |%apply unsigned short {u_uint16_t}
+         |%apply unsigned char {u_uint8_t}
+         |%apply unsigned long long {uint64_t}
+         |%apply unsigned int {uint32_t}
+         |%apply unsigned short {uint16_t}
+         |%apply unsigned char {uint8_t}
+         |%apply long long {i_int64_t}
+         |%apply int {i_int32_t}
+         |%apply short {i_int16_t}
+         |%apply char {i_int8_t}
+         |%apply long long {int64_t}
+         |%apply int {int32_t}
+         |%apply short {int16_t}
+         |%apply char {int8_t}
+         |
+         |%include stdint.i
+         |%include std_string.i
+         |%include std_map.i
+         |%include std_vector.i
+         |
+         |%include "difftest.h"
+         |%include "swig_export.h"
+         |%include "ram.h"
+         |%include "flash.h"
+         |%include "device.h"
+         |%include "diffstate.h"
+         |
+         |%extend DiffTestState {
+         |""".stripMargin
+
+    // add getter for array member of DiffTestState
+    val numCores = instances.count(_.isUniqueIdentifier)
+    for ((className, cppInstances) <- uniqBundles.toSeq.sortBy(_._2.head.order)) {
+      val bundleType = cppInstances.head
+      val instanceName = bundleType.desiredCppName
+      val cppIsArray = bundleType.isInstanceOf[DifftestWithIndex] || bundleType.isFlatten
+      val nInstances = cppInstances.length
+      val instanceCount = if (bundleType.isFlatten) bundleType.bits.getNumElements else nInstances / numCores
+      require(nInstances % numCores == 0, s"Cores seem to have different # of $instanceName")
+      require(cppIsArray || nInstances == numCores, s"# of $instanceName should not be $nInstances")
+      if (cppIsArray) {
+        difftestSwig +=
+          s"""
+             |$className *get_$instanceName(int idx) {
+             |  if (idx >= $instanceCount) {
+             |    return NULL;
+             |  }
+             |  return &self->$instanceName[idx];
+             |}""".stripMargin
+      }
+    }
+    difftestSwig += "}"
+    FileControl.write(difftestSwig, "difftest.i")
   }
 
   def generateCppHeader(

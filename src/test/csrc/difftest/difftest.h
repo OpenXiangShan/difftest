@@ -180,12 +180,12 @@ public:
   void display(int coreid);
 
 private:
-  const static int DEBUG_GROUP_TRACE_SIZE = 16;
+  static const int DEBUG_GROUP_TRACE_SIZE = 16;
   int retire_group_pointer = 0;
   uint64_t retire_group_pc_queue[DEBUG_GROUP_TRACE_SIZE] = {0};
   uint32_t retire_group_cnt_queue[DEBUG_GROUP_TRACE_SIZE] = {0};
 
-  const static int DEBUG_INST_TRACE_SIZE = 32;
+  static const int DEBUG_INST_TRACE_SIZE = 32;
   int retire_inst_pointer = 0;
   std::vector<CommitTrace *> commit_trace;
 

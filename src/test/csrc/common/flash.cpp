@@ -60,7 +60,7 @@ void init_flash(const char *flash_bin) {
   }
   Info("Using simulated %luB flash\n", flash_dev.size);
 
-  if (!flash_bin) {
+  if (!flash_bin || (strlen(flash_bin) == 0)) {
     /** no specified flash_path, use defualt 3 instructions */
     // addiw   t0,zero,1
     // slli    to,to,  0x1f
