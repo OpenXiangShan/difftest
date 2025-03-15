@@ -19,8 +19,8 @@ VCS_PG  = simv_pg
 
 VCS_CSRC_DIR = $(abspath ./src/test/csrc/vcs)
 VCS_CXXFILES = $(SIM_CXXFILES) $(DIFFTEST_CXXFILES) $(PLUGIN_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
-VCS_CXXFLAGS += -std=c++11 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
-VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3
+VCS_CXXFLAGS += -std=c++14 -static -Wall -I$(VCS_CSRC_DIR) -I$(SIM_CSRC_DIR) -I$(DIFFTEST_CSRC_DIR) -I$(PLUGIN_CHEAD_DIR)
+VCS_LDFLAGS  += -lpthread -lSDL2 -ldl -lz -lsqlite3 /usr/lib/x86_64-linux-gnu/libboost_filesystem.a
 
 ifeq ($(RELEASE),1)
 VCS_CXXFLAGS += -DBASIC_DIFFTEST_ONLY
