@@ -21,6 +21,7 @@ import firrtl.ir._
 import firrtl.options.Phase
 import firrtl.passes.wiring.{SinkAnnotation, SourceAnnotation}
 import firrtl.stage.FirrtlCircuitAnnotation
+import com.thoughtworks.enableIf
 
 // This is the main user interface for defining the Verification sink.
 // index i (i < 0) is connected with assertions.orR; index i (i >= 0) is connected with assertions(i)
@@ -122,6 +123,7 @@ class VerificationExtractor extends Phase {
     }
   }
 
+  @enableIf(chisel3.BuildInfo.version.startsWith("6"))
   private def onSourceModule(m: DefModule, c: CircuitName): (Option[AssertionTracker], DefModule) = {
     m match {
       case Module(info, name, ports, body) =>
@@ -129,6 +131,18 @@ class VerificationExtractor extends Phase {
         val (regDefs, newBody) = onStmt(body)(tracker)
         val bodyTail = tracker.bodyTail.getOrElse(EmptyStmt)
         (Some(tracker), Module(info, name, ports, Block(regDefs :+ newBody :+ bodyTail)))
+      case other: DefModule => (None, other)
+    }
+  }
+
+  @enableIf(chisel3.BuildInfo.version.startsWith("7"))
+  private def onSourceModule(m: DefModule, c: CircuitName): (Option[AssertionTracker], DefModule) = {
+    m match {
+      case Module(info, name, public, layer, ports, body) =>
+        val tracker = new AssertionTracker(ModuleName(name, c))
+        val (regDefs, newBody) = onStmt(body)(tracker)
+        val bodyTail = tracker.bodyTail.getOrElse(EmptyStmt)
+        (Some(tracker), Module(info, name, public, layer, ports, Block(regDefs :+ newBody :+ bodyTail)))
       case other: DefModule => (None, other)
     }
   }
