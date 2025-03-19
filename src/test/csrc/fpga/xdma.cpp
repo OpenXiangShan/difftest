@@ -134,7 +134,6 @@ void FpgaXdma::stop_thansmit_thread() {
 #ifdef CONFIG_USE_XDMA_H2C
   close(xdma_h2c_fd);
 #endif
-  xdma_mempool.cleanupMemoryPool();
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
