@@ -238,6 +238,9 @@ bool TraceReader::read(Instruction &inst) {
     inst = instList_preread.front();
     instList_preread.pop();
     counterReadFromInstList ++;
+
+    // dynamic update constructedICache to hanlder thread changes
+    trace_icache->constructICache(inst.instr_pc_va, inst.instr);
   } else {
     setOver();
     memset(reinterpret_cast<char *> (&inst), 0, sizeof(Instruction));
@@ -330,6 +333,7 @@ void TraceReader::checkCommit(uint64_t tick) {
       while (!pendingInstList.empty()) {
         if (pendingInstList.front().isCtrlForceJump()) {
           pendingInstList.pop_front();
+          commit_inst_num.add(1); // force jump also has unique inst_id
         } else {
           break;
         }
@@ -382,7 +386,6 @@ void TraceReader::checkCommit(uint64_t tick) {
 
     setCommit();
     commit_inst_num.add(instNum);
-
   }
 
   update_tick(tick);
