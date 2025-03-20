@@ -86,14 +86,11 @@ private trait HasReadPort { this: ExtModule =>
 
   val r_func =
     """
+      |  r_data = 0;
       |`ifndef DISABLE_DIFFTEST_RAM_DPIC
-      |if (r_enable) begin
-      |  r_data <= difftest_ram_read(r_index);
-      |end
+      |  if (r_enable) r_data = difftest_ram_read(r_index);
       |`else
-      |if (r_enable) begin
-      |  r_data <= `MEM_TARGET[r_index];
-      |end
+      |  if (r_enable) r_data = `MEM_TARGET[r_index];
       |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
@@ -108,7 +105,7 @@ private trait HasReadPort { this: ExtModule =>
   def read(enable: Bool, index: UInt): UInt = {
     r.enable := enable
     r.index := index
-    r.data
+    RegEnable(r.data, r.enable)
   }
 }
 
@@ -211,8 +208,10 @@ private class MemRWHelper extends MemHelper with HasReadPort with HasWritePort {
        |  input clock
        |);
        |  $mem_init
-       |  always @(posedge clock) begin
+       |  always @(*) begin
        |    $r_func
+       |  end
+       |  always @(posedge clock) begin
        |    $w_func
        |  end
        |endmodule
