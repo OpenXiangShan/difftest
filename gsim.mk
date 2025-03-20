@@ -39,7 +39,8 @@ gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 
 GSIM_CONFIG_DIR = $(abspath ./config)
 VERILITOR_CSRC_DIR = $(abspath ./src/test/csrc/verilator)
-GSIM_CXXFILES = $(SIM_CXXFILES) $(shell find $(VERILITOR_CSRC_DIR) -name "*.cpp")
+GSIM_OTHER_CSRC_DIR = $(abspath ./src/test/csrc/gsim)
+GSIM_CXXFILES = $(SIM_CXXFILES) $(shell find $(VERILITOR_CSRC_DIR) $(GSIM_OTHER_CSRC_DIR) -name "*.cpp")
 
 GSIM_CXXFLAGS = $(subst \\\",\", $(SIM_CXXFLAGS)) -DNUM_CORES=$(NUM_CORES) -DGSIM \
 						-I$(VERILITOR_CSRC_DIR) -I$(GEN_VSRC_DIR) \
