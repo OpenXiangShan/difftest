@@ -42,7 +42,7 @@ class FlashHelper extends ExtModule with HasExtModuleInline {
       |  uint32_t  r_addr,
       |  uint64_t& r_data
       |) {
-      |  if (r_en) flash_read(r_addr, r_data);
+      |  if (r_en) flash_read(r_addr, &r_data);
       |}
       |""".stripMargin
   difftest.DifftestModule.createCppExtModule("FlashHelper", cppExtModule, Some("\"flash.h\""))
