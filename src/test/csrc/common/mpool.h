@@ -25,6 +25,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <vector>
+#include <xmmintrin.h>
 
 #define MEMPOOL_SIZE   16384 * 1024 // 16M memory
 #define MEMBLOCK_SIZE  4096         // 4K packge
@@ -67,6 +68,19 @@ public:
   // Disable the copy constructor and copy assignment operator
   MemoryBlock(const MemoryBlock &) = delete;
   MemoryBlock &operator=(const MemoryBlock &) = delete;
+};
+
+class SpinLock {
+  std::atomic_flag locked = ATOMIC_FLAG_INIT;
+
+public:
+  void lock() {
+    while (locked.test_and_set(std::memory_order_acquire))
+      _mm_pause();
+  }
+  void unlock() {
+    locked.clear(std::memory_order_release);
+  }
 };
 
 class MemoryPool {
@@ -122,17 +136,14 @@ private:
   const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2; //The window needs to reserve two free Spaces
   const size_t REM_MAX_IDX = (MAX_IDX - 1);
   const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
-  uint64_t mem_block_size = 4096;
+  uint64_t mem_block_size = MEMBLOCK_SIZE;
 
 public:
-  MemoryIdxPool(uint64_t block_size) {
-    mem_block_size = block_size;
+  MemoryIdxPool(uint64_t block_size) : mem_block_size(block_size) {
     initMemoryPool();
   }
-  MemoryIdxPool() : MemoryIdxPool(4096) {}
-  ~MemoryIdxPool() {
-    cleanupMemoryPool();
-  }
+  MemoryIdxPool() : mem_block_size(MEMBLOCK_SIZE) {}
+  ~MemoryIdxPool() {}
   // Disable copy constructors and copy assignment operators
   MemoryIdxPool(const MemoryIdxPool &) = delete;
   MemoryIdxPool &operator=(const MemoryIdxPool &) = delete;
@@ -144,9 +155,6 @@ public:
       memory_pool.emplace_back(mem_block_size);
     }
   }
-
-  // Cleaning up memory pools
-  void cleanupMemoryPool();
 
   // Write a specified free block of a free window
   bool write_free_chunk(uint8_t idx, const char *data);
@@ -168,17 +176,13 @@ public:
 
 private:
   std::vector<MemoryBlock> memory_pool; // Mempool
-  std::mutex window_mutexes;            // window sliding protection
-  std::mutex offset_mutexes;            // w/r offset protection
-  std::condition_variable cv_empty;     // Free block condition variable
-  std::condition_variable cv_filled;    // Filled block condition variable
+  SpinLock offset_mutexes;              // w/r offset protection
 
   size_t group_r_offset = 0; // The offset used by the current consumer
-  size_t group_w_offset = 0; // The offset used by the current producer
   size_t read_count = 0;
-  size_t write_count = 0;
-  size_t write_next_count = 0;
-
+  std::atomic<size_t> group_w_offset{0}; // The offset used by the current producer
+  std::atomic<size_t> write_count{0};
+  std::atomic<size_t> write_next_count{0};
   std::atomic<size_t> empty_blocks{MAX_GROUP_READ};
   std::atomic<size_t> group_w_idx{1};
   std::atomic<size_t> group_r_idx{1};

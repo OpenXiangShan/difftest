@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 #include "mpool.h"
+#include <thread>
 
 void MemoryPool::init_memory_pool() {
   memory_pool.reserve(NUM_BLOCKS);
@@ -71,40 +72,34 @@ void MemoryPool::set_free_chunk() {
   ++empty_blocks;
 }
 
-// Cleaning up memory pools
-void MemoryIdxPool::cleanupMemoryPool() {
-  cv_empty.notify_all();
-  cv_filled.notify_all();
-}
-
 // Write a specified free block of a free window
 bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
   size_t page_w_idx;
   {
-    std::lock_guard<std::mutex> lock(offset_mutexes);
+    std::lock_guard<SpinLock> lock(offset_mutexes);
 
-    page_w_idx = idx + group_w_offset;
+    page_w_idx = idx + group_w_offset.load(std::memory_order_relaxed);
     // Processing of winding data at the boundary
-    if (memory_pool[page_w_idx].is_free.load() == false) {
-      size_t this_group = group_w_idx.load();
+    if (memory_pool[page_w_idx].is_free.load(std::memory_order_relaxed) == false) {
+      size_t this_group = group_w_idx.load(std::memory_order_relaxed);
       size_t offset = ((this_group & REM_MAX_GROUPING_IDX) * MAX_IDX);
       page_w_idx = idx + offset;
-      write_next_count++;
+      write_next_count.fetch_add(1, std::memory_order_relaxed);
       // Lookup failed
-      if (memory_pool[page_w_idx].is_free.load() == false) {
+      if (memory_pool[page_w_idx].is_free.load(std::memory_order_relaxed) == false) {
         printf("This block has been written, and there is a duplicate packge idx %d\n", idx);
         return false;
       }
     } else {
-      write_count++;
+      write_count.fetch_add(1, std::memory_order_relaxed);
       // Proceed to the next group
-      if (write_count == MAX_IDX) {
+      if (write_count.load(std::memory_order_relaxed) == MAX_IDX) {
         memcpy(memory_pool[page_w_idx].data.get(), data, mem_block_size);
         memory_pool[page_w_idx].is_free.store(false);
         size_t next_w_idx = wait_next_free_group();
-        group_w_offset = (next_w_idx & REM_MAX_GROUPING_IDX) * MAX_IDX;
-        write_count = write_next_count;
-        write_next_count = 0;
+        group_w_offset.store((next_w_idx & REM_MAX_GROUPING_IDX) * MAX_IDX);
+        write_count.store(write_next_count);
+        write_next_count.store(0);
         return true;
       }
     }
@@ -116,8 +111,7 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
 }
 
 void MemoryIdxPool::wait_mempool_start() {
-  std::unique_lock<std::mutex> lock(window_mutexes);
-  cv_filled.wait(lock);
+  while (check_group() == false) {}
 }
 
 bool MemoryIdxPool::read_busy_chunk(char *data) {
@@ -141,22 +135,22 @@ bool MemoryIdxPool::read_busy_chunk(char *data) {
 
 size_t MemoryIdxPool::wait_next_free_group() {
   size_t free_num = empty_blocks.fetch_sub(1, std::memory_order_relaxed) - 1;
-  cv_filled.notify_all();
   //Reserve at least two free blocks
   if (free_num <= 2) {
-    std::unique_lock<std::mutex> lock(window_mutexes);
-    cv_empty.wait(lock, [this] { return empty_blocks.load() > 1; });
+    while (empty_blocks.load(std::memory_order_acquire) <= 1) {
+      std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+    }
   }
   return group_w_idx.fetch_add(1);
 }
 
 size_t MemoryIdxPool::wait_next_full_group() {
   size_t free_num = empty_blocks.fetch_add(1, std::memory_order_relaxed) + 1;
-  cv_empty.notify_all();
 
   if (free_num >= MAX_GROUP_READ) {
-    std::unique_lock<std::mutex> lock(window_mutexes);
-    cv_filled.wait(lock, [this] { return empty_blocks.load() < MAX_GROUP_READ; });
+    while (empty_blocks.load(std::memory_order_acquire) >= MAX_GROUP_READ) {
+      std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+    }
   }
   return group_r_idx.fetch_add(1);
 }
