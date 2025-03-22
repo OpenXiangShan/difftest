@@ -953,6 +953,12 @@ int Emulator::tick() {
       trapCode = STATE_ABORT;
       return trapCode;
     }
+    if (tracertl_emu_conflict()) {
+      eprintf("Emu simulation slow, may encouter Emu Conflict, SHOULD RERUN\n");
+      tracertl_error_drive_dump();
+      trapCode = STATE_ABORT;
+      return trapCode;
+    }
 
     if (args.fast_warmup && trap->instrCnt >= args.warmup_instr) {
       args.fast_warmup = false;

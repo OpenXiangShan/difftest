@@ -400,6 +400,10 @@ void TraceReader::checkCommit(uint64_t tick) {
     uint64_t cycle_per_second = cycle_delta / time_delta;
     uint64_t inst_per_second = inst_delta / time_delta;
 
+    static int slow_count = 0;
+    if (cycle_per_second < 500) { slow_count ++; }
+    else { slow_count = 0; }
+
     last_interval_time = cur_time;
     last_interval_tick = tick;
     last_interval_inst = commit_inst_num.get();
@@ -408,6 +412,11 @@ void TraceReader::checkCommit(uint64_t tick) {
     printf("Current Finished Inst Num %ld. Simulation Speed: %ld cycle/s %ld inst/s\r ", commit_inst_num.get(), cycle_per_second, inst_per_second);
     fflush(stdout);
 
+    if (slow_count > 3) {
+      printf("\n");
+      printf("  Slow Simulation Speed, may conflict with other process\n");
+      setEmuConflict();
+    }
   }
 #endif
   METHOD_TRACE();

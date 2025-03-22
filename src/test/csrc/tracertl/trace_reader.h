@@ -30,7 +30,8 @@ enum TraceStatus {
   TRACE_EOF,
   TRACE_ERROR,
   TRACE_ERROR_DRIVE,
-  TRACE_STUCK
+  TRACE_STUCK,
+  TRACE_EMU_CONFLICT,
 };
 
 class TraceCounter {
@@ -160,11 +161,13 @@ public:
   bool isError() { return status == TRACE_ERROR; }
   bool isErrorDrive() { return status == TRACE_ERROR_DRIVE; }
   bool isStuck() { return status == TRACE_STUCK; }
+  bool isEmuConflict() { return status == TRACE_EMU_CONFLICT; }
 
   void setOver() { status = TRACE_EOF; }
   void setError() { status = TRACE_ERROR; }
   void setErrorDrive() { status = TRACE_ERROR_DRIVE; }
   void setStuck() { status = TRACE_STUCK; }
+  void setEmuConflict() { status = TRACE_EMU_CONFLICT; }
 
   bool isCommited() { return last_committed;}
   void setCommit() { last_committed = true;}
