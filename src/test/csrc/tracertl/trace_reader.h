@@ -53,8 +53,8 @@ struct TraceCollectBufferEntry {
 };
 
 #define DriveInstDecodedSize 16
-#define CommittedInstSize 16
-#define DutCommittedInstSize 16
+#define CommittedInstSize 64
+#define DutCommittedInstSize 64
 #define RedirectLogSize 16
 #define TraceCommitBufferSize 8
 #define TraceDriveBufferSize 8
