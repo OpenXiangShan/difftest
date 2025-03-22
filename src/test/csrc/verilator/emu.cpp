@@ -456,8 +456,8 @@ Emulator::Emulator(int argc, const char *argv[])
   dut_ptr->difftest_logCtrl_end = args.log_end;
 #endif // VERILATOR
 #ifdef GSIM
-  dut_ptr->set_difftest$$logCtrl$$begin(args.log_begin);
-  dut_ptr->set_difftest$$logCtrl$$end(args.log_end);
+  dut_ptr->set_difftest__DOT__logCtrl__DOT__begin(args.log_begin);
+  dut_ptr->set_difftest__DOT__logCtrl__DOT__end(args.log_end);
 #endif // GSIM
 
 #ifndef CONFIG_NO_DIFFTEST
@@ -702,14 +702,14 @@ inline void Emulator::single_cycle() {
 
 #ifdef GSIM
   dut_ptr->step();
-  if (dut_ptr->get_difftest$$uart$$out$$valid()) {
-    printf("%c", dut_ptr->get_difftest$$uart$$out$$ch());
+  if (dut_ptr->get_difftest__DOT__uart__DOT__out__DOT__valid()) {
+    printf("%c", dut_ptr->get_difftest__DOT__uart__DOT__out__DOT__ch());
     fflush(stdout);
   }
-  if (dut_ptr->get_difftest$$uart$$in$$valid()) {
+  if (dut_ptr->get_difftest__DOT__uart__DOT__in__DOT__valid()) {
     extern uint8_t uart_getc();
     uint8_t ch = uart_getc();
-    dut_ptr->set_difftest$$uart$$in$$ch(ch);
+    dut_ptr->set_difftest__DOT__uart__DOT__in__DOT__ch(ch);
   }
 #endif // GSIM
 
@@ -826,8 +826,8 @@ int Emulator::tick() {
       dut_ptr->difftest_perfCtrl_dump = 1;
 #endif // VERILATOR
 #ifdef GSIM
-      dut_ptr->set_difftest$$perfCtrl$$clean(1);
-      dut_ptr->set_difftest$$perfCtrl$$dump(1);
+      dut_ptr->set_difftest__DOT__perfCtrl__DOT__clean(1);
+      dut_ptr->set_difftest__DOT__perfCtrl__DOT__dump(1);
 #endif // GSIM
       args.warmup_instr = -1;
     }
@@ -837,8 +837,8 @@ int Emulator::tick() {
       dut_ptr->difftest_perfCtrl_dump = 1;
 #endif // VERILATOR
 #ifdef GSIM
-      dut_ptr->set_difftest$$perfCtrl$$clean(1);
-      dut_ptr->set_difftest$$perfCtrl$$dump(1);
+      dut_ptr->set_difftest__DOT__perfCtrl__DOT__clean(1);
+      dut_ptr->set_difftest__DOT__perfCtrl__DOT__dump(1);
 #endif // GSIM
     }
 #ifdef ENABLE_IPC
@@ -879,8 +879,8 @@ int Emulator::tick() {
   dut_ptr->difftest_perfCtrl_dump = 0;
 #endif // VERILATOR
 #ifdef GSIM
-  dut_ptr->set_difftest$$perfCtrl$$clean(0);
-  dut_ptr->set_difftest$$perfCtrl$$dump(0);
+  dut_ptr->set_difftest__DOT__perfCtrl__DOT__clean(0);
+  dut_ptr->set_difftest__DOT__perfCtrl__DOT__dump(0);
 #endif // GSIM
 #ifndef CONFIG_NO_DIFFTEST
   int step = 0;
@@ -1080,9 +1080,9 @@ void Emulator::trigger_stat_dump() {
   }
 #endif // VERILATOR
 #ifdef GSIM
-  dut_ptr->set_difftest$$perfCtrl$$dump(1);
+  dut_ptr->set_difftest__DOT__perfCtrl__DOT__dump(1);
   if (get_args().force_dump_result) {
-    dut_ptr->set_difftest$$logCtrl$$end(-1);
+    dut_ptr->set_difftest__DOT__logCtrl__DOT__end(-1);
   }
 #endif // GSIM
   single_cycle();
