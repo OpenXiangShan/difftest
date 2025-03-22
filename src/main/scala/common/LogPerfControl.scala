@@ -29,6 +29,22 @@ class LogPerfControl extends Bundle {
 private class LogPerfHelper extends BlackBox with HasBlackBoxInline {
   val io = IO(Output(new LogPerfControl))
 
+  val cppExtModule =
+    """
+      |void LogPerfHelper (
+      |  uint64_t& timer,
+      |  uint8_t&  logEnable,
+      |  uint8_t&  clean,
+      |  uint8_t&  dump
+      |) {
+      |  timer     = difftest$$timer;
+      |  logEnable = difftest$$log_enable;
+      |  clean     = difftest$$perfCtrl$$clean;
+      |  dump      = difftest$$perfCtrl$$dump;
+      |}
+      |""".stripMargin
+  difftest.DifftestModule.createCppExtModule("LogPerfHelper", cppExtModule)
+
   val verilog =
     """`ifndef SIM_TOP_MODULE_NAME
       |  `define SIM_TOP_MODULE_NAME SimTop

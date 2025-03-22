@@ -30,6 +30,20 @@ class SDCardHelper extends ExtModule with HasExtModuleInline {
   val clock = IO(Input(Clock()))
   val io = IO(new DifftestSDCardRead)
 
+  val cppExtModule =
+    """
+      |void SDCardHelper (
+      |  uint8_t   io_setAddr,
+      |  uint32_t  io_addr,
+      |  uint8_t   io_ren,
+      |  uint32_t& io_data
+      |) {
+      |  if (io_ren) sd_read(&io_data);
+      |  if (io_setAddr) sd_setaddr(io_addr);
+      |}
+      |""".stripMargin
+  difftest.DifftestModule.createCppExtModule("SDCardHelper", cppExtModule, Some("\"sdcard.h\""))
+
   setInline(
     "SDCardHelper.v",
     s"""

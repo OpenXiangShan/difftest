@@ -500,6 +500,8 @@ trait DifftestModule[T <: DifftestBundle] {
 object DifftestModule {
   private val enabled = true
   private val interfaces = ListBuffer.empty[(DifftestBundle, Int)]
+  private val cppExtModules = ListBuffer.empty[(String, String)]
+  private val cppExtHeaders = ListBuffer.empty[String]
 
   def parseArgs(args: Array[String]): Array[String] = {
     @tailrec
@@ -544,6 +546,9 @@ object DifftestModule {
       gateway.structPacked.getOrElse(false),
       gateway.structAligned.getOrElse(false),
     )
+    if (gateway.cppExtModule.getOrElse(false)) {
+      generateCppExtModules()
+    }
     generateVeriogHeader(gateway.vMacros)
     Profile.generateJson(cpu, interfaces.toSeq)
 
@@ -729,6 +734,28 @@ object DifftestModule {
     FileControl.write(difftestCpp, "diffstate.h")
   }
 
+  def createCppExtModule(name: String, func: String, header: Option[String]): Unit = {
+    // generate external modules only once
+    if (!cppExtModules.exists(_._1 == name)) {
+      cppExtModules += ((name, func))
+      // Some cpp external module may have header dependency
+      if (header.isDefined && !cppExtHeaders.contains(header.get)) {
+        cppExtHeaders += header.get
+      }
+    }
+  }
+  def createCppExtModule(name: String, func: String): Unit = createCppExtModule(name, func, None)
+
+  def generateCppExtModules(): Unit = {
+    val difftestCppExts = ListBuffer.empty[String]
+    difftestCppExts += "#ifdef GSIM"
+    difftestCppExts += "#include <cstdint>"
+    difftestCppExts += "#include \"SimTop.h\""
+    cppExtHeaders.foreach(h => difftestCppExts += s"#include $h")
+    cppExtModules.foreach(m => difftestCppExts += m._2)
+    difftestCppExts += "#endif // GSIM"
+    FileControl.write(difftestCppExts, "difftest-extmodule.cpp")
+  }
   def generateVeriogHeader(macros: Seq[String]): Unit = {
     FileControl.write(macros.map(m => s"`define $m"), "DifftestMacros.v")
   }

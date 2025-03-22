@@ -20,6 +20,7 @@ import chisel3.experimental.ExtModule
 import chisel3.reflect.DataMirror
 import chisel3.util._
 import difftest._
+import difftest.DifftestModule.createCppExtModule
 import difftest.batch.{BatchInfo, BatchIO}
 import difftest.common.FileControl
 import difftest.delta.Delta
@@ -41,7 +42,8 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
     val typeString = data.getWidth match {
       case 1                                  => if (isC) "uint8_t" else "bit"
       case width if width > 1 && width <= 8   => if (isC) "uint8_t" else "byte"
-      case width if width > 8 && width <= 32  => if (isC) "uint32_t" else "int"
+      case width if width > 8 && width <= 16  => if (isC) "uint16_t" else "shortint"
+      case width if width > 16 && width <= 32 => if (isC) "uint32_t" else "int"
       case width if width > 32 && width <= 64 => if (isC) "uint64_t" else "longint"
       case width if width > 64 =>
         if (isC)
@@ -74,13 +76,15 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   }
 
   def desiredName: String
-  def dpicFuncName: String = s"v_difftest_${desiredName.replace("Difftest", "")}"
+  def dpicFuncName: String = s"v_difftest_${desiredName.replace("DiffExt", "")}"
   def dpicFuncArgs: Seq[Seq[(String, Data)]] =
     modPorts.filterNot(p => p.length == 1 && commonPorts.exists(_._1 == p.head._1))
   def dpicFuncProto: String =
     s"""
        |extern "C" void $dpicFuncName (
-       |  ${dpicFuncArgs.flatten.map(arg => getDPICArgString(arg._1, arg._2, true, !config.isFPGA)).mkString(",\n  ")}
+       |  ${dpicFuncArgs.flatten
+        .map(arg => getDPICArgString(arg._1, arg._2, true, config.useDPICtype))
+        .mkString(",\n  ")}
        |)""".stripMargin
   def getPacketDecl(gen: DifftestBundle, prefix: String, config: GatewayConfig): String = {
     val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
@@ -151,12 +155,25 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
          |""".stripMargin
     modDef
   }
+
+  def cppExtModule: String = {
+    val extArgs = modPorts.flatten.filterNot(_._1 == "clock").map(arg => getDPICArgString(arg._1, arg._2, true, false))
+    s"""
+       |void $desiredName(
+       |  ${extArgs.mkString(",\n  ")}
+       |) {
+       |  if (enable) {
+       |    $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
+       |  }
+       |}
+       |""".stripMargin
+  }
 }
 
 class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(config) with DifftestModule[T] {
   val io = IO(Input(gen))
 
-  override def desiredName: String = gen.desiredModuleName
+  override def desiredName: String = gen.desiredModuleName.replace("Difftest", "DiffExt")
   override def modPorts: Seq[Seq[(String, Data)]] = {
     super.modPorts ++ io.elementsInSeqUInt.map { case (name, dataSeq) =>
       val prefixName = s"io_$name"
@@ -195,6 +212,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
     packetDecl ++ validAssign ++ body ++ query
   }
 
+  createCppExtModule(desiredName, cppExtModule, Some("\"difftest-dpic.h\""))
   setInline(s"$desiredName.v", moduleBody)
 }
 
@@ -230,7 +248,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
 
   override def modPorts = super.modPorts ++ Seq(Seq(("io", io)))
 
-  override def desiredName: String = "DifftestBatch"
+  override def desiredName: String = "DiffExtBatch"
   override def dpicFuncAssigns: Seq[String] = {
     val bundleEnum = template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchStep", "BatchFinish")
     val bundleAssign = template.zipWithIndex.map { case (t, idx) =>
@@ -300,6 +318,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |""".stripMargin)
   }
 
+  createCppExtModule(desiredName, cppExtModule, Some("\"difftest-dpic.h\""))
   setInline(s"$desiredName.v", moduleBody)
 }
 

@@ -17,7 +17,7 @@
 #include "common.h"
 #include "dut.h"
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(GSIM)
 #include "emu.h"
 #define DUT_MODEL Emulator
 #endif
