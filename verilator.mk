@@ -178,10 +178,19 @@ ifdef PGO_WORKLOAD
 					   PGO_LDFLAGS="-fprofile-generate=$(EMU_PGO_DIR)"
 	@echo "Training emu with PGO Workload..."
 	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
+
+ifeq ($(TRACERTL_MODE), 1)
+	$(EMU) --no-diff --gen-paddr --tracertl-file $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+		   1>$(EMU_PGO_DIR)/`date +%s`.log \
+		   2>$(EMU_PGO_DIR)/`date +%s`.err \
+		   $(PGO_EMU_ARGS)
+else # exec-driven mode
 	$(EMU) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
 		   1>$(EMU_PGO_DIR)/`date +%s`.log \
 		   2>$(EMU_PGO_DIR)/`date +%s`.err \
 		   $(PGO_EMU_ARGS)
+endif
+
 	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 ifdef LLVM_PROFDATA
 # When using LLVM's profile-guided optimization, the raw data can not
