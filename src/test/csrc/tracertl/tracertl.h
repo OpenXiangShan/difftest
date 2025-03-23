@@ -35,7 +35,6 @@ void tracertl_check_drive();
 bool tracertl_over();
 bool tracertl_error();
 bool tracertl_error_drive();
-bool tracertl_update_tick(uint64_t tick);
 bool tracertl_stuck();
 bool tracertl_emu_conflict();
 void tracertl_error_dump();

@@ -62,9 +62,6 @@ bool tracertl_stuck() {
   return trace_reader->isStuck();
 }
 
-bool tracertl_update_tick(uint64_t tick) {
-  return trace_reader->update_tick(tick);
-}
 bool tracertl_emu_conflict() {
   return trace_reader->isEmuConflict();
 };
