@@ -240,6 +240,7 @@ SIM_CXXFLAGS += -Werror
 endif
 
 include verilator.mk
+include gsim.mk
 include vcs.mk
 include palladium.mk
 include libso.mk

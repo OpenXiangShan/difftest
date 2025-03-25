@@ -86,21 +86,26 @@ private trait HasReadPort { this: ExtModule =>
 
   val r_func =
     """
+      |  r_data = 0;
       |`ifndef DISABLE_DIFFTEST_RAM_DPIC
-      |if (r_enable) begin
-      |  r_data <= difftest_ram_read(r_index);
-      |end
+      |  if (r_enable) r_data = difftest_ram_read(r_index);
       |`else
-      |if (r_enable) begin
-      |  r_data <= `MEM_TARGET[r_index];
-      |end
+      |  if (r_enable) r_data = `MEM_TARGET[r_index];
       |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
+
+  val r_cpp_arg =
+    """
+      |uint8_t   r_enable,
+      |uint64_t  r_index,
+      |uint64_t& r_data""".stripMargin
+
+  val r_cpp_func = "if (r_enable) r_data = difftest_ram_read(r_index);"
 
   def read(enable: Bool, index: UInt): UInt = {
     r.enable := enable
     r.index := index
-    r.data
+    RegEnable(r.data, r.enable)
   }
 }
 
@@ -145,6 +150,15 @@ private trait HasWritePort { this: ExtModule =>
       |`endif // DISABLE_DIFFTEST_RAM_DPIC
       |""".stripMargin
 
+  val w_cpp_arg =
+    """
+      |uint8_t  w_enable,
+      |uint64_t w_index,
+      |uint64_t w_data,
+      |uint64_t w_mask""".stripMargin
+
+  val w_cpp_func = "if(w_enable) difftest_ram_write(w_index, w_data, w_mask);"
+
   def write(enable: Bool, index: UInt, data: UInt, mask: UInt): HasWritePort = {
     w.enable := enable
     w.index := index
@@ -168,6 +182,18 @@ private class MemRWHelper extends MemHelper with HasReadPort with HasWritePort {
 
   def mem_target: String = "memory"
 
+  val cppExtModule =
+    s"""
+       |void MemRWHelper(
+       |$r_cpp_arg,
+       |$w_cpp_arg
+       |) {
+       |  $r_cpp_func
+       |  $w_cpp_func
+       |}
+       |""".stripMargin
+  difftest.DifftestModule.createCppExtModule("MemRWHelper", cppExtModule, Some("\"ram.h\""))
+
   setInline(
     "MemRWHelper.v",
     s"""
@@ -182,8 +208,10 @@ private class MemRWHelper extends MemHelper with HasReadPort with HasWritePort {
        |  input clock
        |);
        |  $mem_init
-       |  always @(posedge clock) begin
+       |  always @(*) begin
        |    $r_func
+       |  end
+       |  always @(posedge clock) begin
        |    $w_func
        |  end
        |endmodule
