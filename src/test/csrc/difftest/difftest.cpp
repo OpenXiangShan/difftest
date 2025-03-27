@@ -1374,6 +1374,17 @@ int Difftest::do_golden_memory_update() {
     dumpGoldenMem("Init", track_instr, cycleCnt);
   }
 
+#ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+  for (int i = 0; i < CONFIG_DIFF_UNCACHE_MM_STORE_WIDTH; i++) {
+    if (dut->uncache_mm_store[i].valid) {
+      dut->uncache_mm_store[i].valid = 0;
+      update_goldenmem(dut->uncache_mm_store[i].addr, dut->uncache_mm_store[i].data, dut->uncache_mm_store[i].mask, 8);
+      if (dut->uncache_mm_store[i].addr == track_instr) {
+        dumpGoldenMem("Uncache MM Store", track_instr, cycleCnt);
+      }
+    }
+  }
+#endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
 #ifdef CONFIG_DIFFTEST_SBUFFEREVENT
   for (int i = 0; i < CONFIG_DIFF_SBUFFER_WIDTH; i++) {
     if (dut->sbuffer[i].valid) {

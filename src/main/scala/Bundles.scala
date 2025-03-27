@@ -230,6 +230,12 @@ class SbufferEvent extends DifftestBaseBundle with HasValid {
   val mask = UInt(64.W)
 }
 
+class UncacheMMStoreEvent extends DifftestBaseBundle with HasValid {
+  val addr = UInt(64.W)
+  val data = Vec(8, UInt(8.W))
+  val mask = UInt(8.W)
+}
+
 class StoreEvent extends DifftestBaseBundle with HasValid {
   val addr = UInt(64.W)
   val data = UInt(64.W)

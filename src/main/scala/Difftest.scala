@@ -358,6 +358,11 @@ class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWit
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
 }
 
+class DiffUncacheMMStoreEvent extends UncacheMMStoreEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "uncache_mm_store"
+  override val squashGroup: Seq[String] = Seq("GOLDENMEM")
+}
+
 class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "store"
 }
