@@ -49,6 +49,7 @@ import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
+import "DPI-C" function void set_ram_size(longint size);
 import "DPI-C" function void set_overwrite_autoset();
 import "DPI-C" function void set_warmup_instr(longint instrs);
 `ifdef WITH_DRAMSIM3
@@ -81,6 +82,7 @@ string diff_ref_so;
 string workload_list;
 string iotrace_name;
 longint overwrite_nbytes;
+longint ram_size;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
@@ -125,6 +127,11 @@ initial begin
   if ($test$plusargs("overwrite_nbytes")) begin
     $value$plusargs("overwrite_nbytes=%d", overwrite_nbytes);
     set_overwrite_nbytes(overwrite_nbytes);
+  end
+  // size of the gcpt used
+  if ($test$plusargs("ram_size")) begin
+    $value$plusargs("ram_size=%d", ram_size);
+    set_ram_size(ram_size);
   end
   // auto set gcpt used size
   if ($test$plusargs("overwrite_autoset")) begin
