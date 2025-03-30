@@ -45,9 +45,9 @@ GSIM_CXXFILES = $(SIM_CXXFILES) $(shell find $(VERILITOR_CSRC_DIR) $(GSIM_OTHER_
 GSIM_CXXFLAGS = $(subst \\\",\", $(SIM_CXXFLAGS)) -DNUM_CORES=$(NUM_CORES) -DGSIM \
 						-I$(VERILITOR_CSRC_DIR) -I$(GEN_VSRC_DIR) \
 						-I$(GSIM_GEN_CSRC_DIR)/ \
-						-O3 \
+						-O3 $(PGO_CFLAGS) \
 						-fbracket-depth=2048 -Wno-parentheses-equality
-LDFLAGS   =  $(SIM_LDFLAGS) -ldl
+LDFLAGS   =  $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
 
 # $(1): object file
 # $(2): source file
@@ -78,7 +78,65 @@ $(foreach x, $(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null), $(ev
 
 $(eval $(call LD_TEMPLATE, $(GSIM_EMU_TARGET), $(GSIM_EMU_OBJS), $(LDFLAGS)))
 
-gsim-gen-emu: $(GSIM_EMU_TARGET)
+gsim-build-emu: $(GSIM_EMU_TARGET)
+
+gsim-clean-obj:
+	-@rm -f $(GSIM_EMU_OBJS) $(GSIM_EMU_TARGET)
+
+# Profile Guided Optimization
+GSIM_EMU_PGO_DIR  = $(GSIM_EMU_BUILD_DIR)/pgo
+PGO_MAX_CYCLE ?= 2000000
+PGO_EMU_ARGS ?= --no-diff
+
+gsim-gen-emu:
+ifdef PGO_WORKLOAD
+	@echo "Building PGO profile..."
+	@stat $(PGO_WORKLOAD) > /dev/null
+	@$(MAKE) gsim-clean-obj
+	@mkdir -p $(GSIM_EMU_PGO_DIR)
+	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
+	@$(MAKE) gsim-build-emu \
+					   PGO_CFLAGS="-fprofile-generate=$(GSIM_EMU_PGO_DIR)" \
+					   PGO_LDFLAGS="-fprofile-generate=$(GSIM_EMU_PGO_DIR)"
+	@echo "Training emu with PGO Workload..."
+	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
+	$(GSIM_EMU_TARGET) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+		   1>$(GSIM_EMU_PGO_DIR)/`date +%s`.log \
+		   2>$(GSIM_EMU_PGO_DIR)/`date +%s`.err \
+		   $(PGO_EMU_ARGS)
+	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
+ifdef LLVM_PROFDATA
+# When using LLVM's profile-guided optimization, the raw data can not
+# directly be used in -fprofile-use. We need to use a specific version of
+# llvm-profdata. This happens when verilator compiled with CC=clang
+# CXX=clang++. In this case, we should add LLVM_PROFDATA=llvm-profdata
+# when calling make. For GCC, this step should be skipped. Also, some
+# machines may have multiple versions of llvm-profdata. So please never
+# add default value for LLVM_PROFDATA unless we have a proper way to probe
+# the compiler and the corresponding llvm-profdata value.
+	$(LLVM_PROFDATA) merge $(GSIM_EMU_PGO_DIR)/*.profraw -o $(GSIM_EMU_PGO_DIR)/default.profdata
+else # ifdef LLVM_PROFDATA
+	@echo ""
+	@echo "----------------------- NOTICE BEGIN -----------------------"
+	@echo "If your verilator is compiled with LLVM, please don't forget"
+	@echo "to add LLVM_PROFDATA=llvm-profdata when calling make."
+	@echo ""
+	@echo "If your verilator is compiled with GCC, please ignore this"
+	@echo "message and NEVER adding LLVM_PROFDATA when calling make."
+	@echo "----------------------- NOTICE  END  -----------------------"
+	@echo ""
+endif # ifdef LLVM_PROFDATA
+	@echo "Building emu with PGO profile..."
+	@$(MAKE) gsim-clean-obj
+	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
+	@$(MAKE) gsim-build-emu \
+					   PGO_CFLAGS="-fprofile-use=$(GSIM_EMU_PGO_DIR)" \
+					   PGO_LDFLAGS="-fprofile-use=$(GSIM_EMU_PGO_DIR)"
+else # ifdef PGO_WORKLOAD
+	@echo "Building emu..."
+	$(MAKE) gsim-build-emu
+endif # ifdef PGO_WORKLOAD
+	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
 
 gsim:
 	$(MAKE) gsim-gen-cpp
