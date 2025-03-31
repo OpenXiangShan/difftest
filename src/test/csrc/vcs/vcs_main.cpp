@@ -253,7 +253,8 @@ extern "C" uint8_t simv_step() {
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
     if (warmup_instr != 0 && !core_end_info.core_warmup[i] && trap->instrCnt > warmup_instr) {
-      Info("Warmup finished. The performance counters will be reset on %ld.\n", trap->instrCnt);
+      Info("Warmup finished. The performance counters will be reset instrCnt %ld, cycleCnt %ld.\n", trap->instrCnt,
+           trap->cycleCnt);
       core_end_info.core_warmup[i] = true;
       core_end_info.core_warmup_cycle[i] = trap->cycleCnt;
       core_end_info.core_warmup_instr[i] = trap->instrCnt;
@@ -271,7 +272,9 @@ extern "C" uint8_t simv_step() {
         if (core_end_info.core_warmup[i]) {
           core_end_info.core_cpi[i] = (double)(trap->cycleCnt - core_end_info.core_warmup_cycle[i]) /
                                       (double)(trap->instrCnt - core_end_info.core_warmup_instr[i]);
-          Info(ANSI_COLOR_MAGENTA "Core-%d final_ipc: %f\n" ANSI_COLOR_RESET, i, 1.0 / core_end_info.core_cpi[i]);
+          Info(ANSI_COLOR_MAGENTA "Core-%d final_instrCnt: %ld, final_cycleCnt: %ld, final_ipc: %f\n" ANSI_COLOR_RESET,
+               i, core_end_info.core_warmup_instr[i], trap->cycleCnt - core_end_info.core_warmup_cycle[i],
+               1.0 / core_end_info.core_cpi[i]);
         } else {
           core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
         }
