@@ -122,7 +122,7 @@ static inline void print_help(const char *file) {
 #ifdef TRACERTL_MODE
   printf("      --tracertl-file=NAME    load trace from NAME\n");
   printf("      --tracept-file=NAME     load trace page table from NAME\n");
-  printf("      --fast-warmup            fast warmup mode\n");
+  printf("      --fast-warmup=NUM       fast warmup mode, for NUM instruction\n");
   printf("      --gen-paddr            generate physical address\n");
 #endif // TRACERTL_MODE
 #if VM_COVERAGE == 1
@@ -178,7 +178,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "tracept-file",      1, NULL,  0  },
     { "gen-paddr",         0, NULL,  0  },
     { "dump-chiselmap",    0, NULL,  0  },
-    { "fast-warmup",       0, NULL,  0  },
+    { "fast-warmup",       1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -307,6 +307,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #endif // ENABLE_CHISEL_MAP
           case 31:
 #ifdef TRACERTL_MODE
+            args.fast_warmup_instr = atoll_strict(optarg, "fast-warmup");
             args.fast_warmup = true; continue;
 #else
             printf("[WARN] tracertl is not enabled, ignore --fast-warmup\n");
@@ -348,7 +349,12 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         break;
       case 'W': args.warmup_instr = atoll_strict(optarg, "warmup-instr"); break;
       case 'D': args.stat_cycles = atoll_strict(optarg, "stat-cycles"); break;
-      case 'i': args.image = optarg; break;
+      case 'i': args.image = optarg;
+#ifdef TRACERTL_MODE
+        printf("[ERROR] --image=IMAGE_FILE should not exist in TraceRTL mode\n");
+        exit(1);
+#endif
+        break;
       case 'r': args.gcpt_restore = optarg; break;
       case 'b': args.log_begin = atoll_strict(optarg, "log-begin"); break;
       case 'e': args.log_end = atoll_strict(optarg, "log-end"); break;
@@ -448,7 +454,8 @@ Emulator::Emulator(int argc, const char *argv[])
   fflush(stdout);
   if (args.tracertl_file) {
     // traceicache's ram is constructed by tracertl's init method.
-    init_tracefastsim(args.fast_warmup, args.warmup_instr);
+    init_tracefastsim(args.fast_warmup, args.fast_warmup_instr);
+    // init_tracefastsim(args.fast_warmup, args.warmup_instr);
     init_traceicache(args.tracept_file);
     init_tracertl(args.tracertl_file, args.enable_gen_paddr);
     if (args.fast_warmup) {
@@ -463,8 +470,8 @@ Emulator::Emulator(int argc, const char *argv[])
     tracertl_prepare_read();
     tracertl_prepare_fastsim_memaddr();
   } else {
-    fprintf(stderr, "trace file not specified\n");
-    fflush(stderr);
+    fprintf("trace file not specified\n");
+    fflush(stdout);
     throw std::runtime_error("trace file not specified");
   }
 #else // TRACERTL_MODE

@@ -149,17 +149,10 @@ struct Instruction : TraceInstruction {
   uint64_t inst_id;
   // currently, only used for fast warmup
   uint8_t fast_simulation = 0;
-
-  // use by fast warmup instruction dedup
-  // if true, skip this instruction
-  uint32_t loopBodyLength = 0;
   bool is_squashed = false;
-  bool isLoopFirstInst = false;
-  // bool differentWithLastBody = false; // when this body length is different from next, skip this body
-  // bool differentWithNextBody = false;
 
   void dump() {
-    printf("[0x%08lx](Fs %d Sq %d Fi %d BL %u) ", inst_id, fast_simulation, is_squashed ? 1 : 0, isLoopFirstInst ? 1 : 0, loopBodyLength);
+    printf("[0x%08lx]: fs %d sq %d ", inst_id, fast_simulation, is_squashed);
     TraceInstruction::dump();
     fflush(stdout);
   }

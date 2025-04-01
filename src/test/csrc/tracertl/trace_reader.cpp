@@ -100,8 +100,8 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
     instList_preread.push_back(inst);
   }
 
-  uint64_t lastLoopBodyLength = 0;
-  bool inLoop = false;
+  // uint64_t lastLoopBodyLength = 0;
+  // bool inLoop = false;
   for (uint64_t idx = 0; idx < traceInstNum; idx ++) {
     // trans to XS Trace Format
     TraceInstruction static_inst = instDecompressBuffer[idx];
@@ -179,49 +179,49 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
     }
 
     // add memory address to trace fastsim manager
-    if (!trace_fastsim->isFastSimFinished() && !trace_fastsim->preCollectEnoughFastSimInst()) {
-      trace_fastsim->preCollectFastSimInst(inst);
+    // if (!trace_fastsim->isFastSimFinished() && !trace_fastsim->preCollectEnoughFastSimInst()) {
+    //   trace_fastsim->preCollectFastSimInst(inst);
 
-      lastLoopBodyLength ++;
-      if (!inLoop) {
-        inst.isLoopFirstInst = true;
-        inLoop = true;
-      }
-      if (inst.branch_type != 0 && inst.branch_taken != 0) {
-        inLoop = false;
-        if (lastLoopBodyLength == 1) {
-          inst.loopBodyLength = 1;
+      // lastLoopBodyLength ++;
+      // if (!inLoop) {
+      //   inst.isLoopFirstInst = true;
+      //   inLoop = true;
+      // }
+      // if (inst.branch_type != 0 && inst.branch_taken != 0) {
+      //   inLoop = false;
+      //   if (lastLoopBodyLength == 1) {
+      //     inst.loopBodyLength = 1;
 
-        } else {
-          if (lastLoopBodyLength == 0) {
-            printf("Error: lastLoopBodyLength == 0\n");
-            exit(1);
-          }
-          instList_preread[instList_preread.size() - lastLoopBodyLength + 1].loopBodyLength = lastLoopBodyLength;
-          if (!instList_preread[instList_preread.size() - lastLoopBodyLength + 1].isLoopFirstInst) {
-            printf("Error: loop first inst not set 0x%lx %lu\n",instList_preread.size(), lastLoopBodyLength);
-            int pNum = std::max(20, (int)lastLoopBodyLength);
-            for (int i = 0; i < pNum; i++) {
-              printf("Idx %lx ", instList_preread.size() - pNum + i);
-              instList_preread[instList_preread.size() - pNum + i].dump();
+      //   } else {
+      //     if (lastLoopBodyLength == 0) {
+      //       printf("Error: lastLoopBodyLength == 0\n");
+      //       exit(1);
+      //     }
+      //     instList_preread[instList_preread.size() - lastLoopBodyLength + 1].loopBodyLength = lastLoopBodyLength;
+      //     if (!instList_preread[instList_preread.size() - lastLoopBodyLength + 1].isLoopFirstInst) {
+      //       printf("Error: loop first inst not set 0x%lx %lu\n",instList_preread.size(), lastLoopBodyLength);
+      //       int pNum = std::max(20, (int)lastLoopBodyLength);
+      //       for (int i = 0; i < pNum; i++) {
+      //         printf("Idx %lx ", instList_preread.size() - pNum + i);
+      //         instList_preread[instList_preread.size() - pNum + i].dump();
 
-            }
-            inst.dump();
-            // for (int i = 0; i < lastLoopBodyLength; i++) {
-              // instList_preread[instList_preread.size() - lastLoopBodyLength + 1 + i].dump();
-            // }
-            exit(1);
-          }
+      //       }
+      //       inst.dump();
+      //       // for (int i = 0; i < lastLoopBodyLength; i++) {
+      //         // instList_preread[instList_preread.size() - lastLoopBodyLength + 1 + i].dump();
+      //       // }
+      //       exit(1);
+      //     }
 
-        }
-        lastLoopBodyLength = 0;
-      }
+      //   }
+      //   lastLoopBodyLength = 0;
+      // }
 
 
-      if (!inst.isTrap() && !inst.isInstException() && inst.memory_type != MEM_TYPE_None) {
-        trace_fastsim->addMemAddr(inst.exu_data.memory_address.va, inst.exu_data.memory_address.pa);
-      }
-    }
+      // if (!inst.isTrap() && !inst.isInstException() && inst.memory_type != MEM_TYPE_None) {
+      //   trace_fastsim->addMemAddr(inst.exu_data.memory_address.va, inst.exu_data.memory_address.pa);
+      // }
+    // }
 
     // construct trace
     instList_preread.push_back(inst);
@@ -231,12 +231,25 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
   delete[] instDecompressBuffer;
 
   // fast sim manager merge/squash mem addr
+  for (auto inst : instList_preread) {
+    if (trace_fastsim->preCollectEnoughFastSimInst())
+      break; // inst enough
+
+    trace_fastsim->preCollectFastSimInst(inst);
+    if (!trace_fastsim->isFastSimFinished() && // fast sim enabled
+        !trace_fastsim->isFastSimMemoryFinished() && // fast sim memory enable
+        !inst.isTrap() && !inst.isInstException() && // not trap
+        (inst.memory_type != MEM_TYPE_None)) { // memory access
+      trace_fastsim->addMemAddr(inst.exu_data.memory_address.va, inst.exu_data.memory_address.pa);
+    }
+  }
+
   if (!trace_fastsim->isFastSimMemoryFinished()) {
     trace_fastsim->mergeMemAddr();
   }
   if (!trace_fastsim->isFastSimInstFinished()) {
-    trace_fastsim->instDedup.trace_inst_dedup(
-      instList_preread, trace_fastsim->getWarmupInstNum());
+    trace_fastsim->instDedup.dedup(instList_preread,
+      0, trace_fastsim->getWarmupInstNum());
   }
 
   last_interval_time = gen_cur_time();

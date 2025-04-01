@@ -22,7 +22,7 @@
 #include <vector>
 #include <deque>
 #include "trace_common.h"
-#include "trace_inst_dedup.h"
+#include "trace_inst_deduper.h"
 
 struct FastSimMemAddr {
   uint64_t vaddr;
@@ -65,7 +65,8 @@ public:
     }
   }
 
-  TraceInstLoopDedup instDedup;
+  // TraceInstLoopDedup instDedup;
+  TraceInstDeduper instDedup;
 
   bool isFastSimFinished() { return fastSimInstFinish && fastSimMemoryFinish; };
   bool isFastSimInstFinished() { return fastSimInstFinish; };
@@ -87,7 +88,7 @@ public:
   void prepareMemAddrBuffer();
   void read_mem_addr(uint8_t idx, uint8_t* valid, uint64_t* vaddr, uint64_t* paddr);
   void preCollectFastSimInst(Instruction inst) {
-    instDedup.addInst(inst);
+    // instDedup.addInst(inst);
     fastsimInstIdx++;
   };
   bool preCollectEnoughFastSimInst() { return fastsimInstIdx >= warmupInst; };
