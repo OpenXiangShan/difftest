@@ -85,7 +85,7 @@ static inline word_t pmem_read(uint64_t addr, int len) {
 static inline word_t pmem_flag_read(uint64_t addr, int len) {
   void *p = &pmem_flag[addr - PMEM_BASE];
   uint8_t *tmpArray = (uint8_t *)p;
-  for(int i = 0; i < len; i++) {
+  for (int i = 0; i < len; i++) {
     if (*(uint8_t *)(tmpArray + i) != 0 && *(uint8_t *)(tmpArray + i) != 1)
       assert(0);
   }
@@ -106,10 +106,22 @@ static inline void pmem_write(uint64_t addr, word_t data, word_t flag, int len) 
   void *p = &pmem[addr - PMEM_BASE];
   void *pf = &pmem_flag[addr - PMEM_BASE];
   switch (len) {
-    case 1: *(uint8_t *)p = data; *(uint8_t *)pf = flag; return;
-    case 2: *(uint16_t *)p = data; *(uint16_t *)pf = flag; return;
-    case 4: *(uint32_t *)p = data; *(uint32_t *)pf = flag; return;
-    case 8: *(uint64_t *)p = data; *(uint64_t *)pf = flag; return;
+    case 1:
+      *(uint8_t *)p = data;
+      *(uint8_t *)pf = flag;
+      return;
+    case 2:
+      *(uint16_t *)p = data;
+      *(uint16_t *)pf = flag;
+      return;
+    case 4:
+      *(uint32_t *)p = data;
+      *(uint32_t *)pf = flag;
+      return;
+    case 8:
+      *(uint64_t *)p = data;
+      *(uint64_t *)pf = flag;
+      return;
     default: assert(0);
   }
 }
@@ -151,7 +163,8 @@ void pmem_record_store(uint64_t addr) {
 
 void goldenmem_store_log_restore() {
   for (int i = goldenmem_store_log_ptr - 1; i >= 0; i--) {
-    pmem_write(goldenmem_store_log_buf[i].addr, goldenmem_store_log_buf[i].org_data, goldenmem_store_log_buf[i].org_flag, 8);
+    pmem_write(goldenmem_store_log_buf[i].addr, goldenmem_store_log_buf[i].org_data,
+               goldenmem_store_log_buf[i].org_flag, 8);
   }
 }
 #endif // ENABLE_STORE_LOG

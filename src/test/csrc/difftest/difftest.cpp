@@ -1002,7 +1002,7 @@ int Difftest::do_refill_check(int cacheid) {
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
           // in multi-core, uncache mm store may cause data inconsistencies.
           // so here needs to override the nemu value with the dut value by cacheline granularity.
-          if (*((uint64_t *)flag_buf) != 0){
+          if (*((uint64_t *)flag_buf) != 0) {
             Info("INFO: Sync GoldenMem using refill Data from DUT (Because of uncache main-mem store):\n");
             Info("      cacheid=%d, addr: %lx\n      Gold: ", cacheid, dut_refill->addr);
             for (int j = 0; j < 8; j++) {
@@ -1427,7 +1427,8 @@ int Difftest::do_golden_memory_update() {
       dut->uncache_mm_store[i].valid = 0;
       // the flag is set only in the case of multi-cores and uncache mm store
       uint8_t flag = NUM_CORES > 1 ? 1 : 0;
-      update_goldenmem(dut->uncache_mm_store[i].addr, dut->uncache_mm_store[i].data, dut->uncache_mm_store[i].mask, 8, flag);
+      update_goldenmem(dut->uncache_mm_store[i].addr, dut->uncache_mm_store[i].data, dut->uncache_mm_store[i].mask, 8,
+                       flag);
       if (dut->uncache_mm_store[i].addr == track_instr) {
         dumpGoldenMem("Uncache MM Store", track_instr, cycleCnt);
       }
