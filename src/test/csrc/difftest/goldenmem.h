@@ -20,6 +20,7 @@
 #include "common.h"
 #include "ram.h"
 #include <assert.h>
+#include <cstdint>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -28,12 +29,14 @@ typedef uint64_t uint64_t;
 typedef uint64_t word_t;
 
 extern uint8_t *pmem;
+extern uint8_t *pmem_flag;
 
 void init_goldenmem();
 void goldenmem_finish();
 
-extern "C" void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len);
+extern "C" void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len, uint8_t flag);
 extern "C" void read_goldenmem(uint64_t addr, void *data, uint64_t len);
+extern "C" void read_goldenmem_flag(uint64_t addr, void *flag, uint64_t len);
 
 /* convert the guest physical address in the guest program to host virtual address in NEMU */
 void *guest_to_host(uint64_t addr);
@@ -41,7 +44,8 @@ void *guest_to_host(uint64_t addr);
 uint64_t host_to_guest(void *addr);
 
 word_t paddr_read(uint64_t addr, int len);
-void paddr_write(uint64_t addr, word_t data, int len);
+word_t paddr_flag_read(uint64_t addr, int len);
+void paddr_write(uint64_t addr, word_t data, word_t flag, int len);
 bool is_sfence_safe(uint64_t addr, int len);
 bool in_pmem(uint64_t addr);
 
