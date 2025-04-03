@@ -173,6 +173,7 @@ coherence via RefillTest.
 | `DiffCriticalErrorEvent` | Raise critical-error | No |
 | `DiffSyncAIAEvent` | Synchronization of AIA | No |
 | `DiffSyncCustomMflushpwrEvent` | custom CSR mflushpwr | No |
+| `DiffUncacheMMStoreEvent` | Uncache buffer main memory store operations | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 They will be automatically created when calling `DifftestModule.finish(cpu: String)`.
