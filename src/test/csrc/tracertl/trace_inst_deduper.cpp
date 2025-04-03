@@ -151,13 +151,13 @@ TraceInstDeduper::dedup_branch_interval_by_dp(size_t from_branch_index, size_t e
   // fflush(stdout);
 
 
-  size_t dp[branch_num];
+  std::vector<size_t> dp(branch_num);
   struct DPResult {
     BranchDedupResult interval;
     int pre_index;
     bool interval_valid = false;
   };
-  struct DPResult intervals[branch_num];
+  std::vector<DPResult> intervals(branch_num);
   // final result need add all the interval like a linked list
 
   // function to match the branch pc
@@ -214,7 +214,7 @@ TraceInstDeduper::dedup_branch_interval_by_dp(size_t from_branch_index, size_t e
 
   // get the final result
   // printf("DP: final result\n");
-    fflush(stdout);
+  // fflush(stdout);
   for (int i = branch_num - 1; i >= 0; i = intervals[i].pre_index) {
     if (intervals[i].interval_valid) {
     //   printf("  add interval from %lu to %lu\n", intervals[i].interval.startInstIndex, intervals[i].interval.endInstIndex);
@@ -239,7 +239,7 @@ void
 TraceInstDeduper::dedup_inst(std::vector<Instruction> &src) {
   for (auto interval : branch_dedup_result) {
     for (size_t i = interval.startInstIndex; i < interval.endInstIndex; i++) {
-      src[i].fast_simulation = true;
+      src[i].is_squashed = true;
 
       deduped_branch_num += (src[i].branch_type != 0) ? 1 : 0;
       deduped_inst_num ++;
