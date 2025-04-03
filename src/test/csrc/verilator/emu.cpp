@@ -179,6 +179,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "gen-paddr",         0, NULL,  0  },
     { "dump-chiselmap",    0, NULL,  0  },
     { "fast-warmup",       1, NULL,  0  },
+    { "skip-instr",        1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -310,9 +311,18 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             args.fast_warmup_instr = atoll_strict(optarg, "fast-warmup");
             args.fast_warmup = true; continue;
 #else
-            printf("[WARN] tracertl is not enabled, ignore --fast-warmup\n");
+            printf("[WARN] tracertl is not enabled, ignore --fast-warmup NUM\n");
             continue;
 #endif // TRACERTL_MODE
+          case 32:
+#ifdef TRACERTL_MODE
+            args.skip_traceinstr = atoll_strict(optarg, "fast-warmup");
+            continue;
+#else
+            printf("[WARN] tracertl is not enabled, ignore --skip-traceinstr NUM\n");
+            continue;
+#endif
+
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -457,7 +467,7 @@ Emulator::Emulator(int argc, const char *argv[])
     init_tracefastsim(args.fast_warmup, args.fast_warmup_instr);
     // init_tracefastsim(args.fast_warmup, args.warmup_instr);
     init_traceicache(args.tracept_file);
-    init_tracertl(args.tracertl_file, args.enable_gen_paddr);
+    init_tracertl(args.tracertl_file, args.enable_gen_paddr, args.skip_traceinstr);
     if (args.fast_warmup) {
       uint64_t dedupInstNUm = trace_fastsim->getSquashedInstNum();
       printf("Fast warmup Squash Duplicate Instructions: %lu\n", dedupInstNUm);
@@ -470,7 +480,7 @@ Emulator::Emulator(int argc, const char *argv[])
     tracertl_prepare_read();
     tracertl_prepare_fastsim_memaddr();
   } else {
-    fprintf("trace file not specified\n");
+    printf("trace file not specified\n");
     fflush(stdout);
     throw std::runtime_error("trace file not specified");
   }
@@ -979,7 +989,9 @@ int Emulator::tick() {
       return trapCode;
     }
 
-    if (args.fast_warmup && trap->instrCnt >= args.warmup_instr) {
+    // this may be wrong for instrCnt may not be precise, have +-N(exception?)
+    // so do not rely on this Set. Turn to Fetch End.
+    if (args.fast_warmup && trap->instrCnt >= (args.fast_warmup_instr - trace_fastsim->getSquashedInstNum())) {
       args.fast_warmup = false;
       printf("Set FastSim Inst Finish at Commit End\n");
       trace_fastsim->setFastsimInstFinish();

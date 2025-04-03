@@ -83,6 +83,7 @@ struct EmuArgs {
   bool dump_chiselmap = false;
   bool fast_warmup = false;
   uint64_t fast_warmup_instr = 0;
+  uint64_t skip_traceinstr = 0;
   bool trace_is_read = true;
   bool dump_coverage = false;
   bool image_as_footprints = false;

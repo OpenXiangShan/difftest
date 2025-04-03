@@ -21,7 +21,7 @@
 #include "tracertl.h"
 #include "trace_decompress.h"
 
-TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
+TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t skip_traceinstr)
 {
   printf("TraceRTL: check file exists...\n");
   fflush(stdout);
@@ -62,6 +62,15 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
   uint64_t traceInstNum = decompressedSize / sizeof(TraceInstruction);
   delete[] fileBuffer;
 
+  printf("Read %lu instructions from trace file.\n", traceInstNum);
+  if (skip_traceinstr > 0) {
+    printf("Skip %lu instructions.\n", skip_traceinstr);
+  }
+  if (traceInstNum <= skip_traceinstr) {
+    printf("Skip all the instructions. Exit\n");
+    exit(1);
+  }
+
   if (decompressedSize != sizeAfterDC) {
     std::cerr << "TraceRTL: Error of Decompress. Decompress size not match "
               << sizeAfterDC << " " << decompressedSize << std::endl;
@@ -74,10 +83,12 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
   inst_id_preread.pop(); // set init id to 1
   commit_inst_num.pop(); // set init id to 1
 
-  if (instDecompressBuffer[0].instr_pc_va != RESET_VECTOR) {
+  size_t start_instr_index = skip_traceinstr;
+
+  if (instDecompressBuffer[start_instr_index].instr_pc_va != RESET_VECTOR) {
     // gen jump instr
     TraceInstruction static_inst;
-    static_inst.setToForceJump(RESET_VECTOR, instDecompressBuffer[0].instr_pc_va);
+    static_inst.setToForceJump(RESET_VECTOR, instDecompressBuffer[start_instr_index].instr_pc_va);
     Instruction inst;
     inst.fromTraceInst(static_inst);
     inst.inst_id = inst_id_preread.pop();
@@ -102,7 +113,7 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
 
   // uint64_t lastLoopBodyLength = 0;
   // bool inLoop = false;
-  for (uint64_t idx = 0; idx < traceInstNum; idx ++) {
+  for (uint64_t idx = start_instr_index; idx < traceInstNum; idx ++) {
     // trans to XS Trace Format
     TraceInstruction static_inst = instDecompressBuffer[idx];
     Instruction inst;
@@ -177,51 +188,6 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr)
       }
 
     }
-
-    // add memory address to trace fastsim manager
-    // if (!trace_fastsim->isFastSimFinished() && !trace_fastsim->preCollectEnoughFastSimInst()) {
-    //   trace_fastsim->preCollectFastSimInst(inst);
-
-      // lastLoopBodyLength ++;
-      // if (!inLoop) {
-      //   inst.isLoopFirstInst = true;
-      //   inLoop = true;
-      // }
-      // if (inst.branch_type != 0 && inst.branch_taken != 0) {
-      //   inLoop = false;
-      //   if (lastLoopBodyLength == 1) {
-      //     inst.loopBodyLength = 1;
-
-      //   } else {
-      //     if (lastLoopBodyLength == 0) {
-      //       printf("Error: lastLoopBodyLength == 0\n");
-      //       exit(1);
-      //     }
-      //     instList_preread[instList_preread.size() - lastLoopBodyLength + 1].loopBodyLength = lastLoopBodyLength;
-      //     if (!instList_preread[instList_preread.size() - lastLoopBodyLength + 1].isLoopFirstInst) {
-      //       printf("Error: loop first inst not set 0x%lx %lu\n",instList_preread.size(), lastLoopBodyLength);
-      //       int pNum = std::max(20, (int)lastLoopBodyLength);
-      //       for (int i = 0; i < pNum; i++) {
-      //         printf("Idx %lx ", instList_preread.size() - pNum + i);
-      //         instList_preread[instList_preread.size() - pNum + i].dump();
-
-      //       }
-      //       inst.dump();
-      //       // for (int i = 0; i < lastLoopBodyLength; i++) {
-      //         // instList_preread[instList_preread.size() - lastLoopBodyLength + 1 + i].dump();
-      //       // }
-      //       exit(1);
-      //     }
-
-      //   }
-      //   lastLoopBodyLength = 0;
-      // }
-
-
-      // if (!inst.isTrap() && !inst.isInstException() && inst.memory_type != MEM_TYPE_None) {
-      //   trace_fastsim->addMemAddr(inst.exu_data.memory_address.va, inst.exu_data.memory_address.pa);
-      // }
-    // }
 
     // construct trace
     instList_preread.push_back(inst);
@@ -314,6 +280,11 @@ bool TraceReader::read(Instruction &inst) {
       inst = instList_preread[instReadIdx++];
       // inst.fast_simulation = trace_fastsim->isFastSimInstFinished() ? 0 : 1;
       inst.fast_simulation = trace_fastsim->isFastSimInstByIdx(instReadIdx) ? 1 : 0;
+
+      if (!trace_fastsim->isFastSimInstFinished() && (instReadIdx >= trace_fastsim->getWarmupInstNum())) {
+        printf("Set FastSim Inst Finish at Fetch end\n");
+        trace_fastsim->setFastsimInstFinish();
+      }
 
       // instList_preread.pop();
       counterReadFromInstList ++;

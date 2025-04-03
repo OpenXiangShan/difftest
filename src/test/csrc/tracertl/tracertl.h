@@ -27,7 +27,7 @@ extern TraceICache *trace_icache;
 extern TraceFastSimManager *trace_fastsim;
 
 /*             called by emu              */
-void init_tracertl(const char *tracefile_name, bool enable_gen_paddr);
+void init_tracertl(const char *tracefile_name, bool enable_gen_paddr, uint64_t skip_traceinstr);
 void init_traceicache(const char *tracept_name);
 bool tracertl_prepare_read();
 void tracertl_check_commit(uint64_t tick);
