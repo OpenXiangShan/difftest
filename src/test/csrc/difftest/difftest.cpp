@@ -839,8 +839,7 @@ void Difftest::do_load_check(int i) {
             len = 8;
           }
         }
-        read_goldenmem(load_event.paddr, &golden, len);
-        read_goldenmem_flag(load_event.paddr, &golden_flag, len);
+        read_goldenmem_with_flag(load_event.paddr, &golden, &golden_flag, len);
         if (load_event.isLoad) {
           switch (len) {
             case 1:
@@ -871,7 +870,7 @@ void Difftest::do_load_check(int i) {
           Info("load check of uncache mm store flag\n");
           Info("  DUT data: 0x%lx, regWen: %d, refRegPtr: 0x%lx\n", commitData, regWen, refRegPtr);
           proxy->ref_memcpy(load_event.paddr, &commitData, len, DUT_TO_REF);
-          update_goldenmem(load_event.paddr, &commitData, mask, len, 0);
+          update_goldenmem(load_event.paddr, &commitData, mask, len);
           if (regWen) {
             *refRegPtr = commitData;
             proxy->sync(true);
@@ -975,8 +974,7 @@ int Difftest::do_refill_check(int cacheid) {
       return 0;
     }
     for (int i = 0; i < 8; i++) {
-      read_goldenmem(dut_refill->addr + i * 8, &buf, 8);
-      read_goldenmem_flag(dut_refill->addr + i * 8, &flag_buf, 8);
+      read_goldenmem_with_flag(dut_refill->addr + i * 8, &buf, &flag_buf, 8);
       if (dut_refill->data[i] != *((uint64_t *)buf)) {
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
         if (cmo_inval_event_set.find(dut_refill->addr) != cmo_inval_event_set.end()) {
@@ -993,7 +991,7 @@ int Difftest::do_refill_check(int cacheid) {
             Info("%016lx", dut_refill->data[j]);
           }
           Info("\n");
-          update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64, 0);
+          update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
           proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
           cmo_inval_event_set.erase(dut_refill->addr);
           return 0;
@@ -1014,7 +1012,7 @@ int Difftest::do_refill_check(int cacheid) {
               Info("%016lx", dut_refill->data[j]);
             }
             Info("\n");
-            update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64, 0);
+            update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
             proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
             return 0;
           }
@@ -1308,7 +1306,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       case 057: ret = (t == cmp) ? rs : t; break;
       default: Info("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
-    update_goldenmem(atomicAddr, &ret, atomicMask, 8, 0);
+    update_goldenmem(atomicAddr, &ret, atomicMask, 8);
   }
 
   if (atomicMask == 0xf || atomicMask == 0xf0) {
@@ -1368,7 +1366,7 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
     ret_sel = ret;
     if (atomicMask == 0xf0)
       ret_sel = (ret_sel << 32);
-    update_goldenmem(atomicAddr, &ret_sel, atomicMask, 8, 0);
+    update_goldenmem(atomicAddr, &ret_sel, atomicMask, 8);
   }
 
   if (atomicMask == 0xffff) {
@@ -1390,8 +1388,8 @@ inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[],
       }
       default: Info("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
     }
-    update_goldenmem(atomicAddr, &retl, 0xff, 8, 0);
-    update_goldenmem(atomicAddr + 8, &reth, 0xff, 8, 0);
+    update_goldenmem(atomicAddr, &retl, 0xff, 8);
+    update_goldenmem(atomicAddr + 8, &reth, 0xff, 8);
   }
   return 0;
 }
@@ -1439,7 +1437,7 @@ int Difftest::do_golden_memory_update() {
   for (int i = 0; i < CONFIG_DIFF_SBUFFER_WIDTH; i++) {
     if (dut->sbuffer[i].valid) {
       dut->sbuffer[i].valid = 0;
-      update_goldenmem(dut->sbuffer[i].addr, dut->sbuffer[i].data, dut->sbuffer[i].mask, 64, 0);
+      update_goldenmem(dut->sbuffer[i].addr, dut->sbuffer[i].data, dut->sbuffer[i].mask, 64);
       if (dut->sbuffer[i].addr == track_instr) {
         dumpGoldenMem("Store", track_instr, cycleCnt);
       }

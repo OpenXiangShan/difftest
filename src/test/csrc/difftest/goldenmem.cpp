@@ -60,11 +60,14 @@ void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len, uint8_t
 }
 
 void read_goldenmem(uint64_t addr, void *data, uint64_t len) {
-  *(uint64_t *)data = paddr_read(addr, len);
+  read_goldenmem_with_flag(addr, data, NULL, len);
 }
 
-void read_goldenmem_flag(uint64_t addr, void *flag, uint64_t len) {
-  *(uint64_t *)flag = paddr_flag_read(addr, len);
+void read_goldenmem_with_flag(uint64_t addr, void *data, void *flag, uint64_t len) {
+  *(uint64_t *)data = paddr_read(addr, len);
+  if (flag != NULL) {
+    *(uint64_t *)flag = paddr_flag_read(addr, len);
+  }
 }
 
 bool in_pmem(uint64_t addr) {
