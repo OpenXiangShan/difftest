@@ -839,7 +839,7 @@ void Difftest::do_load_check(int i) {
             len = 8;
           }
         }
-        read_goldenmem_with_flag(load_event.paddr, &golden, &golden_flag, len);
+        read_goldenmem(load_event.paddr, &golden, len, &golden_flag);
         if (load_event.isLoad) {
           switch (len) {
             case 1:
@@ -974,7 +974,7 @@ int Difftest::do_refill_check(int cacheid) {
       return 0;
     }
     for (int i = 0; i < 8; i++) {
-      read_goldenmem_with_flag(dut_refill->addr + i * 8, &buf, &flag_buf, 8);
+      read_goldenmem(dut_refill->addr + i * 8, &buf, 8, &flag_buf);
       if (dut_refill->data[i] != *((uint64_t *)buf)) {
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
         if (cmo_inval_event_set.find(dut_refill->addr) != cmo_inval_event_set.end()) {
@@ -1011,7 +1011,7 @@ int Difftest::do_refill_check(int cacheid) {
             for (int j = 0; j < 8; j++) {
               Info("%016lx", dut_refill->data[j]);
             }
-            Info("\n");
+             Info("\n");
             update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
             proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
             return 0;
