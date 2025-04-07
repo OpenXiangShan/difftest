@@ -24,6 +24,7 @@
 #include <time.h>
 
 uint8_t *pmem;
+uint8_t *pmem_flag; // 1: store update but load check skip; 0: update and check. others: assert
 static uint64_t pmem_size;
 
 void *guest_to_host(uint64_t addr) {
@@ -33,6 +34,7 @@ void *guest_to_host(uint64_t addr) {
 void init_goldenmem() {
   pmem_size = simMemory->get_size();
   pmem = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+  pmem_flag = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (pmem == (uint8_t *)MAP_FAILED) {
     Info("ERROR allocating physical memory. \n");
   }
@@ -43,20 +45,25 @@ void init_goldenmem() {
 
 void goldenmem_finish() {
   munmap(pmem, pmem_size);
+  munmap(pmem_flag, pmem_size);
   pmem = NULL;
+  pmem_flag = NULL;
 }
 
-void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len) {
+void update_goldenmem(uint64_t addr, void *data, uint64_t mask, int len, uint8_t flag) {
   uint8_t *dataArray = (uint8_t *)data;
   for (int i = 0; i < len; i++) {
     if (((mask >> i) & 1) != 0) {
-      paddr_write(addr + i, dataArray[i], 1);
+      paddr_write(addr + i, dataArray[i], flag, 1);
     }
   }
 }
 
-void read_goldenmem(uint64_t addr, void *data, uint64_t len) {
+void read_goldenmem(uint64_t addr, void *data, uint64_t len, void *flag) {
   *(uint64_t *)data = paddr_read(addr, len);
+  if (flag != NULL) {
+    *(uint64_t *)flag = paddr_flag_read(addr, len);
+  }
 }
 
 bool in_pmem(uint64_t addr) {
@@ -74,17 +81,46 @@ static inline word_t pmem_read(uint64_t addr, int len) {
   }
 }
 
-static inline void pmem_write(uint64_t addr, word_t data, int len) {
+static inline word_t pmem_flag_read(uint64_t addr, int len) {
+  void *p = &pmem_flag[addr - PMEM_BASE];
+  uint8_t *tmpArray = (uint8_t *)p;
+  for (int i = 0; i < len; i++) {
+    if (*(uint8_t *)(tmpArray + i) != 0 && *(uint8_t *)(tmpArray + i) != 1)
+      assert(0);
+  }
+  switch (len) {
+    case 1: return *(uint8_t *)p;
+    case 2: return *(uint16_t *)p;
+    case 4: return *(uint32_t *)p;
+    case 8: return *(uint64_t *)p;
+    default: assert(0);
+  }
+}
+
+static inline void pmem_write(uint64_t addr, word_t data, word_t flag, int len) {
 #ifdef DIFFTEST_STORE_COMMIT
   store_commit_queue_push(addr, data, len);
 #endif
 
   void *p = &pmem[addr - PMEM_BASE];
+  void *pf = &pmem_flag[addr - PMEM_BASE];
   switch (len) {
-    case 1: *(uint8_t *)p = data; return;
-    case 2: *(uint16_t *)p = data; return;
-    case 4: *(uint32_t *)p = data; return;
-    case 8: *(uint64_t *)p = data; return;
+    case 1:
+      *(uint8_t *)p = data;
+      *(uint8_t *)pf = flag;
+      return;
+    case 2:
+      *(uint16_t *)p = data;
+      *(uint16_t *)pf = flag;
+      return;
+    case 4:
+      *(uint32_t *)p = data;
+      *(uint32_t *)pf = flag;
+      return;
+    case 8:
+      *(uint64_t *)p = data;
+      *(uint64_t *)pf = flag;
+      return;
     default: assert(0);
   }
 }
@@ -95,6 +131,7 @@ static inline void pmem_write(uint64_t addr, word_t data, int len) {
 struct store_log {
   uint64_t addr;
   word_t org_data;
+  word_t org_flag;
 } goldenmem_store_log_buf[GOLDENMEM_STORE_LOG_SIZE];
 
 bool goldenmem_store_log_enable = false;
@@ -113,8 +150,10 @@ void pmem_record_store(uint64_t addr) {
     // align to 8 byte
     addr = (addr >> 3) << 3;
     word_t rdata = pmem_read(addr, 8);
+    word_t rflag = pmem_flag_read(addr, 8);
     goldenmem_store_log_buf[goldenmem_store_log_ptr].addr = addr;
     goldenmem_store_log_buf[goldenmem_store_log_ptr].org_data = rdata;
+    goldenmem_store_log_buf[goldenmem_store_log_ptr].org_flag = rflag;
     ++goldenmem_store_log_ptr;
     if (goldenmem_store_log_ptr >= GOLDENMEM_STORE_LOG_SIZE)
       assert(0);
@@ -123,7 +162,8 @@ void pmem_record_store(uint64_t addr) {
 
 void goldenmem_store_log_restore() {
   for (int i = goldenmem_store_log_ptr - 1; i >= 0; i--) {
-    pmem_write(goldenmem_store_log_buf[i].addr, goldenmem_store_log_buf[i].org_data, 8);
+    pmem_write(goldenmem_store_log_buf[i].addr, goldenmem_store_log_buf[i].org_data,
+               goldenmem_store_log_buf[i].org_flag, 8);
   }
 }
 #endif // ENABLE_STORE_LOG
@@ -140,13 +180,23 @@ inline word_t paddr_read(uint64_t addr, int len) {
   return 0;
 }
 
-inline void paddr_write(uint64_t addr, word_t data, int len) {
+inline word_t paddr_flag_read(uint64_t addr, int len) {
+  if (in_pmem(addr))
+    return pmem_flag_read(addr, len);
+  else {
+    Info("[Hint] read not in pmem, maybe in speculative state! addr: %lx\n", addr);
+    return 0;
+  }
+  return 0;
+}
+
+inline void paddr_write(uint64_t addr, word_t data, word_t flag, int len) {
   if (in_pmem(addr)) {
 #ifdef ENABLE_STORE_LOG
     if (goldenmem_store_log_enable)
       pmem_record_store(addr);
 #endif // ENABLE_STORE_LOG
-    pmem_write(addr, data, len);
+    pmem_write(addr, data, flag, len);
   } else
     panic("write not in pmem!");
 }

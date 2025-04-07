@@ -797,6 +797,8 @@ void Difftest::do_load_check(int i) {
       proxy->sync();
       if (regWen && *refRegPtr != commitData) {
         uint64_t golden;
+        uint64_t golden_flag;
+        uint64_t mask = 0xFFFFFFFFFFFFFFFF;
         int len = 0;
         if (load_event.isLoad) {
           switch (load_event.opType) {
@@ -837,16 +839,38 @@ void Difftest::do_load_check(int i) {
             len = 8;
           }
         }
-        read_goldenmem(load_event.paddr, &golden, len);
+        read_goldenmem(load_event.paddr, &golden, len, &golden_flag);
         if (load_event.isLoad) {
           switch (len) {
-            case 1: golden = (int64_t)(int8_t)golden; break;
-            case 2: golden = (int64_t)(int16_t)golden; break;
-            case 4: golden = (int64_t)(int32_t)golden; break;
+            case 1:
+              golden = (int64_t)(int8_t)golden;
+              golden_flag = (int64_t)(int8_t)golden_flag;
+              mask = (uint64_t)(0xFF);
+              break;
+            case 2:
+              golden = (int64_t)(int16_t)golden;
+              golden_flag = (int64_t)(int16_t)golden_flag;
+              mask = (uint64_t)(0xFFFF);
+              break;
+            case 4:
+              golden = (int64_t)(int32_t)golden;
+              golden_flag = (int64_t)(int32_t)golden_flag;
+              mask = (uint64_t)(0xFFFFFFFF);
+              break;
           }
         }
         if (golden == commitData || load_event.isAtomic) { //  atomic instr carefully handled
           proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
+          if (regWen) {
+            *refRegPtr = commitData;
+            proxy->sync(true);
+          }
+        } else if (load_event.isLoad && golden_flag != 0) {
+          // goldenmem check failed, but the flag is set, so use DUT data to reset
+          Info("load check of uncache mm store flag\n");
+          Info("  DUT data: 0x%lx, regWen: %d, refRegPtr: 0x%lx\n", commitData, regWen, refRegPtr);
+          proxy->ref_memcpy(load_event.paddr, &commitData, len, DUT_TO_REF);
+          update_goldenmem(load_event.paddr, &commitData, mask, len);
           if (regWen) {
             *refRegPtr = commitData;
             proxy->sync(true);
@@ -940,6 +964,7 @@ int Difftest::do_refill_check(int cacheid) {
   }
   static uint64_t last_valid_addr = 0;
   char buf[512];
+  char flag_buf[512];
   uint64_t realpaddr = dut_refill->addr;
   dut_refill->addr = dut_refill->addr - dut_refill->addr % 64;
   if (dut_refill->addr != last_valid_addr) {
@@ -949,7 +974,7 @@ int Difftest::do_refill_check(int cacheid) {
       return 0;
     }
     for (int i = 0; i < 8; i++) {
-      read_goldenmem(dut_refill->addr + i * 8, &buf, 8);
+      read_goldenmem(dut_refill->addr + i * 8, &buf, 8, &flag_buf);
       if (dut_refill->data[i] != *((uint64_t *)buf)) {
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
         if (cmo_inval_event_set.find(dut_refill->addr) != cmo_inval_event_set.end()) {
@@ -972,6 +997,26 @@ int Difftest::do_refill_check(int cacheid) {
           return 0;
         } else {
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
+#ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+          // in multi-core, uncache mm store may cause data inconsistencies.
+          // so here needs to override the nemu value with the dut value by cacheline granularity.
+          if (*((uint64_t *)flag_buf) != 0) {
+            Info("INFO: Sync GoldenMem using refill Data from DUT (Because of uncache main-mem store):\n");
+            Info("      cacheid=%d, addr: %lx\n      Gold: ", cacheid, dut_refill->addr);
+            for (int j = 0; j < 8; j++) {
+              read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
+              Info("%016lx", *((uint64_t *)buf));
+            }
+            Info("\n      Core: ");
+            for (int j = 0; j < 8; j++) {
+              Info("%016lx", dut_refill->data[j]);
+            }
+            Info("\n");
+            update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
+            proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
+            return 0;
+          }
+#endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
           Info("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->idtfr, realpaddr);
           Info("addr: %lx\nGold: ", dut_refill->addr);
           for (int j = 0; j < 8; j++) {
@@ -1374,6 +1419,20 @@ int Difftest::do_golden_memory_update() {
     dumpGoldenMem("Init", track_instr, cycleCnt);
   }
 
+#ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+  for (int i = 0; i < CONFIG_DIFF_UNCACHE_MM_STORE_WIDTH; i++) {
+    if (dut->uncache_mm_store[i].valid) {
+      dut->uncache_mm_store[i].valid = 0;
+      // the flag is set only in the case of multi-cores and uncache mm store
+      uint8_t flag = NUM_CORES > 1 ? 1 : 0;
+      update_goldenmem(dut->uncache_mm_store[i].addr, dut->uncache_mm_store[i].data, dut->uncache_mm_store[i].mask, 8,
+                       flag);
+      if (dut->uncache_mm_store[i].addr == track_instr) {
+        dumpGoldenMem("Uncache MM Store", track_instr, cycleCnt);
+      }
+    }
+  }
+#endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
 #ifdef CONFIG_DIFFTEST_SBUFFEREVENT
   for (int i = 0; i < CONFIG_DIFF_SBUFFER_WIDTH; i++) {
     if (dut->sbuffer[i].valid) {
