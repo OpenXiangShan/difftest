@@ -1011,7 +1011,7 @@ int Difftest::do_refill_check(int cacheid) {
             for (int j = 0; j < 8; j++) {
               Info("%016lx", dut_refill->data[j]);
             }
-             Info("\n");
+            Info("\n");
             update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
             proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
             return 0;
