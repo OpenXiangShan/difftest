@@ -42,6 +42,7 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
+static uint64_t ram_size = 0;
 static uint64_t warmup_instr = 0;
 
 struct core_end_info_t {
@@ -74,6 +75,11 @@ extern "C" void set_flash_bin(char *s) {
 
 extern "C" void set_overwrite_nbytes(uint64_t len) {
   overwrite_nbytes = len;
+}
+
+extern "C" void set_ram_size(uint64_t size) {
+  printf("ram size:0x%lx\n", size);
+  ram_size = size;
 }
 
 extern "C" void set_overwrite_autoset() {
@@ -178,7 +184,8 @@ extern "C" uint8_t simv_init() {
   }
   common_init("simv");
 
-  init_ram(bin_file, DEFAULT_EMU_RAM_SIZE);
+  ram_size = ram_size > 0 ? ram_size : DEFAULT_EMU_RAM_SIZE;
+  init_ram(bin_file, ram_size);
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);
 #endif
@@ -196,7 +203,7 @@ extern "C" uint8_t simv_init() {
 #ifndef CONFIG_NO_DIFFTEST
   if (enable_difftest) {
     init_goldenmem();
-    init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
+    init_nemuproxy(ram_size);
   }
 #endif // CONFIG_NO_DIFFTEST
 
