@@ -467,6 +467,10 @@ void Difftest::do_interrupt() {
   } else if (dut->event.virtualInterruptIsHvictlInject) {
     proxy->virtual_interrupt_is_hvictl_inject(dut->event.virtualInterruptIsHvictlInject);
   }
+  struct InterruptDelegate intrDeleg;
+  intrDeleg.irToHS = dut->event.irToHS;
+  intrDeleg.irToVS = dut->event.irToVS;
+  proxy->intr_delegate(intrDeleg);
   proxy->raise_intr(dut->event.interrupt | (1ULL << 63));
   progress = true;
 }
