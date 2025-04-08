@@ -79,8 +79,10 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
   val robIdx = UInt(10.W)
   val lqIdx = UInt(7.W)
   val sqIdx = UInt(7.W)
+  val mlsqIdx = UInt(7.W)
   val isLoad = Bool()
   val isStore = Bool()
+  val isMls = Bool()
   val nFused = UInt(8.W)
   val special = UInt(8.W)
 
