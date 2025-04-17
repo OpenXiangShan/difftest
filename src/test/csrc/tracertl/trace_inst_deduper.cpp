@@ -16,30 +16,18 @@
 #include "trace_inst_deduper.h"
 
 void
-TraceInstDeduper::predict(const std::vector<Instruction> &src, size_t from_index, size_t end_index) {
-  // for (int i = from_index; i < end_index; i++) {
-  for (int i = 0; i < end_index; i++) {
-    const auto inst = src[i];
-    if (inst.branch_type == 0) continue;
+TraceInstDeduper::dedup_label(const std::vector<Instruction> &src, size_t from_index, size_t end_index) {
+  std::vector<bool> branch_dedupable_list;
+  history_labeler.assignLabel(src, from_index, end_index, branch_dedupable_list);
 
-    uint64_t seq_pc = inst.instr_pc_va + (isRVC(inst.instr) ? 2 : 4);
-    bool is_nonret_jr = type_fixer.is_nonret_jr(inst.instr, inst.branch_type);
+  size_t branch_index = 0;
+  for (int i = 0; i < end_index; i ++) {
+    if (src[i].branch_type == BRANCH_None) continue;
 
-    bool predTaken = bpu.predictTaken(inst.instr_pc_va, inst.branch_type);
-    uint64_t predTarget = bpu.predictTarget(inst.instr_pc_va, inst.branch_type, is_nonret_jr);
-    bool takenC = predTaken == inst.branch_taken;
-    bool targetC = predTarget == inst.target;
-    bool predC = takenC && targetC;
+    bool dedupable = branch_dedupable_list[branch_index];
+    branch_bpu_result.emplace_back(BranchBPUResult(i, src[i].instr_pc_va, dedupable));
 
-    bool bpu_changed = false;
-    bpu.update(inst.instr_pc_va, inst.target, inst.branch_taken,
-      inst.branch_type, seq_pc, is_nonret_jr, bpu_changed);
-    // bool dedupable = !bpu_changed;
-    bool dedupable = !bpu_changed && predC;
-
-    // if (i >= from_index) { // the filter is ok, but complicated, just rm it
-      branch_bpu_result.emplace_back(BranchBPUResult(i, inst.instr_pc_va, takenC, targetC, dedupable));
-    // }
+    branch_index++;
   }
 }
 
@@ -62,7 +50,7 @@ TraceInstDeduper::dedup_branch(const std::vector<Instruction> &src, size_t from_
   while (branch_index < end_branch_index) {
     // skip all the change_bpu branch
     // TODO: check oversize
-    while ((branch_index < end_branch_index) && !branch_bpu_result[branch_index].bpuNoChange) {
+    while ((branch_index < end_branch_index) && !branch_bpu_result[branch_index].dedupable) {
       branch_index ++;
     }
     if (branch_index >= end_branch_index) break;
@@ -70,12 +58,14 @@ TraceInstDeduper::dedup_branch(const std::vector<Instruction> &src, size_t from_
     // now branch_index is the noChange bpu
     size_t start_index = branch_index;
     // TODO: check oversize
-    while ((branch_index < end_branch_index) && branch_bpu_result[branch_index].bpuNoChange) {
+    while ((branch_index < end_branch_index) && branch_bpu_result[branch_index].dedupable) {
       branch_index++;
     }
     // now branch_index is the !noChange bpu
     size_t end_index = branch_index >= end_branch_index ? end_branch_index-1 : branch_index;
     // if (end_index == start_index) continue; // this should not happen
+
+    if (end_index <= start_index) continue;
 
     // find dedup branch in src
     dedup_branch_interval(start_index, end_index);
@@ -228,21 +218,53 @@ TraceInstDeduper::dedup_branch_interval_by_dp(size_t from_branch_index, size_t e
   // }
 }
 
+void TraceInstDeduper::dedup_branch_interval_by_forceJump(size_t from_branch_index, size_t end_branch_index) {
+  if (branch_bpu_result[from_branch_index].instIndex + forceJump_threshold <
+      branch_bpu_result[end_branch_index].instIndex) {
+    // printf("DP: forceJump interval from %lu to %lu\n", branch_bpu_result[from_branch_index].instIndex, branch_bpu_result[end_branch_index].instIndex);
+    // fflush(stdout);
+
+    size_t startIdx = from_branch_index > 1 ? branch_bpu_result[from_branch_index-1].instIndex + 1 :
+      branch_bpu_result[from_branch_index].instIndex;
+    branch_dedup_result.emplace_back(BranchDedupResult(startIdx,
+        branch_bpu_result[end_branch_index].instIndex));
+  }
+}
+
 void
 TraceInstDeduper::dedup_branch_interval(size_t from_branch_index, size_t end_branch_index) {
   // end_branch_index should not be ignored/fast_simulation
   // dedup_branch_interval_by_sort(from_branch_index, end_branch_index);
-  dedup_branch_interval_by_dp(from_branch_index, end_branch_index);
+  if (dedup_by_forceJump) {
+    dedup_branch_interval_by_forceJump(from_branch_index, end_branch_index);
+  } else {
+    dedup_branch_interval_by_dp(from_branch_index, end_branch_index);
+  }
 }
 
 void
 TraceInstDeduper::dedup_inst(std::vector<Instruction> &src) {
-  for (auto interval : branch_dedup_result) {
-    for (size_t i = interval.startInstIndex; i < interval.endInstIndex; i++) {
-      src[i].is_squashed = true;
+  if (dedup_by_forceJump) {
+    for (auto interval : branch_dedup_result) {
+      for (size_t i = interval.startInstIndex + 1; i < interval.endInstIndex; i++) {
+        src[i].is_squashed = true;
 
-      deduped_branch_num += (src[i].branch_type != 0) ? 1 : 0;
-      deduped_inst_num ++;
+        deduped_branch_num += (src[i].branch_type != 0) ? 1 : 0;
+        deduped_inst_num ++;
+      }
+
+      size_t forceJump_index = interval.startInstIndex;
+      src[forceJump_index].exception = 0x81;
+      src[forceJump_index].target = src[interval.endInstIndex].instr_pc_va;
+    }
+  } else {
+    for (auto interval : branch_dedup_result) {
+      for (size_t i = interval.startInstIndex; i < interval.endInstIndex; i++) {
+        src[i].is_squashed = true;
+
+        deduped_branch_num += (src[i].branch_type != 0) ? 1 : 0;
+        deduped_inst_num ++;
+      }
     }
   }
 }
@@ -252,16 +274,19 @@ TraceInstDeduper::dedup(std::vector<Instruction> &src, size_t from_index, size_t
   TraceLegalFlowChecker flowChecker;
   flowChecker.check(src);
 
+  size_t old_signature_count = history_labeler.tool_signature_count(src, end_index);
+  printf("TraceInstDeduper: Old Signature Count %lu\n", old_signature_count);
+
   // fix wrong instruction branch type
   for (int i = from_index; i < end_index; i++) {
-    src[i].branch_type = type_fixer.fix_branch_type(src[i].instr, src[i].branch_type);
+    // src[i].branch_type = type_fixer.fix_branch_type(src[i].instr, src[i].branch_type);
     if (src[i].branch_type != 0) perf_branch_num++;
   }
 
-  printf("Predict started from %ld to %ld\n", from_index, end_index);
+  printf("Dedup label started from %ld to %ld\n", from_index, end_index);
   fflush(stdout);
-  predict(src, from_index, end_index);
-  printf("Predict ready\n");
+  dedup_label(src, from_index, end_index);
+  printf("Dedup label ready\n");
   fflush(stdout);
   dedup_branch(src, from_index, end_index);
   printf("Dedup branch ready\n");
@@ -274,4 +299,8 @@ TraceInstDeduper::dedup(std::vector<Instruction> &src, size_t from_index, size_t
   printf("         Deduped: Instruction Num %8lu Branch Num %8lu\n", deduped_inst_num, deduped_branch_num);
 
   flowChecker.check(src);
+
+
+  size_t new_signature_count = history_labeler.tool_signature_count(src, end_index);
+  printf("TraceInstDeduper: New Signature Count %lu\n", new_signature_count);
 }

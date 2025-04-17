@@ -50,4 +50,13 @@
 #define TRACE_PADDR_INST_BASE 0xa00000000
 #define TRACE_PADDR_DATA_BASE 0xb00000000
 
+enum BranchType {
+  BRANCH_None = 0,
+  BRANCH_Cond = 1,          // branch
+  BRANCH_Uncond = 2,        // jump offset
+  BRANCH_Call = 3,          // call, jump and link register ra
+  BRANCH_Return = 4,        // return, jump register(ra)
+  // BRANCH_Uncond_Indir = 5,  // jump register
+};
+
 #endif // __TRACE_COMMON_H__

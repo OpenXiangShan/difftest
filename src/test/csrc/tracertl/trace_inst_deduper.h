@@ -25,21 +25,20 @@
 #include <set>
 
 #include "trace_format.h"
-#include "branch_predictor/trace_branch_predictor.h"
-#include "branch_predictor/trace_branch_type_fixer.h"
+// #include "branch_predictor/trace_branch_predictor.h"
+// #include "branch_predictor/trace_branch_type_fixer.h"
 #include "trace_legal_flow_check.h"
+#include "trace_history_labeler.h"
 
 class TraceInstDeduper {
 public:
   struct BranchBPUResult {
     size_t instIndex;  // dynamic info
     uint64_t pc;       // static info
-    bool takenCorrect; // bpu info
-    bool targetCorrect;
-    bool bpuNoChange;
+    bool dedupable;
 
-    BranchBPUResult(size_t idx, uint64_t pc, bool takC, bool tarC, bool noC):
-      instIndex(idx), pc(pc), takenCorrect(takC), targetCorrect(tarC), bpuNoChange(noC) {}
+    BranchBPUResult(size_t idx, uint64_t pc, bool dedupable):
+      instIndex(idx), pc(pc), dedupable(dedupable) {}
   };
 
   struct BranchDedupResult {
@@ -60,8 +59,9 @@ public:
   };
 
 protected:
-  TraceBranchPredictor bpu;
-  TraceBranchTypeFixer type_fixer;
+  // TraceBranchPredictor bpu;
+  TraceHistoryLabeler history_labeler;
+  // TraceBranchTypeFixer type_fixer;
 
   std::vector<BranchBPUResult> branch_bpu_result;
   std::vector<BranchDedupResult> branch_dedup_result;
@@ -69,10 +69,17 @@ protected:
   size_t deduped_branch_num = 0;
   size_t deduped_inst_num = 0;
 
-  void predict(const std::vector<Instruction> &src, size_t from_index, size_t end_index);
+  // force jump will change target
+  // currently, target is part of precode(finally, part of instruction encoding)
+  // so force Jump is not allowed
+  bool dedup_by_forceJump = false;
+  const size_t forceJump_threshold = 50; // forceJump faster than normal execution?
+
+  void dedup_label(const std::vector<Instruction> &src, size_t from_index, size_t end_index);
   void dedup_branch(const std::vector<Instruction> &src, size_t from_index, size_t end_index);
 
   // sort each instruction
+  void dedup_branch_interval_by_forceJump(size_t from_branch_index, size_t end_branch_index);
   void dedup_branch_interval_by_sort(size_t from_branch_index, size_t end_branch_index);
   // Dynamic programming for individual interval
   void dedup_branch_interval_by_dp(size_t from_branch_index, size_t end_branch_index);

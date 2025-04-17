@@ -6,17 +6,7 @@
 #include <cstdlib>
 #include <map>
 
-#define NEMU_FORMAT
-#ifdef NEMU_FORMAT
-enum BranchType {
-  BRANCH_None = 0,
-  BRANCH_Cond = 1,          // branch
-  BRANCH_Uncond = 2,        // jump offset
-  BRANCH_Call = 3,          // call, jump and link register ra
-  BRANCH_Return = 4,        // return, jump register(ra)
-  // BRANCH_Uncond_Indir = 5,  // jump register
-};
-#endif
+#include "../trace_common.h"
 
 class TraceBranchTypeFixer {
 private:
