@@ -349,7 +349,7 @@ void simv_finish() {
 static uint8_t simv_result = SIMV_RUN;
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 extern "C" void simv_nstep(uint8_t step) {
-  if (simv_result == SIMV_FAIL || difftest == NULL)
+  if (simv_result == SIMV_DONE || simv_result == SIMV_FAIL || difftest == NULL)
     return;
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {

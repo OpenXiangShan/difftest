@@ -228,10 +228,10 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |end
        |
        |// For the C/C++ interface
-       |export "DPI-C" task set_squash_enable;
-       |task set_squash_enable(int en);
+       |export "DPI-C" function set_squash_enable;
+       |function set_squash_enable(int en);
        |  enable = en;
-       |endtask
+       |endfunction
        |`endif // DIFFTEST
        |`endif // SYNTHESIS
        |
