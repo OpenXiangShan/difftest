@@ -11,7 +11,7 @@ on:
 jobs:
   test-difftest-main:
     runs-on: ubuntu-latest
-    container: ghcr.io/OpenXiangShan/ubuntu-22.04:latest
+    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
 
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
 
   test-difftest-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/OpenXiangShan/ubuntu-22.04:latest
+    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
@@ -187,7 +187,7 @@ jobs:
 
   test-difftest-vcs:
     runs-on: ubuntu-latest
-    container: ghcr.io/OpenXiangShan/ubuntu-22.04:latest
+    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
@@ -317,7 +317,7 @@ jobs:
 
   test-difftest-fpga:
     runs-on: ubuntu-latest
-    container: ghcr.io/OpenXiangShan/ubuntu-22.04:latest
+    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
