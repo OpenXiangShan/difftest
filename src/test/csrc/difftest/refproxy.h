@@ -147,6 +147,7 @@ public:
   f(ref_memcpy_init, difftest_memcpy_init, void, uint64_t, void*, size_t, bool)                             \
   f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                                                    \
   f(ref_virtual_interrupt_is_hvictl_inject, difftest_virtual_interrupt_is_hvictl_inject, void, bool)        \
+  f(ref_interrupt_delegate, difftest_interrupt_delegate, void, void*)                                    \
   f(disambiguation_state, difftest_disambiguation_state, int, )                                             \
   f(ref_non_reg_interrupt_pending, difftest_non_reg_interrupt_pending, void, void*)                         \
   f(raise_mhpmevent_overflow, difftest_raise_mhpmevent_overflow, void, uint64_t)                            \
@@ -265,6 +266,12 @@ public:
       ref_virtual_interrupt_is_hvictl_inject(virtualInterruptIsHvictlInject);
     } else {
       Info("Virtual interrupt without hvictl register injection.\n");
+    }
+  }
+
+  inline void intr_delegate(struct InterruptDelegate &intrDeleg) {
+    if (ref_interrupt_delegate) {
+      ref_interrupt_delegate(&intrDeleg);
     }
   }
 
@@ -467,6 +474,11 @@ struct FromAIA {
   uint64_t stopei;
   uint64_t vstopei;
   uint64_t hgeip;
+};
+
+struct InterruptDelegate {
+  bool irToHS;
+  bool irToVS;
 };
 
 extern const char *difftest_ref_so;
