@@ -10,14 +10,11 @@ on:
 
 jobs:
   test-difftest-main:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
+
     steps:
       - uses: actions/checkout@v4
-
-      - name: Mill Installation
-        run: |
-          sudo curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.1/0.11.1 > /usr/local/bin/mill
-          chmod +x /usr/local/bin/mill
 
       - name: Compile
         run: |
@@ -30,7 +27,8 @@ jobs:
           make MFC=1
 
   test-difftest-nutshell:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
@@ -40,13 +38,6 @@ jobs:
       - name: Enable -Werror for EMU Build
         run: |
           echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
-
-      - name: Prepare environment
-        run: |
-            cd $GITHUB_WORKSPACE/..
-            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/install-verilator.sh
-            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/setup-tools.sh
-            sudo bash setup-tools.sh
 
       - name: Prepare NutShell
         run: |
@@ -195,7 +186,8 @@ jobs:
             make clean && make -C .. clean
 
   test-difftest-vcs:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
@@ -205,13 +197,6 @@ jobs:
       - name: Enable -Werror for EMU Build
         run: |
           echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
-
-      - name: Prepare environment
-        run: |
-            cd $GITHUB_WORKSPACE/..
-            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/install-verilator.sh
-            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/setup-tools.sh
-            sudo bash setup-tools.sh
 
       - name: Prepare NutShell
         run: |
@@ -331,19 +316,13 @@ jobs:
             make clean
 
   test-difftest-fpga:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Prepare environment
-        run: |
-            cd $GITHUB_WORKSPACE/..
-            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/install-verilator.sh
-            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/setup-tools.sh
-            sudo bash setup-tools.sh
 
       - name: Prepare NutShell
         run: |
