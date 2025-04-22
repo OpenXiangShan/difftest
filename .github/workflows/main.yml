@@ -11,7 +11,7 @@ on:
 jobs:
   test-difftest-main:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
+    container: ghcr.io/OpenXiangShan/ubuntu-22.04:latest
 
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
 
   test-difftest-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
+    container: ghcr.io/OpenXiangShan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
@@ -186,7 +186,8 @@ jobs:
             make clean && make -C .. clean
 
   test-difftest-vcs:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: ghcr.io/OpenXiangShan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
@@ -196,13 +197,6 @@ jobs:
       - name: Enable -Werror for EMU Build
         run: |
           echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
-
-      - name: Prepare environment
-        run: |
-            cd $GITHUB_WORKSPACE/..
-            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/install-verilator.sh
-            wget https://github.com/OpenXiangShan/xs-env/raw/refs/heads/master/setup-tools.sh
-            sudo bash setup-tools.sh
 
       - name: Prepare NutShell
         run: |
@@ -323,7 +317,7 @@ jobs:
 
   test-difftest-fpga:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/ubuntu-22.04:latest
+    container: ghcr.io/OpenXiangShan/ubuntu-22.04:latest
 
     needs: test-difftest-main
 
