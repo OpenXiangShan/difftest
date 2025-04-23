@@ -2,10 +2,8 @@ name: Nightly Regression
 
 on:
   schedule:
-    # run at 01:00 UTC (9:00 UTC+8) so that we can debug it immediately
-    - cron: '00 01 * * *'
-  pull_request:
-    branches: [ master ]
+    # run at 00:00 UTC (8:00 UTC+8) so that we can debug it immediately
+    - cron: '00 00 * * *'
 
 jobs:
   test-difftest-fuzzing:
