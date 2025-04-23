@@ -4,6 +4,8 @@ on:
   schedule:
     # run at 01:00 UTC (9:00 UTC+8) so that we can debug it immediately
     - cron: '00 01 * * *'
+  pull_request:
+    branches: [ master ]
 
 jobs:
   test-difftest-fuzzing:
@@ -26,6 +28,7 @@ jobs:
         run: |
             cd $GITHUB_WORKSPACE/..
             git clone https://github.com/OpenXiangShan/xfuzz.git
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             cargo install cargo-make
             cd xfuzz && make init && make build
 
