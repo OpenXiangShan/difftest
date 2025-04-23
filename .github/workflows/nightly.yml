@@ -29,6 +29,7 @@ jobs:
             cd $GITHUB_WORKSPACE/..
             git clone https://github.com/OpenXiangShan/xfuzz.git
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source $HOME/.cargo/env
             cargo install cargo-make
             cd xfuzz && make init && make build
 
