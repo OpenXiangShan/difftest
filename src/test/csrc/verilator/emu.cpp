@@ -377,8 +377,6 @@ Emulator::Emulator(int argc, const char *argv[])
   if (enable_simjtag) {
     jtag_init();
   }
-  // init flash
-  init_flash(args.flash_bin);
 
 #if VM_TRACE == 1
   if (args.enable_waveform) {
@@ -400,6 +398,9 @@ Emulator::Emulator(int argc, const char *argv[])
 
   // init core
   reset_ncycles(args.reset_cycles);
+
+  // init flash
+  init_flash(args.flash_bin);
 
   // init ram
   uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
