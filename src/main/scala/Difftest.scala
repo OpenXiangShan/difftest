@@ -96,16 +96,19 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   def elementsInSeqUInt: Seq[(String, Seq[UInt])] = seqUIntHelper(elements.toSeq.reverse)
 
-  // return (name, data_width_in_byte, data_seq) for all elements except coreid and index
-  def dataElements: Seq[(String, Int, Seq[UInt])] = {
-    val nonDataElements = Seq("coreid", "index")
-    elementsInSeqUInt.filterNot(e => nonDataElements.contains(e._1)).map { case (name, dataSeq) =>
+  // return (name, data_width_aligned, data_seq) for all elements, where width can be 8,16,32,64
+  def totalElements: Seq[(String, Int, Seq[UInt])] = {
+    elementsInSeqUInt.map { case (name, dataSeq) =>
       val width = dataSeq.map(_.getWidth).distinct
       require(width.length == 1, "should not have different width")
       require(width.head <= 64, s"do not support DifftestBundle element with width (${width.head}) >= 64")
-      (name, (width.head + 7) / 8, dataSeq)
+      (name, math.pow(2, math.max(3, log2Ceil(width.head))).toInt, dataSeq)
     }
   }
+
+  // return (name, data_width_aligned, data_seq) for all elements except coreid and index
+  def dataElements: Seq[(String, Int, Seq[UInt])] =
+    totalElements.filterNot(e => Seq("coreid", "index").contains(e._1))
 
   def toCppDeclMacro: String = {
     val macroName = s"CONFIG_DIFFTEST_${desiredModuleName.toUpperCase.replace("DIFFTEST", "")}"
@@ -119,8 +122,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
       val isRemoved = isFlatten && Seq("valid", "address").contains(name)
       if (!isRemoved) {
         // Align elem to 8 bytes for bundle enabled to split when Delta
-        val elemSize = if (this.supportsDelta && aligned) deltaElemBytes else size
-        val arrayType = s"uint${elemSize * 8}_t"
+        val elemWidth = if (this.supportsDelta && aligned) deltaElemWidth else size
+        val arrayType = s"uint${elemWidth}_t"
         val arrayWidth = if (elem.length == 1) "" else s"[${elem.length}]"
         cpp += f"  $arrayType%-8s $name$arrayWidth;"
       }
@@ -130,13 +133,12 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   }
 
   def toTraceDeclaration: String = {
-    def byteWidth(data: Data) = (data.getWidth + 7) / 8 * 8
     val cpp = ListBuffer.empty[String]
     cpp += "typedef struct __attribute__((packed)) {"
-    elements.toSeq.reverse.foreach { case (name, data) =>
+    totalElements.foreach { case (name, width, data) =>
       val (typeWidth, arrSuffix) = data match {
-        case v: Vec[_] => (byteWidth(v.head), s"[${v.length}]")
-        case _         => (byteWidth(data), "")
+        case v: Vec[_] => (width, s"[${v.length}]")
+        case _         => (width, "")
       }
       cpp += f"  ${s"uint${typeWidth}_t"}%-8s $name$arrSuffix;"
     }
@@ -174,34 +176,27 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   val supportsDelta: Boolean = false
   def isDeltaElem: Boolean = this.isInstanceOf[DiffDeltaElem]
-  def deltaElemBytes: Int = dataElements.map(_._2).max
+  def deltaElemWidth: Int = dataElements.map(_._2).max
 
   // Byte align all elements
   def getByteAlignElems(isTrace: Boolean): Seq[(String, Data)] = {
-    def byteAlign(data: Data): UInt = {
-      val width: Int = (data.getWidth + 7) / 8 * 8
-      data.asTypeOf(UInt(width.W))
-    }
     val gen = if (DataMirror.isWire(this) || DataMirror.isReg(this) || DataMirror.isIO(this)) {
       this
     } else {
       0.U.asTypeOf(this)
     }
     val elems = if (isTrace) {
-      gen.elements.toSeq.reverse
+      gen.totalElements
     } else {
       // Reorder to separate locating and transmitted data
-      def locFilter: ((String, Data)) => Boolean = { case (name, _) =>
+      def locFilter: ((String, Int, Seq[UInt])) => Boolean = { case (name, _, _) =>
         Seq("coreid", "index", "address").contains(name)
       }
-      val raw = gen.elements.toSeq.reverse.filterNot(this.isFlatten && _._1 == "valid")
+      val raw = gen.totalElements.filterNot(this.isFlatten && _._1 == "valid")
       raw.filterNot(locFilter) ++ raw.filter(locFilter)
     }
-    elems.flatMap { case (name, data) =>
-      data match {
-        case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"{${name}_$i}", byteAlign(v)) }
-        case _           => Seq((s"$name", byteAlign(data)))
-      }
+    elems.flatMap { case (name, width, seq) =>
+      seq.map(d => (name, d.asTypeOf(UInt(width.W))))
     }
   }
   def getByteAlignElems: Seq[(String, Data)] = getByteAlignElems(false)
@@ -213,15 +208,11 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     require(aligned.getWidth == this.getByteAlignWidth(isTrace))
     val bundle = WireInit(0.U.asTypeOf(this))
     val byteSeq = aligned.asTypeOf(Vec(aligned.getWidth / 8, UInt(8.W)))
-    val elems = bundle.elements.toSeq.reverse
+    val elems = bundle.totalElements
       .filterNot(this.isFlatten && _._1 == "valid" && !isTrace)
-      .flatMap { case (_, data) =>
-        data match {
-          case vec: Vec[_] => vec.toSeq
-          case _           => Seq(data)
-        }
+      .flatMap { case (_, width, seq) =>
+        seq.map(d => (d, width / 8))
       }
-      .map { d => (d, (d.getWidth + 7) / 8) }
     elems.zipWithIndex.foreach { case ((data, size), idx) =>
       val offset = elems.map(_._2).take(idx).sum
       data := MixedVecInit(byteSeq.slice(offset, offset + size).toSeq).asUInt
@@ -231,7 +222,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 }
 
 class DiffDeltaElem(gen: DifftestBundle)
-  extends DeltaElem(gen.deltaElemBytes)
+  extends DeltaElem(gen.deltaElemWidth)
   with DifftestBundle
   with DifftestWithIndex {
   override val desiredCppName: String = gen.desiredCppName + "_elem"
