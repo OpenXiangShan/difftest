@@ -37,10 +37,15 @@
 // #include "dse.h"
 // #endif
 #include "uparam.h"
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <semaphore.h>
 
 uint64_t old_cycles = 0;
 
 extern remote_bitbang_t * jtag;
+
+#define SYNC_WITH_PYTHON 1
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
   if (strspn(str, " +-0123456789") != strlen(str)) {
@@ -403,6 +408,10 @@ inline void Emulator::single_cycle() {
   cycles ++;
 }
 
+/// @brief 
+/// @param max_cycle 
+/// @param max_instr 
+/// @return 
 uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
 
@@ -450,19 +459,33 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   time_t coverage_start_time = time(NULL);
 #endif
 
+  // dse init
   bool lastCycleDSEReset = false;
   bool doDSEReset = false;
   bool deg_record = false;
   int deg_record_num = args.max_deg_instrs;
   Perfprocess* perfprocess = new Perfprocess(dut_ptr, 6);
   ArchExplorerEngine* engine = new ArchExplorerEngine();
-  std::vector<std::string> perfNames = getIOPerfNames();
   std::vector<int> embedding;
+  sem_t *sem_py;
+  sem_t *sem_cpp;
+
+#ifdef SYNC_WITH_PYTHON
+  sem_py = sem_open("/py_to_cpp", 0);
+  sem_cpp = sem_open("/cpp_to_py", 0);
+  if (sem_py == SEM_FAILED || sem_cpp == SEM_FAILED) {
+      perror("信号量打开失败");
+  }
+  printf("wait for python\n");
+  sem_wait(sem_py);
+  embedding = engine->design_space.get_embedding_from_file("embedding.txt");
+#else
   if (args.init_params != NULL) {
     embedding = engine->design_space.get_embedding_from_file(args.init_params);
   } else {
     embedding = engine->design_space.get_init_embedding();
   }
+#endif
   init_uparam(embedding, engine->max_epoch);
   engine->initial_embedding = embedding;
   engine->visualize = args.enable_deg_visualize;
@@ -505,15 +528,17 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         if (reset_vector == 0x10000000) {
           deg_record = false;
           auto trap = difftest[i]->get_trap_event();
-          uint64_t cycleCnt = trap->cycleCnt;
-          uint64_t instrCnt = trap->instrCnt;
-          // double ipc = (double)instrCnt / (cycleCnt);
           uint64_t epoch = dut_ptr->io_dse_epoch;
           uint64_t max_epoch = dut_ptr->io_dse_max_epoch;
           printf("epoch: %ld\n", epoch);
           printf("max epoch: %ld\n", max_epoch);
-          auto ipc = perfprocess->get_ipc();
-          printf("ipc: %f\n", ipc);
+
+          // calculate ppa
+          double ipc = perfprocess->get_ipc();
+          double cpi = perfprocess->get_cpi();
+
+          printf("IPC: %f\n", ipc);
+
           if (epoch == max_epoch) {
             // compare initial and last embeddings
             printf("Final embedding of microarch parameters after %d epochs:\n", max_epoch);
@@ -521,6 +546,44 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
             trapCode = STATE_GOODTRAP;
             break;
           }
+#ifdef SYNC_WITH_PYTHON
+          // 反馈 PPA
+          std::ofstream ipc_file;
+          std::string filename = "ipc.rpt";
+          if (epoch == 1) {
+              // 第一个epoch时创建新文件
+              ipc_file.open(filename, std::ios::out);
+              ipc_file << "Epoch,IPC,CPI" << std::endl;
+          } else {
+              // 之后的epoch追加到文件末尾
+              ipc_file.open(filename, std::ios::app);
+          }
+          
+          if (ipc_file.is_open()) {
+              ipc_file << epoch << "," << ipc << "," << cpi << std::endl;
+              ipc_file.close();
+          } else {
+              std::cerr << "无法打开文件: " << filename << std::endl;
+          }
+        
+          perfprocess->get_simulation_stats(epoch);
+          engine->design_space.get_configs(embedding);
+          
+          // 通知Python
+          sem_post(sem_cpp);
+          std::cout << "[C++] 通知Python,开始 DSE 算法" << std::endl;
+  
+          // 等待Python通知
+          sem_wait(sem_py);
+          std::cout << "[C++] 收到Python通知,开始下一轮 DSE 仿真" << std::endl;
+  
+          std::vector<int> embedding_new;
+          embedding_new = engine->design_space.get_embedding_from_file("embedding.txt");
+          engine->design_space.compare_embeddings(embedding, embedding_new);
+          embedding = embedding_new;
+          embedding_to_uparam(embedding);
+#endif
+
           deg_record_num = args.max_deg_instrs;
           engine->start_epoch(epoch + 1);
         }
@@ -538,12 +601,14 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           init_nemuproxy();
           proxy->nemu_init(reset_vector);
         }
+#ifndef SYNC_WITH_PYTHON
         if (reset_vector == 0x80000000) {
           printf("[Do DEG Record]\n");
           if (deg_record_num > 0) {
             deg_record = true;
           }
         }
+#endif
         break;
       }
       if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {

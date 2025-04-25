@@ -28,12 +28,12 @@ enum EMDIdx {
 };
 
 // const parameters
-#define RenameWidth 4
-#define PredictWidth 16
 
 class O3CPUDesignSpace {
 protected:
     std::map<std::string, std::vector<int>> components_params;
+    std::map<std::string, std::map<int, double>> component_areas;
+    void initialize_areas();
 
 public:
     O3CPUDesignSpace();
@@ -50,6 +50,49 @@ public:
         "L2MSHRS", "L2SETS", "L3MSHRS", "L3SETS", "INTPHYREGS", "FPPHYREGS",
         "RASSIZE"
     };
+    double get_component_area(const std::string& component, int param) const;
+    double calculate_total_area(const std::vector<int>& embedding) const;
+     // 获取设计空间中可能的最大面积配置
+    std::vector<int> get_max_area_embedding() const;
+     // 计算相对于最大面积的归一化面积
+    double calculate_normalized_area_to_max(const std::vector<int>& embedding) const;
+     // 获取相对于最大面积的组件归一化面积
+    std::map<std::string, double> get_normalized_component_areas_to_max(
+         const std::vector<int>& embedding) const;
+     // 打印相对于最大面积的归一化信息
+    void print_normalized_area_to_max(const std::vector<int>& embedding) const;
+
+    void get_configs(const std::vector<int>& embedding) const;
+
+    const int RenameWidth = 4;
+    const int PredictWidth = 16;
+    const int FetchWidth = 8;
+    const int DecodeWidth = 4;
+    const int IssueWidth = 4;
+    const int CommitWidth = 6;
+    const int ALUCnt = 2;
+    const int MULCnt = 1;
+    const int FPUCnt = 2;
+    const int FTBSize = 2048;
+    const int ITLBSize = 4;
+    const int DTLBSize = 32;
+    const int ICacheSize = 256;
+    const int ICacheAssoc = 4;
+    const int ICacheBlockSize = 64;
+    const int ICache_response_latency = 2;
+    const int ICacheMSHRs = 2;
+    const int ICache_prefetch_buffer_size = 2;
+    const int DCacheSize = 512;
+    const int DCacheAssoc = 4;
+    const int DCacheBlockSize = 64;
+    const int DCache_response_latency = 2;
+    const int DCacheMSHRs = 16;
+    const int DCache_prefetch_buffer_size = 2;
+    const int DCache_wb_buffer_size = 18;
+    const int BTBSize = 1024;
+    const int L2_assoc = 8;
+    const int L2_banks = 4;
+    const int L2_block_width = 64;
 };
 
 

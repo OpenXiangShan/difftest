@@ -1,5 +1,5 @@
-#ifndef PERFPROCESS_H
-#define PERFPROCESS_H
+#ifndef __PERFPROCESS_H
+#define __PERFPROCESS_H
 
 #include <vector>
 #include <string>
@@ -12,15 +12,17 @@
 #include <array>
 #include <iostream>
 #include <iomanip>
-#include "verilated.h"
-#include "VSimTop.h"
+#include "isa_parser.h"
+#include "disasm.h"
 
-extern std::vector<uint64_t> getIOPerfCnts(VSimTop *dut_ptr);
-extern std::vector<std::string> getIOPerfNames();
+extern int get_perfCnt_id(std::string perfName);
+
+#define DEFAULT_ISA  "rv64imafdc_zicntr_zihpm"
+#define DEFAULT_PRIV "MSU"
 
 class Perfprocess {
 public:
-  Perfprocess(VSimTop *dut_ptr, int commit_width);
+  Perfprocess(int commit_width);
   ~Perfprocess();
   uint64_t find_perfCnt(std::string perfName);
   double get_ipc();
@@ -34,11 +36,13 @@ public:
     return traces[i];
   }
   void clear_traces() { traces.clear(); }
+  std::vector<uint64_t> perfCnts;
+  bool get_simulation_stats(long int dse_epoch);
 
 private:
-  VSimTop *dut_ptr = nullptr;
-  std::vector<std::string> perfNames = getIOPerfNames();
   int commit_width = 6;
+  isa_parser_t isa_parser;
+  disassembler_t* disassembler;
   std::vector<std::string> traces;
 };
 
