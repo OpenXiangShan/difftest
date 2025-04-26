@@ -1689,6 +1689,12 @@ void CommitTrace::display(bool use_spike) {
   }
 }
 
+void CommitTrace::display_line(int index, bool use_spike, bool is_retire) {
+  Info("[%02d] ", index);
+  display(use_spike);
+  Info("%s\n", is_retire ? " <--" : "");
+}
+
 void Difftest::display_stats() {
   auto trap = get_trap_event();
   uint64_t instrCnt = trap->instrCnt;
@@ -1698,40 +1704,27 @@ void Difftest::display_stats() {
        this->id, instrCnt, cycleCnt, ipc);
 }
 
-void DiffState::display_commit_count(int i) {
-  auto retire_pointer = (retire_group_pointer + DEBUG_GROUP_TRACE_SIZE - 1) % DEBUG_GROUP_TRACE_SIZE;
-  Info("commit group [%02d]: pc %010lx cmtcnt %d%s\n", i, retire_group_pc_queue[i], retire_group_cnt_queue[i],
-       (i == retire_pointer) ? " <--" : "");
-}
-
-void DiffState::display_commit_instr(int i) {
-  display_commit_instr(retire_inst_pointer, spike_valid());
-  fflush(stdout);
-}
-
-void DiffState::display_commit_instr(int i, bool use_spike) {
-  if (!commit_trace[i]) {
-    return;
-  }
-  Info("[%02d] ", i);
-  commit_trace[i]->display(use_spike);
-  auto retire_pointer = (retire_inst_pointer + DEBUG_INST_TRACE_SIZE - 1) % DEBUG_INST_TRACE_SIZE;
-  Info("%s\n", (i == retire_pointer) ? " <--" : "");
-}
-
 void DiffState::display(int coreid) {
   Info("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
-  for (int j = 0; j < DEBUG_GROUP_TRACE_SIZE; j++) {
-    display_commit_count(j);
+  int group_index = 0;
+  while (!retire_group_queue.empty()) {
+    auto [pc, cnt] = retire_group_queue.front();
+    retire_group_queue.pop();
+    Info("commit group [%02d]: pc %010lx cmtcnt %d%s\n", group_index, pc, cnt,
+         retire_group_queue.empty() ? " <--" : "");
+    group_index++;
   }
 
   Info("\n============== Commit Instr Trace ==============\n");
-  bool use_spike = spike_valid();
-  for (int j = 0; j < DEBUG_INST_TRACE_SIZE; j++) {
-    display_commit_instr(j, use_spike);
+  int commit_index = 0;
+  while (!commit_trace.empty()) {
+    CommitTrace *trace = commit_trace.front();
+    commit_trace.pop();
+    trace->display_line(commit_index, use_spike, commit_trace.empty());
+    commit_index++;
   }
 
   fflush(stdout);
 }
 
-DiffState::DiffState() : commit_trace(DEBUG_INST_TRACE_SIZE, nullptr) {}
+DiffState::DiffState() : use_spike(spike_valid()) {}

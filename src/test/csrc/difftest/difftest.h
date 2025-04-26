@@ -24,7 +24,6 @@
 #include "refproxy.h"
 #include <queue>
 #include <unordered_set>
-#include <vector>
 #ifdef FUZZING
 #include "emu.h"
 #endif // FUZZING
@@ -81,6 +80,7 @@ public:
   virtual ~CommitTrace() {}
   virtual const char *get_type() = 0;
   virtual void display(bool use_spike = false);
+  void display_line(int index, bool use_spike, bool is_retire);
 
 protected:
   virtual void display_custom() = 0;
@@ -159,48 +159,48 @@ public:
   bool dump_commit_trace = false;
 
   DiffState();
-  void record_group(uint64_t pc, uint64_t count) {
-    retire_group_pc_queue[retire_group_pointer] = pc;
-    retire_group_cnt_queue[retire_group_pointer] = count;
-    retire_group_pointer = (retire_group_pointer + 1) % DEBUG_GROUP_TRACE_SIZE;
-  };
+  void record_group(uint64_t pc, uint32_t count) {
+    if (retire_group_queue.size() >= DEBUG_GROUP_TRACE_SIZE) {
+      retire_group_queue.pop();
+    }
+    retire_group_queue.push({pc, count});
+  }
   void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip, bool delayed,
                    uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore) {
     push_back_trace(new InstrTrace(pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
-    retire_inst_pointer = (retire_inst_pointer + 1) % DEBUG_INST_TRACE_SIZE;
   };
   void record_exception(uint64_t pc, uint32_t inst, uint64_t cause) {
     push_back_trace(new ExceptionTrace(pc, inst, cause));
-    retire_inst_pointer = (retire_inst_pointer + 1) % DEBUG_INST_TRACE_SIZE;
   };
   void record_interrupt(uint64_t pc, uint32_t inst, uint64_t cause) {
     push_back_trace(new InterruptTrace(pc, inst, cause));
-    retire_inst_pointer = (retire_inst_pointer + 1) % DEBUG_INST_TRACE_SIZE;
   };
   void display(int coreid);
 
 private:
+  const bool use_spike;
+
   const static int DEBUG_GROUP_TRACE_SIZE = 16;
-  int retire_group_pointer = 0;
-  uint64_t retire_group_pc_queue[DEBUG_GROUP_TRACE_SIZE] = {0};
-  uint32_t retire_group_cnt_queue[DEBUG_GROUP_TRACE_SIZE] = {0};
+  std::queue<std::pair<uint64_t, uint32_t>> retire_group_queue;
 
   const static int DEBUG_INST_TRACE_SIZE = 32;
-  int retire_inst_pointer = 0;
-  std::vector<CommitTrace *> commit_trace;
+  std::queue<CommitTrace *> commit_trace;
 
   void push_back_trace(CommitTrace *trace) {
-    if (commit_trace[retire_inst_pointer]) {
-      delete commit_trace[retire_inst_pointer];
+    if (commit_trace.size() >= DEBUG_INST_TRACE_SIZE) {
+      delete commit_trace.front();
+      commit_trace.pop();
     }
-    commit_trace[retire_inst_pointer] = trace;
+    commit_trace.push(trace);
     if (dump_commit_trace) {
-      display_commit_instr(retire_inst_pointer);
+      static uint64_t commit_counter = 0;
+      trace->display_line(commit_counter, use_spike, false);
+      commit_counter++;
+      fflush(stdout);
     }
   }
   void display_commit_count(int i);
-  void display_commit_instr(int i);
-  void display_commit_instr(int i, bool use_spike);
+  void display_commit_instr(int index, CommitTrace *trace, bool is_retire);
 };
 
 class Difftest {
