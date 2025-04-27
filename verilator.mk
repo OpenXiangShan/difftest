@@ -222,6 +222,7 @@ endif # ifdef PGO_WORKLOAD
 	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
 
 emu: $(EMU)
+emu-mk: $(EMU_MK)
 
 COVERAGE_DATA ?= $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.dat")
 COVERAGE_DIR  ?= $(DESIGN_DIR)/$(basename $(notdir $(COVERAGE_DATA)))
