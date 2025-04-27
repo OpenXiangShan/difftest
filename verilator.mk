@@ -140,6 +140,8 @@ endif
 	@echo -e "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) $(VERILATOR) $(VERILATOR_FLAGS) --Mdir $(@D) $^ $(EMU_DEPS)
+	@sed -i -e 's/$(subst /,\/,$(NOOP_HOME))/$$(NOOP_HOME)/g' \
+	       -e '/^default:/i\NOOP_HOME ?= $(subst /,\/,$(NOOP_HOME))\n' $@
 ifneq ($(VERILATOR_5_000),1)
 	@sed -i 's/private/public/g' $(EMU_DIR)/VSimTop.h
 	@sed -i 's/const vlSymsp/vlSymsp/g' $(EMU_DIR)/VSimTop.h
