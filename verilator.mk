@@ -36,8 +36,11 @@ ifneq ($(FUZZER_LIB), )
 EMU = $(BUILD_DIR)/fuzzer
 endif
 
+# Verilator binary
+VERILATOR ?= verilator
+
 # Verilator version check
-VERILATOR_VER_CMD = verilator --version 2> /dev/null | cut -f2 -d' ' | tr -d '.'
+VERILATOR_VER_CMD = $(VERILATOR) --version 2> /dev/null | cut -f2 -d' ' | tr -d '.'
 VERILATOR_4_210 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 4210 2> /dev/null)
 ifeq ($(VERILATOR_4_210),1)
 EMU_CXXFLAGS += -DVERILATOR_4_210
@@ -136,7 +139,7 @@ endif
 	@mkdir -p $(@D)
 	@echo -e "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) verilator $(VERILATOR_FLAGS) -Mdir $(@D) $^ $(EMU_DEPS)
+	$(TIME_CMD) $(VERILATOR) $(VERILATOR_FLAGS) --Mdir $(@D) $^ $(EMU_DEPS)
 ifneq ($(VERILATOR_5_000),1)
 	@sed -i 's/private/public/g' $(EMU_DIR)/VSimTop.h
 	@sed -i 's/const vlSymsp/vlSymsp/g' $(EMU_DIR)/VSimTop.h
