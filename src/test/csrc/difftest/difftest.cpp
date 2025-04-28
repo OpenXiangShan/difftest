@@ -1710,9 +1710,9 @@ void DiffState::display(int coreid) {
   Info("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
   int group_index = 0;
   while (!retire_group_queue.empty()) {
-    auto [pc, cnt] = retire_group_queue.front();
+    auto retire_group = retire_group_queue.front()
     retire_group_queue.pop();
-    Info("commit group [%02d]: pc %010lx cmtcnt %d%s\n", group_index, pc, cnt,
+    Info("commit group [%02d]: pc %010lx cmtcnt %d%s\n", group_index, retire_group.pc, retire_group.cnt,
          retire_group_queue.empty() ? " <--" : "");
     group_index++;
   }
