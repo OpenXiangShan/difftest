@@ -82,7 +82,7 @@ else
 # randomize all undefined signals (instead of using X)
 VCS_FLAGS += +vcs+initreg+random
 endif
-VCS_CXXFLAGS += -std=c++11 -static
+VCS_CXXFLAGS += -std=c++20 -static
 endif
 
 VCS_FLAGS += -o $(VCS_TARGET)
