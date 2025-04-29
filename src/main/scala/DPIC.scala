@@ -292,7 +292,6 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |  enum DifftestBundleType {
            |  ${bundleEnum.mkString(",\n  ")}
            |  };
-           |  extern void simv_nstep(uint8_t step);
            |  static int dut_index = 0;
            |  $batchDecl
            |  for (int i = 0; i < $infoLen; i++) {
@@ -301,7 +300,13 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |    uint32_t coreid, index, address;
            |    if (id == BatchFinish) {
            |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
+           |#ifdef CONFIG_PLATFORM_FPGA
+           |      extern void fpga_nstep(uint8_t step);
+           |      fpga_nstep(num);
+           |#else
+           |      extern void simv_nstep(uint8_t step);
            |      simv_nstep(num);
+           |#endif // CONFIG_PLATFORM_FPGA
            |#endif // CONFIG_DIFFTEST_INTERNAL_STEP
            |      break;
            |    }
