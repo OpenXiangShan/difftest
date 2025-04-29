@@ -17,6 +17,7 @@
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
+#include <execinfo.h>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
@@ -25,11 +26,27 @@
 #include <stdlib.h>
 #include <string>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #define XDMA_USER       "/dev/xdma0_user"
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
+
+void signal_handler(int sig) {
+  void *array[20];
+  size_t size;
+  size = backtrace(array, 20);
+
+  fprintf(stderr, "Error: signal %d:\n", sig);
+  backtrace_symbols_fd(array, size, STDERR_FILENO);
+  exit(1);
+}
+
+template <typename Func, typename Obj, typename... Args> void thread_wrapper(Func func, Obj obj, Args... args) {
+  signal(SIGSEGV, signal_handler);
+  (obj->*func)(args...);
+}
 
 FpgaXdma::FpgaXdma() : xdma_mempool(DMA_DIFF_PACKGE_LEN) {
   signal(SIGINT, handle_sigint);
@@ -112,9 +129,11 @@ void FpgaXdma::start_transmit_thread() {
 
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     printf("start channel %d \n", i);
-    receive_thread[i] = std::thread(&FpgaXdma::read_xdma_thread, this, i);
+    receive_thread[i] = std::thread(thread_wrapper<decltype(&FpgaXdma::read_xdma_thread), FpgaXdma *, int>,
+                                    &FpgaXdma::read_xdma_thread, this, i);
   }
-  process_thread = std::thread(&FpgaXdma::write_difftest_thread, this);
+  process_thread = std::thread(thread_wrapper<decltype(&FpgaXdma::write_difftest_thread), FpgaXdma *>,
+                               &FpgaXdma::write_difftest_thread, this);
   running = true;
 }
 
@@ -138,23 +157,30 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
+  const uint64_t xdma_get_len = ((sizeof(FpgaPackgeHead) + 128) / 128) * 128; // send width to be calculated by mod up
+  uint8_t *xdma_packge = (uint8_t *)malloc(xdma_get_len);
   FpgaPackgeHead *packge = (FpgaPackgeHead *)malloc(sizeof(FpgaPackgeHead));
+  int debug_count = 0;
+  memset(packge, 0, sizeof(FpgaPackgeHead));
+  memset(xdma_packge, 0, xdma_get_len);
   while (running) {
-    memset(packge, 0, sizeof(FpgaPackgeHead));
-    size_t size = read(xdma_c2h_fd[channel], packge->diff_packge, DMA_DIFF_PACKGE_LEN);
+    size_t size = read(xdma_c2h_fd[channel], xdma_packge, xdma_get_len);
 #ifdef USE_THREAD_MEMPOOL
-    if (xdma_mempool.write_free_chunk(idx, (char *)&packge) == false) {
+    uint8_t idx = xdma_packge[0];
+    if (xdma_mempool.write_free_chunk(idx, (char *)&xdma_packge) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
     }
 #else
 #ifdef CONFIG_DIFFTEST_BATCH
+    memcpy(packge, xdma_packge, sizeof(FpgaPackgeHead));
     v_difftest_Batch(packge->diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
     //TODO: need automatically generates squash data parsing implementations
 #endif // CONFIG_DIFFTEST_BATCH
 #endif // USE_THREAD_MEMPOOL
   }
+  free(xdma_packge);
   free(packge);
 }
 

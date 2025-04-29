@@ -26,7 +26,11 @@
 #include <condition_variable>
 #include <getopt.h>
 #include <mutex>
+#include <time.h>
 
+static uint64_t perf_run_sec_start;
+void fpga_perfcnt_init();
+void fpga_perfcnt_print(uint64_t cycleCnt);
 void fpga_finish();
 
 enum {
@@ -36,6 +40,7 @@ enum {
 } simv_state;
 
 static char work_load[256] = "/dev/zero";
+static char *flash_bin_file = NULL;
 static std::atomic<uint8_t> simv_result{FPGA_RUN};
 static std::mutex simv_mtx;
 static std::condition_variable simv_cv;
@@ -60,7 +65,8 @@ int main(int argc, char *argv[]) {
   args_parsing(argc, argv);
 
   fpga_init();
-  printf("simv init\n");
+  fpga_perfcnt_init();
+  printf("fpga init\n");
   {
     std::unique_lock<std::mutex> lock(simv_mtx);
     xdma_device->start_transmit_thread();
@@ -84,7 +90,7 @@ void set_diff_ref_so(char *s) {
 void fpga_init() {
   xdma_device = new FpgaXdma();
   init_ram(work_load, DEFAULT_EMU_RAM_SIZE);
-  init_flash(NULL);
+  init_flash(flash_bin_file);
 
   difftest_init();
 
@@ -106,7 +112,7 @@ void fpga_finish() {
   simMemory = nullptr;
 }
 
-void fpga_nstep(uint8_t step) {
+extern "C" void simv_nstep(uint8_t step) {
   for (int i = 0; i < step; i++) {
     fpga_step();
   }
@@ -128,6 +134,7 @@ void fpga_step() {
         default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
       }
       difftest[i]->display_stats();
+      fpga_perfcnt_print(difftest[i]->get_trap_event()->cycleCnt);
     }
     if (trapCode == 0)
       simv_result.store(FPGA_DONE);
@@ -138,18 +145,36 @@ void fpga_step() {
   cpu_endtime_check();
 }
 
+void fpga_perfcnt_init() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  perf_run_sec_start = ts.tv_sec;
+}
+
+void fpga_perfcnt_print(uint64_t cycleCnt) {
+  uint64_t perf_run_sec;
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  perf_run_sec = ts.tv_sec - perf_run_sec_start;
+  float speed = cycleCnt / 1000 / (float)perf_run_sec;
+  printf("\rFpga speed: %.1f K Cycle", speed);
+}
+
 void cpu_endtime_check() {
+  uint64_t cycleCnt = 0;
   if (max_instrs != 0) { // 0 for no limit
     for (int i = 0; i < NUM_CORES; i++) {
       if (core_end_info.core_trap[i])
         continue;
       auto trap = difftest[i]->get_trap_event();
-      if (max_instrs < trap->instrCnt) {
+      cycleCnt = trap->cycleCnt;
+      if (max_instrs < cycleCnt) {
         core_end_info.core_trap[i] = true;
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
         difftest[i]->display_stats();
-        core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
+        fpga_perfcnt_print(cycleCnt);
+        core_end_info.core_cpi[i] = (double)cycleCnt / (double)trap->instrCnt;
         if (core_end_info.core_trap_num == NUM_CORES) {
           simv_result.store(FPGA_DONE);
           simv_cv.notify_one();
@@ -162,8 +187,10 @@ void cpu_endtime_check() {
 void args_parsing(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
-  static struct option long_options[] = {
-    {"diff", required_argument, 0, 0}, {"max-instrs", required_argument, 0, 0}, {0, 0, 0, 0}};
+  static struct option long_options[] = {{"diff", required_argument, 0, 0},
+                                         {"max-instrs", required_argument, 0, 0},
+                                         {"flash", required_argument, 0, 0},
+                                         {0, 0, 0, 0}};
 
   while ((opt = getopt_long(argc, argv, "i:", long_options, &option_index)) != -1) {
     switch (opt) {
@@ -172,11 +199,15 @@ void args_parsing(int argc, char *argv[]) {
           set_diff_ref_so(optarg);
         } else if (strcmp(long_options[option_index].name, "max-instrs") == 0) {
           max_instrs = std::stoul(optarg, nullptr, 10);
+        } else if (strcmp(long_options[option_index].name, "flash") == 0) {
+          flash_bin_file = (char *)malloc(256);
+          strcpy(flash_bin_file, optarg);
         }
         break;
       case 'i': strncpy(work_load, optarg, sizeof(work_load) - 1); break;
       default:
-        std::cerr << "Usage: " << argv[0] << " [--diff <path>] [-i <workload>] [--max-instrs <num>]" << std::endl;
+        std::cerr << "Usage: " << argv[0]
+                  << " [--diff <path>] [-i <workload>] [--max-instrs <num>] [--flash <flash_img>]" << std::endl;
         exit(EXIT_FAILURE);
     }
   }

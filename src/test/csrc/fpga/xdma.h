@@ -29,14 +29,17 @@
 #include <vector>
 
 #ifdef CONFIG_DIFFTEST_BATCH
-#define DMA_DIFF_PACKGE_LEN (CONFIG_DIFFTEST_BATCH_BYTELEN + 1)
+#define DMA_DIFF_PACKGE_LEN (CONFIG_DIFFTEST_BATCH_BYTELEN)
 #elif defined(CONFIG_DIFFTEST_SQUASH)
 #define DMA_DIFF_PACKGE_LEN 1280 // XDMA Min size
 #endif
 
+#pragma pack(1)
 typedef struct FpgaPackgeHead {
+  uint8_t idx;
   uint8_t diff_packge[DMA_DIFF_PACKGE_LEN];
 } FpgaPackgeHead;
+#pragma pack()
 
 class FpgaXdma {
 public:
