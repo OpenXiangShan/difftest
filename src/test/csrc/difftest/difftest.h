@@ -367,7 +367,7 @@ public:
 #endif
 
 protected:
-  const uint64_t firstCommit_limit = 15000;
+  const uint64_t firstCommit_limit = 150000;
   const uint64_t stuck_limit = 15000;
 
   int id;

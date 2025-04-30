@@ -1,19 +1,27 @@
 #include "perfprocess.h"
 
-Perfprocess::Perfprocess(int commit_width) :
-  isa_parser(DEFAULT_ISA, DEFAULT_PRIV)
-{
+Perfprocess::Perfprocess(VSimTop *dut_ptr, int commit_width) {
+  this->dut_ptr = dut_ptr;
   this->commit_width = commit_width;
-  this->disassembler = new disassembler_t(&isa_parser, false);
+  this->perfNames = getIOPerfNames();
 }
 
 Perfprocess::~Perfprocess() {
-  delete disassembler;
 }
 
 uint64_t Perfprocess::find_perfCnt(std::string perfName) {
-  int id = get_perfCnt_id(perfName);
-  return perfCnts[id];
+  std::vector<uint64_t> perfCnts = getIOPerfCnts(dut_ptr);
+  // Find the index of the perfName in perfNames
+  auto it = std::find(perfNames.begin(), perfNames.end(), perfName);
+  if (it != perfNames.end()) {
+    // Calculate the index
+    size_t index = std::distance(perfNames.begin(), it);
+    // Return the corresponding value from perfCnts
+    return perfCnts[index];
+  } else {
+    throw std::runtime_error("perfName not found in perfNames");
+  }
+  return perfCnts[1];
 }
 
 double Perfprocess::get_ipc() {
@@ -25,8 +33,77 @@ double Perfprocess::get_ipc() {
 double Perfprocess::get_cpi() {
   auto clockCnt = find_perfCnt("clock_cycle");
   auto instrCnt = find_perfCnt("commitInstr");
-  printf("clockCnt: %lu, instrCnt: %lu\n", clockCnt, instrCnt);
   return (double)clockCnt / (double)instrCnt;
+}
+
+void Perfprocess::update_deg() {
+  for (int i = 0; i < commit_width; i++) {
+    auto do_update = find_perfCnt("isCommit_" + std::to_string(i));
+    if (do_update != 0) {
+      printf("%ld: system.switch_cpus: T0 : 0x%lx : 0x%lx"
+          " : %ld_%ld_%ld : _"
+          " : FetchCacheLine=%ld : ProcessCacheCompletion=%ld"
+
+          " : Fetch=%ld"
+          " : Decode=%ld : Rename=%ld"
+
+          " : BlockFromROB=%ld"
+          " : BlockFromDPQ=%ld"
+          " : BlockFromSerial=%ld"
+          " : BlockFromRF=%ld"
+          " : BlockFromLQ=%ld : BlockFromSQ=%ld"
+
+          " : EliminatedMove=%ld"
+          " : Dispatch=%ld : EnqRS=%ld"
+          " : InsertReadyList=%ld"
+          " : Select=%ld : Issue=%ld"
+          " : Complete=%ld : Commit=%ld"
+
+          " : ROB=%ld : LQ=%ld : SQ=%ld"
+          " : RS=%ld : FU=%ld"
+          " : SRC=%ld,%ld,%ld : DST=%ld"
+          " : SRCTYPE=%ld,%ld,%ld"
+          "\n", 
+          find_perfCnt("cf_" + std::to_string(i)),
+          find_perfCnt("pc_" + std::to_string(i)),
+          find_perfCnt("instr_" + std::to_string(i)),
+          find_perfCnt("fuType_" + std::to_string(i)),
+          find_perfCnt("fuOpType_" + std::to_string(i)),
+          find_perfCnt("fpu_" + std::to_string(i)),
+          find_perfCnt("FetchCacheLine_" + std::to_string(i)),
+          find_perfCnt("ProcessCacheCompletion_" + std::to_string(i)),
+          find_perfCnt("Fetch_" + std::to_string(i)),
+          find_perfCnt("Decode_" + std::to_string(i)),
+          find_perfCnt("Rename_" + std::to_string(i)),
+          find_perfCnt("BlockFromROB_" + std::to_string(i)),
+          find_perfCnt("BlockFromDPQ_" + std::to_string(i)),
+          find_perfCnt("BlockFromSerial_" + std::to_string(i)),
+          find_perfCnt("BlockFromRF_" + std::to_string(i)),
+          find_perfCnt("BlockFromLQ_" + std::to_string(i)),
+          find_perfCnt("BlockFromSQ_" + std::to_string(i)),
+          find_perfCnt("EliminatedMove_" + std::to_string(i)),
+          find_perfCnt("Dispatch_" + std::to_string(i)),
+          find_perfCnt("EnqRS_" + std::to_string(i)),
+          find_perfCnt("InsertReadyList_" + std::to_string(i)),
+          find_perfCnt("Select_" + std::to_string(i)),
+          find_perfCnt("Issue_" + std::to_string(i)),
+          find_perfCnt("Complete_" + std::to_string(i)),
+          find_perfCnt("Commit_" + std::to_string(i)),
+          find_perfCnt("ROB_" + std::to_string(i)),
+          find_perfCnt("LQ_" + std::to_string(i)),
+          find_perfCnt("SQ_" + std::to_string(i)),
+          find_perfCnt("RS_" + std::to_string(i)),
+          find_perfCnt("FU_" + std::to_string(i)),
+          find_perfCnt("SRC0_" + std::to_string(i)),
+          find_perfCnt("SRC1_" + std::to_string(i)),
+          find_perfCnt("SRC2_" + std::to_string(i)),
+          find_perfCnt("DST_" + std::to_string(i)),
+          find_perfCnt("SRCTYPE0_" + std::to_string(i)),
+          find_perfCnt("SRCTYPE1_" + std::to_string(i)),
+          find_perfCnt("SRCTYPE2_" + std::to_string(i))
+        );
+    }
+  }
 }
 
 std::string exec(const char* cmd) {
@@ -76,7 +153,10 @@ int Perfprocess::update_deg_v2() {
       uint64_t dest = find_perfCnt("DST_" + std::to_string(i));
 
       // 调用 spike-dasm 解析指令
-      std::string insn_decoded = disassembler->disassemble(instr);
+      std::stringstream command;
+      command << "echo \"DASM(" << std::setw(8) << std::setfill('0') << std::hex << instr << ")\" | spike-dasm";
+      std::string insn_decoded = exec(command.str().c_str());
+      insn_decoded.erase(insn_decoded.find_last_not_of(" \n") + 1);
       
       // 解析指令类型
       std::string type_str = "unknown";
@@ -135,16 +215,8 @@ int Perfprocess::update_deg_v2() {
             << " : BlockFromSerial=" << find_perfCnt("BlockFromSerial_" + std::to_string(i));
         
         traces.push_back(trace.str());
-        std::ofstream trace_file("traces.txt", std::ios::app);
-        if (trace_file.is_open()) {
-            trace_file << trace.str() << std::endl;
-            trace_file.close();
-        } else {
-            std::cerr << "Failed to open trace file for writing." << std::endl;
-        }
-
-        if (false) {
-            std::cout << trace.str() << std::endl;
+        if (true) {
+            std::cerr << trace.str() << std::endl;
         }
     }
   }
@@ -213,6 +285,8 @@ bool Perfprocess::get_simulation_stats(long int dse_epoch) {
   uint64_t l2_write_access = find_perfCnt("l2_write_access");
   uint64_t l2_write_miss = find_perfCnt("l2_write_miss");
   uint64_t l2_conflit = find_perfCnt("l2_conflit");
+  uint64_t memory_access = find_perfCnt("memory_access");
+  uint64_t memory_write = find_perfCnt("memory_write");
   
   // do some calculations
   uint64_t int_instructions = alu_instr_cnt + div_instr_cnt + mul_instr_cnt + jmp_instr_cnt;
@@ -223,8 +297,7 @@ bool Perfprocess::get_simulation_stats(long int dse_epoch) {
 
   // output
   std::ostringstream stats;
-  stats << "Simulation Statistics:" << std::endl
-        << "dse_epoch: " << dse_epoch << std::endl
+  stats << "dse_epoch: " << dse_epoch << std::endl
         << "total_cycles: " << clock_cycle << std::endl
         << "total_instructions: " << issue_num << std::endl
         << "int_instructions: " << int_instructions << std::endl
@@ -269,13 +342,14 @@ bool Perfprocess::get_simulation_stats(long int dse_epoch) {
         << "l2_write_access: " << l2_write_access << std::endl
         << "l2_write_misses: " << l2_write_miss << std::endl
         << "l2_conflit: " << l2_conflit << std::endl
-        << "branch_mispredictions" << BPWrong << std::endl
+        << "branch_mispredictions: " << BPWrong << std::endl
         << "intdqreads: " << intdqreads << std::endl
-        << "intdqwrites: " << intdqwrites << std::endl;
+        << "intdqwrites: " << intdqwrites << std::endl
+        << "memory_access: " << memory_access << std::endl
+        << "memory_write: " << memory_write << std::endl;
 
-  std::ofstream stats_file("stats.txt", std::ios::app);
+  std::ofstream stats_file("stats.txt", std::ios::trunc);
   if (stats_file.is_open()) {
-    stats_file << "\n--------------------------------------------------\n";
     stats_file << stats.str();
     stats_file.close();
     return true;

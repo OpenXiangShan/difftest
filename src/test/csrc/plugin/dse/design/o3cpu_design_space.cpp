@@ -162,10 +162,10 @@ std::vector<int> O3CPUDesignSpace::get_max_area_embedding() const {
     }
     
     // 确保配置有效
-    if (!check_embedding(max_area_embedding)) {
-        // 如果最大面积配置无效，回退到使用初始配置
-        return get_init_embedding();
-    }
+    // if (!check_embedding(max_area_embedding)) {
+    //     // 如果最大面积配置无效，回退到使用初始配置
+    //     return get_init_embedding();
+    // }
     
     return max_area_embedding;
 }
@@ -266,7 +266,7 @@ std::vector<int> O3CPUDesignSpace::get_init_embedding() const {
     embedding[static_cast<size_t>(EMDIdx::INTPHYREGS)] = 128;
     embedding[static_cast<size_t>(EMDIdx::FPPHYREGS)] = 96;
     embedding[static_cast<size_t>(EMDIdx::RASSIZE)] = 32;
-    check_embedding(embedding);
+    // check_embedding(embedding);
     return embedding;
 }
 
@@ -301,6 +301,11 @@ std::vector<int> O3CPUDesignSpace::get_embedding_from_file(const std::string& fi
         // 提取参数名和值
         std::string param = line.substr(0, pos);
         std::string value_str = line.substr(pos + 1);
+
+        if (param == "Benchmark") {
+            // 跳过Benchmark参数
+            continue;
+        }
         
         // 查找参数索引
         auto it = std::find(param_names.begin(), param_names.end(), param);
@@ -317,9 +322,9 @@ std::vector<int> O3CPUDesignSpace::get_embedding_from_file(const std::string& fi
     file.close();
 
     // 验证embedding是否有效
-    if (!check_embedding(embedding)) {
-        throw std::runtime_error("Invalid embedding configuration in file: " + filename);
-    }
+    // if (!check_embedding(embedding)) {
+    //     throw std::runtime_error("Invalid embedding configuration in file: " + filename);
+    // }
 
     return embedding;
 }
@@ -462,7 +467,6 @@ void O3CPUDesignSpace::get_configs(const std::vector<int>& embedding) const {
     std::ofstream stats_file("stats.txt", std::ios::app);
     if (stats_file.is_open()) {
         stats_file << stats.str();
-        stats_file << "\n--------------------------------------------------\n";
         stats_file.close();
       } else {
         std::cerr << "Failed to open stats.txt for writing." << std::endl;

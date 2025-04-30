@@ -46,6 +46,9 @@ uint64_t old_cycles = 0;
 extern remote_bitbang_t * jtag;
 
 #define SYNC_WITH_PYTHON 1
+Perfprocess* perfprocess = nullptr;
+std::string benchmark_name;
+std::string benchmark_root_path = "/nfs/home/wujiabin/work/arch-explorer2/infras/benchmarks";
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
   if (strspn(str, " +-0123456789") != strlen(str)) {
@@ -408,6 +411,42 @@ inline void Emulator::single_cycle() {
   cycles ++;
 }
 
+std::string get_benchmark(const std::string& file_name) {
+  std::ifstream file(file_name);
+  if (!file.is_open()) {
+    std::cerr << "Error opening file: " << file_name << std::endl;
+    return "";
+  }
+
+  std::string line;
+  while (std::getline(file, line)) {
+      // 跳过空行和注释行
+        if (line.empty() || line[0] == '#') {
+          continue;
+      }
+
+      // 移除空白字符
+      line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
+      
+      // 查找分隔符
+      size_t pos = line.find(':');
+      if (pos == std::string::npos) {
+          continue;
+      }
+
+      // 提取参数名和值
+      std::string param = line.substr(0, pos);
+      std::string value_str = line.substr(pos + 1);
+
+      if (param == "Benchmark") {
+          std::string benchmark = value_str;
+          std::cout << "Benchmark: " << benchmark << std::endl;
+          return benchmark;
+      }
+  }
+
+}
+
 /// @brief 
 /// @param max_cycle 
 /// @param max_instr 
@@ -471,17 +510,29 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   sem_t *sem_cpp;
 
 #ifdef SYNC_WITH_PYTHON
-  sem_py = sem_open("/py_to_cpp", 0);
-  sem_cpp = sem_open("/cpp_to_py", 0);
+  sem_py = sem_open("/py_to_xs", 0);
+  sem_cpp = sem_open("/xs_to_py", 0);
   if (sem_py == SEM_FAILED || sem_cpp == SEM_FAILED) {
       perror("信号量打开失败");
   }
   printf("wait for python\n");
   sem_wait(sem_py);
   embedding = engine->design_space.get_embedding_from_file("embedding.txt");
+  benchmark_name = get_benchmark("embedding.txt");
+  if (benchmark_name.empty()) {
+    std::cerr << "Error: Could not read Benchmark name from initial embedding.txt" << std::endl;
+    exit(1); // 如果初始 benchmark 名为空则退出
+  }
+  printf("Initial benchmark_name read: %s\n", benchmark_name.c_str());
 #else
   if (args.init_params != NULL) {
     embedding = engine->design_space.get_embedding_from_file(args.init_params);
+    benchmark_name = get_benchmark(args.init_params);
+    if (benchmark_name.empty()) {
+        std::cerr << "Error: Could not read Benchmark name from init_params file: " << args.init_params << std::endl;
+        exit(1);
+    }
+    printf("Initial benchmark_name read from %s: %s\n", args.init_params, benchmark_name.c_str());
   } else {
     embedding = engine->design_space.get_init_embedding();
   }
@@ -539,13 +590,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
           printf("IPC: %f\n", ipc);
 
-          if (epoch == max_epoch) {
-            // compare initial and last embeddings
-            printf("Final embedding of microarch parameters after %d epochs:\n", max_epoch);
-            engine->design_space.compare_embeddings(engine->initial_embedding, embedding);
-            trapCode = STATE_GOODTRAP;
-            break;
-          }
+
 #ifdef SYNC_WITH_PYTHON
           // 反馈 PPA
           std::ofstream ipc_file;
@@ -577,6 +622,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           sem_wait(sem_py);
           std::cout << "[C++] 收到Python通知,开始下一轮 DSE 仿真" << std::endl;
   
+          benchmark_name = get_benchmark("embedding.txt");
+          printf("benchmark_name: %s\n", benchmark_name.c_str());
+
           std::vector<int> embedding_new;
           embedding_new = engine->design_space.get_embedding_from_file("embedding.txt");
           engine->design_space.compare_embeddings(embedding, embedding_new);
@@ -592,7 +640,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         doDSEReset = false;
         printf("DSE reset finish at pc: %lx, reset vector: %lx\n", diff->get_dut()->commit[0].pc, reset_vector);
         // reset ram
-        init_ram(args.image);
+        init_ram((benchmark_root_path + "/" + benchmark_name + ".bin").c_str());
         difftest_finish();
         difftest_init();
         init_device();
@@ -680,10 +728,9 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         uint64_t instrCnt = trap->instrCnt;
         uint64_t cycleCnt = trap->cycleCnt;
         uint64_t epoch = dut_ptr->io_dse_epoch;
-        uint64_t max_epoch = dut_ptr->io_dse_max_epoch;
         uint64_t dse_max_instr = dut_ptr->io_dse_max_instr;
 
-        if (instrCnt < dse_max_instr && epoch <= max_epoch) {
+        if (instrCnt < dse_max_instr) {
           printf("Hit good trap at pc = 0x%lx, instrCnt = %ld, cycleCnt = %ld\n", trap->pc, instrCnt, cycleCnt);
           double ipc = (double)instrCnt / (cycleCnt);
           printf("epoch: %ld\n", epoch);
@@ -695,7 +742,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           reset_ncycles(10);
           printf("Core reset complete\n");
 
-          init_ram(args.image);
+          init_ram((benchmark_root_path + "/" + benchmark_name + ".bin").c_str());
           difftest_finish();
           difftest_init();
           init_device();

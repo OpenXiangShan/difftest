@@ -76,13 +76,13 @@ public:
     const int FTBSize = 2048;
     const int ITLBSize = 4;
     const int DTLBSize = 32;
-    const int ICacheSize = 256;
+    const int ICacheSize = 262144;
     const int ICacheAssoc = 4;
     const int ICacheBlockSize = 64;
     const int ICache_response_latency = 2;
     const int ICacheMSHRs = 2;
     const int ICache_prefetch_buffer_size = 2;
-    const int DCacheSize = 512;
+    const int DCacheSize = 524288;
     const int DCacheAssoc = 4;
     const int DCacheBlockSize = 64;
     const int DCache_response_latency = 2;
