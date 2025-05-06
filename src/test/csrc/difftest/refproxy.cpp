@@ -167,8 +167,7 @@ void RefProxy::regcpy(const DiffTestRegState *regs, uint64_t pc) {
   memcpy(&state.fcsr, &regs->fcsr, sizeof(state.fcsr));
 #endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_MATRIXCSRSTATE
-// TODO: Implement ports in NEMU，and then enable me
-//  memcpy(&mcsr, &dut->mcsr, sizeof(mcsr));
+  memcpy(&state.mcsr, &regs->mcsr, sizeof(state.mcsr));
 #endif // CONFIG_DIFFTEST_MATRIXCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
   memcpy(&state.triggercsr, &regs->triggercsr, sizeof(state.triggercsr));
@@ -196,8 +195,7 @@ int RefProxy::compare(DiffTestState *dut) {
                          PROXY_COMPARE(hcsr),
 #endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_MATRIXCSRSTATE
-// TODO: Implement ports in NEMU，and then enable me
-//                         PROXY_COMPARE(mcsr),
+                         PROXY_COMPARE(mcsr),
 #endif // CONFIG_DIFFTEST_MATRIXCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
                          PROXY_COMPARE(triggercsr),
@@ -253,9 +251,8 @@ void RefProxy::display(DiffTestState *dut) {
     PROXY_COMPARE_AND_DISPLAY(fcsr, regs_name_fp_csr)
 #endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_MATRIXCSRSTATE
-// TODO: Implement ports in NEMU，and then enable me
-//    PROXY_COMPARE_AND_DISPLAY(mcsr, regs_name_matrix_csr)
-#endif
+    PROXY_COMPARE_AND_DISPLAY(mcsr, regs_name_matrix_csr)
+#endif // CONFIG_DIFFTEST_MATRIXCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
     PROXY_COMPARE_AND_DISPLAY(triggercsr, regs_name_triggercsr)
 #endif // CONFIG_DIFFTEST_TRIGGERCSRSTATE
