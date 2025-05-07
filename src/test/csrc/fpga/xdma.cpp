@@ -158,13 +158,11 @@ void FpgaXdma::stop_thansmit_thread() {
 
 void FpgaXdma::read_xdma_thread(int channel) {
   FpgaPackgeHead *packge = (FpgaPackgeHead *)malloc(sizeof(FpgaPackgeHead));
-  int debug_count = 0;
   memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running) {
     size_t size = read(xdma_c2h_fd[channel], packge, sizeof(FpgaPackgeHead));
 #ifdef USE_THREAD_MEMPOOL
-    uint8_t idx = packge->idx;
-    if (xdma_mempool.write_free_chunk(idx, (char *)&packge) == false) {
+    if (xdma_mempool.write_free_chunk((const char *)packge) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
     }
@@ -188,8 +186,8 @@ void FpgaXdma::write_difftest_thread() {
       printf("Failed to read data from the XDMA memory pool\n");
       assert(0);
     }
-    if (packge.diff_packge[0] != recv_count) {
-      printf("read mempool idx failed\n");
+    if (packge.idx != recv_count) {
+      printf("read mempool idx failed, packge_idx %d need_idx %d\n", packge.idx, recv_count);
       assert(0);
     }
     recv_count++;

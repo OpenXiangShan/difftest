@@ -149,7 +149,7 @@ public:
   void cleanupMemoryPool();
 
   // Write a specified free block of a free window
-  bool write_free_chunk(uint8_t idx, const char *data);
+  bool write_free_chunk(const char *data);
 
   // Get the head memory
   bool read_busy_chunk(char *data);

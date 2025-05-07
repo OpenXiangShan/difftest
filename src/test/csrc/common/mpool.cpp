@@ -78,7 +78,8 @@ void MemoryIdxPool::cleanupMemoryPool() {
 }
 
 // Write a specified free block of a free window
-bool MemoryIdxPool::write_free_chunk(uint8_t idx, const char *data) {
+bool MemoryIdxPool::write_free_chunk(const char *data) {
+  uint8_t idx = data[0];
   size_t page_w_idx;
   {
     std::lock_guard<std::mutex> lock(offset_mutexes);
