@@ -17,6 +17,7 @@
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
+#include <execinfo.h>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
@@ -25,13 +26,29 @@
 #include <stdlib.h>
 #include <string>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #define XDMA_USER       "/dev/xdma0_user"
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
 
-FpgaXdma::FpgaXdma() : xdma_mempool(DMA_DIFF_PACKGE_LEN) {
+void signal_handler(int sig) {
+  void *array[20];
+  size_t size;
+  size = backtrace(array, 20);
+
+  fprintf(stderr, "Error: signal %d:\n", sig);
+  backtrace_symbols_fd(array, size, STDERR_FILENO);
+  exit(1);
+}
+
+template <typename Func, typename Obj, typename... Args> void thread_wrapper(Func func, Obj obj, Args... args) {
+  signal(SIGSEGV, signal_handler);
+  (obj->*func)(args...);
+}
+
+FpgaXdma::FpgaXdma() : xdma_mempool(sizeof(FpgaPackgeHead)) {
   signal(SIGINT, handle_sigint);
 
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
@@ -112,9 +129,11 @@ void FpgaXdma::start_transmit_thread() {
 
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     printf("start channel %d \n", i);
-    receive_thread[i] = std::thread(&FpgaXdma::read_xdma_thread, this, i);
+    receive_thread[i] = std::thread(thread_wrapper<decltype(&FpgaXdma::read_xdma_thread), FpgaXdma *, int>,
+                                    &FpgaXdma::read_xdma_thread, this, i);
   }
-  process_thread = std::thread(&FpgaXdma::write_difftest_thread, this);
+  process_thread = std::thread(thread_wrapper<decltype(&FpgaXdma::write_difftest_thread), FpgaXdma *>,
+                               &FpgaXdma::write_difftest_thread, this);
   running = true;
 }
 
@@ -138,11 +157,11 @@ void FpgaXdma::stop_thansmit_thread() {
 
 void FpgaXdma::read_xdma_thread(int channel) {
   FpgaPackgeHead *packge = (FpgaPackgeHead *)malloc(sizeof(FpgaPackgeHead));
+  memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running) {
-    memset(packge, 0, sizeof(FpgaPackgeHead));
-    size_t size = read(xdma_c2h_fd[channel], packge->diff_packge, DMA_DIFF_PACKGE_LEN);
+    size_t size = read(xdma_c2h_fd[channel], packge, sizeof(FpgaPackgeHead));
 #ifdef USE_THREAD_MEMPOOL
-    if (xdma_mempool.write_free_chunk(idx, (char *)&packge) == false) {
+    if (xdma_mempool.write_free_chunk((const char *)packge) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
     }
@@ -166,8 +185,8 @@ void FpgaXdma::write_difftest_thread() {
       printf("Failed to read data from the XDMA memory pool\n");
       assert(0);
     }
-    if (packge.diff_packge[0] != recv_count) {
-      printf("read mempool idx failed\n");
+    if (packge.idx != recv_count) {
+      printf("read mempool idx failed, packge_idx %d need_idx %d\n", packge.idx, recv_count);
       assert(0);
     }
     recv_count++;

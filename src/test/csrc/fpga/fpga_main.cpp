@@ -36,6 +36,7 @@ enum {
 } simv_state;
 
 static char work_load[256] = "/dev/zero";
+static char *flash_bin_file = NULL;
 static std::atomic<uint8_t> simv_result{FPGA_RUN};
 static std::mutex simv_mtx;
 static std::condition_variable simv_cv;
@@ -60,7 +61,8 @@ int main(int argc, char *argv[]) {
   args_parsing(argc, argv);
 
   fpga_init();
-  printf("simv init\n");
+
+  printf("fpga init\n");
   {
     std::unique_lock<std::mutex> lock(simv_mtx);
     xdma_device->start_transmit_thread();
@@ -84,14 +86,16 @@ void set_diff_ref_so(char *s) {
 void fpga_init() {
   xdma_device = new FpgaXdma();
   init_ram(work_load, DEFAULT_EMU_RAM_SIZE);
-  init_flash(NULL);
+  init_flash(flash_bin_file);
 
   difftest_init();
 
   init_device();
   init_goldenmem();
   init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
+#ifdef USE_XDMA_DDR_LOAD
   xdma_device->ddr_load_workload(work_load);
+#endif // USE_XDMA_DDR_LOAD
 }
 
 void fpga_finish() {
@@ -162,8 +166,10 @@ void cpu_endtime_check() {
 void args_parsing(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
-  static struct option long_options[] = {
-    {"diff", required_argument, 0, 0}, {"max-instrs", required_argument, 0, 0}, {0, 0, 0, 0}};
+  static struct option long_options[] = {{"diff", required_argument, 0, 0},
+                                         {"max-instrs", required_argument, 0, 0},
+                                         {"flash", required_argument, 0, 0},
+                                         {0, 0, 0, 0}};
 
   while ((opt = getopt_long(argc, argv, "i:", long_options, &option_index)) != -1) {
     switch (opt) {
@@ -172,11 +178,15 @@ void args_parsing(int argc, char *argv[]) {
           set_diff_ref_so(optarg);
         } else if (strcmp(long_options[option_index].name, "max-instrs") == 0) {
           max_instrs = std::stoul(optarg, nullptr, 10);
+        } else if (strcmp(long_options[option_index].name, "flash") == 0) {
+          flash_bin_file = (char *)malloc(256);
+          strcpy(flash_bin_file, optarg);
         }
         break;
       case 'i': strncpy(work_load, optarg, sizeof(work_load) - 1); break;
       default:
-        std::cerr << "Usage: " << argv[0] << " [--diff <path>] [-i <workload>] [--max-instrs <num>]" << std::endl;
+        std::cerr << "Usage: " << argv[0]
+                  << " [--diff <path>] [-i <workload>] [--max-instrs <num>] [--flash <flash_img>]" << std::endl;
         exit(EXIT_FAILURE);
     }
   }
