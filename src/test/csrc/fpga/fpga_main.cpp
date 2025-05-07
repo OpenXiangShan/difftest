@@ -106,7 +106,7 @@ void fpga_finish() {
   simMemory = nullptr;
 }
 
-void fpga_nstep(uint8_t step) {
+extern "C" void fpga_nstep(uint8_t step) {
   for (int i = 0; i < step; i++) {
     fpga_step();
   }

@@ -103,9 +103,16 @@ case class GatewayConfig(
     if (isBatch) require(!hasDutZone)
     // Currently Delta depends on Batch to ensure update and sync order
     if (isDelta) require(isBatch)
+    // Batch provides unified IO interface for FPGA Diff
+    if (isFPGA) require(isBatch)
     // TODO: support dump and load together
     require(!(traceDump && traceLoad))
   }
+}
+
+class FpgaDiffIO(config: GatewayConfig) extends Bundle {
+  val data = UInt(config.batchBitWidth.W)
+  val enable = Bool()
 }
 
 case class GatewayResult(
@@ -117,6 +124,7 @@ case class GatewayResult(
   cppExtModule: Option[Boolean] = None,
   exit: Option[UInt] = None,
   step: Option[UInt] = None,
+  fpgaIO: Option[FpgaDiffIO] = None,
 ) {
   def +(that: GatewayResult): GatewayResult = {
     GatewayResult(
@@ -128,6 +136,7 @@ case class GatewayResult(
       cppExtModule = if (cppExtModule.isDefined) cppExtModule else that.cppExtModule,
       exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
+      fpgaIO = if (fpgaIO.isDefined) fpgaIO else that.fpgaIO,
     )
   }
 }
@@ -199,6 +208,7 @@ object Gateway {
         structPacked = Some(config.isBatch),
         structAligned = Some(config.isDelta),
         step = Some(endpoint.step),
+        fpgaIO = endpoint.fpgaIO,
       )
     } else {
       GatewayResult(instances = instances) + GatewaySink.collect(config)
@@ -256,11 +266,16 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val step = IO(Output(UInt(config.stepWidth.W)))
   val control = Wire(new GatewaySinkControl(config))
 
+  val fpgaIO = Option.when(config.isBatch && config.isFPGA)(IO(Output(new FpgaDiffIO(config))))
   if (config.isBatch) {
     val batch = Batch(toSink, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
     GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
+    if (config.isFPGA) {
+      fpgaIO.get.data := batch.io.asUInt
+      fpgaIO.get.enable := batch.enable
+    }
   } else {
     val sink_enable = VecInit(toSink.map(_.valid).toSeq).asUInt.orR
     step := RegNext(sink_enable, 0.U)
@@ -291,17 +306,6 @@ object GatewaySink {
     config.style match {
       case "dpic" => DPIC.batch(template, control, io, config)
       case _      => DPIC.batch(template, control, io, config) // Default: DPI-C
-    }
-    val out = Option.when(config.isFPGA) {
-      IO(new Bundle {
-        val data = Output(UInt(config.batchBitWidth.W))
-        val enable = Output(Bool())
-      })
-    }
-    if (config.isFPGA) {
-      out.get.data := Cat(io.data, io.info)
-      out.get.enable := control.enable
-      dontTouch(out.get)
     }
   }
 
