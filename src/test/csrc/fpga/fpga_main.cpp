@@ -34,12 +34,19 @@ enum {
   FPGA_DONE,
   FPGA_FAIL,
 } simv_state;
+struct sematit_ckpt_info {
+  uint64_t pc;
+  uint64_t last_inst;
+  uint64_t count;
+};
 
 static char work_load[256] = "/dev/zero";
+static std::vector<sematit_ckpt_info> sematic_ckpt_list;
 static std::atomic<uint8_t> simv_result{FPGA_RUN};
 static std::mutex simv_mtx;
 static std::condition_variable simv_cv;
 static uint64_t max_instrs = 0;
+static FpgaXdma *xdma_device = NULL;
 
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
@@ -53,8 +60,7 @@ void fpga_step();
 void cpu_endtime_check();
 void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
-
-FpgaXdma *xdma_device = NULL;
+void sematic_checkpoint_out(const char *output_file);
 
 int main(int argc, char *argv[]) {
   args_parsing(argc, argv);
@@ -70,6 +76,9 @@ int main(int argc, char *argv[]) {
   }
   xdma_device->running = false;
   fpga_finish();
+#ifdef SEMATIC_CHECKPOINT
+  sematic_checkpoint_out("sematic_ckpt_result.txt");
+#endif // SEMATIC_CHECKPOINT
   printf("difftest releases the fpga device and exits\n");
   return 0;
 }
@@ -79,6 +88,46 @@ void set_diff_ref_so(char *s) {
   char *buf = (char *)malloc(256);
   strcpy(buf, s);
   difftest_ref_so = buf;
+}
+
+void sematic_checkpoint_init(const char *file) {
+  FILE *fd = fopen(file, "r");
+  if (!fd) {
+    std::cerr << "Error: Could not open file " << file << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  char line[256];
+  while (fgets(line, sizeof(line), fd)) {
+    uint64_t value = std::stoull(line, nullptr, 16);
+    sematic_ckpt_list.push_back({value, 0, 0});
+  }
+
+  fclose(fd);
+}
+
+void sematic_checkpoint_check(uint64_t pc, uint64_t inst) {
+  for (auto &ckpt: sematic_ckpt_list) {
+    if (ckpt.pc == pc) {
+      ckpt.last_inst = inst;
+      ckpt.count++;
+      break;
+    }
+  }
+}
+
+void sematic_checkpoint_out(const char *output_file) {
+  FILE *fd = fopen(output_file, "w");
+  if (!fd) {
+    std::cerr << "Error: Could not open file " << output_file << " for writing" << std::endl;
+    return;
+  }
+
+  for (const auto &ckpt: sematic_ckpt_list) {
+    fprintf(fd, "0x%lx,0x%lx,0x%ld\n", ckpt.pc, ckpt.last_inst, ckpt.count);
+  }
+
+  fclose(fd);
 }
 
 void fpga_init() {
@@ -136,6 +185,12 @@ void fpga_step() {
     simv_cv.notify_one();
   }
   cpu_endtime_check();
+#ifdef SEMATIC_CHECKPOINT
+  for (size_t i = 0; i < NUM_CORES; i++) {
+    auto trap = difftest[i]->get_trap_event();
+    sematic_checkpoint_check(trap->pc, trap->instrCnt);
+  }
+#endif // SEMATIC_CHECKPOINT
 }
 
 void cpu_endtime_check() {
@@ -162,8 +217,10 @@ void cpu_endtime_check() {
 void args_parsing(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
-  static struct option long_options[] = {
-    {"diff", required_argument, 0, 0}, {"max-instrs", required_argument, 0, 0}, {0, 0, 0, 0}};
+  static struct option long_options[] = {{"diff", required_argument, 0, 0},
+                                         {"max-instrs", required_argument, 0, 0},
+                                         {"sematic-checkpoint", required_argument, 0, 0},
+                                         {0, 0, 0, 0}};
 
   while ((opt = getopt_long(argc, argv, "i:", long_options, &option_index)) != -1) {
     switch (opt) {
@@ -172,11 +229,14 @@ void args_parsing(int argc, char *argv[]) {
           set_diff_ref_so(optarg);
         } else if (strcmp(long_options[option_index].name, "max-instrs") == 0) {
           max_instrs = std::stoul(optarg, nullptr, 10);
+        } else if (strcmp(long_options[option_index].name, "sematic-checkpoint") == 0) {
+          sematic_checkpoint_init(optarg);
         }
         break;
       case 'i': strncpy(work_load, optarg, sizeof(work_load) - 1); break;
       default:
-        std::cerr << "Usage: " << argv[0] << " [--diff <path>] [-i <workload>] [--max-instrs <num>]" << std::endl;
+        std::cerr << "Usage: " << argv[0]
+                  << " [--diff <path>] [-i <workload>] [--max-instrs <num>] [--sematic-checkpoint <path>]" << std::endl;
         exit(EXIT_FAILURE);
     }
   }
