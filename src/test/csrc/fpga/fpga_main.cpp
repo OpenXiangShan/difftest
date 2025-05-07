@@ -26,11 +26,7 @@
 #include <condition_variable>
 #include <getopt.h>
 #include <mutex>
-#include <time.h>
 
-static uint64_t perf_run_sec_start;
-void fpga_perfcnt_init();
-void fpga_perfcnt_print(uint64_t cycleCnt);
 void fpga_finish();
 
 enum {
@@ -65,7 +61,7 @@ int main(int argc, char *argv[]) {
   args_parsing(argc, argv);
 
   fpga_init();
-  fpga_perfcnt_init();
+
   printf("fpga init\n");
   {
     std::unique_lock<std::mutex> lock(simv_mtx);
@@ -97,7 +93,9 @@ void fpga_init() {
   init_device();
   init_goldenmem();
   init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
+#ifdef USE_XDMA_DDR_LOAD
   xdma_device->ddr_load_workload(work_load);
+#endif // USE_XDMA_DDR_LOAD
 }
 
 void fpga_finish() {
@@ -112,7 +110,7 @@ void fpga_finish() {
   simMemory = nullptr;
 }
 
-extern "C" void simv_nstep(uint8_t step) {
+extern "C" void fpga_nstep(uint8_t step) {
   for (int i = 0; i < step; i++) {
     fpga_step();
   }
@@ -134,7 +132,6 @@ void fpga_step() {
         default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
       }
       difftest[i]->display_stats();
-      fpga_perfcnt_print(difftest[i]->get_trap_event()->cycleCnt);
     }
     if (trapCode == 0)
       simv_result.store(FPGA_DONE);
@@ -145,36 +142,18 @@ void fpga_step() {
   cpu_endtime_check();
 }
 
-void fpga_perfcnt_init() {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  perf_run_sec_start = ts.tv_sec;
-}
-
-void fpga_perfcnt_print(uint64_t cycleCnt) {
-  uint64_t perf_run_sec;
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  perf_run_sec = ts.tv_sec - perf_run_sec_start;
-  float speed = cycleCnt / 1000 / (float)perf_run_sec;
-  printf("\rFpga speed: %.1f K Cycle", speed);
-}
-
 void cpu_endtime_check() {
-  uint64_t cycleCnt = 0;
   if (max_instrs != 0) { // 0 for no limit
     for (int i = 0; i < NUM_CORES; i++) {
       if (core_end_info.core_trap[i])
         continue;
       auto trap = difftest[i]->get_trap_event();
-      cycleCnt = trap->cycleCnt;
-      if (max_instrs < cycleCnt) {
+      if (max_instrs < trap->instrCnt) {
         core_end_info.core_trap[i] = true;
         core_end_info.core_trap_num++;
         eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
         difftest[i]->display_stats();
-        fpga_perfcnt_print(cycleCnt);
-        core_end_info.core_cpi[i] = (double)cycleCnt / (double)trap->instrCnt;
+        core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
         if (core_end_info.core_trap_num == NUM_CORES) {
           simv_result.store(FPGA_DONE);
           simv_cv.notify_one();

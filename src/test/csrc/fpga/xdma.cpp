@@ -48,7 +48,7 @@ template <typename Func, typename Obj, typename... Args> void thread_wrapper(Fun
   (obj->*func)(args...);
 }
 
-FpgaXdma::FpgaXdma() : xdma_mempool(DMA_DIFF_PACKGE_LEN) {
+FpgaXdma::FpgaXdma() : xdma_mempool(sizeof(FpgaPackgeHead)) {
   signal(SIGINT, handle_sigint);
 
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
@@ -157,30 +157,25 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
-  const uint64_t xdma_get_len = ((sizeof(FpgaPackgeHead) + 128) / 128) * 128; // send width to be calculated by mod up
-  uint8_t *xdma_packge = (uint8_t *)malloc(xdma_get_len);
   FpgaPackgeHead *packge = (FpgaPackgeHead *)malloc(sizeof(FpgaPackgeHead));
   int debug_count = 0;
   memset(packge, 0, sizeof(FpgaPackgeHead));
-  memset(xdma_packge, 0, xdma_get_len);
   while (running) {
-    size_t size = read(xdma_c2h_fd[channel], xdma_packge, xdma_get_len);
+    size_t size = read(xdma_c2h_fd[channel], packge, sizeof(FpgaPackgeHead));
 #ifdef USE_THREAD_MEMPOOL
-    uint8_t idx = xdma_packge[0];
-    if (xdma_mempool.write_free_chunk(idx, (char *)&xdma_packge) == false) {
+    uint8_t idx = packge->idx;
+    if (xdma_mempool.write_free_chunk(idx, (char *)&packge) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
     }
 #else
 #ifdef CONFIG_DIFFTEST_BATCH
-    memcpy(packge, xdma_packge, sizeof(FpgaPackgeHead));
     v_difftest_Batch(packge->diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
     //TODO: need automatically generates squash data parsing implementations
 #endif // CONFIG_DIFFTEST_BATCH
 #endif // USE_THREAD_MEMPOOL
   }
-  free(xdma_packge);
   free(packge);
 }
 
