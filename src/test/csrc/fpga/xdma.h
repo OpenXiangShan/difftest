@@ -74,6 +74,16 @@ public:
 
   void device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);
 
+  void *posix_memalignd_malloc(size_t size) {
+    void *ptr = nullptr;
+    int ret = posix_memalign(&ptr, 4096, size);
+    if (ret != 0) {
+      perror("posix_memalign failed");
+      return nullptr;
+    }
+    return ptr;
+  }
+
   // thread api
   void start_transmit_thread();
   void stop_thansmit_thread();

@@ -156,7 +156,7 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
-  FpgaPackgeHead *packge = (FpgaPackgeHead *)malloc(sizeof(FpgaPackgeHead));
+  FpgaPackgeHead *packge = (FpgaPackgeHead *)posix_memalignd_malloc(sizeof(FpgaPackgeHead));
   memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running) {
     size_t size = read(xdma_c2h_fd[channel], packge, sizeof(FpgaPackgeHead));
