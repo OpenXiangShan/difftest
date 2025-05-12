@@ -27,9 +27,7 @@ static inline void difftest_perfcnt_print(const char *name, long long calls, lon
 void difftest_perfcnt_init();
 void difftest_perfcnt_finish(uint64_t cycleCnt);
 enum DIFFTEST_PERF {
-#ifndef CONFIG_DIFFTEST_INTERNAL_STEP
-  perf_simv_nstep,
-#endif // CONFIG_DIFFTEST_INTERNAL_STEP
+  perf_difftest_nstep,
   perf_difftest_ram_read,
   perf_difftest_ram_write,
   perf_flash_read,

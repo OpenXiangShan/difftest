@@ -181,6 +181,11 @@ public:
   }
 };
 
+typedef struct {
+  uint64_t instrCnt;
+  uint64_t cycleCnt;
+} WarmupInfo;
+
 class DiffState {
 public:
   bool dump_commit_trace = false;
@@ -242,6 +247,7 @@ public:
   REF_PROXY *proxy = NULL;
   uint32_t num_commit = 0; // # of commits if made progress
   bool has_commit = false;
+  WarmupInfo warmup_info;
   // Trigger a difftest checking procdure
   int step();
   void update_nemuproxy(int, size_t);
@@ -315,6 +321,13 @@ public:
   void set_commit_trace(bool enable) {
     state->dump_commit_trace = enable;
   }
+
+  void warmup_record() {
+    auto trap = get_trap_event();
+    warmup_info.instrCnt = trap->instrCnt;
+    warmup_info.cycleCnt = trap->cycleCnt;
+  }
+  void warmup_display_stats();
 
 protected:
   DiffTrace<DiffTestState> *difftrace = nullptr;
