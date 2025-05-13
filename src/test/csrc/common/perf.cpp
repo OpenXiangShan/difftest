@@ -44,11 +44,8 @@ void difftest_perfcnt_finish(uint64_t cycleCnt) {
   diffstate_perfcnt_finish(perf_run_msec);
   printf(">>> Other Difftest Func\n");
   const char *func_name[DIFFTEST_PERF_NUM] = {
-#ifndef CONFIG_DIFFTEST_INTERNAL_STEP
-    "simv_nstep",
-#endif // CONFIG_DIFFTEST_INTERNAL_STEP
-    "difftest_ram_read", "difftest_ram_write", "flash_read", "sd_set_addr", "sd_read",
-    "jtag_tick",         "put_pixel",          "vmem_sync",  "pte_helper",  "amo_helper",
+    "difftest_nstep", "difftest_ram_read", "difftest_ram_write", "flash_read", "sd_set_addr", "sd_read",
+    "jtag_tick",      "put_pixel",         "vmem_sync",          "pte_helper", "amo_helper",
   };
   for (int i = 0; i < DIFFTEST_PERF_NUM; i++) {
     difftest_perfcnt_print(func_name[i], difftest_calls[i], difftest_bytes[i], perf_run_msec);

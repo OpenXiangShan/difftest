@@ -68,10 +68,15 @@ int difftest_state() {
       return difftest[i]->proxy->get_status();
     }
   }
-  return -1;
+  return STATE_RUNNING;
 }
 
 int difftest_nstep(int step, bool enable_diff) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_difftest_nstep]++;
+  difftest_bytes[perf_difftest_nstep] += 1;
+#endif // CONFIG_DIFFTEST_PERFCNT
+
 #if CONFIG_DIFFTEST_ZONESIZE > 1
   difftest_switch_zone();
 #endif // CONFIG_DIFFTEST_ZONESIZE
@@ -1703,6 +1708,17 @@ void Difftest::display_stats() {
   uint64_t cycleCnt = trap->cycleCnt;
   double ipc = (double)instrCnt / cycleCnt;
   Info(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
+       this->id, instrCnt, cycleCnt, ipc);
+}
+
+// API for soft warmup, display final instr/cycle - warmup instr/cycle
+void Difftest::warmup_display_stats() {
+  auto trap = get_trap_event();
+  uint64_t instrCnt = trap->instrCnt - warmup_info.instrCnt;
+  uint64_t cycleCnt = trap->cycleCnt - warmup_info.cycleCnt;
+  double ipc = (double)instrCnt / cycleCnt;
+  Info(ANSI_COLOR_MAGENTA "Core-%d(Soft Warmup) instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64
+                          ", IPC = %lf\n" ANSI_COLOR_RESET,
        this->id, instrCnt, cycleCnt, ipc);
 }
 

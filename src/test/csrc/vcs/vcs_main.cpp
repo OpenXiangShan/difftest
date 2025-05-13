@@ -45,19 +45,10 @@ static uint32_t overwrite_nbytes = 0xe00;
 static uint64_t ram_size = 0;
 static uint64_t warmup_instr = 0;
 
-struct core_end_info_t {
-  bool core_trap[NUM_CORES];
-  bool core_warmup[NUM_CORES];
-  double core_cpi[NUM_CORES];
-  uint64_t core_warmup_instr[NUM_CORES];
-  uint64_t core_warmup_cycle[NUM_CORES];
-  uint8_t core_trap_num;
-};
-static core_end_info_t core_end_info;
-
 enum {
   SIMV_RUN,
-  SIMV_DONE,
+  SIMV_GOODTRAP,
+  SIMV_EXCEED,
   SIMV_FAIL,
   SIMV_WARMUP,
 } simv_state;
@@ -211,96 +202,21 @@ extern "C" uint8_t simv_init() {
 }
 
 #ifdef OUTPUT_CPI_TO_FILE
-int output_cpi_to_file() {
-  FILE *d2q_fifo = fopen(OUTPUT_CPI_TO_FILE, "w+");
-  if (d2q_fifo == NULL) {
-    printf("open dq2_fifo fail\n");
-    return SIMV_FAIL;
-  }
-  printf("OUTPUT_CPI_TO_FIFO to %s\n", OUTPUT_CPI_TO_FILE);
+void output_cpi_to_file() {
+  FILE *cpi_file = fopen(OUTPUT_CPI_TO_FILE, "w+");
+  printf("OUTPUT CPI to %s\n", OUTPUT_CPI_TO_FILE);
   for (size_t i = 0; i < NUM_CORES; i++) {
-    fprintf(d2q_fifo, "%d,%.6lf\n", i, core_end_info.core_cpi[i]);
-  }
-  fclose(d2q_fifo);
-  return 0;
-}
-#endif
-
-extern "C" uint8_t simv_step() {
-  if (assert_count > 0) {
-    return SIMV_FAIL;
-  }
-
-#ifndef CONFIG_NO_DIFFTEST
-  if (enable_difftest) {
-    if (difftest_step())
-      return SIMV_FAIL;
-  } else {
-    difftest_set_dut();
-  }
-
-  if (difftest_state() != -1) {
-    int trapCode = difftest_state();
-    for (int i = 0; i < NUM_CORES; i++) {
-      printf("Core %d: ", i);
-      uint64_t pc = difftest[i]->get_trap_event()->pc;
-      switch (trapCode) {
-        case 0: eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
-        default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n" ANSI_COLOR_RESET, trapCode);
-      }
-      difftest[i]->display_stats();
-    }
-    if (trapCode == 0)
-      return SIMV_DONE;
-    else
-      return SIMV_FAIL;
-  }
-
-  bool need_warmup = false;
-  for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
-    if (warmup_instr != 0 && !core_end_info.core_warmup[i] && trap->instrCnt > warmup_instr) {
-      Info("Warmup finished. The performance counters will be reset instrCnt %ld, cycleCnt %ld.\n", trap->instrCnt,
-           trap->cycleCnt);
-      core_end_info.core_warmup[i] = true;
-      core_end_info.core_warmup_cycle[i] = trap->cycleCnt;
-      core_end_info.core_warmup_instr[i] = trap->instrCnt;
-      need_warmup = true;
-    }
-
-    if (max_instrs != 0) { // 0 for no limit
-      if (core_end_info.core_trap[i])
-        continue;
-      if (max_instrs < trap->instrCnt) {
-        core_end_info.core_trap[i] = true;
-        core_end_info.core_trap_num++;
-        eprintf(ANSI_COLOR_GREEN "EXCEEDED CORE-%d MAX INSTR: %ld\n" ANSI_COLOR_RESET, i, max_instrs);
-        difftest[i]->display_stats();
-        if (core_end_info.core_warmup[i]) {
-          core_end_info.core_cpi[i] = (double)(trap->cycleCnt - core_end_info.core_warmup_cycle[i]) /
-                                      (double)(trap->instrCnt - core_end_info.core_warmup_instr[i]);
-          Info(ANSI_COLOR_MAGENTA "Core-%d final_instrCnt: %ld, final_cycleCnt: %ld, final_ipc: %f\n" ANSI_COLOR_RESET,
-               i, core_end_info.core_warmup_instr[i], trap->cycleCnt - core_end_info.core_warmup_cycle[i],
-               1.0 / core_end_info.core_cpi[i]);
-        } else {
-          core_end_info.core_cpi[i] = (double)trap->cycleCnt / (double)trap->instrCnt;
-        }
-        if (core_end_info.core_trap_num == NUM_CORES) {
-#ifdef OUTPUT_CPI_TO_FILE
-          if (output_cpi_to_file())
-            return SIMV_FAIL;
-#endif
-          return SIMV_DONE;
-        }
-      }
-    }
+    auto warmup = difftest[i]->warmup_info;
+    uint64_t instrCnt = trap->instrCnt - warmup.instrCnt;
+    uint64_t cycleCnt = trap->cycleCnt - warmup.cycleCnt;
+    double cpi = (double)cycleCnt / instrCnt;
+    // Record CPI, note the final instr/cycle will minus warmup instr/cycle
+    fprintf(cpi_file, "%d,%.6lf\n", i, cpi);
   }
-
-  if (need_warmup)
-    return SIMV_WARMUP;
-#endif // CONFIG_NO_DIFFTEST
-  return 0;
+  fclose(cpi_file);
 }
+#endif
 
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 svScope deferredResultScope;
@@ -327,6 +243,9 @@ extern "C" void simv_tick() {
 #endif
 
 void simv_finish() {
+#ifdef OUTPUT_CPI_TO_FILE
+  output_cpi_to_file();
+#endif
   common_finish();
   flash_finish();
 
@@ -340,16 +259,82 @@ void simv_finish() {
   finish_device();
   delete simMemory;
   simMemory = nullptr;
+}
 
-  for (int i = 0; i < NUM_CORES; i++)
-    core_end_info.core_trap[i] = false;
-  core_end_info.core_trap_num = 0;
+int simv_get_result(uint8_t step) {
+  // Assert Check
+  if (assert_count > 0) {
+    return SIMV_FAIL;
+  }
+#ifndef CONFIG_NO_DIFFTEST
+  // Compare DUT and REF
+  int trapCode = difftest_nstep(step, enable_difftest);
+  if (trapCode != STATE_RUNNING) {
+    if (trapCode == STATE_GOODTRAP)
+      return SIMV_GOODTRAP;
+    else
+      return SIMV_FAIL;
+  }
+  // Max Instr Limit Check
+  if (max_instrs != 0) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      if (trap->instrCnt >= max_instrs) {
+        return SIMV_EXCEED;
+      }
+    }
+  }
+  // Warmup Check
+  if (warmup_instr != 0) {
+    bool finish = false;
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      if (trap->instrCnt >= warmup_instr) {
+        warmup_instr = -1; // maxium of uint64_t
+        finish = true;
+        break;
+      }
+    }
+    if (finish) {
+      Info("Warmup finished. The performance counters will be dumped and then reset.\n");
+      // Record Instr/Cycle for soft warmup
+      for (int i = 0; i < NUM_CORES; i++) {
+        difftest[i]->warmup_record();
+      }
+      // perfCtrl_clean/dump will set according to SIMV_WARMUP
+      return SIMV_WARMUP;
+    }
+  }
+#endif // CONFIG_NO_DIFFTEST
+  return SIMV_RUN;
+}
+
+void simv_display_result(int ret) {
+#ifndef CONFIG_NO_DIFFTEST
+  for (int i = 0; i < NUM_CORES; i++) {
+    printf("Core %d: ", i);
+    uint64_t pc = difftest[i]->get_trap_event()->pc;
+    switch (ret) {
+      case SIMV_GOODTRAP: eprintf(ANSI_COLOR_GREEN "HIT GOOD TRAP at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
+      case SIMV_EXCEED:
+        eprintf(ANSI_COLOR_YELLOW "EXCEEDING INSTR LIMIT at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc);
+        break;
+      case SIMV_FAIL: eprintf(ANSI_COLOR_RED "FAILED at pc = 0x%" PRIx64 "\n" ANSI_COLOR_RESET, pc); break;
+      case SIMV_WARMUP: eprintf(ANSI_COLOR_MAGENTA "WARMUP DONE at pc = 0x%" PRIx64 "\n"); break;
+      default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n", ret);
+    }
+    difftest[i]->display_stats();
+    if (warmup_instr != 0 && ret != SIMV_WARMUP) {
+      difftest[i]->warmup_display_stats();
+    }
+  }
+#endif // CONFIG_NO_DIFFTEST
 }
 
 static uint8_t simv_result = SIMV_RUN;
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 extern "C" void simv_nstep(uint8_t step) {
-  if (simv_result == SIMV_DONE || simv_result == SIMV_FAIL || difftest == NULL)
+  if (simv_result == SIMV_GOODTRAP || simv_result == SIMV_EXCEED || simv_result == SIMV_FAIL || difftest == NULL)
     return;
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {
@@ -359,33 +344,23 @@ extern "C" uint8_t simv_nstep(uint8_t step) {
 #endif // CONFIG_NO_DIFFTEST
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 
-#ifdef CONFIG_DIFFTEST_PERFCNT
-#ifndef CONFIG_DIFFTEST_INTERNAL_STEP
-  difftest_calls[perf_simv_nstep]++;
-  difftest_bytes[perf_simv_nstep] += 1;
-#endif // CONFIG_DIFFTEST_INTERNAL_STEP
-#endif // CONFIG_DIFFTEST_PERFCNT
-
-#ifndef CONFIG_NO_DIFFTEST
-#if CONFIG_DIFFTEST_ZONESIZE > 1
-  difftest_switch_zone();
-#endif // CONFIG_DIFFTEST_ZONESIZE
-#endif // CONFIG_NO_DIFFTEST
-
-  for (int i = 0; i < step; i++) {
-    int ret = simv_step();
-    if (ret == SIMV_DONE || ret == SIMV_FAIL) {
+  int ret = simv_get_result(step);
+  // Return result
+  if (ret != SIMV_RUN) {
+    simv_display_result(ret);
+    if (ret == SIMV_GOODTRAP || ret == SIMV_EXCEED || ret == SIMV_FAIL) {
       simv_result = ret;
       simv_finish();
-#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
-      difftest_deferred_result(ret);
-      return;
-#else
-      return ret;
-#endif // CONFIG_DIFFTEST_DEFERRED_RESULT
     }
+#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
+    difftest_deferred_result(ret);
+    return;
+#else
+    return ret;
+#endif // CONFIG_DIFFTEST_DEFERRED_RESULT
   }
+
 #ifndef CONFIG_DIFFTEST_DEFERRED_RESULT
-  return 0;
+  return SIMV_RUN;
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
 }

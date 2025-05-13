@@ -67,9 +67,10 @@ import "DPI-C" function void set_iotrace_name(string name);
 `endif // CONFIG_DIFFTEST_IOTRACE
 `endif // TB_NO_DPIC
 
-`define SIMV_DONE     8'h1
-`define SIMV_FAIL     8'h2
-`define SIMV_WARMUP   8'h3
+`define SIMV_GOODTRAP 8'h1
+`define SIMV_EXCEED   8'h2
+`define SIMV_FAIL     8'h3
+`define SIMV_WARMUP   8'h4
 
 reg  [63:0] difftest_logCtrl_begin_r;
 reg  [63:0] difftest_logCtrl_end_r;
@@ -284,7 +285,7 @@ reg [7:0] simv_result;
  * handle the delay-step, and dpics at the next cycle coming together.
  */
 always @(posedge clock) begin
-  if (reset || simv_result == `SIMV_DONE) begin
+  if (reset || simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED) begin
     simv_result <= 8'b0;
   end
   else begin
@@ -319,7 +320,7 @@ always @(simv_step_event or posedge reset) begin
 end
 // update to `simv_result` at next cycle
 always @(posedge clock) begin
-  if (reset || simv_result == `SIMV_DONE) begin
+  if (reset || simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED) begin
     simv_result <= 8'b0;
   end
   else begin
@@ -338,7 +339,7 @@ always @(posedge clock) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
       $fatal;
     end
-    else if (simv_result == `SIMV_DONE) begin
+    else if (simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED) begin
       $display("DIFFTEST WORKLOAD DONE at cycle %d", n_cycles);
 `ifndef ENABLE_WORKLOAD_SWITCH
       $finish();
@@ -352,7 +353,7 @@ end
  * workload switch
  */
 `ifdef ENABLE_WORKLOAD_SWITCH
-assign workload_switch = simv_result == `SIMV_DONE;
+assign workload_switch = simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED;
 `endif // ENABLE_WORKLOAD_SWITCH
 
 /*
@@ -375,7 +376,7 @@ assign difftest_logCtrl_level = 0;
 
 `ifndef TB_NO_DPIC
 assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP;
-assign difftest_perfCtrl_dump = simv_result == `SIMV_DONE || simv_result == `SIMV_FAIL;
+assign difftest_perfCtrl_dump = simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED || simv_result == `SIMV_FAIL;
 `else
 assign difftest_perfCtrl_clean = 0;
 assign difftest_perfCtrl_dump = 0;
