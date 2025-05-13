@@ -35,9 +35,10 @@ void init_goldenmem() {
   pmem_size = simMemory->get_size();
   pmem = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   pmem_flag = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-  if (pmem == (uint8_t *)MAP_FAILED) {
+  if (pmem == (uint8_t *)MAP_FAILED || pmem_flag == (uint8_t *)MAP_FAILED) {
     Info("ERROR allocating physical memory. \n");
   }
+  memset(pmem_flag, 0, pmem_size);
   simMemory->clone_on_demand([](uint64_t offset, void *src, size_t n) { nonzero_large_memcpy(pmem + offset, src, n); },
                              true);
   ref_golden_mem = pmem;
