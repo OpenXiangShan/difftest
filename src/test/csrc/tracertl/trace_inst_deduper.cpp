@@ -274,8 +274,10 @@ TraceInstDeduper::dedup(std::vector<Instruction> &src, size_t from_index, size_t
   TraceLegalFlowChecker flowChecker;
   flowChecker.check(src);
 
+  printf("[TraceInstDeduper] Dedup from %lu to %lu\n", from_index, end_index);
+  fflush(stdout);
+
   size_t old_signature_count = history_labeler.tool_signature_count(src, end_index);
-  printf("TraceInstDeduper: Old Signature Count %lu\n", old_signature_count);
 
   // fix wrong instruction branch type
   for (int i = from_index; i < end_index; i++) {
@@ -283,24 +285,15 @@ TraceInstDeduper::dedup(std::vector<Instruction> &src, size_t from_index, size_t
     if (src[i].branch_type != 0) perf_branch_num++;
   }
 
-  printf("Dedup label started from %ld to %ld\n", from_index, end_index);
-  fflush(stdout);
   dedup_label(src, from_index, end_index);
-  printf("Dedup label ready\n");
-  fflush(stdout);
   dedup_branch(src, from_index, end_index);
-  printf("Dedup branch ready\n");
-  fflush(stdout);
   dedup_inst(src);
-  printf("Dedup instr ready\n");
-  fflush(stdout);
 
-  printf("TraceInstDeduper: Instruction Num %8lu Branch Num %8lu\n", end_index - from_index, perf_branch_num);
-  printf("         Deduped: Instruction Num %8lu Branch Num %8lu\n", deduped_inst_num, deduped_branch_num);
+  printf("[TraceInstDeduper] Instruction Num %8lu Branch Num %8lu\n", end_index - from_index, perf_branch_num);
+  printf("           Deduped Instruction Num %8lu Branch Num %8lu\n", deduped_inst_num, deduped_branch_num);
 
   flowChecker.check(src);
 
-
   size_t new_signature_count = history_labeler.tool_signature_count(src, end_index);
-  printf("TraceInstDeduper: New Signature Count %lu\n", new_signature_count);
+  printf("[TraceInstDeduper] Signature Count from %lu to %lu\n", old_signature_count, new_signature_count);
 }

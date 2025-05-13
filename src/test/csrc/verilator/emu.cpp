@@ -179,7 +179,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "gen-paddr",         0, NULL,  0  },
     { "dump-chiselmap",    0, NULL,  0  },
     { "fast-warmup",       1, NULL,  0  },
-    { "skip-instr",        1, NULL,  0  },
+    { "skip-traceinstr",   1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -316,7 +316,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #endif // TRACERTL_MODE
           case 32:
 #ifdef TRACERTL_MODE
-            args.skip_traceinstr = atoll_strict(optarg, "fast-warmup");
+            args.skip_traceinstr = atoll_strict(optarg, "fast-traceinstr");
             continue;
 #else
             printf("[WARN] tracertl is not enabled, ignore --skip-traceinstr NUM\n");
@@ -371,6 +371,13 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
       case 'F': args.flash_bin = optarg; break;
     }
   }
+
+#ifdef TRACERTL_MODE
+  if (args.warmup_instr == -1 && args.fast_warmup) {
+    Info("Warn: warmup_instr is not specified, set to fast_warmup_instr\n");
+    args.warmup_instr = args.fast_warmup_instr;
+  }
+#endif
 
   if (args.image == NULL) {
     Info("Hint: --image=IMAGE_FILE is not specified. Use /dev/zero instead.\n");
@@ -467,7 +474,7 @@ Emulator::Emulator(int argc, const char *argv[])
     init_tracefastsim(args.fast_warmup, args.fast_warmup_instr);
     // init_tracefastsim(args.fast_warmup, args.warmup_instr);
     init_traceicache(args.tracept_file);
-    init_tracertl(args.tracertl_file, args.enable_gen_paddr, args.skip_traceinstr);
+    init_tracertl(args.tracertl_file, args.enable_gen_paddr, args.max_instr, args.skip_traceinstr);
     if (args.fast_warmup) {
       uint64_t dedupInstNUm = trace_fastsim->getSquashedInstNum();
       printf("Fast warmup Squash Duplicate Instructions: %lu\n", dedupInstNUm);

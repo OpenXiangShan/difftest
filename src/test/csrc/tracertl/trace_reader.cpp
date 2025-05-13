@@ -21,7 +21,7 @@
 #include "tracertl.h"
 #include "trace_decompress.h"
 
-TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t skip_traceinstr)
+TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t max_insts, uint64_t skip_traceinstr)
 {
   printf("TraceRTL: check file exists...\n");
   fflush(stdout);
@@ -193,25 +193,15 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
     instList_preread.push_back(inst);
   }
   printf("TraceRTL: preparse tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());
+  if (inst_id_preread.get() < max_insts) {
+    printf("TraceRTL: inst_id_preread %lu < max_insts %lu, adjust max_insts\n", inst_id_preread.get(), max_insts);
+    max_insts = inst_id_preread.get();
+  }
   fflush(stdout);
   delete[] instDecompressBuffer;
 
-  // fast sim manager merge/squash mem addr
-  for (auto inst : instList_preread) {
-    if (trace_fastsim->preCollectEnoughFastSimInst())
-      break; // inst enough
-
-    trace_fastsim->preCollectFastSimInst(inst);
-    if (!trace_fastsim->isFastSimFinished() && // fast sim enabled
-        !trace_fastsim->isFastSimMemoryFinished() && // fast sim memory enable
-        !inst.isTrap() && !inst.isInstException() && // not trap
-        (inst.memory_type != MEM_TYPE_None)) { // memory access
-      trace_fastsim->addMemAddr(inst.exu_data.memory_address.va, inst.exu_data.memory_address.pa);
-    }
-  }
-
   if (!trace_fastsim->isFastSimMemoryFinished()) {
-    trace_fastsim->mergeMemAddr();
+    trace_fastsim->mergeMemAddr(instList_preread, max_insts);
   }
   if (!trace_fastsim->isFastSimInstFinished()) {
     trace_fastsim->instDedup.dedup(instList_preread,

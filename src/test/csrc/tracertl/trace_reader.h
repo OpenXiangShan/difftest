@@ -127,7 +127,7 @@ class TraceReader {
   }
 
 public:
-  TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t skip_traceinstr);
+  TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t max_insts, uint64_t skip_traceinstr);
   ~TraceReader() {
   }
   // Physical Address Allocator

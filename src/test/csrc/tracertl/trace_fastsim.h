@@ -23,11 +23,9 @@
 #include <deque>
 #include "trace_common.h"
 #include "trace_inst_deduper.h"
+#include "trace_mem_deduper.h"
 
-struct FastSimMemAddr {
-  uint64_t vaddr;
-  uint64_t paddr;
-};
+
 
 struct FastSimMemAddrBuf : public FastSimMemAddr {
   uint8_t valid = 0;
@@ -35,19 +33,14 @@ struct FastSimMemAddrBuf : public FastSimMemAddr {
 
 class TraceFastSimManager {
 private:
-  // FastSimState state = FASTSIM_DISABLE;
   uint64_t warmupInst = 0;
 
   uint64_t fastsimInstIdx = 0;
 
   FastSimMemAddrBuf mem_addr_buffer[4];
-  // std::deque<FastSimMemAddr> mem_addr_list;
   std::vector<FastSimMemAddr> mem_addr_list;
-  std::vector<FastSimMemAddr> mem_addr_list_before_merge;
   uint64_t cur_mem_addr_idx = 0;
   uint64_t mem_addr_list_size = 0;
-
-  bool addrSameBlock(uint64_t addr1, uint64_t addr2);
 
   bool fastSimInstFinish = true;
   bool fastSimMemoryFinish = true;
@@ -67,6 +60,7 @@ public:
 
   // TraceInstLoopDedup instDedup;
   TraceInstDeduper instDedup;
+  TraceMemDeduper memDedup;
 
   bool isFastSimFinished() { return fastSimInstFinish && fastSimMemoryFinish; };
   bool isFastSimInstFinished() { return fastSimInstFinish; };
@@ -75,30 +69,23 @@ public:
   void setFastsimMemoryFinish() { fastSimMemoryFinish = true; };
   bool avoidInstStuck() { return fastSimInstFinish && !fastSimMemoryFinish; };
   bool isFastSimInstByIdx(uint64_t idx) {
-    // mv setFastsimInstFinish out of this function
-    // if (idx >= warmupInst) {
-    //   printf("Set FastSim Inst Finish at Fetch end\n");
-    //   setFastsimInstFinish();
-    // }
     return idx < warmupInst;
   };
 
   bool get_fastsim_state() { return !isFastSimFinished(); };
-
-  void prepareMemAddrBuffer();
-  void read_mem_addr(uint8_t idx, uint8_t* valid, uint64_t* vaddr, uint64_t* paddr);
-  void preCollectFastSimInst(Instruction inst) {
-    // instDedup.addInst(inst);
-    fastsimInstIdx++;
-  };
-  bool preCollectEnoughFastSimInst() { return fastsimInstIdx >= warmupInst; };
-  void addMemAddr(uint64_t vaddr, uint64_t paddr);
-  void mergeMemAddr();
-
-  bool memAddrEmpty() { return cur_mem_addr_idx >= mem_addr_list_size; }
-
   uint64_t getWarmupInstNum() { return warmupInst; }
   uint64_t getSquashedInstNum() { return instDedup.getSquashedInst(); }
+
+  // used by DPI-C
+  void prepareMemAddrBuffer();
+  void read_mem_addr(uint8_t idx, uint8_t* valid, uint64_t* vaddr, uint64_t* paddr);
+  // used by emu-driver
+  bool memAddrEmpty() { return cur_mem_addr_idx >= mem_addr_list_size; }
+
+  // mem dedup
+  void mergeMemAddr(std::vector<Instruction> inst_list, size_t max_insts) {
+    memDedup.mergeMem(mem_addr_list, inst_list, 0, warmupInst, max_insts);
+  };
 };
 
 

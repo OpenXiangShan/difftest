@@ -69,7 +69,7 @@ public:
     history[1] = 0;
 
     if (HISTORY_LENGTH > 123) {
-      printf("HISTORY_LENGTH %d too large, use more uint64_t\n", HISTORY_LENGTH);
+      printf("  HISTORY_LENGTH %d too large, use more uint64_t\n", HISTORY_LENGTH);
       fflush(stdout);
       exit(1);
     }
@@ -78,7 +78,7 @@ public:
   void assignLabel(const std::vector<Instruction> &src, size_t from_index, size_t end_index, std::vector<bool> &branch_dedupable_list) {
     // read all the src history until end_index, ignore from_index
     if (branch_dedupable_list.size() != 0) {
-      printf("[Error] origin branch_dedupable_list size %lu is not empty\n", branch_dedupable_list.size());
+      printf("  [Error] origin branch_dedupable_list size %lu is not empty\n", branch_dedupable_list.size());
     }
 
     for (size_t i = 0; i < end_index; i++) {
@@ -93,7 +93,7 @@ public:
         updateHistory(src[i].branch_taken);
       }
     }
-    printf("Labeler collect all the signatures %lu\n", signatures.size());
+    printf("  [Labeler] collect all the signatures %lu\n", signatures.size());
 
     std::map<BranchSignature, uint64_t> signature_map;
     std::vector<bool> is_unique_signature_list(signatures.size(), false);
@@ -110,7 +110,7 @@ public:
       }
     }
 
-    printf("Labler assign signature_map size %lu\n", signature_map.size());
+    printf("  [Labeler] assign signature_map size %lu\n", signature_map.size());
 
     size_t non_dedupable_num = 0;
     branch_dedupable_list.resize(signatures.size(), true);
@@ -125,7 +125,7 @@ public:
       }
     }
 
-    printf("Labler: branch instruction num %lu non-dedupable %lu dedupable %lu\n", branch_dedupable_list.size(), non_dedupable_num, branch_dedupable_list.size()- non_dedupable_num);
+    printf("  [Labeler] branch instruction num %lu non-dedupable %lu dedupable %lu\n", branch_dedupable_list.size(), non_dedupable_num, branch_dedupable_list.size()- non_dedupable_num);
   }
 
   size_t tool_signature_count(const std::vector<Instruction> &src, size_t end_index) {
