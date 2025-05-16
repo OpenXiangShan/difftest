@@ -111,6 +111,9 @@ extern unsigned long EMU_FLASH_SIZE;
 // whether to check l2tlb response
 // #define DEBUG_L2TLB
 
+// whether to check AmuCtrlIO
+#define DEBUG_AMUCTRL
+
 // whether to enable REF/GoldenMemory record origin data of memory and restore
 #ifdef CONFIG_DIFFTEST_REPLAY
 #define ENABLE_STORE_LOG

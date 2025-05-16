@@ -457,6 +457,10 @@ void Difftest::do_replay() {
   while (!state->load_event_queue.empty())
     state->load_event_queue.pop();
 #endif
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  while (!amu_ctrl_event_queue.empty())
+    amu_ctrl_event_queue.pop();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
@@ -505,6 +509,10 @@ inline int Difftest::check_all() {
     }
   }
 
+#ifdef DEBUG_AMUCTRL
+  amu_ctrl_event_record();
+#endif // DEBUG_AMUCTRL
+
 #ifdef DEBUG_MODE_DIFF
   // skip load & store insts in debug mode
   // for other insts copy inst content to ref's dummy debug module
@@ -540,6 +548,12 @@ inline int Difftest::check_all() {
     }
   }
 
+#ifdef DEBUG_AMUCTRL
+  if (do_amuctrl_check()) {
+    return 1;
+  }
+#endif
+
   if (int ret = update_delayed_writeback()) {
     return ret;
   }
@@ -574,6 +588,57 @@ inline int Difftest::check_all() {
 
   return DiffTestChecker::STATE_OK;
 }
+
+int Difftest::do_amuctrl_check() {
+  // TODO: implement AMU control check
+  while (!amu_ctrl_event_queue.empty()) {
+    DifftestAmuCtrlEvent amu_event = amu_ctrl_event_queue.front();
+#ifdef CONFIG_DIFFTEST_SQUASH
+    // TODO: What is squash? How to squash?
+#endif // CONFIG_DIFFTEST_SQUASH
+    auto op = amu_event.op;
+    auto md = amu_event.md;
+    auto sat = amu_event.sat;
+    auto ms1 = amu_event.ms1;
+    auto ms2 = amu_event.ms2;
+    auto mtilem = amu_event.mtilem;
+    auto mtilen = amu_event.mtilen;
+    auto mtilek = amu_event.mtilek;
+    auto types = amu_event.types;
+    auto typed = amu_event.typed;
+    auto transpose = amu_event.transpose;
+    auto isacc = amu_event.isacc;
+    auto base = amu_event.base;
+    auto stride = amu_event.stride;
+
+    if (proxy->get_amu_ctrl_event(&amu_event)) {
+      // return 1 for dismatch
+      uint64_t pc = amu_event.pc;
+      display();
+
+      printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", this->id);
+      proxy->get_amu_ctrl_event_other_info(&pc);
+      printf("Mismatch for amu mma ctrl event \n");
+      // TODO: print amu event info
+      amu_ctrl_event_queue.pop();
+      return 1;
+    }
+    amu_ctrl_event_queue.pop();
+  }
+  return 0;
+}
+
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+void Difftest::amu_ctrl_event_record() {
+  for (int i = 0; i < CONFIG_DIFF_AMU_CTRL_WIDTH; i++) {
+    if (dut->amu_ctrl[i].valid) {
+      amu_ctrl_event_queue.push(dut->amu_ctrl[i]);
+      dut->amu_ctrl[i].valid = 0;
+    }
+  }
+}
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 int Difftest::update_delayed_writeback() {
 #define CHECK_DELAYED_WB(wb, delayed, n, regs_name)                                                \
