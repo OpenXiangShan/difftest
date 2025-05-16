@@ -193,7 +193,12 @@ protected:
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_LOADEVENT
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  std::queue<DifftestAmuCtrlEvent> amu_ctrl_event_queue;
+  void amu_ctrl_event_record();
+#endif
   int check_all();
+  int do_amuctrl_check();
 
   inline bool in_disambiguation_state() {
     static bool was_found = false;
