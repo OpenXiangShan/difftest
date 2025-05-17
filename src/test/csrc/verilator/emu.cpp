@@ -1131,18 +1131,28 @@ int Emulator::is_good() {
   return is_good_trap();
 }
 
+inline int output_stat(char *buf) {
+  const char *path = getenv("SIDE_STAT_PATH");
+  if (path == nullptr) {
+    const char *path = getenv("NOOP_HOME");
+#ifdef NOOP_HOME
+    if (path == nullptr) {
+      path = NOOP_HOME;
+    }
+#endif
+    assert(path != NULL);
+    return snprintf(buf, 1024, "%s/build/", path);
+  } else {
+    return snprintf(buf, 1024, "%s/", path);
+  }
+}
+
 inline char *Emulator::timestamp_filename(time_t t, char *buf) {
   char buf_time[64];
   strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
-  const char *noop_home = getenv("NOOP_HOME");
-#ifdef NOOP_HOME
-  if (noop_home == nullptr) {
-    noop_home = NOOP_HOME;
-  }
-#endif
-  assert(noop_home != NULL);
-  int len = snprintf(buf, 1024, "%s/build/%s", noop_home, buf_time);
-  return buf + len;
+  int path_len = output_stat(buf);
+  int time_len = snprintf(buf+path_len, 1024, "%s", buf_time);
+  return buf + path_len + time_len;
 }
 
 #ifdef VM_SAVABLE
@@ -1184,18 +1194,13 @@ inline char *Emulator::cycle_wavefile(uint64_t cycles, time_t t) {
   static char buf[1024];
   char buf_time[64];
   strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
-  const char *noop_home = getenv("NOOP_HOME");
-#ifdef NOOP_HOME
-  if (noop_home == nullptr) {
-    noop_home = NOOP_HOME;
-  }
-#endif
-  assert(noop_home != NULL);
-  int len = snprintf(buf, 1024, "%s/build/%s_%ld", noop_home, buf_time, cycles);
+  int path_len = output_stat(buf);
+  // buf = buf + path_len;
+  int len = snprintf(buf + path_len, 1024, "%s_%ld", buf_time, cycles);
 #ifdef ENABLE_FST
-  strcpy(buf + len, ".fst");
+  strcpy(buf + path_len + len, ".fst");
 #else
-  strcpy(buf + len, ".vcd");
+  strcpy(buf + path_len + len, ".vcd");
 #endif
   FORK_PRINTF("dump wave to %s...\n", buf);
   return buf;
