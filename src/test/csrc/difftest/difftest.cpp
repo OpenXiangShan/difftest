@@ -575,13 +575,15 @@ inline int Difftest::check_all() {
   return DiffTestChecker::STATE_OK;
 }
 
+static char amu_ctrl_op_str[2][16] = {"MMA", "MLS"};
+
 int Difftest::do_amuctrl_check() {
-  // TODO: implement AMU control check
   while (!amu_ctrl_event_queue.empty()) {
     DifftestAmuCtrlEvent amu_event = amu_ctrl_event_queue.front();
 #ifdef CONFIG_DIFFTEST_SQUASH
     // TODO: What is squash? How to squash?
 #endif // CONFIG_DIFFTEST_SQUASH
+    // Save the amu event info
     auto op = amu_event.op;
     auto md = amu_event.md;
     auto sat = amu_event.sat;
@@ -596,16 +598,50 @@ int Difftest::do_amuctrl_check() {
     auto isacc = amu_event.isacc;
     auto base = amu_event.base;
     auto stride = amu_event.stride;
+    uint64_t pc = amu_event.pc;
 
     if (proxy->get_amu_ctrl_event(&amu_event)) {
-      // return 1 for dismatch
-      uint64_t pc = amu_event.pc;
+      // Compare the amu event info
+      // For dismatch, proxy returns 1 and sets the amu event info
       display();
 
       printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", this->id);
       proxy->get_amu_ctrl_event_other_info(&pc);
       printf("Mismatch for amu mma ctrl event \n");
-      // TODO: print amu event info
+      printf("  REF AMU ctrl: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_str[amu_event.op]);
+      switch (amu_event.op) {
+        case 0: // MMA
+          printf("                md %d, sat %d, ms1 %d, ms2 %d,\n"
+                 "                mtilem %d, mtilen %d, mtilek %d, types %d, typed %d\n",
+                 amu_event.md, amu_event.sat, amu_event.ms1, amu_event.ms2,
+                 amu_event.mtilem, amu_event.mtilen, amu_event.mtilek, amu_event.types, amu_event.typed);
+          break;
+        case 1: // MLS
+          printf("                md %d, ls %d, transpose %d, isacc %d,\n"
+                 "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
+                 amu_event.md, amu_event.sat, amu_event.transpose, amu_event.isacc,
+                 amu_event.base, amu_event.stride, amu_event.mtilem, amu_event.mtilen, amu_event.types);
+          break;
+        default:
+          printf("                Unknown amu event op\n");
+          break;
+      }
+      printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
+      switch (op) {
+        case 0: // MMA
+          printf("                md %d, sat %d, ms1 %d, ms2 %d,\n"
+                 "                mtilem %d, mtilen %d, mtilek %d, types %d, typed %d\n",
+                 md, sat, ms1, ms2, mtilem, mtilen, mtilek, types, typed);
+          break;
+        case 1: // MLS
+          printf("                md %d, ls %d, transpose %d, isacc %d,\n"
+                 "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
+                 md, sat, transpose, isacc, base, stride, mtilem, mtilen, types);
+          break;
+        default:
+          printf("                Unknown amu event op\n");
+          break;
+      }
       amu_ctrl_event_queue.pop();
       return 1;
     }
