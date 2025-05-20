@@ -27,10 +27,22 @@
 #include <vector>
 #include <xmmintrin.h>
 
-#define MEMPOOL_SIZE   16384 * 1024 // 16M memory
-#define MEMBLOCK_SIZE  4096         // 4K packge
-#define NUM_BLOCKS     (MEMPOOL_SIZE / MEMBLOCK_SIZE)
-#define REM_NUM_BLOCKS (NUM_BLOCKS - 1)
+#define MEMPOOL_SIZE    16384 * 1024 // 16M memory
+#define MEMBLOCK_SIZE   4096         // 4K packge
+#define NUM_BLOCKS      (MEMPOOL_SIZE / MEMBLOCK_SIZE)
+#define REM_NUM_BLOCKS  (NUM_BLOCKS - 1)
+#define MAX_WINDOW_SIZE 256
+
+class MemoryChunk {
+public:
+  std::atomic<size_t> memblock_idx;
+  std::atomic<bool> is_free;
+  MemoryChunk() : memblock_idx(0), is_free(true) {}
+
+  MemoryChunk(MemoryChunk &&other) noexcept : memblock_idx(other.memblock_idx.load()), is_free(other.is_free.load()) {}
+
+  MemoryChunk(const MemoryChunk &other) : memblock_idx(other.memblock_idx.load()), is_free(other.is_free.load()) {}
+};
 
 class MemoryBlock {
 public:
@@ -140,27 +152,33 @@ private:
 
 public:
   MemoryIdxPool(uint64_t block_size) : mem_block_size(block_size) {
-    initMemoryPool();
-  }
-  MemoryIdxPool() : mem_block_size(MEMBLOCK_SIZE) {}
-  ~MemoryIdxPool() {}
-  // Disable copy constructors and copy assignment operators
-  MemoryIdxPool(const MemoryIdxPool &) = delete;
-  MemoryIdxPool &operator=(const MemoryIdxPool &) = delete;
-
-  void initMemoryPool() {
-    memory_pool.clear();
-    memory_pool.reserve(MEMBLOCK_SIZE);
-    for (size_t i = 0; i < MEMBLOCK_SIZE; ++i) {
-      memory_pool.emplace_back(mem_block_size);
+    size_t total_size = NUM_BLOCKS * mem_block_size;
+    void *base = nullptr;
+    if (posix_memalign(&base, 4096, total_size) != 0) {
+      throw std::runtime_error("Failed to allocate large aligned memory block");
     }
-  }
+    memset(base, 0, total_size);
+    memory_base = static_cast<char *>(base);
+    for (size_t i = 0; i < NUM_BLOCKS; ++i) {
+      memory_pool[i] = (memory_base + i * mem_block_size);
+      memory_order_ptr[i].is_free.store(true);
+      memory_pool_is_free[i].store(true);
+    }
 
+    printf("MemoryIdxPool using contiguous memory block\n");
+  }
+  ~MemoryIdxPool() {}
+
+  // Get free block pointer increment is returned from the heap
+  char *get_free_chunk(size_t *mem_idx);
   // Write a specified free block of a free window
-  bool write_free_chunk(const char *data);
+  bool write_free_chunk(uint8_t idx, size_t mem_idx);
 
   // Get the head memory
-  bool read_busy_chunk(char *data);
+  char *read_busy_chunk();
+
+  // Set the block data valid and locked
+  void set_free_chunk();
 
   // Wait for the data to be free
   size_t wait_next_free_group();
@@ -170,16 +188,22 @@ public:
 
   // Check if there is a window to read
   bool check_group();
-
   // Wait mempool have data
   void wait_mempool_start();
 
 private:
-  std::vector<MemoryBlock> memory_pool; // Mempool
-  SpinLock offset_mutexes;              // w/r offset protection
+  char *memory_base = nullptr;
+  char *memory_pool[NUM_BLOCKS];                     // Mempool
+  std::atomic<bool> memory_pool_is_free[NUM_BLOCKS]; // Mempool free status
+  MemoryChunk memory_order_ptr[NUM_BLOCKS];
+  std::atomic<bool> chunk_semaphore{false};
 
   size_t group_r_offset = 0; // The offset used by the current consumer
-  size_t read_count = 0;
+
+  std::atomic<size_t> wait_setfree_mem_idx{0};
+  std::atomic<size_t> wait_setfree_ptr_idx{0};
+  std::atomic<size_t> read_count{0};
+  std::atomic<size_t> mem_chunk_idx{0};
   std::atomic<size_t> group_w_offset{0}; // The offset used by the current producer
   std::atomic<size_t> write_count{0};
   std::atomic<size_t> write_next_count{0};
