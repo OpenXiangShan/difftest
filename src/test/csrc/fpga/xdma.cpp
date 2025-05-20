@@ -156,45 +156,52 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
+#ifdef USE_THREAD_MEMPOOL
+  size_t mem_get_idx = 0;
+  while (running) {
+    char *mem = xdma_mempool.get_free_chunk(&mem_get_idx);
+    size_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
+    if (xdma_mempool.write_free_chunk(mem[0], mem_get_idx) == false) {
+      printf("It should not be the case that no available block can be found\n");
+      assert(0);
+    }
+  }
+#else
   FpgaPackgeHead *packge = (FpgaPackgeHead *)posix_memalignd_malloc(sizeof(FpgaPackgeHead));
   memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running) {
     size_t size = read(xdma_c2h_fd[channel], packge, sizeof(FpgaPackgeHead));
-#ifdef USE_THREAD_MEMPOOL
-    if (xdma_mempool.write_free_chunk((const char *)packge) == false) {
-      printf("It should not be the case that no available block can be found\n");
-      assert(0);
-    }
-#else
 #ifdef CONFIG_DIFFTEST_BATCH
     v_difftest_Batch(packge->diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
     //TODO: need automatically generates squash data parsing implementations
 #endif // CONFIG_DIFFTEST_BATCH
-#endif // USE_THREAD_MEMPOOL
   }
   free(packge);
+#endif // USE_THREAD_MEMPOOL
 }
 
 void FpgaXdma::write_difftest_thread() {
-  FpgaPackgeHead packge;
+  FpgaPackgeHead *packge;
   uint8_t recv_count = 0;
   xdma_mempool.wait_mempool_start();
   while (running) {
-    if (xdma_mempool.read_busy_chunk((char *)&packge) == false) {
+    packge = reinterpret_cast<FpgaPackgeHead *>(xdma_mempool.read_busy_chunk());
+    if (packge == nullptr) {
       printf("Failed to read data from the XDMA memory pool\n");
       assert(0);
     }
-    if (packge.idx != recv_count) {
-      printf("read mempool idx failed, packge_idx %d need_idx %d\n", packge.idx, recv_count);
+    if (packge->idx != recv_count) {
+      printf("read mempool idx failed, packge_idx %d need_idx %d\n", packge->idx, recv_count);
       assert(0);
     }
     recv_count++;
     // packge unpack
 #ifdef CONFIG_DIFFTEST_BATCH
-    v_difftest_Batch(packge.diff_packge);
+    v_difftest_Batch(packge->diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
     //TODO: need automatically generates squash data parsing implementations
 #endif
+    xdma_mempool.set_free_chunk();
   }
 }
