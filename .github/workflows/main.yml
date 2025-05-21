@@ -337,3 +337,5 @@ jobs:
             make sim-verilog MILL_ARGS="--difftest-config ESBIDF" -j2
             cd ./difftest
             make fpga-build FPGA=1
+            make fpga-clean
+            make fpga-build FPGA=1 USE_THREAD_MEMPOOL=1
