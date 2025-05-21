@@ -33,15 +33,21 @@
 #elif defined(CONFIG_DIFFTEST_SQUASH)
 #define DMA_DIFF_PACKGE_LEN 1280 // XDMA Min size
 #endif
+#define DMA_PACKGE_NUM 8
+
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
 #define DMA_PADDING (((1 + DMA_DIFF_PACKGE_LEN + 63) / 64) * 64 - (DMA_DIFF_PACKGE_LEN + 1))
 
 typedef struct __attribute__((packed)) {
-  uint8_t idx;
+  uint8_t packge_idx; // idx of header packet is valid and idx of intermediate data is placeholder
   uint8_t diff_packge[DMA_DIFF_PACKGE_LEN];
-#if (DMA_PADDING != 0)
+#if (DMA_PADDING > 0)
   uint8_t padding[DMA_PADDING];
 #endif
+} DmaDiffPackge;
+
+typedef struct __attribute__((packed)) {
+  DmaDiffPackge diff_packge[DMA_PACKGE_NUM];
 } FpgaPackgeHead;
 
 class FpgaXdma {

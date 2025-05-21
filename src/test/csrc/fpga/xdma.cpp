@@ -171,11 +171,13 @@ void FpgaXdma::read_xdma_thread(int channel) {
   memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running) {
     size_t size = read(xdma_c2h_fd[channel], packge, sizeof(FpgaPackgeHead));
+    for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
 #ifdef CONFIG_DIFFTEST_BATCH
-    v_difftest_Batch(packge->diff_packge);
+      v_difftest_Batch(packge->diff_packge[i].diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
-    //TODO: need automatically generates squash data parsing implementations
+      //TODO: need automatically generates squash data parsing implementations
 #endif // CONFIG_DIFFTEST_BATCH
+    }
   }
   free(packge);
 #endif // USE_THREAD_MEMPOOL
@@ -191,17 +193,19 @@ void FpgaXdma::write_difftest_thread() {
       printf("Failed to read data from the XDMA memory pool\n");
       assert(0);
     }
-    if (packge->idx != recv_count) {
-      printf("read mempool idx failed, packge_idx %d need_idx %d\n", packge->idx, recv_count);
+    if (packge->diff_packge[0].packge_idx != recv_count) {
+      printf("read mempool idx failed, packge_idx %d need_idx %d\n", packge->diff_packge[0].packge_idx, recv_count);
       assert(0);
     }
-    recv_count++;
     // packge unpack
+    for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
+      recv_count++;
 #ifdef CONFIG_DIFFTEST_BATCH
-    v_difftest_Batch(packge->diff_packge);
+      v_difftest_Batch(packge->diff_packge[i].diff_packge);
 #elif defined(CONFIG_DIFFTEST_SQUASH)
-    //TODO: need automatically generates squash data parsing implementations
+      //TODO: need automatically generates squash data parsing implementations
 #endif
+    }
     xdma_mempool.set_free_chunk();
   }
 }
