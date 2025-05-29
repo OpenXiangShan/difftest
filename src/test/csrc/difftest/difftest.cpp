@@ -614,13 +614,14 @@ int Difftest::do_amuctrl_check() {
     auto stride = amu_event.stride;
     uint64_t pc = amu_event.pc;
 
-    if (proxy->get_amu_ctrl_event(&amu_event)) {
+    int check_res = proxy->get_amu_ctrl_event(&amu_event);
+
+    if (check_res == 1) {
       // Compare the amu event info
       // For dismatch, proxy returns 1 and sets the amu event info
       display();
 
       printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", this->id);
-      proxy->get_amu_ctrl_event_other_info(&pc);
       printf("Mismatch for amu mma ctrl event \n");
       printf("  REF AMU ctrl: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_str[amu_event.op]);
       switch (amu_event.op) {
@@ -640,6 +641,28 @@ int Difftest::do_amuctrl_check() {
           printf("                Unknown amu event op\n");
           break;
       }
+      printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
+      switch (op) {
+        case 0: // MMA
+          printf("                md %d, sat %d, ms1 %d, ms2 %d,\n"
+                 "                mtilem %d, mtilen %d, mtilek %d, types %d, typed %d\n",
+                 md, sat, ms1, ms2, mtilem, mtilen, mtilek, types, typed);
+          break;
+        case 1: // MLS
+          printf("                md %d, ls %d, transpose %d, isacc %d,\n"
+                 "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
+                 md, sat, transpose, isacc, base, stride, mtilem, mtilen, types);
+          break;
+        default:
+          printf("                Unknown amu event op\n");
+          break;
+      }
+      amu_ctrl_event_queue.pop();
+      return 1;
+    } else if (check_res == -1) {
+      display();
+      printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", this->id);
+      printf("  No available REF AMU ctrl\n");
       printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
       switch (op) {
         case 0: // MMA
