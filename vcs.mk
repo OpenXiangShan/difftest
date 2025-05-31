@@ -28,10 +28,10 @@ VCS_CXXFILES  = $(SIM_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
 VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
 VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
-# DiffTest support
-ifneq ($(NO_DIFF),1)
-VCS_FLAGS    += +define+DIFFTEST
-endif
+VCS_VSRC_DIR 	= $(abspath ./src/test/vsrc/vcs)
+VCS_VFILES    = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v" -or -name "*.sv")
+
+VCS_FLAGS 		= $(SIM_VFLAGS)
 
 ifeq ($(RELEASE),1)
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
@@ -40,17 +40,6 @@ endif
 # core soft rst
 ifeq ($(WORKLOAD_SWITCH),1)
 VCS_FLAGS    += +define+ENABLE_WORKLOAD_SWITCH
-endif
-
-ifeq ($(SYNTHESIS), 1)
-VCS_FLAGS    += +define+SYNTHESIS +define+TB_NO_DPIC
-else
-ifeq ($(DISABLE_DIFFTEST_RAM_DPIC), 1)
-VCS_FLAGS    += +define+DISABLE_DIFFTEST_RAM_DPIC
-endif
-ifeq ($(DISABLE_DIFFTEST_FLASH_DPIC), 1)
-VCS_FLAGS    += +define+DISABLE_DIFFTEST_FLASH_DPIC
-endif
 endif
 
 # if fsdb is considered
@@ -106,8 +95,6 @@ VCS_FLAGS += +incdir+$(GEN_VSRC_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
-VCS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
-VCS_VFILES   = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v" -or -name "*.sv")
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 	$(VCS) $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 ifeq ($(VCS),verilator)
