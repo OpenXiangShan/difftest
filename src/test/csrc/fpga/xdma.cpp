@@ -48,12 +48,23 @@ template <typename Func, typename Obj, typename... Args> void thread_wrapper(Fun
   (obj->*func)(args...);
 }
 
-FpgaXdma::FpgaXdma() : xdma_mempool(sizeof(FpgaPackgeHead)) {
-  signal(SIGINT, handle_sigint);
+void handle_sigint(int sig) {
+  printf("handle sigint unlink pcie success, exit fpga-host!\n");
+  exit(1);
+}
 
+FpgaXdma::FpgaXdma()
+#ifdef USE_THREAD_MEMPOOL
+    : xdma_mempool(sizeof(FpgaPackgeHead))
+#endif // USE_THREAD_MEMPOOL
+{
+  signal(SIGINT, handle_sigint);
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     char c2h_device[64];
     sprintf(c2h_device, "%s%d", XDMA_C2H_DEVICE, i);
+#ifdef FPGA_SIM
+    xdma_sim_open(i, true);
+#else
     xdma_c2h_fd[i] = open(c2h_device, O_RDONLY);
     if (xdma_c2h_fd[i] == -1) {
       std::cout << c2h_device << std::endl;
@@ -61,6 +72,7 @@ FpgaXdma::FpgaXdma() : xdma_mempool(sizeof(FpgaPackgeHead)) {
       exit(-1);
     }
     std::cout << "XDMA link " << c2h_device << std::endl;
+#endif // FPGA_SIM
   }
 #ifdef CONFIG_USE_XDMA_H2C
   xdma_h2c_fd = open(XDMA_H2C_DEVICE, O_WRONLY);
@@ -71,11 +83,6 @@ FpgaXdma::FpgaXdma() : xdma_mempool(sizeof(FpgaPackgeHead)) {
   }
   std::cout << "XDMA link " << XDMA_H2C_DEVICE << std::endl;
 #endif
-}
-
-void FpgaXdma::handle_sigint(int sig) {
-  printf("handle sigint unlink pcie success, exit fpga-host!\n");
-  exit(1);
 }
 
 // write xdma_bypass memory or xdma_user
@@ -123,10 +130,8 @@ void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr,
   close(fd);
 }
 
+#ifdef USE_THREAD_MEMPOOL
 void FpgaXdma::start_transmit_thread() {
-  if (running == true)
-    return;
-
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     printf("start channel %d \n", i);
     receive_thread[i] = std::thread(thread_wrapper<decltype(&FpgaXdma::read_xdma_thread), FpgaXdma *, int>,
@@ -134,18 +139,17 @@ void FpgaXdma::start_transmit_thread() {
   }
   process_thread = std::thread(thread_wrapper<decltype(&FpgaXdma::write_difftest_thread), FpgaXdma *>,
                                &FpgaXdma::write_difftest_thread, this);
-  running = true;
 }
 
 void FpgaXdma::stop_thansmit_thread() {
-  if (running == false)
-    return;
-  running = false;
-
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     if (receive_thread[i].joinable())
       receive_thread[i].join();
+#ifdef FPGA_SIM
+    xdma_sim_close(i);
+#else
     close(xdma_c2h_fd[i]);
+#endif // FPGA_SIM
   }
 
   if (process_thread.joinable())
@@ -156,31 +160,19 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
-#ifdef USE_THREAD_MEMPOOL
   size_t mem_get_idx = 0;
   while (running) {
     char *mem = xdma_mempool.get_free_chunk(&mem_get_idx);
+#ifdef FPGA_SIM
+    size_t size = xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead));
+#else
     size_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
+#endif // FPGA_SIM
     if (xdma_mempool.write_free_chunk(mem[0], mem_get_idx) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
     }
   }
-#else
-  FpgaPackgeHead *packge = (FpgaPackgeHead *)posix_memalignd_malloc(sizeof(FpgaPackgeHead));
-  memset(packge, 0, sizeof(FpgaPackgeHead));
-  while (running) {
-    size_t size = read(xdma_c2h_fd[channel], packge, sizeof(FpgaPackgeHead));
-    for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
-#ifdef CONFIG_DIFFTEST_BATCH
-      v_difftest_Batch(packge->diff_packge[i].diff_packge);
-#elif defined(CONFIG_DIFFTEST_SQUASH)
-      //TODO: need automatically generates squash data parsing implementations
-#endif // CONFIG_DIFFTEST_BATCH
-    }
-  }
-  free(packge);
-#endif // USE_THREAD_MEMPOOL
 }
 
 void FpgaXdma::write_difftest_thread() {
@@ -197,15 +189,39 @@ void FpgaXdma::write_difftest_thread() {
       printf("read mempool idx failed, packge_idx %d need_idx %d\n", packge->diff_packge[0].packge_idx, recv_count);
       assert(0);
     }
+    recv_count++;
     // packge unpack
     for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
-      recv_count++;
-#ifdef CONFIG_DIFFTEST_BATCH
       v_difftest_Batch(packge->diff_packge[i].diff_packge);
-#elif defined(CONFIG_DIFFTEST_SQUASH)
-      //TODO: need automatically generates squash data parsing implementations
-#endif
     }
     xdma_mempool.set_free_chunk();
   }
 }
+
+#else
+void *posix_memalignd_malloc(size_t size) {
+  void *ptr = nullptr;
+  int ret = posix_memalign(&ptr, 4096, size);
+  if (ret != 0) {
+    perror("posix_memalign failed");
+    return nullptr;
+  }
+  return ptr;
+}
+void FpgaXdma::read_and_process() {
+  printf("start channel 0\n");
+  FpgaPackgeHead *packge = (FpgaPackgeHead *)posix_memalignd_malloc(sizeof(FpgaPackgeHead));
+  memset(packge, 0, sizeof(FpgaPackgeHead));
+  while (running) {
+#ifdef FPGA_SIM
+    size_t size = xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead));
+#else
+    size_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
+#endif // FPGA_SIM
+    for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
+      v_difftest_Batch(packge->diff_packge[i].diff_packge);
+    }
+  }
+  free(packge);
+}
+#endif // USE_THREAD_MEMPOOL

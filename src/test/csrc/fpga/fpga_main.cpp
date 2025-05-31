@@ -26,6 +26,9 @@
 #include <condition_variable>
 #include <getopt.h>
 #include <mutex>
+#ifdef FPGA_SIM
+#include "xdma_sim.h"
+#endif // FPGA_SIM
 
 void fpga_finish();
 
@@ -38,16 +41,13 @@ enum {
 
 static char work_load[256] = "/dev/zero";
 static char *flash_bin_file = NULL;
-static std::atomic<uint8_t> fpga_result{FPGA_RUN};
-static std::mutex fpga_mtx;
-static std::condition_variable fpga_cv;
+static uint8_t fpga_result = FPGA_RUN;
 static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static uint64_t warmup_instr = 0;
 
 void fpga_init();
 void fpga_step();
-void cpu_endtime_check();
 void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
 
@@ -59,14 +59,7 @@ int main(int argc, char *argv[]) {
   fpga_init();
 
   printf("fpga init\n");
-  {
-    std::unique_lock<std::mutex> lock(fpga_mtx);
-    xdma_device->start_transmit_thread();
-    while (fpga_result.load() == FPGA_RUN) {
-      fpga_cv.wait(lock);
-    }
-  }
-  xdma_device->running = false;
+  xdma_device->start(); // Trigger stop by fpga_nstep
   fpga_finish();
   printf("difftest releases the fpga device and exits\n");
   return 0;
@@ -95,7 +88,7 @@ void fpga_init() {
 }
 
 void fpga_finish() {
-  free(xdma_device);
+  delete xdma_device;
   common_finish();
 
   difftest_finish();
@@ -165,11 +158,13 @@ int fpga_get_result(uint8_t step) {
 }
 
 extern "C" void fpga_nstep(uint8_t step) {
+  if (fpga_result != FPGA_RUN)
+    return;
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
     fpga_display_result(ret);
-    fpga_result.store(ret);
-    fpga_cv.notify_one();
+    fpga_result = ret;
+    xdma_device->stop();
   }
 }
 

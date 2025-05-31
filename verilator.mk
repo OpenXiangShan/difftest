@@ -25,10 +25,7 @@ EMU_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(EMU_CSRC_DIR)
 EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES) --std=c++17
 EMU_LDFLAGS   = $(SIM_LDFLAGS) -ldl
 
-# DiffTest support
-ifneq ($(NO_DIFF), 1)
-VEXTRA_FLAGS += +define+DIFFTEST
-endif
+VEXTRA_FLAGS  = $(SIM_VFLAGS)
 
 # Link fuzzer libraries
 ifneq ($(FUZZER_LIB), )

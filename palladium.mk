@@ -5,30 +5,20 @@ PLDM_SCRIPTS_DIR 	 = $(abspath ./scripts/palladium)
 PLDM_BUILD_DIR 		 = $(abspath $(BUILD_DIR)/pldm-compile)
 PLDM_CC_OBJ_DIR	 	 = $(abspath $(PLDM_BUILD_DIR)/cc_obj)
 
-# Macro Flags
-PLDM_MACRO_FLAGS  	 = +define+TOP_MODULE=$(PLDM_TOP_MODULE)
-PLDM_MACRO_FLAGS 	+= +define+PALLADIUM
-PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_MEM_INIT
-PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_REG_INIT
-PLDM_MACRO_FLAGS 	+= +define+RANDOMIZE_DELAY=0
-ifeq ($(SYNTHESIS), 1)
-PLDM_MACRO_FLAGS 	+= +define+SYNTHESIS +define+TB_NO_DPIC
-else
-PLDM_MACRO_FLAGS 	+= +define+DIFFTEST +define+DISABLE_SIMJTAG_DPIC
-ifneq ($(DIFFTEST_RAM_DPIC), 1)
-PLDM_MACRO_FLAGS 	+= +define+DISABLE_DIFFTEST_RAM_DPIC
-endif
-ifneq ($(DIFFTEST_FLASH_DPIC), 1)
-PLDM_MACRO_FLAGS 	+= +define+DISABLE_DIFFTEST_FLASH_DPIC
-endif
-endif
-PLDM_MACRO_FLAGS 	+= $(PLDM_EXTRA_MACRO)
+# Verilog Flags
+PLDM_VFLAGS 	 = $(SIM_VFLAGS) +define+TOP_MODULE=$(PLDM_TOP_MODULE)
+PLDM_VFLAGS 	+= +define+PALLADIUM
+PLDM_VFLAGS 	+= +define+RANDOMIZE_MEM_INIT
+PLDM_VFLAGS 	+= +define+RANDOMIZE_REG_INIT
+PLDM_VFLAGS 	+= +define+RANDOMIZE_DELAY=0
+PLDM_VFLAGS 	+= +define+DISABLE_SIMJTAG_DPIC
+PLDM_VFLAGS 	+= $(PLDM_EXTRA_MACRO)
 
 ifeq ($(WORKLOAD_SWITCH),1)
-PLDM_MACRO_FLAGS  	+= +define+ENABLE_WORKLOAD_SWITCH
+PLDM_VFLAGS  	+= +define+ENABLE_WORKLOAD_SWITCH
 endif
 ifeq ($(WITH_DRAMSIM3),1)
-PLDM_MACRO_FLAGS  	+= +define+WITH_DRAMSIM3
+PLDM_VFLAGS  	+= +define+WITH_DRAMSIM3
 endif
 
 # UA Args
@@ -43,7 +33,7 @@ endif
 IXCOM_FLAGS 	+= -xecompile compilerOptions=$(PLDM_SCRIPTS_DIR)/compilerOptions.qel
 IXCOM_FLAGS 	+= +gfifoDisp+tb_top
 IXCOM_FLAGS 	+= $(addprefix -incdir , $(PLDM_VSRC_DIR))
-IXCOM_FLAGS 	+= $(PLDM_MACRO_FLAGS)
+IXCOM_FLAGS 	+= $(PLDM_VFLAGS)
 IXCOM_FLAGS 	+= +dut+$(PLDM_TB_TOP)
 ifeq ($(SYNTHESIS), 1)
 PLDM_CLOCK	 = clock_gen
@@ -69,7 +59,7 @@ ifneq ($(SYNTHESIS), 1)
 VLAN_FLAGS 	 = -64 -sv
 VLAN_FLAGS 	+= $(addprefix -incdir , $(PLDM_VSRC_DIR))
 VLAN_FLAGS	+= -vtimescale 1ns/1ns
-VLAN_FLAGS 	+= $(PLDM_MACRO_FLAGS)
+VLAN_FLAGS 	+= $(PLDM_VFLAGS)
 VLAN_FLAGS 	+= -F $(PLDM_VFILELIST)
 endif
 
