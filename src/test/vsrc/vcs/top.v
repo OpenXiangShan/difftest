@@ -111,9 +111,30 @@ end
 always #1 clock <= ~clock;
 `endif // WIRE_CLK
 
-SimTop sim(
+wire core_clock;
+
+`ifdef FPGA_SIM
+  wire [`CONFIG_DIFFTEST_BATCH_IO_WITDH - 1:0] difftest_data;
+  wire difftest_enable;
+xdma_wrapper xdma(
   .clock(clock),
   .reset(reset),
+  .difftest_data(difftest_data),
+  .difftest_enable(difftest_enable),
+  .core_clock(core_clock)
+);
+  // assign core_clock = clock;
+`else
+  assign core_clock = clock;
+`endif // FPGA_SIM
+
+SimTop sim(
+  .clock(core_clock),
+  .reset(reset),
+`ifdef FPGA_SIM
+  .difftest_io_data(difftest_data),
+  .difftest_io_enable(difftest_enable),
+`endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),
   .difftest_logCtrl_level(difftest_logCtrl_level),
@@ -128,7 +149,7 @@ SimTop sim(
 );
 
 DifftestEndpoint difftest(
-  .clock(clock),
+  .clock(core_clock),
   .reset(reset),
 `ifdef ENABLE_WORKLOAD_SWITCH
   .workload_switch(workload_switch),

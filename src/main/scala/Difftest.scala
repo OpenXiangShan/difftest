@@ -558,16 +558,13 @@ object DifftestModule {
     gateway
   }
 
-  def finishFPGA(cpu: String): FpgaDiffIO = {
-    val gateway = collect(cpu)
-    val fpgaIO = gateway.fpgaIO.get
-    val io = IO(Output(chiselTypeOf(fpgaIO)))
-    io := fpgaIO
-    io
-  }
-
   def finish(cpu: String, createTopIO: Boolean): Option[DifftestTopIO] = {
     val gateway = collect(cpu)
+    if (gateway.fpgaIO.isDefined) {
+      val fpgaIO = gateway.fpgaIO.get
+      val io = IO(Output(chiselTypeOf(fpgaIO)))
+      io := fpgaIO
+    }
     Option.when(createTopIO) {
       if (enabled) {
         createTopIOs(gateway.exit, gateway.step)

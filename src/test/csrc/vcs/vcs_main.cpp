@@ -33,6 +33,9 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 #include "remote_bitbang.h"
+#ifdef FPGA_SIM
+#include "xdma_sim.h"
+#endif // FPGA_SIM
 
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
@@ -198,6 +201,10 @@ extern "C" uint8_t simv_init() {
   }
 #endif // CONFIG_NO_DIFFTEST
 
+#ifdef FPGA_SIM
+  xdma_sim_open(0, false);
+#endif // FPGA_SIM
+
   return 0;
 }
 
@@ -259,6 +266,10 @@ void simv_finish() {
   finish_device();
   delete simMemory;
   simMemory = nullptr;
+
+#ifdef FPGA_SIM
+  xdma_sim_close(0);
+#endif //FPGA_SIM
 }
 
 int simv_get_result(uint8_t step) {
