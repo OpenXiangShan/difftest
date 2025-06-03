@@ -91,6 +91,7 @@ SIM_CXXFLAGS += -DCONFIG_NO_DIFFTEST
 else
 SIM_CXXFILES += $(DIFFTEST_CXXFILES)
 SIM_CXXFLAGS += -I$(DIFFTEST_CSRC_DIR)
+SIM_VFLAGS   += +define+DIFFTEST
 ifeq ($(DIFFTEST_PERFCNT), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
 endif
@@ -99,6 +100,32 @@ SIM_CXXFLAGS += -DCONFIG_DIFFTEST_QUERY
 SIM_LDFLAGS  += -lsqlite3
 endif
 endif
+
+ifeq ($(SYNTHESIS), 1)
+SIM_VFLAGS   += +define+SYNTHESIS +define+TB_NO_DPIC
+else
+ifeq ($(DISABLE_DIFFTEST_RAM_DPIC), 1)
+SIM_VFLAGS   += +define+DISABLE_DIFFTEST_RAM_DPIC
+endif
+ifeq ($(DISABLE_DIFFTEST_FLASH_DPIC), 1)
+SIM_VFLAGS   += +define+DISABLE_DIFFTEST_FLASH_DPIC
+endif
+endif
+
+# FPGA DiffTest Simulate Support
+ifeq ($(FPGA_SIM), 1)
+FPGA_SIM_CSRC_DIR = $(abspath ./src/test/csrc/fpga_sim)
+FPGA_SIM_VSRC_DIR = $(abspath ./src/test/vsrc/fpga_sim)
+SIM_CXXFILES += $(shell find $(FPGA_SIM_CSRC_DIR) -name "*.cpp")
+SIM_CXXFLAGS += -I$(FPGA_SIM_CSRC_DIR) -DFPGA_SIM
+SIM_LDFLAGS  += -lrt
+SIM_VFLAGS   += +define+FPGA_SIM
+SIM_VSRC     += $(shell find $(FPGA_SIM_VSRC_DIR) -name "*.v" -or -name "*.sv")
+ifneq ($(ASYNC_CLK_2N), )
+SIM_VFLAGS   += +define+ASYNC_CLK_2N=$(ASYNC_CLK_2N)
+endif
+endif
+
 
 # ChiselDB
 WITH_CHISELDB ?= 1
