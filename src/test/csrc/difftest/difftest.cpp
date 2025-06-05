@@ -483,7 +483,8 @@ void Difftest::do_interrupt() {
 void Difftest::do_exception() {
   state->record_exception(dut->event.exceptionPC, dut->event.exceptionInst, dut->event.exception);
   if (dut->event.exception == EX_IPF || dut->event.exception == EX_LPF || dut->event.exception == EX_SPF ||
-      dut->event.exception == EX_IGPF || dut->event.exception == EX_LGPF || dut->event.exception == EX_SGPF) {
+      dut->event.exception == EX_IGPF || dut->event.exception == EX_LGPF || dut->event.exception == EX_SGPF ||
+      dut->event.exception == EX_HWE) {
     struct ExecutionGuide guide;
     guide.force_raise_exception = true;
     guide.exception_num = dut->event.exception;
@@ -496,8 +497,6 @@ void Difftest::do_exception() {
 #endif // CONFIG_DIFFTEST_HCSRSTATE
     guide.force_set_jump_target = false;
     proxy->guided_exec(guide);
-  } else if (dut->event.exception == EX_HWE) {
-    proxy->raise_intr(dut->event.exception);
   } else {
 #ifdef DEBUG_MODE_DIFF
     if (DEBUG_MEM_REGION(true, dut->event.exceptionPC)) {
