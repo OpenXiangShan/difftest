@@ -272,6 +272,7 @@ include vcs.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
+include python.mk
 
 clean: vcs-clean pldm-clean fpga-clean
 	rm -rf $(BUILD_DIR)
