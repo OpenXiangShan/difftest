@@ -28,6 +28,9 @@
 #include "emu.h"
 #endif // FUZZING
 
+#define DEBUG_GROUP_TRACE_SIZE 16
+#define DEBUG_INST_TRACE_SIZE 32
+
 enum {
   EX_IAM,       // instruction address misaligned
   EX_IAF,       // instruction address fault
@@ -212,10 +215,8 @@ public:
 private:
   const bool use_spike;
 
-  const static int DEBUG_GROUP_TRACE_SIZE = 16;
   std::queue<std::pair<uint64_t, uint32_t>> retire_group_queue;
 
-  const static int DEBUG_INST_TRACE_SIZE = 32;
   std::queue<CommitTrace *> commit_trace;
 
   void push_back_trace(CommitTrace *trace) {
