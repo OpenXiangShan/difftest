@@ -2,7 +2,7 @@ PYTHON_DIR   = $(abspath $(BUILD_DIR)/python)
 CC_OBJ_DIR   = $(abspath $(BUILD_DIR)/swig_obj)
 
 picker_include = $(shell picker --show_xcom_lib_location_cpp|grep include|awk '{print $$2}')
-LIB_SWIG_DIR	= $(abspath ../XSDebuger/swig)
+LIB_SWIG_DIR	= $(abspath ../scripts/xspdb/swig)
 LIB_CXXFILES 	= $(SIM_CXXFILES) $(shell find $(LIB_SWIG_DIR)/cpp -name "*.cpp")
 LIB_CXXFLAGS 	= -m64 -c -fPIC -g -std=c++11 -std=c++20
 LIB_CXXFLAGS 	+= $(subst \\\",\", $(SIM_CXXFLAGS)) -DNUM_CORES=$(NUM_CORES)
