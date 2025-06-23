@@ -42,14 +42,17 @@
 #define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
 #endif
 
+extern uint64_t PMEM_BASE;
+extern uint64_t FIRST_INST_ADDRESS;
+
 // physical memory base address
-#define PMEM_BASE 0x80000000UL
+#define _PMEM_BASE 0x80000000UL
 
 // first valid instruction's address, difftest starts from this instruction
 #if defined(CPU_NUTSHELL)
-#define FIRST_INST_ADDRESS 0x80000000UL
+#define _FIRST_INST_ADDRESS 0x80000000UL
 #elif defined(CPU_XIANGSHAN) || defined(CPU_ROCKET_CHIP)
-#define FIRST_INST_ADDRESS 0x10000000UL
+#define _FIRST_INST_ADDRESS 0x10000000UL
 #endif
 
 // sdcard image to be used in simulation

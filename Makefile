@@ -85,7 +85,8 @@ WITH_CHISELDB = 0
 WITH_CONSTANTIN = 0
 endif
 
-DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
+DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp") $(shell find $(SIM_CONFIG_DIR) -name "*.cpp")
+
 ifeq ($(NO_DIFF), 1)
 SIM_CXXFLAGS += -DCONFIG_NO_DIFFTEST
 else
@@ -272,7 +273,7 @@ include vcs.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
-include python.mk
+include pdb.mk
 
 clean: vcs-clean pldm-clean fpga-clean
 	rm -rf $(BUILD_DIR)
