@@ -18,7 +18,6 @@
 %}
 #endif
 
-
 %apply unsigned long long {u_int64_t}
 %apply unsigned int {u_uint32_t}
 %apply unsigned short {u_uint16_t}
@@ -70,7 +69,6 @@
     }
 }
 %enddef
-
 
 GAL_METHODS(DifftestInstrCommit, pc)
 GAL_METHODS(DifftestInstrCommit, valid)

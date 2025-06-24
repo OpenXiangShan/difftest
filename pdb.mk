@@ -3,7 +3,7 @@ CC_OBJ_DIR   = $(abspath $(BUILD_DIR)/xspdb/swig_obj)
 
 picker_include = $(shell picker --show_xcom_lib_location_cpp|grep include|awk '{print $$2}')
 
-LIB_SWIG_DIR	= $(abspath scripts/xspdb)
+LIB_SWIG_DIR	= $(abspath src/test/csrc/plugin/xspdb)
 LIB_CXXFILES 	= $(SIM_CXXFILES) $(shell find $(LIB_SWIG_DIR)/cpp -name "*.cpp")
 LIB_CXXFLAGS 	+= $(subst \\\",\", $(SIM_CXXFLAGS)) -DNUM_CORES=$(NUM_CORES)
 
