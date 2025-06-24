@@ -29,11 +29,9 @@ process_DiffTestState:
 	cat $(BUILD_DIR)/generated-src/diffstate.h|grep Difftest|grep "\["|sed "s/\[/\ /g"|sed "s/\]/\ /g"|awk '{print $$1 " *get_"$$2"(int index){if(index<"$$3"){return &(self->"$$2"[index]);} return NULL;}"}' >> $(CC_OBJ_DIR)/python.i
 	echo "}" >> $(CC_OBJ_DIR)/python.i
 
-
 swig_export: process_DiffTestState
 	swig -c++ -outdir $(PYTHON_DIR) -o $(CC_OBJ_DIR)/difftest_wrap.cpp $(SWIG_INCLUDE) -python $(SWIG_D) $(CC_OBJ_DIR)/python.i
 	$(eval LIB_CXXFILES = $(LIB_CXXFILES) $(CC_OBJ_DIR)/difftest_wrap.cpp)
-
 
 difftest-python: swig_export
 	cd $(CC_OBJ_DIR) 					&& \
