@@ -51,6 +51,7 @@ case class GatewayConfig(
   exitOnAssertions: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
+  isDisableDpic: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -162,6 +163,7 @@ object Gateway {
       case 'X' => config = config.copy(exitOnAssertions = true)
       case 'F' => config = config.copy(isFPGA = true)
       case 'G' => config = config.copy(isGSIM = true)
+      case 'W' => config = config.copy(isDisableDpic = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()
