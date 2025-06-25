@@ -377,19 +377,14 @@ object DPIC {
 
   def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
     Query.register(template, "")
-    if (config.isDisableDpic == true) {
-      dontTouch(control)
-      dontTouch(io)
-    } else {
-      val module = Module(new DummyDPICBatchWrapper(template, chiselTypeOf(io), config))
-      module.control := control
-      module.io := io
-      val dpic = module.dpic
-      interfaces += ((dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc))
-      perfs += dpic.dpicFuncName
-      perfs ++= template.map("Batch_" + _.desiredModuleName.replace("Difftest", ""))
-      deltaInstances ++= template.filter(_.supportsDelta)
-    }
+    val module = Module(new DummyDPICBatchWrapper(template, chiselTypeOf(io), config))
+    module.control := control
+    module.io := io
+    val dpic = module.dpic
+    interfaces += ((dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc))
+    perfs += dpic.dpicFuncName
+    perfs ++= template.map("Batch_" + _.desiredModuleName.replace("Difftest", ""))
+    deltaInstances ++= template.filter(_.supportsDelta)
   }
 
   def collect(config: GatewayConfig): GatewayResult = {

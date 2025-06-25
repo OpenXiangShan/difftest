@@ -334,12 +334,8 @@ jobs:
       - name: FPGA-difftest Build (no THREAD, no ASYNC_CLK)
         run: |
             cd $NOOP_HOME
-            make sim-verilog MILL_ARGS="--difftest-config ESBIDFW" -j2
-            cd difftest
-            export NOOP_HOME=$(pwd)
-            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=ESBIDF
-            cd ..
-            export NOOP_HOME=$(pwd)
+            make sim-verilog MILL_ARGS="--difftest-config ESBIDF" -j2
+            NOOP_HOME=$(pwd)/difftest make -C difftest difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=ESBIDF
             cp -r ./difftest/build/generated-src ./build/
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1
@@ -349,12 +345,8 @@ jobs:
       - name: FPGA-difftest Build (with THREAD and ASYNC_CLK)
         run: |
             cd $NOOP_HOME
-            make sim-verilog MILL_ARGS="--difftest-config ESBIDFW" -j2
-            cd difftest
-            export NOOP_HOME=$(pwd)
-            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=ESBIDF
-            cd ..
-            export NOOP_HOME=$(pwd)
+            make sim-verilog MILL_ARGS="--difftest-config ESBIDF" -j2
+            NOOP_HOME=$(pwd)/difftest make -C difftest difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=ESBIDF
             cp -r ./difftest/build/generated-src ./build/
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 USE_THREAD_MEMPOOL=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2N=1

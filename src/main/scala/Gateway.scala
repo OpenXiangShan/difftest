@@ -51,7 +51,6 @@ case class GatewayConfig(
   exitOnAssertions: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
-  isDisableDpic: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -163,7 +162,6 @@ object Gateway {
       case 'X' => config = config.copy(exitOnAssertions = true)
       case 'F' => config = config.copy(isFPGA = true)
       case 'G' => config = config.copy(isGSIM = true)
-      case 'W' => config = config.copy(isDisableDpic = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()
@@ -273,10 +271,11 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     val batch = Batch(toSink, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
-    GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
     if (config.isFPGA) {
       fpgaIO.get.data := batch.io.asUInt
       fpgaIO.get.enable := batch.enable
+    } else {
+      GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
     }
   } else {
     val sink_enable = VecInit(toSink.map(_.valid).toSeq).asUInt.orR
