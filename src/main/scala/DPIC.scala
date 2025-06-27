@@ -141,6 +141,7 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
          |module $desiredName(
          |  $modPortsString
          |);
+         |  wire _dummy_unused = 1'b1;
          |`ifndef SYNTHESIS
          |`ifdef DIFFTEST
          |`ifndef FPGA_SIM

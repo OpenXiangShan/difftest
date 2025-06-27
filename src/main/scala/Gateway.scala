@@ -271,11 +271,10 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     val batch = Batch(toSink, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
     control.enable := batch.enable
+    GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
     if (config.isFPGA) {
       fpgaIO.get.data := batch.io.asUInt
       fpgaIO.get.enable := batch.enable
-    } else {
-      GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
     }
   } else {
     val sink_enable = VecInit(toSink.map(_.valid).toSeq).asUInt.orR
