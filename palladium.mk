@@ -50,7 +50,7 @@ endif
 IXCOM_FLAGS 	+= +tfconfig+$(PLDM_SCRIPTS_DIR)/argConfigs.qel
 
 # Verilog Files
-PLDM_VSRC_DIR  	 = $(RTL_DIR) $(GEN_VSRC_DIR) $(abspath ./src/test/vsrc)
+PLDM_VSRC_DIR  	 = $(RTL_DIR) $(GEN_VSRC_DIR) $(abspath ./src/test/vsrc/vcs) $(abspath ./src/test/vsrc/common)
 PLDM_VFILELIST 	 = $(PLDM_BUILD_DIR)/vfiles.f
 IXCOM_FLAGS   	+= -F $(PLDM_VFILELIST)
 
