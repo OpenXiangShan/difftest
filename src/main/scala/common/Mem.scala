@@ -68,6 +68,7 @@ private trait HasReadPort { this: ExtModule =>
     val enable = Input(Bool())
     val index = Input(UInt(64.W))
     val data = Output(UInt(64.W))
+    val async = Output(Bool())
   })
 
   val r_dpic =
@@ -82,16 +83,39 @@ private trait HasReadPort { this: ExtModule =>
       |input             r_enable,
       |input      [63:0] r_index,
       |output reg [63:0] r_data,
+      |output            r_async,
       |""".stripMargin
 
   val r_func =
     """
+      |`ifdef GSIM
+      |  assign r_async = 1'b1;
+      |always @(*) begin
       |  r_data = 0;
       |`ifndef DISABLE_DIFFTEST_RAM_DPIC
-      |  if (r_enable) r_data = difftest_ram_read(r_index);
+      |  if (r_enable) begin
+      |    r_data = difftest_ram_read(r_index);
+      |  end
       |`else
-      |  if (r_enable) r_data = `MEM_TARGET[r_index];
+      |  if (r_enable) begin
+      |    r_data = `MEM_TARGET[r_index];
+      |  end
       |`endif // DISABLE_DIFFTEST_RAM_DPIC
+      |end
+      |`else // GSIM
+      |  assign r_async = 1'b0;
+      |always @(posedge clock) begin
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
+      |  if (r_enable) begin
+      |    r_data <= difftest_ram_read(r_index);
+      |  end
+      |`else
+      |  if (r_enable) begin
+      |    r_data <= `MEM_TARGET[r_index];
+      |  end
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
+      |end
+      |`endif // GSIM
       |""".stripMargin
 
   val r_cpp_arg =
@@ -105,7 +129,7 @@ private trait HasReadPort { this: ExtModule =>
   def read(enable: Bool, index: UInt): UInt = {
     r.enable := enable
     r.index := index
-    RegEnable(r.data, r.enable)
+    Mux(r.async, RegEnable(r.data, r.enable), r.data)
   }
 }
 
@@ -139,15 +163,17 @@ private trait HasWritePort { this: ExtModule =>
 
   val w_func =
     """
+      |always @(posedge clock) begin
       |`ifndef DISABLE_DIFFTEST_RAM_DPIC
-      |if (w_enable) begin
-      |  difftest_ram_write(w_index, w_data, w_mask);
-      |end
+      |  if (w_enable) begin
+      |    difftest_ram_write(w_index, w_data, w_mask);
+      |  end
       |`else
-      |if (w_enable) begin
-      |  `MEM_TARGET[w_index] <= (w_data & w_mask) | (`MEM_TARGET[w_index] & ~w_mask);
-      |end
+      |  if (w_enable) begin
+      |    `MEM_TARGET[w_index] <= (w_data & w_mask) | (`MEM_TARGET[w_index] & ~w_mask);
+      |  end
       |`endif // DISABLE_DIFFTEST_RAM_DPIC
+      |end
       |""".stripMargin
 
   val w_cpp_arg =
@@ -208,12 +234,8 @@ private class MemRWHelper extends MemHelper with HasReadPort with HasWritePort {
        |  input clock
        |);
        |  $mem_init
-       |  always @(*) begin
-       |    $r_func
-       |  end
-       |  always @(posedge clock) begin
-       |    $w_func
-       |  end
+       |  $r_func
+       |  $w_func
        |endmodule
      """.stripMargin,
   )
