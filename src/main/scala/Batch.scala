@@ -126,10 +126,11 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
 //  val valid_sum = Seq.tabulate(groupSize) { idx =>
 //    VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).reduce(_ +& _)
 //  }
-  val valid_sum = Wire(MixedVec(Seq.tabulate(groupSize){idx => UInt(log2Ceil(idx + 2).W)}))
-  valid_sum(0) := in(0).valid
-  (1 until groupSize).foreach{ idx => valid_sum(idx) := valid_sum(idx - 1) +& in(idx).valid.asUInt}
-  val v_size = valid_sum.last
+//  val valid_sum = Wire(MixedVec(Seq.tabulate(groupSize){idx => UInt(log2Ceil(idx + 2).W)}))
+//  valid_sum(0) := in(0).valid
+//  (1 until groupSize).foreach{ idx => valid_sum(idx) := valid_sum(idx - 1) +& in(idx).valid.asUInt}
+//  val v_size = valid_sum.last
+  val v_size = PopCount(VecInit(in.map(_.valid)).asUInt)
   val aligned = Seq.tabulate(groupSize){idx => Wire(Vec(idx + 1, UInt(alignWidth.W)))}
   val valids = Seq.tabulate(groupSize){idx => Wire(Vec(idx + 1, Bool()))}
   aligned.last.zip(valids.last).zip(in).foreach{ case ((gen, v), io) =>
@@ -138,7 +139,10 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   }
   (0 until groupSize - 1).foreach{ gid =>
     val len = gid + 1
-    val vand = VecInit.tabulate(len){ idx => VecInit(valids(gid + 1).take(idx + 1)).asUInt.andR}
+//    val vand = VecInit.tabulate(len){ idx => VecInit(valids(gid + 1).take(idx + 1)).asUInt.andR}
+    val vand = Vec(len, Bool())
+    vand(0) := valids(gid + 1)(0)
+    (1 until len).foreach { idx => vand(idx) := vand(idx-1) & valids(gid+1)(idx)}
     aligned(gid).zip(valids(gid)).zipWithIndex.foreach{ case ((gen, v), idx) =>
       val has_bubble = !vand(idx) // invalid in [0, idx]
       val next_valid = valids(gid + 1)(idx + 1)
