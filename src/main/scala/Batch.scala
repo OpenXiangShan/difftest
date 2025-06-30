@@ -123,9 +123,12 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   val status_base = IO(Input(new BatchStats(param)))
   val status_sum = IO(Output(new BatchStats(param)))
 
-  val valid_sum = Seq.tabulate(groupSize) { idx =>
-    VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).reduce(_ +& _)
-  }
+//  val valid_sum = Seq.tabulate(groupSize) { idx =>
+//    VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).reduce(_ +& _)
+//  }
+  val valid_sum = Wire(MixedVec(Seq.tabulate(groupSize){idx => UInt(log2Ceil(idx + 2).W)}))
+  valid_sum(0) := in(0).valid
+  (1 until groupSize).foreach{ idx => valid_sum(idx) := valid_sum(idx - 1) +& in(idx).valid.asUInt}
   val v_size = valid_sum.last
   val aligned = Seq.tabulate(groupSize){idx => Wire(Vec(idx + 1, UInt(alignWidth.W)))}
   val valids = Seq.tabulate(groupSize){idx => Wire(Vec(idx + 1, Bool()))}
@@ -141,12 +144,15 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
       val next_valid = valids(gid + 1)(idx + 1)
       val next_gen = aligned(gid + 1)(idx + 1)
       val this_gen = aligned(gid + 1)(idx)
-      gen := Mux(has_bubble && next_valid, next_gen, Mux(!has_bubble, this_gen, 0.U))
+//      gen := Mux(has_bubble && next_valid, next_gen, Mux(!has_bubble, this_gen, 0.U))
+      gen := Mux(has_bubble && next_valid, next_gen, this_gen)
       v := (has_bubble && next_valid) | !has_bubble
     }
   }
+  val mask = Wire(Vec(groupSize, Bool()))
+  mask := ((1.U << v_size).asUInt - 1.U).asTypeOf(mask)
   val collect = VecInit.tabulate(groupSize){ idx =>
-    Mux(v_size >= (idx + 1).U, aligned(idx).last, 0.U(alignWidth.W))
+    Mux(mask(idx), aligned(idx).last, 0.U(alignWidth.W))
   }
   out_data := collect.asUInt
 //  val v_aligned = in.map { v_gen => Mux(v_gen.valid, v_gen.bits.getByteAlign, 0.U) }
