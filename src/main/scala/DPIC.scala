@@ -403,9 +403,6 @@ object DPIC {
     interfaceCpp += "#if defined(CONFIG_DIFFTEST_BATCH) && !defined(CONFIG_PLATFORM_FPGA)"
     interfaceCpp += "#include \"svdpi.h\""
     interfaceCpp += "#endif // CONFIG_DIFFTEST_BATCH && !CONFIG_PLATFORM_FPGA"
-    interfaceCpp += "#ifdef CONFIG_DIFFTEST_PERFCNT"
-    interfaceCpp += "#include \"perf.h\""
-    interfaceCpp += "#endif // CONFIG_DIFFTEST_PERFCNT"
     if (config.isDelta) {
       Delta.collect()
       interfaceCpp += "#include \"difftest-delta.h\""
@@ -442,15 +439,6 @@ object DPIC {
         |};
         |""".stripMargin
 
-    interfaceCpp +=
-      s"""
-         |#ifdef CONFIG_DIFFTEST_PERFCNT
-         |enum DIFFSTATE_PERF {
-         |  ${(perfs.toSeq.map("perf_" + _) ++ Seq("DIFFSTATE_PERF_NUM")).mkString(",\n  ")}
-         |};
-         |long long dpic_calls[DIFFSTATE_PERF_NUM] = {0}, dpic_bytes[DIFFSTATE_PERF_NUM] = {0};
-         |#endif // CONFIG_DIFFTEST_PERFCNT
-         |""".stripMargin
     interfaceCpp += interfaces.map(_._2 + ";").mkString("\n")
     interfaceCpp += ""
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
@@ -463,6 +451,9 @@ object DPIC {
     interfaceCpp += "#include \"difftest.h\""
     interfaceCpp += "#include \"difftest-dpic.h\""
     interfaceCpp += "#include \"difftest-query.h\""
+    interfaceCpp += "#ifdef CONFIG_DIFFTEST_PERFCNT"
+    interfaceCpp += "#include \"perf.h\""
+    interfaceCpp += "#endif // CONFIG_DIFFTEST_PERFCNT"
     interfaceCpp += ""
     if (config.isDelta) {
       interfaceCpp +=
@@ -498,6 +489,10 @@ object DPIC {
     interfaceCpp +=
       s"""
          |#ifdef CONFIG_DIFFTEST_PERFCNT
+         |enum DIFFSTATE_PERF {
+         |  ${(perfs.toSeq.map("perf_" + _) ++ Seq("DIFFSTATE_PERF_NUM")).mkString(",\n  ")}
+         |};
+         |long long dpic_calls[DIFFSTATE_PERF_NUM] = {0}, dpic_bytes[DIFFSTATE_PERF_NUM] = {0};
          |void diffstate_perfcnt_init() {
          |  for (int i = 0; i < DIFFSTATE_PERF_NUM; i++) {
          |    dpic_calls[i] = 0;
