@@ -124,14 +124,15 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   val status_sum = IO(Output(new BatchStats(param)))
 
   val valid_sum = Seq.tabulate(groupSize) { idx =>
-    VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).reduce(_ +& _)
+    PopCount(VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).asUInt)
   }
   val v_size = valid_sum.last
-  val v_aligned = in.map { v_gen => Mux(v_gen.valid, v_gen.bits.getByteAlign, 0.U) }
+  val aligned = in.map(_.bits.getByteAlign)
   val collect_data = Wire(Vec(groupSize, UInt(alignWidth.W)))
   collect_data.zipWithIndex.foreach { case (gen, vid) =>
     gen := VecInit((vid until groupSize).map { idx =>
-      Mux(valid_sum(idx) === (vid + 1).U, v_aligned(idx), 0.U)
+      val prefix = if (idx == 0) 0.U else valid_sum(idx - 1)
+      Mux(prefix === vid.U && in(idx).valid, aligned(idx), 0.U)
     }).reduce(_ | _)
   }
   out_data := collect_data.asUInt
