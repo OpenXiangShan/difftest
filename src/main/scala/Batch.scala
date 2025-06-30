@@ -127,14 +127,36 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
     VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).reduce(_ +& _)
   }
   val v_size = valid_sum.last
-  val v_aligned = in.map { v_gen => Mux(v_gen.valid, v_gen.bits.getByteAlign, 0.U) }
-  val collect_data = Wire(Vec(groupSize, UInt(alignWidth.W)))
-  collect_data.zipWithIndex.foreach { case (gen, vid) =>
-    gen := VecInit((vid until groupSize).map { idx =>
-      Mux(valid_sum(idx) === (vid + 1).U, v_aligned(idx), 0.U)
-    }).reduce(_ | _)
+  val aligned = Seq.tabulate(groupSize){idx => Wire(Vec(idx + 1, UInt(alignWidth.W)))}
+  val valids = Seq.tabulate(groupSize){idx => Wire(Vec(idx + 1, Bool()))}
+  aligned.last.zip(valids.last).zip(in).foreach{ case ((gen, v), io) =>
+    gen := io.bits.getByteAlign
+    v := io.valid
   }
-  out_data := collect_data.asUInt
+  (0 until groupSize - 1).foreach{ gid =>
+    val len = gid + 1
+    val vand = VecInit.tabulate(len){ idx => VecInit(valids(gid + 1).take(idx + 1)).asUInt.andR}
+    aligned(gid).zip(valids(gid)).zipWithIndex.foreach{ case ((gen, v), idx) =>
+      val has_bubble = !vand(idx) // invalid in [0, idx]
+      val next_valid = valids(gid + 1)(idx + 1)
+      val next_gen = aligned(gid + 1)(idx + 1)
+      val this_gen = aligned(gid + 1)(idx)
+      gen := Mux(has_bubble && next_valid, next_gen, Mux(!has_bubble, this_gen, 0.U))
+      v := (has_bubble && next_valid) | !has_bubble
+    }
+  }
+  val collect = VecInit.tabulate(groupSize){ idx =>
+    Mux(v_size >= (idx + 1).U, aligned(idx).last, 0.U(alignWidth.W))
+  }
+  out_data := collect.asUInt
+//  val v_aligned = in.map { v_gen => Mux(v_gen.valid, v_gen.bits.getByteAlign, 0.U) }
+//  val collect_data = Wire(Vec(groupSize, UInt(alignWidth.W)))
+//  collect_data.zipWithIndex.foreach { case (gen, vid) =>
+//    gen := VecInit((vid until groupSize).map { idx =>
+//      Mux(valid_sum(idx) === (vid + 1).U, v_aligned(idx), 0.U)
+//    }).reduce(_ | _)
+//  }
+//  out_data := collect_data.asUInt
 
   val info = Wire(new BatchInfo)
   info.id := Batch.getBundleID(bundleType).U
