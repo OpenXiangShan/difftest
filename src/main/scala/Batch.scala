@@ -192,15 +192,15 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   // Collect data by shifter
   step_data := MixedVecInit(
     delay_group_data.zipWithIndex.map { case (gen, idx) =>
-      val maxWidth = delay_group_data.take(idx).map(_.getWidth).sum
       // Truncate width of offset to reduce useless gates
-      val offset = Wire(UInt(log2Ceil(maxWidth + 1).W))
       if (idx == 0) {
-        offset := 0.U
+        gen
       } else {
-        offset := delay_group_status(idx - 1).data_bytes << 3
+        val maxWidth = delay_group_data.take(idx).map(_.getWidth).sum
+        val offset = Wire(UInt(log2Ceil(maxWidth + 1).W))
+        offset := maxWidth.U - (delay_group_status(idx - 1).data_bytes << 3).asUInt
+        ((gen << maxWidth) >> offset).asUInt
       }
-      (gen << offset).asUInt
     }.toSeq
   ).reduce(_ | _)
 
