@@ -2,19 +2,19 @@
 #define __SWIG_DIFFTEST_EXPORT__
 
 #include "difftest.h"
+#include "flash.h"
 #include "goldenmem.h"
 #include "ram.h"
-#include "flash.h"
 #include <string>
 
 extern Difftest **difftest;
 
-Difftest * GetDifftest(int index);
+Difftest *GetDifftest(int index);
 
 void InitRam(std::string image, uint64_t n_bytes);
 void InitFlash(std::string flash_bin);
 
-flash_device_t* GetFlash();
+flash_device_t *GetFlash();
 uint64_t FlashRead(uint32_t addr);
 int FlashWrite(uint32_t addr, uint64_t data);
 

@@ -58,7 +58,7 @@ REMOTE ?= localhost
 # simulation
 SIM_CONFIG_DIR = $(abspath ./config)
 SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
-SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
+SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp") $(shell find $(SIM_CONFIG_DIR) -name "*.cpp")
 SIM_CXXFLAGS = -I$(SIM_CSRC_DIR) -I$(SIM_CONFIG_DIR)
 
 SIM_CXXFLAGS += -DNOOP_HOME=\\\"$(NOOP_HOME)\\\"
@@ -85,7 +85,6 @@ WITH_CHISELDB = 0
 WITH_CONSTANTIN = 0
 endif
 
-# DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp") $(shell find $(SIM_CONFIG_DIR) -name "*.cpp")
 ifeq ($(NO_DIFF), 1)
 SIM_CXXFLAGS += -DCONFIG_NO_DIFFTEST
