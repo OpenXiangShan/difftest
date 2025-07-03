@@ -58,7 +58,7 @@ REMOTE ?= localhost
 # simulation
 SIM_CONFIG_DIR = $(abspath ./config)
 SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
-SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp")
+SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp") $(shell find $(SIM_CONFIG_DIR) -name "*.cpp")
 SIM_CXXFLAGS = -I$(SIM_CSRC_DIR) -I$(SIM_CONFIG_DIR)
 
 SIM_CXXFLAGS += -DNOOP_HOME=\\\"$(NOOP_HOME)\\\"
@@ -272,6 +272,7 @@ include vcs.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
+include pdb.mk
 
 clean: vcs-clean pldm-clean fpga-clean
 	rm -rf $(BUILD_DIR)
