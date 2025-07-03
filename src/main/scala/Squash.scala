@@ -221,11 +221,10 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |`ifdef SYNTHESIS
        |  assign enable = 1;
        |`else
-       |  reg _enable;
-       |  assign enable = _enable;
        |`ifdef DIFFTEST
        |import "DPI-C" context function void set_squash_scope();
-       |
+       |  reg _enable;
+       |  assign enable = _enable;
        |initial begin
        |  _enable = 1;
        |  set_squash_scope();
@@ -236,8 +235,6 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |function set_squash_enable(int en);
        |  _enable = en;
        |endfunction
-       |`endif // DIFFTEST
-       |`endif // SYNTHESIS
        |
        |// For the simulation argument +squash_cycles=N
        |reg [63:0] squash_cycles;
@@ -260,7 +257,8 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |    end
        |  end
        |end
-       |
+       |`endif // DIFFTEST
+       |`endif // SYNTHESIS
        |
        |endmodule
        |""".stripMargin,
