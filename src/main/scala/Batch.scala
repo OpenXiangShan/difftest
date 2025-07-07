@@ -21,6 +21,7 @@ import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.common.DifftestPerf
 import difftest.util.LookupTree
+import difftest.util.Delayer
 
 import scala.collection.mutable.ListBuffer
 
@@ -36,14 +37,25 @@ case class BatchParam(config: GatewayConfig, bundles: Seq[DifftestBundle]) {
   val MaxInfoBitLen = MaxInfoByteLen * 8
   val MaxInfoSize = MaxInfoByteLen / infoByte
 
-  val StepGroupSize = bundles.distinctBy(_.desiredCppName).length
+  val SlotBit = 2048
+  val SlotByte = SlotBit / 8
+  val GrainBit = 64
+  val GrainWidth = log2Ceil(GrainBit)
+  val GroupNum = 16
+//  val StepGroupSize = bundles.distinctBy(_.desiredGroupName).length
+  val StepGroupSize = bundles.groupBy(_.desiredCppName).values.flatMap{ gen =>
+    val width = gen.head.getByteAlignWidth
+    val group_size = math.min(GroupNum, (SlotBit + width - 1)/width)
+    gen.grouped(group_size).toSeq
+  }.size
   val StepDataByteLen = bundles.map(_.getByteAlignWidth).map { w => w / 8 }.sum
   val StepDataBitLen = StepDataByteLen * 8
   val StepInfoByteLen = (StepGroupSize + 1) * (infoWidth / 8) // Include BatchStep to update buffer index
   val StepInfoBitLen = StepInfoByteLen * 8
 
   // Width of statistic for data/info byte length
-  val StatsDataWidth = log2Ceil(math.max(MaxDataByteLen, StepDataByteLen))
+//  val StatsDataWidth = log2Ceil(math.max(MaxDataByteLen, StepDataByteLen))
+  val StatsDataWidth = log2Ceil(SlotByte + 1)
   val StatsInfoWidth = log2Ceil(math.max(MaxInfoSize, StepGroupSize + 1))
 
   // Truncate width when shifting to reduce useless gates
@@ -58,6 +70,7 @@ class BatchIO(param: BatchParam) extends Bundle {
 class BatchStats(param: BatchParam) extends Bundle {
   val data_bytes = UInt(param.StatsDataWidth.W)
   val info_size = UInt(param.StatsInfoWidth.W)
+  val data_slot = UInt(8.W)
 }
 
 class BatchOutput(param: BatchParam, config: GatewayConfig) extends Bundle {
@@ -126,6 +139,7 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   val valid_sum = Seq.tabulate(groupSize) { idx =>
     PopCount(VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).asUInt)
   }
+//  val v_size = Mux(valid_sum.last =/= 0.U, groupSize.U, 0.U)
   val v_size = valid_sum.last
   val aligned = in.map(_.bits.getByteAlign)
   val collect_data = Wire(Vec(groupSize, UInt(alignWidth.W)))
@@ -136,6 +150,10 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
     }).reduce(_ | _)
   }
   out_data := collect_data.asUInt
+//  out_data := MixedVecInit(aligned.zipWithIndex.map{ case (gen, idx) =>
+//    val offset = if (idx == 0) 0.U else valid_sum(idx - 1) * alignWidth.U
+//    Mux(in(idx).valid, (gen << offset).asUInt, 0.U)
+//  }.toSeq).reduce(_ | _)
 
   val info = Wire(new BatchInfo)
   info.id := Batch.getBundleID(bundleType).U
@@ -143,10 +161,61 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   out_info := Mux(v_size =/= 0.U, info.asUInt, 0.U)
 
   val bytes_map = Seq.tabulate(groupSize + 1) { vi => (vi.U, (alignWidth / 8 * vi).U) }
-  status_sum.data_bytes := status_base.data_bytes +& LookupTree(v_size, bytes_map)
+  val data_bytes = LookupTree(v_size, bytes_map)
+  val next_slot = status_base.data_bytes +& data_bytes > param.SlotByte.U
+  status_sum.data_slot := status_base.data_slot + next_slot.asUInt
+  status_sum.data_bytes := Mux(next_slot, data_bytes, status_base.data_bytes +& data_bytes)
   status_sum.info_size := status_base.info_size +& Mux(v_size =/= 0.U, 1.U, 0.U)
 }
 
+//class shifter(a: UInt, b: UInt) extends Module {
+//  val in = IO(Input(chiselTypeOf(a)))
+//  val offset = IO(Input(chiselTypeOf(b)))
+//  val offset_vec = offset.asTypeOf(Vec(b.getWidth, Bool()))
+//  val temp = Wire(MixedVec((0 until b.getWidth - 8 + 1).map { idx =>
+//    val width = a.getWidth + ((1 << idx) - 1) * 256
+//    UInt(width.W)
+//  }))
+//  temp(0) := in
+//  (1 until b.getWidth - 8 + 1).foreach{idx =>
+//    val offidx = idx - 1
+//    val bitoff = (1 << offidx) * 256
+//    temp(idx) := Mux(offset_vec(offidx + 8), temp(idx - 1) << bitoff, temp(idx - 1))
+//  }
+//  val result = IO(UInt(temp.last.getWidth.W))
+//  result := temp.last
+//}
+
+class shifter(a: UInt, b: UInt, param: BatchParam) extends Module {
+  val in = IO(Input(chiselTypeOf(a)))
+  val offset = IO(Input(chiselTypeOf(b)))
+//  val res = (in << offset).asUInt
+//  val width = math.min(res.getWidth, 2048)
+//  val result = IO(Output(UInt(width.W)))
+//  result := res
+
+  val result = IO(Output(UInt(param.SlotBit.W)))
+  val offset_vec = offset.asTypeOf(Vec(offset.getWidth, Bool()))
+//  val temp = Wire(Vec(offset.getWidth - 3, UInt(2048.W)))
+//  println("Offset: "+ offset.getWidth + " " + param.GrainWidth)
+  val temp = Wire(MixedVec(Seq.tabulate(offset.getWidth - param.GrainWidth){ idx =>
+    val width = math.min(in.getWidth + ((2 << idx) - 1) * param.GrainBit, param.SlotBit)
+    UInt(width.W)
+  }))
+  offset_vec.drop(param.GrainWidth).zipWithIndex.foreach{ case (v, idx) =>
+    val base = if (idx == 0) in else temp(idx - 1)
+    temp(idx) := Mux(v, base << ((1 << idx) * param.GrainBit), base)
+  }
+  result := temp.last
+}
+object Shifter {
+  def apply(a: UInt, b: UInt, param: BatchParam): UInt = {
+    val shifter = Module(new shifter(a, b, param))
+    shifter.in := a
+    shifter.offset := b
+    shifter.result
+  }
+}
 // Collect Data from different group in same cycle
 class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) extends Module {
   val in = IO(Input(MixedVec(bundles)))
@@ -159,7 +228,13 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   def getGroupDataWidth: Seq[Valid[DifftestBundle]] => Int = { group =>
     group.length * group.head.bits.getByteAlignWidth
   }
-  val sorted = in.groupBy(_.bits.desiredCppName).values.toSeq.map(_.toSeq).sortBy(getGroupDataWidth)
+  val in_group = in.groupBy(_.bits.desiredCppName).values.flatMap { gen =>
+    val width = gen.head.bits.getByteAlignWidth
+    val group_size = math.min(param.GroupNum, (width + param.SlotBit - 1) / width)
+    gen.grouped(group_size).toSeq
+  }.toSeq
+  val sorted = in_group.sortBy(getGroupDataWidth)
+  //  val sorted = in.groupBy(_.bits.desiredGroupName).values.toSeq.map(_.toSeq).sortBy(getGroupDataWidth)
   // Stage 1: concat bundles with same desiredCppName
   val group_info = Wire(Vec(param.StepGroupSize, UInt(param.infoWidth.W)))
   val group_status = Wire(Vec(param.StepGroupSize, new BatchStats(param)))
@@ -176,9 +251,9 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   }
 
   // Stage 2: delay grouped data, concat different group
-  val delay_group_data = RegNext(group_data)
-  val delay_group_info = RegNext(group_info)
-  val delay_group_status = RegNext(group_status)
+  val delay_group_data = Delayer(group_data, 0, true)
+  val delay_group_info = Delayer(group_info, 0, true)
+  val delay_group_status = Delayer(group_status, 0, true)
   val info_num = delay_group_status.last.info_size
   val BatchStep = Wire(new BatchInfo)
   BatchStep.id := Batch.getTemplate.length.U
@@ -190,19 +265,52 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   step_status.last.info_size := delay_group_status.last.info_size + 1.U
 
   // Collect data by shifter
-  step_data := MixedVecInit(
+  val aligned_width = delay_group_data.map(d => (d.getWidth + 255) / 256 * 256)
+  val step_res = Wire(Vec(8, UInt(param.SlotBit.W)))
+  step_data := step_res.asUInt
+  val shifted = MixedVecInit(
     delay_group_data.zipWithIndex.map { case (gen, idx) =>
       // Truncate width of offset to reduce useless gates
       if (idx == 0) {
         gen
       } else {
-        val maxWidth = delay_group_data.take(idx).map(_.getWidth).sum
-        val offset = Wire(UInt(log2Ceil(maxWidth + 1).W))
-        offset := maxWidth.U - (delay_group_status(idx - 1).data_bytes << 3).asUInt
-        ((gen << maxWidth) >> offset).asUInt
+        val prefix = delay_group_data.map(_.getWidth).take(idx).sum
+        val maxWidth = math.min((prefix + param.GrainBit - 1) / param.GrainBit * param.GrainBit + 1, param.SlotBit)
+//        val maxWidth = aligned_width.take(idx).sum
+        val offset = Wire(UInt(log2Ceil(maxWidth).W))
+//        offset := maxWidth.U - (delay_group_status(idx - 1).data_bytes << 3).asUInt
+//        ((gen << maxWidth) >> offset).asUInt
+        offset := delay_group_status(idx - 1).data_bytes << 3
+        dontTouch(offset)
+//        (gen << offset).asUInt
+        Shifter(gen, offset, param)
+
+//        offset := delay_group_status(idx - 1).data_bytes(param.StatsDataWidth - 1, 5) << 8
+//        val shifter = Module(new shifter(gen, offset))
+//        shifter.in := gen
+//        shifter.offset := offset
+//        shifter.result
       }
     }.toSeq
-  ).reduce(_ | _)
+  )
+
+  val slot = delay_group_status.map(_.data_slot)
+  step_res.zipWithIndex.map{ case (res, idx) =>
+    res := MixedVecInit(shifted.zip(slot).map{ case (sft, sl) =>
+      Mux(sl === idx.U, sft, 0.U)
+    }).reduce(_ | _)
+  }
+
+//  val toCollect_data = Wire(MixedVec(Seq.tabulate(param.StepGroupSize){idx =>
+//    val width = group_data.take(idx + 1).map(_.getWidth).sum
+//    UInt(width.W)
+//  }))
+//  toCollect_data(0) := Mux(delay_group_info(0) =/= 0.U, delay_group_data(0), 0.U)
+//  (1 until param.StepGroupSize).foreach { idx =>
+//    val data_base = toCollect_data(idx - 1)
+//    toCollect_data(idx) := Mux(delay_group_info(idx) =/= 0.U, Cat(data_base, delay_group_data(idx)), data_base)
+//  }
+//  step_data := toCollect_data.last
 
   // Collect info from tail, collect(i) include last 0~i
   val toCollect_info = delay_group_info.reverse
@@ -316,6 +424,7 @@ class BatchAssembler(
     next_state_info := Mux(has_append, remain_info, delay_step_info)
     next_state_stats.data_bytes := Mux(has_append, remain_stats.data_bytes, delay_step_status.last.data_bytes)
     next_state_stats.info_size := Mux(has_append, remain_stats.info_size, delay_step_status.last.info_size)
+    next_state_stats.data_slot := 0.U
   } else {
     data_exceed := delay_step_enable && delay_step_status.last.data_bytes > data_bytes_avail
     info_exceed := delay_step_enable && delay_step_status.last.info_size > info_size_avail
@@ -331,6 +440,7 @@ class BatchAssembler(
     next_state_info := delay_step_info
     next_state_stats.data_bytes := delay_step_status.last.data_bytes
     next_state_stats.info_size := delay_step_status.last.info_size
+    next_state_stats.data_slot := 0.U
   }
 
   // Stage 2:

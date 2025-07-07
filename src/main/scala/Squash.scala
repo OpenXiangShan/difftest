@@ -78,7 +78,7 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
 
   val stores = in.filter(_.bits.desiredCppName == "store").map(_.asInstanceOf[Valid[DiffStoreEvent]])
   val storeQueues = stores.map { st =>
-    val sq = WireInit(0.U.asTypeOf(Valid(new DiffStoreEventQueue)))
+    val sq = WireInit(0.U.asTypeOf(Valid(new DiffStoreEventQueue(st.bits.groupName))))
     sq.inheritFrom(st)
     val base = stamp(sq.bits.coreid)
     val inc = commitSum(sq.bits.coreid).last
@@ -110,7 +110,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   val timeout = timeout_count === 200000.U
   val global_tick = !control.enable || in_replay || timeout
 
-  val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredCppName)
+  val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredGroupName)
   // Tick and Submit the pending non-squashable events immediately.
   val want_tick_vec = WireInit(VecInit.fill(uniqBundles.length)(false.B))
   when(!want_tick_vec.asUInt.orR) {
@@ -136,7 +136,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   })
 
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
-    val s_in = in.filter(_.bits.desiredCppName == u.desiredCppName)
+    val s_in = in.filter(_.bits.desiredGroupName == u.desiredGroupName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
     squasher.in.zip(s_in).foreach { case (i, s_i) => i := s_i }
     wt := squasher.want_tick

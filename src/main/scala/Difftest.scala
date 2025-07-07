@@ -63,6 +63,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     }
     className.split("\\.").filterNot(_.forall(java.lang.Character.isDigit)).last
   }
+  def desiredGroupName: String = desiredCppName
 
   def order: (Int, String) = (desiredOffset, desiredModuleName)
 
@@ -383,11 +384,13 @@ class DiffUncacheMMStoreEvent extends UncacheMMStoreEvent with DifftestBundle wi
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
 }
 
-class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithIndex {
+class DiffStoreEvent(val groupName: String = "") extends StoreEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "store"
+  override def desiredGroupName: String = desiredCppName + "_" + groupName
+  override def classArgs: Map[String, Any] = Map("groupName" -> groupName)
 }
 
-class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
+class DiffStoreEventQueue(groupName: String) extends DiffStoreEvent(groupName) with DifftestWithStamp with DiffTestIsInherited {
   override val squashQueue: Boolean = true
 }
 

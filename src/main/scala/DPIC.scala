@@ -265,6 +265,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
          |      dpic_bytes[$perfName] += num * ${t.getByteAlignWidth / 8};
          |#endif // CONFIG_DIFFTEST_PERFCNT
          |      step_size += num * ${t.getByteAlignWidth / 8};
+         |      // printf("$perfName %d %d\\n", num, num * ${t.getByteAlignWidth / 8});
          |      for (int j = 0; j < num; j++) {
          |        ${getDPICBundleUnpack(t)}
          |      }
@@ -317,6 +318,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |      break;
            |    }
            |    else if (id == BatchStep) {
+           |      if (step_size > 1000)
            |      printf("StepSize: %d\\n", step_size);
            |      step_size = 0;
            |      ${if (config.isDelta) "dStats->sync(0, dut_index);" else ""}
