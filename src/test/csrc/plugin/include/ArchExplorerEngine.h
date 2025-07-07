@@ -33,12 +33,17 @@ class ArchExplorerEngine {
         void finalize_deg() {
             o3graph->finalize();
         }
+        void start_epoch(std::string idx, std::string benchmark) {
+            if (o3graph) delete o3graph;
+            std::string output = "../../temp/" + idx + "/" + benchmark + "/analysis.rpt";
+            init(output);
+        }
         void start_epoch(int epoch) {
             if (o3graph) delete o3graph;
             std::string output = "output_" + std::to_string(epoch);
             init(output);
         }
-        int max_epoch = 10;
+        int max_epoch = 1000;
         int top_k = 3;  // default
         bool visualize = false;
         O3Graph* o3graph = nullptr;

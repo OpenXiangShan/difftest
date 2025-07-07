@@ -45,10 +45,11 @@ uint64_t old_cycles = 0;
 
 extern remote_bitbang_t * jtag;
 
-#define SYNC_WITH_PYTHON 1
+// #define SYNC_WITH_PYTHON
+#define CONDUCT_ARCH_EXPLORER 1
 Perfprocess* perfprocess = nullptr;
 std::string benchmark_name;
-std::string benchmark_root_path = "/nfs/home/wujiabin/work/arch-explorer2/infras/benchmarks";
+std::string benchmark_root_path = "/nfs/home/wujiabin/work/arch-explorer-new/infras/benchmarks";
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
   if (strspn(str, " +-0123456789") != strlen(str)) {
@@ -76,7 +77,7 @@ static inline void print_help(const char *file) {
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --no-snapshot          disable saving snapshots\n");
   printf("      --dump-wave            dump waveform when log is enabled\n");
-#ifdef DEBUG_TILELINK
+#ifdef DEBUG_TILELINK 
   printf("      --dump-tl              dump tilelink transactions\n");
   printf("      --flash                the flash bin file for simulation\n");
 #endif
@@ -130,7 +131,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { 0,                   0, NULL,  0  }
   };
 
-  int o;
+  int o;  
   while ( (o = getopt_long(argc, const_cast<char *const*>(argv),
           "-s:C:I:T:W:hi:m:b:e:F:", long_options, &long_index)) != -1) {
     switch (o) {
@@ -447,6 +448,46 @@ std::string get_benchmark(const std::string& file_name) {
 
 }
 
+std::string get_idx(const std::string& file_name) {
+  std::ifstream file(file_name);
+  if (!file.is_open()) {
+    std::cerr << "Error opening file: " << file_name << std::endl;
+    return "";
+  }
+
+  std::string line, last_line;
+  while (std::getline(file, line)) {
+    // 跳过空行和注释行
+    if (line.empty() || line[0] == '#') {
+      continue;
+    }
+    last_line = line;
+  }
+
+  if (last_line.empty()) {
+    std::cerr << "Error: No valid lines in file: " << file_name << std::endl;
+    return "";
+  }
+
+  // 移除空白字符
+  last_line.erase(std::remove_if(last_line.begin(), last_line.end(), ::isspace), last_line.end());
+  // 查找分隔符
+  size_t pos = last_line.find(':');
+  if (pos == std::string::npos) {
+    std::cerr << "Error: Invalid format in last line: " << last_line << std::endl;
+    return "";
+  }
+
+  std::string param = last_line.substr(0, pos);
+  std::string value_str = last_line.substr(pos + 1);
+
+  if (param != "idx") {
+    std::cerr << "Warning: Last line parameter is not 'idx': " << param << std::endl;
+  }
+
+  std::cout << "idx: " << value_str << std::endl;
+  return value_str;
+}
 /// @brief 
 /// @param max_cycle 
 /// @param max_instr 
@@ -503,11 +544,12 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   bool doDSEReset = false;
   bool deg_record = false;
   int deg_record_num = args.max_deg_instrs;
-  Perfprocess* perfprocess = new Perfprocess(dut_ptr, 6);
+  Perfprocess* perfprocess = new Perfprocess(dut_ptr, 4);
   ArchExplorerEngine* engine = new ArchExplorerEngine();
   std::vector<int> embedding;
   sem_t *sem_py;
   sem_t *sem_cpp;
+  std::string idx;
 
 #ifdef SYNC_WITH_PYTHON
   sem_py = sem_open("/py_to_xs", 0);
@@ -518,6 +560,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   printf("wait for python\n");
   sem_wait(sem_py);
   embedding = engine->design_space.get_embedding_from_file("embedding.txt");
+  idx = get_idx("embedding.txt");
   benchmark_name = get_benchmark("embedding.txt");
   if (benchmark_name.empty()) {
     std::cerr << "Error: Could not read Benchmark name from initial embedding.txt" << std::endl;
@@ -528,19 +571,20 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   if (args.init_params != NULL) {
     embedding = engine->design_space.get_embedding_from_file(args.init_params);
     benchmark_name = get_benchmark(args.init_params);
-    if (benchmark_name.empty()) {
+    if (benchmark_name.empty()) { 
         std::cerr << "Error: Could not read Benchmark name from init_params file: " << args.init_params << std::endl;
         exit(1);
     }
     printf("Initial benchmark_name read from %s: %s\n", args.init_params, benchmark_name.c_str());
   } else {
     embedding = engine->design_space.get_init_embedding();
+    benchmark_name = "coremark"; // Default benchmark name if not specified
   }
 #endif
   init_uparam(embedding, engine->max_epoch);
   engine->initial_embedding = embedding;
   engine->visualize = args.enable_deg_visualize;
-  engine->start_epoch(1);
+  engine->start_epoch(idx, benchmark_name);
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
@@ -625,15 +669,28 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           benchmark_name = get_benchmark("embedding.txt");
           printf("benchmark_name: %s\n", benchmark_name.c_str());
 
+          idx = get_idx("embedding.txt");
+
           std::vector<int> embedding_new;
           embedding_new = engine->design_space.get_embedding_from_file("embedding.txt");
           engine->design_space.compare_embeddings(embedding, embedding_new);
           embedding = embedding_new;
           embedding_to_uparam(embedding);
-#endif
-
+          deg_record_num = args.max_deg_instrs;
+          engine->start_epoch(idx, benchmark_name);
+#else
           deg_record_num = args.max_deg_instrs;
           engine->start_epoch(epoch + 1);
+          if (epoch == max_epoch) {
+            // compare initial and last embeddings
+            printf("Final embedding of microarch parameters after %d epochs:\n", max_epoch);
+            engine->design_space.compare_embeddings(engine->initial_embedding, embedding);
+            trapCode = STATE_GOODTRAP;
+            break;
+          }
+#endif
+
+
         }
       }
       if (doDSEReset) {
@@ -649,7 +706,7 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           init_nemuproxy();
           proxy->nemu_init(reset_vector);
         }
-#ifndef SYNC_WITH_PYTHON
+#ifdef CONDUCT_ARCH_EXPLORER
         if (reset_vector == 0x80000000) {
           printf("[Do DEG Record]\n");
           if (deg_record_num > 0) {
@@ -674,12 +731,15 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           engine->finalize_deg();
           deg_record = false;
           std::vector<int> embedding_new;
-          printf("[Do bottleneck_analysis]\n");
-          embedding_new = engine->bottleneck_analysis(embedding, "output_" + std::to_string(dut_ptr->io_dse_epoch));
-          printf("[Finish bottleneck_analysis]\n");
-          engine->design_space.compare_embeddings(embedding, embedding_new);
-          embedding = embedding_new;
-          embedding_to_uparam(embedding);
+          // printf("[Do bottleneck_analysis]\n");
+          // embedding_new = engine->bottleneck_analysis(embedding, "output_" + std::to_string(dut_ptr->io_dse_epoch));
+          // printf("[Finish bottleneck_analysis]\n");
+          // engine->design_space.compare_embeddings(embedding, embedding_new);
+#ifdef SYNC_WITH_PYTHON
+          // engine->design_space.save_embedding_to_file("embedding.txt", embedding_new);
+#endif
+          // embedding = embedding_new;
+          // embedding_to_uparam(embedding);
         }
       }
     }
@@ -728,9 +788,10 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
         uint64_t instrCnt = trap->instrCnt;
         uint64_t cycleCnt = trap->cycleCnt;
         uint64_t epoch = dut_ptr->io_dse_epoch;
+        uint64_t max_epoch = dut_ptr->io_dse_max_epoch; 
         uint64_t dse_max_instr = dut_ptr->io_dse_max_instr;
 
-        if (instrCnt < dse_max_instr) {
+        if (instrCnt < dse_max_instr && epoch <= max_epoch) {
           printf("Hit good trap at pc = 0x%lx, instrCnt = %ld, cycleCnt = %ld\n", trap->pc, instrCnt, cycleCnt);
           double ipc = (double)instrCnt / (cycleCnt);
           printf("epoch: %ld\n", epoch);

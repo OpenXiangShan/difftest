@@ -30,7 +30,7 @@ enum BIdx {
     BTK_RdWrPort,       // 14
     BTK_RAW,            // 15
     BTK_Virtual,        // 16
-    BTK_Serial          // 17
+    // BTK_Serial          // 17
 };
 
 
@@ -63,7 +63,7 @@ public:
 class IcacheMiss : public Bottleneck
 {
 public:
-    IcacheMiss() : Bottleneck("I-cache miss") {}
+    IcacheMiss() : Bottleneck("I-cache Miss") {}
     ~IcacheMiss() = default;
 
 };
@@ -72,7 +72,7 @@ public:
 class DcacheMiss : public Bottleneck
 {
 public:
-    DcacheMiss() : Bottleneck("D-cache miss") {}
+    DcacheMiss() : Bottleneck("D-cache Miss") {}
     ~DcacheMiss() = default;
 
 };
@@ -81,7 +81,7 @@ public:
 class BPMiss : public Bottleneck
 {
 public:
-    BPMiss() : Bottleneck("BP miss") {}
+    BPMiss() : Bottleneck("BP Miss") {}
     ~BPMiss() = default;
 
 };
@@ -90,7 +90,7 @@ public:
 class ROB : public Bottleneck
 {
 public:
-    ROB() : Bottleneck("Lack ROB") {}
+    ROB() : Bottleneck("ROB") {}
     ~ROB() = default;
 
 };
@@ -99,7 +99,7 @@ public:
 class LQ : public Bottleneck
 {
 public:
-    LQ() : Bottleneck("Lack LQ") {}
+    LQ() : Bottleneck("LQ") {}
     ~LQ() = default;
 
 };
@@ -108,7 +108,7 @@ public:
 class SQ : public Bottleneck
 {
 public:
-    SQ() : Bottleneck("Lack SQ") {}
+    SQ() : Bottleneck("SQ") {}
     ~SQ() = default;
 
 };
@@ -117,7 +117,7 @@ public:
 class IntRF : public Bottleneck
 {
 public:
-    IntRF() : Bottleneck("Lack INT RF") {}
+    IntRF() : Bottleneck("INT RF") {}
     ~IntRF() = default;
 
 };
@@ -126,7 +126,7 @@ public:
 class FpRF : public Bottleneck
 {
 public:
-    FpRF() : Bottleneck("Lack FP RF") {}
+    FpRF() : Bottleneck("FP RF") {}
     ~FpRF() = default;
 
 };
@@ -135,7 +135,7 @@ public:
 class IQ : public Bottleneck
 {
 public:
-    IQ() : Bottleneck("Lack IQ") {}
+    IQ() : Bottleneck("IQ") {}
     ~IQ() = default;
 
 };
@@ -144,7 +144,7 @@ public:
 class IntALU : public Bottleneck
 {
 public:
-    IntALU() : Bottleneck("Lack IntAlu") {}
+    IntALU() : Bottleneck("IntAlu") {}
     ~IntALU() = default;
 
 };
@@ -153,7 +153,7 @@ public:
 class IntMultDiv : public Bottleneck
 {
 public:
-    IntMultDiv() : Bottleneck("Lack IntMultDiv") {}
+    IntMultDiv() : Bottleneck("IntMultDiv") {}
     ~IntMultDiv() = default;
 
 };
@@ -162,7 +162,7 @@ public:
 class FpAlu : public Bottleneck
 {
 public:
-    FpAlu() : Bottleneck("Lack FpAlu") {}
+    FpAlu() : Bottleneck("FpAlu") {}
     ~FpAlu() = default;
 
 };
@@ -171,7 +171,7 @@ public:
 class FpMultDiv : public Bottleneck
 {
 public:
-    FpMultDiv() : Bottleneck("Lack FpMultDiv") {}
+    FpMultDiv() : Bottleneck("FpMultDiv") {}
     ~FpMultDiv() = default;
 
 };
@@ -180,7 +180,7 @@ public:
 class RdWrPort : public Bottleneck
 {
 public:
-    RdWrPort() : Bottleneck("Lack RdWrPort") {}
+    RdWrPort() : Bottleneck("RdWrPort") {}
     ~RdWrPort() = default;
 
 };
@@ -189,7 +189,7 @@ public:
 class RAW : public Bottleneck
 {
 public:
-    RAW() : Bottleneck("Read after write dependence") {}
+    RAW() : Bottleneck("RAW") {}
     ~RAW() = default;
 
 };
@@ -204,13 +204,13 @@ public:
 };
 
 
-class Serial : public Bottleneck
-{
-public:
-    Serial() : Bottleneck("Serial") {}
-    ~Serial() = default;
+// class Serial : public Bottleneck
+// {
+// public:
+//     Serial() : Bottleneck("Serial") {}
+//     ~Serial() = default;
 
-};
+// };
 
 
 class BottleneckReport {
@@ -233,7 +233,7 @@ public:
         lack_rd_wr_port = 0;
         raw = 0;
         _virtual = 0;
-        serial = 0;
+        // serial = 0;
     };
     ~BottleneckReport() = default;
 
@@ -306,9 +306,9 @@ public:
         _virtual += delay;
     }
 
-    void incr_serial(latency delay) {
-        serial += delay;
-    }
+    // void incr_serial(latency delay) {
+    //     serial += delay;
+    // }
 
     void set_length(latency _length) {
         length = _length;
@@ -386,9 +386,9 @@ public:
         return _virtual;
     }
 
-    latency get_serial() {
-        return serial;
-    }
+    // latency get_serial() {
+    //     return serial;
+    // }
 
 private:
     latency length;
@@ -410,7 +410,7 @@ private:
     latency lack_rd_wr_port;
     latency raw;
     latency _virtual;
-    latency serial;
+    // latency serial;
 };
 
 

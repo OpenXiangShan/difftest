@@ -39,7 +39,7 @@ public:
 private:
   VSimTop *dut_ptr = nullptr;
   std::vector<std::string> perfNames = getIOPerfNames();
-  int commit_width = 6;
+  int commit_width = 4;
   std::vector<std::string> traces;
 };
 

@@ -21,6 +21,8 @@ struct uparam_t {
     int intphyregs;
     int fpphyregs;
     int rasssize;
+    int dcacheways;
+    int dcachemshrs;
 };
 
 extern uint64_t max_epoch;
@@ -44,6 +46,8 @@ extern uparam_t uparam;
 #define INTPHYREGS_ADDR     0x0060
 #define FPPHYREGS_ADDR      0x0068
 #define RASSIZE_ADDR        0x0070
+#define DCACHEWAYS_ADDR     0x0078
+#define DCACHEMSHRS_ADDR    0x0080
 
 #define MAX_EPOCH_ADDR      0x1000
 

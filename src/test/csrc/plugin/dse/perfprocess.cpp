@@ -130,7 +130,9 @@ int Perfprocess::update_deg_v2() {
   int commit_count = 0;
   clear_traces();
   for (int i = 0; i < commit_width; i++) {
+    // printf("[debug] iter=%d\n", i);
     auto do_update = find_perfCnt("isCommit_" + std::to_string(i));
+    // printf("[debug] iter=%d do_update=%lu\n", i, (unsigned long)do_update);
     if (do_update != 0) {
       commit_count++;
       uint64_t cycle = find_perfCnt("cf_" + std::to_string(i));
@@ -152,11 +154,17 @@ int Perfprocess::update_deg_v2() {
       int src_valid_2 = find_perfCnt("SRCTYPE2_" + std::to_string(i));
       uint64_t dest = find_perfCnt("DST_" + std::to_string(i));
 
+      // printf("[debug] iter=%d cycle=%lu pc=0x%lx instr=0x%lx\n",
+      //              i, (unsigned long)cycle, (unsigned long)pc, (unsigned long)instr);
+
       // 调用 spike-dasm 解析指令
       std::stringstream command;
       command << "echo \"DASM(" << std::setw(8) << std::setfill('0') << std::hex << instr << ")\" | spike-dasm";
+
+      // printf("[debug] iter=%d spike-dasm cmd=\"%s\"\n", i, command.str().c_str());
       std::string insn_decoded = exec(command.str().c_str());
       insn_decoded.erase(insn_decoded.find_last_not_of(" \n") + 1);
+      // printf("[debug] iter=%d insn_decoded=\"%s\"\n", i, insn_decoded.c_str());
       
       // 解析指令类型
       std::string type_str = "unknown";
@@ -215,9 +223,9 @@ int Perfprocess::update_deg_v2() {
             << " : BlockFromSerial=" << find_perfCnt("BlockFromSerial_" + std::to_string(i));
         
         traces.push_back(trace.str());
-        if (true) {
-            std::cerr << trace.str() << std::endl;
-        }
+        // if (true) {
+        //     std::cerr << trace.str() << std::endl;
+        // }
     }
   }
   return commit_count;
@@ -285,8 +293,8 @@ bool Perfprocess::get_simulation_stats(long int dse_epoch) {
   uint64_t l2_write_access = find_perfCnt("l2_write_access");
   uint64_t l2_write_miss = find_perfCnt("l2_write_miss");
   uint64_t l2_conflit = find_perfCnt("l2_conflit");
-  uint64_t memory_access = find_perfCnt("memory_access");
-  uint64_t memory_write = find_perfCnt("memory_write");
+  // uint64_t memory_access = find_perfCnt("memory_access");
+  // uint64_t memory_write = find_perfCnt("memory_write");
   
   // do some calculations
   uint64_t int_instructions = alu_instr_cnt + div_instr_cnt + mul_instr_cnt + jmp_instr_cnt;
@@ -345,8 +353,8 @@ bool Perfprocess::get_simulation_stats(long int dse_epoch) {
         << "branch_mispredictions: " << BPWrong << std::endl
         << "intdqreads: " << intdqreads << std::endl
         << "intdqwrites: " << intdqwrites << std::endl
-        << "memory_access: " << memory_access << std::endl
-        << "memory_write: " << memory_write << std::endl;
+        << "memory_access: " << 0 << std::endl
+        << "memory_write: " << 0 << std::endl;
 
   std::ofstream stats_file("stats.txt", std::ios::trunc);
   if (stats_file.is_open()) {

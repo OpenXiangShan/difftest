@@ -9,19 +9,21 @@
 enum EMDIdx {
     FTQ = 0,
     IBUF,
+    RASSIZE,
     INTDQ,
     FPDQ,
     LSDQ,
     LQ,
     SQ,
     ROB,
-    L2MSHRS,
-    L2SETS,
-    L3MSHRS,
-    L3SETS,
     INTPHYREGS,
     FPPHYREGS,
-    RASSIZE,
+    L2SETS,
+    L2MSHRS,
+    L3SETS,
+    L3MSHRS,
+    DCACHEWAYS,
+    DCACHEMSHRS,
 
     // size
     EMD_SIZE
@@ -42,13 +44,14 @@ public:
     std::vector<int> get_component_params(const std::string& component) const;
     std::vector<int> get_init_embedding() const;
     std::vector<int> get_embedding_from_file(const std::string& filename) const;
+    void save_embedding_to_file(const std::string& filename, const std::vector<int>& embedding) const;
     void print_embedding(const std::vector<int>& embedding) const;
     void compare_embeddings(const std::vector<int>& emb1, const std::vector<int>& emb2) const;
     bool check_embedding(const std::vector<int>& embedding) const;
     const std::vector<std::string> param_names = {
-        "FTQ", "IBUF", "INTDQ", "FPDQ", "LSDQ", "LQ", "SQ", "ROB", 
-        "L2MSHRS", "L2SETS", "L3MSHRS", "L3SETS", "INTPHYREGS", "FPPHYREGS",
-        "RASSIZE"
+        "FTQ", "IBUF", "RASSIZE", "INTDQ", "FPDQ", "LSDQ", "LQ", "SQ", "ROB", 
+        "INTPHYREGS", "FPPHYREGS", "L2SETS", "L2MSHRS", "L3SETS", "L3MSHRS" ,
+        "DCACHEWAYS", "DCACHEMSHRS"
     };
     double get_component_area(const std::string& component, int param) const;
     double calculate_total_area(const std::vector<int>& embedding) const;
@@ -69,7 +72,7 @@ public:
     const int FetchWidth = 8;
     const int DecodeWidth = 4;
     const int IssueWidth = 4;
-    const int CommitWidth = 6;
+    const int CommitWidth = 4;
     const int ALUCnt = 2;
     const int MULCnt = 1;
     const int FPUCnt = 2;

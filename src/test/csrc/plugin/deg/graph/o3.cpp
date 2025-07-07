@@ -285,7 +285,7 @@ void O3Graph::model_interaction_impl(RiscvInstruction* inst) {
 
     // 控制依赖
     model_miss_bp_interaction_impl(inst);
-    model_serial_interaction_impl(inst);
+    // model_serial_interaction_impl(inst);
     // 资源依赖
     model_rob_interaction_impl(inst);
     model_lq_interaction_impl(inst);
@@ -341,17 +341,17 @@ void O3Graph::model_miss_bp_interaction_impl(RiscvInstruction* inst) {
     }
 }
 
-void O3Graph::model_serial_interaction_impl(RiscvInstruction* inst) {
-    auto prev = inst_window.front();
+// void O3Graph::model_serial_interaction_impl(RiscvInstruction* inst) {
+//     auto prev = inst_window.front();
 
-    if (inst->block_from_serial() != 0) {
-        // serial dependence
-        assert(prev->complete() < inst->dispatch());
-        auto C = get_vertex_from_inst(prev, VertexType::C), \
-            DS = get_vertex_from_inst(inst, VertexType::DS);
-        from_c_to_ds_serial(C, DS);
-    }
-}
+//     if (inst->block_from_serial() != 0) {
+//         // serial dependence
+//         assert(prev->complete() < inst->dispatch());
+//         auto C = get_vertex_from_inst(prev, VertexType::C), \
+//             DS = get_vertex_from_inst(inst, VertexType::DS);
+//         from_c_to_ds_serial(C, DS);
+//     }
+// }
 
 void O3Graph::model_rob_interaction_impl(RiscvInstruction* inst) {
     if (inst->block_from_rob() != 0) {
@@ -1086,8 +1086,6 @@ void O3Graph::profiling_critical_path(std::vector<Vertex>& path) {
             report.incr_raw(edge.weight);
         } else if (name == bottlenecks[BIdx::BTK_Virtual]) {
             report.incr_virtual(edge.weight);
-        } else if (name == bottlenecks[BIdx::BTK_Serial]) {
-            report.incr_serial(edge.weight);
         } else {
             ERROR("no bottleneck: %s\n", name);
         }
@@ -1160,8 +1158,6 @@ void O3Graph::generate_report(BottleneckReport& report, std::vector<Vertex>& pat
             weight = report.get_raw();
         } else if (name == bottlenecks[BIdx::BTK_Virtual]) {
             weight = report.get_virtual();
-        } else if (name == bottlenecks[BIdx::BTK_Serial]) {
-            weight = report.get_serial();
         } else {
             ERROR("no bottleneck: %s\n", name);
         }
@@ -1707,13 +1703,13 @@ bool O3Graph::from_c_to_sink(Vertex& vertex, Vertex& sink, std::vector<Vertex>& 
     return false;
 }
 
-void O3Graph::from_c_to_ds_serial(Vertex& C, Vertex& DS) {
-    latency weight;
+// void O3Graph::from_c_to_ds_serial(Vertex& C, Vertex& DS) {
+//     latency weight;
 
-    weight = DS.inst->dispatch() - C.inst->commit();
-    add_edge(C, OutgoingEdge(DS, weight, weight, Serial()));
-    add_edge(DS, IngoingEdge(C));
-}
+//     weight = DS.inst->dispatch() - C.inst->commit();
+//     add_edge(C, OutgoingEdge(DS, weight, weight, Serial()));
+//     add_edge(DS, IngoingEdge(C));
+// }
 
 void O3Graph::visualize() {
     if (view) {

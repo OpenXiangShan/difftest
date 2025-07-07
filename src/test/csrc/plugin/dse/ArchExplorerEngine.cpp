@@ -11,8 +11,10 @@ bool ArchExplorerEngine::adjust_component(const std::string& component_name,
                                         bool increase) {
     bool adjust = false;
     int value = embedding[idx];
+    printf("component_name: %s, value: %d\n", component_name.c_str(), value);
     std::vector<int> params = design_space.get_component_params(component_name);
     int tot_size = params.size();
+    
 
     if (increase) {
         auto it = std::find(params.begin(), params.end(), value);
@@ -118,9 +120,9 @@ void ArchExplorerEngine::decrease_hardware_resource(std::vector<int>& embedding,
         else if (btnk_name == "Virtual") {
             continue;
         }
-        else if (btnk_name == "Serial") {
-            continue;
-        }
+        // else if (btnk_name == "Serial") {
+        //     continue;
+        // }
         else {
             ERROR("Unknown bottleneck: %s\n", btnk_name.c_str());
         }
@@ -132,6 +134,7 @@ void ArchExplorerEngine::decrease_hardware_resource(std::vector<int>& embedding,
 
 void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding, std::vector<std::tuple<std::string, int>>& contribution) {
     int num_of_adjust = 0;
+    printf("num_of_adjust: %d\n", num_of_adjust);
     for (const auto& [btnk_name, contrib] : contribution) {
         bool adjust = false;
 
@@ -148,10 +151,10 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
         }
         else if (btnk_name == "I-cache miss") {
             adjust = adjust_component("FTQ", embedding, EMDIdx::FTQ, true);
-            adjust = adjust_component("L2SETS", embedding, EMDIdx::L2SETS, true);
         }
         else if (btnk_name == "D-cache miss") {
-            adjust = adjust_component("L2SETS", embedding, EMDIdx::L2SETS, true);
+            adjust = adjust_component("DCACHEWAYS", embedding, EMDIdx::DCACHEWAYS, true);
+            adjust = adjust_component("DCACHEMSHRS", embedding, EMDIdx::DCACHEWAYS, true);
         }
         else if (btnk_name == "BP miss") {
             adjust = adjust_component("RASSIZE", embedding, EMDIdx::RASSIZE, true);
@@ -172,20 +175,16 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
             adjust = adjust_component("IBUF", embedding, EMDIdx::IBUF, true);
         }
         else if (btnk_name == "Lack IntAlu") {
-            adjust = false;
-            INFO("We do not support IntAlu adjustment\n");
+            adjust = adjust_component("INTDQ", embedding, EMDIdx::IBUF, true);
         }
         else if (btnk_name == "Lack IntMultDiv") {
-            adjust = false;
-            INFO("We do not support IntMultDiv adjustment\n");
+            adjust = adjust_component("INTDQ", embedding, EMDIdx::IBUF, true);
         }
         else if (btnk_name == "Lack FpAlu") {
-            adjust = false;
-            INFO("We do not support FpAlu adjustment\n");
+            adjust = adjust_component("FPDQ", embedding, EMDIdx::IBUF, true);
         }
         else if (btnk_name == "Lack FpMultDiv") {
-            adjust = false;
-            INFO("We do not support FpMultDiv adjustment\n");
+            adjust = adjust_component("FPDQ", embedding, EMDIdx::IBUF, true);
         }
         else if (btnk_name == "Lack RdWrPort") {
             adjust = false;
@@ -198,9 +197,9 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
         else if (btnk_name == "Virtual") {
             adjust = false;
         }
-        else if (btnk_name == "Serial") {
-            adjust = false;
-        }
+        // else if (btnk_name == "Serial") {
+        //     adjust = false;
+        // }
         else {
             ERROR("Unknown bottleneck: %s\n", btnk_name);
         }
@@ -212,6 +211,7 @@ void ArchExplorerEngine::increase_hardware_resource(std::vector<int>& embedding,
 
 
 std::vector<int> ArchExplorerEngine::bottleneck_removal(std::vector<int>& embedding, std::vector<std::tuple<std::string, int>>& contribution) {
+    printf("=== Debug bottleneck_removal ===\n");
     increase_hardware_resource(embedding, contribution);
     decrease_hardware_resource(embedding, contribution);
     return embedding;
@@ -326,6 +326,7 @@ std::map<std::string, double> ArchExplorerEngine::calc_bottleneck_contribution(
 
 std::vector<int> ArchExplorerEngine::bottleneck_analysis(std::vector<int> embedding, std::string btnk_rpt) {
     auto contribution = get_bottleneck_contribution(0, btnk_rpt);
+    printf("=== Debug bottleneck_analysis ===\n");
     return bottleneck_removal(embedding, contribution);
     // return embedding;
 }
