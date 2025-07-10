@@ -220,7 +220,7 @@ void UnionCoverage::display_uncovered_points() {
 void UnionCoverage::update_is_feedback(const char *cover_name) {
   auto name_len = strlen(get_name()) + strlen(c1->get_name()) + strlen(c2->get_name()) + 2;
   char *correct_name = new char[name_len + 1];
-  sprintf(correct_name, "%s:%s+%s", get_name(), c1->get_name(), c2->get_name());
+  snprintf(correct_name, name_len + 1, "%s:%s+%s", get_name(), c1->get_name(), c2->get_name());
   is_feedback = !cover_name_cmp(cover_name, correct_name);
   delete[] correct_name;
 }
