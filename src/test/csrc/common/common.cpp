@@ -17,6 +17,7 @@
 #include "common.h"
 #include <locale.h>
 #include <signal.h>
+#include <time.h>
 
 int assert_count = 0;
 int signal_num = 0;
@@ -124,4 +125,37 @@ extern "C" void enable_sim_verbose() {
 
 extern "C" void disable_sim_verbose() {
   sim_verbose = false;
+}
+
+// formatted as follows: <NOOP_HOME>/build/<timestamp>
+const char *create_noop_filename(const char *suffix) {
+  static char noop_filename[1024] = "";
+
+  static int noop_len = 0;
+  // initialize the NOOP_HOME only once
+  if (!noop_len) {
+    // get NOOP_HOME environment variable
+    const char *noop_home = getenv("NOOP_HOME");
+#ifdef NOOP_HOME
+    if (noop_home == nullptr) {
+      noop_home = NOOP_HOME;
+    }
+#endif
+    assert(noop_home != NULL);
+
+    noop_len = snprintf(noop_filename, sizeof(noop_filename), "%s/build/", noop_home);
+  }
+
+  // get formatted time
+  time_t now = time(NULL);
+  int time_len = strftime(noop_filename + noop_len, sizeof(noop_filename) - noop_len, "%F-%H-%M-%S", localtime(&now));
+
+  // copy the suffix if provided
+  if (suffix) {
+    snprintf(noop_filename + noop_len + time_len, sizeof(noop_filename) - noop_len - time_len, "%s", suffix);
+  } else {
+    noop_filename[noop_len + time_len] = '\0'; // ensure null-termination
+  }
+
+  return noop_filename;
 }

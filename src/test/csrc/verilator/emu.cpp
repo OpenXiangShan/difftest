@@ -393,7 +393,7 @@ Emulator::Emulator(int argc, const char *argv[])
       tfp->open(args.wave_path);
     } else {
       time_t now = time(NULL);
-      tfp->open(waveform_filename(now)); // Open the dump file
+      tfp->open(waveform_filename()); // Open the dump file
     }
   }
 #endif
@@ -526,8 +526,7 @@ Emulator::~Emulator() {
   // since we are not sure when an emu will stop
   // we distinguish multiple dat files by emu start time
   if (args.dump_coverage) {
-    time_t coverage_start_time = time(NULL);
-    save_coverage(coverage_start_time);
+    save_coverage();
   }
 #endif
 
@@ -939,8 +938,7 @@ int Emulator::tick() {
     uint32_t t = uptime();
     if (trapCode != STATE_GOODTRAP && t - lasttime_snapshot > 1000 * SNAPSHOT_INTERVAL) {
       // save snapshot every 60s
-      time_t now = time(NULL);
-      snapshot_save(snapshot_filename(now));
+      snapshot_save();
       lasttime_snapshot = t;
       // dump one snapshot to file every 60 snapshots
       snapshot_count++;
@@ -994,79 +992,22 @@ int Emulator::is_good() {
   return is_good_trap();
 }
 
-inline char *Emulator::timestamp_filename(time_t t, char *buf) {
-  char buf_time[64];
-  strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
-  const char *noop_home = getenv("NOOP_HOME");
-#ifdef NOOP_HOME
-  if (noop_home == nullptr) {
-    noop_home = NOOP_HOME;
-  }
-#endif
-  assert(noop_home != NULL);
-  int len = snprintf(buf, 1024, "%s/build/%s", noop_home, buf_time);
-  return buf + len;
-}
-
-#ifdef VM_SAVABLE
-inline char *Emulator::snapshot_filename(time_t t) {
-  static char buf[1024];
-  char *p = timestamp_filename(t, buf);
-  strcpy(p, ".snapshot");
-  return buf;
-}
-#endif
-
-inline char *Emulator::logdb_filename(time_t t) {
-  static char buf[1024];
-  char *p = timestamp_filename(t, buf);
-  strcpy(p, ".db");
-  return buf;
-}
-
-inline char *Emulator::waveform_filename(time_t t) {
-  static char buf[1024];
-  char *p = timestamp_filename(t, buf);
+const char *Emulator::cycle_wavefile(uint64_t cycles) {
 #ifdef ENABLE_FST
-  strcpy(p, ".fst");
+  const char *suffix = ".fst";
 #else
-  strcpy(p, ".vcd");
+  const char *suffix = ".vcd";
 #endif
-  Info("dump wave to %s...\n", buf);
-  return buf;
-}
-
-inline char *Emulator::cycle_wavefile(uint64_t cycles, time_t t) {
-  static char buf[1024];
-  char buf_time[64];
-  strftime(buf_time, sizeof(buf_time), "%F@%T", localtime(&t));
-  const char *noop_home = getenv("NOOP_HOME");
-#ifdef NOOP_HOME
-  if (noop_home == nullptr) {
-    noop_home = NOOP_HOME;
-  }
-#endif
-  assert(noop_home != NULL);
-  int len = snprintf(buf, 1024, "%s/build/%s_%ld", noop_home, buf_time, cycles);
-#ifdef ENABLE_FST
-  strcpy(buf + len, ".fst");
-#else
-  strcpy(buf + len, ".vcd");
-#endif
-  FORK_PRINTF("dump wave to %s...\n", buf);
-  return buf;
+  char buf[32];
+  int len = snprintf(buf, sizeof(buf), "_%ld%s", cycles, suffix);
+  const char *filename = create_noop_filename(buf);
+  FORK_PRINTF("dump wave to %s...\n", filename);
+  return filename;
 }
 
 #if VM_COVERAGE == 1
-inline char *Emulator::coverage_filename(time_t t) {
-  static char buf[1024];
-  char *p = timestamp_filename(t, buf);
-  strcpy(p, ".coverage.dat");
-  return buf;
-}
-
-inline void Emulator::save_coverage(time_t t) {
-  char *p = coverage_filename(t);
+void Emulator::save_coverage() {
+  const char *p = create_noop_filename(".coverage.dat");
   Info("dump coverage data to %s...\n", p);
   coverage->write(p);
 }
@@ -1123,12 +1064,12 @@ void Emulator::display_trapinfo() {
 }
 
 #ifdef VM_SAVABLE
-void Emulator::snapshot_save(const char *filename) {
+void Emulator::snapshot_save() {
   static int last_slot = 0;
   VerilatedSaveMem &stream = snapshot_slot[last_slot];
   last_slot = !last_slot;
 
-  stream.init(filename);
+  stream.init(snapshot_filename());
   stream << *dut_ptr;
   stream.flush();
 
@@ -1246,8 +1187,7 @@ void Emulator::fork_child_init() {
   tfp = new VerilatedVcdC;
 #endif
   dut_ptr->trace(tfp, 99);
-  time_t now = time(NULL);
-  tfp->open(cycle_wavefile(cycles, now));
+  tfp->open(cycle_wavefile(cycles));
   // override output range config, force dump wave
   force_dump_wave = true;
   args.enable_waveform = true;
