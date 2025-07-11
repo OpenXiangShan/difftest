@@ -13,7 +13,7 @@ jobs:
     #     which is the default apt-installed version on ubuntu 20.04.
     #     On ubuntu 22.04, toolchain 11.4.0 won't compile riscv-arch-test.
     # (2) to test whether difftest compiles correctly on ubuntu 20.04
-    container: ghcr.io/openxiangshan/ubuntu-20.04:latest
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-20.04
 
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +67,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/${{ matrix.os }}:latest
+    container: ghcr.io/openxiangshan/xs-env:${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
