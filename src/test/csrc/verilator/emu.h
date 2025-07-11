@@ -121,17 +121,33 @@ private:
   inline void single_cycle();
   void trigger_stat_dump();
   void display_trapinfo();
-  inline char *timestamp_filename(time_t t, char *buf);
-  inline char *logdb_filename(time_t t);
-  inline char *snapshot_filename(time_t t);
-  inline char *coverage_filename(time_t t);
-  void snapshot_save(const char *filename);
+
+  inline const char *logdb_filename() {
+    return create_noop_filename(".db");
+  }
+
+  inline const char *snapshot_filename() {
+    return create_noop_filename(".snapshot");
+  }
+  void snapshot_save();
   void snapshot_load(const char *filename);
-  inline char *waveform_filename(time_t t);
-  inline char *cycle_wavefile(uint64_t cycles, time_t t);
-#if VM_COVERAGE == 1
-  inline void save_coverage(time_t t);
+
+  inline const char *waveform_filename() {
+#ifdef ENABLE_FST
+    const char *filename = create_noop_filename(".fst");
+#else
+    const char *filename = create_noop_filename(".vcd");
 #endif
+    Info("dump wave to %s...\n", filename);
+    return filename;
+  }
+
+  const char *cycle_wavefile(uint64_t cycles);
+
+#if VM_COVERAGE == 1
+  void save_coverage();
+#endif
+
   void fork_child_init();
   inline bool is_fork_child() {
     return lightsss->is_child();
