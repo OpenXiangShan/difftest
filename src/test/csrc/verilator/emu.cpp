@@ -317,6 +317,13 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     args.image = "/dev/zero";
   }
 
+#if VM_TRACE != 1
+  if (args.enable_waveform) {
+    printf("[WARN] --dump-wave is ignored. Please compile with EMU_TRACE=1 to enable it.\n");
+    args.enable_waveform = false;
+  }
+#endif // VM_TRACE != 1
+
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
 #ifdef ENABLE_IPC
@@ -382,18 +389,11 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #if VM_TRACE == 1
   if (args.enable_waveform) {
-    Verilated::traceEverOn(true); // Verilator must compute traced signals
-#ifdef ENABLE_FST
-    tfp = new VerilatedFstC;
-#else
-    tfp = new VerilatedVcdC;
-#endif
-    dut_ptr->trace(tfp, 99); // Trace 99 levels of hierarchy
+    uint64_t waveform_clock = args.enable_waveform_full ? 2 * args.log_begin : args.log_begin;
     if (args.wave_path != NULL) {
-      tfp->open(args.wave_path);
+      waveform = new EmuWaveform(trace_bind, waveform_clock, args.wave_path);
     } else {
-      time_t now = time(NULL);
-      tfp->open(waveform_filename()); // Open the dump file
+      waveform = new EmuWaveform(trace_bind, waveform_clock);
     }
   }
 #endif
@@ -516,10 +516,6 @@ Emulator::Emulator(int argc, const char *argv[])
 
 Emulator::~Emulator() {
   // Simulation ends here, do clean up & display jobs
-#if VM_TRACE == 1
-  if (args.enable_waveform)
-    tfp->close();
-#endif
 
 #if VM_COVERAGE == 1
   // we dump coverage into files at the end
@@ -546,6 +542,8 @@ Emulator::~Emulator() {
     delete lightsss;
   }
 
+  // warning: this function may still simulate the circuit
+  // simulator resources must be released after this function
   display_trapinfo();
 
 #ifndef CONFIG_NO_DIFFTEST
@@ -594,6 +592,11 @@ Emulator::~Emulator() {
     delete jtag;
   }
 
+#if VM_TRACE == 1
+  if (args.enable_waveform)
+    delete waveform;
+#endif
+
   delete dut_ptr;
 }
 
@@ -615,7 +618,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 
 #if VM_TRACE == 1
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-      tfp->dump(2 * i);
+      waveform->tick();
     }
 #endif
 
@@ -627,7 +630,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 
 #if VM_TRACE == 1
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-      tfp->dump(2 * i + 1);
+      waveform->tick();
     }
 #endif
 
@@ -669,11 +672,7 @@ inline void Emulator::single_cycle() {
 #endif
     bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
     if (in_range || force_dump_wave) {
-      if (args.enable_waveform_full) {
-        tfp->dump(2 * args.reset_cycles + 2 * cycles);
-      } else {
-        tfp->dump(cycle);
-      }
+      waveform->tick();
     }
   }
 #endif
@@ -722,7 +721,7 @@ inline void Emulator::single_cycle() {
 #endif
     bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
     if (in_range || force_dump_wave) {
-      tfp->dump(2 * args.reset_cycles + 1 + 2 * cycles);
+      waveform->tick();
     }
   }
 #endif
@@ -992,19 +991,6 @@ int Emulator::is_good() {
   return is_good_trap();
 }
 
-const char *Emulator::cycle_wavefile(uint64_t cycles) {
-#ifdef ENABLE_FST
-  const char *suffix = ".fst";
-#else
-  const char *suffix = ".vcd";
-#endif
-  char buf[32];
-  int len = snprintf(buf, sizeof(buf), "_%ld%s", cycles, suffix);
-  const char *filename = create_noop_filename(buf);
-  FORK_PRINTF("dump wave to %s...\n", filename);
-  return filename;
-}
-
 #if VM_COVERAGE == 1
 void Emulator::save_coverage() {
   const char *p = create_noop_filename(".coverage.dat");
@@ -1179,15 +1165,7 @@ void Emulator::fork_child_init() {
 
   FORK_PRINTF("the oldest checkpoint start to dump wave and dump nemu log...\n")
 #if VM_TRACE == 1
-  //dump wave
-  Verilated::traceEverOn(true);
-#ifdef ENABLE_FST
-  tfp = new VerilatedFstC;
-#else
-  tfp = new VerilatedVcdC;
-#endif
-  dut_ptr->trace(tfp, 99);
-  tfp->open(cycle_wavefile(cycles));
+  waveform = new EmuWaveform(trace_bind, args.enable_waveform_full ? 2 * cycles : cycles);
   // override output range config, force dump wave
   force_dump_wave = true;
   args.enable_waveform = true;
