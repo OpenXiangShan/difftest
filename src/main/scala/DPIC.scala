@@ -145,12 +145,14 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
          |`ifndef SYNTHESIS
          |`ifdef DIFFTEST
          |`ifndef FPGA_SIM
+         |`ifndef CONFIG_DIFFTEST_FPGA
          |$dpicDecl
          |$gfifoInitial
          |  always @(posedge clock) begin
          |    if (enable)
          |      $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
          |  end
+         |`endif
          |`endif
          |`endif
          |`endif

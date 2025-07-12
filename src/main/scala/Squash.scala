@@ -212,6 +212,7 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
   setInline(
     "SquashControl.v",
     s"""
+       |`include "DifftestMacros.v"
        |module SquashControl(
        |  input clock,
        |  input reset,
@@ -219,6 +220,8 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |);
        |
        |`ifdef SYNTHESIS
+       |  assign enable = 1;
+       |`elsif CONFIG_DIFFTEST_FPGA
        |  assign enable = 1;
        |`else
        |`ifdef DIFFTEST
