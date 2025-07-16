@@ -14,18 +14,18 @@
 #
 # See the Mulan PSL v2 for more details.
 #
-#GalaxSim, developed by X-EPIC Technologies, is an event-driven Verilog/SystemVerilog
-#simulator that delivers comparable simulation accuracy and performance to VCS.
-
-#GalaxSim Turbo, another innovation from X-EPIC, is a hybrid simulation accelerator that
-#combines event-driven and cycle-based methodologies. It outperforms Verilator in simulation
-#performance and natively supports the SystemVerilog language and UVM methodology.
-
-#FusionDebug, a feature-rich debugger that supports a wide array of simulation debugging
-#techniques similar to those in Verdi.
-
-#These 3 tools are available for free trial on the website: https://free.x-epic.com/
-
+# GalaxSim, developed by X-EPIC Technologies, is an event-driven Verilog/SystemVerilog
+# simulator that delivers comparable simulation accuracy and performance to VCS.
+#
+# GalaxSim Turbo, another innovation from X-EPIC, is a hybrid simulation accelerator that
+# combines event-driven and cycle-based methodologies. It outperforms Verilator in simulation
+# performance and natively supports the SystemVerilog language and UVM methodology.
+#
+# FusionDebug, a feature-rich debugger that supports a wide array of simulation debugging
+# techniques similar to those in Verdi.
+#
+# These 3 tools are available for free trial on the website: https://free.x-epic.com/
+#
 #***************************************************************************************
 RUN_BIN       ?= $(DESIGN_DIR)/ready-to-run/copy_and_run.bin
 GLX           = galaxsim
