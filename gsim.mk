@@ -25,7 +25,7 @@ GSIM_EMU_BUILD_DIR = $(abspath $(BUILD_DIR)/gsim-compile)
 ##############################################
 
 GSIM_GEN_CSRC_DIR = $(GSIM_EMU_BUILD_DIR)/model
-GSIM_FLAGS = --supernode-max-size=35 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --sep-aggr=__DOT__
+GSIM_FLAGS = --supernode-max-size=15 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --sep-aggr=__DOT__
 
 $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir
 	@mkdir -p $(@D)
