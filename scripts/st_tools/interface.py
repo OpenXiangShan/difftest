@@ -86,6 +86,16 @@ def remove_file(file_path):
     if os.path.exists(file_path):
         os.remove(file_path)
 
+def remove_xstop(file_path):
+    with open(file_path, 'r') as file:
+        content = file.read()
+
+    updated_content = re.sub(r'XSTop.', '', content)
+
+    with open(file_path, 'w') as file:
+        file.write(updated_content)
+    print("XSTop has been removed from all lines in the file.")
+
 def rmprocess_file(file_path, string_to_delete=None):
     if os.path.exists(file_path):
         if string_to_delete is not None:
@@ -107,6 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("--filelist", type=str, help="The filelist file to process")
     parser.add_argument("--simtop", type=str, help="The Verilog file to process")
     parser.add_argument("--core", action="store_true", help="Use core_out mode (default is gateway_in mode)")
+    parser.add_argument("--fpga", action="store_true", help="Use fpga mode need rm XSTOP. (default is not fpga mode)")
 
     args = parser.parse_args()
 
@@ -116,3 +127,5 @@ if __name__ == "__main__":
         remove_file(args.simtop)
     if args.filelist:
         rmprocess_file(args.filelist, "SimTop.sv")
+    if args.fpga:
+        remove_xstop(args.filename)
