@@ -138,13 +138,13 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
       else ""
     val modDef =
       s"""
+         |`include "DifftestMacros.v"
          |module $desiredName(
          |  $modPortsString
          |);
          |  wire _dummy_unused = 1'b1;
          |`ifndef SYNTHESIS
          |`ifdef DIFFTEST
-         |`ifndef FPGA_SIM
          |`ifndef CONFIG_DIFFTEST_FPGA
          |$dpicDecl
          |$gfifoInitial
@@ -152,10 +152,9 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
          |    if (enable)
          |      $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
          |  end
-         |`endif
-         |`endif
-         |`endif
-         |`endif
+         |`endif // CONFIG_DIFFTEST_FPGA
+         |`endif // DIFFTEST
+         |`endif // SYNTHESIS
          |endmodule
          |""".stripMargin
     modDef
@@ -305,13 +304,13 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |    uint32_t coreid, index, address;
            |    if (id == BatchFinish) {
            |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
-           |#ifdef CONFIG_PLATFORM_FPGA
+           |#ifdef FPGA_HOST
            |      extern void fpga_nstep(uint8_t step);
            |      fpga_nstep(num);
            |#else
            |      extern void simv_nstep(uint8_t step);
            |      simv_nstep(num);
-           |#endif // CONFIG_PLATFORM_FPGA
+           |#endif // FPGA_HOST
            |#endif // CONFIG_DIFFTEST_INTERNAL_STEP
            |      break;
            |    }
@@ -402,9 +401,9 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#include <cstdint>"
     interfaceCpp += "#include \"diffstate.h\""
-    interfaceCpp += "#if defined(CONFIG_DIFFTEST_BATCH) && !defined(CONFIG_PLATFORM_FPGA)"
+    interfaceCpp += "#if defined(CONFIG_DIFFTEST_BATCH) && !defined(CONFIG_DIFFTEST_FPGA)"
     interfaceCpp += "#include \"svdpi.h\""
-    interfaceCpp += "#endif // CONFIG_DIFFTEST_BATCH && !CONFIG_PLATFORM_FPGA"
+    interfaceCpp += "#endif // CONFIG_DIFFTEST_BATCH && !CONFIG_DIFFTEST_FPGA"
     if (config.isDelta) {
       Delta.collect()
       interfaceCpp += "#include \"difftest-delta.h\""

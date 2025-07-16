@@ -50,7 +50,6 @@ case class GatewayConfig(
   hierarchicalWiring: Boolean = false,
   exitOnAssertions: Boolean = false,
   isFPGA: Boolean = false,
-  isFPGASim: Boolean = false,
   isGSIM: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
@@ -86,6 +85,7 @@ case class GatewayConfig(
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
+    if (isFPGA) macros += "CONFIG_DIFFTEST_FPGA"
     macros.toSeq
   }
   def vMacros: Seq[String] = {
@@ -96,7 +96,7 @@ case class GatewayConfig(
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
-    if (isFPGA && !isFPGASim) macros += "CONFIG_DIFFTEST_FPGA"
+    if (isFPGA) macros += "CONFIG_DIFFTEST_FPGA"
     macros.toSeq
   }
   def check(): Unit = {
@@ -163,7 +163,6 @@ object Gateway {
       case 'H' => config = config.copy(hierarchicalWiring = true)
       case 'X' => config = config.copy(exitOnAssertions = true)
       case 'F' => config = config.copy(isFPGA = true)
-      case 'M' => config = config.copy(isFPGASim = true)
       case 'G' => config = config.copy(isGSIM = true)
       case x   => println(s"Unknown Gateway Config $x")
     }

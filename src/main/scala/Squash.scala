@@ -219,9 +219,13 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |  output enable
        |);
        |
-       |`ifdef SYNTHESIS
-       |  assign enable = 1;
-       |`elsif CONFIG_DIFFTEST_FPGA
+       |`ifndef SYNTHESIS
+       |`ifndef CONFIG_DIFFTEST_FPGA
+       |`define SQUASH_CTRL
+       |`endif // CONFIG_DIFFTEST_FPGA
+       |`endif // SYNTHESIS
+       |
+       |`ifndef SQUASH_CTRL
        |  assign enable = 1;
        |`else
        |`ifdef DIFFTEST
@@ -261,7 +265,7 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |  end
        |end
        |`endif // DIFFTEST
-       |`endif // SYNTHESIS
+       |`endif // SQUASH_CTRL
        |
        |endmodule
        |""".stripMargin,
