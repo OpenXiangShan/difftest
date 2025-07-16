@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-void SimJTAG(uint8_t _0, uint8_t &_1, uint8_t &_2, uint8_t &_3, uint8_t _4, uint8_t _5, uint8_t _6, uint8_t _7,
+void SimJTAG(int __0, uint8_t _0, uint8_t &_1, uint8_t &_2, uint8_t &_3, uint8_t _4, uint8_t _5, uint8_t _6, uint8_t _7,
              uint32_t &_8) {
   _1 = 1; // TRSTn
   _2 = 0; // TMS
@@ -18,3 +18,5 @@ void imsic_csr_top(uint8_t _0, uint8_t _1, uint16_t _2, uint8_t _3, uint8_t _4, 
   _18 = 0;
   _19 = 0;
 }
+
+void PrintCommitIDModule(uint8_t _0, uint64_t _1, uint8_t _2) {}
