@@ -269,6 +269,7 @@ endif
 include verilator.mk
 include gsim.mk
 include vcs.mk
+include galaxsim.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
