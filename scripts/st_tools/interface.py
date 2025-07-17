@@ -90,7 +90,7 @@ def remove_xstop(file_path):
     with open(file_path, 'r') as file:
         content = file.read()
 
-    updated_content = re.sub(r'XSTop.', '', content)
+    updated_content = re.sub(r'XSTop.core_with_l2.', 'core_with_l2.', content)
 
     with open(file_path, 'w') as file:
         file.write(updated_content)
