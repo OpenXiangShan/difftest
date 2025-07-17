@@ -86,9 +86,6 @@ ifeq ($(GLX_TURBO),1)
 GLX_CXXFLAGS += -DVERILATOR_4_210
 GLX_FLAGS += -turbo_mode +define+VERILATOR_5 +define+VERILATOR=1 +define+PRINTF_COND=1 +define+RANDOMIZE_DELAY=0
 endif
-ifneq ($(GLX_TURBO_THREADS),0)
-RUN_OPTS += turbo_threads=$(GLX_TURBO_THREADS)
-endif
 
 
 $(GLX_TARGET): $(SIM_TOP_V) $(GLX_CXXFILES) $(GLX_VFILES)
@@ -97,6 +94,11 @@ $(GLX_TARGET): $(SIM_TOP_V) $(GLX_CXXFILES) $(GLX_VFILES)
 xsim: $(GLX_TARGET)
 
 RUN_OPTS := +workload=$(RUN_BIN)
+
+#glaxism turbo threads
+ifneq ($(GLX_TURBO_THREADS),0)
+RUN_OPTS += -turbo_threads=$(GLX_TURBO_THREADS)
+endif
 
 ifeq ($(NO_DIFF),1)
 RUN_OPTS += +no-diff
