@@ -362,3 +362,7 @@ stack.info*
 
 !ready-to-run/*
 
+# Xilinx Vivado project files
+xs_fpga_diff/*
+*.jou
+cpu_kmh_files.tcl
