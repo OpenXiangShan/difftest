@@ -1,4 +1,6 @@
 `include "sys_define.vh"
+`include "gateway_interface.svh"
+`include "DifftestMacros.v"
 
 module xs_core_def (
       input                                      ddr_clk_p,
@@ -110,7 +112,6 @@ assign uhs1_swvolt_en = 0;
 assign sd_led_control = 0;
 // }}} Unbind useless output port
 
-wire                       inter_soc_clk               ; 
 wire                       axi_bclk_sync_rstn        ; 
 wire                       ddr_bus_clk               ; 
 wire                       ddr_bclk_sync_rstn        ; 
@@ -1047,7 +1048,6 @@ assign i2c2_prdata = 0;
   wire gateway_out_enable;
   wire inter_dev_clk;
   wire inter_soc_clk;
-  wire inter_tmclk;
   xdma_ep xdma_ep_i(
     .cpu_clk(sys_clk_i),
     .cpu_rstn(sys_rstn),
@@ -1088,8 +1088,6 @@ assign i2c2_prdata = 0;
         .soc_clk_o  (inter_soc_clk),
         .dev_clk_i  (dev_clk_i),
         .dev_clk_o  (inter_dev_clk),
-        .tmclk_i    (tmclk),
-        .tmclk_o    (inter_tmclk),
         .data_next  (data_need_next),
         .rstn       (data_rst_ok)
   );
@@ -1210,7 +1208,7 @@ XSTop_wrapper U_CPU_TOP(
 
     .sys_clk_i                      (inter_soc_clk    ),
     .sys_rstn_i                     (cpu_rstn     ),
-    .tmclk                          (inter_tmclk),
+    .tmclk                          (tmclk),
     .osc_clock                      (inter_soc_clk ),
     .outer_clock                    (inter_soc_clk ),
     .global_reset                   (cpu_rstn                  ),

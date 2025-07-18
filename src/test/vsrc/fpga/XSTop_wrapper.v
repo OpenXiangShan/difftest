@@ -1,5 +1,6 @@
-  `include "DifftestMacros.v"
-  `include "gateway_interface.svh"
+`include "DifftestMacros.v"
+`include "gateway_interface.svh"
+
 module XSTop_wrapper(
   input           sys_clk_i,    
   input           sys_rstn_i, 

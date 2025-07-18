@@ -3,6 +3,7 @@
 `define XS_UART         // 11
 `define XS_QSPI2ROM     // 10
 `define XS_XMDA_EP
+`define SYNTHESIS
 //`define XS_GMAC       // 18 cpu_int = {} xs_core_def(top_debug)
 
 /* 
