@@ -576,8 +576,7 @@ Emulator::~Emulator() {
 
 #ifdef ENABLE_CHISEL_DB
   if (args.dump_db) {
-    time_t now = time(NULL);
-    save_db(logdb_filename(now));
+    save_db(logdb_filename());
   }
 #endif
 
@@ -952,8 +951,7 @@ int Emulator::tick() {
 #ifdef DEBUG_TILELINK
   if (args.dump_tl_interval != 0) {
     if ((cycles != 0) && (cycles % args.dump_tl_interval == 0)) {
-      time_t now = time(NULL);
-      checkpoint_db(logdb_filename(now));
+      checkpoint_db(logdb_filename());
     }
   }
 #endif
