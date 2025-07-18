@@ -56,7 +56,7 @@ ifeq ($(ENABLE_XPROP),1)
 GLX_FLAGS += -xprop
 else
 # randomize all undefined signals (instead of using X)
-GLX_FLAGS += -initreg
+# GLX_FLAGS += -initreg
 endif
 GLX_CXXFLAGS += -std=c++11
 
