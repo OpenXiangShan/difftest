@@ -5,7 +5,7 @@ FPGA_CONFIG_DIR = $(abspath ./config) # Reserve storage for xdma configuration
 DMA_CHANNELS ?= 1
 
 FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp")
-FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DCONFIG_DMA_CHANNELS=$(DMA_CHANNELS) -DNUM_CORES=$(NUM_CORES) -DCONFIG_PLATFORM_FPGA
+FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DCONFIG_DMA_CHANNELS=$(DMA_CHANNELS) -DNUM_CORES=$(NUM_CORES) -DFPGA_HOST
 FPGA_CXXFLAGS += -std=c++11 -O3 -flto -march=native -mtune=native
 FPGA_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 

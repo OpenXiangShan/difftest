@@ -21,9 +21,9 @@
 #include "goldenmem.h"
 #include "ram.h"
 #include "spikedasm.h"
-#if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_PLATFORM_FPGA)
+#if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 #include "svdpi.h"
-#endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_PLATFORM_FPGA
+#endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -149,7 +149,7 @@ void difftest_finish() {
   difftest = NULL;
 }
 
-#if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_PLATFORM_FPGA)
+#if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 svScope squashScope;
 void set_squash_scope() {
   squashScope = svGetScope();
@@ -164,7 +164,7 @@ void difftest_squash_enable(int enable) {
   svSetScope(squashScope);
   set_squash_enable(enable);
 }
-#endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_PLATFORM_FPGA
+#endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
 
 #ifdef CONFIG_DIFFTEST_REPLAY
 svScope replayScope;

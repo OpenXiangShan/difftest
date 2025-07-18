@@ -85,6 +85,7 @@ case class GatewayConfig(
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
+    if (isFPGA) macros += "CONFIG_DIFFTEST_FPGA"
     macros.toSeq
   }
   def vMacros: Seq[String] = {
@@ -95,6 +96,7 @@ case class GatewayConfig(
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
+    if (isFPGA) macros += "CONFIG_DIFFTEST_FPGA"
     macros.toSeq
   }
   def check(): Unit = {
