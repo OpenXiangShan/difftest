@@ -1,7 +1,7 @@
 #***************************************************************************************
-# Copyright (c) 2024 Beijing Institute of Open Source Chip (BOSC)
-# Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
-# Copyright (c) 2020-2021 Peng Cheng Laboratory
+# Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
+# Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2025 X-EPIC Co., Ltd
 #
 # DiffTest is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -14,15 +14,12 @@
 #
 # See the Mulan PSL v2 for more details.
 #
-# GalaxSim, developed by X-EPIC Technologies, is an event-driven Verilog/SystemVerilog
-# simulator that delivers comparable simulation accuracy and performance to VCS.
+# GalaxSim, developed by X-EPIC Technologies, is an event-driven Verilog/SystemVerilog simulator.
 #
 # GalaxSim Turbo, another innovation from X-EPIC, is a hybrid simulation accelerator that
-# combines event-driven and cycle-based methodologies. It outperforms Verilator in simulation
-# performance and natively supports the SystemVerilog language and UVM methodology.
+# combines event-driven and cycle-based methodologies. 
 #
-# FusionDebug, a feature-rich debugger that supports a wide array of simulation debugging
-# techniques similar to those in Verdi.
+# FusionDebug, a feature-rich debugger that supports a wide array of simulation debugging techniques.
 #
 # These 3 tools are available for free trial on the website: https://free.x-epic.com/
 #
