@@ -26,6 +26,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <stdexcept>
+#include <sys/mman.h>
 #include <sys/time.h>
 #include <unistd.h>
 

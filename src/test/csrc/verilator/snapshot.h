@@ -17,7 +17,6 @@
 #ifndef SNAPSHOT_H
 #define SNAPSHOT_H
 
-#ifdef VM_SAVABLE
 #include "VSimTop.h"
 #include "compress.h"
 #include "ram.h"
@@ -96,6 +95,5 @@ public:
   void flush() override VL_MT_UNSAFE_ONE {}
   void fill() override VL_MT_UNSAFE_ONE;
 };
-#endif
 
-#endif
+#endif // SNAPSHOT_H

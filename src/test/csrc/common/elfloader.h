@@ -16,19 +16,13 @@
 #ifndef __ELFLOADER_H
 #define __ELFLOADER_H
 
-#include "config.h"
+#include "common.h"
 #include <assert.h>
-#include <cstring>
 #include <fcntl.h>
 #include <iostream>
 #include <map>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string>
-#include <sys/mman.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <vector>
 
 #define IS_ELF(hdr) \

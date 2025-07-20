@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -89,7 +89,7 @@ static inline void print_help(const char *file) {
   printf("      --overwrite-auto       overwrite size is automatically set of the new gcpt\n");
   printf("      --force-dump-result    force dump performance counter result in the end\n");
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
-  printf("      --no-snapshot          disable saving snapshots\n");
+  printf("      --enable-snapshot      enable simulation snapshots\n");
   printf("      --dump-wave            dump waveform when log is enabled\n");
   printf("      --dump-wave-full       dump full waveform when log is enabled\n");
   printf("      --dump-ref-trace       dump REF trace when log is enabled\n");
@@ -135,7 +135,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
   const struct option long_options[] = {
     { "load-snapshot",     1, NULL,  0  },
     { "dump-wave",         0, NULL,  0  },
-    { "no-snapshot",       0, NULL,  0  },
+    { "enable-snapshot",   0, NULL,  0  },
     { "force-dump-result", 0, NULL,  0  },
     { "diff",              1, NULL,  0  },
     { "no-diff",           0, NULL,  0  },
@@ -189,7 +189,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
         switch (long_index) {
           case 0: args.snapshot_path = optarg; continue;
           case 1: args.enable_waveform = true; continue;
-          case 2: args.enable_snapshot = false; continue;
+          case 2: args.enable_snapshot = true; continue;
           case 3: args.force_dump_result = true; continue;
 #ifndef CONFIG_NO_DIFFTEST
           case 4: difftest_ref_so = optarg; continue;
@@ -317,13 +317,6 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     args.image = "/dev/zero";
   }
 
-#if VM_TRACE != 1
-  if (args.enable_waveform) {
-    printf("[WARN] --dump-wave is ignored. Please compile with EMU_TRACE=1 to enable it.\n");
-    args.enable_waveform = false;
-  }
-#endif // VM_TRACE != 1
-
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
 #ifdef ENABLE_IPC
@@ -350,7 +343,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 }
 
 Emulator::Emulator(int argc, const char *argv[])
-    : dut_ptr(new DUT_TOP), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
+    : dut_ptr(new SIMULATOR), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
 
 #ifdef VERILATOR
 #if !defined(VERILATOR_VERSION_INTEGER) || VERILATOR_VERSION_INTEGER < 5026000
@@ -387,16 +380,14 @@ Emulator::Emulator(int argc, const char *argv[])
   // init flash
   init_flash(args.flash_bin);
 
-#if VM_TRACE == 1
   if (args.enable_waveform) {
     uint64_t waveform_clock = args.enable_waveform_full ? 2 * args.log_begin : args.log_begin;
     if (args.wave_path != NULL) {
-      waveform = new EmuWaveform(trace_bind, waveform_clock, args.wave_path);
+      dut_ptr->waveform_init(waveform_clock, args.wave_path);
     } else {
-      waveform = new EmuWaveform(trace_bind, waveform_clock);
+      dut_ptr->waveform_init(waveform_clock);
     }
   }
-#endif
 
   // init core
   reset_ncycles(args.reset_cycles);
@@ -440,25 +431,22 @@ Emulator::Emulator(int argc, const char *argv[])
   init_db(args.dump_db, (args.select_db != NULL), args.select_db);
 #endif
 
-#ifdef VM_SAVABLE
-  snapshot_slot = new VerilatedSaveMem[2];
-  if (args.snapshot_path != NULL) {
-    Info("loading from snapshot `%s`...\n", args.snapshot_path);
-    snapshot_load(args.snapshot_path);
-    auto cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
-    Info("model cycleCnt = %" PRIu64 "\n", cycleCnt);
+  if (args.enable_snapshot || args.snapshot_path) {
+    dut_ptr->snapshot_init();
+
+    if (args.snapshot_path) {
+      Info("loading from snapshot `%s`...\n", args.snapshot_path);
+      snapshot_load(args.snapshot_path);
+#ifndef CONFIG_NO_DIFFTEST
+      auto cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
+      Info("model cycleCnt = %" PRIu64 "\n", cycleCnt);
+#endif // CONFIG_NO_DIFFTEST
+    }
   }
-#endif
 
   // set log time range and log level
-#ifdef VERILATOR
-  dut_ptr->difftest_logCtrl_begin = args.log_begin;
-  dut_ptr->difftest_logCtrl_end = args.log_end;
-#endif // VERILATOR
-#ifdef GSIM
-  dut_ptr->set_difftest__DOT__logCtrl__DOT__begin(args.log_begin);
-  dut_ptr->set_difftest__DOT__logCtrl__DOT__end(args.log_end);
-#endif // GSIM
+  dut_ptr->set_log_begin(args.log_begin);
+  dut_ptr->set_log_end(args.log_end);
 
 #ifndef CONFIG_NO_DIFFTEST
   // init difftest
@@ -564,15 +552,9 @@ Emulator::~Emulator() {
   difftest_finish();
 #endif // CONFIG_NO_DIFFTEST
 
-#ifdef VM_SAVABLE
   if (args.enable_snapshot && trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED) {
-    Info("Saving snapshots to file system. Please wait.\n");
-    snapshot_slot[0].save();
-    snapshot_slot[1].save();
-    Info("Please remove unused snapshots manually\n");
+    dut_ptr->snapshot_save(-1); // save all snapshots
   }
-  delete[] snapshot_slot;
-#endif
 
 #ifdef ENABLE_CHISEL_DB
   if (args.dump_db) {
@@ -591,11 +573,6 @@ Emulator::~Emulator() {
     delete jtag;
   }
 
-#if VM_TRACE == 1
-  if (args.enable_waveform)
-    delete waveform;
-#endif
-
   delete dut_ptr;
 }
 
@@ -604,45 +581,33 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     return;
   }
   for (int i = 0; i < cycles; i++) {
+    dut_ptr->set_reset(1);
+
 #ifdef VERILATOR
-    dut_ptr->reset = 1;
-#ifdef COVERAGE_PORT_RESET
-    dut_ptr->coverage_reset = dut_ptr->reset;
-#endif // COVERAGE_PORT_RESET
-    dut_ptr->clock = 1;
-#ifdef COVERAGE_PORT_CLOCK
-    dut_ptr->coverage_clock = dut_ptr->clock;
-#endif // COVERAGE_PORT_CLOCK
-    dut_ptr->eval();
-
-#if VM_TRACE == 1
-    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-      waveform->tick();
-    }
-#endif
-
-    dut_ptr->clock = 0;
-#ifdef COVERAGE_PORT_CLOCK
-    dut_ptr->coverage_clock = dut_ptr->clock;
-#endif // COVERAGE_PORT_CLOCK
-    dut_ptr->eval();
-
-#if VM_TRACE == 1
-    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-      waveform->tick();
-    }
-#endif
-
-    dut_ptr->reset = 0;
-#ifdef COVERAGE_PORT_RESET
-    dut_ptr->coverage_reset = dut_ptr->reset;
-#endif // COVERAGE_PORT_RESET
+    dut_ptr->set_clock(1);
+    dut_ptr->step();
 #endif // VERILATOR
 
-#ifdef GSIM
-    dut_ptr->set_reset(1);
+    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
+      dut_ptr->waveform_tick();
+    }
+
+#ifdef VERILATOR
+    dut_ptr->set_clock(0);
     dut_ptr->step();
+#endif // VERILATOR
+
+    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
+      dut_ptr->waveform_tick();
+    }
+
+#ifdef GSIM
+    dut_ptr->step();
+#endif
+
     dut_ptr->set_reset(0);
+
+#ifdef GSIM
     dut_ptr->step();
 #endif // GSIM
   }
@@ -654,14 +619,10 @@ inline void Emulator::single_cycle() {
   }
 
 #ifdef VERILATOR
-  dut_ptr->clock = 1;
-#ifdef COVERAGE_PORT_CLOCK
-  dut_ptr->coverage_clock = dut_ptr->clock;
-#endif // COVERAGE_PORT_CLOCK
-  dut_ptr->eval();
+  dut_ptr->set_clock(1);
+  dut_ptr->step();
 #endif // VERILATOR
 
-#if VM_TRACE == 1
   if (args.enable_waveform) {
 #if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_SQUASH)
     uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
@@ -671,46 +632,25 @@ inline void Emulator::single_cycle() {
 #endif
     bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
     if (in_range || force_dump_wave) {
-      waveform->tick();
+      dut_ptr->waveform_tick();
     }
   }
-#endif
 
 #ifdef WITH_DRAMSIM3
   dramsim3_step();
 #endif
 
-#ifdef VERILATOR
-  if (dut_ptr->difftest_uart_out_valid) {
-    printf("%c", dut_ptr->difftest_uart_out_ch);
-    fflush(stdout);
-  }
-  if (dut_ptr->difftest_uart_in_valid) {
-    extern uint8_t uart_getc();
-    dut_ptr->difftest_uart_in_ch = uart_getc();
-  }
-
-  dut_ptr->clock = 0;
-#ifdef COVERAGE_PORT_CLOCK
-  dut_ptr->coverage_clock = dut_ptr->clock;
-#endif // COVERAGE_PORT_CLOCK
-  dut_ptr->eval();
-#endif // VERILATOR
-
 #ifdef GSIM
   dut_ptr->step();
-  if (dut_ptr->get_difftest__DOT__uart__DOT__out__DOT__valid()) {
-    printf("%c", dut_ptr->get_difftest__DOT__uart__DOT__out__DOT__ch());
-    fflush(stdout);
-  }
-  if (dut_ptr->get_difftest__DOT__uart__DOT__in__DOT__valid()) {
-    extern uint8_t uart_getc();
-    uint8_t ch = uart_getc();
-    dut_ptr->set_difftest__DOT__uart__DOT__in__DOT__ch(ch);
-  }
 #endif // GSIM
 
-#if VM_TRACE == 1
+  dut_ptr->step_uart();
+
+#ifdef VERILATOR
+  dut_ptr->set_clock(0);
+  dut_ptr->step();
+#endif // VERILATOR
+
   if (args.enable_waveform && args.enable_waveform_full) {
 #if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
     uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
@@ -720,10 +660,9 @@ inline void Emulator::single_cycle() {
 #endif
     bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
     if (in_range || force_dump_wave) {
-      waveform->tick();
+      dut_ptr->waveform_tick();
     }
   }
-#endif
 
 end_single_cycle:
   cycles++;
@@ -795,12 +734,7 @@ int Emulator::tick() {
   }
 
   // exit signal: non-zero exit exits the simulation. exit all 1's indicates good.
-#ifdef VERILATOR
-  uint64_t difftest_exit = dut_ptr->difftest_exit;
-#endif
-#ifdef GSIM
-  uint64_t difftest_exit = 0; // TODO: gsim API
-#endif
+  uint64_t difftest_exit = dut_ptr->get_difftest_exit();
   if (difftest_exit) {
     if (difftest_exit == -1UL) {
       trapCode = STATE_SIM_EXIT;
@@ -818,25 +752,13 @@ int Emulator::tick() {
     auto trap = difftest[i]->get_trap_event();
     if (trap->instrCnt >= args.warmup_instr) {
       Info("Warmup finished. The performance counters will be dumped and then reset.\n");
-#ifdef VERILATOR
-      dut_ptr->difftest_perfCtrl_clean = 1;
-      dut_ptr->difftest_perfCtrl_dump = 1;
-#endif // VERILATOR
-#ifdef GSIM
-      dut_ptr->set_difftest__DOT__perfCtrl__DOT__clean(1);
-      dut_ptr->set_difftest__DOT__perfCtrl__DOT__dump(1);
-#endif // GSIM
+      dut_ptr->set_perf_clean(1);
+      dut_ptr->set_perf_dump(1);
       args.warmup_instr = -1;
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
-#ifdef VERILATOR
-      dut_ptr->difftest_perfCtrl_clean = 1;
-      dut_ptr->difftest_perfCtrl_dump = 1;
-#endif // VERILATOR
-#ifdef GSIM
-      dut_ptr->set_difftest__DOT__perfCtrl__DOT__clean(1);
-      dut_ptr->set_difftest__DOT__perfCtrl__DOT__dump(1);
-#endif // GSIM
+      dut_ptr->set_perf_clean(1);
+      dut_ptr->set_perf_dump(1);
     }
 #ifdef ENABLE_IPC
     if (trap->instrCnt >= args.ipc_times * args.ipc_interval &&
@@ -871,26 +793,17 @@ int Emulator::tick() {
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles--;
 #endif // CONFIG_NO_DIFFTEST
-#ifdef VERILATOR
-  dut_ptr->difftest_perfCtrl_clean = 0;
-  dut_ptr->difftest_perfCtrl_dump = 0;
-#endif // VERILATOR
-#ifdef GSIM
-  dut_ptr->set_difftest__DOT__perfCtrl__DOT__clean(0);
-  dut_ptr->set_difftest__DOT__perfCtrl__DOT__dump(0);
-#endif // GSIM
+
+  dut_ptr->set_perf_clean(0);
+  dut_ptr->set_perf_dump(0);
+
 #ifndef CONFIG_NO_DIFFTEST
   int step = 0;
   if (args.trace_name && args.trace_is_read) {
     step = 1;
     difftest_trace_read();
   } else {
-#ifdef VERILATOR
-    step = dut_ptr->difftest_step;
-#endif // VERILATOR
-#ifdef GSIM
-    step = 1; // TODO: gsim API
-#endif        // GSIM
+    step = dut_ptr->get_difftest_step();
   }
 
   static uint64_t stuck_timer = 0;
@@ -930,7 +843,6 @@ int Emulator::tick() {
   }
 #endif // ENABLE_RUNAHEAD
 
-#ifdef VM_SAVABLE
   if (args.enable_snapshot) {
     static int snapshot_count = 0;
     uint32_t t = uptime();
@@ -941,12 +853,11 @@ int Emulator::tick() {
       // dump one snapshot to file every 60 snapshots
       snapshot_count++;
       if (snapshot_count == 60) {
-        snapshot_slot[0].save();
+        dut_ptr->snapshot_save(0);
         snapshot_count = 0;
       }
     }
   }
-#endif
 
 #ifdef DEBUG_TILELINK
   if (args.dump_tl_interval != 0) {
@@ -998,18 +909,10 @@ void Emulator::save_coverage() {
 #endif
 
 void Emulator::trigger_stat_dump() {
-#ifdef VERILATOR
-  dut_ptr->difftest_perfCtrl_dump = 1;
+  dut_ptr->set_perf_dump(1);
   if (get_args().force_dump_result) {
-    dut_ptr->difftest_logCtrl_end = -1;
+    dut_ptr->set_log_end(-1);
   }
-#endif // VERILATOR
-#ifdef GSIM
-  dut_ptr->set_difftest__DOT__perfCtrl__DOT__dump(1);
-  if (get_args().force_dump_result) {
-    dut_ptr->set_difftest__DOT__logCtrl__DOT__end(-1);
-  }
-#endif // GSIM
   single_cycle();
 }
 
@@ -1047,127 +950,104 @@ void Emulator::display_trapinfo() {
 #endif // CONFIG_NO_DIFFTEST
 }
 
-#ifdef VM_SAVABLE
 void Emulator::snapshot_save() {
-  static int last_slot = 0;
-  VerilatedSaveMem &stream = snapshot_slot[last_slot];
-  last_slot = !last_slot;
-
-  stream.init(snapshot_filename());
-  stream << *dut_ptr;
-  stream.flush();
+  auto snapshot_write = dut_ptr->snapshot_take();
 
   long size = simMemory->get_size();
-  stream.unbuf_write(&size, sizeof(size));
+  snapshot_write(&size, sizeof(size));
   if (!simMemory->as_ptr()) {
     printf("simMemory does not support as_ptr\n");
     assert(0);
   }
-  stream.unbuf_write(simMemory->as_ptr(), size);
+  snapshot_write(simMemory->as_ptr(), size);
 
+#ifndef CONFIG_NO_DIFFTEST
   auto diff = difftest[0];
   uint64_t cycleCnt = diff->get_trap_event()->cycleCnt;
-  stream.unbuf_write(&cycleCnt, sizeof(cycleCnt));
+  snapshot_write(&cycleCnt, sizeof(cycleCnt));
 
   auto proxy = diff->proxy;
-  stream.unbuf_write(&proxy->regs_int, sizeof(proxy->regs_int));
+  snapshot_write(&proxy->regs_int, sizeof(proxy->regs_int));
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  stream.unbuf_write(&proxy->regs_fp, sizeof(proxy->regs_fp));
+  snapshot_write(&proxy->regs_fp, sizeof(proxy->regs_fp));
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-  stream.unbuf_write(&proxy->csr, sizeof(proxy->csr));
-  stream.unbuf_write(&proxy->pc, sizeof(proxy->pc));
+  snapshot_write(&proxy->csr, sizeof(proxy->csr));
+  snapshot_write(&proxy->pc, sizeof(proxy->pc));
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   proxy->mem_init(PMEM_BASE, buf, size, REF_TO_DUT);
-  stream.unbuf_write(buf, size);
+  snapshot_write(buf, size);
   munmap(buf, size);
 
   uint64_t csr_buf[4096];
   proxy->ref_csrcpy(csr_buf, REF_TO_DUT);
-  stream.unbuf_write(&csr_buf, sizeof(csr_buf));
+  snapshot_write(&csr_buf, sizeof(csr_buf));
+#endif // CONFIG_NO_DIFFTEST
 
   long sdcard_offset;
   if (fp)
     sdcard_offset = ftell(fp);
   else
     sdcard_offset = 0;
-  stream.unbuf_write(&sdcard_offset, sizeof(sdcard_offset));
-
-  // actually write to file in snapshot_finalize()
+  snapshot_write(&sdcard_offset, sizeof(sdcard_offset));
 }
 
 void Emulator::snapshot_load(const char *filename) {
-  VerilatedRestoreMem stream;
-  stream.open(filename);
-  stream >> *dut_ptr;
+  auto snapshot_read = dut_ptr->snapshot_load(filename);
 
   long size;
-  stream.read(&size, sizeof(size));
+  snapshot_read(&size, sizeof(size));
   assert(size == simMemory->get_size());
   if (!simMemory->as_ptr()) {
     printf("simMemory does not support as_ptr\n");
     assert(0);
   }
-  stream.read(simMemory->as_ptr(), size);
+  snapshot_read(simMemory->as_ptr(), size);
 
+#ifndef CONFIG_NO_DIFFTEST
   auto diff = difftest[0];
   uint64_t *cycleCnt = &(diff->get_trap_event()->cycleCnt);
-  stream.read(cycleCnt, sizeof(*cycleCnt));
+  snapshot_read(cycleCnt, sizeof(*cycleCnt));
 
   auto proxy = diff->proxy;
-  stream.read(&proxy->regs_int, sizeof(proxy->regs_int));
+  snapshot_read(&proxy->regs_int, sizeof(proxy->regs_int));
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  stream.read(&proxy->regs_fp, sizeof(proxy->regs_fp));
+  snapshot_read(&proxy->regs_fp, sizeof(proxy->regs_fp));
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-  stream.read(&proxy->csr, sizeof(proxy->csr));
-  stream.read(&proxy->pc, sizeof(proxy->pc));
+  snapshot_read(&proxy->csr, sizeof(proxy->csr));
+  snapshot_read(&proxy->pc, sizeof(proxy->pc));
   proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-  stream.read(buf, size);
+  snapshot_read(buf, size);
   proxy->mem_init(PMEM_BASE, buf, size, DUT_TO_REF);
   munmap(buf, size);
 
   uint64_t csr_buf[4096];
-  stream.read(&csr_buf, sizeof(csr_buf));
+  snapshot_read(&csr_buf, sizeof(csr_buf));
   proxy->ref_csrcpy(csr_buf, DUT_TO_REF);
-
-  long sdcard_offset = 0;
-  stream.read(&sdcard_offset, sizeof(sdcard_offset));
-
-  if (fp)
-    fseek(fp, sdcard_offset, SEEK_SET);
 
   // No one uses snapshot when !has_commit, isn't it?
   diff->has_commit = 1;
+#endif // CONFIG_NO_DIFFTEST
+
+  long sdcard_offset = 0;
+  snapshot_read(&sdcard_offset, sizeof(sdcard_offset));
+
+  if (fp)
+    fseek(fp, sdcard_offset, SEEK_SET);
 }
-#endif
 
 void Emulator::fork_child_init() {
-#ifdef VERILATOR_VERSION_INTEGER // >= v4.220
-#if VERILATOR_VERSION_INTEGER >= 5016000
-  // This will cause 288 bytes leaked for each one fork call.
-  // However, one million snapshots cause only 288MB leaks, which is still acceptable.
-  // See verilator/test_regress/t/t_wrapper_clone.cpp:48 to avoid leaks.
   dut_ptr->atClone();
-#else
-#error Please use Verilator v5.016 or newer versions.
-#endif                 // check VERILATOR_VERSION_INTEGER values
-#elif EMU_THREAD > 1   // VERILATOR_VERSION_INTEGER not defined
-#ifdef VERILATOR_4_210 // v4.210 <= version < 4.220
-  dut_ptr->vlSymsp->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
-#else                  // older than v4.210
-  dut_ptr->__Vm_threadPoolp = new VlThreadPool(dut_ptr->contextp(), EMU_THREAD - 1, 0);
-#endif
-#endif
 
   FORK_PRINTF("the oldest checkpoint start to dump wave and dump nemu log...\n")
-#if VM_TRACE == 1
-  waveform = new EmuWaveform(trace_bind, args.enable_waveform_full ? 2 * cycles : cycles);
+
+  dut_ptr->waveform_init(args.enable_waveform_full ? 2 * cycles : cycles);
   // override output range config, force dump wave
   force_dump_wave = true;
   args.enable_waveform = true;
-#endif
+
 #ifndef CONFIG_NO_DIFFTEST
 #ifdef ENABLE_SIMULATOR_DEBUG_INFO
   // let simulator print debug info
