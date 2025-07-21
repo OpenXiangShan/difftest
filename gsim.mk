@@ -15,7 +15,7 @@
 #***************************************************************************************
 
 GSIM_BIN ?= gsim
-CXX = clang++  # only support clang++14 or above
+GSIM_CXX = clang++  # only support clang++14 or above
 
 GSIM_EMU_TARGET    = $(abspath $(BUILD_DIR)/gsim)
 GSIM_EMU_BUILD_DIR = $(abspath $(BUILD_DIR)/gsim-compile)
@@ -54,10 +54,10 @@ LDFLAGS   =  $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
 # $(3): compile flags
 # $(4): object file list
 # $(5): extra dependency
-define CXX_TEMPLATE =
+define GSIM_CXX_TEMPLATE =
 $(1): $(2) $(THIS_MAKEFILE) $(5)
 	@mkdir -p $$(@D) && echo + CXX $$<
-	@$(CXX) $$< $(3) -c -o $$@
+	@$(GSIM_CXX) $$< $(3) -c -o $$@
 $(4) += $(1)
 endef
 
@@ -67,14 +67,14 @@ endef
 define LD_TEMPLATE =
 $(1): $(2)
 	@mkdir -p $$(@D) && echo + LD $$@
-	@$(CXX) $$^ $(3) -o $$@
+	@$(GSIM_CXX) $$^ $(3) -o $$@
 endef
 
 $(foreach x, $(GSIM_CXXFILES), $(eval \
-	$(call CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
 
 $(foreach x, $(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null), $(eval \
-	$(call CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
 
 $(eval $(call LD_TEMPLATE, $(GSIM_EMU_TARGET), $(GSIM_EMU_OBJS), $(LDFLAGS)))
 
