@@ -51,10 +51,10 @@ public:
   }
 
   inline uint64_t get_difftest_exit() final {
-    return 0; // TODO: gsim API
+    return dut->get_difftest__DOT__exit();
   }
   inline uint64_t get_difftest_step() final {
-    return 1; // TODO: gsim API
+    return dut->get_difftest__DOT__step();
   }
 
   inline void set_perf_clean(unsigned clean) override {

@@ -14,8 +14,8 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "snapshot.h"
 #include "compress.h"
+#include "snapshot.h"
 
 #ifdef VM_SAVABLE
 

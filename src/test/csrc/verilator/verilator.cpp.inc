@@ -70,6 +70,8 @@ void VerilatorSim::waveform_init(uint64_t cycles, const char *filename) {
 void VerilatorSim::waveform_tick() {
   waveform->tick();
 }
+
+#include "waveform.cpp.inc"
 #endif // VM_TRACE == 1
 
 #ifdef VM_SAVABLE
@@ -81,8 +83,7 @@ void VerilatorSim::snapshot_save(int index) {
   if (snapshot_slot) {
     if (index >= 0) {
       snapshot_slot[index].save();
-    }
-    else if (index == -1) {
+    } else if (index == -1) {
       Info("Saving snapshots to file system. Please wait.\n");
       snapshot_slot[0].save();
       snapshot_slot[1].save();
@@ -110,4 +111,5 @@ std::function<void(void *, size_t)> VerilatorSim::snapshot_load(const char *file
 
   return [stream](void *datap, size_t size) { stream->read((uint8_t *)datap, size); };
 }
+#include "snapshot.cpp.inc"
 #endif // VM_SAVABLE
