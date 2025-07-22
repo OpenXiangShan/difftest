@@ -96,7 +96,10 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
 // Instantiate inside DiffTest, work for get_commit_data specially
 class CommitData extends DifftestBaseBundle with HasValid {
   val data = UInt(64.W)
-  val vecData = Vec(16, UInt(64.W))
+}
+
+class VecCommitData extends DifftestBaseBundle with HasValid {
+  val data = Vec(16, UInt(64.W))
 }
 
 class TrapEvent extends DifftestBaseBundle {
