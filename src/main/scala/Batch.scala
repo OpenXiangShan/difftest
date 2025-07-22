@@ -39,13 +39,13 @@ case class BatchParam(config: GatewayConfig, bundles: Seq[DifftestBundle]) {
 
   val SlotBit = 2048
   val SlotByte = SlotBit / 8
-  val GrainBit = 64
+  val GrainBit = 128
   val GrainWidth = log2Ceil(GrainBit)
   val GroupNum = 16
 //  val StepGroupSize = bundles.distinctBy(_.desiredGroupName).length
   val StepGroupSize = bundles.groupBy(_.desiredCppName).values.flatMap{ gen =>
     val width = gen.head.getByteAlignWidth
-    val group_size = math.min(GroupNum, (SlotBit + width - 1)/width)
+    val group_size = math.min(GroupNum, SlotBit/width)
     gen.grouped(group_size).toSeq
   }.size
   val StepDataByteLen = bundles.map(_.getByteAlignWidth).map { w => w / 8 }.sum
@@ -228,12 +228,15 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   def getGroupDataWidth: Seq[Valid[DifftestBundle]] => Int = { group =>
     group.length * group.head.bits.getByteAlignWidth
   }
-  val in_group = in.groupBy(_.bits.desiredCppName).values.flatMap { gen =>
+  val in_group = in.groupBy(_.bits.desiredCppName).values
+  val in_group_single = in_group.filter(_.size == 1).toSeq
+  println("Single: %d %d", in_group_single.size, in_group_single.map(getGroupDataWidth).sum)
+  val in_group_multi = in_group.filterNot(_.size == 1).flatMap { gen =>
     val width = gen.head.bits.getByteAlignWidth
-    val group_size = math.min(param.GroupNum, (width + param.SlotBit - 1) / width)
+    val group_size = math.min(param.GroupNum, param.SlotBit / width)
     gen.grouped(group_size).toSeq
   }.toSeq
-  val sorted = in_group.sortBy(getGroupDataWidth)
+  val sorted = in_group_single.sortBy(getGroupDataWidth) ++ in_group_multi.sortBy(getGroupDataWidth)
   //  val sorted = in.groupBy(_.bits.desiredGroupName).values.toSeq.map(_.toSeq).sortBy(getGroupDataWidth)
   // Stage 1: concat bundles with same desiredCppName
   val group_info = Wire(Vec(param.StepGroupSize, UInt(param.infoWidth.W)))
@@ -268,8 +271,17 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   val aligned_width = delay_group_data.map(d => (d.getWidth + 255) / 256 * 256)
   val step_res = Wire(Vec(8, UInt(param.SlotBit.W)))
   step_data := step_res.asUInt
+  val cated = Wire(MixedVec(Seq.tabulate(in_group_single.size){idx =>
+    val width = delay_group_data.take(idx + 1).map(_.getWidth).sum
+    UInt(width.W)
+  }))
+  cated(0) := delay_group_data(0)
+  (1 until in_group_single.size).foreach {idx =>
+    val base = cated(idx - 1)
+    cated(idx) := Mux(delay_group_info(idx) =/= 0.U, Cat(base, delay_group_data(idx)), base)
+  }
   val shifted = MixedVecInit(
-    delay_group_data.zipWithIndex.map { case (gen, idx) =>
+    delay_group_data.zipWithIndex.drop(in_group_single.size).map { case (gen, idx) =>
       // Truncate width of offset to reduce useless gates
       if (idx == 0) {
         gen
@@ -296,9 +308,10 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
 
   val slot = delay_group_status.map(_.data_slot)
   step_res.zipWithIndex.map{ case (res, idx) =>
+    val single_res = if (idx < 2) cated.last else 0.U
     res := MixedVecInit(shifted.zip(slot).map{ case (sft, sl) =>
       Mux(sl === idx.U, sft, 0.U)
-    }).reduce(_ | _)
+    }).reduce(_ | _) | single_res
   }
 
 //  val toCollect_data = Wire(MixedVec(Seq.tabulate(param.StepGroupSize){idx =>
