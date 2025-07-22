@@ -130,30 +130,42 @@ class PreprocessEndpoint(bundles: Seq[DifftestBundle]) extends Module {
   val commits = in.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit]).toSeq
   val fpData = Preprocess.getCommitData(in, commits, "wb_fp", "regs_fp")
   val intData = Preprocess.getCommitData(in, commits, "wb_int", "regs_int")
-  val vecData = Preprocess.getVecCommitData(in, commits)
-  val commitData = commits.zip(fpData).zip(vecData).zip(intData).map { case (((c, f), v), i) =>
+  val commitData = commits.zip(fpData).zip(intData).map { case ((c, f), i) =>
     val cd = WireInit(0.U.asTypeOf(new DiffCommitData))
-    val vectorWen = c.v0wen || c.vecwen
     cd.coreid := c.coreid
     cd.index := c.index
     cd.valid := c.valid
     cd.data := Mux(c.fpwen, f, i)
-    when(vectorWen) {
-      for (index <- 0 until 8) {
-        cd.vecData(2 * index) := v(index)(0)
-        cd.vecData(2 * index + 1) := v(index)(1)
-      }
-    }
     cd
   }
 
   val withCommitData = in.filterNot(_.desiredCppName.contains("wb")) ++ commitData
 
-  // LoadEvent will not be checked when single-core
-  val skipLoad = if (in.count(_.isUniqueIdentifier) == 1) {
-    withCommitData.filterNot(_.desiredCppName == "load")
+  val withVecCommitData = if (bundles.exists(_.desiredCppName == "wb_vec")) {
+    val vecData = Preprocess.getVecCommitData(in, commits)
+    val vecCommitData = commits.zip(vecData).map { case (c, v) =>
+      val vcd = WireInit(0.U.asTypeOf(new DiffCommitData))
+      vcd.coreid := c.coreid
+      vcd.index := c.index
+      vcd.valid := c.valid
+      when(c.v0wen || c.vecwen) {
+        for (index <- 0 until 8) {
+          vcd.data(2 * index) := v(index)(0)
+          vcd.data(2 * index + 1) := v(index)(1)
+        }
+      }
+      vcd
+    }
+    withCommitData ++ vecCommitData
   } else {
     withCommitData
+  }
+
+  // LoadEvent will not be checked when single-core
+  val skipLoad = if (in.count(_.isUniqueIdentifier) == 1) {
+    withVecCommitData.filterNot(_.desiredCppName == "load")
+  } else {
+    withVecCommitData
   }
 
   val preprocessed = MixedVecInit(skipLoad.toSeq)
