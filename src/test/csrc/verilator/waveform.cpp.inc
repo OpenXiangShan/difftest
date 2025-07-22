@@ -13,8 +13,8 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "waveform.h"
 #include "common.h"
+#include "waveform.h"
 
 EmuWaveform::EmuWaveform(TraceBindFunc trace, uint64_t cycles) : EmuWaveform(trace, cycles, default_filename(cycles)) {}
 

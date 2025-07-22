@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -17,23 +17,11 @@
 #ifndef __EMU_H
 #define __EMU_H
 
-#ifdef GSIM
-#include "SimTop.h"
-#define DUT_TOP SSimTop
-#else // VERILATOR
-#include "VSimTop.h"
-#include "VSimTop__Syms.h"
-#define DUT_TOP VSimTop
-#endif
 #include "common.h"
 #include "dut.h"
 #include "lightsss.h"
-#include "snapshot.h"
-#include "waveform.h"
+#include "simulator.h"
 #include <sys/types.h>
-#ifdef EMU_THREAD
-#include <verilated_threads.h>
-#endif
 
 struct EmuArgs {
   uint32_t reset_cycles = 50;
@@ -71,7 +59,7 @@ struct EmuArgs {
   bool enable_waveform_full = false;
   bool enable_ref_trace = false;
   bool enable_commit_trace = false;
-  bool enable_snapshot = true;
+  bool enable_snapshot = false;
   bool force_dump_result = false;
   bool enable_diff = true;
   bool enable_fork = false;
@@ -85,17 +73,9 @@ struct EmuArgs {
 
 class Emulator final : public DUT {
 private:
-  DUT_TOP *dut_ptr;
-
-#if VM_TRACE == 1
-  TraceBindFunc trace_bind = [this](VerilatedTraceBaseC *tfp, int levels) { this->dut_ptr->trace(tfp, levels); };
-  EmuWaveform *waveform = nullptr;
-#endif // VM_TRACE == 1
+  Simulator *dut_ptr;
 
   bool force_dump_wave = false;
-#ifdef VM_SAVABLE
-  VerilatedSaveMem *snapshot_slot = nullptr;
-#endif
   EmuArgs args;
   LightSSS *lightsss = NULL;
 #if VM_COVERAGE == 1
@@ -119,9 +99,6 @@ private:
     return create_noop_filename(".db");
   }
 
-  inline const char *snapshot_filename() {
-    return create_noop_filename(".snapshot");
-  }
   void snapshot_save();
   void snapshot_load(const char *filename);
 

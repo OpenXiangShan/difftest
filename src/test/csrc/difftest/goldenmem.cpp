@@ -20,7 +20,6 @@
 #include "refproxy.h"
 #include <goldenmem.h>
 #include <stdlib.h>
-#include <sys/mman.h>
 
 uint8_t *pmem;
 uint8_t *pmem_flag; // 1: store update but load check skip; 0: update and check. others: assert

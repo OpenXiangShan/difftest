@@ -286,7 +286,7 @@ scala-format:
 CLANG_FORMAT_VER = 18.1.4
 clang-format:
 ifeq ($(shell clang-format --version 2> /dev/null| cut -f3 -d' ' | tr '.' '_'), $(shell echo $(CLANG_FORMAT_VER) | tr '.' '_'))
-	clang-format -i $(shell find ./src/test/csrc -name "*.cpp" -or -name "*.h")
+	clang-format -i $(shell find ./src/test/csrc -name "*.cpp" -or -name "*.h" -or -name "*.inc")
 else
 	@echo "Required clang-format Version: $(CLANG_FORMAT_VER)"
 	@echo "Your Version: $(shell clang-format --version)"

@@ -16,7 +16,6 @@
 
 #include "flash.h"
 #include "common.h"
-#include <sys/mman.h>
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT

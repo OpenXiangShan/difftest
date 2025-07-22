@@ -19,7 +19,6 @@
 #include "compress.h"
 #include "elfloader.h"
 #include <iostream>
-#include <sys/mman.h>
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
