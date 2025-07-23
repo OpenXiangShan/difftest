@@ -1,5 +1,5 @@
 PYTHON_DIR       = $(abspath $(BUILD_DIR)/xspdb/python)
-PDB_OBJ_DIR       = $(abspath $(BUILD_DIR)/xspdb/swig_obj)
+PDB_OBJ_DIR      = $(abspath $(BUILD_DIR)/xspdb/swig_obj)
 
 picker_include   = $(shell picker --show_xcom_lib_location_cpp|grep include|awk '{print $$2}')
 
