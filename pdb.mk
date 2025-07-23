@@ -1,17 +1,17 @@
 PYTHON_DIR       = $(abspath $(BUILD_DIR)/xspdb/python)
-PDB_OBJ_DI       = $(abspath $(BUILD_DIR)/xspdb/swig_obj)
+PDB_OBJ_DIR       = $(abspath $(BUILD_DIR)/xspdb/swig_obj)
 
 picker_include   = $(shell picker --show_xcom_lib_location_cpp|grep include|awk '{print $$2}')
 
 PDB_SWIG_DIR     = $(abspath src/test/csrc/plugin/xspdb)
 PDB_CXXFILES     = $(SIM_CXXFILES) $(shell find $(PDB_SWIG_DIR)/cpp -name "*.cpp") $(shell find $(SIM_CONFIG_DIR) -name "*.cpp")
-PDB_CXXFLAGS    += $(subst \\\",\", $(SIM_CXXFLAGS)) -DNUM_CORES=$(NUM_CORES)
+PDB_CXXFLAGS     = $(LIB_CXXFLAGS) $(subst \\\",\", $(SIM_CXXFLAGS)) -DNUM_CORES=$(NUM_CORES)
 
 ifeq ($(WITH_DRAMSIM3),1)
 PDB_LD_LIB       = -L $(DRAMSIM3_HOME)/ -ldramsim3 -Wl,-rpath-link=$(DRAMSIM3_HOME)/libdramsim3.so
 endif
 
-PDB_CXXFLAGS    += -I$(VCS_HOME)/include $(shell python3-config --includes) -I$(LIB_SWIG_DIR)/cpp
+PDB_CXXFLAGS    += -I$(VCS_HOME)/include $(shell python3-config --includes) -I$(PDB_SWIG_DIR)/cpp
 PDB_LD_LIB      += $(shell python3-config --ldflags)
 
 
