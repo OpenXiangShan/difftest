@@ -36,20 +36,22 @@ object Preprocess {
       if (bundles.exists(_.desiredCppName == wbName)) {
         val numCores = bundles.count(_.isUniqueIdentifier)
         val writeBacks = bundles.filter(_.desiredCppName == wbName).map(_.asInstanceOf[DiffIntWriteback])
-        val phyRf = Reg(Vec(numCores, Vec(writeBacks.head.numElements, UInt(64.W))))
-        for (wb <- writeBacks) {
-          when(wb.valid) {
-            phyRf(wb.coreid)(wb.address) := wb.data
+        val phyRfSize = writeBacks.head.numElements
+        val phyRf = Reg(Vec(numCores, Vec(phyRfSize, UInt(64.W))))
+        Seq.tabulate(numCores) { core =>
+          Seq.tabulate(phyRfSize) { addr =>
+            val wenOH = VecInit(writeBacks.map(w => w.valid && w.coreid === core.U && w.address === addr.U))
+            val wData = writeBacks.map(_.data)
+            when(wenOH.asUInt.orR) {
+              phyRf(core)(addr) := Mux1H(wenOH, wData)
+            }
           }
         }
         commits.map { c =>
-          val data = WireInit(phyRf(c.coreid)(c.wpdest))
-          for (wb <- writeBacks) { // Consider WriteBack valid in same cycle
-            when(wb.valid && wb.coreid === c.coreid && wb.address === c.wpdest) {
-              data := wb.data
-            }
-          }
-          data
+          // Consider WriteBack valid in same cycle
+          val wenOH = VecInit(writeBacks.map(w => w.valid && w.coreid === c.coreid && w.address === c.wpdest))
+          val wData = writeBacks.map(_.data)
+          Mux(wenOH.asUInt.orR, Mux1H(wenOH, wData), phyRf(c.coreid)(c.wpdest))
         }
       } else {
         val archRf = VecInit(bundles.filter(_.desiredCppName == regName).map(_.asInstanceOf[ArchIntRegState]).toSeq)
@@ -68,17 +70,25 @@ object Preprocess {
       val numCores = bundles.count(_.isUniqueIdentifier)
       val vecWriteBacks = bundles.filter(_.desiredCppName == "wb_vec").map(_.asInstanceOf[DiffVecWriteback])
       val v0WriteBacks = bundles.filter(_.desiredCppName == "wb_v0").map(_.asInstanceOf[DiffVecWriteback])
-      val vecPhyRf = Reg(Vec(numCores, Vec(vecWriteBacks.head.numElements, Vec(2, UInt(64.W)))))
-      val v0PhyRf = Reg(Vec(numCores, Vec(v0WriteBacks.head.numElements, Vec(2, UInt(64.W)))))
+      val vecPhyRfSize = vecWriteBacks.head.numElements
+      val v0PhyRfSize = v0WriteBacks.head.numElements
+      val vecPhyRf = Reg(Vec(numCores, Vec(vecPhyRfSize, Vec(2, UInt(64.W)))))
+      val v0PhyRf = Reg(Vec(numCores, Vec(v0PhyRfSize, Vec(2, UInt(64.W)))))
 
-      for (vecWb <- vecWriteBacks) {
-        when(vecWb.valid) {
-          vecPhyRf(vecWb.coreid)(vecWb.address) := vecWb.data
+      Seq.tabulate(numCores) { core =>
+        Seq.tabulate(vecPhyRfSize) { addr =>
+          val wenOH = VecInit(vecWriteBacks.map(w => w.valid && w.coreid === core.U && w.address === addr.U))
+          val wData = vecWriteBacks.map(_.data)
+          when(wenOH.asUInt.orR) {
+            vecPhyRf(core)(addr) := Mux1H(wenOH, wData)
+          }
         }
-      }
-      for (v0Wb <- v0WriteBacks) {
-        when(v0Wb.valid) {
-          v0PhyRf(v0Wb.coreid)(v0Wb.address) := v0Wb.data
+        Seq.tabulate(v0PhyRfSize) {addr =>
+          val wenOH = VecInit(v0WriteBacks.map(w => w.valid && w.coreid === core.U && w.address === addr.U))
+          val wData = v0WriteBacks.map(_.data)
+          when(wenOH.asUInt.orR) {
+            v0PhyRf(core)(addr) := Mux1H(wenOH, wData)
+          }
         }
       }
 
@@ -89,10 +99,10 @@ object Preprocess {
 
         when(c.valid) {
           c.otherwpdest.zipWithIndex.map { case (pdest, i) =>
-            for (vecWb <- vecWriteBacks) {
-              when(vecWb.valid && vecWb.coreid === c.coreid && vecWb.address === pdest) {
-                otherData(i) := vecWb.data
-              }
+            val wenOH = VecInit(vecWriteBacks.map(w => w.valid && w.coreid === c.coreid && w.address === pdest))
+            val wData = vecWriteBacks.map(_.data)
+            when(wenOH.asUInt.orR) {
+              otherData(i) := Mux1H(wenOH, wData)
             }
           }
         }
@@ -101,10 +111,10 @@ object Preprocess {
         when(c.v0wen) {
           otherData(0) := v0PhyRf(c.coreid)(c.otherwpdest(0))
           when(c.valid) {
-            for (v0Wb <- v0WriteBacks) {
-              when(v0Wb.valid && v0Wb.coreid === c.coreid && v0Wb.address === c.otherwpdest(0)) {
-                otherData(0) := v0Wb.data
-              }
+            val wenOH = VecInit(v0WriteBacks.map(w => w.valid && w.coreid === c.coreid && w.address === c.otherwpdest(0)))
+            val wData = v0WriteBacks.map(_.data)
+            when(wenOH.asUInt.orR) {
+              otherData(0) := Mux1H(wenOH, wData)
             }
           }
         }
