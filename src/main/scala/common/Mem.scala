@@ -122,9 +122,13 @@ private trait HasReadPort { this: ExtModule =>
     """
       |uint8_t   r_enable,
       |uint64_t  r_index,
-      |uint64_t& r_data""".stripMargin
+      |uint64_t& r_data,
+      |uint8_t&  r_async""".stripMargin
 
-  val r_cpp_func = "if (r_enable) r_data = difftest_ram_read(r_index);"
+  val r_cpp_func =
+    s"""
+       |  r_async = 1;
+       |  if (r_enable) r_data = difftest_ram_read(r_index);""".stripMargin
 
   def read(enable: Bool, index: UInt): UInt = {
     r.enable := enable
