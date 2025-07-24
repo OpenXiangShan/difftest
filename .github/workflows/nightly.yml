@@ -6,7 +6,7 @@ on:
     - cron: '00 00 * * *'
 
 jobs:
-  test-difftest-fuzzing:
+  test-fuzzing-rocket:
     runs-on: ubuntu-latest
     # This test runs on ubuntu-20.04 for two reasons:
     # (1) riscv-arch-test can be built with riscv-linux-gnu toolchain 9.4.0,
@@ -62,7 +62,7 @@ jobs:
             ./build/fuzzer -v -- $CORPUS/I-add-01.bin
             ./build/fuzzer -f --max-runs 100 --corpus-input $CORPUS -- --max-cycles 10000 | grep max_runs
 
-  test-difftest-xiangshan:
+  test-libso-xiangshan:
     strategy:
       matrix:
         os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
