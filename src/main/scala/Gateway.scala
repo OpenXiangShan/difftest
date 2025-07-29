@@ -182,6 +182,22 @@ object Gateway {
     bundle
   }
 
+  def getInstance(bundles: Seq[DifftestBundle]): Seq[DifftestBundle] = {
+    // Append arch_reg when phy_reg and rename_table defined
+    def hasBundle(name: String) = bundles.exists(_.desiredCppName == name)
+    def appendArch(suffix: String) = hasBundle("pregs_" + suffix) && hasBundle("rat_" + suffix) && !hasBundle("regs_" + suffix)
+    val numCores = bundles.count(_.isUniqueIdentifier)
+    val res = ListBuffer.empty[DifftestBundle]
+    res ++= bundles
+    val archMap = Seq(("int", new DiffArchIntRegState), ("fp", new DiffArchFpRegState), ("vec", new DiffArchVecRegState))
+    archMap.foreach{ case (suffix, gen) =>
+      if (appendArch(suffix)) {
+        res ++= Seq.fill(numCores)(gen)
+      }
+    }
+    res.toSeq
+  }
+
   def collect(): GatewayResult = {
     val instances = instanceWithDelay.map(_._1).toSeq
     val sink = if (config.needEndpoint) {
@@ -197,14 +213,14 @@ object Gateway {
       val endpoint = Module(new GatewayEndpoint(instanceWithDelay.toSeq, config))
       endpoint.in := gatewayIn
       GatewayResult(
-        instances = endpoint.instances,
+        instances = getInstance(endpoint.instances),
         structPacked = Some(config.isBatch),
         structAligned = Some(config.isDelta),
         step = Some(endpoint.step),
         fpgaIO = endpoint.fpgaIO,
       )
     } else {
-      GatewayResult(instances = instances) + GatewaySink.collect(config)
+      GatewayResult(instances = getInstance(instances)) + GatewaySink.collect(config)
     }
     sink + GatewayResult(
       cppMacros = config.cppMacros,

@@ -383,6 +383,7 @@ protected:
   }
   int check_timeout();
   int check_all();
+  void update_dut_archreg();
   void do_first_instr_commit();
   void do_interrupt();
   void do_exception();
