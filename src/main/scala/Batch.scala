@@ -36,7 +36,7 @@ case class BatchParam(config: GatewayConfig, bundles: Seq[DifftestBundle]) {
   val MaxInfoBitLen = MaxInfoByteLen * 8
   val MaxInfoSize = MaxInfoByteLen / infoByte
 
-  val StepGroupSize = bundles.distinctBy(_.desiredCppName).length
+  val StepGroupSize = bundles.groupBy(_.desiredCppName).values.flatMap(_.grouped(8).toSeq).size
   val StepDataByteLen = bundles.map(_.getByteAlignWidth).map { w => w / 8 }.sum
   val StepDataBitLen = StepDataByteLen * 8
   val StepInfoByteLen = (StepGroupSize + 1) * (infoWidth / 8) // Include BatchStep to update buffer index
@@ -124,14 +124,15 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   val status_sum = IO(Output(new BatchStats(param)))
 
   val valid_sum = Seq.tabulate(groupSize) { idx =>
-    VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).reduce(_ +& _)
+    PopCount(VecInit(in.map(_.valid.asUInt).take(idx + 1).toSeq).asUInt)
   }
   val v_size = valid_sum.last
-  val v_aligned = in.map { v_gen => Mux(v_gen.valid, v_gen.bits.getByteAlign, 0.U) }
+  val aligned = in.map(_.bits.getByteAlign)
   val collect_data = Wire(Vec(groupSize, UInt(alignWidth.W)))
   collect_data.zipWithIndex.foreach { case (gen, vid) =>
     gen := VecInit((vid until groupSize).map { idx =>
-      Mux(valid_sum(idx) === (vid + 1).U, v_aligned(idx), 0.U)
+      val prefix = if (idx == 0) 0.U else valid_sum(idx - 1)
+      Mux(prefix === vid.U && in(idx).valid, aligned(idx), 0.U)
     }).reduce(_ | _)
   }
   out_data := collect_data.asUInt
@@ -158,7 +159,12 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   def getGroupDataWidth: Seq[Valid[DifftestBundle]] => Int = { group =>
     group.length * group.head.bits.getByteAlignWidth
   }
-  val sorted = in.groupBy(_.bits.desiredCppName).values.toSeq.map(_.toSeq).sortBy(getGroupDataWidth)
+
+  val in_group = in.groupBy(_.bits.desiredCppName).values
+  val in_group_single = in_group.filter(_.size == 1).toSeq
+  val in_group_multi = in_group.filterNot(_.size == 1).flatMap(_.grouped(8)).toSeq
+  val sorted = in_group_single.sortBy(getGroupDataWidth).reverse ++ in_group_multi.sortBy(getGroupDataWidth)
+
   // Stage 1: concat bundles with same desiredCppName
   val group_info = Wire(Vec(param.StepGroupSize, UInt(param.infoWidth.W)))
   val group_status = Wire(Vec(param.StepGroupSize, new BatchStats(param)))
@@ -188,20 +194,39 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   step_status := delay_group_status
   step_status.last.info_size := delay_group_status.last.info_size + 1.U
 
+  val toCat_data = delay_group_data.take(in_group_single.size).reverse
+  val toCat_info = delay_group_info.take(in_group_single.size).reverse
+  val res_single = Wire(MixedVec(Seq.tabulate(in_group_single.size) { idx =>
+    val width = toCat_data.take(idx + 1).map(_.getWidth).sum
+    UInt(width.W)
+  }))
+  res_single(0) := toCat_data(0)
+  (1 until in_group_single.size).foreach { idx =>
+    val base = res_single(idx - 1)
+    res_single(idx) := Mux(toCat_info(idx) =/= 0.U, Cat(base, toCat_data(idx)), base)
+  }
   // Collect data by shifter
-  step_data := MixedVecInit(
-    delay_group_data.zipWithIndex.map { case (gen, idx) =>
-      val maxWidth = delay_group_data.take(idx).map(_.getWidth).sum
-      // Truncate width of offset to reduce useless gates
-      val offset = Wire(UInt(log2Ceil(maxWidth + 1).W))
-      if (idx == 0) {
-        offset := 0.U
-      } else {
-        offset := delay_group_status(idx - 1).data_bytes << 3
-      }
-      (gen << offset).asUInt
-    }.toSeq
-  ).reduce(_ | _)
+  val res_multi = if (in_group_multi.size != 0) {
+    MixedVecInit(
+      delay_group_data.zipWithIndex
+        .drop(in_group_single.size)
+        .map { case (gen, idx) =>
+          val maxWidth = delay_group_data.take(idx).map(_.getWidth).sum
+          // Truncate width of offset to reduce useless gates
+          val offset = Wire(UInt(log2Ceil(maxWidth + 1).W))
+          if (idx == 0) {
+            offset := 0.U
+          } else {
+            offset := delay_group_status(idx - 1).data_bytes << 3
+          }
+          (gen << offset).asUInt
+        }
+        .toSeq
+    ).reduce(_ | _)
+  } else {
+    0.U
+  }
+  step_data := res_single.last | res_multi
 
   // Collect info from tail, collect(i) include last 0~i
   val toCollect_info = delay_group_info.reverse
