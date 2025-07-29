@@ -116,7 +116,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
       val isRemoved = isFlatten && Seq("valid", "address").contains(name)
       if (!isRemoved) {
         // Align elem to 8 bytes for bundle enabled to split when Delta
-        val elemSize = if (this.supportsDelta && aligned) (size + 7) / 8 * 8 else size
+        val elemSize = if (this.supportsDelta && aligned) (size + 7) / 8 * 8 else math.pow(2, log2Ceil(size)).toInt
         val arrayType = s"uint${elemSize * 8}_t"
         val arrayWidth = if (elem.length == 1) "" else s"[${elem.length}]"
         cpp += f"  $arrayType%-8s $name$arrayWidth;"
