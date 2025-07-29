@@ -117,7 +117,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
       val isRemoved = isFlatten && Seq("valid", "address").contains(name)
       if (!isRemoved) {
         // Align elem to 8 bytes for bundle enabled to split when Delta
-        val elemSize = if (this.supportsDelta && aligned) (size + 7) / 8 * 8 else size
+        val elemSize = if (this.supportsDelta && aligned) deltaElemBytes else size
         val arrayType = s"uint${elemSize * 8}_t"
         val arrayWidth = if (elem.length == 1) "" else s"[${elem.length}]"
         cpp += f"  $arrayType%-8s $name$arrayWidth;"
@@ -172,6 +172,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   val supportsDelta: Boolean = false
   def isDeltaElem: Boolean = this.isInstanceOf[DiffDeltaElem]
+  def deltaElemBytes: Int = dataElements.map(_._2).max
 
   // Byte align all elements
   def getByteAlignElems(isTrace: Boolean): Seq[(String, Data)] = {
@@ -227,7 +228,10 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   }
 }
 
-class DiffDeltaElem(gen: DifftestBundle) extends DeltaElem with DifftestBundle with DifftestWithIndex {
+class DiffDeltaElem(gen: DifftestBundle)
+  extends DeltaElem(gen.deltaElemBytes)
+  with DifftestBundle
+  with DifftestWithIndex {
   override val desiredCppName: String = gen.desiredCppName + "_elem"
   override def desiredModuleName: String = gen.desiredModuleName + "Elem"
 }
