@@ -75,7 +75,7 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String) {
   }
   private val dataArgs: Seq[(String, String)] = {
     if (gen.isDeltaElem) {
-      Seq(("DATA", "packet"))
+      Seq(("DATA", "*packet"))
     } else {
       val dataPrefix = "packet->"
       val argList = ListBuffer.empty[(String, String)]
@@ -107,7 +107,7 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String) {
        |  }
        |""".stripMargin
   val initInvoke = s"${tableName}_init();"
-  val packetType = if (gen.isDeltaElem) "uint64_t" else gen.desiredModuleName
+  val packetType = if (gen.isDeltaElem) s"uint${gen.deltaElemBytes * 8}_t" else gen.desiredModuleName
   val writeDecl =
     s"""
        |  void ${tableName}_write(${locArgs.map("uint8_t " + _._2).mkString(", ")}, ${packetType}* packet) {
