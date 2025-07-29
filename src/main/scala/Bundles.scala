@@ -175,6 +175,19 @@ class TriggerCSRState extends DifftestBaseBundle {
   val tinfo = UInt(64.W)
 }
 
+class ArchRenameTable(pregIdxWidth: Int) extends DifftestBaseBundle {
+  val value = Vec(32, UInt(pregIdxWidth.W))
+}
+class ArchVecRenameTable(pregIdxWidth: Int) extends DifftestBaseBundle {
+  val value = Vec(64, UInt(pregIdxWidth.W))
+}
+class PhyRegState(numElements: Int) extends DifftestBaseBundle {
+  val value = Vec(numElements, UInt(64.W))
+}
+class PhyVecRegState(numElements: Int) extends DifftestBaseBundle {
+  val value = Vec(numElements, Vec(2, UInt(64.W)))
+}
+
 class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
   val data = UInt(64.W)
 }
