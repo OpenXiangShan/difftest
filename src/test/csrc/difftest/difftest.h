@@ -413,6 +413,19 @@ protected:
   int do_golden_memory_update();
 
   inline uint64_t get_commit_data(int i) {
+#ifdef CONFIG_DIFFTEST_PHYINTREGSTATE
+#ifdef CONFIG_DIFFTEST_PHYFPREGSTATE
+    if (dut->commit[i].fpwen) {
+      return dut->pregs_fp.value[dut->commit[i].wpdest];
+    } else
+#endif // CONFIG_DIFFTEST_PHYFPREGSTATE
+#ifdef CONFIG_DIFFTEST_PHYVECREGSTATE
+        if (dut->commit[i].vecwen) {
+      return dut->pregs_vec.value[dut->commit[i].wpdest][0];
+    } else
+#endif // CONFIG_DIFFTEST_PHYVECREGSTATE
+      return dut->pregs_int.value[dut->commit[i].wpdest];
+#else
 #ifdef CONFIG_DIFFTEST_COMMITDATA
     return dut->commit_data[i].data;
 #else
@@ -453,6 +466,7 @@ protected:
         dut->regs_int.value[dut->commit[i].wdest];
 #endif // CONFIG_DIFFTEST_INTWRITEBACK
 #endif // CONFIG_DIFFTEST_COMMITDATA
+#endif // CONFIG_DIFFTEST_PHYINTREGSTATE
   }
   inline bool has_wfi() {
     return dut->trap.hasWFI;
