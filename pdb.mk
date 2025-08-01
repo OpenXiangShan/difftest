@@ -17,7 +17,7 @@ PDB_LD_LIB      += $(shell python3-config --ldflags)
 
 SWIG_INCLUDE     = $(filter -I%, $(PDB_CXXFLAGS)) -I$(picker_include)
 ifeq ($(WITH_CHISELDB), 1)
-  SWIG_D        += -DENABLE_CHISEL_DB
+SWIG_D        += -DENABLE_CHISEL_DB
 endif
 
 pydifftest: $(PYTHON_DIR)/_difftest.so
