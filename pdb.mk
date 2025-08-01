@@ -1,4 +1,4 @@
-PYTHON_DIR       = $(abspath $(BUILD_DIR)/xspdb/python)
+PYTHON_DIR       = $(abspath $(BUILD_DIR)/xspdb/pydifftest)
 PDB_OBJ_DIR      = $(abspath $(BUILD_DIR)/xspdb/swig_obj)
 
 picker_include   = $(shell picker --show_xcom_lib_location_cpp|grep include|awk '{print $$2}')
@@ -20,7 +20,9 @@ ifeq ($(WITH_CHISELDB), 1)
   SWIG_D        += -DENABLE_CHISEL_DB
 endif
 
-process_DiffTestState:
+pydifftest: $(PYTHON_DIR)/_difftest.so
+
+$(PDB_OBJ_DIR)/python.i:
 	rm -rf $(PDB_OBJ_DIR) $(PYTHON_DIR)
 	mkdir -p $(PDB_OBJ_DIR)
 	mkdir -p $(PYTHON_DIR)
@@ -29,11 +31,11 @@ process_DiffTestState:
 	cat $(BUILD_DIR)/generated-src/diffstate.h|grep Difftest|grep "\["|sed "s/\[/\ /g"|sed "s/\]/\ /g"|awk '{print $$1 " *get_"$$2"(int index){if(index<"$$3"){return &(self->"$$2"[index]);} return NULL;}"}' >> $(PDB_OBJ_DIR)/python.i
 	echo "}" >> $(PDB_OBJ_DIR)/python.i
 
-swig_export: process_DiffTestState
+$(PDB_OBJ_DIR)/difftest_wrap.cpp: $(PDB_OBJ_DIR)/python.i
 	swig -c++ -outdir $(PYTHON_DIR) -o $(PDB_OBJ_DIR)/difftest_wrap.cpp $(SWIG_INCLUDE) -python $(SWIG_D) $(PDB_OBJ_DIR)/python.i
 	$(eval PDB_CXXFILES = $(PDB_CXXFILES) $(PDB_OBJ_DIR)/difftest_wrap.cpp)
 
-difftest_python: swig_export
+$(PYTHON_DIR)/_difftest.so: $(PDB_OBJ_DIR)/difftest_wrap.cpp
 	cd $(PDB_OBJ_DIR) 					&& \
 	$(CC) $(PDB_CXXFLAGS) $(PDB_CXXFILES)			&& \
 	$(CC) -o $(PYTHON_DIR)/_difftest.so -m64 -shared *.o $(PDB_LD_LIB) $(SIM_LDFLAGS)
