@@ -680,7 +680,7 @@ void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
 #ifdef CONFIG_DIFFTEST_SQUASH
       uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
 #else
-      uint64_t dutRegData = dut->commit_data[index].vecData[VLENE_64 * vdidx + i];
+      uint64_t dutRegData = dut->vec_commit_data[index].data[VLENE_64 * vdidx + i];
 #endif // CONFIG_DIFFTEST_SQUASH
 #else
       uint64_t dutRegData = dutRegPtr[i];
@@ -719,7 +719,7 @@ void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
 #ifdef CONFIG_DIFFTEST_SQUASH
         uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
 #else
-        uint64_t dutRegData = dut->commit_data[index].vecData[VLENE_64 * vdidx + i];
+        uint64_t dutRegData = dut->vec_commit_data[index].data[VLENE_64 * vdidx + i];
 #endif // CONFIG_DIFFTEST_SQUASH
 #else
         uint64_t dutRegData = dutRegPtr[i];
@@ -749,7 +749,7 @@ void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
 #ifdef CONFIG_DIFFTEST_SQUASH
           uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
 #else
-          uint64_t dutRegData = dut->commit_data[index].vecData[VLENE_64 * vdidx + i];
+          uint64_t dutRegData = dut->vec_commit_data[index].data[VLENE_64 * vdidx + i];
 #endif // CONFIG_DIFFTEST_SQUASH
 #else
           uint64_t dutRegData = dutRegPtr[i];
