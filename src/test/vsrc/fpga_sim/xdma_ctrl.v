@@ -30,7 +30,11 @@ module xdma_ctrl #(
   output axi_tvalid
 );
 
-import "DPI-C" function bit v_xdma_tready();
+`ifndef SYNTHESIS
+    import "DPI-C" function bit v_xdma_tready();
+`endif // SYNTHESIS
+
+    localparam BLOACK_RAM_LATENCY = 2; 
     localparam NUM_PACKETS_PER_BUFFER = 8; // one send packet num
     localparam AXIS_SEND_LEN = ((DATA_WIDTH  + 8 + AXIS_DATA_WIDTH - 1) / AXIS_DATA_WIDTH);
 
@@ -50,13 +54,18 @@ import "DPI-C" function bit v_xdma_tready();
     reg                  reg_axi_tlast;
     reg                  reg_core_clock_enable;
     // Ping-Pong Buffers
-    reg [DATA_WIDTH - 1:0] dual_buffer [1:0][0 : NUM_PACKETS_PER_BUFFER - 1];
     reg wr_buf;
+    reg wr_buf_ld;
     reg rd_buf;
     reg [7:0] wr_pkt_cnt;   // (0~7)
     reg [7:0] rd_pkt_cnt;   // (0~7)
     reg [1:0] buffer_valid;
-
+    reg [2:0] dual_buffer_wr_addr;
+    reg dual_buffer_wen;
+    reg [DATA_WIDTH-1:0] dual_buffer_wr_data;
+    wire [DATA_WIDTH-1:0] dual_buffer_rd_data[1:0];
+    wire [DATA_WIDTH-1:0] dual_buffer_rd_data_mux = rd_buf ? dual_buffer_rd_data[0] : dual_buffer_rd_data[1];
+    
     assign core_clock_enable = reg_core_clock_enable;
     assign axi_tdata = reg_axi_tdata;
     assign axi_tvalid = reg_axi_tvalid;
@@ -64,6 +73,33 @@ import "DPI-C" function bit v_xdma_tready();
     assign axi_tlast = reg_axi_tlast;
 
     wire both_full = &buffer_valid;
+    dual_buffer_bram #(
+      .DATA_WIDTH(DATA_WIDTH),
+      .NUM_PACKETS_PER_BUFFER(NUM_PACKETS_PER_BUFFER),
+      .ADDR_WIDTH(3)
+    ) dual_buffer0 (
+      .clk(clock),
+      .rst(reset),
+      .wr_en(~wr_buf & dual_buffer_wen),
+      .wr_addr(dual_buffer_wr_addr),
+      .wr_data(dual_buffer_wr_data),
+      .rd_addr(rd_pkt_cnt),
+      .rd_data(dual_buffer_rd_data[0])
+    );
+    dual_buffer_bram #(
+      .DATA_WIDTH(DATA_WIDTH),
+      .NUM_PACKETS_PER_BUFFER(NUM_PACKETS_PER_BUFFER),
+      .ADDR_WIDTH(3)
+    ) dual_buffer1 (
+      .clk(clock),
+      .rst(reset),
+      .wr_en(wr_buf & dual_buffer_wen),
+      .wr_addr(dual_buffer_wr_addr),
+      .wr_data(dual_buffer_wr_data),
+      .rd_addr(rd_pkt_cnt),
+      .rd_data(dual_buffer_rd_data[1])
+    );
+
 
     // asynchronous clock fetches the signal
 `ifdef ASYNC_CLK_2N
@@ -81,11 +117,27 @@ import "DPI-C" function bit v_xdma_tready();
     wire difftest_sampling = difftest_enable;
 `endif //ASYNC_CLK_2N
 
-
+    reg can_send_reg;
+    reg [2:0]can_send_delay_cnt;
     wire can_send = buffer_valid[rd_buf];
     wire last_pkt = rd_pkt_cnt == NUM_PACKETS_PER_BUFFER;
     // Each package has AXIS_SEND_LEN send
     wire last_send = datalen == (AXIS_SEND_LEN - 1);
+
+
+    always @(posedge clock) begin
+        if (reset) begin
+            can_send_reg <= 0;
+        end else if (can_send) begin
+            can_send_reg <= 1'b0;
+            if (can_send_delay_cnt == BLOACK_RAM_LATENCY) begin
+                can_send_reg <= 1'b1;
+                can_send_delay_cnt <= 0;
+            end else begin
+                can_send_delay_cnt <= can_send_delay_cnt + 1'b1;
+            end
+        end
+    end
 
     always @(posedge clock) begin
         if (reset)
@@ -97,7 +149,7 @@ import "DPI-C" function bit v_xdma_tready();
 /* verilator lint_off CASEINCOMPLETE */
     always @(*) begin
         case(current_state)
-            IDLE:     next_state = can_send ? TRANSFER : IDLE;
+            IDLE:     next_state = can_send_reg ? TRANSFER : IDLE;
             TRANSFER: next_state = (axi_tready & axi_tvalid & last_pkt & last_send) ? DONE : TRANSFER;
             DONE:     next_state = IDLE;
             default:  next_state = IDLE;
@@ -108,17 +160,22 @@ import "DPI-C" function bit v_xdma_tready();
     always @(posedge clock) begin
         if (reset) begin
             wr_buf <= 0;
+            wr_buf_ld <= 0;
             wr_pkt_cnt <= 0;
             buffer_valid <= 'b00;
         end else begin
+            dual_buffer_wen <= 0;
+            wr_buf <= wr_buf_ld;
             if (difftest_sampling & reg_core_clock_enable) begin
-                dual_buffer[wr_buf][wr_pkt_cnt] <= difftest_data;
+                dual_buffer_wr_addr <= wr_pkt_cnt[2:0];
+                dual_buffer_wr_data <= difftest_data;
                 wr_pkt_cnt <= wr_pkt_cnt + 1'b1;
                 if (wr_pkt_cnt == NUM_PACKETS_PER_BUFFER - 1) begin
                     buffer_valid[wr_buf] <= 1;
                     wr_pkt_cnt <= 0;
-                    wr_buf <= ~wr_buf; // Switch buffers
+                    wr_buf_ld <= ~wr_buf; // Switch buffers
                 end
+                dual_buffer_wen <= 1;
             end
             if (next_state == DONE) begin // Releasing a buffer
                 buffer_valid[rd_buf] <= 0;
@@ -146,13 +203,10 @@ import "DPI-C" function bit v_xdma_tready();
         end else begin
             case(current_state)
             IDLE : begin
-                if (can_send) begin
-                    reg_axi_tdata <= {dual_buffer[rd_buf][0][AXIS_DATA_WIDTH - 8 - 1:0], data_num};
-                    mix_data <= dual_buffer[rd_buf][0][DATA_WIDTH - 1:AXIS_DATA_WIDTH - 8];
-                    reg_axi_tvalid <= 1;
+                if (can_send_reg) begin
+                    mix_data <= {dual_buffer_rd_data_mux, data_num};
                     rd_pkt_cnt <= 1;
                     data_num <= data_num + 1'b1;
-                    datalen <= 1;
                 end
             end
             TRANSFER: begin
@@ -163,13 +217,18 @@ import "DPI-C" function bit v_xdma_tready();
                         rd_pkt_cnt <= 0;
                         datalen <= 0;
                     end else if (!last_pkt & last_send) begin
-                        mix_data <= {dual_buffer[rd_buf][rd_pkt_cnt], 8'b0};
+                        mix_data <= {dual_buffer_rd_data_mux, 8'b0};
                         rd_pkt_cnt <= rd_pkt_cnt + 1'b1;
                         datalen <= 0;
                     end else begin
                         datalen <= datalen + 1'b1;
                         mix_data <= mix_data >> AXIS_DATA_WIDTH;
                     end
+                end else if (~reg_axi_tvalid)begin
+                    reg_axi_tvalid <= 1;
+                    reg_axi_tdata <= mix_data[AXIS_DATA_WIDTH - 1:0];
+                    mix_data <= mix_data >> AXIS_DATA_WIDTH;
+                    datalen <= datalen + 1'b1;
                 end
             end
             DONE: begin
