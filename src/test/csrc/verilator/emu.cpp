@@ -584,7 +584,8 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   init_uparam(embedding, engine->max_epoch);
   engine->initial_embedding = embedding;
   engine->visualize = args.enable_deg_visualize;
-  engine->start_epoch(idx, benchmark_name);
+  // engine->start_epoch(idx, benchmark_name);
+  engine->start_epoch(1);
 
   while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
     if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
@@ -731,15 +732,15 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
           engine->finalize_deg();
           deg_record = false;
           std::vector<int> embedding_new;
-          // printf("[Do bottleneck_analysis]\n");
-          // embedding_new = engine->bottleneck_analysis(embedding, "output_" + std::to_string(dut_ptr->io_dse_epoch));
-          // printf("[Finish bottleneck_analysis]\n");
-          // engine->design_space.compare_embeddings(embedding, embedding_new);
+          printf("[Do bottleneck_analysis]\n");
+          embedding_new = engine->bottleneck_analysis(embedding, "output_" + std::to_string(dut_ptr->io_dse_epoch));
+          printf("[Finish bottleneck_analysis]\n");
+          engine->design_space.compare_embeddings(embedding, embedding_new);
 #ifdef SYNC_WITH_PYTHON
           // engine->design_space.save_embedding_to_file("embedding.txt", embedding_new);
 #endif
-          // embedding = embedding_new;
-          // embedding_to_uparam(embedding);
+          embedding = embedding_new;
+          embedding_to_uparam(embedding);
         }
       }
     }
