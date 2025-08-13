@@ -63,7 +63,7 @@ public:
 class IcacheMiss : public Bottleneck
 {
 public:
-    IcacheMiss() : Bottleneck("I-cache Miss") {}
+    IcacheMiss() : Bottleneck("I-cache miss") {}
     ~IcacheMiss() = default;
 
 };
@@ -72,7 +72,7 @@ public:
 class DcacheMiss : public Bottleneck
 {
 public:
-    DcacheMiss() : Bottleneck("D-cache Miss") {}
+    DcacheMiss() : Bottleneck("D-cache miss") {}
     ~DcacheMiss() = default;
 
 };
@@ -81,7 +81,7 @@ public:
 class BPMiss : public Bottleneck
 {
 public:
-    BPMiss() : Bottleneck("BP Miss") {}
+    BPMiss() : Bottleneck("BP miss") {}
     ~BPMiss() = default;
 
 };
@@ -90,7 +90,7 @@ public:
 class ROB : public Bottleneck
 {
 public:
-    ROB() : Bottleneck("ROB") {}
+    ROB() : Bottleneck("Lack ROB") {}
     ~ROB() = default;
 
 };
@@ -99,7 +99,7 @@ public:
 class LQ : public Bottleneck
 {
 public:
-    LQ() : Bottleneck("LQ") {}
+    LQ() : Bottleneck("Lack LQ") {}
     ~LQ() = default;
 
 };
@@ -108,7 +108,7 @@ public:
 class SQ : public Bottleneck
 {
 public:
-    SQ() : Bottleneck("SQ") {}
+    SQ() : Bottleneck("Lack SQ") {}
     ~SQ() = default;
 
 };
@@ -117,7 +117,7 @@ public:
 class IntRF : public Bottleneck
 {
 public:
-    IntRF() : Bottleneck("INT RF") {}
+    IntRF() : Bottleneck("Lack INT RF") {}
     ~IntRF() = default;
 
 };
@@ -126,7 +126,7 @@ public:
 class FpRF : public Bottleneck
 {
 public:
-    FpRF() : Bottleneck("FP RF") {}
+    FpRF() : Bottleneck("Lack FP RF") {}
     ~FpRF() = default;
 
 };
@@ -135,7 +135,7 @@ public:
 class IQ : public Bottleneck
 {
 public:
-    IQ() : Bottleneck("IQ") {}
+    IQ() : Bottleneck("Lack IQ") {}
     ~IQ() = default;
 
 };
@@ -144,7 +144,7 @@ public:
 class IntALU : public Bottleneck
 {
 public:
-    IntALU() : Bottleneck("IntAlu") {}
+    IntALU() : Bottleneck("Lack IntAlu") {}
     ~IntALU() = default;
 
 };
@@ -153,7 +153,7 @@ public:
 class IntMultDiv : public Bottleneck
 {
 public:
-    IntMultDiv() : Bottleneck("IntMultDiv") {}
+    IntMultDiv() : Bottleneck("Lack IntMultDiv") {}
     ~IntMultDiv() = default;
 
 };
@@ -162,7 +162,7 @@ public:
 class FpAlu : public Bottleneck
 {
 public:
-    FpAlu() : Bottleneck("FpAlu") {}
+    FpAlu() : Bottleneck("Lack FpAlu") {}
     ~FpAlu() = default;
 
 };
@@ -171,7 +171,7 @@ public:
 class FpMultDiv : public Bottleneck
 {
 public:
-    FpMultDiv() : Bottleneck("FpMultDiv") {}
+    FpMultDiv() : Bottleneck("Lack FpMultDiv") {}
     ~FpMultDiv() = default;
 
 };
@@ -180,7 +180,7 @@ public:
 class RdWrPort : public Bottleneck
 {
 public:
-    RdWrPort() : Bottleneck("RdWrPort") {}
+    RdWrPort() : Bottleneck("Lack RdWrPort") {}
     ~RdWrPort() = default;
 
 };
@@ -189,7 +189,7 @@ public:
 class RAW : public Bottleneck
 {
 public:
-    RAW() : Bottleneck("RAW") {}
+    RAW() : Bottleneck("Read after write dependence") {}
     ~RAW() = default;
 
 };
