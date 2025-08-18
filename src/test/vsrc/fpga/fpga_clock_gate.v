@@ -4,38 +4,22 @@
  * Description: AXIS data package helper for FPGA-difftest
  */
 module fpga_clock_gate(
-	input               data_next,
-	input               rstn,
-	input 			    soc_clk_i,
-	input               dev_clk_i,
-	output              soc_clk_o,
-	output              dev_clk_o
+	input     CK,
+	input	  E,
+	output    Q
 );
 
 `ifdef NOTUSE_VIVADO
-	reg EN_SOC;
-	reg EN_DEV;
+	reg EN;
 	always_latch begin
-		if (!soc_clk_i) EN_SOC = data_next;
+		if (!CK) EN = E;
 	end
-	assign soc_clk_o = EN_SOC & soc_clk_i;
-
-	always_latch begin
-		if (!dev_clk_i) EN_DEV = data_next;
-	end
-	assign dev_clk_o = EN_DEV & dev_clk_i;
-
+	assign Q = EN & CK;
 `else
-	BUFGCE inst_bufgce_1 (
-		.O(soc_clk_o),
-		.I(soc_clk_i),
-		.CE(data_next || !rstn)
-	);
-		
-	BUFGCE inst_bufgce_2 (
-		.O(dev_clk_o),
-		.I(dev_clk_i),
-		.CE(data_next || !rstn)
+	BUFGCE bufgce_1 (
+		.O(Q),
+		.I(CK),
+		.CE(E)
 	);
 `endif
 	
