@@ -28,9 +28,9 @@ module bram_single_port #(
 
 `ifndef SYNTHESIS
   reg [DATA_WIDTH - 1:0] mem [RAM_DEPTH - 1:0] ;
-  reg [DATA_WIDTH - 1:0] rdata_reg;
+  reg [DATA_WIDTH - 1:0] rdata_reg, rdata_reg_ld;
 
-  assign rdata = rdata_reg;
+  assign rdata = rdata_reg_ld;
 
   integer initvar;
   initial begin
@@ -46,6 +46,7 @@ module bram_single_port #(
       if (wea)
         mem[addr] <= wdata;
       rdata_reg <= mem[addr];
+      rdata_reg_ld <= rdata_reg;
     end
   end
 
@@ -55,7 +56,7 @@ module bram_single_port #(
       .wea(wea),
       .addra(addr),
       .douta(rdata),
-      .dina(data)
+      .dina(wdata)
     );
 `endif
 endmodule

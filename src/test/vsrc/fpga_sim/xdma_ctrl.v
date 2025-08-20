@@ -60,7 +60,7 @@ module xdma_ctrl #(
     reg dual_buffer_wen;
     reg [DATA_WIDTH-1:0] dual_buffer_wr_data;
     wire [DATA_WIDTH-1:0] dual_buffer_rd_data[1:0];
-    wire [DATA_WIDTH-1:0] dual_buffer_rd_data_mux = rd_buf ? dual_buffer_rd_data[0] : dual_buffer_rd_data[1];
+    wire [DATA_WIDTH-1:0] dual_buffer_rd_data_mux = ~rd_buf ? dual_buffer_rd_data[0] : dual_buffer_rd_data[1];
     
     assign core_clock_enable = reg_core_clock_enable;
     assign axi_tdata = reg_axi_tdata;
