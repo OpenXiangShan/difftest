@@ -37,20 +37,17 @@ module dual_buffer_bram #(
   assign wr_data_split[2] = wr_data[11999: 8000];
   assign wr_data_split[3] = wr_data[15999:12000];
 
-  wire [ADDR_WIDTH-1:0] addr;
-  assign addr = wr_en ? wr_addr : rd_addr;
-
-  bram_single_port #(.DATA_WIDTH(BLOCK_RAM_DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram0 (
-    .clk(clk), .rst(rst), .wea(wr_en), .addr(addr), .wdata(wr_data_split[0]), .rdata(rd_data_split[0])
+  bram_port #(.DATA_WIDTH(BLOCK_RAM_DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram0 (
+    .clk(clk), .rst(rst), .wea(wr_en), .en(1), .waddr(wr_addr), .raddr(rd_addr), .wdata(wr_data_split[0]), .rdata(rd_data_split[0])
   );
-  bram_single_port #(.DATA_WIDTH(BLOCK_RAM_DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram1 (
-    .clk(clk), .rst(rst), .wea(wr_en), .addr(addr), .wdata(wr_data_split[1]), .rdata(rd_data_split[1])
+  bram_port #(.DATA_WIDTH(BLOCK_RAM_DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram1 (
+    .clk(clk), .rst(rst), .wea(wr_en), .en(1), .waddr(wr_addr), .raddr(rd_addr), .wdata(wr_data_split[1]), .rdata(rd_data_split[1])
   );
-  bram_single_port #(.DATA_WIDTH(BLOCK_RAM_DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram2 (
-    .clk(clk), .rst(rst), .wea(wr_en), .addr(addr), .wdata(wr_data_split[2]), .rdata(rd_data_split[2])
+  bram_port #(.DATA_WIDTH(BLOCK_RAM_DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram2 (
+    .clk(clk), .rst(rst), .wea(wr_en), .en(1), .waddr(wr_addr), .raddr(rd_addr), .wdata(wr_data_split[2]), .rdata(rd_data_split[2])
   );
-  bram_single_port #(.DATA_WIDTH(BLOCK_RAM_DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram3 (
-    .clk(clk), .rst(rst), .wea(wr_en), .addr(addr), .wdata(wr_data_split[3]), .rdata(rd_data_split[3])
+  bram_port #(.DATA_WIDTH(BLOCK_RAM_DATA_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) bram3 (
+    .clk(clk), .rst(rst), .wea(wr_en), .en(1), .waddr(wr_addr), .raddr(rd_addr), .wdata(wr_data_split[3]), .rdata(rd_data_split[3])
   );
 
   assign rd_data = {rd_data_split[3], rd_data_split[2], rd_data_split[1], rd_data_split[0]};

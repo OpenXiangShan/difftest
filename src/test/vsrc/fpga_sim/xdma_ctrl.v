@@ -30,11 +30,6 @@ module xdma_ctrl #(
   output axi_tvalid
 );
 
-`ifndef SYNTHESIS
-    import "DPI-C" function bit v_xdma_tready();
-`endif // SYNTHESIS
-
-    localparam BLOACK_RAM_LATENCY = 2; 
     localparam NUM_PACKETS_PER_BUFFER = 8; // one send packet num
     localparam AXIS_SEND_LEN = ((DATA_WIDTH  + 8 + AXIS_DATA_WIDTH - 1) / AXIS_DATA_WIDTH);
 
@@ -54,17 +49,16 @@ module xdma_ctrl #(
     reg                  reg_axi_tlast;
     reg                  reg_core_clock_enable;
     // Ping-Pong Buffers
+    reg [1:0]wr_en;
     reg wr_buf;
-    reg wr_buf_ld;
     reg rd_buf;
     reg [7:0] wr_pkt_cnt;   // (0~7)
     reg [7:0] rd_pkt_cnt;   // (0~7)
     reg [1:0] buffer_valid;
     reg [2:0] dual_buffer_wr_addr;
-    reg dual_buffer_wen;
     reg [DATA_WIDTH-1:0] dual_buffer_wr_data;
     wire [DATA_WIDTH-1:0] dual_buffer_rd_data[1:0];
-    wire [DATA_WIDTH-1:0] dual_buffer_rd_data_mux = rd_buf ? dual_buffer_rd_data[0] : dual_buffer_rd_data[1];
+    wire [DATA_WIDTH-1:0] dual_buffer_rd_data_mux = ~rd_buf ? dual_buffer_rd_data[0] : dual_buffer_rd_data[1];
     
     assign core_clock_enable = reg_core_clock_enable;
     assign axi_tdata = reg_axi_tdata;
@@ -80,7 +74,7 @@ module xdma_ctrl #(
     ) dual_buffer0 (
       .clk(clock),
       .rst(reset),
-      .wr_en(~wr_buf & dual_buffer_wen),
+      .wr_en(wr_en[0]),
       .wr_addr(dual_buffer_wr_addr),
       .wr_data(dual_buffer_wr_data),
       .rd_addr(rd_pkt_cnt),
@@ -93,7 +87,7 @@ module xdma_ctrl #(
     ) dual_buffer1 (
       .clk(clock),
       .rst(reset),
-      .wr_en(wr_buf & dual_buffer_wen),
+      .wr_en(wr_en[1]),
       .wr_addr(dual_buffer_wr_addr),
       .wr_data(dual_buffer_wr_data),
       .rd_addr(rd_pkt_cnt),
@@ -117,27 +111,10 @@ module xdma_ctrl #(
     wire difftest_sampling = difftest_enable;
 `endif //ASYNC_CLK_2N
 
-    reg can_send_reg;
-    reg [2:0]can_send_delay_cnt;
     wire can_send = buffer_valid[rd_buf];
     wire last_pkt = rd_pkt_cnt == NUM_PACKETS_PER_BUFFER;
     // Each package has AXIS_SEND_LEN send
     wire last_send = datalen == (AXIS_SEND_LEN - 1);
-
-
-    always @(posedge clock) begin
-        if (reset) begin
-            can_send_reg <= 0;
-        end else if (can_send) begin
-            can_send_reg <= 1'b0;
-            if (can_send_delay_cnt == BLOACK_RAM_LATENCY) begin
-                can_send_reg <= 1'b1;
-                can_send_delay_cnt <= 0;
-            end else begin
-                can_send_delay_cnt <= can_send_delay_cnt + 1'b1;
-            end
-        end
-    end
 
     always @(posedge clock) begin
         if (reset)
@@ -149,7 +126,7 @@ module xdma_ctrl #(
 /* verilator lint_off CASEINCOMPLETE */
     always @(*) begin
         case(current_state)
-            IDLE:     next_state = can_send_reg ? TRANSFER : IDLE;
+            IDLE:     next_state = can_send ? TRANSFER : IDLE;
             TRANSFER: next_state = (axi_tready & axi_tvalid & last_pkt & last_send) ? DONE : TRANSFER;
             DONE:     next_state = IDLE;
             default:  next_state = IDLE;
@@ -160,22 +137,20 @@ module xdma_ctrl #(
     always @(posedge clock) begin
         if (reset) begin
             wr_buf <= 0;
-            wr_buf_ld <= 0;
             wr_pkt_cnt <= 0;
-            buffer_valid <= 'b00;
+            buffer_valid <= 2'b00;
         end else begin
-            dual_buffer_wen <= 0;
-            wr_buf <= wr_buf_ld;
+            wr_en[1:0] <= 2'b00;
             if (difftest_sampling & reg_core_clock_enable) begin
                 dual_buffer_wr_addr <= wr_pkt_cnt[2:0];
                 dual_buffer_wr_data <= difftest_data;
                 wr_pkt_cnt <= wr_pkt_cnt + 1'b1;
+                wr_en[wr_buf] <= 1;
                 if (wr_pkt_cnt == NUM_PACKETS_PER_BUFFER - 1) begin
                     buffer_valid[wr_buf] <= 1;
                     wr_pkt_cnt <= 0;
-                    wr_buf_ld <= ~wr_buf; // Switch buffers
+                    wr_buf <= ~wr_buf; // Switch buffers
                 end
-                dual_buffer_wen <= 1;
             end
             if (next_state == DONE) begin // Releasing a buffer
                 buffer_valid[rd_buf] <= 0;
@@ -203,7 +178,7 @@ module xdma_ctrl #(
         end else begin
             case(current_state)
             IDLE : begin
-                if (can_send_reg) begin
+                if (can_send) begin
                     mix_data <= {dual_buffer_rd_data_mux, data_num};
                     rd_pkt_cnt <= 1;
                     data_num <= data_num + 1'b1;

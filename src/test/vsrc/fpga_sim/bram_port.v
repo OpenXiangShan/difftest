@@ -13,7 +13,7 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-module bram_single_port #(
+module bram_port #(
   parameter DATA_WIDTH = 4000,
   parameter ADDR_WIDTH = 3,
   parameter RAM_DEPTH = 1 << ADDR_WIDTH
@@ -21,41 +21,32 @@ module bram_single_port #(
   input                    clk,
   input                    rst,
   input                    wea,
-  input [ADDR_WIDTH - 1:0] addr,
+  input                    en,
+  input [ADDR_WIDTH - 1:0] waddr,
+  input [ADDR_WIDTH - 1:0] raddr,
   input [DATA_WIDTH - 1:0] wdata,
-  output [DATA_WIDTH - 1:0] rdata
+  output reg [DATA_WIDTH - 1:0] rdata
 );
 
+  (* ram_style = "block" *) reg [DATA_WIDTH - 1:0] mem [RAM_DEPTH - 1:0];
+
 `ifndef SYNTHESIS
-  reg [DATA_WIDTH - 1:0] mem [RAM_DEPTH - 1:0] ;
-  reg [DATA_WIDTH - 1:0] rdata_reg;
-
-  assign rdata = rdata_reg;
-
   integer initvar;
   initial begin
-    #`RANDOMIZE_DELAY begin end
     for (initvar = 0; initvar < RAM_DEPTH; initvar = initvar + 1)
-      mem[initvar] = {DATA_WIDTH{$random}};
+      mem[initvar] = {DATA_WIDTH{1'b0}};
   end
+`endif
 
   always @(posedge clk) begin
-    if (rst) begin
-      rdata_reg <= 0;
-    end else begin
-      if (wea)
-        mem[addr] <= wdata;
-      rdata_reg <= mem[addr];
+    if (en) begin
+      rdata <= mem[raddr];
     end
   end
 
-`else
-    bram_4000x8_single_port bram_u (
-      .clka(clk),
-      .wea(wea),
-      .addra(addr),
-      .douta(rdata),
-      .dina(data)
-    );
-`endif
+  always @(posedge clk) begin
+    if (en && wea) begin
+      mem[waddr] <= wdata;
+    end
+  end
 endmodule
