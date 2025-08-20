@@ -30,10 +30,6 @@ module xdma_ctrl #(
   output axi_tvalid
 );
 
-`ifndef SYNTHESIS
-    import "DPI-C" function bit v_xdma_tready();
-`endif // SYNTHESIS
-
     localparam BLOACK_RAM_LATENCY = 2; 
     localparam NUM_PACKETS_PER_BUFFER = 8; // one send packet num
     localparam AXIS_SEND_LEN = ((DATA_WIDTH  + 8 + AXIS_DATA_WIDTH - 1) / AXIS_DATA_WIDTH);
