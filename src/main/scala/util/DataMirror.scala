@@ -44,5 +44,15 @@ private[difftest] object DataMirror {
       val argument: Seq[Any] = Seq(data, si)
       method.get.apply(argument: _*).asInstanceOf[T]
     }
+
+    def bore(implicit si: SourceInfo): T = {
+      require(
+        !chisel3.BuildInfo.version.startsWith("3"),
+        "BoringUtils.bore(data) does not support Chisel 3, use BoringUtils.addSource/addSink in replace.",
+      )
+      val method = loadMethodOfObject("boreOrTap", "chisel3.util.experimental.BoringUtils")
+      val argument: Seq[Any] = Seq(data, None, false, si)
+      method.get.apply(argument: _*).asInstanceOf[T]
+    }
   }
 }

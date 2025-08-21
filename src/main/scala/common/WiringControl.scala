@@ -26,6 +26,8 @@ private object WiringControl {
   def addSink(data: Data, name: String): Unit = BoringUtils.addSink(data, s"difftest_$name")
 
   def tapAndRead[T <: Data](source: T): T = source.tapAndRead
+
+  def bore[T <: Data](source: T): T = source.bore
 }
 
 private class WiringInfo(val data: Data, val name: String, val isHierarchical: Boolean) {
@@ -69,7 +71,7 @@ object DifftestWiring {
 
   def addSource[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
     getWire(data, name, isHierarchical).setSource()
-    if (!isHierarchical || isChisel3) {
+    if (isChisel3) {
       WiringControl.addSource(data, name)
     }
     data
@@ -81,12 +83,14 @@ object DifftestWiring {
 
   def addSink[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
     val info = getWire(data, name, isHierarchical).addSink()
-    if (isHierarchical && !isChisel3) {
-      require(!info.isPending, s"[${info.name}]: Hierarchical wiring requires addSource before addSink")
+    if (!isChisel3) {
+      require(!info.isPending, s"[${info.name}]: Wiring requires addSource before addSink")
       if (info.data.isVisible) {
         data := info.data
-      } else {
+      } else if (isHierarchical) {
         data := WiringControl.tapAndRead(info.data)
+      } else {
+        data := WiringControl.bore(info.data)
       }
     } else {
       WiringControl.addSink(data, name)
