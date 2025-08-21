@@ -22,9 +22,14 @@ import scala.reflect.runtime.currentMirror
 import scala.reflect.runtime.universe._
 
 private[difftest] object DataMirror {
-  private def loadMethodOfObject(methodName: String, objectName: String): Option[MethodMirror] = {
+  private def loadMethodOfObject(
+    methodName: String,
+    objectName: String,
+    extraFilter: Symbol => Boolean = (_ => true),
+  ): Option[MethodMirror] = {
     val moduleSymb = currentMirror.staticModule(objectName)
-    val methodSymb = moduleSymb.info.decls.find(m => m.isMethod && m.name.toString == methodName).map(_.asMethod)
+    val methodSymb =
+      moduleSymb.info.decls.find(m => m.isMethod && m.name.toString == methodName && extraFilter(m)).map(_.asMethod)
     val obj = currentMirror.reflectModule(moduleSymb).instance
     methodSymb.map(s => currentMirror.reflect(obj).reflectMethod(s))
   }
@@ -41,6 +46,20 @@ private[difftest] object DataMirror {
         "BoringUtils.tapAndRead does not support Chisel 3, use BoringUtils.addSource/addSink in replace.",
       )
       val method = loadMethodOfObject("tapAndRead", "chisel3.util.experimental.BoringUtils")
+      val argument: Seq[Any] = Seq(data, si)
+      method.get.apply(argument: _*).asInstanceOf[T]
+    }
+
+    def bore(implicit si: SourceInfo): T = {
+      require(
+        !chisel3.BuildInfo.version.startsWith("3"),
+        "BoringUtils.bore(data) does not support Chisel 3, use BoringUtils.addSource/addSink in replace.",
+      )
+      val method = loadMethodOfObject(
+        "bore",
+        "chisel3.util.experimental.BoringUtils",
+        _.typeSignature.paramLists.flatten.map(_.typeSignature.toString()).contains("chisel3.experimental.SourceInfo"),
+      )
       val argument: Seq[Any] = Seq(data, si)
       method.get.apply(argument: _*).asInstanceOf[T]
     }
