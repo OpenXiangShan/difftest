@@ -13,7 +13,7 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-module bram_single_port #(
+module bram_port #(
   parameter DATA_WIDTH = 4000,
   parameter ADDR_WIDTH = 3,
   parameter RAM_DEPTH = 1 << ADDR_WIDTH
@@ -21,7 +21,8 @@ module bram_single_port #(
   input                    clk,
   input                    rst,
   input                    wea,
-  input [ADDR_WIDTH - 1:0] addr,
+  input [ADDR_WIDTH - 1:0] waddr,
+  input [ADDR_WIDTH - 1:0] raddr,
   input [DATA_WIDTH - 1:0] wdata,
   output [DATA_WIDTH - 1:0] rdata
 );
@@ -44,19 +45,21 @@ module bram_single_port #(
       rdata_reg <= 0;
     end else begin
       if (wea)
-        mem[addr] <= wdata;
-      rdata_reg <= mem[addr];
+        mem[waddr] <= wdata;
+      rdata_reg <= mem[raddr];
       rdata_reg_ld <= rdata_reg;
     end
   end
 
 `else
-    bram_4000x8_single_port bram_u (
+    bram_4000x8_dual_port bram_u (
       .clka(clk),
+      .clkb(clk),
       .wea(wea),
-      .addra(addr),
-      .douta(rdata),
-      .dina(wdata)
+      .addra(waddr),
+      .dina(wdata),
+      .addrb(raddr),
+      .doutb(rdata)
     );
 `endif
 endmodule
