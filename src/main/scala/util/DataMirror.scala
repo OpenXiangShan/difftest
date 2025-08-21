@@ -60,7 +60,7 @@ private[difftest] object DataMirror {
         "chisel3.util.experimental.BoringUtils",
         _.typeSignature.paramLists.flatten.map(_.typeSignature.toString()).contains("chisel3.experimental.SourceInfo"),
       )
-      val argument: Seq[Any] = Seq(data, None, false, si)
+      val argument: Seq[Any] = Seq(data, si)
       method.get.apply(argument: _*).asInstanceOf[T]
     }
   }
