@@ -355,9 +355,9 @@ inline int Difftest::check_all() {
   cmo_inval_event_record();
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 
-  if (!has_commit) {
-    return 0;
-  }
+  // if (!has_commit) {
+  //   return 0;
+  // }
 
 #ifdef DEBUG_REFILL
   if (do_irefill_check() || do_drefill_check() || do_ptwrefill_check()) {
