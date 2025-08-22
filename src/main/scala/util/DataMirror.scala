@@ -34,6 +34,9 @@ private[difftest] object DataMirror {
     methodSymb.map(s => currentMirror.reflect(obj).reflectMethod(s))
   }
 
+  // Whether we have new BoringUtils
+  def hasNewBore: Boolean = loadMethodOfObject("tapAndRead", "chisel3.util.experimental.BoringUtils").isDefined
+
   implicit class DataMirrorLoader[T <: Data](data: T) {
     def isVisible: Boolean = {
       val method = loadMethodOfObject("isVisible", "chisel3.reflect.DataMirror")
@@ -41,20 +44,14 @@ private[difftest] object DataMirror {
     }
 
     def tapAndRead(implicit si: SourceInfo): T = {
-      require(
-        !chisel3.BuildInfo.version.startsWith("3"),
-        "BoringUtils.tapAndRead does not support Chisel 3, use BoringUtils.addSource/addSink in replace.",
-      )
+      require(hasNewBore, "BoringUtils.tapAndRead not supported. Use BoringUtils.addSource/addSink instead.")
       val method = loadMethodOfObject("tapAndRead", "chisel3.util.experimental.BoringUtils")
       val argument: Seq[Any] = Seq(data, si)
       method.get.apply(argument: _*).asInstanceOf[T]
     }
 
     def bore(implicit si: SourceInfo): T = {
-      require(
-        !chisel3.BuildInfo.version.startsWith("3"),
-        "BoringUtils.bore(data) does not support Chisel 3, use BoringUtils.addSource/addSink in replace.",
-      )
+      require(hasNewBore, "BoringUtils.bore(data) not supported. Use BoringUtils.addSource/addSink instead.")
       val method = loadMethodOfObject(
         "bore",
         "chisel3.util.experimental.BoringUtils",

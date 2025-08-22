@@ -66,12 +66,9 @@ object DifftestWiring {
     }
   }
 
-  // Hierarchical Wiring does not support Chisel 3.
-  def isChisel3: Boolean = chisel3.BuildInfo.version.startsWith("3")
-
   def addSource[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
     getWire(data, name, isHierarchical).setSource()
-    if (isChisel3) {
+    if (!hasNewBore) {
       WiringControl.addSource(data, name)
     }
     data
@@ -83,7 +80,7 @@ object DifftestWiring {
 
   def addSink[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
     val info = getWire(data, name, isHierarchical).addSink()
-    if (!isChisel3) {
+    if (hasNewBore) {
       require(!info.isPending, s"[${info.name}]: Wiring requires addSource before addSink")
       if (info.data.isVisible) {
         data := info.data
