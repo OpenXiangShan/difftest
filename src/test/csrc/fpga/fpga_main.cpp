@@ -29,6 +29,9 @@
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
 #endif // FPGA_SIM
+#ifdef USE_SERIAL_PORT
+#include "serial_port.h"
+#endif // USE_SERIAL_PORT
 
 void fpga_finish();
 
@@ -52,7 +55,9 @@ void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
 
 FpgaXdma *xdma_device = NULL;
-
+#ifdef USE_SERIAL_PORT
+SerialPort *serial_port = NULL;
+#endif // USE_SERIAL_PORT
 int main(int argc, char *argv[]) {
   args_parsing(argc, argv);
 
@@ -74,6 +79,12 @@ void set_diff_ref_so(char *s) {
 
 void fpga_init() {
   xdma_device = new FpgaXdma();
+
+#ifdef USE_SERIAL_PORT
+  serial_port = new SerialPort("/dev/ttyUSB0");
+  serial_port->start();
+#endif // USE_SERIAL_PORT
+
   init_ram(work_load, DEFAULT_EMU_RAM_SIZE);
   init_flash(flash_bin_file);
 
@@ -89,6 +100,11 @@ void fpga_init() {
 
 void fpga_finish() {
   delete xdma_device;
+#ifdef USE_SERIAL_PORT
+  serial_port->stop();
+  delete serial_port;
+#endif // USE_SERIAL_PORT
+
   common_finish();
 
   difftest_finish();
