@@ -61,20 +61,26 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
 
   // Instantiation of LoadEvent corresponds to InstrCommit
   val commitData = in.filter(_.bits.desiredCppName == "commit_data").map(_.asInstanceOf[Valid[DiffCommitData]])
+  val vecCommitData =
+    in.filter(_.bits.desiredCppName == "vec_commit_data").map(_.asInstanceOf[Valid[DiffVecCommitData]])
+  val hasVCD = vecCommitData.nonEmpty
   val loads = in.filter(_.bits.desiredCppName == "load").map(_.asInstanceOf[Valid[DiffLoadEvent]])
-  val loadQueues = loads.zip(commits).zip(commitData).zip(commitSum.flatten).map { case (((ld, c), cd), sum) =>
-    val lq = WireInit(0.U.asTypeOf(Valid(new DiffLoadEventQueue)))
-    lq.inheritFrom(ld)
-    lq.bits.stamp := stamp(ld.bits.coreid) + sum
-    lq.bits.commitData := cd.bits.data
-    lq.bits.vecCommitData := cd.bits.vecData
-    lq.bits.regWen := ((c.bits.rfwen && c.bits.wdest =/= 0.U) || c.bits.fpwen) && !c.bits.vecwen
-    lq.bits.wdest := c.bits.wdest
-    lq.bits.fpwen := c.bits.fpwen
-    lq.bits.vecwen := c.bits.vecwen
-    lq.bits.v0wen := c.bits.v0wen
-    lq
-  }
+  val loadQueues =
+    loads.zip(commits).zip(commitData).zip(commitSum.flatten).zipWithIndex.map { case ((((ld, c), cd), sum), idx) =>
+      val lq = WireInit(0.U.asTypeOf(Valid(new DiffLoadEventQueue)))
+      lq.inheritFrom(ld)
+      lq.bits.stamp := stamp(ld.bits.coreid) + sum
+      lq.bits.commitData := cd.bits.data
+      if (hasVCD) {
+        lq.bits.vecCommitData := vecCommitData(idx).bits.data
+      }
+      lq.bits.regWen := ((c.bits.rfwen && c.bits.wdest =/= 0.U) || c.bits.fpwen) && !c.bits.vecwen
+      lq.bits.wdest := c.bits.wdest
+      lq.bits.fpwen := c.bits.fpwen
+      lq.bits.vecwen := c.bits.vecwen
+      lq.bits.v0wen := c.bits.v0wen
+      lq
+    }
 
   val stores = in.filter(_.bits.desiredCppName == "store").map(_.asInstanceOf[Valid[DiffStoreEvent]])
   val storeQueues = stores.map { st =>
