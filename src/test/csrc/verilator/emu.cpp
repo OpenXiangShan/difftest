@@ -39,14 +39,18 @@
 #include "uparam.h"
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <semaphore.h>
+#include <filesystem>
+
+namespace fs = boost::filesystem;
+fs::path embedding_path = "embedding.txt";
+fs::path ipc_path = "ipc.rpt";
 
 uint64_t old_cycles = 0;
 
 extern remote_bitbang_t * jtag;
 
-// #define SYNC_WITH_PYTHON
-#define CONDUCT_ARCH_EXPLORER 1
+#define SYNC_WITH_PYTHON
+// #define CONDUCT_ARCH_EXPLORER 1
 Perfprocess* perfprocess = nullptr;
 std::string benchmark_name;
 std::string benchmark_root_path = "/nfs/home/wujiabin/work/arch-explorer-new/infras/benchmarks";
@@ -547,18 +551,15 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
   Perfprocess* perfprocess = new Perfprocess(dut_ptr, 4);
   ArchExplorerEngine* engine = new ArchExplorerEngine();
   std::vector<int> embedding;
-  sem_t *sem_py;
-  sem_t *sem_cpp;
   std::string idx;
 
 #ifdef SYNC_WITH_PYTHON
-  sem_py = sem_open("/py_to_xs", 0);
-  sem_cpp = sem_open("/xs_to_py", 0);
-  if (sem_py == SEM_FAILED || sem_cpp == SEM_FAILED) {
-      perror("信号量打开失败");
-  }
   printf("wait for python\n");
-  sem_wait(sem_py);
+
+  while (!fs::exists(embedding_path)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::cout << "Waiting for embedding file..." << std::endl;
+  } 
   embedding = engine->design_space.get_embedding_from_file("embedding.txt");
   idx = get_idx("embedding.txt");
   benchmark_name = get_benchmark("embedding.txt");
@@ -637,35 +638,48 @@ uint64_t Emulator::execute(uint64_t max_cycle, uint64_t max_instr) {
 
 
 #ifdef SYNC_WITH_PYTHON
-          // 反馈 PPA
-          std::ofstream ipc_file;
-          std::string filename = "ipc.rpt";
-          if (epoch == 1) {
-              // 第一个epoch时创建新文件
-              ipc_file.open(filename, std::ios::out);
-              ipc_file << "Epoch,IPC,CPI" << std::endl;
-          } else {
-              // 之后的epoch追加到文件末尾
-              ipc_file.open(filename, std::ios::app);
-          }
+          // if (epoch == 1) {
+          //     // 第一个epoch时创建新文件
+          //     ipc_file.open(filename, std::ios::out);
+          //     ipc_file << "Epoch,IPC,CPI" << std::endl;
+          // } else {
+          //     // 之后的epoch追加到文件末尾
+          //     ipc_file.open(filename, std::ios::app);
+          // }
           
+          // if (ipc_file.is_open()) {
+          //     ipc_file << epoch << "," << ipc << "," << cpi << std::endl;
+          //     ipc_file.close();
+          // } else {
+          //     std::cerr << "无法打开文件: " << filename << std::endl;
+          // }
+
+          std::ofstream ipc_file("ipc.rpt", std::ios::out | std::ios::app);
           if (ipc_file.is_open()) {
-              ipc_file << epoch << "," << ipc << "," << cpi << std::endl;
-              ipc_file.close();
+            ipc_file << ipc << "," << cpi << std::endl;
+            ipc_file.close();
           } else {
-              std::cerr << "无法打开文件: " << filename << std::endl;
+            std::cerr << "Failed to open IPC file." << std::endl;
           }
         
           perfprocess->get_simulation_stats(epoch);
           engine->design_space.get_configs(embedding);
           
-          // 通知Python
-          sem_post(sem_cpp);
-          std::cout << "[C++] 通知Python,开始 DSE 算法" << std::endl;
-  
-          // 等待Python通知
-          sem_wait(sem_py);
-          std::cout << "[C++] 收到Python通知,开始下一轮 DSE 仿真" << std::endl;
+
+          try {
+            if (fs::remove(embedding_path)) {
+                std::cout << "Embedding file deleted successfully." << std::endl;
+            }
+          } catch (const fs::filesystem_error& err) {
+              std::cerr << "Error deleting embedding file: " << err.what() << std::endl;
+          }
+
+          std::cout << "[Simulation] Simulation finished, waiting for python..." << std::endl;
+          std::cout << "Waiting for new embedding file..." << std::endl;
+          while (!fs::exists(embedding_path)) {
+              std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          }
+          std::cout << "[Simulation] Python finished, start simulation..." << std::endl;
   
           benchmark_name = get_benchmark("embedding.txt");
           printf("benchmark_name: %s\n", benchmark_name.c_str());

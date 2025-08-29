@@ -16,23 +16,21 @@ void O3CPUDesignSpace::insert_component(
 }
 
 void O3CPUDesignSpace::initialize() {
-    components_params["FTQ"] = {16, 32, 48, 64};
-    components_params["IBUF"] = {20, 24, 28, 32};
-    components_params["RASSIZE"] = {16, 24, 32};
-    components_params["INTDQ"] = {6, 8, 12, 16};
-    components_params["FPDQ"] = {6, 8, 12, 16};
-    components_params["LSDQ"] = {6, 8, 12, 16};
-    components_params["LQ"] = {16, 24, 32, 48, 64};
-    components_params["SQ"] = {16, 24, 32, 48, 64};
-    components_params["ROB"] = {16, 24, 32, 48, 64, 80, 96, 128};
-    components_params["INTPHYREGS"] = {48, 64, 80, 96, 128};
-    components_params["FPPHYREGS"] = {32, 48, 64, 96};
-    components_params["L2SETS"] = {64, 128};
+    components_params["FTQ"] = {4, 8, 12, 16, 32, 64};
+    components_params["IBUF"] = {16, 20, 24, 28, 32}; 
+    components_params["INTDQ"] = {6, 8, 12};
+    components_params["FPDQ"] = {6, 8, 12};
+    components_params["LSDQ"] = {6, 8, 12};
+    components_params["LQ"] = {4, 8, 12, 16, 24, 32, 64};
+    components_params["SQ"] = {4, 8, 12, 16, 24, 32, 64};
+    components_params["ROB"] = {6, 8, 16, 24, 32, 48, 64, 80, 96, 128, 256};
     components_params["L2MSHRS"] = {2, 6, 10, 14};
-    components_params["L3SETS"] = {256, 512, 1024};
+    components_params["L2SETS"] = {64, 128};
     components_params["L3MSHRS"] = {2, 6, 10, 14};
-    components_params["DCACHEWAYS"] = {2, 4};
-    components_params["DCACHEMSHRS"] = {16};
+    components_params["L3SETS"] = {512, 1024};
+    components_params["INTPHYREGS"] = {64, 80, 96, 128};
+    components_params["FPPHYREGS"] = {32, 48, 64, 96};
+    components_params["RASSIZE"] = {8, 16, 24, 32};
     // initialize_areas();
 }
 
@@ -308,7 +306,7 @@ std::vector<int> O3CPUDesignSpace::get_embedding_from_file(const std::string& fi
             // 跳过Benchmark参数
             continue;
         }
-        
+
         // 查找参数索引
         auto it = std::find(param_names.begin(), param_names.end(), param);
         if (it != param_names.end()) {
@@ -329,20 +327,6 @@ std::vector<int> O3CPUDesignSpace::get_embedding_from_file(const std::string& fi
     // }
 
     return embedding;
-}
-
-void O3CPUDesignSpace::save_embedding_to_file(const std::string& filename, const std::vector<int>& embedding) const {
-    // 打开文件
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-        throw std::runtime_error("Unable to open file: " + filename);
-    }
-    // 写入参数
-    for (size_t i = 0; i < embedding.size(); ++i) {
-        file << param_names[i] << ": " << embedding[i] << "\n";
-    }
-    file.close();
-    std::cout << "Embedding saved to " << filename << std::endl;
 }
 
 bool O3CPUDesignSpace::check_embedding(const std::vector<int>& embedding) const {
@@ -429,6 +413,11 @@ void O3CPUDesignSpace::compare_embeddings(
     const std::vector<int>& emb1, 
     const std::vector<int>& emb2) const {
 
+    if (emb1.size() != emb2.size()) {
+        std::cerr << "Embeddings must be of the same size" << std::endl;
+        return;
+    }
+
 
     std::cout << "{\n";
 
@@ -479,6 +468,11 @@ void O3CPUDesignSpace::get_configs(const std::vector<int>& embedding) const {
           << "L2_assoc: " << L2_assoc << "\n"
           << "L2_banks: " << L2_banks << "\n"
           << "L2_mshrs: " << embedding[EMDIdx::L2MSHRS] << "\n";
+        //   << "L3_capacity: " << embedding[EMDIdx::L3SETS] * 8 * 4 / 16 * 1024 << "\n"
+        //   << "L3_block_width: " << l3_block_width << "\n"
+        //   << "L3_assoc: " << l3_assoc << "\n"
+        //   << "L3_banks: " << l3_banks << "\n"
+        //   << "L3_mshrs: " << embedding[EMDIdx::L3MSHRS] << "\n";
     
     std::ofstream stats_file("stats.txt", std::ios::app);
     if (stats_file.is_open()) {
@@ -488,6 +482,7 @@ void O3CPUDesignSpace::get_configs(const std::vector<int>& embedding) const {
         std::cerr << "Failed to open stats.txt for writing." << std::endl;
       }
 }
+
 
 // O3CPUDesignSpace::O3CPUDesignSpace(
 //     const std::map<std::string, std::map<std::string, std::vector<int>>>& descriptions,
