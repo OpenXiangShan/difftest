@@ -76,7 +76,7 @@ static const char *regs_name_fp_csr[] = {
 };
 
 static const char *regs_name_matrix_csr[] = {
-  "mtype", "mtilem", "mtilen", "mtilek", "mlenb", "mrlenb", "mamul", "mstart", "mcsr"
+  "mtype", "mtilem", "mtilen", "mtilek", "mlenb", "mrlenb", "mamul", "mtok", "mstart", "mcsr"
 };
 
 static const char *regs_name_triggercsr[] = {
