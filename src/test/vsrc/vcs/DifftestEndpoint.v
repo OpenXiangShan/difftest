@@ -50,6 +50,7 @@ import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
 import "DPI-C" function void set_overwrite_autoset();
+
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -72,6 +73,7 @@ reg  [63:0] difftest_logCtrl_begin_r;
 reg  [63:0] difftest_logCtrl_end_r;
 
 string bin_file;
+string tracertl_file;
 string flash_bin_file;
 string gcpt_bin_file;
 string diff_ref_so;
@@ -161,6 +163,8 @@ initial begin
     $fatal;
   end
 `endif // ENABLE_WORKLOAD_SWITCH
+
+
 `endif // TB_NO_DPIC
   // max cycles to execute, no limit for default
   max_cycles = 0;
@@ -226,6 +230,7 @@ always @(posedge clock) begin
       $finish();
     end
 
+
     // stuck check
     if (difftest_step)
       stuck_timer <= 0;
@@ -248,6 +253,7 @@ always @(posedge clock) begin
     end
 
 `ifndef TB_NO_DPIC
+
 `ifdef WITH_DRAMSIM3
     if (n_cycles) begin
       simv_tick();

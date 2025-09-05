@@ -36,6 +36,10 @@
 #endif // CONFIG_DIFFTEST_PERFCNT
 #include "remote_bitbang.h"
 
+#ifdef TRACERTL_MODE
+#include "tracertl.h"
+#endif
+
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
 static char *flash_bin_file = NULL;
@@ -190,6 +194,8 @@ extern "C" uint8_t simv_init() {
   }
 #endif // CONFIG_NO_DIFFTEST
 
+
+
   return 0;
 }
 
@@ -263,6 +269,17 @@ extern "C" uint8_t simv_step() {
 #endif // CONFIG_NO_DIFFTEST
   return 0;
 }
+
+#ifdef TRACERTL_MODE
+extern "C" void init_tracertl_reader(char *tracertl_file) {
+  init_traceicache(NULL);
+  init_tracertl(tracertl_file);
+}
+
+extern "C" void  tracertl_prepare_read_vcs() {
+  tracertl_prepare_read();
+}
+#endif
 
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 svScope deferredResultScope;

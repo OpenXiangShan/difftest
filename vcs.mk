@@ -67,6 +67,10 @@ EXTRA += -P $(NOVAS)/novas.tab $(NOVAS)/pli.a
 endif
 endif
 
+ifeq ($(TRACERTL_MODE),1)
+EXTRA += +define+TRACERTL_MODE
+endif
+
 ifeq ($(VCS),verilator)
 VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH --max-num-width 150000
 VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5

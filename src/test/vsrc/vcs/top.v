@@ -73,6 +73,7 @@ initial begin
     end
   end
 `endif
+
 end
 
 // Note: reset delay #100 should be larger than RANDOMIZE_DELAY
