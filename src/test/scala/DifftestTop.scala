@@ -98,7 +98,7 @@ abstract class DifftestApp extends App {
     }
     (nextOption(default, args.toList), firrtlOpts)
   }
-  val newArgs = DifftestModule.parseArgs(args)
+  val (newArgs, firtoolOptions) = DifftestModule.parseArgs(args)
   val (param, firrtlOpts) = parseArgs(newArgs)
   val gen = if (param.profile.isDefined) { () =>
     new SimTop(param.profile.get, param.numCores)

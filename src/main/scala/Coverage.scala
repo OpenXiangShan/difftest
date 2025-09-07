@@ -1,0 +1,29 @@
+/***************************************************************************************
+ * Copyright (c) 2025 Institute of Computing Technology, Chinese Academy of Sciences
+ * Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
+ *
+ * DiffTest is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the Mulan PSL v2 for more details.
+ ***************************************************************************************/
+
+package difftest
+
+import circt.stage.FirtoolOption
+
+object Coverage {
+  def parseArgs(args: Array[String]): (Array[String], Seq[FirtoolOption]) = {
+    val supportedCoverTypes = Seq("branch")
+    val firtoolOptions = supportedCoverTypes.map(c => s"--extract-$c-cover")
+    val partitioned = args.partition(firtoolOptions.contains)
+    partitioned._1.foreach(println)
+    (partitioned._2, partitioned._1.map(FirtoolOption))
+  }
+}

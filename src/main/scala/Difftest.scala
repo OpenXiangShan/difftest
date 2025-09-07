@@ -16,6 +16,7 @@
 
 package difftest
 
+import circt.stage.FirtoolOption
 import chisel3._
 import chisel3.reflect.DataMirror
 import chisel3.util._
@@ -508,7 +509,8 @@ object DifftestModule {
   private val cppExtModules = ListBuffer.empty[(String, String)]
   private val cppExtHeaders = ListBuffer.empty[String]
 
-  def parseArgs(args: Array[String]): Array[String] = {
+  // Some FIRTOOL options are customized for DiffTest
+  def parseArgs(args: Array[String]): (Array[String], Seq[FirtoolOption]) = {
     @tailrec
     def nextOption(args: Array[String], list: List[String]): Array[String] = {
       list match {
@@ -519,7 +521,9 @@ object DifftestModule {
         case _ :: tail => nextOption(args, tail)
       }
     }
-    nextOption(args, args.toList)
+
+    val (chiselArgs, options) = difftest.Coverage.parseArgs(args)
+    (nextOption(chiselArgs, args.toList), options)
   }
 
   def apply[T <: DifftestBundle](
