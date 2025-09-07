@@ -32,6 +32,15 @@ jobs:
               | cut -d '"' -f 4                                                      \
               | xargs wget -O libfuzzer.a
 
+      - name: Download the customized firtool
+        run: |
+            curl -s https://api.github.com/repos/OpenXiangShan/circt/releases/latest \
+              | grep "browser_download_url"                                          \
+              | grep "firtool-1.62.1-ubuntu-20.04"                                   \
+              | cut -d '"' -f 4                                                      \
+              | xargs wget -O firtool
+            chmod +x ./firtool
+
       - name: Build the fuzzing corpus - riscv-arch-test
         run: |
             cd $GITHUB_WORKSPACE/..
@@ -59,9 +68,16 @@ jobs:
             rm -r difftest
             cp -r $GITHUB_WORKSPACE .
             make bootrom CROSS=riscv64-linux-gnu-
-            make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1 -j2
+            make emu XFUZZ=1 -j2                                           \
+              REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1 \
+              FIRRTL_COVER=branch FIRTOOL=firtool
             ./build/fuzzer -v -- $CORPUS/I-add-01.bin
-            ./build/fuzzer -f --max-runs 100 --corpus-input $CORPUS -- --max-cycles 10000 | grep max_runs
+            ./build/fuzzer -f -c llvm.branch --max-runs 100   \
+              --corpus-input $CORPUS -- --max-cycles 10000    \
+              | grep max_runs
+            ./build/fuzzer -f -c firrtl.branch --max-runs 100 \
+              --corpus-input $CORPUS -- --max-cycles 10000    \
+              | grep max_runs
 
   test-libso-xiangshan:
     strategy:
