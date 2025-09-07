@@ -18,13 +18,11 @@ jobs:
 
       - name: Compile
         run: |
-          mill -i design[chisel3].compile
-          mill -i design[chisel].compile
+          mill -i design.compile
 
       - name: Generate Verilog
         run: |
-          make MFC=0
-          make MFC=1
+          make
 
   test-verilator-nutshell:
     runs-on: ubuntu-latest

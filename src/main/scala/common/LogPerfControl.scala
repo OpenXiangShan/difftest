@@ -17,7 +17,7 @@ package difftest.common
 
 import chisel3._
 import chisel3.util._
-import difftest.util.DataMirror._
+import chisel3.reflect.DataMirror
 
 class LogPerfControl extends Bundle {
   val timer = UInt(64.W)
@@ -75,7 +75,7 @@ object LogPerfControl {
   private val instances = scala.collection.mutable.ListBuffer.empty[LogPerfControl]
   private def instantiate(): LogPerfControl = instances.addOne(WireInit(Module(new LogPerfHelper).io)).last
 
-  def apply(): LogPerfControl = instances.find(_.isVisible).getOrElse(instantiate())
+  def apply(): LogPerfControl = instances.find(DataMirror.isVisible).getOrElse(instantiate())
 }
 
 object DifftestPerf {

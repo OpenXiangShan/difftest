@@ -49,8 +49,8 @@ through a `json` file.
 
 ## Example Chisel Usage: Connecting Your Own Design with DiffTest
 
-We are supporting Chisel 3.6.1 (the last version supporting Scala FIRRTL Compiler)
-as well as 6.7.0 (the latest stable version supporting MLIR FIRRTL Compiler).
+We are supporting Chisel 6.7.0 (the latest stable version supporting MLIR FIRRTL Compiler).
+Note that we have removed the support for Chisel 3.6.1 and older versions.
 
 Here are the detail instructions on integrating DiffTest to your own project.
 
@@ -65,17 +65,7 @@ In Mill `build.sc`:
 ```scala
 import $file.difftest.build
 
-// We recommend using a fixed Chisel version.
 object difftest extends millbuild.difftest.build.CommonDiffTest {
-  def crossValue: String = "3.6.1"
-
-  override def millSourcePath = os.pwd / "difftest"
-}
-
-// This is for advanced users only.
-// All supported Chisel versions are listed in `build.sc`.
-// To pass a cross value to difftest:
-object difftest extends Cross[millbuild.difftest.build.CommonDiffTest](chiselVersions) {
   override def millSourcePath = os.pwd / "difftest"
 }
 ```
