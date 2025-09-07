@@ -126,6 +126,10 @@ SIM_VFLAGS   += +define+ASYNC_CLK_2N=$(ASYNC_CLK_2N)
 endif
 endif
 
+# Third-party RTL include files
+ifneq ($(RTL_INCLUDE),)
+SIM_VFLAGS += $(addprefix -y ,$(abspath $(RTL_INCLUDE)))
+endif
 
 # ChiselDB
 WITH_CHISELDB ?= 1
