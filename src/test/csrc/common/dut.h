@@ -107,7 +107,7 @@ public:
     for (auto cov: cover) {
       cov->display();
     }
-    simstats_display("ExitCode: %d\n", (int)exit_code);
+    // simstats_display("ExitCode: %d\n", (int)exit_code);
   }
 
   void display_uncovered_points() {
