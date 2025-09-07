@@ -31,12 +31,9 @@ SIM_TOP_V = $(RTL_DIR)/$(SIM_TOP).$(RTL_SUFFIX)
 
 # generate difftest files for non-chisel design.
 .DEFAULT_GOAL := difftest_verilog
-ifeq ($(MFC), 1)
-CHISEL_VERSION = chisel
+
 MILL_ARGS += --target systemverilog --split-verilog
-else
-CHISEL_VERSION = chisel3
-endif
+
 ifneq ($(PROFILE), )
 MILL_ARGS += --profile $(abspath $(PROFILE))
 endif
@@ -47,7 +44,7 @@ ifneq ($(CONFIG), )
 MILL_ARGS += --difftest-config $(CONFIG)
 endif
 difftest_verilog:
-	mill -i difftest[$(CHISEL_VERSION)].test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
+	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
 
 TIMELOG = $(BUILD_DIR)/time.log
 TIME_CMD = time -avp -o $(TIMELOG)

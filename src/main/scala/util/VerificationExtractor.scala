@@ -237,18 +237,12 @@ private object DefRegisterWithRef {
     clock: Expression,
     reset: Expression,
     init: Expression,
-  ): (Statement, Reference) = {
-    val defReg = difftest.compatibility.DefRegisterWithReset(info, name, tpe, clock, reset, init)
-    (defReg, Reference(name, tpe))
-  }
+  ): (Statement, Reference) = (DefRegisterWithReset(info, name, tpe, clock, reset, init), Reference(name, tpe))
 
   def apply(
     info: Info,
     name: String,
     tpe: Type,
     clock: Expression,
-  ): (Statement, Reference) = {
-    val defReg = difftest.compatibility.DefRegister(info, name, tpe, clock)
-    (defReg, Reference(name, tpe))
-  }
+  ): (Statement, Reference) = (DefRegister(info, name, tpe, clock), Reference(name, tpe))
 }

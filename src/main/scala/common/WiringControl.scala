@@ -17,7 +17,7 @@ package difftest.common
 
 import chisel3._
 import chisel3.util.experimental.BoringUtils
-import difftest.util.DataMirror._
+import chisel3.reflect.DataMirror
 
 // Wrapper for the Chisel wiring utils.
 private object WiringControl {
@@ -25,9 +25,9 @@ private object WiringControl {
 
   def addSink(data: Data, name: String): Unit = BoringUtils.addSink(data, s"difftest_$name")
 
-  def tapAndRead[T <: Data](source: T): T = source.tapAndRead
+  def tapAndRead[T <: Data](source: T): T = BoringUtils.tapAndRead(source)
 
-  def bore[T <: Data](source: T): T = source.bore
+  def bore[T <: Data](source: T): T = BoringUtils.tapAndRead(source)
 }
 
 private class WiringInfo(val data: Data, val name: String, val isHierarchical: Boolean) {
@@ -68,9 +68,6 @@ object DifftestWiring {
 
   def addSource[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
     getWire(data, name, isHierarchical).setSource()
-    if (!hasNewBore) {
-      WiringControl.addSource(data, name)
-    }
     data
   }
 
@@ -80,17 +77,13 @@ object DifftestWiring {
 
   def addSink[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
     val info = getWire(data, name, isHierarchical).addSink()
-    if (hasNewBore) {
-      require(!info.isPending, s"[${info.name}]: Wiring requires addSource before addSink")
-      if (info.data.isVisible) {
-        data := info.data
-      } else if (isHierarchical) {
-        data := WiringControl.tapAndRead(info.data)
-      } else {
-        data := WiringControl.bore(info.data)
-      }
+    require(!info.isPending, s"[${info.name}]: Wiring requires addSource before addSink")
+    if (DataMirror.isVisible(info.data)) {
+      data := info.data
+    } else if (isHierarchical) {
+      data := WiringControl.tapAndRead(info.data)
     } else {
-      WiringControl.addSink(data, name)
+      data := WiringControl.bore(info.data)
     }
     data
   }

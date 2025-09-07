@@ -20,25 +20,22 @@ import publish._
 
 object ivys {
   val scala = "2.13.14"
-  val chiselCrossVersions = Map(
-    "chisel3" -> (ivy"edu.berkeley.cs::chisel3:3.6.1", ivy"edu.berkeley.cs:::chisel3-plugin:3.6.1"),
-    "chisel" -> (ivy"org.chipsalliance::chisel:6.7.0", ivy"org.chipsalliance:::chisel-plugin:6.7.0"),
-  )
+  val chisel = (ivy"org.chipsalliance::chisel:6.7.0", ivy"org.chipsalliance:::chisel-plugin:6.7.0")
 }
 
-trait CommonDiffTest extends ScalaModule with SbtModule with Cross.Module[String] {
+trait CommonDiffTest extends ScalaModule with SbtModule {
 
   override def scalaVersion = ivys.scala
 
-  override def scalacPluginIvyDeps = Agg(ivys.chiselCrossVersions(crossValue)._2)
+  override def scalacPluginIvyDeps = Agg(ivys.chisel._2)
 
   override def scalacOptions = Seq("-Ymacro-annotations") ++
     Seq("-feature", "-language:reflectiveCalls")
 
-  override def ivyDeps = Agg(ivys.chiselCrossVersions(crossValue)._1)
+  override def ivyDeps = Agg(ivys.chisel._1)
 }
 
-object design extends Cross[DiffTestModule](ivys.chiselCrossVersions.keys.toSeq)
+object design extends DiffTestModule
 
 trait DiffTestModule extends CommonDiffTest {
 
@@ -49,16 +46,10 @@ trait DiffTestModule extends CommonDiffTest {
 
 }
 
-object difftest extends Cross[Difftest](ivys.chiselCrossVersions.keys.toSeq)
+object difftest extends Difftest
 trait Difftest extends CommonDiffTest { outer =>
 
   override def millSourcePath = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
 
-  object test extends SbtTests with TestModule.ScalaTest {
-    override def millSourcePath = outer.millSourcePath
-    override def sources = T.sources {
-      super.sources() ++ Seq(PathRef(millSourcePath / "src" / "generator" / s"$crossValue"))
-    }
-  }
-
+  object test extends SbtTests with TestModule.ScalaTest
 }
