@@ -532,7 +532,7 @@ Emulator::~Emulator() {
 
   // warning: this function may still simulate the circuit
   // simulator resources must be released after this function
-  display_trapinfo();
+  display_stats();
 
 #ifndef CONFIG_NO_DIFFTEST
   stats.update(difftest[0]->dut);
@@ -916,7 +916,7 @@ void Emulator::trigger_stat_dump() {
   single_cycle();
 }
 
-void Emulator::display_trapinfo() {
+void Emulator::display_stats() {
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     printf("Core %d: ", i);
@@ -943,11 +943,11 @@ void Emulator::display_trapinfo() {
     runahead[i]->memdep_watcher->print_pred_matrix();
 #endif
   }
+#endif // CONFIG_NO_DIFFTEST
 
   if (trapCode != STATE_ABORT) {
     trigger_stat_dump();
   }
-#endif // CONFIG_NO_DIFFTEST
 }
 
 void Emulator::snapshot_save() {
