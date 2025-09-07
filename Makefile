@@ -103,14 +103,28 @@ endif
 
 ifeq ($(SYNTHESIS), 1)
 SIM_VFLAGS   += +define+SYNTHESIS +define+TB_NO_DPIC
-else
+else  # SYNTHESIS != 1
+# DiffTest MemHelper
 ifeq ($(DISABLE_DIFFTEST_RAM_DPIC), 1)
 SIM_VFLAGS   += +define+DISABLE_DIFFTEST_RAM_DPIC
 endif
+# DiffTest FlashHelper
 ifeq ($(DISABLE_DIFFTEST_FLASH_DPIC), 1)
 SIM_VFLAGS   += +define+DISABLE_DIFFTEST_FLASH_DPIC
 endif
+# SimJTAG
+ifeq ($(DISABLE_SIMJTAG_DPIC), 1)
+SIM_VFLAGS   += +define+DISABLE_SIMJTAG_DPIC
 endif
+# Chisel-generated macro for assertion printf
+ifneq ($(ASSERT_VERBOSE_COND),)
+SIM_VFLAGS   += +define+ASSERT_VERBOSE_COND=$(ASSERT_VERBOSE_COND)
+endif
+# Chisel-generated macro for SVA
+ifneq ($(STOP_COND),)
+SIM_VFLAGS   += +define+STOP_COND=$(STOP_COND)
+endif
+endif # SYNTHESIS
 
 # FPGA DiffTest Simulate Support
 ifeq ($(FPGA_SIM), 1)
