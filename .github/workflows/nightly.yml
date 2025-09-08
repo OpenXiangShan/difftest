@@ -70,7 +70,7 @@ jobs:
             make bootrom CROSS=riscv64-linux-gnu-
             make emu XFUZZ=1 -j2                                           \
               REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1 \
-              FIRRTL_COVER=branch FIRTOOL=firtool
+              FIRRTL_COVER=branch FIRTOOL=$GITHUB_WORKSPACE/firtool
             ./build/fuzzer -v -- $CORPUS/I-add-01.bin
             ./build/fuzzer -f -c llvm.branch --max-runs 100   \
               --corpus-input $CORPUS -- --max-cycles 10000    \
