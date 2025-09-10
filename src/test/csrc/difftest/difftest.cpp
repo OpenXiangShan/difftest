@@ -575,7 +575,7 @@ inline int Difftest::check_all() {
   return DiffTestChecker::STATE_OK;
 }
 
-static char amu_ctrl_op_str[2][16] = {"MMA", "MLS"};
+static char amu_ctrl_op_str[3][16] = {"MMA", "MLS", "MRELEASE"};
 
 int Difftest::do_amuctrl_check() {
   while (!amu_ctrl_event_queue.empty()) {
@@ -594,7 +594,7 @@ int Difftest::do_amuctrl_check() {
     auto mtilek = amu_event.mtilek;
     auto types = amu_event.types;
     auto typed = amu_event.typed;
-    auto transpose = amu_event.transpose;
+    auto transpose = amu_event.isfp;
     auto isacc = amu_event.isacc;
     auto base = amu_event.base;
     auto stride = amu_event.stride;
@@ -620,8 +620,11 @@ int Difftest::do_amuctrl_check() {
         case 1: // MLS
           printf("                md %d, ls %d, transpose %d, isacc %d,\n"
                  "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                 amu_event.md, amu_event.sat, amu_event.transpose, amu_event.isacc,
+                 amu_event.md, amu_event.sat, amu_event.isfp, amu_event.isacc,
                  amu_event.base, amu_event.stride, amu_event.mtilem, amu_event.mtilen, amu_event.types);
+          break;
+        case 2: // MRelease
+          printf("                tokenRd %d\n", amu_event.mtilem);
           break;
         default:
           printf("                Unknown amu event op\n");
@@ -638,6 +641,9 @@ int Difftest::do_amuctrl_check() {
           printf("                md %d, ls %d, transpose %d, isacc %d,\n"
                  "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
                  md, sat, transpose, isacc, base, stride, mtilem, mtilen, types);
+          break;
+        case 2: // MRelease
+          printf("                tokenRd %d\n", mtilem);
           break;
         default:
           printf("                Unknown amu event op\n");
@@ -660,6 +666,9 @@ int Difftest::do_amuctrl_check() {
           printf("                md %d, ls %d, transpose %d, isacc %d,\n"
                  "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
                  md, sat, transpose, isacc, base, stride, mtilem, mtilen, types);
+          break;
+        case 2: // MRelease
+          printf("                tokenRd %d\n", mtilem);
           break;
         default:
           printf("                Unknown amu event op\n");
