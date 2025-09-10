@@ -391,21 +391,22 @@ class SyncCustomMflushpwrEvent extends DifftestBaseBundle with HasValid {
 // Attention: the order of fields in this class must be the same as the order
 //            in the corresponding struct in NEMU.
 class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
-  val op  = UInt(1.W)
+  val op  = UInt(2.W)
   
-  val md  = UInt(4.W)
-  val sat = Bool()
-  val ms1 = UInt(4.W)
-  val ms2 = UInt(4.W)
+  val md     = UInt(4.W)
+  val sat    = Bool()
+  val isfp   = Bool()
+  val ms1    = UInt(4.W)
+  val ms2    = UInt(4.W)
   val mtilem = UInt(16.W)
   val mtilen = UInt(16.W)
   val mtilek = UInt(16.W)
-  val types = UInt(3.W)
-  val typed = UInt(3.W)
+  val types  = UInt(3.W)
+  val typed  = UInt(3.W)
 
   def ms:     UInt = md
-  def ls:     UInt = sat
-  val transpose    = Bool()
+  def ls:     Bool = sat
+  def transpose: Bool = isfp
   val isacc        = Bool()
   val base         = UInt(64.W)
   val stride       = UInt(64.W)
@@ -413,6 +414,8 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
   def column: UInt = mtilen
   def widths: UInt = types
   val pc = UInt(64.W)
+
+  def tokenRd: UInt = mtilem
 }
 
 private[difftest] class DeltaInfo extends DifftestBaseBundle with HasValid
