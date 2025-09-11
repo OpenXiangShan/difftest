@@ -27,7 +27,7 @@ private object WiringControl {
 
   def tapAndRead[T <: Data](source: T): T = BoringUtils.tapAndRead(source)
 
-  def bore[T <: Data](source: T): T = BoringUtils.tapAndRead(source)
+  def bore[T <: Data](source: T): T = BoringUtils.bore(source)
 }
 
 private class WiringInfo(val data: Data, val name: String, val isHierarchical: Boolean) {
