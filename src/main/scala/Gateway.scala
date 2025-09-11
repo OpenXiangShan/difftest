@@ -27,7 +27,6 @@ import difftest.batch.{Batch, BatchIO}
 import difftest.delta.Delta
 import difftest.replay.Replay
 import difftest.trace.Trace
-import difftest.util.VerificationExtractor
 import difftest.validate.Validate
 
 import scala.collection.mutable.ListBuffer
@@ -48,7 +47,6 @@ case class GatewayConfig(
   traceDump: Boolean = false,
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
-  exitOnAssertions: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
 ) {
@@ -161,7 +159,6 @@ object Gateway {
       case 'T' => config = config.copy(traceDump = true)
       case 'L' => config = config.copy(traceLoad = true)
       case 'H' => config = config.copy(hierarchicalWiring = true)
-      case 'X' => config = config.copy(exitOnAssertions = true)
       case 'F' => config = config.copy(isFPGA = true)
       case 'G' => config = config.copy(isGSIM = true)
       case x   => println(s"Unknown Gateway Config $x")
@@ -186,12 +183,6 @@ object Gateway {
   }
 
   def collect(): GatewayResult = {
-    val exit = Option.when(config.exitOnAssertions) {
-      val asserted = RegInit(false.B)
-      VerificationExtractor.sink(asserted)
-      // Holds 1 after any assertion is asserted.
-      RegEnable(1.U(64.W), 0.U(64.W), asserted)
-    }
     val instances = instanceWithDelay.map(_._1).toSeq
     val sink = if (config.needEndpoint) {
       val gatewayIn = if (config.traceLoad) {
@@ -219,7 +210,7 @@ object Gateway {
       cppMacros = config.cppMacros,
       vMacros = config.vMacros,
       cppExtModule = Some(config.isGSIM),
-      exit = exit,
+      exit = None,
     )
   }
 }
