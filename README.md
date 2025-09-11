@@ -171,6 +171,7 @@ coherence via RefillTest.
 | `DiffUncacheMMStoreEvent` | Uncache buffer main memory store operations | No |
 | `DiffCMOInvalEvent` | Commit of cbo.inval | No |
 | `DiffAmuCtrlEvent` | AmuCtrl IO | No |
+| `DiffTokenEvent` | msyncregreset & macquire insts | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 They will be automatically created when calling `DifftestModule.finish(cpu: String)`.

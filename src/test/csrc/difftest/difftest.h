@@ -196,9 +196,16 @@ protected:
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   std::queue<DifftestAmuCtrlEvent> amu_ctrl_event_queue;
   void amu_ctrl_event_record();
-#endif
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#ifdef CONFIG_DIFFTEST_TOKENEVENT
+  std::queue<DifftestTokenEvent> token_event_queue;
+  void token_event_record();
+#endif // CONFIG_DIFFTEST_TOKENEVENT
+
   int check_all();
   int do_amuctrl_check();
+  int do_token_check();
 
   inline bool in_disambiguation_state() {
     static bool was_found = false;

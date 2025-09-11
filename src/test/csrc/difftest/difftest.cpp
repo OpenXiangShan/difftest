@@ -511,6 +511,7 @@ inline int Difftest::check_all() {
 
 #ifdef DEBUG_AMUCTRL
   amu_ctrl_event_record();
+  token_event_record();
 #endif // DEBUG_AMUCTRL
 
 #ifdef DEBUG_MODE_DIFF
@@ -550,6 +551,9 @@ inline int Difftest::check_all() {
 
 #ifdef DEBUG_AMUCTRL
   if (do_amuctrl_check()) {
+    return 1;
+  }
+  if (do_token_check()) {
     return 1;
   }
 #endif
@@ -696,6 +700,43 @@ int Difftest::do_amuctrl_check() {
   return 0;
 }
 
+static char token_event_op_str[2][16] = {"msyncregreset", "macquire"};
+
+int Difftest::do_token_check() {
+  while (!token_event_queue.empty()) {
+    DifftestTokenEvent token_event = token_event_queue.front();
+#ifdef CONFIG_DIFFTEST_SQUASH
+    // TODO: What is squash? How to squash?
+#endif // CONFIG_DIFFTEST_SQUASH
+    // Save the token event info
+    auto op = token_event.op;
+    auto tokenRd = token_event.tokenRd;
+    uint64_t pc = token_event.pc;
+
+    int check_res = proxy->get_token_event(&token_event);
+
+    if (check_res == 1) {
+      // Compare the token event info
+      // For dismatch, proxy returns 1 and sets the token event info
+      display();
+      printf("\n==============  Token Event (Core %d)  ==============\n", state->coreid);
+      printf("Mismatch for token event\n");
+      printf("  REF Token: pc 0x%016lx, op %s, tokenRd %d\n", token_event.pc, token_event_op_str[token_event.op], token_event.tokenRd);
+      printf("  DUT Token: pc 0x%016lx, op %s, tokenRd %d\n", pc, token_event_op_str[op], tokenRd);
+      token_event_queue.pop();
+      return 1;
+    } else if (check_res == -1) {
+      display();
+      printf("\n==============  Token Event (Core %d)  ==============\n", state->coreid);
+      printf("  No available REF Token\n");
+      printf("  DUT Token: pc 0x%016lx, op %s, tokenRd %d\n", pc, token_event_op_str[op], tokenRd);
+      token_event_queue.pop();
+      return 1;
+    }
+    token_event_queue.pop();
+  }
+  return 0;
+}
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 void Difftest::amu_ctrl_event_record() {
@@ -707,6 +748,17 @@ void Difftest::amu_ctrl_event_record() {
   }
 }
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#ifdef CONFIG_DIFFTEST_TOKENEVENT
+void Difftest::token_event_record() {
+  for (int i = 0; i < CONFIG_DIFF_TOKEN_WIDTH; i++) {
+    if (dut->token[i].valid) {
+      token_event_queue.push(dut->token[i]);
+      dut->token[i].valid = 0;
+    }
+  }
+}
+#endif // CONFIG_DIFFTEST_TOKENEVENT
 
 int Difftest::update_delayed_writeback() {
 #define CHECK_DELAYED_WB(wb, delayed, n, regs_name)                                                \

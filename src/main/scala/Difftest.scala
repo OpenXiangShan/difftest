@@ -518,6 +518,10 @@ class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWit
   override val desiredCppName: String = "amu_ctrl"
 }
 
+class DiffTokenEvent extends TokenEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "token"
+}
+
 // TODO: Matrix Store Event in AME
 // class DiffMatrixStoreEvent extends MatrixStoreEvent with DifftestBundle with DifftestWithIndex {
 //   override val desiredCppName: String = "matrix_store"

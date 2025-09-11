@@ -164,7 +164,9 @@ public:
   f(ref_get_vec_load_dual_goldenmem_reg, difftest_get_vec_load_dual_goldenmem_reg, void*, )                 \
   f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )                                   \
   f(ref_amu_ctrl, difftest_amu_ctrl, int, void*)                                                            \
-  f(ref_get_amu_ctrl_event_other_info, difftest_get_amu_ctrl_event_other_info, void, void*)
+  f(ref_get_amu_ctrl_event_other_info, difftest_get_amu_ctrl_event_other_info, void, void*)                 \
+  f(ref_token_event, difftest_token_event, int, void*)                                                      \
+  f(ref_get_token_event_other_info, difftest_get_token_event_other_info, void, void*)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -410,6 +412,25 @@ public:
       printf(
           "This version of 'REF' does not support the 'PC' value of AmuCtrl event. Please use a newer version of "
           "'REF'.\n");
+    }
+  }
+
+  inline int get_token_event(void *info) {
+    if (ref_token_event) {
+      return ref_token_event(info);
+    } else {
+      printf("This version of 'REF' does not support the 'PC' value of Token event. Please use a newer version of "
+             "'REF'.\n");
+      return 1;
+    }
+  }
+
+  inline void get_token_event_other_info(void *info) {
+    if (ref_get_token_event_other_info) {
+      ref_get_token_event_other_info(info);
+    } else {
+      printf("This version of 'REF' does not support the 'PC' value of Token event. Please use a newer version of "
+             "'REF'.\n");
     }
   }
 
