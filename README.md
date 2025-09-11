@@ -49,7 +49,7 @@ through a `json` file.
 
 ## Example Chisel Usage: Connecting Your Own Design with DiffTest
 
-We are supporting Chisel 6.7.0 (the latest stable version supporting MLIR FIRRTL Compiler).
+We are supporting Chisel 7.0.0 (the latest stable version supporting MLIR FIRRTL Compiler).
 Note that we have removed the support for Chisel 3.6.1 and older versions.
 
 Here are the detail instructions on integrating DiffTest to your own project.
