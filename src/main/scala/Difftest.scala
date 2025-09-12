@@ -268,6 +268,11 @@ class DiffCommitData extends CommitData with DifftestBundle with DifftestWithInd
   override def supportsSquashBase: Bool = true.B
 }
 
+class DiffVecCommitData extends VecCommitData with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "vec_commit_data"
+  override def supportsSquashBase: Bool = true.B
+}
+
 class DiffTrapEvent extends TrapEvent with DifftestBundle {
   override val desiredCppName: String = "trap"
   override def supportsSquashBase: Bool = !hasTrap && !hasWFI
