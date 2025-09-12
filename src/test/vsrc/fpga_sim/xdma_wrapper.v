@@ -34,10 +34,10 @@ xdma_clock xclock(
   .core_clock_enable(core_clock_enable),
   .core_clock(core_clock)
 );
-xdma_ctrl #(
+Difftest2AXI #(
   .DATA_WIDTH(`CONFIG_DIFFTEST_BATCH_IO_WITDH),
   .AXIS_DATA_WIDTH(512)
-) xctrl(
+) diff2axi(
   .clock(clock),
   .reset(reset),
   .difftest_data(difftest_data),
