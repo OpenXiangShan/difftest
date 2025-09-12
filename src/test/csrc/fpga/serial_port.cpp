@@ -72,6 +72,7 @@ void SerialPort::start_read_thread() {
   char buf[256];
   try {
     printf("SerailPort: start read from %s\n", device_);
+    setvbuf(stdout, NULL, _IONBF, 0);
     while (running) {
       fd_set readfds;
       FD_ZERO(&readfds);
