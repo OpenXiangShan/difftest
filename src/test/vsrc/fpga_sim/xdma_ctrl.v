@@ -67,32 +67,25 @@ module xdma_ctrl #(
     assign axi_tlast = reg_axi_tlast;
 
     wire both_full = &buffer_valid;
-    dual_buffer_bram #(
-      .DATA_WIDTH(DATA_WIDTH),
-      .NUM_PACKETS_PER_BUFFER(NUM_PACKETS_PER_BUFFER),
-      .ADDR_WIDTH(3)
-    ) dual_buffer0 (
-      .clk(clock),
-      .rst(reset),
-      .wr_en(wr_en[0]),
-      .wr_addr(dual_buffer_wr_addr),
-      .wr_data(dual_buffer_wr_data),
-      .rd_addr(rd_pkt_cnt),
-      .rd_data(dual_buffer_rd_data[0])
-    );
-    dual_buffer_bram #(
-      .DATA_WIDTH(DATA_WIDTH),
-      .NUM_PACKETS_PER_BUFFER(NUM_PACKETS_PER_BUFFER),
-      .ADDR_WIDTH(3)
-    ) dual_buffer1 (
-      .clk(clock),
-      .rst(reset),
-      .wr_en(wr_en[1]),
-      .wr_addr(dual_buffer_wr_addr),
-      .wr_data(dual_buffer_wr_data),
-      .rd_addr(rd_pkt_cnt),
-      .rd_data(dual_buffer_rd_data[1])
-    );
+
+    // Instantiate dual buffer BRAMs
+    genvar i;
+    generate
+    for (i = 0; i < 2; i = i + 1) begin : gen_dual_buffer
+        dual_buffer_bram #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .NUM_PACKETS_PER_BUFFER(NUM_PACKETS_PER_BUFFER)
+        ) dual_buffer_inst (
+        .clk(clock),
+        .rst(reset),
+        .wr_en(wr_en[i]),
+        .wr_addr(dual_buffer_wr_addr),
+        .wr_data(dual_buffer_wr_data),
+        .rd_addr(rd_pkt_cnt),
+        .rd_data(dual_buffer_rd_data[i])
+        );
+    end
+    endgenerate
 
 
     // asynchronous clock fetches the signal
