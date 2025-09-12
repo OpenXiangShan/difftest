@@ -37,7 +37,8 @@ object Delta {
     val deltaInsts = instances.filter(_.supportsDelta).distinct
     val deltaDecl = deltaInsts.map { inst =>
       val len = inst.dataElements.flatMap(_._3).length
-      s"uint64_t ${inst.desiredCppName}_elem[$len];"
+      val elemType = s"uint${inst.deltaElemBytes * 8}_t"
+      s"$elemType ${inst.desiredCppName}_elem[$len];"
     }
 
     deltaCpp += "#ifndef __DIFFTEST_DELTA_H__"
