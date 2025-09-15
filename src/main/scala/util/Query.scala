@@ -75,7 +75,7 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String) {
   }
   private val dataArgs: Seq[(String, String)] = {
     if (gen.isDeltaElem) {
-      Seq(("DATA", "packet"))
+      Seq(("DATA", "*packet"))
     } else {
       val dataPrefix = "packet->"
       val argList = ListBuffer.empty[(String, String)]
