@@ -14,7 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 `include "DifftestMacros.v"
-module xdma_ctrl #(
+module Difftest2AXI #(
   parameter DATA_WIDTH = 16000,
   parameter AXIS_DATA_WIDTH = 512
 )(
@@ -59,7 +59,7 @@ module xdma_ctrl #(
     reg [DATA_WIDTH-1:0] dual_buffer_wr_data;
     wire [DATA_WIDTH-1:0] dual_buffer_rd_data[1:0];
     wire [DATA_WIDTH-1:0] dual_buffer_rd_data_mux = ~rd_buf ? dual_buffer_rd_data[0] : dual_buffer_rd_data[1];
-    
+
     assign core_clock_enable = reg_core_clock_enable;
     assign axi_tdata = reg_axi_tdata;
     assign axi_tvalid = reg_axi_tvalid;
