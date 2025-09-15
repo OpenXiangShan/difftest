@@ -39,6 +39,9 @@
 #ifdef ENABLE_IPC
 #include <sys/stat.h>
 #endif
+#ifdef PLUGIN_SIMFRONTEND
+#include "simfrontend.h"
+#endif // PLUGIN_SIMFRONTEND
 
 extern remote_bitbang_t *jtag;
 
@@ -87,6 +90,9 @@ static inline void print_help(const char *file) {
   printf("  -X, --fork-interval=NUM    LightSSS snapshot interval (in seconds), default: 10\n");
   printf("      --overwrite-nbytes=N   set valid bytes, but less than 0xf00, default: 0xe00\n");
   printf("      --overwrite-auto       overwrite size is automatically set of the new gcpt\n");
+#ifdef PLUGIN_SIMFRONTEND
+  printf("      --instr-trace          Setting the trace of instructions for SimFrontEnd\n");
+#endif // PLUGIN_SIMFRONTEND
   printf("      --force-dump-result    force dump performance counter result in the end\n");
   printf("      --load-snapshot=PATH   load snapshot from PATH\n");
   printf("      --enable-snapshot      enable simulation snapshots\n");
@@ -161,6 +167,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dramsim3-ini",      1, NULL,  0  },
     { "dramsim3-outdir",   1, NULL,  0  },
     { "overwrite-auto",    1, NULL,  0  },
+    { "instr-trace",       1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -268,6 +275,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
             break;
 #endif
           case 27: args.overwrite_nbytes_autoset = true; continue;
+          case 28: args.instr_trace = optarg; continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -388,6 +396,10 @@ Emulator::Emulator(int argc, const char *argv[])
       dut_ptr->waveform_init(waveform_clock);
     }
   }
+
+#ifdef PLUGIN_SIMFRONTEND
+  init_sim_frontend(args.instr_trace);
+#endif // PLUGIN_SIMFRONTEND
 
   // init core
   reset_ncycles(args.reset_cycles);

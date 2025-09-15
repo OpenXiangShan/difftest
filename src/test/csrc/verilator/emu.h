@@ -46,6 +46,7 @@ struct EmuArgs {
   uint64_t ipc_times;
 #endif
   const char *image = nullptr;
+  const char *instr_trace = nullptr;
   const char *gcpt_restore = nullptr;
   const char *snapshot_path = nullptr;
   const char *wave_path = nullptr;
