@@ -562,7 +562,7 @@ object DifftestModule {
     if (gateway.cppExtModule.getOrElse(false)) {
       generateCppExtModules()
     }
-    generateVeriogHeader(gateway.vMacros)
+    generateVerilogHeader(cpu, gateway.vMacros)
     Profile.generateJson(cpu, interfaces.toSeq)
     gateway
   }
@@ -778,8 +778,12 @@ object DifftestModule {
     difftestCppExts += "#endif // GSIM"
     FileControl.write(difftestCppExts, "difftest-extmodule.cpp")
   }
-  def generateVeriogHeader(macros: Seq[String]): Unit = {
-    FileControl.write(macros.map(m => s"`define $m"), "DifftestMacros.v")
+  def generateVerilogHeader(cpu: String, macros: Seq[String]): Unit = {
+    val difftestV = ListBuffer.empty[String]
+    macros.foreach(m => difftestV += s"`define $m")
+    val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
+    difftestV += s"`define CPU_$cpu_s"
+    FileControl.write(difftestV, "DifftestMacros.v")
   }
 }
 
