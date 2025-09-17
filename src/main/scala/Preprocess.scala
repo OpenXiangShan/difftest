@@ -144,7 +144,7 @@ class PreprocessEndpoint(bundles: Seq[DifftestBundle]) extends Module {
   val withVecCommitData = if (bundles.exists(_.desiredCppName == "wb_vec")) {
     val vecData = Preprocess.getVecCommitData(in, commits)
     val vecCommitData = commits.zip(vecData).map { case (c, v) =>
-      val vcd = WireInit(0.U.asTypeOf(new DiffCommitData))
+      val vcd = WireInit(0.U.asTypeOf(new DiffVecCommitData))
       vcd.coreid := c.coreid
       vcd.index := c.index
       vcd.valid := c.valid
