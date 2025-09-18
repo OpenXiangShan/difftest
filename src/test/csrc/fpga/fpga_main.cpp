@@ -26,6 +26,7 @@
 #include <condition_variable>
 #include <getopt.h>
 #include <mutex>
+#include <unistd.h>
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
 #endif // FPGA_SIM
@@ -79,6 +80,10 @@ void set_diff_ref_so(char *s) {
 
 void fpga_init() {
   xdma_device = new FpgaXdma();
+#ifndef FPGA_SIM
+  xdma_device->fpga_reset_io(true);
+  usleep(1000);
+#endif // FPGA_SIM
 
 #ifdef USE_SERIAL_PORT
   serial_port = new SerialPort("/dev/ttyUSB0");
@@ -93,9 +98,13 @@ void fpga_init() {
   init_device();
   init_goldenmem();
   init_nemuproxy(DEFAULT_EMU_RAM_SIZE);
+
+#ifndef FPGA_SIM
 #ifdef USE_XDMA_DDR_LOAD
   xdma_device->ddr_load_workload(work_load);
 #endif // USE_XDMA_DDR_LOAD
+  xdma_device->fpga_reset_io(false);
+#endif // FPGA_SIM
 }
 
 void fpga_finish() {
