@@ -40,6 +40,7 @@ module DifftestEndpoint(
 
 `ifndef TB_NO_DPIC
 import "DPI-C" function void set_bin_file(string bin);
+import "DPI-C" function void set_copy_ram_offset(string bin);
 import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_gcpt_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
@@ -77,6 +78,7 @@ reg  [63:0] difftest_logCtrl_end_r;
 reg difftest_perfCtrl_clean_r;
 
 string bin_file;
+string copy_ram_offset;
 string flash_bin_file;
 string gcpt_bin_file;
 string diff_ref_so;
@@ -112,6 +114,11 @@ initial begin
   if ($test$plusargs("workload")) begin
     $value$plusargs("workload=%s", bin_file);
     set_bin_file(bin_file);
+  end
+  // copy the ram to offset
+  if ($test$plusargs("copy-ram")) begin
+    $value$plusargs("copy-ram=%s", copy_ram_offset);
+    set_copy_ram_offset(copy_ram_offset);
   end
   // warmup for instrs
   warmup_instr = 0;
