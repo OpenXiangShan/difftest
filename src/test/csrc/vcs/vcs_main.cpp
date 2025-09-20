@@ -39,6 +39,7 @@
 
 static bool has_reset = false;
 static char bin_file[256] = "/dev/zero";
+uint64_t copy_ram_offset = 0;
 static char *flash_bin_file = NULL;
 static char *gcpt_restore_bin = NULL;
 static bool enable_difftest = true;
@@ -59,6 +60,10 @@ enum {
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n", s);
   strcpy(bin_file, s);
+}
+
+extern "C" void set_copy_ram_offset(char *s) {
+  copy_ram_offset = parse_ramsize(s);
 }
 
 extern "C" void set_flash_bin(char *s) {
@@ -186,6 +191,10 @@ extern "C" uint8_t simv_init() {
   if (gcpt_restore_bin != NULL) {
     overwrite_ram(gcpt_restore_bin, overwrite_nbytes);
   }
+  if (copy_ram_offset) {
+    copy_ram(copy_ram_offset);
+  }
+
   init_flash(flash_bin_file);
 
 #ifndef CONFIG_NO_DIFFTEST

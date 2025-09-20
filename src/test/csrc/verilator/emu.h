@@ -34,6 +34,7 @@ struct EmuArgs {
   uint64_t log_begin = 0, log_end = -1;
   uint64_t overwrite_nbytes = 0xe00;
   const char *dramsim3_ini = nullptr;
+  uint64_t copy_ram_offset = 0;
   const char *dramsim3_outdir = nullptr;
 #ifdef DEBUG_REFILL
   uint64_t track_instr = 0;

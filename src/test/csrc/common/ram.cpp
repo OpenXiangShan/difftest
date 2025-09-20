@@ -445,6 +445,42 @@ void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes) {
   delete reader;
 }
 
+void copy_ram(uint64_t copy_ram_offset) {
+  uint64_t n_word = (copy_ram_offset + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+  for (uint64_t src = 0; src < n_word; src++) {
+    uint64_t dest = n_word + src;
+    assert(simMemory->in_range_u64(src) && simMemory->in_range_u64(dest));
+    auto src_val = simMemory->at(src);
+    if (src_val != 0) {
+      simMemory->at(dest) = src_val;
+    }
+  }
+  Info("Copying the RAM contents to 0x%lx.\n", copy_ram_offset);
+}
+
+uint64_t parse_ramsize(const char *ramsize_str) {
+  unsigned long ram_size_value = 0;
+  char ram_size_unit[64];
+  sscanf(ramsize_str, "%ld%s", &ram_size_value, (char *)&ram_size_unit);
+  assert(ram_size_value > 0);
+
+  if (!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")) {
+    return ram_size_value * 1024 * 1024 * 1024;
+  }
+  if (!strcmp(ram_size_unit, "MB") || !strcmp(ram_size_unit, "mb")) {
+    return ram_size_value * 1024 * 1024;
+  }
+  if (!strcmp(ram_size_unit, "KB") || !strcmp(ram_size_unit, "kb")) {
+    return ram_size_value * 1024;
+  }
+  if (!strcmp(ram_size_unit, "B") || ram_size_unit[0] == '\0') {
+    return ram_size_value;
+  }
+  printf("Invalid ram size %s\n", ram_size_unit);
+  assert(false);
+  return 0;
+}
+
 #ifdef WITH_DRAMSIM3
 void dramsim3_init(const char *config_file, const char *out_dir) {
 #if !defined(DRAMSIM3_CONFIG) || !defined(DRAMSIM3_OUTDIR)

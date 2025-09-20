@@ -45,22 +45,6 @@
 
 extern remote_bitbang_t *jtag;
 
-static uint64_t parse_and_update_ramsize(const char *arg_ramsize_str) {
-  unsigned long ram_size_value = 0;
-  char ram_size_unit[64];
-  sscanf(arg_ramsize_str, "%ld%s", &ram_size_value, (char *)&ram_size_unit);
-  assert(ram_size_value > 0);
-
-  if (!strcmp(ram_size_unit, "GB") || !strcmp(ram_size_unit, "gb")) {
-    return ram_size_value * 1024 * 1024 * 1024;
-  }
-  if (!strcmp(ram_size_unit, "MB") || !strcmp(ram_size_unit, "mb")) {
-    return ram_size_value * 1024 * 1024;
-  }
-  printf("Invalid ram size %s\n", ram_size_unit);
-  return 0;
-}
-
 static inline long long int atoll_strict(const char *str, const char *arg) {
   if (strspn(str, " +-0123456789") != strlen(str)) {
     printf("[ERROR] --%s=NUM only accept numeric argument\n", arg);
@@ -126,6 +110,7 @@ static inline void print_help(const char *file) {
   printf("      --dump-footprints=NAME dump memory access footprints to NAME\n");
   printf("      --as-footprints        load the image as memory access footprints\n");
   printf("      --dump-linearized=NAME dump the linearized footprints to NAME\n");
+  printf("      --copy-ram=OFFSET      duplicate the memory at OFFSET\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -168,6 +153,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     { "dramsim3-outdir",   1, NULL,  0  },
     { "overwrite-auto",    1, NULL,  0  },
     { "instr-trace",       1, NULL,  0  },
+    { "copy-ram",          1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -276,6 +262,7 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
 #endif
           case 27: args.overwrite_nbytes_autoset = true; continue;
           case 28: args.instr_trace = optarg; continue;
+          case 29: args.copy_ram_offset = parse_ramsize(optarg); continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);
@@ -407,7 +394,7 @@ Emulator::Emulator(int argc, const char *argv[])
   // init ram
   uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
   if (args.ram_size) {
-    ram_size = parse_and_update_ramsize(args.ram_size);
+    ram_size = parse_ramsize(args.ram_size);
   }
   // footprints
   if (args.image_as_footprints) {
@@ -437,6 +424,10 @@ Emulator::Emulator(int argc, const char *argv[])
       fclose(fp);
     }
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
+  }
+
+  if (args.copy_ram_offset) {
+    copy_ram(args.copy_ram_offset);
   }
 
 #ifdef ENABLE_CHISEL_DB
