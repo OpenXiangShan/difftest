@@ -139,8 +139,19 @@ endif
 endif
 
 # Third-party RTL include files
+define handle_rtl_include_path
+  $(if $(wildcard $1/*), \
+    -y $(abspath $1), \
+    $(if $(wildcard $1), \
+      $(if $(filter %.f,$1), \
+        -F $(abspath $1), \
+        $(abspath $1) \
+      ) \
+    ) \
+  )
+endef
 ifneq ($(RTL_INCLUDE),)
-SIM_VFLAGS += $(addprefix -y ,$(abspath $(RTL_INCLUDE)))
+SIM_VFLAGS += $(foreach p,$(RTL_INCLUDE),$(call handle_rtl_include_path,$(p)))
 endif
 
 # ChiselDB
