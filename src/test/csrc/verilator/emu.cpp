@@ -18,6 +18,7 @@
 #include "compress.h"
 #include "device.h"
 #include "flash.h"
+#include "uart16550.h"
 #include "lightsss.h"
 #include "ram.h"
 #include "remote_bitbang.h"
@@ -650,12 +651,22 @@ inline void Emulator::single_cycle() {
 #endif
 
   if (dut_ptr->difftest_uart_out_valid) {
+
+
     printf("%c", dut_ptr->difftest_uart_out_ch);
     fflush(stdout);
+  } else {
+    // Debug: check if we're getting any UART activity
+    static int debug_count = 0;
+    if (debug_count % 1000000 == 0) {
+      printf("[DEBUG] No UART output, valid=%d, ch=%d\n", 
+             dut_ptr->difftest_uart_out_valid, dut_ptr->difftest_uart_out_ch);
+      fflush(stdout);
+    }
+    debug_count++;
   }
   if (dut_ptr->difftest_uart_in_valid) {
-    extern uint8_t uart_getc();
-    dut_ptr->difftest_uart_in_ch = uart_getc();
+    dut_ptr->difftest_uart_in_ch = uart16550_getc();
   }
 
   dut_ptr->clock = 0;

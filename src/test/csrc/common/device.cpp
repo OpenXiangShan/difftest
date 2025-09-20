@@ -18,6 +18,7 @@
 #include "flash.h"
 #include "sdcard.h"
 #include "uart.h"
+#include "uart16550.h"
 #include "vga.h"
 #ifdef SHOW_SCREEN
 #include <SDL2/SDL.h>
@@ -30,6 +31,7 @@ void init_device(void) {
   init_sdl();
 #endif
   init_uart();
+  init_uart16550();
   init_sd();
 }
 
@@ -38,6 +40,7 @@ void finish_device(void) {
   finish_sdl();
 #endif
   finish_uart();
+  finish_uart16550();
   finish_sd();
 }
 
