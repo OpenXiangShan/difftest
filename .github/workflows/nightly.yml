@@ -109,3 +109,44 @@ jobs:
         with:
           name: libdifftest-${{ matrix.os }}-xiangshan.so
           path: libdifftest.so
+
+  test-gsim-rocketchip:
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+
+    needs: test-difftest-main
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build GSIM
+        run: |
+          # GSIM depends on GMP and clang >= 19
+          sudo apt update
+          sudo apt install -y libgmp-dev clang-19
+          cd $GITHUB_WORKSPACE/..
+          git clone --depth 1 https://github.com/OpenXiangShan/gsim.git
+          cd gsim && make build-gsim -j2
+          echo "GSIM_BIN=$(pwd)/build/gsim/gsim" >> $GITHUB_ENV
+
+      - name: Build the REF - Spike
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          git clone https://github.com/OpenXiangShan/riscv-isa-sim.git
+          echo "SPIKE_HOME=$(pwd)/riscv-isa-sim" >> $GITHUB_ENV
+          make -C riscv-isa-sim/difftest CPU=ROCKET_CHIP -j2
+
+      - name: Prepare Rocket Chip
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          git clone -b dev-difftest --single-branch https://github.com/OpenXiangShan/rocket-chip.git
+          cd rocket-chip && make init && rm -r difftest
+          cp -r $GITHUB_WORKSPACE .
+          make bootrom CROSS=riscv64-linux-gnu-
+          echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
+
+      - name: Build and run EMU with GSIM
+        run: |
+          cd $NOOP_HOME
+          make gsim REF=Spike GSIM_CXX=clang++-19 -j2
+          ./build/gsim -i ./bootrom/bootrom.img -C 1000000
