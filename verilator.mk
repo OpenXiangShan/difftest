@@ -15,7 +15,8 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-VERILATOR_TARGET = $(BUILD_DIR)/emu-verilator
+VERILATOR_BUILD_DIR = $(BUILD_DIR)/verilator-compile
+VERILATOR_TARGET = $(VERILATOR_BUILD_DIR)/$(EMU_ELF_NAME)
 
 ########## Verilator Configuration Options ##########
 VERILATOR_FLAGS = $(SIM_VFLAGS)
@@ -24,12 +25,6 @@ VERILATOR_CSRC_DIR = $(abspath ./src/test/csrc/verilator)
 VERILATOR_CXXFILES = $(EMU_CXXFILES) $(shell find $(VERILATOR_CSRC_DIR) -name "*.cpp")
 VERILATOR_CXXFLAGS = $(EMU_CXXFLAGS) -I$(VERILATOR_CSRC_DIR) -DVERILATOR --std=c++17
 VERILATOR_LDFLAGS  = $(SIM_LDFLAGS) -ldl
-
-# Link fuzzer libraries
-ifneq ($(FUZZER_LIB), )
-# the target is named as fuzzer for clarity
-VERILATOR_TARGET = $(BUILD_DIR)/fuzzer
-endif
 
 # Verilator binary
 VERILATOR ?= verilator
@@ -104,12 +99,11 @@ VERILATOR_FLAGS_ALL =               \
   -o $(VERILATOR_TARGET)            \
   $(VERILATOR_FLAGS)
 
-VERILATOR_DIR = $(BUILD_DIR)/emu-compile
-VERILATOR_MK = $(VERILATOR_DIR)/V$(EMU_TOP).mk
+VERILATOR_MK = $(VERILATOR_BUILD_DIR)/V$(EMU_TOP).mk
 VERILATOR_HEADERS := $(EMU_HEADERS) $(shell find $(VERILATOR_CSRC_DIR) -name "*.h")
 
 # Profile Guided Optimization
-VERILATOR_PGO_DIR  = $(VERILATOR_DIR)/pgo
+VERILATOR_PGO_DIR  = $(VERILATOR_BUILD_DIR)/pgo
 PGO_MAX_CYCLE ?= 2000000
 
 $(VERILATOR_MK): $(SIM_TOP_V) | $(SIM_VSRC) $(VERILATOR_CXXFILES)
@@ -123,9 +117,9 @@ endif
 	@sed -i -e 's/$(subst /,\/,$(NOOP_HOME))/$$(NOOP_HOME)/g' \
 	       -e '/^default:/i\NOOP_HOME ?= $(subst /,\/,$(NOOP_HOME))\n' $@
 ifneq ($(VERILATOR_5_000),1)
-	@sed -i 's/private/public/g' $(VERILATOR_DIR)/VSimTop.h
-	@sed -i 's/const vlSymsp/vlSymsp/g' $(VERILATOR_DIR)/VSimTop.h
-	@sed -i 's/VlThreadPool\* const/VlThreadPool*/g' $(VERILATOR_DIR)/VSimTop__Syms.h
+	@sed -i 's/private/public/g' $(VERILATOR_BUILD_DIR)/VSimTop.h
+	@sed -i 's/const vlSymsp/vlSymsp/g' $(VERILATOR_BUILD_DIR)/VSimTop.h
+	@sed -i 's/VlThreadPool\* const/VlThreadPool*/g' $(VERILATOR_BUILD_DIR)/VSimTop__Syms.h
 endif
 
 EMU_COMPILE_FILTER =
@@ -133,13 +127,13 @@ EMU_COMPILE_FILTER =
 
 verilator-build-emu:
 ifeq ($(REMOTE),localhost)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
 						OPT_FAST=$(OPT_FAST) \
 						PGO_CFLAGS=$(PGO_CFLAGS) \
 						PGO_LDFLAGS=$(PGO_LDFLAGS) \
-						-C $(VERILATOR_DIR) -f $(VERILATOR_MK) $(EMU_COMPILE_FILTER)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
+						-C $(VERILATOR_BUILD_DIR) -f $(VERILATOR_MK) $(EMU_COMPILE_FILTER)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); \
 					   $(MAKE) -C $(NOOP_HOME)/difftest verilator-build-emu \
@@ -157,17 +151,17 @@ ifdef PGO_WORKLOAD
 	@stat $(PGO_WORKLOAD) > /dev/null
 	@$(MAKE) clean_obj
 	@mkdir -p $(VERILATOR_PGO_DIR)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
 					   PGO_CFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)"
 	@echo "Training emu with PGO Workload..."
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	$(VERILATOR_TARGET) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
 		   1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
 		   2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
 		   $(PGO_EMU_ARGS)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 ifdef LLVM_PROFDATA
 # When using LLVM's profile-guided optimization, the raw data can not
 # directly be used in -fprofile-use. We need to use a specific version of
@@ -191,7 +185,7 @@ else # ifdef LLVM_PROFDATA
 endif # ifdef LLVM_PROFDATA
 	@echo "Building emu with PGO profile..."
 	@$(MAKE) clean_obj
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
 					   PGO_CFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)"
@@ -199,7 +193,7 @@ else # ifdef PGO_WORKLOAD
 	@echo "Building emu..."
 	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST)
 endif # ifdef PGO_WORKLOAD
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 
 verilator-emu: $(VERILATOR_TARGET)
 verilator-emu-mk: $(VERILATOR_MK)
@@ -213,6 +207,6 @@ coverage:
 	@mv $(COVERAGE_DATA) $(COVERAGE_DIR)
 
 verilator-clean-obj:
-	rm -f $(VERILATOR_DIR)/*.o $(VERILATOR_DIR)/*.gch $(VERILATOR_DIR)/*.a $(VERILATOR_TARGET)
+	rm -f $(VERILATOR_BUILD_DIR)/*.o $(VERILATOR_BUILD_DIR)/*.gch $(VERILATOR_BUILD_DIR)/*.a $(VERILATOR_TARGET)
 
 .PHONY: verilator-build-emu clean_obj

@@ -17,8 +17,8 @@
 GSIM_BIN ?= gsim
 GSIM_CXX = clang++  # only support clang++14 or above
 
-GSIM_EMU_TARGET = $(abspath $(BUILD_DIR)/emu-gsim)
 GSIM_EMU_BUILD_DIR = $(abspath $(BUILD_DIR)/gsim-compile)
+GSIM_EMU_TARGET = $(abspath $(GSIM_EMU_BUILD_DIR)/emu)
 
 ##############################################
 ### Running GSIM to generate cpp model

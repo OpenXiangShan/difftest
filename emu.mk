@@ -14,7 +14,13 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-EMU          = $(BUILD_DIR)/emu
+EMU_ELF_NAME = emu
+# the target is named as fuzzer for clarity in fuzzing
+ifneq ($(FUZZER_LIB), )
+EMU_ELF_NAME = fuzzer
+endif
+
+EMU          = $(BUILD_DIR)/$(EMU_ELF_NAME)
 EMU_TOP      = SimTop
 
 EMU_CSRC_DIR   = $(abspath ./src/test/csrc/emu)
