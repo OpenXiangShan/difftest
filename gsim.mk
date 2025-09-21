@@ -17,7 +17,7 @@
 GSIM_BIN ?= gsim
 GSIM_CXX = clang++  # only support clang++14 or above
 
-GSIM_EMU_TARGET    = $(abspath $(BUILD_DIR)/gsim)
+GSIM_EMU_TARGET    = $(EMU)
 GSIM_EMU_BUILD_DIR = $(abspath $(BUILD_DIR)/gsim-compile)
 
 ##############################################
