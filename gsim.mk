@@ -40,7 +40,7 @@ gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 GSIM_OTHER_CSRC_DIR = $(abspath ./src/test/csrc/gsim)
 GSIM_CXXFILES = $(EMU_CXXFILES) $(shell find $(GSIM_OTHER_CSRC_DIR) -name "*.cpp")
 # We need to replace extra '\' as this is native in Makefile for GSIM
-GSIM_CXXFLAGS = $(subst \\\",\", $(SIM_CXXFLAGS))
+GSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GSIM_CXXFLAGS += -I$(GSIM_OTHER_CSRC_DIR) -I$(GSIM_GEN_CSRC_DIR)/ -DGSIM
 GSIM_CXXFLAGS += -O3 -fbracket-depth=2048 -Wno-parentheses-equality $(PGO_CFLAGS)
 GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
