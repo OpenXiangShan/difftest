@@ -134,4 +134,6 @@ else # ifdef PGO_WORKLOAD
 endif # ifdef PGO_WORKLOAD
 	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
 
-gsim-emu: gsim-gen-cpp gsim-gen-emu
+gsim-emu:
+	$(MAKE) gsim-gen-cpp
+	$(MAKE) gsim-gen-emu
