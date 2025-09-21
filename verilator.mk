@@ -1,5 +1,6 @@
 #***************************************************************************************
-# Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
 # Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
 # DiffTest is licensed under Mulan PSL v2.
@@ -14,24 +15,16 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-EMU          = $(BUILD_DIR)/emu
-EMU_TOP      = SimTop
+VERILATOR_BUILD_DIR = $(BUILD_DIR)/verilator-compile
+VERILATOR_TARGET = $(VERILATOR_BUILD_DIR)/$(EMU_ELF_NAME)
 
-EMU_CSRC_DIR   = $(abspath ./src/test/csrc/verilator)
-EMU_CONFIG_DIR = $(abspath ./config)
+########## Verilator Configuration Options ##########
+VERILATOR_FLAGS = $(SIM_VFLAGS)
 
-EMU_CXXFILES  = $(SIM_CXXFILES) $(shell find $(EMU_CSRC_DIR) -name "*.cpp")
-EMU_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(EMU_CSRC_DIR)
-EMU_CXXFLAGS += -DVERILATOR -DNUM_CORES=$(NUM_CORES) --std=c++17
-EMU_LDFLAGS   = $(SIM_LDFLAGS) -ldl
-
-VEXTRA_FLAGS  = $(SIM_VFLAGS)
-
-# Link fuzzer libraries
-ifneq ($(FUZZER_LIB), )
-# the target is named as fuzzer for clarity
-EMU = $(BUILD_DIR)/fuzzer
-endif
+VERILATOR_CSRC_DIR = $(abspath ./src/test/csrc/verilator)
+VERILATOR_CXXFILES = $(EMU_CXXFILES) $(shell find $(VERILATOR_CSRC_DIR) -name "*.cpp")
+VERILATOR_CXXFLAGS = $(EMU_CXXFLAGS) -I$(VERILATOR_CSRC_DIR) -DVERILATOR --std=c++17
+VERILATOR_LDFLAGS  = $(SIM_LDFLAGS) -ldl
 
 # Verilator binary
 VERILATOR ?= verilator
@@ -40,62 +33,50 @@ VERILATOR ?= verilator
 VERILATOR_VER_CMD = $(VERILATOR) --version 2> /dev/null | cut -f2 -d' ' | tr -d '.'
 VERILATOR_4_210 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 4210 2> /dev/null)
 ifeq ($(VERILATOR_4_210),1)
-EMU_CXXFLAGS += -DVERILATOR_4_210
-VEXTRA_FLAGS += --instr-count-dpi 1
+VERILATOR_CXXFLAGS += -DVERILATOR_4_210
+VERILATOR_FLAGS += --instr-count-dpi 1
 endif
 VERILATOR_5_000 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5000 2> /dev/null)
 ifeq ($(VERILATOR_5_000),1)
-VEXTRA_FLAGS += --no-timing +define+VERILATOR_5
+VERILATOR_FLAGS += --no-timing +define+VERILATOR_5
 else
-VEXTRA_FLAGS += +define+VERILATOR_LEGACY
+VERILATOR_FLAGS += +define+VERILATOR_LEGACY
 endif
 VERILATOR_5_024 := $(shell expr `$(VERILATOR_VER_CMD)` \>= 5024 2> /dev/null)
 ifeq ($(VERILATOR_5_024),1)
-VEXTRA_FLAGS += --quiet-stats
+VERILATOR_FLAGS += --quiet-stats
 endif
 
-# Verilator trace support
-EMU_TRACE ?=
 ifneq (,$(filter $(EMU_TRACE),1 vcd VCD))
-VEXTRA_FLAGS += --trace
+VERILATOR_FLAGS += --trace
 endif
 ifneq (,$(filter $(EMU_TRACE),fst FST))
-VEXTRA_FLAGS += --trace-fst
-EMU_CXXFLAGS += -DENABLE_FST
+VERILATOR_FLAGS += --trace-fst
+VERILATOR_CXXFLAGS += -DENABLE_FST
 endif
 
 # Verilator trace underscore support
 ifeq ($(EMU_TRACE_ALL),1)
-VEXTRA_FLAGS += --trace-underscore
+VERILATOR_FLAGS += --trace-underscore
 endif
 
-# Verilator multi-thread support
-EMU_THREADS  ?= 0
 ifneq ($(EMU_THREADS),0)
-VEXTRA_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
-EMU_CXXFLAGS += -DEMU_THREAD=$(EMU_THREADS)
+VERILATOR_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
 endif
 
-# Verilator savable
-EMU_SNAPSHOT ?=
 ifeq ($(EMU_SNAPSHOT),1)
-VEXTRA_FLAGS += --savable
-EMU_CXXFLAGS += -DVM_SAVABLE
+VERILATOR_FLAGS += --savable
 endif
 
-# Verilator coverage
-EMU_COVERAGE ?=
 ifeq ($(EMU_COVERAGE),1)
-VEXTRA_FLAGS += --coverage-line --coverage-toggle
+VERILATOR_FLAGS += --coverage-line --coverage-toggle
 endif
-
-# Verilator optimization
-EMU_OPTIMIZE ?= -O3
 
 # C optimization
 OPT_FAST ?= -O3
 
-VERILATOR_FLAGS =                   \
+########## Verilator Build Recipes ##########
+VERILATOR_FLAGS_ALL =               \
   --exe $(EMU_OPTIMIZE)             \
   --cc --top-module $(EMU_TOP)      \
   +define+VERILATOR=1               \
@@ -111,80 +92,76 @@ VERILATOR_FLAGS =                   \
   --output-split-cfuncs 30000       \
   -I$(RTL_DIR)                      \
   -I$(GEN_VSRC_DIR)                 \
-  -CFLAGS "$(EMU_CXXFLAGS)"         \
-  -LDFLAGS "$(EMU_LDFLAGS)"         \
+  -CFLAGS "$(VERILATOR_CXXFLAGS)"   \
+  -LDFLAGS "$(VERILATOR_LDFLAGS)"   \
   -CFLAGS "\$$(PGO_CFLAGS)"         \
   -LDFLAGS "\$$(PGO_LDFLAGS)"       \
-  -o $(abspath $(EMU))              \
-  $(VEXTRA_FLAGS)
+  -o $(VERILATOR_TARGET)            \
+  $(VERILATOR_FLAGS)
 
-EMU_DIR = $(BUILD_DIR)/emu-compile
-EMU_MK  = $(EMU_DIR)/V$(EMU_TOP).mk
-EMU_DEPS  := $(SIM_VSRC) $(EMU_CXXFILES)
-EMU_HEADERS := $(shell find $(EMU_CSRC_DIR) -name "*.h")     \
-               $(shell find $(SIM_CSRC_DIR) -name "*.h")     \
-               $(shell find $(DIFFTEST_CSRC_DIR) -name "*.h")
+VERILATOR_MK = $(VERILATOR_BUILD_DIR)/V$(EMU_TOP).mk
+VERILATOR_HEADERS := $(EMU_HEADERS) $(shell find $(VERILATOR_CSRC_DIR) -name "*.h")
 
 # Profile Guided Optimization
-EMU_PGO_DIR  = $(EMU_DIR)/pgo
+VERILATOR_PGO_DIR  = $(VERILATOR_BUILD_DIR)/pgo
 PGO_MAX_CYCLE ?= 2000000
 
-$(EMU_MK): $(SIM_TOP_V) | $(EMU_DEPS)
+$(VERILATOR_MK): $(SIM_TOP_V) | $(SIM_VSRC) $(VERILATOR_CXXFILES)
 ifeq ($(EMU_COVERAGE),1)
 	@python3 ./scripts/coverage/vtransform.py $(RTL_DIR)
 endif
 	@mkdir -p $(@D)
 	@echo -e "\n[verilator] Generating C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) $(VERILATOR) $(VERILATOR_FLAGS) --Mdir $(@D) $^ $(EMU_DEPS)
+	$(TIME_CMD) $(VERILATOR) $(VERILATOR_FLAGS_ALL) --Mdir $(@D) $^ $(SIM_VSRC) $(VERILATOR_CXXFILES)
 	@sed -i -e 's/$(subst /,\/,$(NOOP_HOME))/$$(NOOP_HOME)/g' \
 	       -e '/^default:/i\NOOP_HOME ?= $(subst /,\/,$(NOOP_HOME))\n' $@
 ifneq ($(VERILATOR_5_000),1)
-	@sed -i 's/private/public/g' $(EMU_DIR)/VSimTop.h
-	@sed -i 's/const vlSymsp/vlSymsp/g' $(EMU_DIR)/VSimTop.h
-	@sed -i 's/VlThreadPool\* const/VlThreadPool*/g' $(EMU_DIR)/VSimTop__Syms.h
+	@sed -i 's/private/public/g' $(VERILATOR_BUILD_DIR)/VSimTop.h
+	@sed -i 's/const vlSymsp/vlSymsp/g' $(VERILATOR_BUILD_DIR)/VSimTop.h
+	@sed -i 's/VlThreadPool\* const/VlThreadPool*/g' $(VERILATOR_BUILD_DIR)/VSimTop__Syms.h
 endif
 
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
 
-build_emu:
+verilator-build-emu:
 ifeq ($(REMOTE),localhost)
-	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
 						OPT_FAST=$(OPT_FAST) \
 						PGO_CFLAGS=$(PGO_CFLAGS) \
 						PGO_LDFLAGS=$(PGO_LDFLAGS) \
-						-C $(EMU_DIR) -f $(EMU_MK) $(EMU_COMPILE_FILTER)
-	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
+						-C $(VERILATOR_BUILD_DIR) -f $(VERILATOR_MK) $(EMU_COMPILE_FILTER)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); \
-					   $(MAKE) -C $(NOOP_HOME)/difftest build_emu \
+					   $(MAKE) -C $(NOOP_HOME)/difftest verilator-build-emu \
 					   -j `nproc` \
 					   OPT_FAST="'"$(OPT_FAST)"'" \
 					   PGO_CFLAGS="'"$(PGO_CFLAGS)"'" \
 					   PGO_LDFLAGS="'"$(PGO_LDFLAGS)"'"'
 endif
 
-$(EMU): $(EMU_MK) $(EMU_DEPS) $(EMU_HEADERS)
+$(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILATOR_HEADERS)
 	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 ifdef PGO_WORKLOAD
 	@echo "Building PGO profile..."
 	@stat $(PGO_WORKLOAD) > /dev/null
 	@$(MAKE) clean_obj
-	@mkdir -p $(EMU_PGO_DIR)
-	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
-	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST) \
-					   PGO_CFLAGS="-fprofile-generate=$(EMU_PGO_DIR)" \
-					   PGO_LDFLAGS="-fprofile-generate=$(EMU_PGO_DIR)"
+	@mkdir -p $(VERILATOR_PGO_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
+	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
+					   PGO_CFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)" \
+					   PGO_LDFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)"
 	@echo "Training emu with PGO Workload..."
-	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
-	$(EMU) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
-		   1>$(EMU_PGO_DIR)/`date +%s`.log \
-		   2>$(EMU_PGO_DIR)/`date +%s`.err \
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
+	$(VERILATOR_TARGET) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+		   1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
+		   2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
 		   $(PGO_EMU_ARGS)
-	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 ifdef LLVM_PROFDATA
 # When using LLVM's profile-guided optimization, the raw data can not
 # directly be used in -fprofile-use. We need to use a specific version of
@@ -194,7 +171,7 @@ ifdef LLVM_PROFDATA
 # machines may have multiple versions of llvm-profdata. So please never
 # add default value for LLVM_PROFDATA unless we have a proper way to probe
 # the compiler and the corresponding llvm-profdata value.
-	$(LLVM_PROFDATA) merge $(EMU_PGO_DIR)/*.profraw -o $(EMU_PGO_DIR)/default.profdata
+	$(LLVM_PROFDATA) merge $(VERILATOR_PGO_DIR)/*.profraw -o $(VERILATOR_PGO_DIR)/default.profdata
 else # ifdef LLVM_PROFDATA
 	@echo ""
 	@echo "----------------------- NOTICE BEGIN -----------------------"
@@ -208,18 +185,18 @@ else # ifdef LLVM_PROFDATA
 endif # ifdef LLVM_PROFDATA
 	@echo "Building emu with PGO profile..."
 	@$(MAKE) clean_obj
-	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
-	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST) \
-					   PGO_CFLAGS="-fprofile-use=$(EMU_PGO_DIR)" \
-					   PGO_LDFLAGS="-fprofile-use=$(EMU_PGO_DIR)"
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
+	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
+					   PGO_CFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)" \
+					   PGO_LDFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)"
 else # ifdef PGO_WORKLOAD
 	@echo "Building emu..."
-	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST)
+	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST)
 endif # ifdef PGO_WORKLOAD
-	@sync -d $(BUILD_DIR) -d $(EMU_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 
-emu: $(EMU)
-emu-mk: $(EMU_MK)
+verilator-emu: $(VERILATOR_TARGET)
+verilator-emu-mk: $(VERILATOR_MK)
 
 COVERAGE_DATA ?= $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.dat")
 COVERAGE_DIR  ?= $(DESIGN_DIR)/$(basename $(notdir $(COVERAGE_DATA)))
@@ -229,7 +206,7 @@ coverage:
 	@python3 scripts/coverage/statistics.py $(COVERAGE_DIR) > $(COVERAGE_DIR)/coverage_$(SIM_TOP).log
 	@mv $(COVERAGE_DATA) $(COVERAGE_DIR)
 
-clean_obj:
-	rm -f $(EMU_DIR)/*.o $(EMU_DIR)/*.gch $(EMU_DIR)/*.a $(EMU)
+verilator-clean-obj:
+	rm -f $(VERILATOR_BUILD_DIR)/*.o $(VERILATOR_BUILD_DIR)/*.gch $(VERILATOR_BUILD_DIR)/*.a $(VERILATOR_TARGET)
 
-.PHONY: build_emu clean_obj
+.PHONY: verilator-build-emu clean_obj

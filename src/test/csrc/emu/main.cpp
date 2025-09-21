@@ -16,13 +16,8 @@
 
 #include "common.h"
 #include "dut.h"
-
-#if defined(VERILATOR) || defined(GSIM)
 #include "emu.h"
-#define DUT_MODEL Emulator
-#endif
 
-#ifdef DUT_MODEL
 #ifdef FUZZER_LIB
 
 extern "C" int sim_main(int argc, const char **argv);
@@ -37,7 +32,7 @@ int main(int argc, const char *argv[]) {
   common_init_without_assertion(argv[0]);
 
   // initialize the design-under-test (DUT)
-  auto emu = new DUT_MODEL(argc, argv);
+  auto emu = new Emulator(argc, argv);
 
   // allow assertions only after DUT resets
   common_enable_assert();
@@ -70,4 +65,3 @@ int main(int argc, const char *argv[]) {
 #endif // FUZZER_LIB
 #endif // FUZZING && !FUZZER_LIB
 }
-#endif // DUT_MODEL

@@ -146,5 +146,5 @@ jobs:
       - name: Build and run EMU with GSIM
         run: |
           cd $NOOP_HOME
-          make gsim REF=Spike GSIM_CXX=clang++-19 -j2
-          ./build/gsim -i ./bootrom/bootrom.img -C 1000000
+          make emu REF=Spike GSIM=1 GSIM_CXX=clang++-19 -j2
+          ./build/emu -i ./bootrom/bootrom.img -C 1000000

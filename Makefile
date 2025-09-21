@@ -1,5 +1,6 @@
 #***************************************************************************************
-# Copyright (c) 2020-2024 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
 # Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
 # DiffTest is licensed under Mulan PSL v2.
@@ -301,8 +302,7 @@ ifeq ($(CXX_NO_WARNING),1)
 SIM_CXXFLAGS += -Werror
 endif
 
-include verilator.mk
-include gsim.mk
+include emu.mk
 include vcs.mk
 include galaxsim.mk
 include palladium.mk
