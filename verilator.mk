@@ -130,7 +130,7 @@ endif
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
 
-build_emu:
+verilator-build-emu:
 ifeq ($(REMOTE),localhost)
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
@@ -141,7 +141,7 @@ ifeq ($(REMOTE),localhost)
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
 else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); \
-					   $(MAKE) -C $(NOOP_HOME)/difftest build_emu \
+					   $(MAKE) -C $(NOOP_HOME)/difftest verilator-build-emu \
 					   -j `nproc` \
 					   OPT_FAST="'"$(OPT_FAST)"'" \
 					   PGO_CFLAGS="'"$(PGO_CFLAGS)"'" \
@@ -157,7 +157,7 @@ ifdef PGO_WORKLOAD
 	@$(MAKE) clean_obj
 	@mkdir -p $(VERILATOR_PGO_DIR)
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
-	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST) \
+	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
 					   PGO_CFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)"
 	@echo "Training emu with PGO Workload..."
@@ -191,12 +191,12 @@ endif # ifdef LLVM_PROFDATA
 	@echo "Building emu with PGO profile..."
 	@$(MAKE) clean_obj
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
-	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST) \
+	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
 					   PGO_CFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)"
 else # ifdef PGO_WORKLOAD
 	@echo "Building emu..."
-	@$(MAKE) build_emu OPT_FAST=$(OPT_FAST)
+	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST)
 endif # ifdef PGO_WORKLOAD
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
 
@@ -214,4 +214,4 @@ coverage:
 verilator-clean-obj:
 	rm -f $(VERILATOR_DIR)/*.o $(VERILATOR_DIR)/*.gch $(VERILATOR_DIR)/*.a $(VERILATOR_TARGET)
 
-.PHONY: build_emu clean_obj
+.PHONY: verilator-build-emu clean_obj

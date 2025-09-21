@@ -57,10 +57,18 @@ include gsim.mk
 
 ########## Emu build recipes ##########
 
-# By default, emu refers to verilator-emu
-$(EMU): $(VERILATOR_TARGET)
+emu-verilator: verilator-emu
 	@ln -sf $(VERILATOR_TARGET) $(EMU)
 
-emu: $(EMU)
+emu-gsim: gsim-emu
+	@ln -sf $(GSIM_EMU_TARGET) $(EMU)
 
-clean-obj: verilator-clean-obj
+# By default, when no simulator is specified, emu refers to verilator-emu
+emu:
+ifeq ($(GSIM),1)
+	@$(MAKE) emu-gsim
+else
+	@$(MAKE) emu-verilator
+endif
+
+clean-obj: verilator-clean-obj gsim-clean-obj
