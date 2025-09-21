@@ -27,13 +27,6 @@ EMU_HEADERS := $(shell find $(SIM_CSRC_DIR) -name "*.h")      \
                $(shell find $(DIFFTEST_CSRC_DIR) -name "*.h") \
 			   $(shell find $(EMU_CSRC_DIR) -name "*.h")
 
-
-# By default, emu refers to verilator-emu
-emu: verilator-emu
-emu-mk: verilator-emu-mk
-clean-obj: verilator-clean-obj
-
-
 ########## Supported Configuration Options ##########
 # trace (waveform)
 EMU_TRACE ?=
@@ -59,6 +52,15 @@ EMU_COVERAGE ?=
 # optimization level for RTL simulators
 EMU_OPTIMIZE ?= -O3
 
-
 include verilator.mk
 include gsim.mk
+
+########## Emu build recipes ##########
+
+# By default, emu refers to verilator-emu
+$(EMU): $(VERILATOR_TARGET)
+	@ln -sf $(VERILATOR_TARGET) $(EMU)
+
+emu: $(EMU)
+
+clean-obj: verilator-clean-obj

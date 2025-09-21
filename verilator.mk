@@ -1,5 +1,5 @@
 #***************************************************************************************
-# Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
 # Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
 # DiffTest is licensed under Mulan PSL v2.
@@ -14,10 +14,10 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-VERILATOR_TARGET   = $(EMU)
+VERILATOR_TARGET = $(BUILD_DIR)/emu-verilator
 
 ########## Verilator Configuration Options ##########
-VERILATOR_FLAGS    = $(SIM_VFLAGS)
+VERILATOR_FLAGS = $(SIM_VFLAGS)
 
 VERILATOR_CSRC_DIR = $(abspath ./src/test/csrc/verilator)
 VERILATOR_CXXFILES = $(EMU_CXXFILES) $(shell find $(VERILATOR_CSRC_DIR) -name "*.cpp")
@@ -100,7 +100,7 @@ VERILATOR_FLAGS_ALL =               \
   -LDFLAGS "$(VERILATOR_LDFLAGS)"   \
   -CFLAGS "\$$(PGO_CFLAGS)"         \
   -LDFLAGS "\$$(PGO_LDFLAGS)"       \
-  -o $(abspath $(EMU))              \
+  -o $(VERILATOR_TARGET)            \
   $(VERILATOR_FLAGS)
 
 VERILATOR_DIR = $(BUILD_DIR)/emu-compile
@@ -162,7 +162,7 @@ ifdef PGO_WORKLOAD
 					   PGO_LDFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)"
 	@echo "Training emu with PGO Workload..."
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_DIR)
-	$(EMU) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+	$(VERILATOR_TARGET) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
 		   1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
 		   2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
 		   $(PGO_EMU_ARGS)
@@ -212,6 +212,6 @@ coverage:
 	@mv $(COVERAGE_DATA) $(COVERAGE_DIR)
 
 verilator-clean-obj:
-	rm -f $(VERILATOR_DIR)/*.o $(VERILATOR_DIR)/*.gch $(VERILATOR_DIR)/*.a $(EMU)
+	rm -f $(VERILATOR_DIR)/*.o $(VERILATOR_DIR)/*.gch $(VERILATOR_DIR)/*.a $(VERILATOR_TARGET)
 
 .PHONY: build_emu clean_obj

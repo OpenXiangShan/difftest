@@ -147,4 +147,4 @@ jobs:
         run: |
           cd $NOOP_HOME
           make gsim REF=Spike GSIM_CXX=clang++-19 -j2
-          ./build/gsim -i ./bootrom/bootrom.img -C 1000000
+          ./build/emu-gsim -i ./bootrom/bootrom.img -C 1000000
