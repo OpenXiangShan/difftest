@@ -2,10 +2,10 @@
 # -*- coding: UTF-8 -*-
 
 #***************************************************************************************
-# Copyright (c) 2020-2021 Institute of Computing Technology, Chinese Academy of Sciences
+# Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
 # Copyright (c) 2020-2021 Peng Cheng Laboratory
 #
-# XiangShan is licensed under Mulan PSL v2.
+# DiffTest is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
 # You may obtain a copy of Mulan PSL v2 at:
 #          http://license.coscl.org.cn/MulanPSL2
@@ -40,7 +40,7 @@ def annotate(input_file, output_file):
             # remove the coverage results of random init variables
             reg_init = re.compile('`ifdef RANDOMIZE_REG_INIT')
             mem_init = re.compile('`ifdef RANDOMIZE_MEM_INIT')
-            coverage = re.compile('^\s*(%?\d+)\s+')
+            coverage = re.compile(r'^\s*(%?\d+)\s+')
 
 
             ifdef_match = ifdef.search(line)
