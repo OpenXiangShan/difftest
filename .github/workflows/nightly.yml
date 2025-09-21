@@ -114,8 +114,6 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
-    needs: test-difftest-main
-
     steps:
       - uses: actions/checkout@v4
 
