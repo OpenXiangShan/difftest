@@ -281,18 +281,18 @@ class DifftestMem(size: BigInt, lanes: Int, bits: Int, nr: Int, nw: Int) extends
       h.read(i, enable = !reset.asBool && r.valid, index = r.index * n_helper.U + j.U)
     }
   }
-  write.foreach(w =>
-    helper.zipWithIndex.foreach { case (h, i) =>
+  write.zipWithIndex.foreach { case (w, i) =>
+    helper.zipWithIndex.foreach { case (h, j) =>
       h.clock := clock
       h.write(
         i,
         enable = !reset.asBool && w.valid,
-        index = w.index * n_helper.U + i.U,
-        data = w.data(i),
-        mask = w.mask(i),
+        index = w.index * n_helper.U + j.U,
+        data = w.data(j),
+        mask = w.mask(j),
       )
     }
-  )
+  }
 
   private var r_index = 0
   def read(addr: UInt, en: Bool): Vec[UInt] = {
