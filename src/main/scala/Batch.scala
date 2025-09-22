@@ -37,8 +37,19 @@ case class BatchParam(config: GatewayConfig, bundles: Seq[DifftestBundle]) {
   val MaxInfoSize = MaxInfoByteLen / infoByte
 
 //  val StepGroupSize = bundles.distinctBy(_.desiredCppName).length
-  val StepGroupSize = bundles.groupBy(_.desiredCppName).values.flatMap(_.grouped(8).toSeq).size
-  val StepDataByteLen = bundles.map(_.getByteAlignWidth).map { w => w / 8 }.sum
+//  val StepGroupSize = bundles.groupBy(_.desiredCppName).values.flatMap(_.grouped(8).toSeq).size
+  val StepGroupSeq = bundles.groupBy(_.desiredCppName).values.toSeq
+  val StepGroupSize = StepGroupSeq.size
+//  val StepDataByteLen = bundles.map(_.getByteAlignWidth).map { w => w / 8 }.sum
+  val StepDataByteLen = StepGroupSeq.map{ group =>
+    val gen = group.head
+    val size = if (gen.isDeltaElem && gen.deltaValidLimit.isDefined) {
+      gen.deltaValidLimit.get
+    } else {
+      group.size
+    }
+    size * (gen.getByteAlignWidth / 8)
+  }.sum
   val StepDataBitLen = StepDataByteLen * 8
   val StepInfoByteLen = (StepGroupSize + 1) * (infoWidth / 8) // Include BatchStep to update buffer index
   val StepInfoBitLen = StepInfoByteLen * 8
@@ -116,10 +127,10 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 }
 
 // Cluster Data from same group in same cycle
-class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam) extends Module {
+class BatchCluster(bundleType: DifftestBundle, groupSize: Int, limitSize: Int, param: BatchParam) extends Module {
   val alignWidth = bundleType.getByteAlignWidth
   val in = IO(Input(Vec(groupSize, Valid(bundleType))))
-  val out_data = IO(Output(UInt((groupSize * alignWidth).W)))
+  val out_data = IO(Output(UInt((limitSize * alignWidth).W)))
   val out_info = IO(Output(UInt(param.infoWidth.W)))
   val status_base = IO(Input(new BatchStats(param)))
   val status_sum = IO(Output(new BatchStats(param)))
@@ -129,7 +140,7 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   }
   val v_size = valid_sum.last
   val aligned = in.map(_.bits.getByteAlign)
-  val collect_data = Wire(Vec(groupSize, UInt(alignWidth.W)))
+  val collect_data = Wire(Vec(limitSize, UInt(alignWidth.W)))
   collect_data.zipWithIndex.foreach { case (gen, vid) =>
     gen := VecInit((vid until groupSize).map { idx =>
       val prefix = if (idx == 0) 0.U else valid_sum(idx - 1)
@@ -157,22 +168,32 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   val step_status = IO(Output(Vec(param.StepGroupSize, new BatchStats(param))))
   val step_enable = IO(Output(Bool()))
 
-  def getGroupDataWidth: Seq[Valid[DifftestBundle]] => Int = { group =>
-    group.length * group.head.bits.getByteAlignWidth
+  def getGroupLimit(v_gens: Seq[Valid[DifftestBundle]]): Int = {
+    val gen = v_gens.head.bits
+    if (gen.isDeltaElem && gen.deltaValidLimit.isDefined) {
+      gen.deltaValidLimit.get
+    } else {
+      v_gens.size
+    }
+  }
+  def getGroupDataWidth(v_gens: Seq[Valid[DifftestBundle]]): Int = {
+    getGroupLimit(v_gens) * v_gens.head.bits.getByteAlignWidth
   }
 
   val in_group = in.groupBy(_.bits.desiredCppName).values
   val in_group_single = in_group.filter(_.size == 1).toSeq
-  val in_group_multi = in_group.filterNot(_.size == 1).flatMap(_.grouped(8)).toSeq
+//  val in_group_multi = in_group.filterNot(_.size == 1).flatMap(_.grouped(8)).toSeq
+  val in_group_multi = in_group.filterNot(_.size == 1).toSeq
   val sorted = in_group_single.sortBy(getGroupDataWidth).reverse ++ in_group_multi.sortBy(getGroupDataWidth)
 
   // Stage 1: concat bundles with same desiredCppName
   val group_info = Wire(Vec(param.StepGroupSize, UInt(param.infoWidth.W)))
   val group_status = Wire(Vec(param.StepGroupSize, new BatchStats(param)))
-  val group_data = Wire(MixedVec(sorted.map(getGroupDataWidth).map(group_w => UInt(group_w.W))))
+  val group_data = Wire(MixedVec(sorted.map(s => getGroupDataWidth(s)).map(group_w => UInt(group_w.W))))
 
   sorted.zipWithIndex.foreach { case (v_gens, gid) =>
-    val cluster = Module(new BatchCluster(chiselTypeOf(v_gens.head.bits), v_gens.length, param))
+    val limitSize = getGroupLimit(v_gens)
+    val cluster = Module(new BatchCluster(chiselTypeOf(v_gens.head.bits), v_gens.length, limitSize, param))
     cluster.in := v_gens
     val status_base = if (gid == 0) 0.U.asTypeOf(new BatchStats(param)) else group_status(gid - 1)
     cluster.status_base := status_base

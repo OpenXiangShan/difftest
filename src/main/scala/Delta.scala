@@ -21,6 +21,7 @@ import chisel3.util._
 import difftest._
 import difftest.common.FileControl
 import difftest.gateway.GatewayConfig
+import difftest.util.Delayer
 
 import scala.collection.mutable.ListBuffer
 
@@ -86,17 +87,48 @@ object Delta {
 class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val deltas = in.filter(_.bits.supportsDelta).flatMap { v_gen =>
+//    val hasLimit = v_gen.bits.deltaValidLimit.isDefined
+//    val gen_elem = VecInit(v_gen.bits.dataElements.flatMap(_._3))
+//    val income_elem = if (hasLimit) {
+//      val isInitDelta = RegInit(true.B)
+//      when(v_gen.valid) {
+//        isInitDelta := false.B
+//      }
+//      val initBuf = RegEnable(gen_elem, isInitDelta && v_gen.valid)
+//
+//    } else {
+//      gen_elem
+//    }
+    val elemSize = v_gen.bits.dataElements.flatMap(_._3).size
+    val limitSize = v_gen.bits.deltaValidLimit.getOrElse(elemSize)
+    val inInit = if (limitSize != elemSize) {
+      val initNum = (elemSize + limitSize - 1) / limitSize
+      println(elemSize +" "+ limitSize + " " + initNum)
+      val isFirstDelta = RegInit(true.B)
+      when(v_gen.valid) {
+        isFirstDelta := false.B
+      }
+      val initCnt = RegEnable(VecInit.fill(initNum)(1.U).asUInt, 0.U, v_gen.valid && isFirstDelta)
+      when(initCnt =/= 0.U) {
+        initCnt := initCnt >> 1
+      }
+      assert(!(initCnt.orR && v_gen.valid))
+      initCnt.orR || (v_gen.valid && isFirstDelta)
+    } else {
+      false.B
+    }
     v_gen.bits.dataElements.flatMap(_._3).zipWithIndex.map { case (data, idx) =>
       val state = RegInit(0.U.asTypeOf(data))
       val update = v_gen.valid && data =/= state
       when(update) {
         state := data
       }
+      val initDelay = idx / limitSize + 1
       val elem = Wire(Valid(new DiffDeltaElem(v_gen.bits)))
-      elem.valid := update
+      elem.valid := Mux(inInit, Delayer(v_gen.valid, initDelay), update)
       elem.bits.coreid := v_gen.bits.coreid
       elem.bits.index := idx.U
-      elem.bits.data := data
+      elem.bits.data := Mux(inInit, Delayer(data, initDelay), data)
       elem
     }
   }

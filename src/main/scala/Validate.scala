@@ -20,6 +20,7 @@ import chisel3._
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
+//import difftest.util.Delayer
 
 object Validate {
   def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[Valid[DifftestBundle]] = {
@@ -57,18 +58,23 @@ class Validator(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mod
     globalEnable := VecInit(in.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
   }
   in.zip(out).foreach { case (i, o) =>
-    val valid = i.bits.getValid && globalEnable && Option
-      .when(i.updateDependency.nonEmpty)(
-        VecInit(
-          in.filter(b => i.updateDependency.contains(b.desiredCppName))
-            .map(bundle => {
-              // Only if the corresponding bundle is valid, we update this bundle
-              bundle.coreid === i.coreid && bundle.bits.getValid
-            })
-            .toSeq
-        ).asUInt.orR
-      )
-      .getOrElse(true.B)
+    val updateValid = globalEnable && !reset.asBool &&
+      Option.when(i.updateDependency.nonEmpty)(
+          VecInit(
+            in.filter(b => i.updateDependency.contains(b.desiredCppName))
+              .map(bundle => {
+                // Only if the corresponding bundle is valid, we update this bundle
+                bundle.coreid === i.coreid && bundle.bits.getValid
+              })
+              .toSeq
+          ).asUInt.orR
+        )
+        .getOrElse(true.B)
+    val initValid = Option.when(i.deltaValidLimit.isDefined)(
+      // Init all elems at reset ends
+      RegNext(reset.asBool) && !reset.asBool
+    ).getOrElse(false.B)
+    val valid = i.bits.getValid && (updateValid || initValid)
     o := i.genValidBundle(valid)
   }
 }

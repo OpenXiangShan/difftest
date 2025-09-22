@@ -172,6 +172,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   val supportsDelta: Boolean = false
   def isDeltaElem: Boolean = this.isInstanceOf[DiffDeltaElem]
   def deltaElemBytes: Int = dataElements.map(_._2).max
+  // Limit the maximum number of valids to simplify Batch
+  def deltaValidLimit: Option[Int] = None
 
   // Byte align all elements
   def getByteAlignElems(isTrace: Boolean): Seq[(String, Data)] = {
@@ -230,6 +232,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 class DiffDeltaElem(gen: DifftestBundle) extends DeltaElem(gen.deltaElemBytes) with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = gen.desiredCppName + "_elem"
   override def desiredModuleName: String = gen.desiredModuleName + "Elem"
+  override def deltaValidLimit: Option[Int] = gen.deltaValidLimit
 }
 
 class DiffArchEvent extends ArchEvent with DifftestBundle {
@@ -382,15 +385,21 @@ class DiffArchVecRenameTable(pregIdxWidth: Int) extends ArchVecRenameTable(pregI
 }
 class DiffPhyIntRegState(numRegs: Int) extends PhyRegState(numRegs) with DifftestBundle {
   override val desiredCppName: String = "pregs_int"
+  override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
+  override def deltaValidLimit: Option[Int] = Some(16)
   override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
 }
 class DiffPhyFpRegState(numRegs: Int) extends DiffPhyIntRegState(numRegs) with DifftestBundle {
   override val desiredCppName: String = "pregs_fp"
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+  override def deltaValidLimit: Option[Int] = Some(16)
 }
 class DiffPhyVecRegState(numRegs: Int) extends PhyVecRegState(numRegs) with DifftestBundle {
   override val desiredCppName: String = "pregs_vec"
+  override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
+  override def deltaValidLimit: Option[Int] = Some(16)
   override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
 }
 

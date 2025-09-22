@@ -190,6 +190,24 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
       .orR
   }
 
+  val tick_first_delta = Option.when(config.isDelta && bundleType.bits.deltaValidLimit.isDefined) {
+    val isInitialEvent = RegInit(true.B)
+    val tick_first = isInitialEvent && VecInit(state.map(_.valid).toSeq).asUInt.orR
+    when(tick_first) {
+      isInitialEvent := false.B
+    }
+    // Limit the delta between two events
+    val lastDelta = RegEnable(out, 0.U.asTypeOf(out), should_tick)
+    def getDeltaElem(gen: Valid[DifftestBundle]) = gen.bits.dataElements.flatMap(_._3)
+    val tick_exceed = PopCount(VecInit(lastDelta.zip(in).flatMap { case (ld, i) =>
+      VecInit(getDeltaElem(ld).zip(getDeltaElem(i)).map { case (lde, ie) =>
+        lde =/= ie && ld.valid && i.valid
+      })
+    }).asUInt) > bundleType.bits.deltaValidLimit.get.U
+    if (config.hasBuiltInPerf) DifftestPerf(s"SquashTick_Delta_${bundleType.bits.desiredCppName}", tick_exceed)
+    tick_first || tick_exceed
+  }
+
   // If one of the bundles cannot be squashed, the others are not squashed as well.
   val supportsSquashVec = VecInit(in.zip(state).map { case (i, s) => i.supportsSquash(s) }.toSeq)
   val supportsSquash = supportsSquashVec.asUInt.andR
@@ -198,7 +216,7 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
   val supportsSquashBaseVec = VecInit(state.map(_.supportsSquashBase).toSeq)
   val supportsSquashBase = supportsSquashBaseVec.asUInt.andR
 
-  want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B)
+  want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B) || tick_first_delta.getOrElse(false.B)
 
   for ((i, s) <- in.zip(state)) {
     when(should_tick) {
