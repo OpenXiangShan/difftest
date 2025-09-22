@@ -79,6 +79,13 @@ public:
     core_restart();
   }
 
+  void fpga_reset_io(bool enable) {
+    if (enable)
+      device_write(false, nullptr, 0x0, 0x1);
+    else
+      device_write(false, nullptr, 0x0, 0x0);
+  }
+
 private:
   bool running = false;
   int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
