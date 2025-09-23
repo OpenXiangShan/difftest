@@ -120,6 +120,7 @@ public:
 xdma_sim *xsim[8] = {nullptr};
 
 void xdma_sim_open(int channel, bool is_host) {
+  printf("fpga sim init\n");
   xsim[channel] = new xdma_sim(channel, is_host);
 }
 
