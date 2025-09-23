@@ -18,7 +18,6 @@ module xdma_axi(
   input clock,
   input reset,
   input [511:0] axi_tdata,
-  input [63:0] axi_tkeep,
   input axi_tlast,
   output axi_tready,
   input axi_tvalid

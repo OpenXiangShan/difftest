@@ -29,6 +29,8 @@ import difftest.replay.Replay
 import difftest.trace.Trace
 import difftest.validate.Validate
 
+import difftest.fpga.xdma._
+
 import scala.collection.mutable.ListBuffer
 
 case class GatewayConfig(
@@ -260,6 +262,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val control = Wire(new GatewaySinkControl(config))
 
   val fpgaIO = Option.when(config.isBatch && config.isFPGA)(IO(Output(new FpgaDiffIO(config))))
+
   if (config.isBatch) {
     val batch = Batch(toSink, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
