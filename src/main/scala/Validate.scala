@@ -70,10 +70,18 @@ class Validator(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mod
           ).asUInt.orR
         )
         .getOrElse(true.B)
-    val initValid = Option.when(i.deltaValidLimit.isDefined)(
-      // Init all elems at reset ends
-      RegNext(reset.asBool) && !reset.asBool
-    ).getOrElse(false.B)
+    val initValid = Option.when(i.deltaValidLimit.isDefined) {
+      // Init all elems after reset
+      // Note: incoming data may be delayed after reset, cannot use reset for valid
+      //      RegNext(reset.asBool) && !reset.asBool
+      val isFirst = RegInit(true.B)
+      val initV = isFirst && i.bits.asUInt =/= 0.U
+      // Some data may be reset to 0, disable Init since first update
+      when(initV || updateValid) {
+        isFirst := false.B
+      }
+      initV && !updateValid
+    }.getOrElse(false.B)
     val valid = i.bits.getValid && (updateValid || initValid)
     o := i.genValidBundle(valid)
   }
