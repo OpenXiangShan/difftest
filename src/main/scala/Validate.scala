@@ -70,19 +70,30 @@ class Validator(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mod
           ).asUInt.orR
         )
         .getOrElse(true.B)
-    val initValid = Option.when(i.deltaValidLimit.isDefined) {
-      // Init all elems after reset
-      // Note: incoming data may be delayed after reset, cannot use reset for valid
-      //      RegNext(reset.asBool) && !reset.asBool
-      val isFirst = RegInit(true.B)
-      val initV = isFirst && i.bits.asUInt =/= 0.U
-      // Some data may be reset to 0, disable Init since first update
-      when(initV || updateValid) {
-        isFirst := false.B
-      }
-      initV && !updateValid
-    }.getOrElse(false.B)
-    val valid = i.bits.getValid && (updateValid || initValid)
+//    val initValid = Option.when(i.deltaValidLimit.isDefined) {
+//      // Init all elems after reset
+//      // Note: incoming data may be delayed after reset, cannot use reset for valid
+//      //      RegNext(reset.asBool) && !reset.asBool
+//      val isFirst = RegInit(true.B)
+//      val initV = isFirst && i.bits.asUInt =/= 0.U
+//      // Some data may be reset to 0, disable Init since first update
+//      when(initV || updateValid) {
+//        isFirst := false.B
+//      }
+//      initV && !updateValid
+//    }.getOrElse(false.B)
+//    val exceedValid = Option.when(i.deltaValidLimit.isDefined) {
+//      // Exceed maximum deltaLimitSize
+//      // Note: Only exceeding-limit events are set as valid to flush Squash state
+//      //       other non-exceeding ones are still invalid to avoid mistakenly update Squash
+//      val lastRecord = RegEnable(i, 0.U.asTypeOf(i), o.valid)
+//      def getDeltaElem(gen: DifftestBundle) = gen.dataElements.flatMap(_._3)
+//      val deltaSize = PopCount(VecInit(getDeltaElem(lastRecord).zip(getDeltaElem(i)).map { case (ld, id) =>
+//        ld =/= id
+//      }).asUInt)
+//      deltaSize > bundl
+//    }
+    val valid = i.bits.getValid && updateValid
     o := i.genValidBundle(valid)
   }
 }

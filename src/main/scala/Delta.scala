@@ -99,36 +99,63 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 //    } else {
 //      gen_elem
 //    }
-    val elemSize = v_gen.bits.dataElements.flatMap(_._3).size
-    val limitSize = v_gen.bits.deltaValidLimit.getOrElse(elemSize)
-    val inInit = if (limitSize != elemSize) {
-      val initNum = (elemSize + limitSize - 1) / limitSize
-      println(elemSize +" "+ limitSize + " " + initNum)
-      val isFirstDelta = RegInit(true.B)
-      when(v_gen.valid) {
-        isFirstDelta := false.B
+//    val elemSize = v_gen.bits.dataElements.flatMap(_._3).size
+//    val limitSize = v_gen.bits.deltaValidLimit.getOrElse(elemSize)
+//    val inInit = if (limitSize != elemSize) {
+//      val initNum = (elemSize + limitSize - 1) / limitSize
+//      println(elemSize +" "+ limitSize + " " + initNum)
+//      val isFirstDelta = RegInit(true.B)
+//      when(v_gen.valid) {
+//        isFirstDelta := false.B
+//      }
+//      val initCnt = RegEnable(VecInit.fill(initNum)(1.U).asUInt, 0.U, v_gen.valid && isFirstDelta)
+//      when(initCnt =/= 0.U) {
+//        initCnt := initCnt >> 1
+//      }
+//      assert(!(initCnt.orR && v_gen.valid))
+//      initCnt.orR || (v_gen.valid && isFirstDelta)
+//    } else {
+//      false.B
+//    }
+    // For preg state, filter with RenameTable
+    def getPregFilter(suffix: String, idx: Int): Bool = {
+      def getRatValue(gen: DifftestBundle, isVec: Boolean): Vec[UInt] = {
+        if (isVec) {
+          gen.bits.asInstanceOf[ArchVecRenameTable].value
+        } else {
+          gen.bits.asInstanceOf[ArchRenameTable].value
+        }
       }
-      val initCnt = RegEnable(VecInit.fill(initNum)(1.U).asUInt, 0.U, v_gen.valid && isFirstDelta)
-      when(initCnt =/= 0.U) {
-        initCnt := initCnt >> 1
+      if (v_gen.bits.desiredCppName == "pregs_" + suffix) {
+        val rat = in.filter(_.bits.desiredCppName == "rat_" + suffix)
+        VecInit(rat.map{r =>
+          r.valid && r.bits.coreid === v_gen.bits.coreid &&
+            VecInit(getRatValue(r.bits, suffix == "vec").map{v => v === idx.U}).asUInt.orR
+        }).asUInt.orR
+      } else {
+        false.B
       }
-      assert(!(initCnt.orR && v_gen.valid))
-      initCnt.orR || (v_gen.valid && isFirstDelta)
-    } else {
-      false.B
     }
     v_gen.bits.dataElements.flatMap(_._3).zipWithIndex.map { case (data, idx) =>
       val state = RegInit(0.U.asTypeOf(data))
-      val update = v_gen.valid && data =/= state
+      val cppName = v_gen.bits.desiredCppName
+      val filter = if (cppName.contains("pregs")) {
+        VecInit(Seq("int", "fp", "vec").map{s => getPregFilter(s, idx)}).asUInt.orR
+      } else {
+        true.B
+      }
+      val update = v_gen.valid && data =/= state && filter
       when(update) {
         state := data
       }
-      val initDelay = idx / limitSize + 1
+//      val initDelay = idx / limitSize + 1
       val elem = Wire(Valid(new DiffDeltaElem(v_gen.bits)))
-      elem.valid := Mux(inInit, Delayer(v_gen.valid, initDelay), update)
+//      elem.valid := Mux(inInit, Delayer(v_gen.valid, initDelay), update)
       elem.bits.coreid := v_gen.bits.coreid
       elem.bits.index := idx.U
-      elem.bits.data := Mux(inInit, Delayer(data, initDelay), data)
+      elem.valid := update
+      elem.bits.data := data
+//      elem.bits.data := Mux(inInit, Delayer(data, initDelay), data)
       elem
     }
   }

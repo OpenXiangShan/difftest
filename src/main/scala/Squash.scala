@@ -216,7 +216,7 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
   val supportsSquashBaseVec = VecInit(state.map(_.supportsSquashBase).toSeq)
   val supportsSquashBase = supportsSquashBaseVec.asUInt.andR
 
-  want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B) || tick_first_delta.getOrElse(false.B)
+  want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B) // || tick_first_delta.getOrElse(false.B)
 
   for ((i, s) <- in.zip(state)) {
     when(should_tick) {

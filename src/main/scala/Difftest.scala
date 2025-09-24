@@ -393,13 +393,13 @@ class DiffPhyIntRegState(numRegs: Int) extends PhyRegState(numRegs) with Difftes
 class DiffPhyFpRegState(numRegs: Int) extends DiffPhyIntRegState(numRegs) with DifftestBundle {
   override val desiredCppName: String = "pregs_fp"
   override val updateDependency: Seq[String] = Seq("commit", "event")
-  override def deltaValidLimit: Option[Int] = Some(16)
+  override def deltaValidLimit: Option[Int] = Some(32)
 }
 class DiffPhyVecRegState(numRegs: Int) extends PhyVecRegState(numRegs) with DifftestBundle {
   override val desiredCppName: String = "pregs_vec"
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
-  override def deltaValidLimit: Option[Int] = Some(16)
+  override def deltaValidLimit: Option[Int] = Some(64)
   override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
 }
 
