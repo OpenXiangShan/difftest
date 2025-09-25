@@ -29,11 +29,12 @@
 #include <sys/types.h>
 #include <vector>
 
+uint64_t debug_line_number = 0;
+
 bool get_debug_flag() {
   return true;
 }
 
-uint64_t debug_line_number = 0;
 std::vector<std::string_view> debug_read_line_vector;
 
 MmapLineReader trace_fetch;
@@ -47,8 +48,12 @@ bool TryFetchNextLine(uint32_t read_count) {
 
   std::string_view line;
   for (uint32_t i = 0; i < read_count; ++i) {
-    if (ftq.is_full())
+    if (ftq.is_full()) {
+      DEBUG_INFO(std::cout << "FTQ Full" << std::endl;)
+
       return false;
+    }
+
     if (!trace_fetch.get_next_line(line)) {
       ftq.set_final();
       return false;
@@ -113,14 +118,13 @@ void SimFrontUpdatePtr(uint32_t updateCount) {
 }
 
 void SimFrontRedirect(uint32_t redirect_valid, uint32_t redirect_ftq_flag, uint32_t redirect_ftq_value,
-                      uint64_t traget_pc) {
+                      uint32_t redirect_type, uint64_t redirect_pc, uint64_t redirect_target) {
   if (redirect_valid) {
 
     DEBUG_INFO(std::cout << std::hex << "Redirect start: ftq: 0x" << redirect_ftq_value << ", " << redirect_ftq_value
-                         << " pc: 0x" << traget_pc << std::dec << std::endl;)
+                         << " pc: 0x" << redirect_target << std::dec << std::endl;)
 
-    // std::cout << "redirect to ftq id: " << redirect_ftq_value << " wrap: " << redirect_ftq_flag << " pc: 0x" << std::hex << traget_pc << std::dec << std::endl;
-    bool rx = ftq.redirect(redirect_ftq_value, redirect_ftq_flag, traget_pc);
+    bool rx = ftq.redirect(redirect_ftq_value, redirect_ftq_flag, redirect_type, redirect_pc, redirect_target);
     if (rx) {
 
       DEBUG_INFO(std::cout << std::hex << "Redirect finish: ftq: 0x" << ftq.get_read_ftq_id() << ", "
@@ -158,7 +162,7 @@ void SimFrontGetFtqToBackEnd(uint64_t *pc, uint32_t *pack_data, uint64_t *newest
   auto entry_opt = ftq.get_physical_entry(ftq_info->start_index);
 
   DEBUG_INFO(std::cout << std::hex << "Ftq to backend current pc: 0x" << entry_opt->pc << " ftq: 0x" << ftq_id
-                       << std::dec << std::endl;)
+                       << " phy_id: " << ftq_info->start_index << std::dec << std::endl;)
 
   *pc = entry_opt->pc;
   *pack_data = (1ULL << 6) | ftq_id;
@@ -188,9 +192,8 @@ void SimFrontGetFtqToBackEnd(uint64_t *pc, uint32_t *pack_data, uint64_t *newest
     *newest_pack_data = (1ULL << 6) | ftq_id;
   }
 
-  DEBUG_INFO(std::cout << std::hex << "Ftq to backend next pc: 0x" << newest_pc << " ftq: 0x"
-                       << ftq.get_physical_entry(newest_ftq_info->start_index)->fetch_group_id << std::dec
-                       << std::endl;)
+  DEBUG_INFO(std::cout << std::hex << "Ftq to backend next pc: 0x" << *newest_pc << " ftq: 0x" << next_id
+                       << " phy_id: " << newest_ftq_info->start_index << std::dec << std::endl;)
 }
 
 void SimFrontRobCommit(uint32_t valid, uint32_t ftqIdxFlag, uint32_t ftqIdxValue) {

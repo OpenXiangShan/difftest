@@ -105,6 +105,7 @@ RiscvInstructionInfo analyze_instruction(uint32_t instr) {
   info.isCall = (is_jal_not_rvc || is_jalr) && is_link_register(info.rd);
   info.isRet = (info.brType == BrType::Jalr) && is_link_register(info.rs1) && !info.isCall;
 
+  info.isJump = info.brType == BrType::Jal || info.brType == BrType::Jalr;
   return info;
 }
 
@@ -220,8 +221,8 @@ void ContinuityChecker::update_state(uint64_t pc, uint32_t instr) {
 // ***************************
 
 FetchTargetQueue::FetchTargetQueue()
-    : enq_ptr(0), read_ptr(0), commit_ptr(0), id_head(0), id_tail(0), id_read_ptr(0), id_head_wrap(false),
-      id_tail_wrap(false), id_read_wrap(false), accumulated_bytes(0) {}
+    : final(false), need_new_group(false), enq_ptr(0), read_ptr(0), commit_ptr(0), id_head(0), id_tail(0),
+      id_read_ptr(0), id_head_wrap(false), id_tail_wrap(false), id_read_wrap(false), accumulated_bytes(0) {}
 
 bool FetchTargetQueue::will_start_new_group(bool is_discontinuous, uint32_t next_bytes) const {
   return is_discontinuous || accumulated_bytes + next_bytes > 32;
@@ -258,7 +259,8 @@ bool FetchTargetQueue::enqueue(uint64_t pc, uint32_t instr, uint64_t next_pc, ui
   }
 
   uint32_t next_bytes = is_rvc(instr) ? 2 : 4;
-  bool starts_new_group = will_start_new_group(is_discontinuous, next_bytes);
+  bool starts_new_group = will_start_new_group(is_discontinuous, next_bytes) || need_new_group;
+  need_new_group = false;
 
   if (starts_new_group && id_queue[id_tail].instr_count > 0) {
     if ((id_tail + 1) % ID_QUEUE_SIZE == id_head)
@@ -269,6 +271,8 @@ bool FetchTargetQueue::enqueue(uint64_t pc, uint32_t instr, uint64_t next_pc, ui
     }
 
     id_tail = (id_tail + 1) % ID_QUEUE_SIZE;
+    DEBUG_INFO(std::cout << std::hex << "new ftq group: " << id_tail << " wrap: " << id_tail_wrap << " pc: 0x" << pc
+                         << " enq_ptr: " << enq_ptr << std::dec << std::endl;)
 
     id_queue[id_tail] = {true, enq_ptr, 0, id_tail_wrap};
     accumulated_bytes = 0;
@@ -293,11 +297,10 @@ bool FetchTargetQueue::enqueue(uint64_t pc, uint32_t instr, uint64_t next_pc, ui
                         ? (is_rvc(instr) ? 0 : 1)
                         : (pc - target_queue[id_queue[current_group_id].start_index].pc + (is_rvc(instr) ? 0 : 2)) >> 1;
 
-  bool next_is_discontinuous = out_is_discontinuous(pc, is_rvc(instr), next_pc);
-  bool br_taken = next_is_discontinuous;
+  bool br_taken = out_is_discontinuous(pc, is_rvc(instr), next_pc);
 
   uint32_t self_and_next_bytes = (is_rvc(instr) ? 2 : 4) + (is_rvc(next_instr) ? 2 : 4);
-  bool is_last_ftq_entry = will_start_new_group(next_is_discontinuous, self_and_next_bytes);
+  bool is_last_ftq_entry = will_start_new_group(br_taken, self_and_next_bytes);
 
   uint64_t packed_data =
       pack_trace_data(riscv_info, br_taken, is_last_ftq_entry, current_group_wrap, current_group_id, offset);
@@ -309,6 +312,7 @@ bool FetchTargetQueue::enqueue(uint64_t pc, uint32_t instr, uint64_t next_pc, ui
   enq_ptr = (enq_ptr + 1) % INSTR_QUEUE_SIZE;
   id_queue[current_group_id].instr_count++;
 
+  need_new_group = riscv_info.isJump || br_taken;
   return true;
 }
 
@@ -403,7 +407,9 @@ size_t FetchTargetQueue::id_queue_committed_size() const {
 
 size_t FetchTargetQueue::id_queue_readable_size() const {
   if (id_tail == id_read_ptr) {
-    return (id_tail_wrap == id_read_wrap) ? 0 : ID_QUEUE_SIZE;
+    int read_valid = id_queue[id_read_ptr].is_valid ? 0 : 0;
+    // std::cout << "id_read_ptr: " << id_read_ptr << " id_tail_ptr: " << id_tail << " valid: " << read_valid << std::endl;
+    return (id_tail_wrap == id_read_wrap) ? read_valid : ID_QUEUE_SIZE;
   } else if (id_tail > id_read_ptr) {
     return id_tail - id_read_ptr;
   } else {
@@ -412,10 +418,12 @@ size_t FetchTargetQueue::id_queue_readable_size() const {
 }
 
 std::optional<FetchGroupInfo> FetchTargetQueue::peek_id_group(size_t offset) const {
-  if (offset >= id_queue_readable_size()) {
+  size_t physical_index = (id_read_ptr + offset) % ID_QUEUE_SIZE;
+
+  if (offset >= id_queue_readable_size() && id_queue[physical_index].is_valid != true) {
     return std::nullopt;
   }
-  size_t physical_index = (id_read_ptr + offset) % ID_QUEUE_SIZE;
+
   return id_queue[physical_index];
 }
 
@@ -508,23 +516,30 @@ bool FetchTargetQueue::commit_to_right_open(size_t target_group_id, bool target_
 }
 
 #define PC_MASK 0x3FFFFFFFFFFFF
-bool FetchTargetQueue::redirect(size_t target_group_id, bool target_wrap_bit, uint64_t target_pc) {
-
+bool FetchTargetQueue::redirect(size_t target_group_id, bool target_wrap_bit, uint32_t redirect_type,
+                                uint64_t redirect_pc, uint64_t redirect_target) {
   if (target_group_id >= ID_QUEUE_SIZE || !id_queue[target_group_id].is_valid ||
       id_queue[target_group_id].wrap_bit != target_wrap_bit) {
     return false;
   }
   const FetchGroupInfo &target_group = id_queue[target_group_id];
 
-  for (size_t i = 0; i < target_group.instr_count; ++i) {
-    size_t physical_index = (target_group.start_index + i) % INSTR_QUEUE_SIZE;
-    uint64_t entry_pc = target_queue[physical_index].pc & PC_MASK;
-    if (entry_pc == target_pc) {
+  DEBUG_INFO(std::cout << std::hex << "Redirecting to ftq group: " << target_group_id << " wrap: " << target_wrap_bit
+                       << " start pc: 0x" << target_queue[target_group.start_index].pc << " this pc: 0x" << redirect_pc
+                       << " target pc: 0x" << redirect_target << " redirect type: " << redirect_type << std::dec
+                       << std::endl;)
 
-      id_read_ptr = target_group_id;
-      id_read_wrap = target_wrap_bit;
-      read_ptr = physical_index;
-      return true;
+  if (redirect_type != isMisPred) {
+    for (size_t i = 0; i < target_group.instr_count; ++i) {
+      size_t physical_index = (target_group.start_index + i) % INSTR_QUEUE_SIZE;
+      uint64_t entry_pc = target_queue[physical_index].pc & PC_MASK;
+      if (entry_pc == redirect_target) {
+
+        id_read_ptr = target_group_id;
+        id_read_wrap = target_wrap_bit;
+        read_ptr = physical_index;
+        return true;
+      }
     }
   }
 
@@ -551,7 +566,7 @@ bool FetchTargetQueue::redirect(size_t target_group_id, bool target_wrap_bit, ui
 
   const FetchGroupInfo &next_group = id_queue[next_group_id];
   uint64_t next_start_pc = target_queue[next_group.start_index].pc & PC_MASK;
-  if (next_start_pc == target_pc) {
+  if (next_start_pc == redirect_target) {
     id_read_ptr = next_group_id;
     id_read_wrap = next_wrap_bit;
     read_ptr = next_group.start_index;

@@ -27,6 +27,12 @@
 #include <optional>
 #include <vector>
 
+enum RedirectType {
+  // For now, there is only two type, but for the sake of scalability, let's write it this way.
+  isMisPred = 1,
+  isFalseBranch = 2 // The branch is not mispredicted, but it is a false branch (the target is the next sequential PC)
+};
+
 enum class BrType {
   NotCfi,
   Branch,
@@ -77,6 +83,11 @@ struct RiscvInstructionInfo {
   BrType brType;
   bool isCall;
   bool isRet;
+
+  //TODO At present, we still have one problem
+  //If the branch instruction points to the next sequential program counter, then issues may arise during processing.
+  //However, in theory, the compiler will not generate such instructions.
+  bool isJump;
 
   uint32_t rd;
   uint32_t rs1;
@@ -171,7 +182,8 @@ public:
   bool commit_to(size_t target_group_id, bool target_wrap_bit);
   bool commit_to_right_open(size_t target_group_id, bool target_wrap_bit);
 
-  bool redirect(size_t target_group_id, bool target_wrap_bit, uint64_t target_pc);
+  bool redirect(size_t target_group_id, bool target_wrap_bit, uint32_t redirect_type, uint64_t redirect_pc,
+                uint64_t redirect_target);
 
   bool will_start_new_group(bool is_discontinuous, uint32_t next_bytes) const;
 
@@ -205,8 +217,10 @@ public:
     return id_read_wrap;
   }
 
-  // private:
+private:
   bool final;
+
+  bool need_new_group;
 
   void advance_id_head();
 
