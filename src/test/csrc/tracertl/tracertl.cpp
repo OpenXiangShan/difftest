@@ -33,14 +33,21 @@ void init_tracertl(const char *trace_file_name, bool enable_gen_paddr, uint64_t 
   printf("skip-insts %lu left_max_insts: %lu\n", skip_traceinstr, max_insts);
   fflush(stdout);
   trace_reader = new TraceReader(trace_file_name, enable_gen_paddr, max_insts, skip_traceinstr);
-}
 
+#ifndef TRACERTL_OnFPGA
+  trace_reader->prepareRead();
+#endif
+}
 bool tracertl_prepare_read() {
   return trace_reader->prepareRead();
 }
 
 void tracertl_check_commit(uint64_t tick) {
   trace_reader->checkCommit(tick);
+}
+
+void tracertl_check_commit_fpga(uint64_t tick) {
+  trace_reader->checkCommitFPGA(tick);
 }
 
 void tracertl_check_drive() {
@@ -154,6 +161,32 @@ extern "C" void trace_collect_commit(uint64_t pc, uint32_t instr, uint8_t instNu
 extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx) {
   METHOD_TRACE();
   trace_reader->collectDrive(pc, instr, idx);
+}
+
+extern "C" void trace_axis_master_helper(
+  char *tvalid, char *last, uint64_t *valid,
+  uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3,
+  uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7
+) {
+  METHOD_TRACE();
+  trace_reader->read_by_axis(
+    tvalid, last, valid,
+    data0, data1, data2, data3,
+    data4, data5, data6, data7
+  );
+}
+
+extern "C" void trace_axis_slave_helper(
+  char last, uint64_t valid,
+  uint64_t data0, uint64_t data1, uint64_t data2, uint64_t data3,
+  uint64_t data4, uint64_t data5, uint64_t data6, uint64_t data7
+) {
+  METHOD_TRACE();
+  trace_reader->check_by_axis(
+    last, valid,
+    data0, data1, data2, data3,
+    data4, data5, data6, data7
+  );
 }
 
 /** Fake ICache */

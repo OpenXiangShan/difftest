@@ -144,6 +144,14 @@ public:
   // Used by prepareRead
   bool read(Instruction &inst);
 
+  void read_by_axis(char *tvalid, char *last, uint64_t *valid,
+    uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3,
+    uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7);
+  void check_by_axis(char last, uint64_t valid,
+    uint64_t data0, uint64_t data1, uint64_t data2, uint64_t data3,
+    uint64_t data4, uint64_t data5, uint64_t data6, uint64_t data7);
+  void checkCommitFPGA(uint64_t tick);
+
   void redirect(uint64_t inst_id);
   void collectCommit(uint64_t pc, uint32_t inst, uint8_t instNum, uint8_t idx);
   void collectDrive(uint64_t pc, uint32_t inst, uint8_t idx);

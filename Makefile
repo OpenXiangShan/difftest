@@ -90,13 +90,17 @@ endif
 endif
 
 # TraceRTL mode
-TRACERTL_MODE ?= 1
+# TRACERTL_MODE ?= 1
 ifeq ($(TRACERTL_MODE), 1)
 SIM_CXXFLAGS += -DTRACERTL_MODE
 TRACERTL_DIR = $(abspath ./src/test/csrc/tracertl)
 TRACERTL_CXXFILES = $(shell find $(TRACERTL_DIR) -name "*.cpp")
 SIM_CXXFILES += $(TRACERTL_CXXFILES)
 SIM_CXXFLAGS += -I$(TRACERTL_DIR)
+endif
+
+ifeq ($(TRACERTLOnFPGA),1)
+SIM_CXXFLAGS += -DTRACERTL_OnFPGA
 endif
 
 # ChiselDB

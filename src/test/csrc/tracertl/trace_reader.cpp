@@ -229,6 +229,11 @@ bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {
 }
 
 bool TraceReader::prepareRead() {
+#ifdef TRACERTL_OnFPGA
+  printf("TraceRTL: prepareRead should not be called in FPGA mode\n");
+  exit(1);
+#endif
+
   METHOD_TRACE();
   if (!readBufferNeedReload) {
     METHOD_TRACE();
@@ -251,6 +256,7 @@ bool TraceReader::prepareRead() {
   METHOD_TRACE();
   return true;
 }
+
 
 bool TraceReader::read(Instruction &inst) {
   // read a inst from redirect buffer
@@ -292,10 +298,12 @@ bool TraceReader::read(Instruction &inst) {
   pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
 
+#ifndef TRACERTL_OnFPGA
   if (pendingInstList.size() > 2000) {
     setError();
     printf("TraceRTL: pendingInstList has too many inst, more than 2000. Check it.\n");
   }
+#endif
 
 //  inst.dump();
 
@@ -513,6 +521,264 @@ void TraceReader::checkDrive() {
   METHOD_TRACE();
 }
 
+// FIXME: currently, struct Instruction is of multiple of 64bits,
+// not need to consider the unaligned case.
+void TraceReader::read_by_axis(char *tvalid, char *last, uint64_t *validVec,
+    uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3,
+    uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7) {
+
+  // 1. read many instruction into a large array. one array, one complete axis-stream packet
+  // 2. send the pakcet through multiply transport
+  const int busBytes = (512 / 8);
+  const int arrayInstNum = 1 * 16; // instructions number per packet
+  // const int arrayInstNum = 200 * 16; // instructions number per packet
+  const int arrayBytes = arrayInstNum * sizeof(Instruction); // bytes per packet
+  const int maxReadCycles = (arrayBytes + busBytes - 1) / busBytes; // cycles per packet
+  const int plusExtraInstNum = ((maxReadCycles * busBytes) + sizeof(Instruction) - 1) / sizeof(Instruction); // ask for more space to avoid segment fault
+  const uint64_t lastValidVec = ((maxReadCycles % busBytes) == 0) ?
+    ~0ULL : ((1ULL << (maxReadCycles % busBytes)) - 1);
+  static bool array_valid = false;
+  static Instruction array[plusExtraInstNum];
+  static int read_cycle_num = 0;
+  static uint64_t packet_count = 0;
+  static uint64_t total_read_cycle = 0;
+  uint64_t *arrayLongType = (uint64_t *)array;
+
+  static int first_time_dump = true;
+
+  if (!array_valid) {
+    array_valid = true;
+    for (int i = 0; i < arrayInstNum; i ++) {
+      read(array[i]);
+    }
+    if (first_time_dump) {
+      first_time_dump = false;
+    }
+  }
+
+  int index = read_cycle_num << 3;
+  *data0 = arrayLongType[index + 0];
+  *data1 = arrayLongType[index + 1];
+  *data2 = arrayLongType[index + 2];
+  *data3 = arrayLongType[index + 3];
+  *data4 = arrayLongType[index + 4];
+  *data5 = arrayLongType[index + 5];
+  *data6 = arrayLongType[index + 6];
+  *data7 = arrayLongType[index + 7];
+  read_cycle_num += 1;
+  bool lastCycle = read_cycle_num == maxReadCycles;
+  *validVec = lastCycle ? lastValidVec : ~0ULL;
+  *last = lastCycle;
+  *tvalid = 1;
+
+  if (lastCycle) {
+    array_valid = false;
+    read_cycle_num = 0;
+    packet_count ++;
+  }
+  total_read_cycle ++;
+}
+
+void TraceReader::check_by_axis(char last, uint64_t valid,
+  uint64_t data0, uint64_t data1, uint64_t data2, uint64_t data3,
+  uint64_t data4, uint64_t data5, uint64_t data6, uint64_t data7) {
+
+  typedef union CommitBundleInfo {
+    struct {
+      uint64_t pcVA:39;
+      uint64_t instNum:8;  // use uint64_t, not uint8_t, to keep sizeof is 8
+      uint64_t padding:17; // use uint64_t, not uint8_t, to keep sizeof is 8
+    };
+    uint64_t value;
+
+    void dump() {
+      printf("value %lx: pcVA %lx instNum %d padding %x", value, pcVA, instNum, padding);
+    }
+  } CommitBundle;
+
+  if (sizeof(CommitBundle) != 8) {
+    printf("TraceRTL CommitBundle size wrong %lu\n", sizeof(CommitBundle));
+    exit(1);
+  }
+
+  const int CommitCheckInstNum = 128;
+  const int BusBytes = (512 / 8);
+  const int CommitCheckRawBytes = CommitCheckInstNum * sizeof(CommitBundle); // but data not align
+  const int CommitCheckRawCycles = (CommitCheckRawBytes + BusBytes - 1) / BusBytes; // cycles per packet
+  const int PlusExtraBytes = CommitCheckRawCycles * BusBytes; // ask for more space to avoid segment fault
+
+  static bool first_time_dump = true;
+  if (first_time_dump) {
+    first_time_dump = false;
+    printf("sizeofBundle %lu CommitCheckInstNum %d CommitCheckRawBytes %d CommitCheckRawCycles %d PlusExtraBytes %d\n",
+      sizeof(CommitBundle),
+      CommitCheckInstNum, CommitCheckRawBytes, CommitCheckRawCycles, PlusExtraBytes);
+  }
+
+  static int cycle_count = 0;
+  static int actual_validBits_num = 0;
+  static uint64_t commit_check_buffer[PlusExtraBytes/(64/8)];
+  static uint64_t packet_count = 0;
+
+  int index = cycle_count << 3;
+  commit_check_buffer[index + 0] = data0;
+  commit_check_buffer[index + 1] = data1;
+  commit_check_buffer[index + 2] = data2;
+  commit_check_buffer[index + 3] = data3;
+  commit_check_buffer[index + 4] = data4;
+  commit_check_buffer[index + 5] = data5;
+  commit_check_buffer[index + 6] = data6;
+  commit_check_buffer[index + 7] = data7;
+  cycle_count += 1;
+  // actual_validBits_num += std::popcount(valid);
+  actual_validBits_num += last ? __builtin_popcountll(valid) : 64;
+  // TODO: for RTL part, actualNum is not supported
+  bool lastCycle = (cycle_count == CommitCheckRawCycles);
+
+  if ((data0 == 0) && ((valid & 0xffUL) != 0) ||
+      (data1 == 0) && ((valid & 0xff00UL) != 0) ||
+      (data2 == 0) && ((valid & 0xff0000UL) != 0) ||
+      (data3 == 0) && ((valid & 0xff000000UL) != 0) ||
+      (data4 == 0) && ((valid & 0xff00000000UL) != 0) ||
+      (data5 == 0) && ((valid & 0xff0000000000UL) != 0) ||
+      (data6 == 0) && ((valid & 0xff000000000000UL) != 0) ||
+      (data7 == 0) && ((valid & 0xff00000000000000UL) != 0) ||
+      (valid == 0)) {
+    printf("Error: TraceRTL Commit data or valid is zero\n");
+    printf("Check_by_axis[%lu|%d/%d] last %d valid %lx data:",
+      packet_count, cycle_count, CommitCheckRawCycles, last, valid);
+    printf(" %016lx %016lx %016lx %016lx %016lx %016lx %016lx %016lx\n",
+      data7, data6, data5, data4, data3, data2, data1, data0);
+    setError();
+    return ;
+  }
+
+  if (cycle_count > CommitCheckRawBytes) {
+    printf("TraceRTL Commit cycle_count %d exceed max %d\n", cycle_count, CommitCheckRawCycles);
+    fflush(stdout);
+    setError();
+    return ;
+  }
+  if (packet_count > 1000000000) {
+    printf("TraceRTL Commit packet_count exceed 1 billion\n");
+    fflush(stdout);
+    setError();
+    return ;
+  }
+
+  if (last) {
+    int actual_instNum = actual_validBits_num / sizeof(CommitBundle);
+
+    CommitBundle committedInst[actual_instNum];
+    for (int i = 0; i < actual_instNum; i++) {
+      committedInst[i].value = commit_check_buffer[i];
+    }
+
+    packet_count ++;
+    cycle_count = 0;
+    actual_validBits_num = 0;
+
+    // below is same with the old checkCommit
+
+    for (int i = 0; i < actual_instNum; i ++) {
+      if (i == 0) {
+        while (!pendingInstList.empty()) {
+          if (pendingInstList.front().isCtrlForceJump()) {
+            pendingInstList.pop_front();
+          } else {
+            break;
+          }
+        }
+      }
+
+      uint64_t pc = committedInst[i].pcVA;
+      uint64_t instNum = committedInst[i].instNum;
+
+      if (isError() || isStuck() || isErrorDrive()) {
+        return ;
+      }
+
+      if (pendingInstList.size() < instNum) {
+        setError();
+        printf("TraceRTL pendingInstList size %zu less then instNum %lu\n", pendingInstList.size(), instNum);
+      }
+      if ((!pendingInstList.front().pc_va_match(pc))) {
+        setError();
+        printf("TraceRTL Commit PC Mismatch\n");
+        printf("Expect PC %lx, Get PC %lx\n", pendingInstList.front().instr_pc_va, pc);
+      }
+
+      if (isError()) {
+        errorInst.instr = 0; // invalid
+        errorInst.instr_pc = pc;
+        errorInst.instNum = instNum;
+        errorInst.instID = commit_inst_num.get();
+        return ;
+      }
+
+      for (int i = 0; i < instNum; i++) {
+        committedInstList.push_back(pendingInstList.front());
+        if (committedInstList.size() > CommittedInstSize) {
+          committedInstList.pop_front();
+        }
+        pendingInstList.pop_front();
+      }
+      TraceCollectInstruction dut;
+      dut.instr_pc = pc;
+      dut.instr = 0;
+      dut.instNum = instNum;
+      dut.instID = commit_inst_num.get();
+      dutCommittedInstList.push_back(dut);
+      if (dutCommittedInstList.size() > DutCommittedInstSize) {
+        dutCommittedInstList.pop_front();
+      }
+
+      setCommit();
+      commit_inst_num.add(instNum);
+    }
+    METHOD_TRACE();
+  }
+}
+
+// replace CheckCommit in FPGA mode
+void TraceReader::checkCommitFPGA(uint64_t tick) {
+
+  // when error, may segmentation fault, not resolved
+  if (isError()) {
+    return ;
+  }
+
+  if (isCommited()) {
+    last_commit_tick = tick;
+    clearCommit();
+  } else {
+    if ((tick - last_commit_tick) >= BLOCK_THREASHOLD) {
+      setStuck();
+    }
+  }
+
+#ifdef PRINT_SIMULATION_SPEED
+  if (commit_inst_num.get() > next_print_inst) {
+    uint64_t cur_time = gen_cur_time();
+    uint64_t time_delta = cur_time - last_interval_time + 1; // plus 1 to avoid divid 0
+    uint64_t cycle_delta = tick - last_interval_tick;
+    uint64_t inst_delta = commit_inst_num.get() - last_interval_inst;
+
+    uint64_t cycle_per_second = cycle_delta / time_delta;
+    uint64_t inst_per_second = inst_delta / time_delta;
+
+    last_interval_time = cur_time;
+    last_interval_tick = tick;
+    last_interval_inst = commit_inst_num.get();
+    next_print_inst += PRINT_INST_INTERVAL;
+
+    printf("Current Finished Inst Num %ld. Simulation Speed: %ld cycle/s %ld inst/s\r ", commit_inst_num.get(), cycle_per_second, inst_per_second);
+    fflush(stdout);
+  }
+#endif
+}
+
+
 void TraceReader::dump_uncommited_inst() {
   printf("UnCommitted Inst: ========================\n");
   int count = 0;
@@ -575,7 +841,7 @@ void TraceReader::error_dump() {
   dump_dut_committed_inst();
   printf("\n");
   if (isError()) {
-    printf("========= TraceRTL Error at inst 0x%lx ===========\n", commit_inst_num.get());
+    printf("========= TraceRTL Error at inst 0x%lx (may invalid)===========\n", commit_inst_num.get());
     printf("DUT inst: ");
     errorInst.dump();
     printf("========= TraceRTL Error End ===========\n");

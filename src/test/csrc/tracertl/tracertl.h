@@ -31,6 +31,7 @@ void init_tracertl(const char *tracefile_name, bool enable_gen_paddr, uint64_t m
 void init_traceicache(const char *tracept_name);
 bool tracertl_prepare_read();
 void tracertl_check_commit(uint64_t tick);
+void tracertl_check_commit_fpga(uint64_t tick);
 void tracertl_check_drive();
 bool tracertl_over();
 bool tracertl_error();
@@ -59,6 +60,16 @@ extern "C" void trace_read_one_instr(
 extern "C" void trace_redirect(uint64_t inst_id);
 extern "C" void trace_collect_commit(uint64_t pc, uint32_t instr, uint8_t instNum, uint8_t idx);
 extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx);
+
+extern "C" void trace_axis_master_helper(
+  char *tvalid, char *last, uint64_t *valid,
+  uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3,
+  uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7);
+
+extern "C" void trace_axis_slave_helper(
+  char last, uint64_t valid,
+  uint64_t data0, uint64_t data1, uint64_t data2, uint64_t data3,
+  uint64_t data4, uint64_t data5, uint64_t data6, uint64_t data7);
 
 extern "C" void trace_icache_helper(uint64_t addr, uint8_t *res_valid, uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3, uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7);
 extern "C" uint64_t trace_icache_dword_helper(uint64_t addr);

@@ -945,10 +945,12 @@ int Emulator::tick() {
 #endif // CONFIG_NO_DIFFTEST
 
 #ifdef TRACERTL_MODE
+#ifndef TRACERTL_OnFPGA
   do {
     tracertl_prepare_read();
     tracertl_prepare_fastsim_memaddr();
   } while (0);
+#endif
 #endif // TRACERTL_MODE
 
 //  printf("Before single cycle\n");
@@ -962,8 +964,11 @@ int Emulator::tick() {
   do{
     // trace's commit/drive check
     auto trap = difftest[0]->get_trap_event();
+#ifdef TRACERTL_OnFPGA
+    tracertl_check_commit_fpga(trap->cycleCnt);
+#else
     tracertl_check_commit(trap->cycleCnt);
-    tracertl_check_drive();
+#endif
 
     if (tracertl_stuck()) {
       eprintf("Trace Stack Too Many Cycle. Current Cycle: %lu\n", trap->cycleCnt);
@@ -983,6 +988,8 @@ int Emulator::tick() {
       trapCode = STATE_ABORT;
       return trapCode;
     }
+#ifndef TRACERTL_OnFPGA
+    tracertl_check_drive();
     if (tracertl_error_drive()) {
       eprintf("Trace RTL Encouter Drive Error. Check IFU/IBuffer\n");
       tracertl_error_drive_dump();
@@ -1003,7 +1010,6 @@ int Emulator::tick() {
       printf("Set FastSim Inst Finish at Commit End\n");
       trace_fastsim->setFastsimInstFinish();
     }
-
   } while(0);
 #endif // TRACERTL_MODE
 
