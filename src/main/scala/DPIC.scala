@@ -235,7 +235,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     }
     unpack += getPacketDecl(gen, "", config)
     val size = if (config.isDelta && gen.isDeltaElem) {
-      "sizeof(uint64_t)"
+      s"sizeof(uint${gen.deltaElemBytes * 8}_t)"
     } else {
       s"sizeof(${gen.desiredModuleName})"
     }
