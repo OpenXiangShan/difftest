@@ -128,10 +128,20 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
       }
       if (v_gen.bits.desiredCppName == "pregs_" + suffix) {
         val rat = in.filter(_.bits.desiredCppName == "rat_" + suffix)
-        VecInit(rat.map{r =>
+        val ratUpdate = VecInit(rat.map{r =>
           r.valid && r.bits.coreid === v_gen.bits.coreid &&
             VecInit(getRatValue(r.bits, suffix == "vec").map{v => v === idx.U}).asUInt.orR
         }).asUInt.orR
+        val instrUpdate = VecInit(in.filter(_.bits.desiredCppName == "commit").map{i =>
+          val gen = i.bits.bits.asInstanceOf[InstrCommit]
+          val wen = suffix match {
+            case "int" => gen.rfwen && !gen.fpwen
+            case "fp"  => gen.rfwen && gen.fpwen
+            case "vec" => gen.vecwen || gen.v0wen
+          }
+          i.valid && i.bits.coreid === v_gen.bits.coreid && wen && gen.wpdest === idx.U
+        }).asUInt.orR
+        ratUpdate || instrUpdate
       } else {
         false.B
       }
