@@ -24,7 +24,7 @@
 extern "C" void SimFrontFetch(int offset, uint64_t *pc, uint32_t *instr, uint32_t *preDecode);
 extern "C" void SimFrontUpdatePtr(uint32_t updateCount);
 extern "C" void SimFrontRedirect(uint32_t redirect_valid, uint32_t redirect_ftq_flag, uint32_t redirect_ftq_value,
-                                 uint64_t traget_pc);
+                                 uint32_t redirect_type, uint64_t redirect_pc, uint64_t redirect_target);
 extern "C" void SimFrontGetFtqToBackEnd(uint64_t *pc, uint32_t *pack_data, uint64_t *newest_pc,
                                         uint32_t *newest_pack_data);
 extern "C" void SimFrontRobCommit(uint32_t valid, uint32_t ftqIdxFlag, uint32_t ftqIdxValue);
