@@ -77,4 +77,6 @@ else
 	@$(MAKE) emu-verilator
 endif
 
+emu-mk: verilator-emu-mk
+
 clean-obj: verilator-clean-obj gsim-clean-obj
