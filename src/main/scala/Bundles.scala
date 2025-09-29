@@ -39,6 +39,20 @@ sealed trait DifftestBaseBundle extends Bundle {
   }
 
   def needUpdate: Option[Bool] = if (hasValid) Some(getValid) else None
+  def defaultUpdate(): DifftestBaseBundle = {
+    if (hasValid) {
+      getValid := false.B
+    }
+    this
+  }
+  def update(that: DifftestBaseBundle): DifftestBaseBundle = {
+    // Using waveAll connects only matched fields and ignores all mismatch fields.
+    // We are using waiveAll here to allow connecting different bundles with same fields.
+    // This is helpful because there may be composite relation or inheritance relationship.
+    this.waiveAll :<= that.waiveAll
+    this
+  }
+
   def hasAddress: Boolean = this.isInstanceOf[HasAddress]
   def getNumElements: Int = {
     this match {
@@ -91,6 +105,21 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
   ): Unit = {
     special := Cat(isExit, isDelayedWb)
   }
+
+  def isDelayedWb: Bool = special(0)
+  def isExit: Bool = special(1)
+
+  override def defaultUpdate(): DifftestBaseBundle = {
+    when(valid && !isDelayedWb) {
+      valid := false.B
+    }
+    this
+  }
+
+  override def update(that: DifftestBaseBundle): DifftestBaseBundle = {
+    assert(!valid || !isDelayedWb, p"Still waiting for the delayed writeback at $wdest for 0x${Hexadecimal(pc)}")
+    super.update(that)
+  }
 }
 
 // Instantiate inside DiffTest, work for get_commit_data specially
@@ -134,12 +163,25 @@ class CSRState extends DifftestBaseBundle {
   val mideleg = UInt(64.W)
   val medeleg = UInt(64.W)
 
-  def toSeq: Seq[UInt] = getElements.map(_.asUInt)
-  def names: Seq[String] = elements.keys.toSeq
+  def toSeq: Seq[UInt] = toNameValSeq.map(_._2)
+  def names: Seq[String] = toNameValSeq.map(_._1)
+  def toNameValSeq: Seq[(String, UInt)] = {
+    val csrs = elements.toSeq.reverse
+    require(csrs.head._1.startsWith("priv"), "Chisel is expected to put priv the last element?")
+    csrs.map { case (name, value) => (name, value.asInstanceOf[UInt]) }
+  }
 
   def ===(that: CSRState): Bool = VecInit(toSeq.zip(that.toSeq).map(v => v._1 === v._2)).asUInt.andR
   def =/=(that: CSRState): Bool = VecInit(toSeq.zip(that.toSeq).map(v => v._1 =/= v._2)).asUInt.orR
 }
+
+trait HasExtraCSRState extends DifftestBaseBundle {
+  val fcsr = UInt(64.W)
+}
+
+class ExtraCSRState extends DifftestBaseBundle with HasExtraCSRState
+
+class FullCSRState extends CSRState with HasExtraCSRState
 
 class HCSRState extends DifftestBaseBundle {
   val virtMode = UInt(64.W)
@@ -177,6 +219,17 @@ class TriggerCSRState extends DifftestBaseBundle {
 
 class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
   val data = UInt(64.W)
+}
+
+class DataWritebackFlatten(numElements: Int) extends DifftestBaseBundle {
+  val data = Vec(numElements, UInt(64.W))
+
+  override def update(that: DifftestBaseBundle): DifftestBaseBundle = {
+    require(that.isInstanceOf[DataWriteback], s"could not assign with different types: $this vs $that")
+    val realThat = that.asInstanceOf[DataWriteback]
+    data(realThat.address) := realThat.data
+    this
+  }
 }
 
 class VecDataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
@@ -352,6 +405,13 @@ class TraceInfo extends DifftestBaseBundle with HasValid {
   val in_replay = Bool()
   val trace_head = UInt(16.W)
   val trace_size = UInt(16.W)
+}
+
+class GuidanceInfo extends DifftestBaseBundle with HasValid {
+  // divisor (for REM*) or remainder (for DIV*)
+  val div = UInt(64.W)
+  // physical address with valid (for load/store/amo)
+  val data_paddr = Valid(UInt(64.W))
 }
 
 class CriticalErrorEvent extends DifftestBaseBundle with HasValid {

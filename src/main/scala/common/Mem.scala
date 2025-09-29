@@ -362,3 +362,8 @@ object DifftestMem {
     nw: Int,
   ): DifftestMem = setDefaultIOs(Module(new DifftestMemMP(size, lanes, bits, nr, nw)))
 }
+
+trait HasTopMemoryMasterPort { this: Module =>
+  def getTopMemoryMasterRead: DifftestMemReadIO
+  def getTopMemoryMasterWrite: DifftestMemWriteIO
+}

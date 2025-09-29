@@ -45,6 +45,7 @@ private class WiringInfo(val data: Data, val name: String, val isHierarchical: B
     this
   }
 
+  def sourceDefined: Boolean = nSources > 0
   def isPending: Boolean = nSources == 0 || nSinks == 0
   // (isSource, dataType, name)
   def toPendingTuple: Option[(Boolean, Data, String, Boolean)] = {
@@ -65,6 +66,13 @@ object DifftestWiring {
       info
     }
   }
+
+  // Hierarchical Wiring does not support Chisel 3.
+  private def isChisel3: Boolean = chisel3.BuildInfo.version.startsWith("3")
+
+  def contains(name: String): Boolean = wires.exists(_.name == name)
+
+  def containsSource(name: String): Boolean = wires.exists(w => w.name == name && w.sourceDefined)
 
   def addSource[T <: Data](data: T, name: String, isHierarchical: Boolean): T = {
     getWire(data, name, isHierarchical).setSource()
@@ -90,6 +98,13 @@ object DifftestWiring {
 
   def addSink[T <: Data](data: T, name: String): T = {
     addSink[T](data, name, false)
+  }
+
+  def getSink[T <: Data](tpe: T, name: String, isHierarchical: Boolean): Option[T] = {
+    Option.when(DifftestWiring.containsSource(name)) {
+      val sink = WireInit(0.U.asTypeOf(tpe))
+      DifftestWiring.addSink(sink, name, isHierarchical)
+    }
   }
 
   def isEmpty: Boolean = !hasPending

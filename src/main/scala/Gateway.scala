@@ -18,6 +18,8 @@ package difftest.gateway
 import chisel3._
 import chisel3.util._
 import difftest._
+import difftest.batch.{Batch, BatchIO}
+import difftest.bist.BIST
 import difftest.common.DifftestWiring
 import difftest.util.Delayer
 import difftest.dpic.DPIC
@@ -108,6 +110,7 @@ case class GatewayConfig(
     // TODO: support dump and load together
     require(!(traceDump && traceLoad))
   }
+  def needTopIOs(): Boolean = style != "bist" || BIST.isDUT
 }
 
 class FpgaDiffIO(config: GatewayConfig) extends Bundle {
@@ -145,8 +148,12 @@ object Gateway {
   private val instanceWithDelay = ListBuffer.empty[(DifftestBundle, Int)]
   private var config = GatewayConfig()
 
+  def getConfig(): GatewayConfig = config
+
   def setConfig(cfg: String): Unit = {
     cfg.foreach {
+      case 'T' => config = config.copy(style = "bist")
+      case 'r' => BIST.isDUT = false
       case 'E' => config = config.copy(hasGlobalEnable = true)
       case 'S' => config = config.copy(isSquash = true)
       case 'R' => config = config.copy(hasReplay = true)
@@ -291,6 +298,7 @@ object GatewaySink {
   def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
     config.style match {
       case "dpic" => DPIC(control, io, config)
+      case "bist" => BIST(io.bits)
       case _      => DPIC(control, io, config) // Default: DPI-C
     }
   }
@@ -305,6 +313,7 @@ object GatewaySink {
   def collect(config: GatewayConfig): GatewayResult = {
     config.style match {
       case "dpic" => DPIC.collect(config)
+      case "bist" => BIST.collect()
       case _      => DPIC.collect(config) // Default: DPI-C
     }
   }

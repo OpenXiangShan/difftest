@@ -20,7 +20,8 @@ import circt.stage.FirtoolOption
 import chisel3._
 import chisel3.reflect.DataMirror
 import chisel3.util._
-import difftest.common.{DifftestWiring, FileControl}
+import difftest.bist.BIST
+import difftest.common.{DifftestWiring, FileControl, HasTopMemoryMasterPort}
 import difftest.gateway.{Gateway, GatewayConfig, GatewayResult}
 import difftest.util.Profile
 
@@ -75,8 +76,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     }
   }
 
-  protected val needFlatten: Boolean = false
-  def isFlatten: Boolean = hasAddress && this.needFlatten
+  def isFlatten: Boolean = hasAddress && this.isInstanceOf[DataWriteback]
 
   // Convert elements into flatten UInt/Vec[UInt]
   private def seqUIntHelper(in: Seq[(String, Data)]): Seq[(String, Seq[UInt])] = {
@@ -285,6 +285,11 @@ class DiffCSRState extends CSRState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
+class DiffExtraCSRState extends ExtraCSRState with DifftestBundle {
+  override val desiredCppName: String = "csr_extra"
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+}
+
 class DiffHCSRState extends HCSRState with DifftestBundle {
   override val desiredCppName: String = "hcsr"
   override val desiredOffset: Int = 6
@@ -308,7 +313,6 @@ class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
 
 class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
   override val desiredCppName: String = "wb_int"
-  override protected val needFlatten: Boolean = true
   // It is required for MMIO/Load(only for multi-core) data synchronization, and commit instr trace record
   override def supportsSquashBase: Bool = true.B
   override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
@@ -320,7 +324,6 @@ class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
 
 class DiffVecWriteback(numRegs: Int = 32) extends VecDataWriteback(numRegs) with DifftestBundle {
   override val desiredCppName: String = "wb_vec"
-  override protected val needFlatten: Boolean = true
   override def supportsSquashBase: Bool = true.B
   override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
 }
@@ -504,6 +507,10 @@ class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle
   }
 }
 
+class DiffGuidanceInfo extends GuidanceInfo with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "guidance"
+}
+
 trait DifftestModule[T <: DifftestBundle] {
   val io: T
 }
@@ -550,7 +557,13 @@ object DifftestModule {
 
   def get_current_interfaces(): Seq[(DifftestBundle, Int)] = interfaces.toSeq
 
-  def collect(cpu: String): GatewayResult = {
+  def designTop[T <: Module](mod: T): T = designTop(mod, mod.getClass.getName.split("\\.").last)
+
+  def designTop[T <: Module](mod: T, cpu: String): T = {
+    if (Gateway.getConfig().style == "bist" && BIST.isDUT) {
+      BIST.tester(mod)
+    }
+
     val gateway = Gateway.collect()
     generateCppHeader(
       cpu,
@@ -564,45 +577,73 @@ object DifftestModule {
     }
     generateVerilogHeader(cpu, gateway.vMacros)
     Profile.generateJson(cpu, interfaces.toSeq)
-    gateway
+
+    gateway.exit.foreach(ex => DifftestWiring.addSource(ex, "difftest_exit", isHierarchical = true))
+    gateway.step.foreach(ex => DifftestWiring.addSource(ex, "difftest_step", isHierarchical = true))
+    gateway.fpgaIO.foreach(ex => DifftestWiring.addSource(ex, "difftest_fpga", isHierarchical = true))
+
+    mod
   }
 
-  def finish(cpu: String, createTopIO: Boolean): Option[DifftestTopIO] = {
-    val gateway = collect(cpu)
-    if (gateway.fpgaIO.isDefined) {
-      val fpgaIO = gateway.fpgaIO.get
-      val io = IO(Output(chiselTypeOf(fpgaIO)))
-      io := fpgaIO
+  def atSimTop(createTopIO: Boolean)(block: DifftestTopIO => Any): Option[DifftestTopIO] = {
+    if (DifftestWiring.hasPending) {
+      DifftestWiring.createAndConnectExtraIOs()
     }
+    require(DifftestWiring.isEmpty, s"pending wires left: ${DifftestWiring.getPending}")
+
     Option.when(createTopIO) {
       if (enabled) {
-        createTopIOs(gateway.exit, gateway.step)
+        createTopIOs(block)
       } else {
         WireInit(0.U.asTypeOf(new DifftestTopIO))
       }
     }
   }
 
-  def finish(cpu: String): DifftestTopIO = {
-    finish(cpu, true).get
-  }
+  def atSimTop(block: DifftestTopIO => Any): DifftestTopIO = atSimTop(createTopIO = true)(block).get
 
-  def createTopIOs(exit: Option[UInt], step: Option[UInt]): DifftestTopIO = {
+  def atSimTop(): DifftestTopIO = atSimTop(_ => ())
+
+  def createTopIOs(block: DifftestTopIO => Any): DifftestTopIO = {
     val difftest = IO(new DifftestTopIO)
 
-    difftest.exit := exit.getOrElse(0.U)
-    difftest.step := step.getOrElse(0.U)
+    difftest.exit := 0.U
+    difftest.step := 0.U
 
-    val timer = RegInit(0.U(64.W)).suggestName("timer")
+    val timer = RegInit(0.U(64.W)).suggestName("difftest_timer")
     timer := timer + 1.U
     dontTouch(timer)
 
-    val log_enable = difftest.logCtrl.enable(timer).suggestName("log_enable")
+    val log_enable = difftest.logCtrl.enable(timer).suggestName("difftest_log_enable")
     dontTouch(log_enable)
 
     difftest.uart := DontCare
 
-    require(DifftestWiring.isEmpty, s"pending wires left: ${DifftestWiring.getPending}")
+    block(difftest)
+
+    // The user may override exit with a lower priority.
+    DifftestWiring
+      .getSink(chiselTypeOf(difftest.exit), "difftest_exit", isHierarchical = true)
+      .foreach(exit =>
+        when(exit.asUInt =/= 0.U) {
+          difftest.exit := exit
+        }
+      )
+
+    // When step is defined in DiffTest, it cannot be overridden in user code.
+    DifftestWiring
+      .getSink(chiselTypeOf(difftest.step), "difftest_step", isHierarchical = true)
+      .foreach(step => difftest.step := step)
+
+    // The user may override the uart output with a lower priority
+    DifftestWiring
+      .getSink(Valid(UInt(8.W)), "difftest_bist_uart", isHierarchical = true)
+      .foreach(uart =>
+        when(uart.valid) {
+          difftest.uart.out.valid := true.B
+          difftest.uart.out.ch := uart.bits
+        }
+      )
 
     difftest
   }
