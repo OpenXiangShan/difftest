@@ -64,6 +64,14 @@ import "DPI-C" function byte simv_nstep(byte step);
 `ifdef CONFIG_DIFFTEST_IOTRACE
 import "DPI-C" function void set_iotrace_name(string name);
 `endif // CONFIG_DIFFTEST_IOTRACE
+
+`ifdef TRACERTL_MODE
+  `ifdef TRACERTL_FPGA
+// import "DPI-C" function void set_tracertl_file(string name);
+import "DPI-C" function void init_tracertl_reader(string tracertl_file);
+  `endif // TRACERTL_FPGA
+`endif // TRACERTL_MODE
+
 `endif // TB_NO_DPIC
 
 `define SIMV_DONE     8'h1
@@ -73,13 +81,13 @@ reg  [63:0] difftest_logCtrl_begin_r;
 reg  [63:0] difftest_logCtrl_end_r;
 
 string bin_file;
-string tracertl_file;
 string flash_bin_file;
 string gcpt_bin_file;
 string diff_ref_so;
 string workload_list;
 string iotrace_name;
 longint overwrite_nbytes;
+string tracertl_file;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
@@ -164,6 +172,25 @@ initial begin
   end
 `endif // ENABLE_WORKLOAD_SWITCH
 
+`ifdef TRACERTL_MODE
+`ifdef TRACERTL_FPGA
+  // set tracertl file
+  if ($test$plusargs("tracertl-file")) begin
+    $value$plusargs("tracertl-file=%s", tracertl_file);
+    $display("set tracertl file: %s", tracertl_file);
+    // set_tracertl_file(tracertl_file);
+    init_tracertl_reader(tracertl_file);
+  end
+  else begin
+    $display("tracertl mode is enabled but the tracertl file is not set");
+    $fatal;
+  end
+`else
+  $display("tracertl mode is enabled but not for FPGA");
+`endif // TRACERTL_FPGA
+`else
+  $display("tracertl mode is disabled");
+`endif // TRACERTL_MODE
 
 `endif // TB_NO_DPIC
   // max cycles to execute, no limit for default

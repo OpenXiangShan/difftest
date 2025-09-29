@@ -34,7 +34,9 @@ void init_tracertl(const char *trace_file_name, bool enable_gen_paddr, uint64_t 
   fflush(stdout);
   trace_reader = new TraceReader(trace_file_name, enable_gen_paddr, max_insts, skip_traceinstr);
 
-#ifndef TRACERTL_OnFPGA
+#ifndef TRACERTL_FPGA
+  printf("prepare read at init_tracertl\n");
+  fflush(stdout);
   trace_reader->prepareRead();
 #endif
 }

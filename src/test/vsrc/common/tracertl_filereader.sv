@@ -265,7 +265,7 @@ initial begin
     $finish;
   end
 
-  $display("Opened file %s successfully", file_name);
+  $display("VCS Opened trace-file %s successfully", file_name);
 
   // TOOD: change the below STRUCT_SIZE_BYTES to fsize
   for (longint i = 0; i < MAX_TRACE_INSTR_NUM; i++) begin

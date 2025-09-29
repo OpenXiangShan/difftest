@@ -48,6 +48,8 @@ static bool enable_difftest = true;
 static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
 static uint32_t overwrite_nbytes = 0xe00;
+static char *tracertl_file = NULL;
+
 struct core_end_info_t {
   bool core_trap[NUM_CORES];
   double core_cpi[NUM_CORES];
@@ -165,6 +167,23 @@ extern "C" void set_simjtag() {
   enable_simjtag = true;
 }
 
+#ifdef TRACERTL_MODE
+extern "C" void init_tracertl_reader(char *tracertl_file) {
+  init_traceicache(NULL);
+  init_tracertl(tracertl_file);
+}
+
+// extern "C" void set_tracertl_file(char *s) {
+//   tracertl_file = (char *)malloc(256);
+//   strcpy(tracertl_file, s);
+//   printf("set tracertl file %s \n", tracertl_file);
+// }
+
+// extern "C" void  tracertl_prepare_read_vcs() {
+//   tracertl_prepare_read();
+// }
+#endif
+
 extern "C" uint8_t simv_init() {
   if (workload_list != NULL) {
     if (switch_workload())
@@ -194,7 +213,9 @@ extern "C" uint8_t simv_init() {
   }
 #endif // CONFIG_NO_DIFFTEST
 
-
+// #if defined(TRACERTL_MODE) && defined(TRACERTL_FPGA)
+//   init_tracertl_reader(tracertl_file);
+// #endif // TRACERTL_MODE && TRACERTL_FPGA
 
   return 0;
 }
@@ -270,16 +291,6 @@ extern "C" uint8_t simv_step() {
   return 0;
 }
 
-#ifdef TRACERTL_MODE
-extern "C" void init_tracertl_reader(char *tracertl_file) {
-  init_traceicache(NULL);
-  init_tracertl(tracertl_file);
-}
-
-extern "C" void  tracertl_prepare_read_vcs() {
-  tracertl_prepare_read();
-}
-#endif
 
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 svScope deferredResultScope;

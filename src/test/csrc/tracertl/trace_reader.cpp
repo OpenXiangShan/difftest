@@ -229,7 +229,7 @@ bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {
 }
 
 bool TraceReader::prepareRead() {
-#ifdef TRACERTL_OnFPGA
+#ifdef TRACERTL_FPGA
   printf("TraceRTL: prepareRead should not be called in FPGA mode\n");
   exit(1);
 #endif
@@ -298,7 +298,7 @@ bool TraceReader::read(Instruction &inst) {
   pendingInstList.push_back(inst); // for commit check
   driveInstInput.push_back(inst); // for ibuffer drive check
 
-#ifndef TRACERTL_OnFPGA
+#ifndef TRACERTL_FPGA
   if (pendingInstList.size() > 2000) {
     setError();
     printf("TraceRTL: pendingInstList has too many inst, more than 2000. Check it.\n");

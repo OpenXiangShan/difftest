@@ -69,6 +69,12 @@ endif
 
 ifeq ($(TRACERTL_MODE),1)
 EXTRA += +define+TRACERTL_MODE
+VCS_CXXFLAGS += -DTRACERTL_MODE
+endif
+
+ifeq ($(TRACERTL_FPGA),1)
+EXTRA += +define+TRACERTL_FPGA
+VCS_CXXFLAGS += -DTRACERTL_FPGA
 endif
 
 ifeq ($(VCS),verilator)
@@ -77,7 +83,7 @@ VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5
 VCS_FLAGS += -Mdir $(VCS_BUILD_DIR)  --compiler gcc
 VCS_CXXFLAGS += -std=c++20
 else
-VCS_FLAGS += -full64 +v2k -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
+VCS_FLAGS += -full64 +v2k -top $(VCS_TOP) -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR) -j200
 VCS_FLAGS += +define+VCS
 ifeq ($(ENABLE_XPROP),1)

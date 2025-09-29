@@ -945,7 +945,7 @@ int Emulator::tick() {
 #endif // CONFIG_NO_DIFFTEST
 
 #ifdef TRACERTL_MODE
-#ifndef TRACERTL_OnFPGA
+#ifndef TRACERTL_FPGA
   do {
     tracertl_prepare_read();
     tracertl_prepare_fastsim_memaddr();
@@ -964,7 +964,7 @@ int Emulator::tick() {
   do{
     // trace's commit/drive check
     auto trap = difftest[0]->get_trap_event();
-#ifdef TRACERTL_OnFPGA
+#ifdef TRACERTL_FPGA
     tracertl_check_commit_fpga(trap->cycleCnt);
 #else
     tracertl_check_commit(trap->cycleCnt);
@@ -988,7 +988,7 @@ int Emulator::tick() {
       trapCode = STATE_ABORT;
       return trapCode;
     }
-#ifndef TRACERTL_OnFPGA
+#ifndef TRACERTL_FPGA
     tracertl_check_drive();
     if (tracertl_error_drive()) {
       eprintf("Trace RTL Encouter Drive Error. Check IFU/IBuffer\n");
