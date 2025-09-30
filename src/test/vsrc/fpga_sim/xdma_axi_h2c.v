@@ -14,33 +14,31 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 `include "DifftestMacros.v"
-module xdma_axi(
+module xdma_axi_h2c(
   input clock,
   input reset,
-  input [511:0] axi_tdata,
-  input [63:0] axi_tkeep,
-  input axi_tlast,
-  output axi_tready,
-  input axi_tvalid
+  output [511:0] axi_tdata,
+  input axi_tready,
+  output axi_tvalid
 );
 
-import "DPI-C" function bit v_xdma_tready();
-import "DPI-C" function void v_xdma_write(
+import "DPI-C" function bit v_xdma_h2c_tvalid();
+import "DPI-C" function void v_xdma_h2c_read(
   input byte channel,
   input bit [511:0] axi_tdata,
-  input bit axi_tlast
 );
 
-reg axi_tready_r;
-assign axi_tready = axi_tready_r;
+reg axi_tvalid_r;
+assign axi_tvalid = axi_tvalid_r;
 always @(posedge clock) begin
   if (reset) begin
-    axi_tready_r <= 1'b0;
+    axi_tvalid_r <= 1'b0;
   end
   else begin
-    axi_tready_r <= v_xdma_tready();
+    axi_tvalid_r <= v_xdma_h2c_tvalid();
     if (axi_tvalid & axi_tready) begin
-      v_xdma_write(0, axi_tdata, axi_tlast);
+      v_xdma_h2c_read(0, axi_tdata);
+      $display("[%t] %m: axi_tdata = %x", $time, axi_tdata);
     end
   end
 end

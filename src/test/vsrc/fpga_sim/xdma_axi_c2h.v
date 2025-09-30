@@ -13,18 +13,36 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-#ifndef __XDMA_SIM_H__
-#define __XDMA_SIM_H__
-#include <stddef.h>
-#include <stdint.h>
+`include "DifftestMacros.v"
+module xdma_axi_c2h(
+  input clock,
+  input reset,
+  input [511:0] axi_tdata,
+  input [63:0] axi_tkeep,
+  input axi_tlast,
+  output axi_tready,
+  input axi_tvalid
+);
 
-void xdma_sim_open(int channel, bool is_host);
-void xdma_sim_close(int channel);
-int xdma_sim_c2h_read(int channel, char *buf, size_t size);
-int xdma_sim_c2h_write(int channel, const char *buf, uint8_t tlast, size_t size);
+import "DPI-C" function bit v_xdma_c2h_tready();
+import "DPI-C" function void v_xdma_c2h_write(
+  input byte channel,
+  input bit [511:0] axi_tdata,
+  input bit axi_tlast
+);
 
-void xdma_ddr_init(const char *workload);
-int xdma_sim_h2c_read(int channel, char *buf, size_t size);
-bool xdma_sim_h2c_write_ddr(int channel);
+reg axi_tready_r;
+assign axi_tready = axi_tready_r;
+always @(posedge clock) begin
+  if (reset) begin
+    axi_tready_r <= 1'b0;
+  end
+  else begin
+    axi_tready_r <= v_xdma_c2h_tready();
+    if (axi_tvalid & axi_tready) begin
+      v_xdma_c2h_write(0, axi_tdata, axi_tlast);
+    end
+  end
+end
 
-#endif // __XDMA_SIM_H__
+endmodule

@@ -27,6 +27,7 @@
 #include <string>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #define XDMA_USER       "/dev/xdma0_user"
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
@@ -74,15 +75,69 @@ FpgaXdma::FpgaXdma()
     std::cout << "XDMA link " << c2h_device << std::endl;
 #endif // FPGA_SIM
   }
-#ifdef CONFIG_USE_XDMA_H2C
+#ifndef FPGA_SIM
   xdma_h2c_fd = open(XDMA_H2C_DEVICE, O_WRONLY);
   if (xdma_h2c_fd == -1) {
     std::cout << XDMA_H2C_DEVICE << std::endl;
     perror("Failed to open XDMA device");
     exit(-1);
   }
+#endif // FPGA_SIM
   std::cout << "XDMA link " << XDMA_H2C_DEVICE << std::endl;
-#endif
+}
+
+void FpgaXdma::ddr_load_workload(const char *workload) {
+  if (workload == nullptr) {
+    fprintf(stderr, "workload is null\n");
+    return;
+  }
+
+  int fd = open(workload, O_RDONLY);
+  if (fd < 0) {
+    perror("open workload failed");
+    return;
+  }
+
+  struct stat st;
+  if (fstat(fd, &st) != 0) {
+    perror("fstat failed");
+    close(fd);
+    return;
+  }
+  size_t filesize = st.st_size;
+
+  const size_t CHUNK = 64;
+  uint8_t buf[CHUNK];
+  size_t offset = 0;
+  size_t total = 0;
+
+  while (offset < filesize) {
+    size_t to_read = (filesize - offset) < CHUNK ? (filesize - offset) : CHUNK;
+    size_t r = read(fd, buf, to_read);
+    if (r < 0) {
+      perror("read workload failed");
+      break;
+    }
+    if ((size_t)r < CHUNK) {
+      memset(buf + r, 0, CHUNK - r); // ²»×ã²¹0
+    }
+
+    size_t w = write(xdma_h2c_fd, buf, CHUNK);
+    usleep(100);
+  
+    if (w < 0 || w != CHUNK) {
+      printf("w %d \n", w);
+      perror("write to xdma h2c failed");
+      close(fd);
+      return;
+    }
+    printf("write offset %d ok\n", offset);
+    offset += to_read;
+    total += to_read;
+  }
+
+  close(fd);
+  printf("ddr_load_workload: transferred %zu bytes (padded to 64B chunks)\n", total);
 }
 
 // write xdma_bypass memory or xdma_user
@@ -164,7 +219,7 @@ void FpgaXdma::read_xdma_thread(int channel) {
   while (running) {
     char *mem = xdma_mempool.get_free_chunk(&mem_get_idx);
 #ifdef FPGA_SIM
-    size_t size = xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead));
+    size_t size = xdma_sim_c2h_read(channel, mem, sizeof(FpgaPackgeHead));
 #else
     size_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
@@ -214,7 +269,7 @@ void FpgaXdma::read_and_process() {
   memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running) {
 #ifdef FPGA_SIM
-    size_t size = xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead));
+    size_t size = xdma_sim_c2h_read(0, (char *)packge, sizeof(FpgaPackgeHead));
 #else
     size_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM

@@ -266,9 +266,9 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     val xdma_axi_bar = XDMA_AXIFactory.genAxi4LiteBar(32, 32)
     xdma_axi_bar.io <> DontCare
     dontTouch(xdma_axi_bar.io)
-    val xdma_axis = XDMA_AXIFactory.genAxisToAxi4Lite(33, 512)
-    xdma_axis.io <> DontCare
-    dontTouch(xdma_axis.io)
+    // val xdma_axis = XDMA_AXIFactory.genAxisToAxi4(33, 512)
+    // xdma_axis.io <> DontCare
+    // dontTouch(xdma_axis.io)
   }
 
   if (config.isBatch) {

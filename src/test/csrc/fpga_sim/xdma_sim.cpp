@@ -24,6 +24,9 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <vector>
+#include <algorithm>
 
 #define BUFFER_SIZE 65536
 
@@ -117,29 +120,118 @@ public:
 };
 
 // API for shared XDMA Dev
-xdma_sim *xsim[8] = {nullptr};
+xdma_sim *xsim_c2H[8] = {nullptr};
+xdma_sim *xsim_h2C[8] = {nullptr};
+static std::vector<char> h2c_mem;
+static size_t h2c_mem_offset = 0;
+static size_t h2c_file_size   = 0;  
+bool h2c_valid = false;
+bool c2h_valid = false;
+bool ddr_init_done = false;
 
 void xdma_sim_open(int channel, bool is_host) {
-  xsim[channel] = new xdma_sim(channel, is_host);
+  xsim_c2H[channel] = new xdma_sim(channel, is_host);
+  xsim_h2C[channel] = new xdma_sim(channel, is_host);
 }
 
 void xdma_sim_close(int channel) {
-  delete xsim[channel];
-  xsim[channel] = nullptr;
+  delete xsim_c2H[channel];
+  xsim_c2H[channel] = nullptr;
 }
 
-int xdma_sim_read(int channel, char *buf, size_t size) {
-  return xsim[channel]->read(buf, size);
+void xdma_ddr_init(const char *workload) {
+  if (workload == nullptr) {
+    fprintf(stderr, "workload is null\n");
+    return;
+  }
+
+  int fd = open(workload, O_RDONLY);
+  if (fd < 0) {
+    perror("open workload failed");
+    return;
+  }
+  struct stat st;
+  if (fstat(fd, &st) != 0) {
+    perror("fstat failed");
+    close(fd);
+    return;
+  }
+  size_t filesize = st.st_size;
+
+  // 1) 清空并分配缓冲区
+  h2c_mem.clear();
+  h2c_mem_offset = 0;
+  h2c_mem.resize(filesize);
+  h2c_file_size = filesize;        // 记录文件总大小
+
+  // 2) 一次性读入到内存
+  ssize_t total = 0;
+  while ((size_t)total < filesize) {
+    ssize_t r = ::read(fd, h2c_mem.data() + total, filesize - total);
+    if (r <= 0) {
+      perror("read workload failed");
+      break;
+    }
+    total += r;
+  }
+  close(fd);
+  printf("ddr_load_workload: loaded %zu bytes into memory\n", h2c_mem.size());
 }
 
-int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size) {
-  return xsim[channel]->write(buf, tlast, size);
+int xdma_sim_c2h_read(int channel, char *buf, size_t size) {
+  return xsim_c2H[channel]->read(buf, size);
 }
 
-extern "C" unsigned char v_xdma_tready() {
-  return 1;
+int xdma_sim_c2h_write(int channel, const char *buf, uint8_t tlast, size_t size) {
+  return xsim_c2H[channel]->write(buf, tlast, size);
 }
 
-extern "C" void v_xdma_write(uint8_t channel, const char *axi_tdata, uint8_t axi_tlast) {
-  xdma_sim_write(channel, axi_tdata, axi_tlast, 64);
+int xdma_sim_h2c_read(int channel, char *buf, size_t size) {
+  return xsim_h2C[channel]->read(buf, size);
+}
+
+bool xdma_sim_h2c_write_ddr(int channel) {
+  size_t CHUNK = 64;
+  if (h2c_valid == true)
+    return false;
+  // 如果已写完全部数据，直接返回 true
+  if (h2c_mem_offset >= h2c_file_size) {
+    return true;
+  }
+  size_t remain   = h2c_file_size - h2c_mem_offset;
+  size_t to_write = std::min(CHUNK, remain);
+
+  int written = xsim_h2C[channel]->write(
+    h2c_mem.data() + h2c_mem_offset,
+    1,           // 每次 chunk 都当作 tlast
+    to_write
+  );
+  if (written > 0) {
+    h2c_mem_offset += written;
+  }
+  printf("h2c_mem_offset: %zu, written: %d\n", h2c_mem_offset, written);
+  // 写到末尾时返回 true，否则 false
+  if (h2c_mem_offset >= h2c_file_size) {
+    ddr_init_done = true;
+  }
+  h2c_valid = true;
+  return ddr_init_done;
+}
+
+
+extern "C" unsigned char v_xdma_c2h_tready() {
+  return c2h_valid;
+}
+
+extern "C" void v_xdma_c2h_write(uint8_t channel, const char *axi_tdata, uint8_t axi_tlast) {
+  xdma_sim_c2h_write(channel, axi_tdata, axi_tlast, 64);
+}
+
+extern "C" unsigned char v_xdma_h2c_tvalid() {
+  return h2c_valid;
+}
+
+extern "C" void v_xdma_h2c_read(uint8_t channel, char *axi_tdata) {
+  xdma_sim_c2h_read(channel, axi_tdata, 64);
+  h2c_valid = false;
 }
