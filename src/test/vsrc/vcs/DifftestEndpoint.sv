@@ -23,7 +23,10 @@ module DifftestEndpoint(
 `ifdef ENABLE_WORKLOAD_SWITCH
   output wire        workload_switch,
 `endif // ENABLE_WORKLOAD_SWITCH
-
+`ifdef FPGA_SIM
+  output wire        dpi_clock_enable_o,
+  output wire        dpi_reset_enable_o,
+`endif // FPGA_SIM
   /* DifftestTopIO */
   output wire [63:0] difftest_logCtrl_begin,
   output wire [63:0] difftest_logCtrl_end,
@@ -66,6 +69,7 @@ import "DPI-C" function byte simv_nstep(byte step);
 `ifdef CONFIG_DIFFTEST_IOTRACE
 import "DPI-C" function void set_iotrace_name(string name);
 `endif // CONFIG_DIFFTEST_IOTRACE
+import "DPI-C" function int get_core_clock_enable();
 `endif // TB_NO_DPIC
 
 `define SIMV_GOODTRAP 8'h1
@@ -92,6 +96,30 @@ reg [63:0] max_cycles;
 reg [63:0] warmup_instr;
 reg [63:0] stuck_limit;
 
+`ifdef FPGA_SIM
+  reg [1:0]dpi_clock_enable;
+  reg dpi_reset_enable;
+  reg fpga_init_ok;
+  always @(posedge clock) begin
+    if (reset) begin
+      dpi_clock_enable <= 1'b0;
+      dpi_reset_enable <= 1'b0;
+    end
+    else begin
+      dpi_clock_enable <= get_core_clock_enable();
+      if (~dpi_clock_enable && ~fpga_init_ok) begin
+        $display("[SIMV] FPGA init done.");
+        dpi_reset_enable <= 1'b1;
+        fpga_init_ok <= 1'b1;
+      end
+      else begin 
+        dpi_reset_enable <= 1'b0;
+      end
+    end
+  end
+  assign dpi_clock_enable_o = dpi_clock_enable[0];
+  assign dpi_reset_enable_o = dpi_reset_enable;
+`endif // FPGA_SIM
 initial begin
   // log begin
   if ($test$plusargs("b")) begin

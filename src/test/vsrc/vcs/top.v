@@ -91,7 +91,7 @@ reg [7:0] reset_counter;
 initial reset_counter = 0;
 always @(posedge clock) begin
 `ifdef ENABLE_WORKLOAD_SWITCH
-  if (workload_switch) begin
+  if (workload_switch || dpic_reset_enable) begin
     reset_counter <= 8'd0;
     reset         <= 1'b1;
     $display("workload switch");
@@ -116,11 +116,20 @@ wire core_clock;
 `ifdef FPGA_SIM
   wire [`CONFIG_DIFFTEST_BATCH_IO_WITDH - 1:0] difftest_data;
   wire difftest_enable;
+  wire dpi_clock_enable;
+  wire dpic_reset_enable;
+  wire xdma_axis_valid;
+  wire [511:0] xdma_axis_data;
+  wire xdma_axis_ready;
 xdma_wrapper xdma(
   .clock(clock),
   .reset(reset),
   .difftest_data(difftest_data),
   .difftest_enable(difftest_enable),
+  .dpi_clock_enable(dpi_clock_enable),
+  .xdma_axis_valid(xdma_axis_valid),
+  .xdma_axis_data(xdma_axis_data),
+  .xdma_axis_ready(xdma_axis_ready),
   .core_clock(core_clock)
 );
   // assign core_clock = clock;
@@ -134,6 +143,9 @@ SimTop sim(
 `ifdef FPGA_SIM
   .difftest_io_data(difftest_data),
   .difftest_io_enable(difftest_enable),
+  .io_xdma_axis_valid(xdma_axis_valid),
+  .io_xdma_axis_data(xdma_axis_data),
+  .io_xdma_axis_ready(xdma_axis_ready),
 `endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),
@@ -154,6 +166,10 @@ DifftestEndpoint difftest(
 `ifdef ENABLE_WORKLOAD_SWITCH
   .workload_switch(workload_switch),
 `endif // ENABLE_WORKLOAD_SWITCH
+`ifdef FPGA_SIM
+  .dpi_clock_enable_o (dpi_clock_enable),
+  .dpi_reset_enable_o (dpic_reset_enable),
+`endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),
   .difftest_logCtrl_level(difftest_logCtrl_level),

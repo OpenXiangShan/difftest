@@ -73,11 +73,7 @@ public:
     thread_cv.notify_one();
 #endif // USE_THREAD_MEMPOOL
   }
-  void ddr_load_workload(const char *workload) {
-    core_reset();
-    device_write(true, workload, 0, 0);
-    core_restart();
-  }
+  void ddr_load_workload(const char *workload);
 
   void fpga_reset_io(bool enable) {
     if (enable)
@@ -89,9 +85,7 @@ public:
 private:
   bool running = false;
   int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
-#ifdef CONFIG_USE_XDMA_H2C
   int xdma_h2c_fd;
-#endif
 
   void device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);
   void core_reset() {

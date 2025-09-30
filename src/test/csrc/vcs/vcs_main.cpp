@@ -35,6 +35,7 @@
 #include "remote_bitbang.h"
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
+#include "vpi_user.h"
 #endif // FPGA_SIM
 
 static bool has_reset = false;
@@ -56,6 +57,14 @@ enum {
   SIMV_FAIL,
   SIMV_WARMUP,
 } simv_state;
+
+#ifdef FPGA_SIM
+int fpga_ddr_init_done = false;
+int fpga_core_enable = true;
+extern "C" int get_core_clock_enable() {
+  return fpga_core_enable;
+}
+#endif // FPGA_SIM
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n", s);
@@ -183,7 +192,13 @@ extern "C" uint8_t simv_init() {
   }
   common_init("simv");
 
+#ifdef FPGA_SIM
+  xdma_sim_open(0, false);
+#endif // FPGA_SIM
+
   ram_size = ram_size > 0 ? ram_size : DEFAULT_EMU_RAM_SIZE;
+
+#ifndef FPGA_SIM
   init_ram(bin_file, ram_size);
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);
@@ -198,6 +213,7 @@ extern "C" uint8_t simv_init() {
   init_flash(flash_bin_file);
 
 #ifndef CONFIG_NO_DIFFTEST
+  printf("difftest is enabled\n");
   difftest_init();
 #endif // CONFIG_NO_DIFFTEST
 
@@ -205,17 +221,19 @@ extern "C" uint8_t simv_init() {
 
 #ifndef CONFIG_NO_DIFFTEST
   if (enable_difftest) {
+    printf("init goldenmem\n");
     init_goldenmem();
     init_nemuproxy(ram_size);
   }
 #endif // CONFIG_NO_DIFFTEST
-
-#ifdef FPGA_SIM
-  xdma_sim_open(0, false);
+#else
+  xdma_ddr_init(bin_file);
+  printf("FPGA xdma_ddr_init\n");
 #endif // FPGA_SIM
-
+  printf("simv init done\n");
   return 0;
 }
+
 
 #ifdef OUTPUT_CPI_TO_FILE
 void output_cpi_to_file() {
@@ -363,6 +381,41 @@ extern "C" uint8_t simv_nstep(uint8_t step) {
     return 0;
 #endif // CONFIG_NO_DIFFTEST
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+
+#ifdef FPGA_SIM
+  if (fpga_ddr_init_done == false) {
+    if (xdma_sim_h2c_write_ddr(1)) {
+      printf("xdma_sim_h2c_write_ddr ok\n");
+      fpga_ddr_init_done = true;
+      fpga_core_enable = false;
+#ifndef CONFIG_NO_DIFFTEST
+  printf("difftest is enabled\n");
+  difftest_init();
+#endif // CONFIG_NO_DIFFTEST
+
+  init_device();
+
+#ifndef CONFIG_NO_DIFFTEST
+  if (enable_difftest) {
+    printf("init goldenmem\n");
+    init_goldenmem();
+    init_nemuproxy(ram_size);
+  }
+#endif // CONFIG_NO_DIFFTEST
+#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
+    return;
+#else
+    return SIMV_EXCEED;
+#endif // CONFIG_DIFFTEST_DEFERRED_RESULT 
+    }
+    printf("xdma_sim_h2c_write_ddr wait\n");
+#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
+    return;
+#else
+    return SIMV_RUN;
+#endif // CONFIG_DIFFTEST_DEFERRED_RESULT 
+  }
+#endif // FPGA_SIM
 
   int ret = simv_get_result(step);
   // Return result
