@@ -3,7 +3,8 @@ package difftest.fpga
 import chisel3._
 import chisel3.BlackBox
 import chisel3.util.HasBlackBoxInline
-import xdma._
+import chisel3.util._
+import difftest.fpga.xdma._
 
 // Note: submodules `dual_buffer_bram` and `bram_port` will be emitted via inline text inside `VerilogDifftest2AXI`.
 
@@ -385,12 +386,18 @@ class VerilogDifftest2AXI(
 class HostEndpoint(
   val dataWidth: Int = 16000,
   val axisDataWidth: Int = 512,
+  val ddrDataWidth: Int = 64,
 ) extends Module {
   val io = IO(new Bundle {
     val difftest_data = Input(UInt(dataWidth.W))
     val difftest_enable = Input(Bool())
-    // Master AXI-stream interface for host-to-hart
+    // AXI-stream
     val host_c2h_axis = new AxisMasterBundle(axisDataWidth)
+    val host_h2c_axis = Flipped(new AxisMasterBundle(axisDataWidth))
+    // Bring in SoC memory AXI as xdma bundle for arbitration
+    val soc_axi_in = Flipped(new AXI4(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1))
+    // AXI4 master interface (xdma bundle) after arbitration to memory
+    val axi4_to_mem = new AXI4(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1)
     // Preserve core clock enable
     val core_clock_enable = Output(Bool())
     // Keep backward compatibility (optional)
@@ -413,4 +420,116 @@ class HostEndpoint(
   io.core_clock_enable := Difftest2AXI.io.core_clock_enable
   // Legacy keep signal
   io.axi_tkeep := Difftest2AXI.io.axi_tkeep
+
+  // Instantiate AXIS(512b) -> AXI4(64b) write converter
+  val axisWriter = Module(new Axis512ToAxi64Write(addrWidth = 64))
+  axisWriter.io.axis.valid := io.host_h2c_axis.valid
+  axisWriter.io.axis.data  := io.host_h2c_axis.data
+  axisWriter.io.axis.last  := io.host_h2c_axis.last
+  io.host_h2c_axis.ready   := axisWriter.io.axis.ready
+
+  // 2-way arbiter (xdma bundle): in(0) = axisWriter, in(1) = SoC
+  val arb = Module(new AXI4Arbiter(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1))
+  arb.io.in(0) <> axisWriter.io.axi
+  arb.io.in(1) <> io.soc_axi_in
+  io.axi4_to_mem <> arb.io.out
+
+
+}
+
+// Convert 512-bit AXIS stream to 64-bit AXI write-only transactions using xdma_axi bundles.
+class Axis512ToAxi64Write(addrWidth: Int = 64) extends Module {
+  val axisWidth = 512
+  val axiDataWidth = 64
+  val bytesPerBeat = axiDataWidth / 8
+  val subBeatsPerAxis = axisWidth / axiDataWidth // 8
+
+  val io = IO(new Bundle {
+    val axis = Flipped(new AxisMasterBundle(axisWidth))
+    val axi  = new AXI4(addrWidth = addrWidth, dataWidth = axiDataWidth, idWidth = 1)
+  })
+
+  // Default tie-offs for unused read channels
+  io.axi.ar.valid := false.B
+  io.axi.ar.bits.addr  := 0.U
+  io.axi.ar.bits.prot  := 0.U
+  io.axi.ar.bits.id    := 0.U
+  io.axi.ar.bits.len   := 0.U
+  io.axi.ar.bits.size  := log2Ceil(bytesPerBeat).U
+  io.axi.ar.bits.burst := 1.U
+  io.axi.ar.bits.lock  := false.B
+  io.axi.ar.bits.cache := 0.U
+  io.axi.ar.bits.qos   := 0.U
+  io.axi.ar.bits.user  := 0.U
+  io.axi.r.ready := true.B
+
+  // State for 8-beat burst write
+  val addrPtr     = RegInit(0.U(addrWidth.W))
+  val axisReg     = Reg(UInt(axisWidth.W))
+  val beatCnt     = RegInit(0.U(log2Ceil(subBeatsPerAxis).W)) // 0..7
+
+  // Burst-level sequencing: Idle -> AW(len=7) -> send 8 W beats -> wait for B -> Idle
+  val sIdle :: sAw :: sW :: sB :: Nil = Enum(4)
+  val state = RegInit(sIdle)
+
+  // Accept one 512-bit AXIS word only when idle; each word maps to one 8-beat AXI INCR burst
+  io.axis.ready := (state === sIdle)
+  val takeAxis = io.axis.valid && io.axis.ready
+
+
+  // Default values for AW/W/B to avoid latches
+  io.axi.aw.valid := false.B
+  io.axi.aw.bits.addr  := addrPtr
+  io.axi.aw.bits.prot  := 0.U
+  io.axi.aw.bits.id    := 0.U
+  io.axi.aw.bits.len   := (subBeatsPerAxis - 1).U // 8-beat burst -> len=7
+  io.axi.aw.bits.size  := log2Ceil(bytesPerBeat).U // 64-bit
+  io.axi.aw.bits.burst := 1.U // INCR
+  io.axi.aw.bits.lock  := false.B
+  io.axi.aw.bits.cache := 0.U
+  io.axi.aw.bits.qos   := 0.U
+  io.axi.aw.bits.user  := 0.U
+
+  io.axi.w.valid := false.B
+  io.axi.w.bits.data := 0.U
+  io.axi.w.bits.strb := ((BigInt(1) << bytesPerBeat) - 1).U
+  io.axi.w.bits.last := false.B
+
+  io.axi.b.ready := true.B
+
+  switch(state) {
+    is(sIdle) {
+      when(takeAxis) {
+        axisReg := io.axis.data
+        beatCnt := 0.U
+        state   := sAw
+      }
+    }
+    is(sAw) {
+      io.axi.aw.valid := true.B
+      when(io.axi.aw.fire) { state := sW }
+    }
+    is(sW) {
+      io.axi.w.valid := true.B
+      // Send least-significant 64b first, shift right by 64b per beat
+      io.axi.w.bits.data := axisReg(axiDataWidth-1, 0)
+      io.axi.w.bits.last := (beatCnt === (subBeatsPerAxis-1).U) // assert last on 8th beat
+      when(io.axi.w.fire) {
+        when(beatCnt === (subBeatsPerAxis-1).U) {
+          state := sB
+        }.otherwise {
+          beatCnt := beatCnt + 1.U
+          axisReg := axisReg >> axiDataWidth
+        }
+      }
+    }
+    is(sB) {
+      when(io.axi.b.valid && io.axi.b.ready) {
+        // One 8-beat burst finished; advance write address by 64B (next 512b window)
+        addrPtr := addrPtr + (axisWidth/8).U
+        // Reset and return to idle
+        state   := sIdle
+      }
+    }
+  }
 }

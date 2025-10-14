@@ -118,8 +118,15 @@ wire core_clock;
   wire c2h_axi_tready;
   wire c2h_axi_tvalid;
   wire [511:0] c2h_axi_tdata;
-  wire core_clock_enable;
 
+  wire h2c_axi_tlast;
+  wire h2c_axi_tready;
+  wire h2c_axi_tvalid;
+  wire [511:0] h2c_axi_tdata;
+
+  wire core_clock_enable;
+  wire io_hots_reset_cpu;
+  
 xdma_wrapper xdma(
   .clock(clock),
   .reset(reset),
@@ -139,10 +146,15 @@ SimTop sim(
   .reset(reset),
 `ifdef FPGA_SIM
   .io_ref_clock(ref_clock),
+  .io_hots_reset_cpu(io_hots_reset_cpu),
   .io_host_c2h_axis_valid(c2h_axi_tvalid),	// src/test/scala/TopMain.scala:48:14
   .io_host_c2h_axis_data(c2h_axi_tdata),	// src/test/scala/TopMain.scala:48:14
   .io_host_c2h_axis_ready(c2h_axi_tready),	// src/test/scala/TopMain.scala:48:14
   .io_host_c2h_axis_last(c2h_axi_tlast),	// src/test/scala/TopMain.scala:48:14
+  .io_host_h2c_axis_valid(h2c_axi_tvalid),	// src/test/scala/TopMain.scala:48:14
+  .io_host_h2c_axis_data(h2c_axi_tdata),	// src/test/scala/TopMain.scala:48:14
+  .io_host_h2c_axis_ready(h2c_axi_tready),	// src/test/scala/TopMain.scala:48:14
+  .io_host_h2c_axis_last(h2c_axi_tlast),	// src/test/scala/TopMain.scala:48
   .io_core_clock_enable(core_clock_enable),	// src/test/scala/TopMain.scala:48:14
 `endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
