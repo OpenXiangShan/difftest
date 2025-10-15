@@ -114,26 +114,36 @@ always #1 clock <= ~clock;
 wire core_clock;
 
 `ifdef FPGA_SIM
-  wire [`CONFIG_DIFFTEST_BATCH_IO_WITDH - 1:0] difftest_data;
-  wire difftest_enable;
+  wire c2h_axi_tlast;
+  wire c2h_axi_tready;
+  wire c2h_axi_tvalid;
+  wire [511:0] c2h_axi_tdata;
+  wire core_clock_enable;
+
 xdma_wrapper xdma(
   .clock(clock),
   .reset(reset),
-  .difftest_data(difftest_data),
-  .difftest_enable(difftest_enable),
+  .axi_tlast(c2h_axi_tlast),
+  .axi_tready(c2h_axi_tready),
+  .axi_tvalid(c2h_axi_tvalid),
+  .axi_tdata(c2h_axi_tdata),
+  .core_clock_enable(core_clock_enable),
   .core_clock(core_clock)
 );
-  // assign core_clock = clock;
+  wire ref_clock = clock;
 `else
   assign core_clock = clock;
 `endif // FPGA_SIM
-
 SimTop sim(
   .clock(core_clock),
   .reset(reset),
 `ifdef FPGA_SIM
-  .difftest_io_data(difftest_data),
-  .difftest_io_enable(difftest_enable),
+  .ref_clock(ref_clock),
+  .host_c2h_axis_valid(c2h_axi_tvalid),	// src/test/scala/TopMain.scala:48:14
+  .host_c2h_axis_data(c2h_axi_tdata),	// src/test/scala/TopMain.scala:48:14
+  .host_c2h_axis_ready(c2h_axi_tready),	// src/test/scala/TopMain.scala:48:14
+  .host_c2h_axis_last(c2h_axi_tlast),	// src/test/scala/TopMain.scala:48:14
+  .core_clock_enable(core_clock_enable),	// src/test/scala/TopMain.scala:48:14
 `endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),

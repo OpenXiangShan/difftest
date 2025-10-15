@@ -20,6 +20,8 @@ import chisel3._
 import chisel3.util._
 import difftest.DifftestModule
 import difftest.common.DifftestWiring
+import difftest.fpga.HostEndpoint
+import difftest.fpga.xdma._
 
 class DifftestTopIO extends Bundle {
   val exit = Output(UInt(64.W))
@@ -73,6 +75,12 @@ class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Modul
 
   // IO: difftest_*
   val difftest = IO(new DifftestTopIO)
+  
+  // IO: ref_clock (only when FPGA IO is available)
+  // In FPGA DiffTest mode, drive CPU clock from an external reference clock
+  private val ref_clock = Option.when(gateway.fpgaIO.isDefined)(IO(Input(Clock())))
+  // IO: core_clock_enable (mirror from HostEndpoint when FPGA IO is available)
+  private val core_clock_enable = Option.when(gateway.fpgaIO.isDefined)(IO(Output(Bool())))
 
   difftest.exit := gateway.exit.getOrElse(0.U)
   difftest.step := gateway.step.getOrElse(0.U)
@@ -88,12 +96,28 @@ class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Modul
 
   cpu.connectTopIOs(difftest)
 
-  // IO: fpga_*
-  val fpga = Option.when(gateway.fpgaIO.isDefined) {
+  // IO: hostendpoint_* (only when FPGA batch IO is available)
+  Option.when(gateway.fpgaIO.isDefined) {
     val fpgaIO = gateway.fpgaIO.get
-    val fpga = IO(Output(chiselTypeOf(fpgaIO)))
-    fpga := fpgaIO
-    fpga
+
+    // Instantiate HostEndpoint with matching data width
+    val host = withClock(ref_clock.get) { Module(new HostEndpoint(
+      dataWidth = fpgaIO.data.getWidth,
+      axisDataWidth = 512,
+    )) }
+    // Connect difftest batch data and enable
+    host.io.difftest_data := fpgaIO.data
+    host.io.difftest_enable := fpgaIO.enable
+
+    // Expose AXIS to top-level
+    val host_c2h_axis = IO(new AxisMasterBundle(512))
+    host_c2h_axis.valid := host.io.host_c2h_axis.valid
+    host_c2h_axis.data  := host.io.host_c2h_axis.data
+    host_c2h_axis.last  := host.io.host_c2h_axis.last
+    host.io.host_c2h_axis.ready := host_c2h_axis.ready
+
+    // Expose additional control signals to top-level
+    core_clock_enable.get := host.io.core_clock_enable
   }
 
   // There should not be anymore IOs
