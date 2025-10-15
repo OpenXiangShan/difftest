@@ -60,7 +60,7 @@ class DifftestTop extends Module {
   val difftest_sync_aia_event = DifftestModule(new DiffSyncAIAEvent, dontCare = true)
   val difftest_sync_custom_mflushpwr_event = DifftestModule(new DiffSyncCustomMflushpwrEvent, dontCare = true)
 
-  DifftestModule.finish("demo")
+  DifftestModule.collect("demo")
 }
 
 // Generate simulation interface based on Profile describing the instantiated information of design
@@ -74,7 +74,7 @@ class SimTop(profileName: String, numCoresOption: Option[Int]) extends Module {
     }
   )
   DifftestModule.generateSvhInterface(bundles, numCores)
-  DifftestModule.finish(profile.cpu)
+  DifftestModule.collect(profile.cpu)
 }
 
 abstract class DifftestApp extends App {
