@@ -9,30 +9,32 @@ class AxisMasterBundle(val dataWidth: Int) extends Bundle {
   val last = Output(Bool())
 }
 
-class AXI4LiteReadMasterBundle(val addrWidth: Int, val dataWidth: Int) extends Bundle {
-  val addr    = Output(UInt(addrWidth.W))
-  val prot    = Output(UInt(3.W))
-  val valid   = Output(Bool())
-  val ready   = Input(Bool())
-  val data    = Input(UInt(dataWidth.W))
+// AXI4-Lite channel bundles (standard five channels) in the same style as AXI4 below
+class AXI4LiteABundle(val addrWidth: Int) extends Bundle {
+  val addr = UInt(addrWidth.W)
+  val prot = UInt(3.W)
 }
 
-class AXI4LiteReadSlaveBundle(addrWidth: Int, dataWidth: Int) extends Bundle {
-  val master = Flipped(new AXI4LiteReadMasterBundle(addrWidth, dataWidth))
+class AXI4LiteWBundle(val dataWidth: Int) extends Bundle {
+  val data = UInt(dataWidth.W)
+  val strb = UInt((dataWidth/8).W)
 }
 
-
-class AXI4LiteWriteMasterBundle(val addrWidth: Int, val dataWidth: Int) extends Bundle {
-  val addr    = Output(UInt(addrWidth.W))
-  val prot    = Output(UInt(3.W))
-  val valid   = Output(Bool())
-  val ready   = Input(Bool())
-  val data    = Output(UInt(dataWidth.W))
-  val strb    = Output(UInt((dataWidth/8).W))
+class AXI4LiteBBundle extends Bundle {
+  val resp = UInt(2.W) // OKAY=0, SLVERR=2, DECERR=3
 }
 
-class AXI4LiteWriteSlaveBundle(addrWidth: Int, dataWidth: Int) extends Bundle {
-  val master = Flipped(new AXI4LiteWriteMasterBundle(addrWidth, dataWidth))
+class AXI4LiteRBundle(val dataWidth: Int) extends Bundle {
+  val data = UInt(dataWidth.W)
+  val resp = UInt(2.W)
+}
+
+class AXI4Lite(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Bundle {
+  val aw = Decoupled(new AXI4LiteABundle(addrWidth))
+  val w  = Decoupled(new AXI4LiteWBundle(dataWidth))
+  val b  = Flipped(Decoupled(new AXI4LiteBBundle))
+  val ar = Decoupled(new AXI4LiteABundle(addrWidth))
+  val r  = Flipped(Decoupled(new AXI4LiteRBundle(dataWidth)))
 }
 
 // AW channel: reuse AXI4Lite and extend AXI4 fields
@@ -166,8 +168,7 @@ class AXI4Arbiter(addrWidth: Int = 32, dataWidth: Int = 64, idWidth: Int = 4) ex
 
 class XDMA_AXI4LiteBar(addrWidth: Int = 32, dataWidth: Int = 32) extends Module {
   val io = IO(new Bundle {
-  val axi_write = new AXI4LiteWriteSlaveBundle(addrWidth, dataWidth)
-  val axi_read  = new AXI4LiteReadSlaveBundle(addrWidth, dataWidth)
+    val axi = Flipped(new AXI4Lite(addrWidth, dataWidth))
     val host_reset = Output(Bool())
     val host_ddraxi_addr_reset = Output(Bool())
   })
@@ -177,53 +178,95 @@ class XDMA_AXI4LiteBar(addrWidth: Int = 32, dataWidth: Int = 32) extends Module 
   io.host_reset := regfile(0)(0)
   io.host_ddraxi_addr_reset := regfile(1)(0)
 
-  // Handshake signals
-  val awready_r = RegInit(true.B)
-  val wready_r  = RegInit(true.B)
-  val bvalid_r  = RegInit(false.B)
-  val awaddr_r  = Reg(UInt(addrWidth.W))
-  io.axi_write.master.ready := awready_r && wready_r
+  // Common parameters
+  val wordShift    = log2Ceil(dataWidth/8)
+  val idxBits      = log2Ceil(regfile.length)
 
-  val arready_r = RegInit(true.B)
-  val rvalid_r  = RegInit(false.B)
-  val araddr_r  = Reg(UInt(addrWidth.W))
-  io.axi_read.master.ready := arready_r
+  // -----------------
+  // Write Address (AW)
+  // -----------------
+  val awaddr_r   = Reg(UInt(addrWidth.W))
+  val aw_captured = RegInit(false.B)
+  io.axi.aw.ready := !aw_captured
+  when (io.axi.aw.fire) {
+    awaddr_r    := io.axi.aw.bits.addr
+    aw_captured := true.B
+  }
 
-  // register index computation (divide byte addr by 4)
-  val bytesPerReg = 4
-  val idxBits = log2Ceil(regfile.length)
-  val write_idx = (awaddr_r >> 2)(idxBits-1, 0)
-  val read_idx  = (araddr_r  >> 2)(idxBits-1, 0)
+  // ---------
+  // Write (W)
+  // ---------
+  val wdata_r     = Reg(UInt(dataWidth.W))
+  val wstrb_r     = Reg(UInt((dataWidth/8).W))
+  val w_captured  = RegInit(false.B)
+  io.axi.w.ready := !w_captured
+  when (io.axi.w.fire) {
+    wdata_r    := io.axi.w.bits.data
+    wstrb_r    := io.axi.w.bits.strb
+    w_captured := true.B
+  }
 
-  // Write FSM: capture AW, accept W, update regfile only if index < regfile.length
-  when (io.axi_write.master.valid && awready_r) {
-    awaddr_r := io.axi_write.master.addr
-    awready_r := false.B
-  } .elsewhen (io.axi_write.master.valid && wready_r) {
-    // compute index and write only if in range; otherwise ignore data but complete handshake
-    when ((awaddr_r >> 2) < regfile.length.U) {
-      regfile((awaddr_r >> 2)(idxBits-1,0)) := io.axi_write.master.data
+  // ------
+  // Resp B
+  // ------
+  val bvalid_r = RegInit(false.B)
+  val bresp_r  = RegInit(0.U(2.W)) // OKAY
+  io.axi.b.valid := bvalid_r
+  io.axi.b.bits.resp := bresp_r
+
+  // Do the write once we have both AW and W captured and no outstanding B
+  val haveWrite = aw_captured && w_captured && !bvalid_r
+  when (haveWrite) {
+    val aindex = (awaddr_r >> wordShift)(idxBits-1, 0)
+    val inRange = (awaddr_r >> wordShift) < regfile.length.U
+
+    when (inRange) {
+      // Byte write mask from strobe
+      val wmask = Cat((0 until dataWidth/8).map(i => Fill(8, wstrb_r(i))).reverse)
+      val old   = regfile(aindex)
+      val next  = (old & ~wmask) | (wdata_r & wmask)
+      regfile(aindex) := next
+      bresp_r := 0.U // OKAY
+    } .otherwise {
+      bresp_r := 2.U // SLVERR for out-of-range
     }
-    wready_r := false.B
-    bvalid_r := true.B
-  } .elsewhen (bvalid_r && io.axi_write.master.ready) {
-    bvalid_r := false.B
-    awready_r := true.B
-    wready_r := true.B
+    bvalid_r   := true.B
+    aw_captured := false.B
+    w_captured  := false.B
   }
 
-  // Read FSM
-  when (io.axi_read.master.valid && arready_r) {
-    araddr_r := io.axi_read.master.addr
-    arready_r := false.B
+  when (io.axi.b.fire) { bvalid_r := false.B }
+
+  // ---------------
+  // Read Address AR
+  // ---------------
+  val araddr_r   = Reg(UInt(addrWidth.W))
+  val ar_captured = RegInit(false.B)
+  io.axi.ar.ready := !ar_captured
+  when (io.axi.ar.fire) {
+    araddr_r    := io.axi.ar.bits.addr
+    ar_captured := true.B
+  }
+
+  // ----------
+  // Read Data R
+  // ----------
+  val rvalid_r = RegInit(false.B)
+  val rdata_r  = Reg(UInt(dataWidth.W))
+  val rresp_r  = RegInit(0.U(2.W))
+  io.axi.r.valid := rvalid_r
+  io.axi.r.bits.data := rdata_r
+  io.axi.r.bits.resp := rresp_r
+
+  when (ar_captured && !rvalid_r) {
+    val aindex = (araddr_r >> wordShift)(idxBits-1, 0)
+    val inRange = (araddr_r >> wordShift) < regfile.length.U
+    rdata_r := Mux(inRange, regfile(aindex), 0.U)
+    rresp_r := Mux(inRange, 0.U, 2.U) // OKAY or SLVERR
     rvalid_r := true.B
-  } .elsewhen (rvalid_r && io.axi_read.master.ready) {
-    rvalid_r := false.B
-    arready_r := true.B
+    ar_captured := false.B
   }
-
-  // Read mapping: return regfile[index] if in range, else zero
-  io.axi_read.master.data := Mux((araddr_r >> 2) < regfile.length.U, regfile((araddr_r >> 2)(idxBits-1,0)), 0.U)
+  when (io.axi.r.fire) { rvalid_r := false.B }
 }
 
 class XDMA_AxisToAxi4(addrWidth: Int = 64, dataWidth: Int = 512) extends Module {

@@ -434,6 +434,12 @@ class HostEndpoint(
   arb.io.in(1) <> io.soc_axi_in
   io.axi4_to_mem <> arb.io.out
 
+  // Instantiate an AXI4-Lite BAR (control registers). Tie-off inputs and dontTouch its IO for now.
+  val hostBar = Module(new XDMA_AXI4LiteBar(addrWidth = 32, dataWidth = 32))
+
+  // Keep the BAR visible to downstream tools even if currently unused
+  hostBar.io := DontCare
+  dontTouch(hostBar.io)
 
 }
 
