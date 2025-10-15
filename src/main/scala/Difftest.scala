@@ -567,45 +567,7 @@ object DifftestModule {
     gateway
   }
 
-  def finish(cpu: String, createTopIO: Boolean): Option[DifftestTopIO] = {
-    val gateway = collect(cpu)
-    if (gateway.fpgaIO.isDefined) {
-      val fpgaIO = gateway.fpgaIO.get
-      val io = IO(Output(chiselTypeOf(fpgaIO)))
-      io := fpgaIO
-    }
-    Option.when(createTopIO) {
-      if (enabled) {
-        createTopIOs(gateway.exit, gateway.step)
-      } else {
-        WireInit(0.U.asTypeOf(new DifftestTopIO))
-      }
-    }
-  }
-
-  def finish(cpu: String): DifftestTopIO = {
-    finish(cpu, true).get
-  }
-
-  def createTopIOs(exit: Option[UInt], step: Option[UInt]): DifftestTopIO = {
-    val difftest = IO(new DifftestTopIO)
-
-    difftest.exit := exit.getOrElse(0.U)
-    difftest.step := step.getOrElse(0.U)
-
-    val timer = RegInit(0.U(64.W)).suggestName("timer")
-    timer := timer + 1.U
-    dontTouch(timer)
-
-    val log_enable = difftest.logCtrl.enable(timer).suggestName("log_enable")
-    dontTouch(log_enable)
-
-    difftest.uart := DontCare
-
-    require(DifftestWiring.isEmpty, s"pending wires left: ${DifftestWiring.getPending}")
-
-    difftest
-  }
+  def top[T <: Module with HasDiffTestInterfaces](cpuGen: => T): SimTop[T] = new SimTop(cpuGen)
 
   def generateSvhInterface(instances: Seq[DifftestBundle], numCores: Int): Unit = {
     // generate interface by jsonProfile, single-core interface will be copied numCore times
@@ -784,44 +746,5 @@ object DifftestModule {
     val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
     difftestV += s"`define CPU_$cpu_s"
     FileControl.write(difftestV, "DifftestMacros.v")
-  }
-}
-
-// Difftest emulator top. Will be created by DifftestModule.finish
-class DifftestTopIO extends Bundle {
-  val exit = Output(UInt(64.W))
-  val step = Output(UInt(64.W))
-  val perfCtrl = new PerfCtrlIO
-  val logCtrl = new LogCtrlIO
-  val uart = new UARTIO
-}
-
-class PerfCtrlIO extends Bundle {
-  val clean = Input(Bool())
-  val dump = Input(Bool())
-}
-
-class LogCtrlIO extends Bundle {
-  val begin = Input(UInt(64.W))
-  val end = Input(UInt(64.W))
-  val level = Input(UInt(64.W)) // a cpp uint
-
-  def enable(timer: UInt): Bool = {
-    val en = WireInit(false.B)
-    en := timer >= begin && timer < end
-    en
-  }
-}
-
-// UART IO, if needed, should be inited in SimTop IO
-// If not needed, just hardwire all output to 0
-class UARTIO extends Bundle {
-  val out = new Bundle {
-    val valid = Output(Bool())
-    val ch = Output(UInt(8.W))
-  }
-  val in = new Bundle {
-    val valid = Output(Bool())
-    val ch = Input(UInt(8.W))
   }
 }
