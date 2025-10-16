@@ -22,8 +22,6 @@ SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 NUM_CORES  ?= 1
 
-MFC 	   ?= 1
-
 BUILD_DIR  = $(DESIGN_DIR)/build
 
 RTL_DIR = $(BUILD_DIR)/rtl
