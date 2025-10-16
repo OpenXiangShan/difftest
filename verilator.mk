@@ -149,7 +149,7 @@ $(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILAT
 ifdef PGO_WORKLOAD
 	@echo "Building PGO profile..."
 	@stat $(PGO_WORKLOAD) > /dev/null
-	@$(MAKE) clean_obj
+	@$(MAKE) verilator-clean-obj
 	@mkdir -p $(VERILATOR_PGO_DIR)
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
@@ -184,7 +184,7 @@ else # ifdef LLVM_PROFDATA
 	@echo ""
 endif # ifdef LLVM_PROFDATA
 	@echo "Building emu with PGO profile..."
-	@$(MAKE) clean_obj
+	@$(MAKE) verilator-clean-obj
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
 					   PGO_CFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)" \
@@ -209,4 +209,4 @@ coverage:
 verilator-clean-obj:
 	rm -f $(VERILATOR_BUILD_DIR)/*.o $(VERILATOR_BUILD_DIR)/*.gch $(VERILATOR_BUILD_DIR)/*.a $(VERILATOR_TARGET)
 
-.PHONY: verilator-build-emu clean_obj
+.PHONY: verilator-build-emu verilator-clean-obj
