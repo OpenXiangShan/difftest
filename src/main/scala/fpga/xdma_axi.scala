@@ -280,66 +280,163 @@ class XDMA_AxisToAxi4(addrWidth: Int = 64, dataWidth: Int = 512) extends Module 
   // bytes per beat
   val bytesPerBeat = (dataWidth/8).U
 
+  // Address pointer increases per accepted AXIS beat
   val addr_ptr = RegInit(0.U(addrWidth.W))
-  val axis_data_reg = Reg(UInt(dataWidth.W))
 
-  // AW channel
-  val awaddr_r  = Reg(UInt(addrWidth.W))
-  val awvalid_r = RegInit(false.B)
-  // W channel
-  val wdata_r   = Reg(UInt(dataWidth.W))
-  val wstrb_r   = Reg(UInt((dataWidth/8).W))
-  val wvalid_r  = RegInit(false.B)
-  // B channel
-  val bready_r  = RegInit(false.B)
+  // One-beat buffer to decouple AXIS from AXI4
+  val buf_valid = RegInit(false.B)
+  val buf_data  = Reg(UInt(dataWidth.W))
+  val buf_addr  = Reg(UInt(addrWidth.W))
 
-  // AXIS ready: only accept new data when both AW/W channels are idle
-  io.axis.ready := !awvalid_r && !wvalid_r
+  // Track progress of current AXI write and outstanding B
+  val aw_sent   = RegInit(false.B)
+  val w_sent    = RegInit(false.B)
+  val b_pending = RegInit(false.B)
 
-  // AXIS data sampling
+  // Busy when a transaction is in-flight (from accept until B response completes)
+  val busy = buf_valid || aw_sent || w_sent || b_pending
+
+  // Accept AXIS only when AXI is idle (no outstanding write)
+  io.axis.ready := !busy
+
+  // Capture incoming AXIS beat and start a new AXI write
   when (io.axis.valid && io.axis.ready) {
-    awaddr_r := addr_ptr
-    wdata_r  := io.axis.data
-    wstrb_r  := Fill(dataWidth/8, 1.U(1.W))
-    addr_ptr := addr_ptr + bytesPerBeat
-    awvalid_r := true.B
-    wvalid_r  := true.B
-    bready_r  := false.B
+    buf_valid := true.B
+    buf_data  := io.axis.data
+    buf_addr  := addr_ptr
+    addr_ptr  := addr_ptr + bytesPerBeat
+    aw_sent   := false.B
+    w_sent    := false.B
+    b_pending := false.B
   }
 
-  // AW channel handshake
-  when (awvalid_r && io.aw.ready) {
-    awvalid_r := false.B
-  }
-
-  // W channel handshake
-  when (wvalid_r && io.w.ready) {
-    wvalid_r := false.B
-    bready_r := true.B
-  }
-
-  // B channel handshake
-  when (bready_r && io.b.valid) {
-    bready_r := false.B
-  }
-
-  // Port connections
-  io.aw.valid := awvalid_r
-  io.aw.bits.addr := awaddr_r
-  io.aw.bits.id := 0.U
-  io.aw.bits.len := 0.U
-  io.aw.bits.size := log2Ceil(dataWidth/8).U
-  io.aw.bits.burst := 1.U
-  io.aw.bits.lock := false.B
+  // Drive AW when we have buffered data and AW not yet sent
+  io.aw.valid := buf_valid && !aw_sent
+  io.aw.bits.addr  := buf_addr
+  io.aw.bits.id    := 0.U
+  io.aw.bits.len   := 0.U // single beat
+  io.aw.bits.size  := log2Ceil(dataWidth/8).U
+  io.aw.bits.burst := 1.U // INCR
+  io.aw.bits.lock  := false.B
   io.aw.bits.cache := 0.U
-  io.aw.bits.prot := 0.U
-  io.aw.bits.qos := 0.U
-  io.aw.bits.user := 0.U
+  io.aw.bits.prot  := 0.U
+  io.aw.bits.qos   := 0.U
+  io.aw.bits.user  := 0.U
+  when (io.aw.fire) { aw_sent := true.B }
 
-  io.w.valid := wvalid_r
-  io.w.bits.data  := wdata_r
-  io.w.bits.strb  := wstrb_r
+  // Drive W when we have buffered data and W not yet sent
+  io.w.valid := buf_valid && !w_sent
+  io.w.bits.data := buf_data
+  io.w.bits.strb := Fill(dataWidth/8, 1.U(1.W))
   io.w.bits.last := true.B
+  when (io.w.fire) { w_sent := true.B }
 
-  io.b.ready := bready_r
+  // Once both AW and W have been sent, clear buffer and wait for B
+  when (buf_valid && aw_sent && w_sent) {
+    buf_valid := false.B
+    b_pending := true.B
+  }
+
+  // Ready for B only when waiting for it
+  io.b.ready := b_pending
+  when (io.b.valid && io.b.ready) {
+    b_pending := false.B
+  }
+}
+
+// Convert 512-bit AXIS stream to 64-bit AXI write-only transactions using xdma_axi bundles.
+class Axis512ToAxi64Write(addrWidth: Int = 64) extends Module {
+  val axisWidth = 512
+  val axiDataWidth = 64
+  val bytesPerBeat = axiDataWidth / 8
+  val subBeatsPerAxis = axisWidth / axiDataWidth // 8
+
+  val io = IO(new Bundle {
+    val axis = Flipped(new AxisMasterBundle(axisWidth))
+    val axi  = new AXI4(addrWidth = addrWidth, dataWidth = axiDataWidth, idWidth = 1)
+  })
+
+  // Default tie-offs for unused read channels
+  io.axi.ar.valid := false.B
+  io.axi.ar.bits.addr  := 0.U
+  io.axi.ar.bits.prot  := 0.U
+  io.axi.ar.bits.id    := 0.U
+  io.axi.ar.bits.len   := 0.U
+  io.axi.ar.bits.size  := log2Ceil(bytesPerBeat).U
+  io.axi.ar.bits.burst := 1.U
+  io.axi.ar.bits.lock  := false.B
+  io.axi.ar.bits.cache := 0.U
+  io.axi.ar.bits.qos   := 0.U
+  io.axi.ar.bits.user  := 0.U
+  io.axi.r.ready := true.B
+
+  // State for 8-beat burst write
+  val addrPtr     = RegInit(0.U(addrWidth.W))
+  val axisReg     = Reg(UInt(axisWidth.W))
+  val beatCnt     = RegInit(0.U(log2Ceil(subBeatsPerAxis).W)) // 0..7
+
+  // Burst-level sequencing: Idle -> AW(len=7) -> send 8 W beats -> wait for B -> Idle
+  val sIdle :: sAw :: sW :: sB :: Nil = Enum(4)
+  val state = RegInit(sIdle)
+
+  // Accept one 512-bit AXIS word only when idle; each word maps to one 8-beat AXI INCR burst
+  io.axis.ready := (state === sIdle)
+  val takeAxis = io.axis.valid && io.axis.ready
+
+
+  // Default values for AW/W/B to avoid latches
+  io.axi.aw.valid := false.B
+  io.axi.aw.bits.addr  := addrPtr
+  io.axi.aw.bits.prot  := 0.U
+  io.axi.aw.bits.id    := 0.U
+  io.axi.aw.bits.len   := (subBeatsPerAxis - 1).U // 8-beat burst -> len=7
+  io.axi.aw.bits.size  := log2Ceil(bytesPerBeat).U // 64-bit
+  io.axi.aw.bits.burst := 1.U // INCR
+  io.axi.aw.bits.lock  := false.B
+  io.axi.aw.bits.cache := 0.U
+  io.axi.aw.bits.qos   := 0.U
+  io.axi.aw.bits.user  := 0.U
+
+  io.axi.w.valid := false.B
+  io.axi.w.bits.data := 0.U
+  io.axi.w.bits.strb := ((BigInt(1) << bytesPerBeat) - 1).U
+  io.axi.w.bits.last := false.B
+
+  io.axi.b.ready := true.B
+
+  switch(state) {
+    is(sIdle) {
+      when(takeAxis) {
+        axisReg := io.axis.data
+        beatCnt := 0.U
+        state   := sAw
+      }
+    }
+    is(sAw) {
+      io.axi.aw.valid := true.B
+      when(io.axi.aw.fire) { state := sW }
+    }
+    is(sW) {
+      io.axi.w.valid := true.B
+      // Send least-significant 64b first, shift right by 64b per beat
+      io.axi.w.bits.data := axisReg(axiDataWidth-1, 0)
+      io.axi.w.bits.last := (beatCnt === (subBeatsPerAxis-1).U) // assert last on 8th beat
+      when(io.axi.w.fire) {
+        when(beatCnt === (subBeatsPerAxis-1).U) {
+          state := sB
+        }.otherwise {
+          beatCnt := beatCnt + 1.U
+          axisReg := axisReg >> axiDataWidth
+        }
+      }
+    }
+    is(sB) {
+      when(io.axi.b.valid && io.axi.b.ready) {
+        // One 8-beat burst finished; advance write address by 64B (next 512b window)
+        addrPtr := addrPtr + (axisWidth/8).U
+        // Reset and return to idle
+        state   := sIdle
+      }
+    }
+  }
 }

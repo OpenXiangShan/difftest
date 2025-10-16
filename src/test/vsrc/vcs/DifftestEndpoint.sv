@@ -23,7 +23,9 @@ module DifftestEndpoint(
 `ifdef ENABLE_WORKLOAD_SWITCH
   output wire        workload_switch,
 `endif // ENABLE_WORKLOAD_SWITCH
-
+`ifdef FPGA_SIM
+  output wire        io_hots_reset_cpu,
+`endif // FPGA_SIM
   /* DifftestTopIO */
   output wire [63:0] difftest_logCtrl_begin,
   output wire [63:0] difftest_logCtrl_end,
@@ -66,6 +68,9 @@ import "DPI-C" function byte simv_nstep(byte step);
 `ifdef CONFIG_DIFFTEST_IOTRACE
 import "DPI-C" function void set_iotrace_name(string name);
 `endif // CONFIG_DIFFTEST_IOTRACE
+`ifdef FPGA_SIM
+import "DPI-C" function int get_fpga_init_status();
+`endif // FPGA_SIM
 `endif // TB_NO_DPIC
 
 `define SIMV_GOODTRAP 8'h1
@@ -91,6 +96,18 @@ reg [63:0] max_instrs;
 reg [63:0] max_cycles;
 reg [63:0] warmup_instr;
 reg [63:0] stuck_limit;
+
+`ifdef FPGA_SIM
+  reg [1:0] dpi_fpga_init_status;
+  assign io_hots_reset_cpu = dpi_fpga_init_status == 'd1 ? 1'b1 : 1'b0;
+  always @(posedge clock) begin
+    if (reset) begin
+      dpi_fpga_init_status = 'd0;
+    end else begin
+      dpi_fpga_init_status = get_fpga_init_status();
+    end
+  end
+`endif // FPGA_SIM
 
 initial begin
   // log begin

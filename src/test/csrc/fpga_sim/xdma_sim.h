@@ -20,7 +20,12 @@
 
 void xdma_sim_open(int channel, bool is_host);
 void xdma_sim_close(int channel);
-int xdma_sim_read(int channel, char *buf, size_t size);
-int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size);
+int xdma_sim_c2h_read(int channel, char *buf, size_t size);
+int xdma_sim_c2h_write(int channel, const char *buf, uint8_t tlast, size_t size);
+
+void xdma_ddr_init(const char *workload);
+int xdma_sim_h2c_read(int channel, char *buf, size_t size);
+bool xdma_sim_h2c_write_ddr(int channel);
+
 
 #endif // __XDMA_SIM_H__

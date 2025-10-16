@@ -57,6 +57,20 @@ enum {
   SIMV_WARMUP,
 } simv_state;
 
+#ifdef FPGA_SIM
+enum {
+  FPGA_RESET,
+  FPGA_WRITE_DDR,
+  FPGA_RUN,
+} fpga_state;
+
+int fpga_state_reg = FPGA_RESET;
+extern "C" int get_fpga_init_status() {
+  return fpga_state_reg;
+}
+
+#endif // FPGA_SIM
+
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n", s);
   strcpy(bin_file, s);
@@ -183,7 +197,14 @@ extern "C" uint8_t simv_init() {
   }
   common_init("simv");
 
+#ifdef FPGA_SIM
+  fpga_state_reg = FPGA_WRITE_DDR;
+  xdma_sim_open(0, false);
+#endif // FPGA_SIM
+
   ram_size = ram_size > 0 ? ram_size : DEFAULT_EMU_RAM_SIZE;
+
+#ifndef FPGA_SIM
   init_ram(bin_file, ram_size);
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);
@@ -209,11 +230,10 @@ extern "C" uint8_t simv_init() {
     init_nemuproxy(ram_size);
   }
 #endif // CONFIG_NO_DIFFTEST
-
-#ifdef FPGA_SIM
-  xdma_sim_open(0, false);
+#else
+  xdma_ddr_init(bin_file);
 #endif // FPGA_SIM
-
+  printf("simv init done\n");
   return 0;
 }
 
@@ -363,6 +383,34 @@ extern "C" uint8_t simv_nstep(uint8_t step) {
     return 0;
 #endif // CONFIG_NO_DIFFTEST
 #endif // CONFIG_DIFFTEST_DEFERRED_RESULT
+   printf("simv_nstep %d\n", step);
+#ifdef FPGA_SIM
+  if (fpga_state_reg == FPGA_WRITE_DDR) {
+    if (xdma_sim_h2c_write_ddr(1)) {
+      printf("xdma_sim_h2c_write_ddr ok\n");
+      fpga_state_reg = FPGA_RUN;
+#ifndef CONFIG_NO_DIFFTEST
+  difftest_init();
+#endif // CONFIG_NO_DIFFTEST
+
+  init_device();
+
+#ifndef CONFIG_NO_DIFFTEST
+  if (enable_difftest) {
+    printf("init goldenmem\n");
+    init_goldenmem();
+    init_nemuproxy(ram_size);
+  }
+#endif // CONFIG_NO_DIFFTEST
+    }
+    printf("xdma_sim_h2c_write_ddr wait\n");
+#ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
+    return;
+#else
+    return SIMV_RUN;
+#endif // CONFIG_DIFFTEST_DEFERRED_RESULT 
+  }
+#endif // FPGA_SIM
 
   int ret = simv_get_result(step);
   // Return result

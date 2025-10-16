@@ -214,7 +214,7 @@ void FpgaXdma::read_and_process() {
   memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running) {
 #ifdef FPGA_SIM
-    size_t size = xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead));
+    size_t size = xdma_sim_c2h_read(0, (char *)packge, sizeof(FpgaPackgeHead));
 #else
     size_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
