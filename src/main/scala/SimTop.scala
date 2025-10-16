@@ -60,7 +60,7 @@ class UARTIO extends Bundle {
 trait HasDiffTestInterfaces {
   def cpuName: Option[String] = None
 
-  def connectTopIOs(difftest: DifftestTopIO): Unit
+  def connectTopIOs(difftest: DifftestTopIO): Unit = {}
 }
 
 // Top-level module for DiffTest simulation. Will be created by DifftestModule.top
