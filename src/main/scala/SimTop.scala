@@ -1,5 +1,5 @@
 /***************************************************************************************
- * Copyright (c) 2025 Institute of Computing Technology, Chinese Academy of Sciences
+ * Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
  * Copyright (c) 2025 Beijing Institute of Open Source Chip
  *
  * DiffTest is licensed under Mulan PSL v2.
@@ -17,8 +17,7 @@
 package difftest
 
 import chisel3._
-import chisel3.util._
-import difftest.DifftestModule
+import chisel3.experimental.prefix
 import difftest.common.DifftestWiring
 
 class DifftestTopIO extends Bundle {
@@ -37,7 +36,7 @@ class PerfCtrlIO extends Bundle {
 class LogCtrlIO extends Bundle {
   val begin = Input(UInt(64.W))
   val end = Input(UInt(64.W))
-  val level = Input(UInt(64.W)) // a cpp uint
+  val level = Input(UInt(64.W))
 
   def enable(timer: UInt): Bool = {
     val en = WireInit(false.B)
@@ -64,7 +63,7 @@ trait HasDiffTestInterfaces {
   def connectTopIOs(difftest: DifftestTopIO): Unit
 }
 
-// Top-level module for DiffTest simulation. Will be created by DifftestModule.finish
+// Top-level module for DiffTest simulation. Will be created by DifftestModule.top
 class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Module {
   val cpu = Module(cpuGen)
 
@@ -76,21 +75,21 @@ class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Modul
 
   difftest.exit := gateway.exit.getOrElse(0.U)
   difftest.step := gateway.step.getOrElse(0.U)
-
-  val timer = RegInit(0.U(64.W)).suggestName("timer")
-  timer := timer + 1.U
-  dontTouch(timer)
-
-  val log_enable = difftest.logCtrl.enable(timer).suggestName("log_enable")
-  dontTouch(log_enable)
-
   difftest.uart := DontCare
+
+  prefix("difftest") {
+    val timer = RegInit(0.U(64.W))
+    timer := timer + 1.U
+    dontTouch(timer)
+
+    val log_enable = difftest.logCtrl.enable(timer)
+    dontTouch(log_enable)
+  }
 
   cpu.connectTopIOs(difftest)
 
   // IO: fpga_*
-  val fpga = Option.when(gateway.fpgaIO.isDefined) {
-    val fpgaIO = gateway.fpgaIO.get
+  gateway.fpgaIO.map { fpgaIO =>
     val fpga = IO(Output(chiselTypeOf(fpgaIO)))
     fpga := fpgaIO
     fpga
