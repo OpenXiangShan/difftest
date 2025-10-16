@@ -170,7 +170,7 @@ object Gateway {
     val bundle = WireInit(0.U.asTypeOf(gen))
     if (!config.traceLoad) {
       if (config.needEndpoint) {
-        val packed = WireInit(bundle.asUInt)
+        val packed = WireInit(UInt(bundle.getWidth.W), bundle.asUInt)
         DifftestWiring.addSource(packed, s"gateway_${instanceWithDelay.length}", config.hierarchicalWiring)
       } else {
         val control = WireInit(0.U.asTypeOf(new GatewaySinkControl(config)))
