@@ -167,7 +167,7 @@ jobs:
             make emu MILL_ARGS="--difftest-config ET" -j2
             ./build/emu -i $WORKLOAD --diff $REF_SO --iotrace-name iotrace
             cd difftest && export NOOP_HOME=$(pwd)
-            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=EL MFC=1
+            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=EL
             make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
             ./build/emu -i $WORKLOAD --diff $REF_SO --iotrace-name ../iotrace
             make clean && make -C .. clean
@@ -178,7 +178,7 @@ jobs:
             make emu MILL_ARGS="--difftest-config ET" IOTRACE_ZSTD=1 -j2
             ./build/emu -i $WORKLOAD --diff $REF_SO --iotrace-name iotrace
             cd difftest && export NOOP_HOME=$(pwd)
-            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=EL MFC=1
+            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=EL
             make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 IOTRACE_ZSTD=1 -j2
             ./build/emu -i $WORKLOAD --diff $REF_SO --iotrace-name ../iotrace
             make clean && make -C .. clean
@@ -290,7 +290,7 @@ jobs:
             make simv MILL_ARGS="--difftest-config ZET" VCS=verilator -j2
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO +iotrace-name=iotrace
             cd difftest && export NOOP_HOME=$(pwd)
-            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=ZEL MFC=1
+            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=ZEL
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO +iotrace-name=../iotrace
             make clean && make -C .. clean
@@ -301,7 +301,7 @@ jobs:
             make simv MILL_ARGS="--difftest-config ZET" VCS=verilator IOTRACE_ZSTD=1 -j2
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO +iotrace-name=iotrace
             cd difftest && export NOOP_HOME=$(pwd)
-            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=ZEL MFC=1
+            make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json CONFIG=ZEL
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 IOTRACE_ZSTD=1
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO +iotrace-name=../iotrace
             make clean && make -C .. clean
