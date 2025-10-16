@@ -16,11 +16,11 @@
 
 package difftest
 
-import circt.stage.FirtoolOption
 import chisel3._
 import chisel3.reflect.DataMirror
+import circt.stage.FirtoolOption
 import chisel3.util._
-import difftest.common.{DifftestWiring, FileControl}
+import difftest.common.FileControl
 import difftest.gateway.{Gateway, GatewayConfig, GatewayResult}
 import difftest.util.Profile
 
