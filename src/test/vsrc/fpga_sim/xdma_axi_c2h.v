@@ -14,45 +14,34 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 `include "DifftestMacros.v"
-module xdma_wrapper(
+module xdma_axi_c2h(
   input clock,
   input reset,
-  input core_clock_enable,
-  input io_hots_reset_cpu,
-  input axi_c2h_tlast,
-  output axi_c2h_tready,
-  input axi_c2h_tvalid,
-  input [511:0] axi_c2h_tdata,
-
-  output axi_h2c_tlast,
-  input axi_h2c_tready,
-  output axi_h2c_tvalid,
-  output [511:0] axi_h2c_tdata,
-
-  output core_clock
+  input [511:0] axi_tdata,
+  input axi_tlast,
+  output axi_tready,
+  input axi_tvalid
 );
 
-xdma_clock xclock(
-  .clock(clock),
-  .core_clock_enable(core_clock_enable || io_hots_reset_cpu || reset),
-  .core_clock(core_clock)
+import "DPI-C" function bit v_xdma_c2h_tready();
+import "DPI-C" function void v_xdma_c2h_write(
+  input byte channel,
+  input bit [511:0] axi_tdata,
+  input bit axi_tlast
 );
 
-xdma_axi_c2h xaxi_c2h(
-  .clock(clock),
-  .reset(reset),
-  .axi_tdata(axi_c2h_tdata),
-  .axi_tlast(axi_c2h_tlast),
-  .axi_tready(axi_c2h_tready),
-  .axi_tvalid(axi_c2h_tvalid)
-);
-
-xdma_axi_h2c xaxi_h2c(
-  .clock(clock),
-  .reset(reset),
-  .axi_tdata(axi_h2c_tdata),
-  .axi_tready(axi_h2c_tready),
-  .axi_tvalid(axi_h2c_tvalid)
-);
+reg axi_tready_r;
+assign axi_tready = axi_tready_r;
+always @(posedge clock) begin
+  if (reset) begin
+    axi_tready_r <= 1'b0;
+  end
+  else begin
+    axi_tready_r <= v_xdma_c2h_tready();
+    if (axi_tvalid & axi_tready) begin
+      v_xdma_c2h_write(0, axi_tdata, axi_tlast);
+    end
+  end
+end
 
 endmodule

@@ -130,10 +130,15 @@ wire core_clock;
 xdma_wrapper xdma(
   .clock(clock),
   .reset(reset),
-  .axi_tlast(c2h_axi_tlast),
-  .axi_tready(c2h_axi_tready),
-  .axi_tvalid(c2h_axi_tvalid),
-  .axi_tdata(c2h_axi_tdata),
+  .io_hots_reset_cpu(io_hots_reset_cpu),
+  .axi_c2h_tlast(c2h_axi_tlast),
+  .axi_c2h_tready(c2h_axi_tready),
+  .axi_c2h_tvalid(c2h_axi_tvalid),
+  .axi_c2h_tdata(c2h_axi_tdata),
+  .axi_h2c_tlast(h2c_axi_tlast),
+  .axi_h2c_tready(h2c_axi_tready),
+  .axi_h2c_tvalid(h2c_axi_tvalid),
+  .axi_h2c_tdata(h2c_axi_tdata),
   .core_clock_enable(core_clock_enable),
   .core_clock(core_clock)
 );
@@ -176,6 +181,9 @@ DifftestEndpoint difftest(
 `ifdef ENABLE_WORKLOAD_SWITCH
   .workload_switch(workload_switch),
 `endif // ENABLE_WORKLOAD_SWITCH
+`ifdef FPGA_SIM
+  .io_hots_reset_cpu(io_hots_reset_cpu),
+`endif
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),
   .difftest_logCtrl_level(difftest_logCtrl_level),
