@@ -132,8 +132,8 @@ SimTop sim(
   .clock(core_clock),
   .reset(reset),
 `ifdef FPGA_SIM
-  .difftest_io_data(difftest_data),
-  .difftest_io_enable(difftest_enable),
+  .difftest_fpga_data(difftest_data),
+  .difftest_fpga_enable(difftest_enable),
 `endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),

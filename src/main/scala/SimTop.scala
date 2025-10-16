@@ -78,22 +78,23 @@ class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Modul
   difftest.uart := DontCare
 
   prefix("difftest") {
+    // Required signals for LogPerfControl
     val timer = RegInit(0.U(64.W))
     timer := timer + 1.U
     dontTouch(timer)
 
     val log_enable = difftest.logCtrl.enable(timer)
     dontTouch(log_enable)
+
+    // IO: difftest_fpga_*
+    gateway.fpgaIO.map { fpgaIO =>
+      val fpga = IO(Output(chiselTypeOf(fpgaIO)))
+      fpga := fpgaIO
+      fpga
+    }
   }
 
   cpu.connectTopIOs(difftest)
-
-  // IO: fpga_*
-  gateway.fpgaIO.map { fpgaIO =>
-    val fpga = IO(Output(chiselTypeOf(fpgaIO)))
-    fpga := fpgaIO
-    fpga
-  }
 
   // There should not be anymore IOs
   require(DifftestWiring.isEmpty, s"pending wires left: ${DifftestWiring.getPending}")
