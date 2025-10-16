@@ -22,7 +22,7 @@ import difftest.util.DifftestProfile
 import scala.annotation.tailrec
 
 // Main class to generate difftest modules when design is not written in chisel.
-class DifftestTop extends Module {
+class DifftestInterfaces extends Module {
   val difftest_arch_event = DifftestModule(new DiffArchEvent, dontCare = true)
   val difftest_instr_commit = DifftestModule(new DiffInstrCommit, dontCare = true)
   val difftest_trap_event = DifftestModule(new DiffTrapEvent, dontCare = true)
@@ -60,11 +60,11 @@ class DifftestTop extends Module {
   val difftest_sync_aia_event = DifftestModule(new DiffSyncAIAEvent, dontCare = true)
   val difftest_sync_custom_mflushpwr_event = DifftestModule(new DiffSyncCustomMflushpwrEvent, dontCare = true)
 
-  DifftestModule.finish("demo")
+  DifftestModule.collect("demo")
 }
 
 // Generate simulation interface based on Profile describing the instantiated information of design
-class SimTop(profileName: String, numCoresOption: Option[Int]) extends Module {
+class DifftestTop(profileName: String, numCoresOption: Option[Int]) extends Module with HasDiffTestInterfaces {
   val profile = DifftestProfile.fromJson(profileName)
   val numCores = numCoresOption.getOrElse(profile.numCores)
   val bundles = (0 until numCores).flatMap(coreid =>
@@ -74,7 +74,8 @@ class SimTop(profileName: String, numCoresOption: Option[Int]) extends Module {
     }
   )
   DifftestModule.generateSvhInterface(bundles, numCores)
-  DifftestModule.finish(profile.cpu)
+
+  override def cpuName: Option[String] = Some(profile.cpu)
 }
 
 abstract class DifftestApp extends App {
@@ -101,8 +102,8 @@ abstract class DifftestApp extends App {
   val (newArgs, firtoolOptions) = DifftestModule.parseArgs(args)
   val (param, firrtlOpts) = parseArgs(newArgs)
   val gen = if (param.profile.isDefined) { () =>
-    new SimTop(param.profile.get, param.numCores)
+    DifftestModule.top(new DifftestTop(param.profile.get, param.numCores))
   } else { () =>
-    new DifftestTop
+    new DifftestInterfaces
   }
 }
