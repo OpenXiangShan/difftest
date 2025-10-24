@@ -36,6 +36,9 @@
 #ifdef ENABLE_CHISEL_DB
 #include "chisel_db.h"
 #endif
+#ifdef PLUGIN_HEATMAP
+#include "heatmap.h"
+#endif
 #ifdef ENABLE_IPC
 #include <sys/stat.h>
 #endif
@@ -565,6 +568,10 @@ Emulator::~Emulator() {
   }
 #endif
 
+#ifdef PLUGIN_HEATMAP
+  heatmap_finish();
+#endif
+
   elapsed_time = uptime() - elapsed_time;
 
   Info(ANSI_COLOR_BLUE "Seed=%d Guest cycle spent: %'" PRIu64
@@ -872,6 +879,10 @@ int Emulator::tick() {
 
 #ifdef ENABLE_IPC
   fclose(args.ipc_file);
+#endif
+
+#ifdef PLUGIN_HEATMAP
+  heatmap_tick();
 #endif
 
   if (args.enable_fork) {

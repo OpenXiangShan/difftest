@@ -259,6 +259,11 @@ SIM_CXXFILES += $(shell find $(TRACE_CSR_DIR) -name "*.cpp")
 SIM_CXXFLAGS += -I$(TRACE_CSR_DIR) -DPLUGIN_SIMFRONTEND
 endif
 
+# heatmap support
+ifeq ($(PLUGIN_HEATMAP),1)
+SIM_CXXFLAGS += -I$(abspath $(PLUGIN_CSRC_DIR)/heatmap) -DPLUGIN_HEATMAP
+SIM_CXXFILES += $(shell find $(PLUGIN_CSRC_DIR)/heatmap -name "*.cpp")
+endif
 
 # Check if XFUZZ is set
 ifeq ($(XFUZZ), 1)
