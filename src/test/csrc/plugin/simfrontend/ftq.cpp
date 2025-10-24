@@ -43,7 +43,7 @@ static BrType get_br_type(uint32_t instr, bool rvc) {
     }
   } else {
     uint32_t opcode = instr & 0x7F;
-    uint32_t funct3 = (instr >> 13) & 0x7;
+    uint32_t funct3 = (instr >> 12) & 0x7;
     if (opcode == 0b1100011)
       return BrType::Branch; // B-type instructions
     if (opcode == 0b1101111)
