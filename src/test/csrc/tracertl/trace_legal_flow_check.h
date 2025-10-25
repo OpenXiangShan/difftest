@@ -40,7 +40,8 @@ public:
     uint64_t index = 0;
     for (auto item : flow) {
       index ++;
-      if (item.fast_simulation) continue;
+      // if (item.fast_simulation) continue;
+      if (item.is_squashed) continue;
 
       if (!init) {
         wantted_pc = getNextPC(item);
