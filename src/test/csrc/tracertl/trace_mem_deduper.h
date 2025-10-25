@@ -52,6 +52,13 @@ private:
     size_t max_insts
   );
 
+  int64_t noMergeMemBaseline(
+    std::vector<FastSimMemAddr> &addr_list,
+    std::vector<Instruction> instr_list,
+    size_t from_index, size_t to_index,
+    size_t max_insts
+  );
+
   struct pair_hash {
     template <class T1, class T2>
     std::size_t operator () (const std::pair<T1, T2>& p) const {

@@ -26,8 +26,10 @@ int64_t TraceMemDeduper::mergeMem(
   printf("[TraceMemDeduper] Fast Sim from %lu to %lu\n", from_index, to_index);
   printf("[TraceMemDeduper] Detailed Sim from %lu to %lu\n", to_index, max_inst);
 
+  // TODO: add cache-only mode
+  return noMergeMemBaseline(addr_list, instr_list, from_index, to_index, max_inst);
   // return mergeMemSigdedup(addr_list, instr_list, from_index, to_index, max_inst);
-  return mergeMemDelorean(addr_list, instr_list, from_index, to_index, max_inst);
+  // return mergeMemDelorean(addr_list, instr_list, from_index, to_index, max_inst);
 }
 
 int64_t TraceMemDeduper::mergeMemSigdedup(
@@ -108,5 +110,29 @@ int64_t TraceMemDeduper::mergeMemDelorean(
 
   printf("[TraceMemDeduper] FiltedBySampling raw %lu mergedLine %lu\n", rawFilteredBySampling, memAddrSetFilteredBySamp.size());
   printf("[TraceMemDeduper] Memory Insts/Ops All %lu raw %lu mergedLine %lu\n", oldCount, oldCount - rawFilteredBySampling, addr_list.size());
+  return addr_list.size();
+}
+
+int64_t TraceMemDeduper::noMergeMemBaseline(
+  std::vector<FastSimMemAddr> &addr_list,
+  std::vector<Instruction> instr_list,
+  size_t from_index, size_t to_index,
+  size_t max_insts
+) {
+  printf("[TraceMemDeduper] Use Baseline(no merge)\n");
+
+  size_t oldCount = 0;
+  // in reverse order
+  for (size_t i = to_index-1; (i >= from_index) && (i != 0); i--) {
+    auto inst = instr_list[i];
+    if (hasLegalMemAddr(inst)) { // legal memory
+      oldCount ++;
+
+      uint64_t vaddr = inst.exu_data.memory_address.va;
+      uint64_t paddr = inst.exu_data.memory_address.pa;
+      addr_list.emplace_back(FastSimMemAddr{vaddr, paddr});
+    }
+  }
+  printf("[TraceMemDeduper] Memory Insts/Ops %lu -> %lu\n", oldCount, addr_list.size());
   return addr_list.size();
 }
