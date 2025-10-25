@@ -20,6 +20,9 @@
 #include <fstream>
 #include <iostream>
 #include <queue>
+#include <chrono>
+#include <cstring>
+
 #include "trace_format.h"
 #include "trace_paddr_allocator.h"
 #include "emu.h"
