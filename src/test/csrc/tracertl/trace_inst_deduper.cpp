@@ -270,6 +270,28 @@ TraceInstDeduper::dedup_inst(std::vector<Instruction> &src) {
 }
 
 void
+TraceInstDeduper::dedup_all(std::vector<Instruction> &src, size_t from_index, size_t end_index) {
+  TraceLegalFlowChecker flowChecker;
+  flowChecker.check(src);
+
+  printf("[TraceInstDeduper] Dedup all from %lu to %lu\n", from_index, end_index);
+  if ((from_index+1) >= end_index) { return; }
+
+  for (int i = from_index+1; i < end_index; i++) {
+    src[i].is_squashed = true;
+    deduped_inst_num ++;
+    deduped_branch_num += (src[i].branch_type != 0) ? 1 : 0;
+  }
+  src[from_index].exception = 0x81;
+  src[from_index].target = src[end_index].instr_pc_va;
+
+  flowChecker.check(src);
+
+  printf("[TraceInstDeduper] Instruction Num %8lu Branch Num %8lu\n", end_index - from_index, perf_branch_num);
+  printf("           Deduped Instruction Num %8lu Branch Num %8lu\n", deduped_inst_num, deduped_branch_num);
+}
+
+void
 TraceInstDeduper::dedup(std::vector<Instruction> &src, size_t from_index, size_t end_index) {
   TraceLegalFlowChecker flowChecker;
   flowChecker.check(src);

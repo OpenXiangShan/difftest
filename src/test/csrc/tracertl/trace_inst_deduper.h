@@ -94,6 +94,9 @@ protected:
 public:
   void dedup(std::vector<Instruction> &src, size_t from_index, size_t end_index);
   size_t getSquashedInst() { return deduped_inst_num; }
+
+  // set all instruction deduped to skip
+  void dedup_all(std::vector<Instruction> &src, size_t from_index, size_t end_index);
 };
 
 #endif
