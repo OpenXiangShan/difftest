@@ -1,0 +1,56 @@
+name: Evening Regression
+
+on:
+  schedule:
+    # 12:00 UTC == 20:00 UTC+8
+    - cron: '00 12 * * *'
+
+  # Delete after the PR test is passed.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+
+  test-fpga-xiangshan-miniconfig:
+    timeout-minutes: 1440
+    runs-on: bosc
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare XiangShan
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          git clone --depth 1 https://github.com/OpenXiangShan/XiangShan.git
+          cd XiangShan && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
+          echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
+          echo "DIFF_HOME=$NOOP_HOME/difftest/" >> $GITHUB_ENV
+          echo "DUT_HOME=$(pwd)" >> $GITHUB_ENV
+
+      - name: Prepare FPGA scripts
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          git clone --depth 1 --branch fpga_diff_ci --single-branch https://github.com/OpenXiangShan/env-scripts.git
+
+      - name: Build Xiangshan
+        run: |
+          cd $NOOP_HOME
+          make verilog CONFIG=FpgaDiffMinimalConfig PLDM=1 FPGA_DIFF=1 PLDM_ARGS="--difftest-config H" -j16 JVM_XMX=10G
+          python $NOOP_HOME/difftest/scripts/st_tools/interface.py $DUT_HOME/build/rtl/XSTop.sv --core --fpga
+          NOOP_HOME=$NOOP_HOME/difftest/
+          make difftest_verilog PROFILE=$DIFF_HOME/build/generated-src/difftest_profile.json NUM_CORES=1 CONFIG=ESBIF
+          python $DIFF_HOME/scripts/st_tools/interface.py $DIFF_HOME/build/rtl/GatewayEndpoint.sv
+          cp -r $DIFF_HOME/src/test/vsrc/fpga $DUT_HOME/build/
+          cp -r $DIFF_HOME/build $DUT_HOME
+
+      - name: Create FPGA project
+        run: |
+          cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
+          make update_core_flist CORE_DIR=$DUT_HOME
+          make vivado CPU=xiangshan
+
+      - name: Build FPGA bitstream
+        run: |
+          make bitstream PRJ=fpga_xiangshan/fpga_xiangshan.xpr
+          source src/tcl/tools/generate_reports.sh CPU=xiangshan
