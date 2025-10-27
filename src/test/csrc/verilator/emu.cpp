@@ -1011,6 +1011,7 @@ int Emulator::tick() {
       trace_fastsim->setFastsimInstFinish();
     }
   } while(0);
+#endif // TRACERTL_FPGA
 #endif // TRACERTL_MODE
 
   do {

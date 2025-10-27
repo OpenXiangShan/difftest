@@ -165,6 +165,8 @@ extern "C" void trace_collect_drive(uint64_t pc, uint32_t instr, uint8_t idx) {
   trace_reader->collectDrive(pc, instr, idx);
 }
 
+// when not in fpga mode, disable functin declare
+#ifdef TRACERTL_FPGA
 extern "C" void trace_axis_master_helper(
   char *tvalid, char *last, uint64_t *valid,
   uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3,
@@ -190,6 +192,7 @@ extern "C" void trace_axis_slave_helper(
     data4, data5, data6, data7
   );
 }
+#endif // TRACERTL_FPGA
 
 /** Fake ICache */
 TraceICache *trace_icache = NULL;
