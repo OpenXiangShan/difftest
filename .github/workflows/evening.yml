@@ -1,0 +1,166 @@
+name: Evening Regression
+
+on:
+  schedule:
+    # 12:00 UTC == 20:00 UTC+8
+    - cron: '00 12 * * *'
+
+  # Delete after the PR test is passed.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  test-fpga-nutshell:
+    if: ${{ github.event_name == 'pull_request' }}
+    timeout-minutes: 1440
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare NutShell
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          rm -rf NutShell && rm -rf env-scripts
+          proxychains git clone -b dev-difftest --single-branch --depth 1 https://github.com/OSCPU/NutShell.git
+          cd NutShell && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
+          echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
+          echo "DIFF_HOME=$NOOP_HOME/difftest/" >> $GITHUB_ENV
+          echo "DUT_HOME=$(pwd)" >> $GITHUB_ENV
+          echo "/nfs/home/tools/Xilinx/Vivado/2020.2/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare FPGA scripts
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          proxychains git clone -b dev_difftest --single-branch --depth 1 https://github.com/OpenXiangShan/env-scripts.git
+
+      - name: Build NutShell
+        run: |
+          cd $NOOP_HOME
+          make verilog BOARD=fpgadiff MILL_ARGS="--difftest-config ESBIF" -j2 
+
+      - name: Create FPGA project
+        run: |
+          source /nfs/home/tools/Xilinx/Vivado/2020.2/settings64.sh
+          cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
+          make update_core_flist CORE_DIR=$DUT_HOME
+          make vivado CPU=nutshell
+
+      - name: Build FPGA bitstream
+        run: |
+          source /nfs/home/tools/Xilinx/Vivado/2020.2/settings64.sh
+          cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
+          make bitstream PRJ=fpga_nutshell/fpga_nutshell.xpr
+
+      - name: Wait for synthesis & report (nutshell)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/../env-scripts/fpga_diff"
+          BIT_DIR="fpga_nutshell/fpga_nutshell.runs/impl_1"
+          REPORT="vivado-analyse.txt"
+          TIMEOUT_MIN=180
+          END=$(( $(date +%s) + TIMEOUT_MIN*60 ))
+          echo "[wait] Waiting Vivado to finish and bitstream to appear..."
+          while true; do
+            BIT_OK=$(ls "$BIT_DIR"/*.bit 2>/dev/null || true)
+            if pgrep -f '[v]ivado' >/dev/null 2>&1; then
+              VIVADO_ALIVE=yes
+            else
+              VIVADO_ALIVE=no
+            fi
+            if [ -n "$BIT_OK" ] && [ "$VIVADO_ALIVE" = no ]; then
+              echo "[wait] Vivado exited and bitstream found."
+              break
+            fi
+            if [ $(date +%s) -gt $END ]; then
+              echo "[wait] Timeout (${TIMEOUT_MIN}m). Vivado or bitstream not ready." >&2
+              [ -n "$BIT_OK" ] || echo "[wait] Missing bit file under $BIT_DIR" >&2
+              echo "[wait] Vivado alive: $VIVADO_ALIVE" >&2
+              exit 1
+            fi
+            sleep 30
+          done
+          ls -lh "$BIT_DIR"/*.bit
+
+          # Generate report AFTER Vivado finishes
+          bash ./tools/generate_reports.sh nutshell
+          test -f "$REPORT" || { echo "[wait] $REPORT not generated" >&2; exit 1; }
+
+      - name: Extract Vivado Hierarchical utilization
+        run: |
+          set -euo pipefail
+          IN_PATH="${IN_PATH:-$GITHUB_WORKSPACE/../env-scripts/fpga_diff/vivado-analyse.txt}"
+          OUT_PATH="$RUNNER_TEMP/vivado_hier.md"
+          python3 "$GITHUB_WORKSPACE/scripts/fpga_sim/ci.py" --input "$IN_PATH" --output "$OUT_PATH" --format markdown
+          echo "VIVADO_HIER_MD=$OUT_PATH" >> "$GITHUB_ENV"
+
+      - name: Comment utilization to PR
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        env:
+          VIVADO_HIER_MD: ${{ env.VIVADO_HIER_MD }}
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync(process.env.VIVADO_HIER_MD, 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+  test-fpga-xiangshan-miniconfig:
+    if: ${{ github.event_name == 'schedule' }}
+    timeout-minutes: 1440
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare XiangShan
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          rm -rf XiangShan && rm -rf env-scripts
+          proxychains git clone --depth 1 https://github.com/OpenXiangShan/XiangShan.git
+          cd XiangShan && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
+          echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
+          echo "DIFF_HOME=$NOOP_HOME/difftest/" >> $GITHUB_ENV
+          echo "DUT_HOME=$(pwd)" >> $GITHUB_ENV
+
+      - name: Prepare FPGA scripts
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          proxychains git clone --depth 1 https://github.com/OpenXiangShan/env-scripts.git
+
+      - name: Build Xiangshan
+        run: |
+          cd $NOOP_HOME
+          make verilog CONFIG=FpgaDiffMinimalConfig PLDM=1 FPGA_DIFF=1 PLDM_ARGS="--difftest-config H" -j16 JVM_XMX=10G
+          python $NOOP_HOME/difftest/scripts/st_tools/interface.py $DUT_HOME/build/rtl/XSTop.sv --core --fpga
+          NOOP_HOME=$NOOP_HOME/difftest/
+          make difftest_verilog PROFILE=$DIFF_HOME/build/generated-src/difftest_profile.json NUM_CORES=1 CONFIG=ESBIF
+          python $DIFF_HOME/scripts/st_tools/interface.py $DIFF_HOME/build/rtl/GatewayEndpoint.sv
+          cp -r $DIFF_HOME/src/test/vsrc/fpga $DUT_HOME/build/
+          cp -r $DIFF_HOME/build $DUT_HOME
+
+      - name: Create FPGA project
+        run: |
+          PATH=$PATH:/nfs/home/tools/Xilinx/Vivado/2020.2/bin
+          source /nfs/home/tools/Xilinx/Vivado/2020.2/settings64.sh
+          cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
+          make update_core_flist CORE_DIR=$DUT_HOME
+          make vivado CPU=xiangshan
+
+      - name: Build FPGA bitstream
+        run: |
+          cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
+          make bitstream PRJ=fpga_xiangshan/fpga_xiangshan.xpr
+          bash ./tools/generate_reports.sh xiangshan
+
+      - name: Print Vivado Hierarchical utilization to logs
+        run: |
+          set -euo pipefail
+          IN_PATH="${IN_PATH:-$GITHUB_WORKSPACE/../env-scripts/fpga_diff/vivado-analyse.txt}"
+          echo "===== Vivado Hierarchical utilization ====="
+          python3 "$GITHUB_WORKSPACE/tools/ci/parse_vivado_hier.py" --input "$IN_PATH" --format markdown
