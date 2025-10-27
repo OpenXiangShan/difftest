@@ -33,6 +33,7 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
     exit(1);
   }
 
+
   // read file into buffer;
   printf("TraceRTL: read tracefile...\n");
   trace_stream->seekg(0, std::ios::end);
@@ -111,8 +112,6 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
     instList_preread.push_back(inst);
   }
 
-  // uint64_t lastLoopBodyLength = 0;
-  // bool inLoop = false;
   for (uint64_t idx = start_instr_index; idx < traceInstNum; idx ++) {
     // trans to XS Trace Format
     TraceInstruction static_inst = instDecompressBuffer[idx];
@@ -209,12 +208,16 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
   }
 
   last_interval_time = gen_cur_time();
+  trace_icache->genHostPageByWalk();
 
   trace_icache->test();
 #ifdef TRACE_VERBOSE
   iPaddrAllocator.dump();
   dPaddrAllocator.dump();
 #endif
+
+  printf("TraceRTL: TraceReader constructed.\n");
+  fflush(stdout);
 }
 
 bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {

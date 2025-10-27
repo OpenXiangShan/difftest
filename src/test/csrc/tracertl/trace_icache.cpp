@@ -70,13 +70,12 @@ TraceICache::TraceICache(const char* tracept_file) {
     }
 
     satp = traceDecompressBuffer[0].pte;
+    satp_use_tracept = true; // use tracept file to set satp
     for (uint64_t i = 1; i < tracePtNum; i++) {
       TracePageEntry entry = traceDecompressBuffer[i];
       dynamic_page_table.setPte(entry.paddr, entry.pte, (uint8_t )entry.level);
     }
   }
-  uint64_t baseAddr = (satp & TRACE_SATP64_PPN) << TRACE_PAGE_SHIFT;
-  dynamic_page_table.setBaseAddr(baseAddr);
 }
 
 void TraceICache::constructSoftTLB(uint64_t vaddr, uint16_t asid, uint16_t vmid, uint64_t paddr) {
@@ -131,7 +130,16 @@ uint64_t TraceICache::addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
     return (it->second << 12) | off;
   } else {
     METHOD_TRACE();
-    return OUTOF_TRACE_PAGE_PADDR | off; // give a legal addr
+    if (outof_range_soft_tlb.find(vpn) != outof_range_soft_tlb.end()) {
+      // if out of range, return the paddr in outof_range_soft_tlb
+      uint64_t paddr = outof_range_soft_tlb[vpn] << 12;
+      return paddr | off;
+    } else {
+      outof_range_cur_addr += TRACE_PAGE_SIZE;
+      outof_range_soft_tlb[vpn] = outof_range_cur_addr >> 12;
+      return outof_range_cur_addr | off;
+    }
+    // return OUTOF_TRACE_PAGE_PADDR | off; // give a legal addr
   }
 }
 
@@ -141,11 +149,12 @@ bool TraceICache::addrTrans_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
   uint64_t vpn = vaddr >> 12;
   // auto it = soft_tlb.find(TLBKeyType(vpn, asid, vmid));
   auto it = soft_tlb.find(vpn);
-  if (it != soft_tlb.end()) {
-    return true;
-  } else {
-    return false;
-  }
+  return true;
+  // if (it != soft_tlb.end()) {
+  //   return true;
+  // } else {
+  //   return false;
+  // }
 }
 
 void TraceICache::dumpICache() {
@@ -187,7 +196,7 @@ void TraceICache::test() {
     uint64_t ppn_pt = dynPageTrans(vpn);
     if (ppn_pt != ppn_tlb) {
       printf("Warn: vpn = %016lx, ppn_pt = %016lx, ppn_tlb = %016lx\n", vpn, ppn_pt, ppn_tlb);
-      // exit(1);
+      exit(1);
     }
   }
 
@@ -197,7 +206,17 @@ void TraceICache::test() {
 }
 
 uint64_t TraceICache::getSatpPpn() {
-  return satp & TRACE_SATP64_PPN;
+  // return satp & TRACE_SATP64_PPN;
+  if (satp_use_tracept) {
+    // satp is set by tracept file
+    return (satp & TRACE_SATP64_PPN);
+  }
+  return dynamic_page_table.getSatpPPN();
+}
+
+uint64_t TraceICache::getHgatpPpn() {
+  // TODO: satp use tracept not supported now for 2-stage translation.
+  return dynamic_page_table.getHgatpPPN();
 }
 
 TraceICache::~TraceICache() {

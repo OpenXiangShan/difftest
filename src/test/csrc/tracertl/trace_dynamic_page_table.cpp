@@ -15,11 +15,11 @@
 ***************************************************************************************/
 
 #include <iostream>
+#include <vector>
 #include "trace_dynamic_page_table.h"
 
 uint64_t DynamicSoftPageTable::read(uint64_t paddr, bool construct) {
   if (pageTable.find(paddr) != pageTable.end()) {
-    // printf("  read pte paddr: %lx, val: %lx\n", paddr, pageTable[paddr].val);
     return pageTable[paddr].val;
   } else {
     if (construct) {
@@ -27,33 +27,65 @@ uint64_t DynamicSoftPageTable::read(uint64_t paddr, bool construct) {
     }
 
     uint64_t ppn = paddr >> 12;
-    // printf("  read pte paddr: %lx. not found, return 0\n", paddr);
     if (page_level_map.find(ppn) != page_level_map.end()) {
       uint8_t level = page_level_map[ppn];
       TracePTE dummyPte = getDummyPte(level);
       return dummyPte.val;
     } else {
-      printf("DSPT: read paddr's level not found. paddr %lx", paddr);
-      exit(1);
+      // exit(1);
       return 0;
     }
   }
+  printf("Error: read paddr %lx not found in pageTable\n", paddr);
+  fflush(stdout);
+  exit(1);
 }
 
-void DynamicSoftPageTable::write(uint64_t vpn, uint64_t ppn) {
-  if (exists(vpn)) { return; }
-  record(vpn, ppn);
+void DynamicSoftPageTable::genHostPageByWalk() {
 
-  uint64_t pgBase = baseAddr;
+  hostBaseAddr = upAlign(curAddr, TwoStageRootPageSize); // host page table should be 16KB aligned
+  curAddr = hostBaseAddr +  TwoStageRootPageSize; // 4KB aligned
+
+  // walk all valid guest page table, generate host page table
+  // map: guest physical address -> host physical address
+  // special requirement: the l0 root page frame should be 16KB aligned
+
+  // generate page table by walking all the guest page table
+  // printf("GenHostPageByWalk hostBaseAddr: %lx\n", hostBaseAddr);
+  std::vector<uint64_t> pteAddr_list;
+
+  for (auto &entry : pageTable) {
+    pteAddr_list.push_back(entry.first);
+  }
+  // split into two loop, because hwrite will change the pageTable
+  for (auto &pteAddr : pteAddr_list) {
+    // map from PAddr(guest physical) to PAddr(host physical)
+    hwrite(pteAddr>> 12, pteAddr >> 12);
+  }
+  for (auto &entry : soft_tlb) {
+    hwrite(entry.second, entry.second);
+  }
+}
+
+void DynamicSoftPageTable::write(uint64_t vpn, uint64_t ppn, bool isHost) {
+  // when host is true, then turn to 2-stage host page table
+  if (isHost) {
+    if (hostExists(vpn)) { return; }
+    hostRecord(vpn, ppn);
+  } else {
+    if (exists(vpn)) { return; }
+    record(vpn, ppn);
+  }
+
+  uint64_t pgBase = isHost ? hostBaseAddr : baseAddr;
   static int count = 0;
-  // printf("%d write vpn: %lx, ppn: %lx\n", count++, vpn, ppn);
   for (int level = initLevel; level >= 0; level--) {
-    uint64_t pteAddr = getPteAddr(vpn, level, pgBase);
-    // printf("  level: %d, pteAddr: %lx pgBase: %lx\n", level, pteAddr, pgBase);
+    uint64_t pteAddr = isHost ?
+      getHostPteAddr(vpn, level, pgBase) :
+      getPteAddr(vpn, level, pgBase);
     uint64_t pteVal = read(pteAddr, true);
     TracePTE pte;
     pte.val = pteVal;
-    // printf("    pte: %lx\n", pte.val);
     if (!pte.v) {
       if (pte.val != 0) {
         printf("Error: invalid pte should be 0. pte: %lx\n", pte.val);
@@ -61,12 +93,15 @@ void DynamicSoftPageTable::write(uint64_t vpn, uint64_t ppn) {
       }
       // not exist, create
       pte = (level == 0) ? genLeafPte(ppn) : genNonLeafPte(popCurAddr() >> 12);
-      // printf("Insert level: %d, pteAddr: %lx, pte: %lx(ppn:%lx)\n", level, pteAddr, pte.val, pte.ppn);
       page_level_map[pteAddr >> 12] = level;
       pageTable[pteAddr] = pte;
     }
     pgBase = pte.ppn << 12;
   }
+}
+
+void DynamicSoftPageTable::hwrite(uint64_t vpn, uint64_t ppn) {
+  write(vpn, ppn, true);
 }
 
 void DynamicSoftPageTable::setPte(uint64_t pteAddr, uint64_t pte_val, uint8_t level) {
@@ -81,17 +116,32 @@ void DynamicSoftPageTable::setPte(uint64_t pteAddr, uint64_t pte_val, uint8_t le
   pageTable[pteAddr] = pte;
 }
 
-uint64_t DynamicSoftPageTable::trans(uint64_t vpn) {
-  uint64_t pgBase = baseAddr;
+uint64_t DynamicSoftPageTable::trans(uint64_t vpn, bool isHost) {
+  uint64_t pgBase = isHost ? hostBaseAddr : baseAddr;
   int level = initLevel;
-  static int count = 0;
-  // printf("%d trans pgBase 0x%lx vpn: %lx\n", count++, pgBase, vpn);
+  static int host_count = 0;
+  static int guest_count = 0;
+
+  if (isHost) host_count++;
+  else guest_count++;
+
   for (; level >= 0; level--) {
-    uint64_t pteAddr = getPteAddr(vpn, level, pgBase);
+    uint64_t pteAddr = -1;
+    if (!isHost) {
+      uint64_t pteAddr_tmp = getPteAddr(vpn, level, pgBase);
+      uint64_t pteAddr_pn = trans(pteAddr_tmp >> 12, true);
+      if (pteAddr_pn != (pteAddr_tmp >> 12)) {
+        printf("Host Trans Error: pteAddr_pn: 0x%lx != pteAddr_tmp: 0x%lx\n", pteAddr_pn, pteAddr_tmp >> 12);
+        fflush(stdout);
+        exit(1);
+      }
+      pteAddr = pteAddr_pn << 12 | (pteAddr_tmp & 0xfff);
+    } else {
+      pteAddr = getHostPteAddr(vpn, level, pgBase);
+    }
     uint64_t pteVal = read(pteAddr, false);
     TracePTE pte;
     pte.val = pteVal;
-    // printf("  level: %d, pteAddr: %lx, pgBase: %lx -> pte: %lx\n", level, pteAddr, pgBase, pteVal);
     if (!pte.v) {
       printf("Error: invalid pte entry for baseAddr: 0x%lx, vpn: 0x%lx, level: %d\n", baseAddr, vpn, level);
       exit(1);
@@ -99,7 +149,8 @@ uint64_t DynamicSoftPageTable::trans(uint64_t vpn) {
       pgBase = pte.ppn << 12;
     }
   }
-  return pgBase >> 12;
+  if (!isHost) return trans(pgBase >> 12, true);
+  else return pgBase >> 12;
 }
 
 inline TracePTE DynamicSoftPageTable::getDummyPte(uint8_t level) {
@@ -119,6 +170,7 @@ inline TracePTE DynamicSoftPageTable::getDummyPte(uint8_t level) {
 
 void DynamicSoftPageTable::dump() {
   printf("DynamicSoftPageTable: baseAddr: 0x%lx\n", baseAddr);
+  printf("DynamicSoftPageTable: HostBaseAddr: 0x%lx\n", hostBaseAddr);
   for (auto &entry : pageTable) {
     printf("0x%lx->0x%lx(ppn:0x%lx)\n", entry.first, entry.second.val, entry.second.ppn);
   }
@@ -155,4 +207,12 @@ inline TracePTE DynamicSoftPageTable::genNonLeafPte(uint64_t ppn) {
 
 inline uint64_t DynamicSoftPageTable::getPteAddr(uint64_t vpn, uint8_t level, uint64_t baseAddr) {
   return baseAddr + TraceVPNi(vpn, level) * sizeof(uint64_t);
+}
+
+inline uint64_t DynamicSoftPageTable::getHostPteAddr(uint64_t vpn, uint8_t level, uint64_t bAddr) {
+  if (level == initLevel) {
+    return bAddr + ((vpn >> (9 * level)) & 0x3ff) * sizeof(uint64_t);
+  } else {
+    return bAddr + TraceVPNi(vpn, level) * sizeof(uint64_t);
+  }
 }

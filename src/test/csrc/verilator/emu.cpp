@@ -953,11 +953,7 @@ int Emulator::tick() {
 #endif
 #endif // TRACERTL_MODE
 
-//  printf("Before single cycle\n");
-//  fflush(stdout);
   single_cycle();
-//  printf("After single cycle\n");
-//  fflush(stdout);
 
 #ifdef TRACERTL_MODE
   // trace check

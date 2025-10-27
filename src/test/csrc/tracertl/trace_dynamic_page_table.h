@@ -50,6 +50,7 @@ struct TracePageEntry {
 };
 
 #define TraceVPNi(vpn, i)        (((vpn) >> (9 * (i))) & 0x1ff)
+#define TwoStageRootPageSize (16UL * 1024)
 
 class DynamicSoftPageTable {
 private:
@@ -57,6 +58,8 @@ private:
   const int initLevel = TRACE_MAX_PAGE_LEVEL-1;
 
   std::map<uint64_t, TracePTE> pageTable;
+  // std::map<uint64_t, TracePTE> hostPageTable;
+
   // set the baseAddr to maxSize of paddr from trace.
   uint64_t baseAddr = DYN_PAGE_TABLE_BASE_PADDR + TRACE_PAGE_SIZE * initLevel; // 4KB aligned
   uint64_t curAddr = baseAddr  + TRACE_PAGE_SIZE; // 4KB aligned
@@ -64,6 +67,11 @@ private:
   std::map<uint64_t, uint64_t> soft_tlb;
   // the page frame's level
   std::map<uint64_t, uint8_t> page_level_map;
+
+  uint64_t hostBaseAddr = -1; // -1 for not valid.
+  std::map<uint64_t, TracePTE> hostPageTable; // guest paddr -> host paddr
+  std::map<uint64_t, uint64_t> host_soft_tlb;
+  std::map<uint64_t, uint8_t> host_page_level_map;
 
 
 public:
@@ -90,9 +98,13 @@ public:
   // if not found, return 0
   uint64_t read(uint64_t paddr, bool construct);
   // assign a page entry for vaddr to paddr
-  void write(uint64_t vpn, uint64_t ppn);
+  void write(uint64_t vpn, uint64_t ppn, bool isHost = false);
+  // assign a page entry for hypervisor host page
+  void genHostPageByWalk();
+  void hwrite(uint64_t vpn, uint64_t ppn);
+
   // translate vpn to ppn, for debug
-  uint64_t trans(uint64_t vpn);
+  uint64_t trans(uint64_t vpn, bool isHost);
   void setPte(uint64_t pteAddr, uint64_t pte, uint8_t level);
 
   bool exists(uint64_t vpn) {
@@ -100,6 +112,13 @@ public:
   }
   void record(uint64_t vpn, uint64_t ppn) {
     soft_tlb[vpn] = ppn;
+  }
+
+  bool hostExists(uint64_t vpn) {
+    return host_soft_tlb.find(vpn) != host_soft_tlb.end();
+  }
+  void hostRecord(uint64_t vpn, uint64_t ppn) {
+    host_soft_tlb[vpn] = ppn;
   }
 
   uint64_t popCurAddr() {
@@ -113,6 +132,21 @@ public:
   inline TracePTE genNonLeafPte(uint64_t ppn);
   // uint64_t entryAlign(uint64_t paddr) { return (paddr >> 3) << 3; }
   // uint64_t pageAlign(uint64_t paddr) { return (paddr >> 12) << 12; }
+
+  inline uint64_t getHostPteAddr(uint64_t vpn, uint8_t level, uint64_t baseAddr);
+
+  inline uint64_t upAlign(uint64_t src, uint64_t alignNum) {
+    if (src % alignNum == 0) return src;
+    else return (src / alignNum + 1) * alignNum;
+  }
+
+  // for DPI-C
+  uint64_t getSatpPPN() {
+    return (baseAddr >> TRACE_PAGE_SHIFT) & TRACE_SATP64_PPN;
+  }
+  uint64_t getHgatpPPN() {
+    return (hostBaseAddr >> TRACE_PAGE_SHIFT) & TRACE_SATP64_PPN;
+  }
 
   void dump();
   void dumpInnerSoftTLB();

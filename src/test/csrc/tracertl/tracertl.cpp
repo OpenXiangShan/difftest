@@ -234,7 +234,12 @@ extern "C" bool trace_tlb_ats_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid) 
 extern "C" uint64_t trace_get_satp_ppn() {
   METHOD_TRACE();
   return trace_icache->getSatpPpn();
-};
+}
+
+extern "C" uint64_t trace_get_hgatp_ppn() {
+  METHOD_TRACE();
+  return trace_icache->getHgatpPpn();
+}
 
 /******* Trace Fast Sim Checker ******/
 TraceFastSimManager *trace_fastsim = NULL;

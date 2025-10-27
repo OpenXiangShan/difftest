@@ -50,9 +50,13 @@ private:
   std::unordered_map<uint64_t, uint16_t> icache_va;
   // std::unordered_map<TLBKeyType, uint64_t> soft_tlb;
   std::unordered_map<uint64_t, uint64_t> soft_tlb;
+  std::map<uint64_t, uint64_t> outof_range_soft_tlb;
+  uint64_t outof_range_cur_addr = OUTOF_TRACE_PAGE_PADDR;
 
   // ddr/dram image for pagetable
-  uint64_t satp = (DYN_PAGE_TABLE_BASE_PADDR + TRACE_PAGE_SIZE * TRACE_MAX_PAGE_LEVEL) >> TRACE_PAGE_SHIFT;
+  // uint64_t satp = (DYN_PAGE_TABLE_BASE_PADDR + TRACE_PAGE_SIZE * 3) >> TRACE_PAGE_SHIFT;
+  uint64_t satp = -1; // satp is not set, use dynamic page table
+  bool satp_use_tracept = false; // use tracept file to set satp
   DynamicSoftPageTable dynamic_page_table;
 
 public:
@@ -81,14 +85,18 @@ public:
   void dynPageWrite(uint64_t vpn, uint64_t ppn) {
     dynamic_page_table.write(vpn, ppn);
   }
+  void genHostPageByWalk() {
+    dynamic_page_table.genHostPageByWalk();
+  }
   uint64_t dynPageTrans(uint64_t vpn) {
-    return dynamic_page_table.trans(vpn);
+    return dynamic_page_table.trans(vpn, false);
   }
   void dumpDynPageTable() {
     dynamic_page_table.dump();
   };
 
   uint64_t getSatpPpn();
+  uint64_t getHgatpPpn();
 };
 
 #endif

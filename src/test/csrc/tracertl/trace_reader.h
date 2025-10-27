@@ -73,7 +73,7 @@ class TraceReader {
   TraceCounter commit_inst_num;
   uint64_t last_commit_tick = 0;
   bool last_committed = false;
-  uint64_t BLOCK_THREASHOLD = 5000;
+  uint64_t BLOCK_THREASHOLD = 15000;
   uint64_t FIRST_BLOCK_THREASHOLD = 15000;
 
   // process print

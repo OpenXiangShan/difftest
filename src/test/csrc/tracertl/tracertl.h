@@ -81,7 +81,8 @@ extern "C" uint64_t trace_tlb_ats(uint64_t vaddr, uint16_t asid, uint16_t vmid);
 extern "C" bool trace_tlb_ats_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid);
 
 extern "C" uint64_t trace_dyn_pt_dword_helper(uint64_t addr);
-extern "C" uint64_t trace_get_satp_ppn();
+extern "C" uint64_t trace_get_satp_ppn(); // vsatp
+extern "C" uint64_t trace_get_hgatp_ppn();
 
 // FastSim
 extern "C" uint8_t tracertl_get_fastsim_state();
