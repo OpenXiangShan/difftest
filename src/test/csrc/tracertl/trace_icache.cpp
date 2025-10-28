@@ -78,6 +78,50 @@ TraceICache::TraceICache(const char* tracept_file) {
   }
 }
 
+void TraceICache::construct(const std::vector<Instruction> &instList) {
+  for (auto inst : instList) {
+    // construct trace_icache
+    if (!inst.isTrap() || !inst.isInstException()) {
+      constructICache(inst.instr_pc_va, inst.instr);
+      constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+    } else {
+      static bool unexcepted_inst = false;
+      if (!unexcepted_inst) {
+        printf("TraceRTL preread. Unexcepted that with instException: %d\n", inst.exception);
+        inst.dump();
+        unexcepted_inst = true;
+      }
+      if (inst.exception == 12 /*inst page fault*/) {
+        // page fault, then not need construct
+      } else if (inst.exception == 1 /*inst access fault*/) {
+        // access fault, inst code is wrong. mmu is right
+        constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+      } else {
+        // other trap, ifetch is OK.
+        constructICache(inst.instr_pc_va, inst.instr);
+        constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
+      }
+    }
+    if (inst.memory_type != MEM_TYPE_None) {
+      if (!inst.isTrap()) {
+        constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
+      } else {
+        if (inst.exception == 13/*lpf*/ || inst.exception == 15) {
+          // memory page fault, no need to construct
+        } else {
+          // FIXME: there may be other higher priority exception happened, and make memory trans invalid(not happened)
+          constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
+        }
+      }
+    }
+  }
+
+  genPageTable();
+  genHostPageByWalk();
+
+  test();
+}
+
 void TraceICache::constructSoftTLB(uint64_t vaddr, uint16_t asid, uint16_t vmid, uint64_t paddr) {
   vaddr = vaddr & vaddr_mask();
   paddr = paddr & paddr_mask();
@@ -117,6 +161,12 @@ void TraceICache::readDWord(uint64_t &dest, uint64_t addr) {
   dest |= (uint64_t)readHWord(addr_inner + 3) << 48;
 }
 
+void TraceICache::genPageTable() {
+  for (auto &pair : soft_tlb) {
+    dynPageWrite(pair.first, pair.second);
+  }
+}
+
 uint64_t TraceICache::addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
   METHOD_TRACE();
   vaddr = vaddr & vaddr_mask();
@@ -147,14 +197,8 @@ bool TraceICache::addrTrans_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid) {
   METHOD_TRACE();
   vaddr = vaddr & vaddr_mask();
   uint64_t vpn = vaddr >> 12;
-  // auto it = soft_tlb.find(TLBKeyType(vpn, asid, vmid));
   auto it = soft_tlb.find(vpn);
   return true;
-  // if (it != soft_tlb.end()) {
-  //   return true;
-  // } else {
-  //   return false;
-  // }
 }
 
 void TraceICache::dumpICache() {
@@ -165,7 +209,6 @@ void TraceICache::dumpICache() {
 }
 
 void TraceICache::dumpSoftTlb() {
-  // fprintf(stderr, "TraceSoftTlb Content:\n");
   printf("TraceSoftTlb Content:\n");
   for (const auto &pair : soft_tlb) {
     printf("  %016lx -> %09lx\n", pair.first, pair.second);

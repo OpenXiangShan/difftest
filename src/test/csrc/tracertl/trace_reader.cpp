@@ -106,9 +106,8 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
       setError();
       printf("TraceRTL preread: read from trace file, but illegal inst. Dump the inst:\n");
       inst.dump();
+      exit(1);
     }
-
-    // construct trace
     instList_preread.push_back(inst);
   }
 
@@ -119,78 +118,26 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
     inst.fromTraceInst(static_inst);
     inst.inst_id = inst_id_preread.pop();
 
-    // gen new paddr
     if (enable_gen_paddr) {
       inst.instr_pc_pa = iPaddrAllocator.va2pa(inst.instr_pc_va);
       if (inst.memory_type != MEM_TYPE_None) {
         inst.exu_data.memory_address.pa = dPaddrAllocator.va2pa(inst.exu_data.memory_address.va);
       }
     }
-
     if (!inst.legalInst()) {
       setError();
       printf("TraceRTL preread: read from trace file, but illegal inst. Dump the inst:\n");
       inst.dump();
+      exit(1);
     }
-
-
-    // construct trace_icache
-    // inst.dump();
-    // printf("inst legalInst: %d, isException: %d\n", inst.legalInst(), inst.isException());
-    if (!inst.isTrap() || !inst.isInstException()) {
-      trace_icache->constructICache(inst.instr_pc_va, inst.instr);
-      trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
-      trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
-    } else {
-      static bool unexcepted_inst = false;
-      if (!unexcepted_inst) {
-        printf("TraceRTL preread. Unexcepted that with instException: %d\n", inst.exception);
-        inst.dump();
-        unexcepted_inst = true;
-      }
-      if (inst.exception == 12 /*inst page fault*/) {
-        // page fault, then not need construct
-      } else if (inst.exception == 1 /*inst access fault*/) {
-        // access fault, inst code is wrong. mmu is right
-        trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
-        trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
-      } else {
-        // other trap, ifetch is OK.
-        trace_icache->constructICache(inst.instr_pc_va, inst.instr);
-        trace_icache->constructSoftTLB(inst.instr_pc_va, 0, 0, inst.instr_pc_pa);
-        trace_icache->dynPageWrite(inst.instr_pc_va >> 12, inst.instr_pc_pa >> 12);
-      }
-    }
-    if (inst.memory_type != MEM_TYPE_None) {
-      if (!inst.isTrap()) {
-        // if mem access lower than 0x80000000L, it is a vaddr or mmio access.
-        // When vaddr, vpn should not equal ppn. When mmio, 0x38000000 to CLINT is filter out.
-        // if (inst.exu_data.memory_address.va < 0x80000000L && ((inst.exu_data.memory_address.va >> 24) != 0x38)) {
-        //   if (inst.exu_data.memory_address.va == inst.exu_data.memory_address.pa) {
-        //     printf("TraceRTL preread: va < 0x8000000L, but va == pa\n");
-        //     printf("If u are running bare-mode test, please disable this\n");
-        //     inst.dump();
-        //     // s-mode/m-mode will print
-        //     // exit(1);
-        //   }
-        // }
-        trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
-        trace_icache->dynPageWrite(inst.exu_data.memory_address.va >> 12, inst.exu_data.memory_address.pa >> 12);
-      } else {
-        if (inst.exception == 13/*lpf*/ || inst.exception == 15) {
-          // memory page fault, no need to construct
-        } else {
-          // FIXME: there may be other higher priority exception happened, and make memory trans invalid(not happened)
-          trace_icache->constructSoftTLB(inst.exu_data.memory_address.va, 0, 0, inst.exu_data.memory_address.pa);
-          trace_icache->dynPageWrite(inst.exu_data.memory_address.va >> 12, inst.exu_data.memory_address.pa >> 12);
-        }
-      }
-
-    }
-
-    // construct trace
     instList_preread.push_back(inst);
   }
+
+#ifdef TRACE_VERBOSE
+  iPaddrAllocator.dump();
+  dPaddrAllocator.dump();
+#endif
+
   printf("TraceRTL: preparse tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());
   if (inst_id_preread.get() < max_insts) {
     printf("TraceRTL: inst_id_preread %lu < max_insts %lu, adjust max_insts\n", inst_id_preread.get(), max_insts);
@@ -199,22 +146,24 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
   fflush(stdout);
   delete[] instDecompressBuffer;
 
+  trace_icache->construct(instList_preread);
+  printf("TraceICache Constructed.\n");
+  fflush(stdout);
+
   if (!trace_fastsim->isFastSimMemoryFinished()) {
     trace_fastsim->mergeMemAddr(instList_preread, max_insts);
+    printf("Trace FastSim Memory Part Finished.\n");
+    fflush(stdout);
   }
   if (!trace_fastsim->isFastSimInstFinished()) {
     trace_fastsim->instDedup.dedup(instList_preread,
       0, trace_fastsim->getWarmupInstNum());
+    printf("Trace FastSim Instruction Part Finished.\n");
+    fflush(stdout);
   }
 
   last_interval_time = gen_cur_time();
-  trace_icache->genHostPageByWalk();
 
-  trace_icache->test();
-#ifdef TRACE_VERBOSE
-  iPaddrAllocator.dump();
-  dPaddrAllocator.dump();
-#endif
 
   printf("TraceRTL: TraceReader constructed.\n");
   fflush(stdout);

@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <map>
+#include <vector>
 #include <unordered_map>
 #include "trace_format.h"
 #include "trace_dynamic_page_table.h"
@@ -63,6 +64,8 @@ public:
   TraceICache(const char *tracept_file);
   ~TraceICache();
 
+  void construct(const std::vector<Instruction> &instList);
+
   void constructSoftTLB(uint64_t vaddr, uint16_t asid, uint16_t vmid, uint64_t paddr);
   uint64_t addrTrans(uint64_t vaddr, uint16_t asid, uint16_t vmid);
   bool addrTrans_hit(uint64_t vaddr, uint16_t asid, uint16_t vmid);
@@ -85,6 +88,7 @@ public:
   void dynPageWrite(uint64_t vpn, uint64_t ppn) {
     dynamic_page_table.write(vpn, ppn);
   }
+  void genPageTable();
   void genHostPageByWalk() {
     dynamic_page_table.genHostPageByWalk();
   }
