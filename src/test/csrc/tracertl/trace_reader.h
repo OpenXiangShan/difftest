@@ -128,6 +128,11 @@ class TraceReader {
     auto duration = now.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::seconds>(duration).count();
   }
+private:
+  uint64_t act_max_insts = 0;
+  void pre_readfile(const char *trace_file_name, uint64_t skip_traceinstr); // read file to Instruction
+  void mid_construct(uint64_t max_insts, bool enable_gen_paddr); // add paddr, construct icache-tlb-pagetable, flow check
+  void post_opt(); // fast sim
 
 public:
   TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t max_insts, uint64_t skip_traceinstr);

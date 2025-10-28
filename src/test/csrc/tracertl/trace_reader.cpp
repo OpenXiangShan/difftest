@@ -23,7 +23,18 @@
 
 TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t max_insts, uint64_t skip_traceinstr)
 {
-  printf("TraceRTL: check file exists...\n");
+  pre_readfile(trace_file_name, skip_traceinstr);
+  mid_construct(max_insts, enable_gen_paddr);
+  post_opt();
+
+  printf("[TraceRTL] TraceReader Finished.\n");
+  fflush(stdout);
+
+  last_interval_time = gen_cur_time();
+}
+
+void TraceReader::pre_readfile(const char *trace_file_name, uint64_t skip_traceinstr) {
+  printf("[TraceRTL] check file exists...\n");
   fflush(stdout);
   // preread trace
   std::ifstream *trace_stream;
@@ -33,9 +44,8 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
     exit(1);
   }
 
-
   // read file into buffer;
-  printf("TraceRTL: read tracefile...\n");
+  printf("[TraceRTL] read tracefile...\n");
   trace_stream->seekg(0, std::ios::end);
   std::streampos fileSize = trace_stream->tellg();
   trace_stream->seekg(0, std::ios::beg);
@@ -50,11 +60,11 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
   }
 
   // decompress
-  printf("TraceRTL: decompress tracefile...\n");
+  printf("[TraceRTL] decompress tracefile...\n");
   size_t sizeAfterDC = traceDecompressSizeZSTD(fileBuffer, fileSize);
   if ((sizeAfterDC % sizeof(TraceInstruction)) != 0) {
-    printf("Trace file decompress result wrong. sizeAfterDC cannot be divide exactly.\n");
-    exit(0);
+    printf("Error: Trace file decompress result wrong. sizeAfterDC cannot be divide exactly.\n");
+    exit(1);
   }
 
   TraceInstruction *instDecompressBuffer = new TraceInstruction[sizeAfterDC / sizeof(TraceInstruction)];
@@ -63,23 +73,23 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
   uint64_t traceInstNum = decompressedSize / sizeof(TraceInstruction);
   delete[] fileBuffer;
 
-  printf("Read %lu instructions from trace file.\n", traceInstNum);
+  printf("[TraceRTL] Read %lu instructions from trace file.\n", traceInstNum);
   if (skip_traceinstr > 0) {
-    printf("Skip %lu instructions.\n", skip_traceinstr);
+    printf("[TraceRTL] Skip %lu instructions.\n", skip_traceinstr);
   }
   if (traceInstNum <= skip_traceinstr) {
-    printf("Skip all the instructions. Exit\n");
+    printf("[TraceRTL] Skip all the instructions. Exit\n");
     exit(1);
   }
 
   if (decompressedSize != sizeAfterDC) {
-    std::cerr << "TraceRTL: Error of Decompress. Decompress size not match "
+    std::cerr << "[TraceRTL] Error of Decompress. Decompress size not match "
               << sizeAfterDC << " " << decompressedSize << std::endl;
     exit(1);
   }
 
   // pre-process the trace inst;
-  printf("TraceRTL: preparse/precheck tracefile...\n");
+  printf("[TraceRTL] preparse/precheck tracefile...\n");
   TraceCounter inst_id_preread;
   inst_id_preread.pop(); // set init id to 1
   commit_inst_num.pop(); // set init id to 1
@@ -93,21 +103,6 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
     Instruction inst;
     inst.fromTraceInst(static_inst);
     inst.inst_id = inst_id_preread.pop();
-
-    // gen new paddr
-    if (enable_gen_paddr) {
-      inst.instr_pc_pa = iPaddrAllocator.va2pa(inst.instr_pc_va);
-      if (inst.memory_type != MEM_TYPE_None) {
-        inst.exu_data.memory_address.pa = dPaddrAllocator.va2pa(inst.exu_data.memory_address.va);
-      }
-    }
-
-    if (!inst.legalInst()) {
-      setError();
-      printf("TraceRTL preread: read from trace file, but illegal inst. Dump the inst:\n");
-      inst.dump();
-      exit(1);
-    }
     instList_preread.push_back(inst);
   }
 
@@ -117,20 +112,25 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
     Instruction inst;
     inst.fromTraceInst(static_inst);
     inst.inst_id = inst_id_preread.pop();
+    instList_preread.push_back(inst);
+  }
+  printf("[TraceRTL] preread trace file finished.\n");
+  fflush(stdout);
 
-    if (enable_gen_paddr) {
+  delete[] instDecompressBuffer;
+}
+
+void TraceReader::mid_construct(uint64_t max_insts, bool enable_gen_paddr) {
+  // gen paddr
+  if (enable_gen_paddr) {
+    for (auto &inst : instList_preread) {
       inst.instr_pc_pa = iPaddrAllocator.va2pa(inst.instr_pc_va);
       if (inst.memory_type != MEM_TYPE_None) {
         inst.exu_data.memory_address.pa = dPaddrAllocator.va2pa(inst.exu_data.memory_address.va);
       }
     }
-    if (!inst.legalInst()) {
-      setError();
-      printf("TraceRTL preread: read from trace file, but illegal inst. Dump the inst:\n");
-      inst.dump();
-      exit(1);
-    }
-    instList_preread.push_back(inst);
+    printf("[TraceRTL] gen paddr finished.\n");
+    fflush(stdout);
   }
 
 #ifdef TRACE_VERBOSE
@@ -138,35 +138,49 @@ TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uin
   dPaddrAllocator.dump();
 #endif
 
-  printf("TraceRTL: preparse tracefile finished total 0x%08lx(0d%08lu) insts...\n", inst_id_preread.get(), inst_id_preread.get());
-  if (inst_id_preread.get() < max_insts) {
-    printf("TraceRTL: inst_id_preread %lu < max_insts %lu, adjust max_insts\n", inst_id_preread.get(), max_insts);
-    max_insts = inst_id_preread.get();
+  // check legal
+  for (auto inst : instList_preread) {
+    if (!inst.legalInst()) {
+      printf("[TraceRTL] read from trace file, but illegal inst. Dump the inst:\n");
+      inst.dump();
+      exit(1);
+    }
   }
+  printf("[TraceRTL] check legal inst finished.\n");
   fflush(stdout);
-  delete[] instDecompressBuffer;
+
+  TraceLegalFlowChecker flowChecker;
+  flowChecker.check(instList_preread);
+  printf("[TraceRTL] flow checker finished.\n");
+  fflush(stdout);
+
+
+  auto traceInstNum = instList_preread.size();
+  printf("[TraceRTL] preparse tracefile finished total 0x%08lx(0d%08lu) insts.\n", traceInstNum, traceInstNum);
+  if (traceInstNum < max_insts) {
+    printf("[TraceRTL] inst_id_preread %lu < max_insts %lu, adjust max_insts\n", traceInstNum, max_insts);
+  }
+  act_max_insts = std::min(act_max_insts, traceInstNum);
+  fflush(stdout);
 
   trace_icache->construct(instList_preread);
-  printf("TraceICache Constructed.\n");
+  printf("[TraceRTL] TraceICache Constructed.\n");
   fflush(stdout);
 
+}
+
+void TraceReader::post_opt() {
   if (!trace_fastsim->isFastSimMemoryFinished()) {
-    trace_fastsim->mergeMemAddr(instList_preread, max_insts);
-    printf("Trace FastSim Memory Part Finished.\n");
+    trace_fastsim->mergeMemAddr(instList_preread, act_max_insts);
+    printf("[TraceRTL] FastSim Memory Part Finished.\n");
     fflush(stdout);
   }
   if (!trace_fastsim->isFastSimInstFinished()) {
     trace_fastsim->instDedup.dedup(instList_preread,
       0, trace_fastsim->getWarmupInstNum());
-    printf("Trace FastSim Instruction Part Finished.\n");
+    printf("[TraceRTL] FastSim Instruction Part Finished.\n");
     fflush(stdout);
   }
-
-  last_interval_time = gen_cur_time();
-
-
-  printf("TraceRTL: TraceReader constructed.\n");
-  fflush(stdout);
 }
 
 bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {
@@ -182,7 +196,7 @@ bool TraceReader::readFromBuffer(Instruction &inst, uint8_t idx) {
 
 bool TraceReader::prepareRead() {
 #ifdef TRACERTL_FPGA
-  printf("TraceRTL: prepareRead should not be called in FPGA mode\n");
+  printf("[TraceRTL] prepareRead should not be called in FPGA mode\n");
   exit(1);
 #endif
 
@@ -253,7 +267,7 @@ bool TraceReader::read(Instruction &inst) {
 #ifndef TRACERTL_FPGA
   if (pendingInstList.size() > 2000) {
     setError();
-    printf("TraceRTL: pendingInstList has too many inst, more than 2000. Check it.\n");
+    printf("[TraceRTL] pendingInstList has too many inst, more than 2000. Check it.\n");
   }
 #endif
 
@@ -391,7 +405,7 @@ void TraceReader::checkCommit(uint64_t tick) {
   static bool lastAvoidStuck = false;
   if (trace_fastsim->avoidInstStuck()) lastAvoidStuck = true;
   if (lastAvoidStuck && !trace_fastsim->avoidInstStuck()) {
-    printf("TraceRTL: FastSim avoidInstStuck finished tick: %ld\n", tick);
+    printf("[TraceRTL] FastSim avoidInstStuck finished tick: %ld\n", tick);
     last_commit_tick = tick; // when fastsim finished, update the last_commit_tick, to pass stuck check
     lastAvoidStuck = false;
   }

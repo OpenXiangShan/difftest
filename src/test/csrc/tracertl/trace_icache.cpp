@@ -34,7 +34,7 @@ TraceICache::TraceICache(const char* tracept_file) {
 
   if (tracept_file) {
     // read tracept file and set DynamicPageTable
-    printf("TraceRTL: read trace page table file. %s\n", tracept_file);
+    printf("[TraceRTL] read trace page table file. %s\n", tracept_file);
     std::ifstream *tracept_stream = new std::ifstream(tracept_file, std::ios::in);
     if (!tracept_stream->is_open()) {
       std::cout << "Error: can't open tracept file" << std::endl;
@@ -54,7 +54,7 @@ TraceICache::TraceICache(const char* tracept_file) {
       exit(1);
     }
 
-    printf("TraceRTL: decompress trace page table file.\n");
+    printf("[TraceRTL] decompress trace page table file.\n");
     size_t sizeAfterDC = traceDecompressSizeZSTD(fileBuffer, fileSize);
     if ((sizeAfterDC % sizeof(TracePageEntry)) != 0) {
       std::cerr << "TracePT file decompress result wrong. sizeAfterDC cannot be divided exactly\n" << std::endl;

@@ -48,7 +48,7 @@ private:
 
 public:
   TraceFastSimManager(bool fastwarmup_enable, uint64_t warmup_inst) {
-    printf("TraceFastSimManager: fastwarmup_enable %d\n", fastwarmup_enable);
+    printf("[TraceRTL] fastwarmup_enable %d\n", fastwarmup_enable);
     fflush(stdout);
     if (fastwarmup_enable) {
       // state = FASTSIM_ENABLE;

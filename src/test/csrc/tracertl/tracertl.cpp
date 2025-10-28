@@ -28,14 +28,14 @@ TraceReader *trace_reader = NULL;
 /** Used By Emulator */
 
 void init_tracertl(const char *trace_file_name, bool enable_gen_paddr, uint64_t max_insts, uint64_t skip_traceinstr) {
-  printf("init_tracertl: %s\n", trace_file_name);
-  printf("dynamic generate paddr(for instruction and data): %s\n", enable_gen_paddr ? "enable" : "disable");
-  printf("skip-insts %lu left_max_insts: %lu\n", skip_traceinstr, max_insts);
+  printf("[TraceRTL] init_tracertl: %s\n", trace_file_name);
+  printf("[TraceRTL] dynamic generate paddr(for instruction and data): %s\n", enable_gen_paddr ? "enable" : "disable");
+  printf("[TraceRTL] skip-insts %lu left_max_insts: %lu\n", skip_traceinstr, max_insts);
   fflush(stdout);
   trace_reader = new TraceReader(trace_file_name, enable_gen_paddr, max_insts, skip_traceinstr);
 
 #ifndef TRACERTL_FPGA
-  printf("prepare read at init_tracertl\n");
+  printf("[TraceRTL] prepare read at init_tracertl\n");
   fflush(stdout);
   trace_reader->prepareRead();
 #endif
