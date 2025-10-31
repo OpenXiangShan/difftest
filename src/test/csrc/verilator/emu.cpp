@@ -898,8 +898,14 @@ int Emulator::tick() {
 
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
+#ifdef TRACERTL_MODE
+    bool fastSimFinished = trace_fastsim->isFastSimFinished();
+#else // TRACERTL_MODE
+    bool fastSimFinished = true;
+#endif // TRACERTL_MODE
     auto trap = difftest[i]->get_trap_event();
-    if ((trap->instrCnt >= args.warmup_instr) && trace_fastsim->isFastSimFinished()) {
+
+    if ((trap->instrCnt >= args.warmup_instr) && fastSimFinished) {
       Info("Warmup finished. The performance counters will be dumped and then reset.\n");
       dut_ptr->difftest_perfCtrl_clean = 1;
       dut_ptr->difftest_perfCtrl_dump = 1;
@@ -1018,8 +1024,13 @@ int Emulator::tick() {
       printf("Warmup Inst finished. instrCnt: %lu cycleCnt: %lu\n", trap->instrCnt, trap->cycleCnt);
     }
 
+#ifdef TRACERTL_MODE
+    bool fastSimFinished = trace_fastsim->isFastSimFinished();
+#else // TRACERTL_MODE
+    bool fastSimFinished = true;
+#endif // TRACERTL_MODE
     static bool warmup_finished = false;
-    if (!warmup_finished && warmup_inst_finished && trace_fastsim->isFastSimFinished()) {
+    if (!warmup_finished && warmup_inst_finished && fastSimFinished) {
       warmup_finished = true;
       printf("Warmup finished. instrCnt: %lu cycleCnt: %lu\n", trap->instrCnt, trap->cycleCnt);
     }
