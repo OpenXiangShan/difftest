@@ -66,6 +66,13 @@ private trait HasMemInitializer { this: ExtModule =>
 private trait HasMemReadHelper { this: ExtModule =>
   private def r(i: Int): String = s"r_$i"
 
+  def r_dpic: String =
+    """
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
+      |import "DPI-C" function longint difftest_ram_read(input longint rIdx);
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
+      |""".stripMargin
+
   private def sv_interface(i: Int): String =
     s"""
        |input             ${r(i)}_enable,
@@ -127,6 +134,18 @@ private trait HasMemReadHelper { this: ExtModule =>
 
 private trait HasMemWriteHelper {
   private def w(i: Int): String = s"w_$i"
+
+  def w_dpic: String =
+    """
+      |`ifndef DISABLE_DIFFTEST_RAM_DPIC
+      |import "DPI-C" function void difftest_ram_write
+      |(
+      |  input  longint index,
+      |  input  longint data,
+      |  input  longint mask
+      |);
+      |`endif // DISABLE_DIFFTEST_RAM_DPIC
+      |""".stripMargin
 
   private def sv_interface(i: Int): String =
     s"""
@@ -245,6 +264,8 @@ private class MemRWHelper(size: BigInt, val nr: Int, val nw: Int)
        |  ${w_sv_interface(nw)}
        |);
        |  $mem_init
+       |  $r_dpic
+       |  $w_dpic
        |  ${r_sv_body(nr)}
        |  ${w_sv_body(nw)}
        |endmodule
