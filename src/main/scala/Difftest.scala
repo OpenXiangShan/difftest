@@ -513,6 +513,7 @@ object DifftestModule {
   private val interfaces = ListBuffer.empty[(DifftestBundle, Int)]
   private val cppExtModules = ListBuffer.empty[(String, String)]
   private val cppExtHeaders = ListBuffer.empty[String]
+  private val nameExcludes = ListBuffer.empty[String]
 
   // Some FIRTOOL options are customized for DiffTest
   def parseArgs(args: Array[String]): (Array[String], Seq[FirtoolOption]) = {
@@ -523,6 +524,9 @@ object DifftestModule {
         case "--difftest-config" :: config :: tail =>
           Gateway.setConfig(config)
           nextOption(args.patch(args.indexOf("--difftest-config"), Nil, 2), tail)
+        case "--difftest-exclude" :: names :: tail =>
+          nameExcludes ++= names.split(",").map(_.trim)
+          nextOption(args.patch(args.indexOf("--difftest-exclude"), Nil, 2), tail)
         case _ :: tail => nextOption(args, tail)
       }
     }
@@ -537,14 +541,15 @@ object DifftestModule {
     delay: Int = 0,
   ): T = {
     val difftest: T = Wire(gen)
-    if (enabled) {
+    val isExcluded = nameExcludes.exists(ex => gen.desiredModuleName.contains(ex))
+    if (enabled && !isExcluded) {
       Gateway(gen, delay) := difftest
+      interfaces.append((gen, delay))
     }
     if (dontCare) {
       difftest := DontCare
       difftest.bits.getValidOption.foreach(_ := false.B)
     }
-    interfaces.append((gen, delay))
     difftest
   }
 
