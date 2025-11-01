@@ -49,7 +49,7 @@ module Difftest2AXI #(
     reg                  reg_axi_tlast;
     reg                  reg_core_clock_enable;
     // Ping-Pong Buffers
-    reg [1:0]wr_en;
+    reg wr_en;
     reg wr_buf;
     reg rd_buf;
     reg [7:0] wr_pkt_cnt;   // (0~7)
@@ -57,8 +57,7 @@ module Difftest2AXI #(
     reg [1:0] buffer_valid;
     reg [2:0] dual_buffer_wr_addr;
     reg [DATA_WIDTH-1:0] dual_buffer_wr_data;
-    wire [DATA_WIDTH-1:0] dual_buffer_rd_data[1:0];
-    wire [DATA_WIDTH-1:0] dual_buffer_rd_data_mux = ~rd_buf ? dual_buffer_rd_data[0] : dual_buffer_rd_data[1];
+    wire [DATA_WIDTH-1:0] dual_buffer_rd_data;
 
     assign core_clock_enable = reg_core_clock_enable;
     assign axi_tdata = reg_axi_tdata;
@@ -68,24 +67,33 @@ module Difftest2AXI #(
 
     wire both_full = &buffer_valid;
 
-    // Instantiate dual buffer BRAMs
-    genvar i;
-    generate
-    for (i = 0; i < 2; i = i + 1) begin : gen_dual_buffer
-        dual_buffer_bram #(
-        .DATA_WIDTH(DATA_WIDTH),
-        .NUM_PACKETS_PER_BUFFER(NUM_PACKETS_PER_BUFFER)
-        ) dual_buffer_inst (
+    // One-cycle primes to handle BRAM read latency at packet boundaries
+    reg prime_first; // asserted for one cycle when entering TRANSFER from IDLE
+    reg prime_next;  // asserted for one cycle after advancing to next packet within TRANSFER
+
+    always @(posedge clock) begin
+        if (reset) begin
+            prime_first <= 1'b0;
+        end else begin
+            prime_first <= (current_state == IDLE) && (next_state == TRANSFER);
+        end
+    end
+
+        // Instantiate single dual-buffer BRAM with address-offset selection
+    dual_buffer_bram #(
+            .DATA_WIDTH(DATA_WIDTH),
+            .NUM_PACKETS_PER_BUFFER(NUM_PACKETS_PER_BUFFER)
+    ) dual_buffer_inst (
         .clk(clock),
         .rst(reset),
-        .wr_en(wr_en[i]),
-        .wr_addr(dual_buffer_wr_addr),
+        .wr_en(wr_en),
+        .wr_buf_sel(wr_buf),
+        .wr_addr(wr_pkt_cnt),
         .wr_data(dual_buffer_wr_data),
-        .rd_addr(rd_pkt_cnt),
-        .rd_data(dual_buffer_rd_data[i])
-        );
-    end
-    endgenerate
+        .rd_buf_sel(rd_buf),
+        .rd_addr(rd_pkt_cnt[2:0]),
+        .rd_data(dual_buffer_rd_data)
+    );
 
 
     // asynchronous clock fetches the signal
@@ -116,6 +124,15 @@ module Difftest2AXI #(
             current_state <= next_state;
     end
 
+    // Generate one-cycle pulse when advancing to next packet in TRANSFER
+    always @(posedge clock) begin
+        if (reset) begin
+            prime_next <= 1'b0;
+        end else begin
+            prime_next <= (current_state == TRANSFER) && (axi_tready && axi_tvalid) && (!last_pkt && last_send);
+        end
+    end
+
 /* verilator lint_off CASEINCOMPLETE */
     always @(*) begin
         case(current_state)
@@ -133,12 +150,12 @@ module Difftest2AXI #(
             wr_pkt_cnt <= 0;
             buffer_valid <= 2'b00;
         end else begin
-            wr_en[1:0] <= 2'b00;
+            wr_en <= 1'b0;
             if (difftest_sampling & reg_core_clock_enable) begin
                 dual_buffer_wr_addr <= wr_pkt_cnt[2:0];
                 dual_buffer_wr_data <= difftest_data;
                 wr_pkt_cnt <= wr_pkt_cnt + 1'b1;
-                wr_en[wr_buf] <= 1;
+                wr_en <= 1'b1;
                 if (wr_pkt_cnt == NUM_PACKETS_PER_BUFFER - 1) begin
                     buffer_valid[wr_buf] <= 1;
                     wr_pkt_cnt <= 0;
@@ -172,7 +189,7 @@ module Difftest2AXI #(
             case(current_state)
             IDLE : begin
                 if (can_send) begin
-                    mix_data <= {dual_buffer_rd_data_mux, data_num};
+                    mix_data <= {dual_buffer_rd_data, data_num};
                     rd_pkt_cnt <= 1;
                     data_num <= data_num + 1'b1;
                 end
@@ -185,7 +202,7 @@ module Difftest2AXI #(
                         rd_pkt_cnt <= 0;
                         datalen <= 0;
                     end else if (!last_pkt & last_send) begin
-                        mix_data <= {dual_buffer_rd_data_mux, 8'b0};
+                        mix_data <= {dual_buffer_rd_data, 8'b0};
                         rd_pkt_cnt <= rd_pkt_cnt + 1'b1;
                         datalen <= 0;
                     end else begin

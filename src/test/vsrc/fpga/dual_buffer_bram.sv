@@ -15,22 +15,31 @@
 ***************************************************************************************/
 module dual_buffer_bram #(
   parameter DATA_WIDTH = 16000,
+  // depth of ONE buffer (ping OR pong), total depth is 2x
   parameter NUM_PACKETS_PER_BUFFER = 8
 )(
   input clk,
   input rst,
   input wr_en,
+  // select which half to write/read: 0 -> ping, 1 -> pong
+  input wr_buf_sel,
   input [$clog2(NUM_PACKETS_PER_BUFFER)-1:0] wr_addr,
   input [DATA_WIDTH-1:0] wr_data,
+  input rd_buf_sel,
   input [$clog2(NUM_PACKETS_PER_BUFFER)-1:0] rd_addr,
   output [DATA_WIDTH-1:0] rd_data
 );
-  localparam ADDR_WIDTH = $clog2(NUM_PACKETS_PER_BUFFER);
+  // total address width covers both halves
+  localparam ADDR_WIDTH = $clog2(NUM_PACKETS_PER_BUFFER*2);
   localparam BLOCK_RAM_DATA_WIDTH = 4000;
   localparam NUM_BLOCKS = DATA_WIDTH / BLOCK_RAM_DATA_WIDTH;
 
   wire [BLOCK_RAM_DATA_WIDTH-1:0] rd_data_split [0:NUM_BLOCKS-1];
   wire [BLOCK_RAM_DATA_WIDTH-1:0] wr_data_split [0:NUM_BLOCKS-1];
+
+  // form full addresses by adding the buffer select as MSB (0: ping, 1: pong)
+  wire [ADDR_WIDTH-1:0] waddr_full = {wr_buf_sel, wr_addr};
+  wire [ADDR_WIDTH-1:0] raddr_full = {rd_buf_sel, rd_addr};
 
   genvar i;
   generate
@@ -44,8 +53,8 @@ module dual_buffer_bram #(
         .rst(rst),
         .wea(wr_en),
         .en(1'b1),
-        .waddr(wr_addr),
-        .raddr(rd_addr),
+        .waddr(waddr_full),
+        .raddr(raddr_full),
         .wdata(wr_data_split[i]),
         .rdata(rd_data_split[i])
       );
