@@ -114,13 +114,20 @@ always #1 clock <= ~clock;
 wire core_clock;
 
 `ifdef FPGA_SIM
-  wire [`CONFIG_DIFFTEST_BATCH_IO_WITDH - 1:0] difftest_data;
-  wire difftest_enable;
+  wire c2h_axi_tlast;
+  wire c2h_axi_tready;
+  wire c2h_axi_tvalid;
+  wire [511:0] c2h_axi_tdata;
+  wire clock_enable;
+
 xdma_wrapper xdma(
   .clock(clock),
   .reset(reset),
-  .difftest_data(difftest_data),
-  .difftest_enable(difftest_enable),
+  .axi_c2h_tlast(c2h_axi_tlast),
+  .axi_c2h_tready(c2h_axi_tready),
+  .axi_c2h_tvalid(c2h_axi_tvalid),
+  .axi_c2h_tdata(c2h_axi_tdata),
+  .core_clock_enable(clock_enable),
   .core_clock(core_clock)
 );
   // assign core_clock = clock;
@@ -132,8 +139,12 @@ SimTop sim(
   .clock(core_clock),
   .reset(reset),
 `ifdef FPGA_SIM
-  .difftest_fpga_data(difftest_data),
-  .difftest_fpga_enable(difftest_enable),
+  .difftest_ref_clock(clock),
+  .difftest_toHost_axis_valid(c2h_axi_tvalid),
+  .difftest_toHost_axis_ready(c2h_axi_tready),
+  .difftest_toHost_axis_bits_data(c2h_axi_tdata),
+  .difftest_toHost_axis_bits_last(c2h_axi_tlast),
+  .difftest_clock_enable(clock_enable),
 `endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),

@@ -110,8 +110,8 @@ case class GatewayConfig(
   }
 }
 
-class FpgaDiffIO(config: GatewayConfig) extends Bundle {
-  val data = UInt(config.batchBitWidth.W)
+class FpgaDiffIO(dataWidth: Int) extends Bundle {
+  val data = UInt(dataWidth.W)
   val enable = Bool()
 }
 
@@ -259,7 +259,8 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val step = IO(Output(UInt(config.stepWidth.W)))
   val control = Wire(new GatewaySinkControl(config))
 
-  val fpgaIO = Option.when(config.isBatch && config.isFPGA)(IO(Output(new FpgaDiffIO(config))))
+  val fpgaIO = Option.when(config.isBatch && config.isFPGA)(IO(Output(new FpgaDiffIO(config.batchBitWidth))))
+
   if (config.isBatch) {
     val batch = Batch(toSink, config)
     step := RegNext(batch.step, 0.U) // expose Batch step to check timeout

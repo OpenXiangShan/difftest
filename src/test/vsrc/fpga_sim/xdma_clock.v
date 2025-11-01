@@ -15,7 +15,6 @@
 ***************************************************************************************/
 module xdma_clock(
   input clock,
-  input reset,
   input core_clock_enable,
   output core_clock
 );
