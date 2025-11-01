@@ -5,6 +5,7 @@ import chisel3.BlackBox
 import chisel3.util.HasBlackBoxInline
 import chisel3.util._
 import difftest.fpga.xdma._
+import difftest.gateway.FpgaDiffIO
 
 // Note: submodules `dual_buffer_bram` and `bram_port` will be emitted via inline text inside `VerilogDifftest2AXI`.
 
@@ -12,7 +13,7 @@ import difftest.fpga.xdma._
 	* BlackBox for Verilog module `Difftest2AXI`.
 	* Wraps difftest/src/test/vsrc/fpga/Difftest2AXI.v and brings in its submodules.
 	*/
-class VerilogDifftest2AXI(
+class Difftest2AXI(
   val DATA_WIDTH: Int = 16000,
   val AXIS_DATA_WIDTH: Int = 512,
 ) extends BlackBox(
@@ -29,14 +30,9 @@ class VerilogDifftest2AXI(
   val io = IO(new Bundle {
     val clock = Input(Clock())
     val reset = Input(Bool())
-    val difftest_data = Input(UInt(DATA_WIDTH.W))
-    val difftest_enable = Input(Bool())
-    val core_clock_enable = Output(Bool())
-    val axi_tdata = Output(UInt(AXIS_DATA_WIDTH.W))
-    val axi_tkeep = Output(UInt(64.W))
-    val axi_tlast = Output(Bool())
-    val axi_tready = Input(Bool())
-    val axi_tvalid = Output(Bool())
+    val difftest = Input(new FpgaDiffIO(DATA_WIDTH))
+    val clock_enable = Output(Bool())
+    val axis = new AXI4Stream(AXIS_DATA_WIDTH)
   })
 
   // Inline Verilog source and its dependencies
@@ -67,12 +63,11 @@ class VerilogDifftest2AXI(
       |  input reset,
       |  input [`CONFIG_DIFFTEST_BATCH_IO_WITDH - 1:0] difftest_data,
       |  input difftest_enable,
-      |  output core_clock_enable,
-      |  output [AXIS_DATA_WIDTH - 1:0] axi_tdata,
-      |  output [63:0] axi_tkeep,
-      |  output axi_tlast,
-      |  input  axi_tready,
-      |  output axi_tvalid
+      |  output clock_enable,
+      |  output [AXIS_DATA_WIDTH - 1:0] axis_bits_data,
+      |  output axis_bits_last,
+      |  input  axis_ready,
+      |  output axis_valid
       |);
       |
       |    localparam NUM_PACKETS_PER_BUFFER = 8; // one send packet num
@@ -90,7 +85,7 @@ class VerilogDifftest2AXI(
       |    reg [7:0] data_num;
       |    reg [4:0] state;
       |
-      |    reg                  reg_axi_tvalid;
+      |    reg                  reg_axis_valid;
       |    reg                  reg_axi_tlast;
       |    reg                  reg_core_clock_enable;
       |    // Ping-Pong Buffers
@@ -105,11 +100,10 @@ class VerilogDifftest2AXI(
       |    wire [DATA_WIDTH-1:0] dual_buffer_rd_data[1:0];
       |    wire [DATA_WIDTH-1:0] dual_buffer_rd_data_mux = ~rd_buf ? dual_buffer_rd_data[0] : dual_buffer_rd_data[1];
       |
-      |    assign core_clock_enable = reg_core_clock_enable;
-      |    assign axi_tdata = reg_axi_tdata;
-      |    assign axi_tvalid = reg_axi_tvalid;
-      |    assign axi_tkeep = 64'hffffffff_ffffffff;
-      |    assign axi_tlast = reg_axi_tlast;
+      |    assign clock_enable = reg_core_clock_enable;
+      |    assign axis_bits_data = reg_axi_tdata;
+      |    assign axis_bits_last = reg_axi_tlast;
+      |    assign axis_valid = reg_axis_valid;
       |
       |    wire both_full = &buffer_valid;
       |
@@ -165,7 +159,7 @@ class VerilogDifftest2AXI(
       |    always @(*) begin
       |        case(current_state)
       |            IDLE:     next_state = can_send ? TRANSFER : IDLE;
-      |            TRANSFER: next_state = (axi_tready & axi_tvalid & last_pkt & last_send) ? DONE : TRANSFER;
+      |            TRANSFER: next_state = (axis_ready & axis_valid & last_pkt & last_send) ? DONE : TRANSFER;
       |            DONE:     next_state = IDLE;
       |            default:  next_state = IDLE;
       |        endcase
@@ -207,7 +201,7 @@ class VerilogDifftest2AXI(
       |    // Read buffer: send data to axi
       |    always @(posedge clock) begin
       |        if(reset) begin
-      |            reg_axi_tvalid <= 0;
+      |            reg_axis_valid <= 0;
       |            reg_axi_tlast <= 0;
       |            rd_buf <= 0;
       |            rd_pkt_cnt <= 0;
@@ -223,7 +217,7 @@ class VerilogDifftest2AXI(
       |                end
       |            end
       |            TRANSFER: begin
-      |                if(axi_tready && axi_tvalid) begin
+      |                if(axis_ready && axis_valid) begin
       |                    reg_axi_tdata <= mix_data[AXIS_DATA_WIDTH - 1:0];
       |                    if(last_pkt & last_send) begin
       |                        reg_axi_tlast <= 1;
@@ -237,15 +231,15 @@ class VerilogDifftest2AXI(
       |                        datalen <= datalen + 1'b1;
       |                        mix_data <= mix_data >> AXIS_DATA_WIDTH;
       |                    end
-      |                end else if (~reg_axi_tvalid)begin
-      |                    reg_axi_tvalid <= 1;
+      |                end else if (~reg_axis_valid)begin
+      |                    reg_axis_valid <= 1;
       |                    reg_axi_tdata <= mix_data[AXIS_DATA_WIDTH - 1:0];
       |                    mix_data <= mix_data >> AXIS_DATA_WIDTH;
       |                    datalen <= datalen + 1'b1;
       |                end
       |            end
       |            DONE: begin
-      |                reg_axi_tvalid <= 0;
+      |                reg_axis_valid <= 0;
       |                reg_axi_tlast <= 0;
       |                rd_buf <= ~rd_buf;
       |            end
@@ -384,55 +378,49 @@ class VerilogDifftest2AXI(
 	* External IO will be decided and connected later.
 	*/
 class HostEndpoint(
-  val dataWidth: Int = 16000,
+  val dataWidth: Int,
   val axisDataWidth: Int = 512,
   val ddrDataWidth: Int = 64,
 ) extends Module {
   val io = IO(new Bundle {
-    val difftest_data = Input(UInt(dataWidth.W))
-    val difftest_enable = Input(Bool())
+    val difftest = Input(new FpgaDiffIO(dataWidth))
     // AXI-stream
-    val host_c2h_axis = new AxisMasterBundle(axisDataWidth)
-    val host_h2c_axis = Flipped(new AxisMasterBundle(axisDataWidth))
-    // Bring in SoC memory AXI as xdma bundle for arbitration
-    val soc_axi_in = Flipped(new AXI4(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1))
-    // AXI4 master interface (xdma bundle) after arbitration to memory
-    val axi4_to_mem = new AXI4(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1)
+    val host_c2h_axis = new AXI4Stream(axisDataWidth)
+//    val host_h2c_axis = Flipped(new AxisMasterBundle(axisDataWidth))
+//    // Bring in SoC memory AXI as xdma bundle for arbitration
+//    val soc_axi_in = Flipped(new AXI4(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1))
+//    // AXI4 master interface (xdma bundle) after arbitration to memory
+//    val axi4_to_mem = new AXI4(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1)
     // Preserve core clock enable
-    val core_clock_enable = Output(Bool())
-    // Keep backward compatibility (optional)
-    val axi_tkeep = Output(UInt(64.W))
+    val clock_enable = Output(Bool())
   })
 
   // Instantiate the Verilog adapter BlackBox
-  val Difftest2AXI = Module(new VerilogDifftest2AXI(DATA_WIDTH = dataWidth, AXIS_DATA_WIDTH = axisDataWidth))
+  val Difftest2AXI = Module(new Difftest2AXI(DATA_WIDTH = dataWidth, AXIS_DATA_WIDTH = axisDataWidth))
   // Connect clock/reset
   Difftest2AXI.io.clock := clock
   Difftest2AXI.io.reset := reset
   // Connect host IO to Verilog inputs
-  Difftest2AXI.io.difftest_data := io.difftest_data
-  Difftest2AXI.io.difftest_enable := io.difftest_enable
-  Difftest2AXI.io.axi_tready := io.host_c2h_axis.ready
-  io.host_c2h_axis.last := Difftest2AXI.io.axi_tlast
-  io.host_c2h_axis.data := Difftest2AXI.io.axi_tdata
-  io.host_c2h_axis.valid := Difftest2AXI.io.axi_tvalid
+  Difftest2AXI.io.difftest := io.difftest
+  Difftest2AXI.io.axis <> io.host_c2h_axis
+//  io.host_c2h_axis.bits.last := Difftest2AXI.io.axi_tlast
+//  io.host_c2h_axis.bits.data := Difftest2AXI.io.axi_tdata
+//  io.host_c2h_axis.valid := Difftest2AXI.io.axis_valid
   // Preserve core clock enable
-  io.core_clock_enable := Difftest2AXI.io.core_clock_enable
-  // Legacy keep signal
-  io.axi_tkeep := Difftest2AXI.io.axi_tkeep
+  io.clock_enable := Difftest2AXI.io.clock_enable
 
-  // Instantiate AXIS(512b) -> AXI4(64b) write converter
-  val axisWriter = Module(new Axis512ToAxi64Write(addrWidth = 64))
-  axisWriter.io.axis.valid := io.host_h2c_axis.valid
-  axisWriter.io.axis.data  := io.host_h2c_axis.data
-  axisWriter.io.axis.last  := io.host_h2c_axis.last
-  io.host_h2c_axis.ready   := axisWriter.io.axis.ready
-
-  // 2-way arbiter (xdma bundle): in(0) = axisWriter, in(1) = SoC
-  val arb = Module(new AXI4Arbiter(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1))
-  arb.io.in(0) <> axisWriter.io.axi
-  arb.io.in(1) <> io.soc_axi_in
-  io.axi4_to_mem <> arb.io.out
+//  // Instantiate AXIS(512b) -> AXI4(64b) write converter
+//  val axisWriter = Module(new Axis512ToAxi64Write(addrWidth = 64))
+//  axisWriter.io.axis.valid := io.host_h2c_axis.valid
+//  axisWriter.io.axis.data  := io.host_h2c_axis.data
+//  axisWriter.io.axis.last  := io.host_h2c_axis.last
+//  io.host_h2c_axis.ready   := axisWriter.io.axis.ready
+//
+//  // 2-way arbiter (xdma bundle): in(0) = axisWriter, in(1) = SoC
+//  val arb = Module(new AXI4Arbiter(addrWidth = 64, dataWidth = ddrDataWidth, idWidth = 1))
+//  arb.io.in(0) <> axisWriter.io.axi
+//  arb.io.in(1) <> io.soc_axi_in
+//  io.axi4_to_mem <> arb.io.out
 
   // Instantiate an AXI4-Lite BAR (control registers). Tie-off inputs and dontTouch its IO for now.
   val hostBar = Module(new XDMA_AXI4LiteBar(addrWidth = 32, dataWidth = 32))

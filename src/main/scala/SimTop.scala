@@ -19,6 +19,7 @@ package difftest
 import chisel3._
 import chisel3.experimental.prefix
 import difftest.common.DifftestWiring
+import difftest.fpga.HostEndpoint
 
 class DifftestTopIO extends Bundle {
   val exit = Output(UInt(64.W))
@@ -88,9 +89,14 @@ class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Modul
 
     // IO: difftest_fpga_*
     gateway.fpgaIO.map { fpgaIO =>
-      val fpga = IO(Output(chiselTypeOf(fpgaIO)))
-      fpga := fpgaIO
-      fpga
+      val host = Module(new HostEndpoint(dataWidth = fpgaIO.data.getWidth))
+      host.io.difftest := fpgaIO
+      val host_c2h_axis = host.io.host_c2h_axis
+      val toHost = IO(chiselTypeOf(host_c2h_axis))
+      toHost <> host_c2h_axis
+
+      val clock_enable = IO(Output(Bool()))
+      clock_enable := host.io.clock_enable
     }
   }
 

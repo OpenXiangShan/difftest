@@ -1,13 +1,14 @@
 package difftest.fpga.xdma
 import chisel3._
 import chisel3.util._
+import util.Decoupled
 
-class AxisMasterBundle(val dataWidth: Int) extends Bundle {
-  val valid = Output(Bool())
-  val data = Output(UInt(dataWidth.W))
-  val ready = Input(Bool())
-  val last = Output(Bool())
+class AXI4StreamBundle(val dataWidth: Int) extends Bundle {
+  val data = UInt(dataWidth.W)
+  val last = Bool()
 }
+
+class AXI4Stream(val dataWidth: Int) extends DecoupledIO(new AXI4StreamBundle(dataWidth))
 
 // AXI4-Lite channel bundles (standard five channels) in the same style as AXI4 below
 class AXI4LiteABundle(val addrWidth: Int) extends Bundle {
@@ -271,7 +272,7 @@ class XDMA_AXI4LiteBar(addrWidth: Int = 32, dataWidth: Int = 32) extends Module 
 
 class XDMA_AxisToAxi4(addrWidth: Int = 64, dataWidth: Int = 512) extends Module {
   val io = IO(new Bundle {
-    val axis = Flipped(new AxisMasterBundle(dataWidth))
+    val axis = Flipped(new AXI4Stream(dataWidth))
     val aw   = Decoupled(new AXI4AWBundle(addrWidth, 4))
     val w    = Decoupled(new AXI4WBundle(dataWidth))
     val b    = Flipped(Decoupled(new AXI4BBundle(4)))
@@ -302,7 +303,7 @@ class XDMA_AxisToAxi4(addrWidth: Int = 64, dataWidth: Int = 512) extends Module 
   // Capture incoming AXIS beat and start a new AXI write
   when (io.axis.valid && io.axis.ready) {
     buf_valid := true.B
-    buf_data  := io.axis.data
+    buf_data  := io.axis.bits.data
     buf_addr  := addr_ptr
     addr_ptr  := addr_ptr + bytesPerBeat
     aw_sent   := false.B
@@ -352,7 +353,7 @@ class Axis512ToAxi64Write(addrWidth: Int = 64) extends Module {
   val subBeatsPerAxis = axisWidth / axiDataWidth // 8
 
   val io = IO(new Bundle {
-    val axis = Flipped(new AxisMasterBundle(axisWidth))
+    val axis = Flipped(new AXI4Stream(axisWidth))
     val axi  = new AXI4(addrWidth = addrWidth, dataWidth = axiDataWidth, idWidth = 1)
   })
 
@@ -407,7 +408,7 @@ class Axis512ToAxi64Write(addrWidth: Int = 64) extends Module {
   switch(state) {
     is(sIdle) {
       when(takeAxis) {
-        axisReg := io.axis.data
+        axisReg := io.axis.bits.data
         beatCnt := 0.U
         state   := sAw
       }
