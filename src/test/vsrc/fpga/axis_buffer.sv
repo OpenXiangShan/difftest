@@ -13,12 +13,12 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-module dual_buffer_bram #(
+module axis_buffer #(
   parameter DATA_WIDTH = 16000,
   parameter NUM_PACKETS_PER_BUFFER = 8
 )(
-  input clk,
-  input rst,
+  input clock,
+  input reset,
   input wr_en,
   input [$clog2(NUM_PACKETS_PER_BUFFER)-1:0] wr_addr,
   input [DATA_WIDTH-1:0] wr_data,
@@ -40,8 +40,8 @@ module dual_buffer_bram #(
         .DATA_WIDTH(BLOCK_RAM_DATA_WIDTH),
         .ADDR_WIDTH(ADDR_WIDTH)
       ) bram_inst (
-        .clk(clk),
-        .rst(rst),
+        .clk(clock),
+        .rst(reset),
         .wea(wr_en),
         .en(1'b1),
         .waddr(wr_addr),
