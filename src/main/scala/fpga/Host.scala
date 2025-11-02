@@ -22,23 +22,18 @@ import chisel3.experimental.ExtModule
 import chisel3.util.HasBlackBoxInline
 import difftest.gateway.FpgaDiffIO
 
-class axis_buffer(difftest_width: Int, packet_num: Int)
-  extends ExtModule(
-    Map("DATA_WIDTH" -> difftest_width, "NUM_PACKETS_PER_BUFFER" -> packet_num)
-  )
-  with HasExtModuleResource {
-  val addr_width = 3 // 0~7
-  val clock = IO(Input(Clock()))
-  val reset = IO(Input(Reset()))
+class PacketBuffer(val data_width: Int, val pkt_num: Int) extends Module {
+  val addr_width = log2Ceil(pkt_num)
   val wr = IO(Input(new Bundle {
     val en = Bool()
     val addr = UInt(addr_width.W)
-    val data = UInt(difftest_width.W)
+    val data = UInt(data_width.W)
   }))
   val rd = IO(new Bundle {
     val addr = Input(UInt(addr_width.W))
-    val data = Output(UInt(difftest_width.W))
+    val data = Output(UInt(data_width.W))
   })
+
   def write(en: Bool, addr: UInt, data: UInt): Unit = {
     wr.en := en
     wr.addr := addr
@@ -48,9 +43,20 @@ class axis_buffer(difftest_width: Int, packet_num: Int)
     rd.addr := addr
     rd.data
   }
+  val block_width = 4000
+  val block_num = data_width / block_width
+  val rd_data_vec = Seq.tabulate(block_num) { idx =>
+    val (hi, lo) = ((idx + 1) * block_width - 1, idx * block_width)
+    val ram = SyncReadMem(pkt_num, UInt(block_width.W))
+    when(wr.en) {
+      ram.write(wr.addr, wr.data(hi, lo))
+    }
+    ram.read(rd.addr)
+  }
+  rd.data := Cat(rd_data_vec.reverse)
 }
 
-class Difftest2AXI(val difftest_width: Int, val axis_width: Int) extends Module {
+class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module {
   val io = IO(new Bundle {
     val clock = Input(Clock())
     val reset = Input(Bool())
@@ -77,7 +83,7 @@ class Difftest2AXI(val difftest_width: Int, val axis_width: Int) extends Module 
   val buf_wen = io.difftest.enable & io.clock_enable
   val buf_clear = io.axis.valid && io.axis.bits.last
   val buf_rdata_vec = VecInit.tabulate(2) { idx =>
-    val buf = Module(new axis_buffer(difftest_width, packet_num))
+    val buf = Module(new PacketBuffer(difftest_width, packet_num))
     buf.clock := clock
     buf.reset := reset
     buf.write(buf_wen && wrBuf === idx.U, wrPkt, io.difftest.data)
@@ -143,7 +149,7 @@ class HostEndpoint(
     val toHost_axis = new AXI4Stream(axisWidth)
     val clock_enable = Output(Bool())
   })
-  val Difftest2AXI = Module(new Difftest2AXI(diffWidth, axisWidth))
+  val Difftest2AXI = Module(new Difftest2AXIs(diffWidth, axisWidth))
   Difftest2AXI.io.clock := clock
   Difftest2AXI.io.reset := reset
   Difftest2AXI.io.difftest := io.difftest
