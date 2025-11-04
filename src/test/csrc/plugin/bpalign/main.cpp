@@ -1,11 +1,14 @@
+#include "BpAlignIO.h"
 #include "bpu.h"
 #include "predictors/fallthrough.h"
 
 struct BpAlign : BasePredictor {
+    FtqToBpAlign_t in;
+    BpAlignToFtq_t out;
     FallthroughPredictor fallthrough;
-    int tick(const FtqToBpAlign_t &in, BpAlignToFtq_t *out) override;
+    int tick() override;
 };
 
-int BpAlign::tick(const FtqToBpAlign_t &in, BpAlignToFtq_t *out) {
+int BpAlign::tick() {
     return 0;
 }
