@@ -38,6 +38,7 @@ void init_tracertl(const char *trace_file_name, bool enable_gen_paddr, uint64_t 
   printf("[TraceRTL] prepare read at init_tracertl\n");
   fflush(stdout);
   trace_reader->prepareRead();
+  trace_fastsim->prepareMemAddrBuffer();
 #endif
 }
 bool tracertl_prepare_read() {

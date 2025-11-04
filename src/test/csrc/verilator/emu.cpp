@@ -483,9 +483,6 @@ Emulator::Emulator(int argc, const char *argv[])
       args.max_instr -= trace_fastsim->getSquashedInstNum();
       printf("  New warmup %lu insts, max %lu insts\n", args.warmup_instr, args.max_instr);
     }
-
-    tracertl_prepare_read();
-    tracertl_prepare_fastsim_memaddr();
   } else {
     printf("trace file not specified\n");
     fflush(stdout);
@@ -1012,8 +1009,8 @@ int Emulator::tick() {
       printf("Set FastSim Inst Finish at Commit End\n");
       trace_fastsim->setFastsimInstFinish();
     }
-  } while(0);
 #endif // TRACERTL_FPGA
+  } while(0);
 #endif // TRACERTL_MODE
 
   do {
