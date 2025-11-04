@@ -29,6 +29,7 @@ class DPICWrapper(bundle: Bundle, wrapperName: String) extends BlackBox
 
     SVStructGenerator.generateDpiFunctions(in.get, verilog)
     SVStructGenerator.generateDpiFunctions(out.get, verilog)
+    verilog += s"import \"DPI-C\" function void tick();"
     verilog += s""
 
     verilog += s"module $wrapperName ("
@@ -54,6 +55,7 @@ class DPICWrapper(bundle: Bundle, wrapperName: String) extends BlackBox
 
     SVStructGenerator.genDPICall(in.get, verilog, 3)
     SVStructGenerator.genDPICall(out.get, verilog, 3)
+    verilog += s"      tick();"
     
     verilog += s"    end"
     verilog += s"  end"

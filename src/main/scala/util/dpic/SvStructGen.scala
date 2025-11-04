@@ -5,14 +5,25 @@ import chisel3._
 import scala.collection.mutable.ListBuffer
 import difftest.util.dpic.TypeMapping._
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 object SVStructGenerator {
-  
+
+  private def getVecDimensions(vec: Vec[_]): (Data, List[Int]) = {
+    @tailrec
+    def getDimRecursive(d: Data, dims: List[Int]): (Data, List[Int]) = d match {
+      case v: Vec[_] => getDimRecursive(v.head, dims :+ v.length)
+      case other => (other, dims)
+    }
+    getDimRecursive(vec, List.empty[Int])
+  }
+
   def generateSvStructs(data: Data, verilog: ListBuffer[String], packed: Boolean = true): Unit = {
     val seenStructs = mutable.Set.empty[String]
     val attr = if (packed) "packed " else ""
-    def generateStructRecursive(d: Data): Unit = {
+
+    def processDataForStructs(d: Data): Unit = {
       d match {
         case b: Bundle =>
           val structName = TypeMapping.getStructName(b)
@@ -20,11 +31,15 @@ object SVStructGenerator {
             seenStructs += structName
             b.elements.foreach { case (_, field) =>
               field match {
-                case nested: Bundle => generateStructRecursive(nested)
-                case v: Vec[_] => v.head match {
-                  case vecBundle: Bundle => generateStructRecursive(vecBundle)
-                  case _ =>
-                }
+                case nested: Bundle =>
+                  processDataForStructs(nested)
+                case vec: Vec[_] =>
+                  val (elementType, _) = getVecDimensions(vec)
+                  elementType match {
+                    case vecBundle: Bundle =>
+                      processDataForStructs(vecBundle)
+                    case _ =>
+                  }
                 case _ =>
               }
             }
@@ -33,38 +48,44 @@ object SVStructGenerator {
             verilog += s"} $structName;"
             verilog += ""
           }
-        case _ => 
+        case _ =>
       }
     }
-    generateStructRecursive(data)
+
+    processDataForStructs(data)
   }
-  
+
   private def genSvStructFields(data: Data, verilog: ListBuffer[String], indent: Int): Unit = {
     val indentStr = "  " * indent
+
+    def genVecDeclaration(baseType: String, dims: List[Int], name: String): String = {
+      val dimStrings = dims.map(dim => s"[$dim-1:0]")
+      s"$baseType ${dimStrings.mkString(" ")} $name;"
+    }
+
     data match {
       case b: Bundle =>
         b.elements.foreach { case (name, field) =>
           field match {
             case nestedBundle: Bundle =>
               val structName = TypeMapping.getStructName(nestedBundle)
-              verilog += s"${indentStr}$structName $name;"
+              verilog += s"$indentStr$structName $name;"
             case vec: Vec[_] =>
-              vec.head match {
+              val (elem, dims) = getVecDimensions(vec)
+              elem match {
                 case vecBundle: Bundle =>
                   val structName = TypeMapping.getStructName(vecBundle)
-                  verilog += s"${indentStr}$structName[${vec.length-1}:0] $name;"
-                case vecVec: Vec[_] =>
-                  throw new Exception(s"Unsupported Vec of Vec: $vec")
+                  verilog += s"$indentStr${genVecDeclaration(structName, dims, name)}"
                 case _ =>
-                  val elemType = TypeMapping.getSvType(vec.head)
-                  verilog += s"${indentStr}$elemType[${vec.length-1}:0] $name;"
+                  val elemType = TypeMapping.getSvType(elem)
+                  verilog += s"$indentStr${genVecDeclaration(elemType, dims, name)}"
               }
             case u: UInt =>
               val svType = TypeMapping.getSvType(u)
-              verilog += s"${indentStr}$svType $name;"
+              verilog += s"$indentStr$svType $name;"
             case s: SInt =>
               val svType = TypeMapping.getSvType(s)
-              verilog += s"${indentStr}$svType $name;"
+              verilog += s"$indentStr$svType $name;"
             case _ =>
               val width = field.getWidth
               verilog += s"${indentStr}bit [${width-1}:0] $name;"
@@ -88,62 +109,125 @@ object SVStructGenerator {
   }
 
   def generatePortsList(data: Data, verilog: ListBuffer[String]): Unit = {
+
+    def generateVecPorts(elementType: Data, dimensions: List[Int], baseName: String, verilog: ListBuffer[String]): Unit = {
+      def generateIndices(currentIndices: List[Int], remainingDims: List[Int]): Unit = {
+        if (remainingDims.isEmpty) {
+          val indexString = currentIndices.map(i => s"_$i").mkString
+          val fullName = s"${baseName}${indexString}"
+          elementType match {
+            case nestedBundle: Bundle =>
+              genPortsListRecursive(nestedBundle, fullName, verilog)
+            case _ =>
+              verilog += s"${fullName},"
+          }
+        } else {
+          val currentDim = remainingDims.head
+          val newRemainingDims = remainingDims.tail
+          for (i <- 0 until currentDim) {
+            generateIndices(currentIndices :+ i, newRemainingDims)
+          }
+        }
+      }
+      generateIndices(List.empty, dimensions)
+    }
+
     def genPortsListRecursive(data: Data, prefix: String, verilog: ListBuffer[String]): Unit = {
       data match {
         case b: Bundle =>
           b.elements.foreach { case (name, field) =>
-            val fullName = if (prefix.nonEmpty) s"${prefix}_${name}" else s"${name}"
+            val fullName = if (prefix.nonEmpty) s"${prefix}_${name}" else name
             field match {
-              case nested: Bundle => genPortsListRecursive(nested, fullName, verilog)
-              case vec: Vec[_] => 
-                (0 until vec.length).foreach { i =>
-                  vec.head match {
-                    case vecBundle: Bundle => genPortsListRecursive(vecBundle, s"${fullName}_$i", verilog)
-                    case vecVec: Vec[_] => throw new Exception(s"Unsupported Vec of Vec: $vec")
-                    case _ => verilog += s"${fullName}_$i,"
-                  }
-                }
-              case _ => verilog += s"${fullName},"
+              case nested: Bundle =>
+                genPortsListRecursive(nested, fullName, verilog)
+
+              case vec: Vec[_] =>
+                val (elementType, dimensions) = getVecDimensions(vec)
+                generateVecPorts(elementType, dimensions, fullName, verilog)
+
+              case _ =>
+                verilog += s"${fullName},"
             }
           }
         case _ =>
       }
     }
     genPortsListRecursive(data, "", verilog)
-    verilog(verilog.length - 1) = verilog.last.stripSuffix(",")
+    // 移除最后一个逗号
+    if (verilog.nonEmpty) {
+      verilog(verilog.length - 1) = verilog.last.stripSuffix(",")
+    }
   }
-  
+
   def generatePortDeclarations(data: Data, verilog: ListBuffer[String], indent: Int): Unit = {
+    def generateVecPortDeclarations(
+      elementType: Data,
+      dimensions: List[Int],
+      baseName: String,
+      verilog: ListBuffer[String],
+      indent: Int
+    ): Unit = {
+      def generateIndices(currentIndices: List[Int], remainingDims: List[Int]): Unit = {
+        if (remainingDims.isEmpty) {
+          val indexString = currentIndices.map(i => s"_$i").mkString
+          val fullName = s"${baseName}${indexString}"
+          elementType match {
+            case nestedBundle: Bundle =>
+              genPortDeclarationRecursive(nestedBundle, fullName, verilog, indent)
+            case _ =>
+              val direction = TypeMapping.getDirectionString(elementType)
+              val width = elementType.getWidth
+              val size = if (width > 1) s" [${width-1}:0]" else ""
+              val indentStr = "  " * indent
+              verilog += s"${indentStr}$direction$size $fullName;"
+          }
+        } else {
+          val currentDim = remainingDims.head
+          val newRemainingDims = remainingDims.tail
+          for (i <- 0 until currentDim) {
+            generateIndices(currentIndices :+ i, newRemainingDims)
+          }
+        }
+      }
+
+      generateIndices(List.empty, dimensions)
+    }
+
     def genPortDeclarationRecursive(data: Data, prefix: String, verilog: ListBuffer[String], indent: Int): Unit = {
       val indentStr = "  " * indent
       data match {
         case b: Bundle =>
           b.elements.foreach { case (name, field) =>
-            val fullName = if (prefix.nonEmpty) s"${prefix}_${name}" else s"${name}"
+            val fullName = if (prefix.nonEmpty) s"${prefix}_${name}" else name
             field match {
-              case nested: Bundle => 
+              case nested: Bundle =>
                 genPortDeclarationRecursive(nested, fullName, verilog, indent)
+
               case vec: Vec[_] =>
-                (0 until vec.length).foreach { i =>
-                  vec.head match {
-                    case vecBundle: Bundle => 
-                      genPortDeclarationRecursive(vecBundle, s"${fullName}_$i", verilog, indent)
-                    case vecVec: Vec[_] => throw new Exception(s"Unsupported Vec of Vec: $vec")
-                    case _ =>
-                      val direction = TypeMapping.getDirectionString(field)
-                      val size = s"[${vec.head.getWidth-1}:0]"
-                      verilog += s"${indentStr}$direction $size ${fullName}_$i;"
-                  }
-                }
+                val (elementType, dimensions) = getVecDimensions(vec)
+                generateVecPortDeclarations(elementType, dimensions, fullName, verilog, indent)
+
               case u: UInt =>
                 val direction = TypeMapping.getDirectionString(field)
-                val size = s"[${u.getWidth-1}:0]"
-                verilog += s"${indentStr}$direction $size $fullName;"
+                val size = if (u.getWidth > 1) s" [${u.getWidth-1}:0]" else ""
+                verilog += s"${indentStr}$direction$size $fullName;"
+
+              case s: SInt =>
+                val direction = TypeMapping.getDirectionString(field)
+                val size = if (s.getWidth > 1) s" [${s.getWidth-1}:0]" else ""
+                verilog += s"${indentStr}$direction$size $fullName;"
+
+              case _ =>
+                val direction = TypeMapping.getDirectionString(field)
+                val width = field.getWidth
+                val size = if (width > 1) s" [${width-1}:0]" else ""
+                verilog += s"${indentStr}$direction$size $fullName;"
             }
           }
         case _ =>
       }
     }
+
     genPortDeclarationRecursive(data, "", verilog, indent)
   }
 
@@ -161,42 +245,73 @@ object SVStructGenerator {
   }
 
   def generateStructAssignment(data: Data, verilog: ListBuffer[String], indent: Int): Unit = {
-    val direction = getDirectionString(data)
-    val dir = if (direction == "input") "in" else "out"
-    def genStructAssignRecursive(data: Data, prefix:(String, String), verilog: ListBuffer[String], indent: Int): Unit = {
+    def generateVecAssignments(
+      elementType: Data,
+      dimensions: List[Int],
+      ioBaseName: String,
+      structBaseName: String,
+      verilog: ListBuffer[String],
+      indent: Int,
+      direction: String
+    ): Unit = {
+      def generateIndices(currentIndices: List[Int], remainingDims: List[Int]): Unit = {
+        if (remainingDims.isEmpty) {
+          val indexString = currentIndices.map(i => s"_$i").mkString
+          val structIndexString = currentIndices.map(i => s"[$i]").mkString
+          val fullIoName = s"${ioBaseName}${indexString}"
+          val fullStructName = s"${structBaseName}${structIndexString}"
+
+          elementType match {
+            case nestedBundle: Bundle =>
+              genStructAssignRecursive(nestedBundle, (fullIoName, fullStructName), verilog, indent, direction)
+            case _ =>
+              val indentStr = "  " * indent
+              if (direction == "input")
+                verilog += s"${indentStr}assign $fullStructName = $fullIoName;"
+              else
+                verilog += s"${indentStr}assign $fullIoName = $fullStructName;"
+          }
+        } else {
+          val currentDim = remainingDims.head
+          val newRemainingDims = remainingDims.tail
+          for (i <- 0 until currentDim) {
+            generateIndices(currentIndices :+ i, newRemainingDims)
+          }
+        }
+      }
+
+      generateIndices(List.empty, dimensions)
+    }
+
+    def genStructAssignRecursive(data: Data, prefix: (String, String), verilog: ListBuffer[String], indent: Int, direction: String): Unit = {
       val indentStr = "  " * indent
       data match {
         case b: Bundle =>
           b.elements.foreach { case (name, field) =>
             val ioName = if (prefix._1.isEmpty) name else s"${prefix._1}_$name"
-            val typeName = if (prefix._2.isEmpty) name else s"${prefix._2}.$name"
+            val structName = if (prefix._2.isEmpty) name else s"${prefix._2}.$name"
             field match {
-              case fb: Bundle =>
-                  genStructAssignRecursive(fb, (ioName, typeName), verilog, indent)
-              case fv: Vec[_] =>
-                (0 until fv.length).foreach{ i =>
-                  fv.head match {
-                    case vb: Bundle =>
-                      genStructAssignRecursive(vb, (s"${ioName}_$i", s"${typeName}[$i]"), verilog, indent)
-                    case vv: Vec[_] => throw new Exception(s"Unsupported Vec of Vec: $fv")
-                    case _ =>
-                      if (direction == "input") 
-                        verilog += s"${indentStr}assign ${typeName}[$i] = ${ioName}_$i;"
-                      else
-                        verilog += s"${indentStr}assign ${ioName}_$i = ${typeName}[$i];"
-                  }   
-                }
-              case fu: UInt =>
-                if (direction == "input") 
-                  verilog += s"${indentStr}assign ${typeName} = ${ioName};"
+              case nested: Bundle =>
+                genStructAssignRecursive(nested, (ioName, structName), verilog, indent, direction)
+
+              case vec: Vec[_] =>
+                val (elementType, dimensions) = getVecDimensions(vec)
+                generateVecAssignments(elementType, dimensions, ioName, structName, verilog, indent, direction)
+
+              case _ =>
+                if (direction == "input")
+                  verilog += s"${indentStr}assign $structName = $ioName;"
                 else
-                  verilog += s"${indentStr}assign ${ioName} = ${typeName};"
+                  verilog += s"${indentStr}assign $ioName = $structName;"
             }
           }
-          case _ =>
+        case _ =>
       }
     }
-    genStructAssignRecursive(data, (dir, dir), verilog, indent)
+
+    val direction = getDirectionString(data)
+    val dir = if (direction == "input") "in" else "out"
+    genStructAssignRecursive(data, (dir, dir), verilog, indent, direction)
   }
 
   def genDPICall(data: Data, verilog: ListBuffer[String], indent: Int): Unit = {

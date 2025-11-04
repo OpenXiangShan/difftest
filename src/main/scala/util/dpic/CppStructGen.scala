@@ -6,9 +6,19 @@ import scala.collection.mutable.{ListBuffer, Set}
 import difftest.util.dpic.TypeMapping.getDirectionString
 import difftest.common.FileControl._
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 object CppStructGenerator {
+
+  private def getVecDimensions(vec: Vec[_]): (Data, List[Int]) = {
+    @tailrec
+    def getDimRecursive(d: Data, dims: List[Int]): (Data, List[Int]) = d match {
+      case v: Vec[_] => getDimRecursive(v.head, dims :+ v.length)
+      case other => (other, dims)
+    }
+    getDimRecursive(vec, List.empty[Int])
+  }
 
   def generateCppHeader(data: Data, headerName: Option[String] = None): Unit = {
     val fileName = headerName.getOrElse(s"${data.getClass.getSimpleName}.h")
@@ -40,37 +50,40 @@ object CppStructGenerator {
     cpp += "#include <cstring>"
     cpp += "#include <iostream>"
     cpp += ""
-    
+
     def generateCppStructRecursive(d: Data): Unit = {
-      d match {
-        case b: Bundle =>
-          val structName = TypeMapping.getCppStructName(b)
-          if (!seenStructs.contains(structName)) {
-            seenStructs += structName
-            
-            b.elements.toSeq.reverse.foreach { case (_, field) =>
-              field match {
-                case nested: Bundle => generateCppStructRecursive(nested)
-                case v: Vec[_] => v.head match {
-                  case vecBundle: Bundle => generateCppStructRecursive(vecBundle)
-                  case vecVec: Vec[_] => throw new Exception(s"Unsupported Vec of Vec: $v")
+      def processDataForCppStructs(d: Data): Unit = {
+        d match {
+          case b: Bundle =>
+            val structName = TypeMapping.getCppStructName(b)
+            if (!seenStructs.contains(structName)) {
+              seenStructs += structName
+              b.elements.toSeq.reverse.foreach { case (_, field) =>
+                field match {
+                  case nested: Bundle =>
+                    processDataForCppStructs(nested)
+                  case vec: Vec[_] =>
+                    val (elementType, _) = getVecDimensions(vec)
+                    elementType match {
+                      case vecBundle: Bundle =>
+                        processDataForCppStructs(vecBundle)
+                      case _ =>
+                    }
                   case _ =>
                 }
-                case _ =>
               }
+              generateSingleCppStruct(b, cpp)
+              cpp += ""
             }
-            
-            generateSingleCppStruct(b, cpp)
-            cpp += ""
-          }
-        case _ =>
+          case _ =>
+        }
       }
+      processDataForCppStructs(d)
     }
     
     generateCppStructRecursive(in.get)
     generateCppStructRecursive(out.get)
-    
-    
+
     Seq(in, out).map(_.get).foreach {
       case data@(nested: Bundle) =>
         val direction = getDirectionString(data)
@@ -85,9 +98,9 @@ object CppStructGenerator {
       case _ =>
     }
 
-    
-
+    cpp += s"extern \"C\" void tick();"
     cpp += s""
+
     cpp += s"#endif // $guardName"
   }
   
@@ -112,8 +125,20 @@ object CppStructGenerator {
     cpp += s"  }"
     cpp += "};"
   }
-  
+
   private def genCppStructFields(data: Data, cpp: ListBuffer[String], indent: Int): Unit = {
+    def generateVecDeclaration(elementType: Data, dimensions: List[Int], name: String): String = {
+      val dimStrings = dimensions.map(dim => s"[$dim]").mkString
+      elementType match {
+        case vecBundle: Bundle =>
+          val structName = TypeMapping.getCppStructName(vecBundle)
+          s"$structName $name$dimStrings;"
+        case _ =>
+          val elemType = TypeMapping.getCppType(elementType)
+          s"$elemType $name$dimStrings;"
+      }
+    }
+
     val indentStr = "  " * indent
     data match {
       case b: Bundle =>
@@ -122,22 +147,19 @@ object CppStructGenerator {
             case nestedBundle: Bundle =>
               val structName = TypeMapping.getCppStructName(nestedBundle)
               cpp += s"${indentStr}$structName $name;"
+
             case vec: Vec[_] =>
-              vec.head match {
-                case vecBundle: Bundle =>
-                  val structName = TypeMapping.getCppStructName(vecBundle)
-                  cpp += s"${indentStr}$structName $name[${vec.length}];"
-                case vecVec: Vec[_] => throw new Exception(s"Unsupported Vec of Vec: $vec")
-                case _ =>
-                  val elemType = TypeMapping.getCppType(vec.head)
-                  cpp += s"${indentStr}$elemType $name[${vec.length}];"
-              }
+              val (elementType, dimensions) = getVecDimensions(vec)
+              cpp += s"${indentStr}${generateVecDeclaration(elementType, dimensions, name)}"
+
             case u: UInt =>
               val cppType = TypeMapping.getCppType(u)
               cpp += s"${indentStr}$cppType $name;"
+
             case s: SInt =>
               val cppType = TypeMapping.getCppType(s)
               cpp += s"${indentStr}$cppType $name;"
+
             case _ =>
               val width = field.getWidth
               val bytes = (width + 7) / 8
