@@ -18,8 +18,6 @@ package difftest.fpga
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.ExtModule
-import chisel3.util.HasBlackBoxInline
 import difftest.gateway.FpgaDiffIO
 
 class PacketBuffer(val data_width: Int, val pkt_num: Int) extends Module {
