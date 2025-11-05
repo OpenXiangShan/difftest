@@ -140,10 +140,10 @@ SimTop sim(
   .reset(reset),
 `ifdef FPGA_SIM
   .difftest_ref_clock(clock),
-  .difftest_toHost_axis_valid(c2h_axi_tvalid),
-  .difftest_toHost_axis_ready(c2h_axi_tready),
-  .difftest_toHost_axis_bits_data(c2h_axi_tdata),
-  .difftest_toHost_axis_bits_last(c2h_axi_tlast),
+  .difftest_to_host_axis_valid(c2h_axi_tvalid),
+  .difftest_to_host_axis_ready(c2h_axi_tready),
+  .difftest_to_host_axis_bits_data(c2h_axi_tdata),
+  .difftest_to_host_axis_bits_last(c2h_axi_tlast),
   .difftest_clock_enable(clock_enable),
 `endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),

@@ -93,9 +93,9 @@ class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Modul
       val host = withClock(ref_clock) { Module(new HostEndpoint(fpgaIO.data.getWidth)) }
       host.io.difftest := fpgaIO
 
-      val toHost = host.io.toHost_axis
-      val toHost_axis = IO(chiselTypeOf(toHost))
-      toHost_axis <> toHost
+      val toHost = host.io.to_host_axis
+      val to_host_axis = IO(chiselTypeOf(toHost))
+      to_host_axis <> toHost
 
       val clock_enable = IO(Output(Bool()))
       clock_enable := host.io.clock_enable

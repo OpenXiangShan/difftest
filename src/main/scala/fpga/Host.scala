@@ -142,13 +142,13 @@ class HostEndpoint(
 ) extends Module {
   val io = IO(new Bundle {
     val difftest = Input(new FpgaDiffIO(diffWidth))
-    val toHost_axis = new AXI4Stream(axisWidth)
+    val to_host_axis = new AXI4Stream(axisWidth)
     val clock_enable = Output(Bool())
   })
-  val Difftest2AXI = Module(new Difftest2AXIs(diffWidth, axisWidth))
-  Difftest2AXI.io.clock := clock
-  Difftest2AXI.io.reset := reset
-  Difftest2AXI.io.difftest := io.difftest
-  io.toHost_axis <> Difftest2AXI.io.axis
-  io.clock_enable := Difftest2AXI.io.clock_enable
+  val diff2axis = Module(new Difftest2AXIs(diffWidth, axisWidth))
+  diff2axis.io.clock := clock
+  diff2axis.io.reset := reset
+  diff2axis.io.difftest := io.difftest
+  io.to_host_axis <> diff2axis.io.axis
+  io.clock_enable := diff2axis.io.clock_enable
 }
