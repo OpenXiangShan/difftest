@@ -17,12 +17,14 @@
 module xdma_wrapper(
   input clock,
   input reset,
-  input [`CONFIG_DIFFTEST_BATCH_IO_WITDH - 1:0] difftest_data,
-  input difftest_enable,
+  input core_clock_enable,
+  input axi_c2h_tlast,
+  output axi_c2h_tready,
+  input axi_c2h_tvalid,
+  input [511:0] axi_c2h_tdata,
   output core_clock
 );
 
-  wire core_clock_enable;
   wire [`CONFIG_DIFFTEST_BATCH_IO_WITDH - 1:0] axi_tdata;
   wire [63:0] axi_tkeep;
   wire axi_tlast;
@@ -30,33 +32,17 @@ module xdma_wrapper(
   wire axi_tvalid;
 xdma_clock xclock(
   .clock(clock),
-  .reset(reset),
   .core_clock_enable(core_clock_enable),
   .core_clock(core_clock)
 );
-Difftest2AXI #(
-  .DATA_WIDTH(`CONFIG_DIFFTEST_BATCH_IO_WITDH),
-  .AXIS_DATA_WIDTH(512)
-) diff2axi(
-  .clock(clock),
-  .reset(reset),
-  .difftest_data(difftest_data),
-  .difftest_enable(difftest_enable),
-  .core_clock_enable(core_clock_enable),
-  .axi_tdata(axi_tdata),
-  .axi_tkeep(axi_tkeep),
-  .axi_tlast(axi_tlast),
-  .axi_tready(axi_tready),
-  .axi_tvalid(axi_tvalid)
-);
+
 xdma_axi xaxi(
   .clock(clock),
   .reset(reset),
-  .axi_tdata(axi_tdata),
-  .axi_tkeep(axi_tkeep),
-  .axi_tlast(axi_tlast),
-  .axi_tready(axi_tready),
-  .axi_tvalid(axi_tvalid)
+  .axi_tdata(axi_c2h_tdata),
+  .axi_tlast(axi_c2h_tlast),
+  .axi_tready(axi_c2h_tready),
+  .axi_tvalid(axi_c2h_tvalid)
 );
 
 endmodule
