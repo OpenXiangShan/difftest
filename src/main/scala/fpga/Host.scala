@@ -64,47 +64,46 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     val clock_enable = Output(Bool())
     val axis = new AXI4Stream(axis_width)
   })
-  val packet_num = 8
-  val axis_send_len = (difftest_width + 8 + axis_width - 1) / axis_width
+  val numRange = 2 // ping-pong
+  val numPacket = 8 // packet in each range
+  val totalPacket = numRange * numPacket
   val pkt_id_w = 8 // pkt = (difftest_data, pkt_id)
+  val axis_send_len = (difftest_width + pkt_id_w + axis_width - 1) / axis_width
 
   val inTransfer = RegInit(false.B)
-
   val pktID = RegInit(0.U(pkt_id_w.W))
 
-  val wrBuf = RegInit(0.U(1.W))
-  val rdBuf = RegInit(0.U(1.W))
   val wrPkt = RegInit(0.U(8.W))
   val rdPkt = RegInit(0.U(8.W))
-  val lastPkt = rdPkt === (packet_num - 1).U
-  val nextRdPkt = Mux(lastPkt || !inTransfer, 0.U, rdPkt + 1.U) // Sync Read, addr for next read
+  def isRangeLast(pkt: UInt): Bool = Seq.tabulate(numRange)(i => pkt === ((i + 1) * numPacket - 1).U).reduce(_ || _)
+  val wrRangeLast = isRangeLast(wrPkt)
+  val rdRangeLast = isRangeLast(rdPkt)
+  // Sync Read, addr for next read
+  val nextRdPkt = Mux(!inTransfer, rdPkt, Mux(rdPkt === (totalPacket - 1).U, 0.U, rdPkt + 1.U))
 
-  val buf_v = RegInit(VecInit.fill(2)(false.B))
   val buf_wen = io.difftest.enable & io.clock_enable
-  val buf_clear = io.axis.valid && io.axis.bits.last
-  val buf_rdata_vec = VecInit.tabulate(2) { idx =>
-    val buf = Module(new PacketBuffer(difftest_width, packet_num))
-    buf.clock := clock
-    buf.reset := reset
-    buf.write(buf_wen && wrBuf === idx.U, wrPkt, io.difftest.data)
-    buf.read(nextRdPkt)
+  val buf = Module(new PacketBuffer(difftest_width, totalPacket))
+  buf.clock := clock
+  buf.reset := reset
+  buf.write(buf_wen, wrPkt, io.difftest.data)
+  val buf_rdata = buf.read(nextRdPkt)
+
+  // Ping-pong ctrl
+  val range_vnum = RegInit(0.U(8.W))
+  val buf_inc = buf_wen && wrRangeLast
+  val buf_clear = io.axis.fire && io.axis.bits.last
+  when(buf_inc && !buf_clear) {
+    range_vnum := range_vnum + 1.U
+  }.elsewhen(!buf_inc && buf_clear) {
+    range_vnum := range_vnum - 1.U
   }
-  val buf_rdata = buf_rdata_vec(rdBuf)
 
   // Backpressure
-  io.clock_enable := !buf_v.asUInt.andR
+  io.clock_enable := range_vnum =/= numRange.U
 
   // Write
   when(buf_wen) {
-    wrPkt := wrPkt + 1.U
-    when(wrPkt === (packet_num - 1).U) {
-      buf_v(wrBuf) := true.B
-      wrPkt := 0.U
-      wrBuf := ~wrBuf
-    }
-  }
-  when(buf_clear) {
-    buf_v(rdBuf) := false.B
+    wrPkt := Mux(wrPkt === (totalPacket - 1).U, 0.U, wrPkt + 1.U)
   }
 
   // Read
@@ -112,19 +111,18 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   io.axis.valid := inTransfer
   io.axis.bits.data := mix_data(axis_width - 1, 0)
   val sendCnt = RegInit(0.U(8.W))
-  val lastSend = WireInit(sendCnt === (axis_send_len - 1).U)
-  io.axis.bits.last := lastPkt && lastSend
+  val sendLast = sendCnt === (axis_send_len - 1).U
+  io.axis.bits.last := rdRangeLast && sendLast
 
   when(inTransfer) {
     when(io.axis.fire) {
-      when(lastSend) {
+      when(sendLast) {
         sendCnt := 0.U
-        mix_data := Cat(buf_rdata, 0.U(pkt_id_w.W))
         rdPkt := nextRdPkt
-        when(lastPkt) {
+        when(rdRangeLast) {
           inTransfer := false.B
-          rdBuf := ~rdBuf
-          rdPkt := 0.U
+        }.otherwise {
+          mix_data := Cat(buf_rdata, 0.U(pkt_id_w.W))
         }
       }.otherwise {
         sendCnt := sendCnt + 1.U
@@ -132,7 +130,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
       }
     }
   }.otherwise { // Idle
-    when(buf_v(rdBuf)) {
+    when(range_vnum =/= 0.U) {
       mix_data := Cat(buf_rdata, pktID) // first pkt in buffer
       pktID := pktID + 1.U
       inTransfer := true.B
