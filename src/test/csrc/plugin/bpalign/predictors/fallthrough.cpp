@@ -18,12 +18,14 @@ int FallthroughPredictor::predict(Prediction *pred) {
     uint64_t s1_target = (s1_crossPage) ?
         s1_nextPageAlignedAddr :
         s1_nextBlockAlignedAddr;
-    
+    pred->taken = false;
+    pred->CfiPosition = s1_cfiPosition;
+    pred->target = s1_target;
+    pred->attribute = BranchAttribute_t();
     return 0;
 }
 
 int FallthroughPredictor::tick() {
-    enable = true;
     resetDone = true;
     s1_startVAddr.Din = s0_startVAddr;
     s1_startVAddr.en = stage.s0_fire;

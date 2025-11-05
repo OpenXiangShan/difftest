@@ -4,11 +4,11 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BaseModule
 import chisel3.reflect.DataMirror
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable
 import difftest.util.dpic.SVStructGenerator._
 import difftest.util.dpic.TypeMapping._
 
-class DPICWrapper(bundle: Bundle, wrapperName: String) extends BlackBox 
+class DPICWrapper(bundle: Bundle, wrapperName: String) extends BlackBox
   with HasBlackBoxInline {
   val io: Bundle = IO(DataMirror.internal.chiselTypeClone(bundle))
 
@@ -21,27 +21,29 @@ class DPICWrapper(bundle: Bundle, wrapperName: String) extends BlackBox
 
   setInline(s"$desiredName.sv", generateVerilogModule())
   def generateVerilogModule(): String = {
-    val verilog = ListBuffer.empty[String]
-    
-    SVStructGenerator.generateSvStructs(in.get, verilog)
-    SVStructGenerator.generateSvStructs(out.get, verilog)
+    val verilog = mutable.ListBuffer.empty[String]
+
+    val reg = mutable.Map.empty[String, mutable.ListBuffer[Bundle]]
+    SVStructGenerator.generateSvStructs(in.get, verilog, reg)
+    SVStructGenerator.generateSvStructs(out.get, verilog, reg)
     verilog += s""
 
     SVStructGenerator.generateDpiFunctions(in.get, verilog)
-    verilog += s"import \"DPI-C\" function void tick();"
     SVStructGenerator.generateDpiFunctions(out.get, verilog)
+    verilog += s"import \"DPI-C\" function void tick();"
+    verilog += s"import \"DPI-C\" function void reset();"
     verilog += s""
 
     verilog += s"module $wrapperName ("
 
     SVStructGenerator.generatePortsList(bundle, verilog)
-    
+
     verilog += ");"
     verilog += ""
-    
+
     SVStructGenerator.generatePortDeclarations(bundle, verilog, 1)
     verilog += s""
-    
+
     SVStructGenerator.generateStructWire(in.get, verilog, 1)
     SVStructGenerator.generateStructWire(out.get, verilog, 1)
     verilog += s""
@@ -56,7 +58,10 @@ class DPICWrapper(bundle: Bundle, wrapperName: String) extends BlackBox
     SVStructGenerator.genDPICall(in.get, verilog, 3)
     verilog += s"      tick();"
     SVStructGenerator.genDPICall(out.get, verilog, 3)
-    
+
+    verilog += s"    end"
+    verilog += s"    else begin"
+    verilog += s"      reset();"
     verilog += s"    end"
     verilog += s"  end"
     verilog += s""

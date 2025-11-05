@@ -3,6 +3,7 @@
 
 #include "BpAlignIO.h"
 #include "common.h"
+#include <cstdint>
 #include <vector>
 
 #define FetchBlockSizeWidth (log2Ceil(FetchBlockSize))
@@ -12,8 +13,11 @@
 #define instOffsetBits (log2Ceil(instBytes))
 #define CfiPositionWidth (log2Ceil(FetchBlockInstNum))
 
-struct Prediction {
-    BpuPrediction_t pred[BPSTAGES + 1];
+struct __attribute__((packed)) Prediction {
+    bool taken;
+    int CfiPosition;
+    uint64_t target;
+    BranchAttribute_t attribute;
 };
 
 struct StageCtrl {

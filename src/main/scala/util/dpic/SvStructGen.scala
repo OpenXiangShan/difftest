@@ -10,42 +10,36 @@ import scala.collection.mutable
 
 object SVStructGenerator {
 
-  private def getVecDimensions(vec: Vec[_]): (Data, List[Int]) = {
-    @tailrec
-    def getDimRecursive(d: Data, dims: List[Int]): (Data, List[Int]) = d match {
-      case v: Vec[_] => getDimRecursive(v.head, dims :+ v.length)
-      case other => (other, dims)
-    }
-    getDimRecursive(vec, List.empty[Int])
-  }
-
-  def generateSvStructs(data: Data, verilog: ListBuffer[String], packed: Boolean = true): Unit = {
-    val seenStructs = mutable.Set.empty[String]
+  def generateSvStructs(
+    data: Data,
+    verilog: ListBuffer[String],
+    reg: mutable.Map[String, ListBuffer[Bundle]],
+    packed: Boolean = true
+  ): Unit = {
     val attr = if (packed) "packed " else ""
 
     def processDataForStructs(d: Data): Unit = {
       d match {
         case b: Bundle =>
-          val structName = TypeMapping.getStructName(b)
-          if (!seenStructs.contains(structName)) {
-            seenStructs += structName
-            b.elements.foreach { case (_, field) =>
-              field match {
-                case nested: Bundle =>
-                  processDataForStructs(nested)
-                case vec: Vec[_] =>
-                  val (elementType, _) = getVecDimensions(vec)
-                  elementType match {
-                    case vecBundle: Bundle =>
-                      processDataForStructs(vecBundle)
-                    case _ =>
-                  }
-                case _ =>
-              }
+          b.elements.foreach { case (_, field) =>
+            field match {
+              case nested: Bundle =>
+                processDataForStructs(nested)
+              case vec: Vec[_] =>
+                val (elementType, _) = getVecDimensions(vec)
+                elementType match {
+                  case vecBundle: Bundle =>
+                    processDataForStructs(vecBundle)
+                  case _ =>
+                }
+              case _ =>
             }
+          }
+          val (actualName, isNew) = regLookup(b, reg, update = true)
+          if (isNew) {
             verilog += s"typedef struct ${attr}{"
-            genSvStructFields(b, verilog, 1)
-            verilog += s"} $structName;"
+            genSvStructFields(b, verilog, reg, 1)
+            verilog += s"} $actualName;"
             verilog += ""
           }
         case _ =>
@@ -55,11 +49,16 @@ object SVStructGenerator {
     processDataForStructs(data)
   }
 
-  private def genSvStructFields(data: Data, verilog: ListBuffer[String], indent: Int): Unit = {
+  private def genSvStructFields(
+    data: Data,
+    verilog: ListBuffer[String],
+    reg: mutable.Map[String, ListBuffer[Bundle]],
+    indent: Int
+  ): Unit = {
     val indentStr = "  " * indent
 
     def genVecDeclaration(baseType: String, dims: List[Int], name: String): String = {
-      val dimStrings = dims.map(dim => s"[$dim-1:0]")
+      val dimStrings = dims.map(dim => s"[${dim-1}:0]")
       s"$baseType ${dimStrings.mkString(" ")} $name;"
     }
 
@@ -68,14 +67,16 @@ object SVStructGenerator {
         b.elements.foreach { case (name, field) =>
           field match {
             case nestedBundle: Bundle =>
-              val structName = TypeMapping.getStructName(nestedBundle)
-              verilog += s"$indentStr$structName $name;"
+              val (actualName, isNew) = regLookup(nestedBundle, reg, update = false)
+              if (isNew) throw new Exception(s"Encounter not generated struct")
+              verilog += s"$indentStr$actualName $name;"
             case vec: Vec[_] =>
               val (elem, dims) = getVecDimensions(vec)
               elem match {
                 case vecBundle: Bundle =>
-                  val structName = TypeMapping.getStructName(vecBundle)
-                  verilog += s"$indentStr${genVecDeclaration(structName, dims, name)}"
+                  val (actualName, isNew) = regLookup(vecBundle, reg, update = false)
+                  if (isNew) throw new Exception(s"Encounter not generated struct")
+                  verilog += s"$indentStr${genVecDeclaration(actualName, dims, name)}"
                 case _ =>
                   val elemType = TypeMapping.getSvType(elem)
                   verilog += s"$indentStr${genVecDeclaration(elemType, dims, name)}"
@@ -100,17 +101,22 @@ object SVStructGenerator {
     val direction = getDirectionString(data)
     val operation = if (direction == "input") "read" else "write"
     data match {
-      case b: Bundle => 
+      case b: Bundle =>
         val structName = TypeMapping.getStructName(b)
         val baseName = structName.replace("_t", "").toLowerCase
-        verilog += s"import \"DPI-C\" context function void ${baseName}_${operation}(${direction} $structName bundle);"
+        verilog += s"import \"DPI-C\" context function void ${baseName}(${direction} $structName bundle);"
       case _ =>
     }
   }
 
   def generatePortsList(data: Data, verilog: ListBuffer[String]): Unit = {
 
-    def generateVecPorts(elementType: Data, dimensions: List[Int], baseName: String, verilog: ListBuffer[String]): Unit = {
+    def generateVecPorts(
+      elementType: Data,
+      dimensions: List[Int],
+      baseName: String,
+      verilog: ListBuffer[String]
+    ): Unit = {
       def generateIndices(currentIndices: List[Int], remainingDims: List[Int]): Unit = {
         if (remainingDims.isEmpty) {
           val indexString = currentIndices.map(i => s"_$i").mkString
@@ -240,7 +246,7 @@ object SVStructGenerator {
         val structName = TypeMapping.getStructName(b)
         val baseName = structName.replace("_t", "").toLowerCase
         verilog += s"${indentStr}${structName} ${dir};"
-      case _ => 
+      case _ =>
     }
   }
 
@@ -320,10 +326,10 @@ object SVStructGenerator {
     val dir = if (direction == "input") "in" else "out"
     val operation = if (direction == "input") "read" else "write"
     data match {
-      case b: Bundle => 
+      case b: Bundle =>
         val structName = TypeMapping.getStructName(b)
         val baseName = structName.replace("_t", "").toLowerCase
-        verilog += s"${indentStr}${baseName}_${operation}(${dir});"
+        verilog += s"${indentStr}${baseName}(${dir});"
       case _ =>
     }
   }
