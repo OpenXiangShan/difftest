@@ -25,10 +25,11 @@ int FallthroughPredictor::predict(Prediction *pred) {
     return 0;
 }
 
-int FallthroughPredictor::tick() {
+int FallthroughPredictor::tick(bool reset) {
     resetDone = true;
     s1_startVAddr.Din = s0_startVAddr;
-    s1_startVAddr.en = stage.s0_fire;
-    s1_startVAddr.tick();
+    s1_startVAddr.en = ctrl.s[0].fire;
+    s1_startVAddr.tick(reset);
     return 0;
 }
+

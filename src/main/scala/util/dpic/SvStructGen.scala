@@ -58,7 +58,7 @@ object SVStructGenerator {
     val indentStr = "  " * indent
 
     def genVecDeclaration(baseType: String, dims: List[Int], name: String): String = {
-      val dimStrings = dims.map(dim => s"[${dim-1}:0]")
+      val dimStrings = dims.reverse.map(dim => s"[${dim-1}:0]")
       s"$baseType ${dimStrings.mkString(" ")} $name;"
     }
 
@@ -104,7 +104,7 @@ object SVStructGenerator {
       case b: Bundle =>
         val structName = TypeMapping.getStructName(b)
         val baseName = structName.replace("_t", "").toLowerCase
-        verilog += s"import \"DPI-C\" context function void ${baseName}(${direction} $structName bundle);"
+        verilog += s"import \"DPI-C\" function void ${baseName}(${direction} $structName bundle);"
       case _ =>
     }
   }

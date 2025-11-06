@@ -13,18 +13,18 @@ object TypeMapping {
     data match {
       case u: UInt =>
         val width = u.getWidth
-        if (width <= 8) "logic[7:0]"
-        else if (width <= 16) "logic[15:0]"
-        else if (width <= 32) "logic[31:0]"
-        else if (width <= 64) "logic[63:0]"
+        if (width <= 8) "bit[7:0]"
+        else if (width <= 16) "bit[15:0]"
+        else if (width <= 32) "bit[31:0]"
+        else if (width <= 64) "bit[63:0]"
         else s"bit [${width-1}:0]"
         
       case s: SInt =>
         val width = s.getWidth
-        if (width <= 8) "logic[7:0]"
-        else if (width <= 16) "logic[15:0]"
-        else if (width <= 32) "logic[31:0]"
-        else if (width <= 64) "logic[63:0]"
+        if (width <= 8) "bit[7:0]"
+        else if (width <= 16) "bit[15:0]"
+        else if (width <= 32) "bit[31:0]"
+        else if (width <= 64) "bit[63:0]"
         else s"bit [${width-1}:0]"
 
       case _ =>

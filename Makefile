@@ -257,6 +257,12 @@ SIM_CXXFILES += $(shell find $(TRACE_CSR_DIR) -name "*.cpp")
 SIM_CXXFLAGS += -I$(TRACE_CSR_DIR) -DPLUGIN_SIMFRONTEND
 endif
 
+# BpAlign plugin
+ifeq ($(ENABLE_BPALIGN), 1)
+BPALIGN_CSRC_DIR = $(abspath ./src/test/csrc/plugin/bpalign)
+SIM_CXXFILES += $(shell find $(BPALIGN_CSRC_DIR) -name "*.cpp")
+SIM_CXXFLAGS += -I$(BPALIGN_CSRC_DIR) -DPLUGIN_BPALIGN
+endif
 
 # Check if XFUZZ is set
 ifeq ($(XFUZZ), 1)

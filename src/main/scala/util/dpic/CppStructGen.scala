@@ -83,8 +83,7 @@ object CppStructGenerator {
       case _ =>
     }
 
-    cpp += s"extern \"C\" void tick();"
-    cpp += s"extern \"C\" void reset();"
+    cpp += s"extern \"C\" void do_reset(char isReset);"
     cpp += s""
 
     cpp += s"#endif // $guardName"
