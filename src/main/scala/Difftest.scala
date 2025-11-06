@@ -449,7 +449,7 @@ class DiffRunaheadEvent extends RunaheadEvent with DifftestBundle with DifftestW
   override val desiredCppName: String = "runahead"
 }
 
-class DiffRunaheadCommitEvent extends RunaheadEvent with DifftestBundle with DifftestWithIndex {
+class DiffRunaheadCommitEvent extends RunaheadCommitEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "runahead_commit"
 }
 
