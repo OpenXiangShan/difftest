@@ -338,9 +338,13 @@ inline int Difftest::check_all() {
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 
 #ifdef DEBUG_REFILL
-  if (do_irefill_check() || do_drefill_check() || do_ptwrefill_check()) {
-    return 1;
+#ifdef CONFIG_DIFFTEST_REFILLEVENT
+  for (int i = 0; i < CONFIG_DIFF_REFILL_WIDTH; i++) {
+    if (do_refill_check(i)) {
+      return 1;
+    }
   }
+#endif // CONFIG_DIFFTEST_REFILLEVENT
 #endif
 
 #ifdef DEBUG_L2TLB
@@ -1047,26 +1051,6 @@ int Difftest::do_refill_check(int cacheid) {
   }
 #endif // CONFIG_DIFFTEST_REFILLEVENT
   return 0;
-}
-
-int Difftest::do_irefill_check() {
-  int r = 0;
-  r |= do_refill_check(ICACHEID);
-  // r |= do_refill_check(3);
-  // r |= do_refill_check(4);
-  // r |= do_refill_check(5);
-  // r |= do_refill_check(6);
-  // r |= do_refill_check(7);
-  // r |= do_refill_check(8);
-  return r;
-}
-
-int Difftest::do_drefill_check() {
-  return do_refill_check(DCACHEID);
-}
-
-int Difftest::do_ptwrefill_check() {
-  return do_refill_check(PAGECACHEID);
 }
 
 typedef struct {
