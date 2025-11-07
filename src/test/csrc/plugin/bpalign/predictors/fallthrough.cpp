@@ -27,7 +27,7 @@ int FallthroughPredictor::predict(Prediction *pred) {
 
 int FallthroughPredictor::tick(bool reset) {
     resetDone = true;
-    s1_startVAddr.Din = s0_startVAddr;
+    s1_startVAddr.Din = startVAddr;
     s1_startVAddr.en = ctrl.s[0].fire;
     s1_startVAddr.tick(reset);
     return 0;

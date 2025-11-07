@@ -5,8 +5,7 @@
 #include <cstdint>
 
 struct FallthroughPredictor : public BasePredictor {
-    uint64_t s0_startVAddr;
-    RegEnable<uint64_t> s1_startVAddr;
+    Reg<uint64_t> s1_startVAddr;
     int tick(bool reset) override;
     int predict(Prediction *pred) override;
 };

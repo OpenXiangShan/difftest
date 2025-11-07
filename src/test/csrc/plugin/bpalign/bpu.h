@@ -24,7 +24,7 @@ struct __attribute__((packed)) Prediction {
 
 struct StageHandshake {
     bool ready;
-    RegEnable<bool> valid;
+    Reg<bool> valid;
     bool fire;
     bool flush;
     bool stall;
@@ -47,6 +47,7 @@ struct BasePredictor {
     bool enable;
     bool resetDone;
     StageCtrl ctrl;
+    uint64_t startVAddr;
     virtual int tick(bool reset) = 0;
     virtual int predict(Prediction *pred) = 0;
     virtual ~BasePredictor() = default;

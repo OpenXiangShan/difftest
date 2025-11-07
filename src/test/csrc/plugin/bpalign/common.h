@@ -84,7 +84,7 @@ inline PrunedAddr_t getPrunedAddr(uint64_t addr) {
 }
 
 template <typename T>
-class RegEnable {
+class Reg {
 private:
     T Dout;
 public:
