@@ -173,7 +173,7 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
   assert(buf_size > 0);
 
   int fd = -1;
-  int file_size = 0;
+  ssize_t file_size = 0;
   uint8_t *compress_file_buffer = NULL;
   size_t compress_file_buffer_size = 0;
 
@@ -203,11 +203,21 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
   compress_file_buffer = new uint8_t[file_size];
   assert(compress_file_buffer);
 
-  compress_file_buffer_size = read(fd, compress_file_buffer, file_size);
-  if (compress_file_buffer_size != file_size) {
+  ssize_t read_cnt = 0;
+  while (read_cnt < file_size) {
+    ssize_t read_now = read(fd, compress_file_buffer + read_cnt, file_size - read_cnt);
+    if (read_now <= 0) {
+      free(compress_file_buffer);
+      close(fd);
+      printf("Zstd compress file read failed, read() return %zd\n", read_now);
+      return -1;
+    }
+    read_cnt += read_now;
+  }
+  if (read_cnt != file_size) {
     close(fd);
     free(compress_file_buffer);
-    printf("Zstd compressed file read failed, file size: %d, read size: %ld\n", file_size, compress_file_buffer_size);
+    printf("Zstd compressed file read failed, file size: %zd, read size: %zd\n", file_size, compress_file_buffer_size);
     return -1;
   }
 
