@@ -55,17 +55,6 @@ enum {
   EX_SGPF       // store/amo guest-page fault, H-extention
 };
 
-enum {
-  ICACHEID,
-  DCACHEID,
-  PAGECACHEID
-};
-enum {
-  ITLBID,
-  LDTLBID,
-  STTLBID
-};
-
 #define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && f >= DEBUG_MEM_BASE && v)
 #define IS_LOAD_STORE(instr)   (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
 #define IS_TRIGGERCSR(instr)   (((instr & 0x7f) == 0x73) && ((instr & (0xff0 << 20)) == (0x7a0 << 20)))
@@ -404,9 +393,6 @@ protected:
   void do_load_check(int index);
   int do_store_check();
   int do_refill_check(int cacheid);
-  int do_irefill_check();
-  int do_drefill_check();
-  int do_ptwrefill_check();
   int do_l1tlb_check();
   int do_l2tlb_check();
   int do_golden_memory_update();
