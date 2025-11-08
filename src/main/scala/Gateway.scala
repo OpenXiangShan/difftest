@@ -47,6 +47,7 @@ case class GatewayConfig(
   traceDump: Boolean = false,
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
+  lazyArchUpdate: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
 ) {
@@ -62,8 +63,8 @@ case class GatewayConfig(
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
-    hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring || traceDump || traceLoad
-  def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo
+    hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring || traceDump || traceLoad || needPreprocess
+  def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo || !lazyArchUpdate
   def useDPICtype: Boolean = !isFPGA && !isGSIM
   // Macros Generation for Cpp and Verilog
   def cppMacros: Seq[String] = {
@@ -161,6 +162,7 @@ object Gateway {
       case 'H' => config = config.copy(hierarchicalWiring = true)
       case 'F' => config = config.copy(isFPGA = true)
       case 'G' => config = config.copy(isGSIM = true)
+      case 'U' => config = config.copy(lazyArchUpdate = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()
@@ -183,19 +185,7 @@ object Gateway {
   }
 
   def getInstance(bundles: Seq[DifftestBundle]): Seq[DifftestBundle] = {
-    // Append arch_reg when phy_reg and rename_table defined
-    def hasBundle(name: String) = bundles.exists(_.desiredCppName == name)
-    def appendArch(suffix: String) = hasBundle("pregs_" + suffix) && hasBundle("rat_" + suffix) && !hasBundle("regs_" + suffix)
-    val numCores = bundles.count(_.isUniqueIdentifier)
-    val res = ListBuffer.empty[DifftestBundle]
-    res ++= bundles
-    val archMap = Seq(("int", new DiffArchIntRegState), ("fp", new DiffArchFpRegState), ("vec", new DiffArchVecRegState))
-    archMap.foreach{ case (suffix, gen) =>
-      if (appendArch(suffix)) {
-        res ++= Seq.fill(numCores)(gen)
-      }
-    }
-    res.toSeq
+    bundles ++ Preprocess.getArchRegs(bundles, false)
   }
 
   def collect(): GatewayResult = {
@@ -245,7 +235,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   }
 
   val preprocessed = if (config.needPreprocess) {
-    WireInit(Preprocess(bundle))
+    WireInit(Preprocess(bundle, config))
   } else {
     WireInit(bundle)
   }

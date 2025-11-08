@@ -19,156 +19,86 @@ package difftest.preprocess
 import chisel3._
 import chisel3.util._
 import difftest._
+import difftest.gateway.GatewayConfig
 
 object Preprocess {
-  def apply(bundles: MixedVec[DifftestBundle]): MixedVec[DifftestBundle] = {
-    val module = Module(new PreprocessEndpoint(chiselTypeOf(bundles).toSeq))
+  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[DifftestBundle] = {
+    val module = Module(new PreprocessEndpoint(chiselTypeOf(bundles).toSeq, config))
     module.in := bundles
     module.out
   }
-  def getCommitData(
-    bundles: MixedVec[DifftestBundle],
-    commits: Seq[DiffInstrCommit],
-    wbName: String,
-    regName: String,
-  ): Seq[UInt] = {
-    if (bundles.exists(_.desiredCppName == regName)) {
-      if (bundles.exists(_.desiredCppName == wbName)) {
-        val numCores = bundles.count(_.isUniqueIdentifier)
-        val writeBacks = bundles.filter(_.desiredCppName == wbName).map(_.asInstanceOf[DiffIntWriteback])
-        val phyRf = Reg(Vec(numCores, Vec(writeBacks.head.numElements, UInt(64.W))))
-        for (wb <- writeBacks) {
-          when(wb.valid) {
-            phyRf(wb.coreid)(wb.address) := wb.data
-          }
-        }
-        commits.map { c =>
-          val data = WireInit(phyRf(c.coreid)(c.wpdest))
-          for (wb <- writeBacks) { // Consider WriteBack valid in same cycle
-            when(wb.valid && wb.coreid === c.coreid && wb.address === c.wpdest) {
-              data := wb.data
+
+  def getArchRegs(bundles: Seq[DifftestBundle], isHardware: Boolean): Seq[ArchRegState with DifftestBundle] = {
+    Seq(("int", new DiffArchIntRegState), ("fp", new DiffArchFpRegState), ("vec", new DiffArchVecRegState)).flatMap {
+      case (suffix, gen) =>
+        val pregs = bundles.filter(_.desiredCppName == "pregs_" + suffix).asInstanceOf[Seq[DiffPhyRegState]]
+        val rats = bundles.filter(_.desiredCppName == "rat_" + suffix).asInstanceOf[Seq[DiffArchRenameTable]]
+        pregs.zip(rats).map { case (preg, rat) =>
+          if (isHardware) {
+            val archReg = Wire(gen)
+            archReg.coreid := preg.coreid
+            archReg.value.zipWithIndex.foreach { case (data, idx) =>
+              data := preg.value(rat.value(idx))
             }
+            archReg
+          } else {
+            gen
           }
-          data
         }
-      } else {
-        val archRf = VecInit(bundles.filter(_.desiredCppName == regName).map(_.asInstanceOf[ArchIntRegState]).toSeq)
-        commits.map { c => archRf(c.coreid).value(c.wdest) }
-      }
-    } else {
-      Seq.fill(commits.length)(0.U)
     }
   }
+  // Replace PhyReg + Rename with ArchReg + CommitData/VecCommitData
+  def replaceRegs(bundles: Seq[DifftestBundle]): Seq[DifftestBundle] = {
+    def getBundle[T <: DifftestBundle](name: String): Seq[T] =
+      bundles.filter(_.desiredCppName == name).asInstanceOf[Seq[T]]
 
-  def getVecCommitData(
-    bundles: MixedVec[DifftestBundle],
-    commits: Seq[DiffInstrCommit],
-  ): Seq[Seq[Vec[UInt]]] = {
-    if (bundles.exists(_.desiredCppName == "wb_vec")) {
-      val numCores = bundles.count(_.isUniqueIdentifier)
-      val vecWriteBacks = bundles.filter(_.desiredCppName == "wb_vec").map(_.asInstanceOf[DiffVecWriteback])
-      val v0WriteBacks = bundles.filter(_.desiredCppName == "wb_v0").map(_.asInstanceOf[DiffVecWriteback])
-      val vecPhyRf = Reg(Vec(numCores, Vec(vecWriteBacks.head.numElements, Vec(2, UInt(64.W)))))
-      val v0PhyRf = Reg(Vec(numCores, Vec(v0WriteBacks.head.numElements, Vec(2, UInt(64.W)))))
+    val numCores = bundles.count(_.isUniqueIdentifier)
+    val archRegs = getArchRegs(bundles, true)
 
-      for (vecWb <- vecWriteBacks) {
-        when(vecWb.valid) {
-          vecPhyRf(vecWb.coreid)(vecWb.address) := vecWb.data
-        }
-      }
-      for (v0Wb <- v0WriteBacks) {
-        when(v0Wb.valid) {
-          v0PhyRf(v0Wb.coreid)(v0Wb.address) := v0Wb.data
-        }
-      }
-
-      commits.map { c =>
-        val otherData = c.otherwpdest.map { case pdest =>
-          WireInit(vecPhyRf(c.coreid)(pdest))
-        }
-
-        when(c.valid) {
-          c.otherwpdest.zipWithIndex.map { case (pdest, i) =>
-            for (vecWb <- vecWriteBacks) {
-              when(vecWb.valid && vecWb.coreid === c.coreid && vecWb.address === pdest) {
-                otherData(i) := vecWb.data
-              }
-            }
-          }
-        }
-
-        // v0 register will only be used as the first register
-        when(c.v0wen) {
-          otherData(0) := v0PhyRf(c.coreid)(c.otherwpdest(0))
-          when(c.valid) {
-            for (v0Wb <- v0WriteBacks) {
-              when(v0Wb.valid && v0Wb.coreid === c.coreid && v0Wb.address === c.otherwpdest(0)) {
-                otherData(0) := v0Wb.data
-              }
-            }
-          }
-        }
-
-        otherData
-      }
-
-    } else {
-      Seq.fill(commits.length)(Seq.fill(8)(VecInit(Seq.fill(2)(0.U(64.W)))))
-    }
-
-  }
-
-}
-
-class PreprocessEndpoint(bundles: Seq[DifftestBundle]) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-
-  // Special fix of writeback for get_commit_data
-  // We use physical WriteBack for compare when load and MMIO, and record commit instr trace
-  // As there are multiple DUT buffer in software side, writeBacks transferred and used may not in the same buffer
-  // So we buffer writeBacks until instrCommit, and submit corresponding data
-  val commits = in.filter(_.desiredCppName == "commit").map(_.asInstanceOf[DiffInstrCommit]).toSeq
-
-  val noWriteBacks = in.filterNot(_.desiredCppName.contains("wb"))
-  val withCommitData = if (bundles.exists(_.desiredCppName.contains("pregs"))) {
-    noWriteBacks
-  } else {
-    val fpData = Preprocess.getCommitData(in, commits, "wb_fp", "regs_fp")
-    val intData = Preprocess.getCommitData(in, commits, "wb_int", "regs_int")
-    val commitData = commits.zip(fpData).zip(intData).map { case ((c, f), i) =>
-      val cd = WireInit(0.U.asTypeOf(new DiffCommitData))
+    val commits = getBundle[DiffInstrCommit]("commit")
+    val phyInts = getBundle[DiffPhyIntRegState]("pregs_int")
+    val phyFps = getBundle[DiffPhyFpRegState]("pregs_fp")
+    val phyVecs = getBundle[DiffPhyVecRegState]("pregs_vec")
+    val commitDatas = commits.zipWithIndex.flatMap { case (c, idx) =>
+      val coreID = idx / (commits.length / numCores)
+      val intData = phyInts(coreID).value(c.wpdest)
+      val fpData = if (phyFps.nonEmpty) phyFps(coreID).value(c.wpdest) else 0.U
+      val cd = Wire(new DiffCommitData)
       cd.coreid := c.coreid
       cd.index := c.index
-      cd.valid := c.valid
-      cd.data := Mux(c.fpwen, f, i)
-      cd
-    }
-    val vecCommitData = if (bundles.exists(_.desiredCppName == "wb_vec")) {
-      val vecData = Preprocess.getVecCommitData(in, commits)
-      commits.zip(vecData).map { case (c, v) =>
-        val vcd = WireInit(0.U.asTypeOf(new DiffVecCommitData))
-        vcd.coreid := c.coreid
-        vcd.index := c.index
-        vcd.valid := c.valid
-        when(c.v0wen || c.vecwen) {
-          for (index <- 0 until 8) {
-            vcd.data(2 * index) := v(index)(0)
-            vcd.data(2 * index + 1) := v(index)(1)
-          }
-        }
-        vcd
+      cd.valid := c.valid && (c.rfwen || c.fpwen)
+      cd.data := Mux(c.fpwen, fpData, intData)
+      val vcd = Option.when(phyVecs.nonEmpty) {
+        val vreg = phyVecs(coreID).value
+        val gen = Wire(new DiffVecCommitData)
+        gen.coreid := c.coreid
+        gen.index := c.index
+        gen.valid := c.valid && (c.v0wen || c.vecwen)
+        gen.data := VecInit(c.otherwpdest.map { wpdest => vreg(wpdest) })
+        gen
       }
-    } else {
-      Seq.empty[DiffVecCommitData]
+      Seq(cd) ++ vcd.toSeq
     }
-    noWriteBacks ++ commitData ++ vecCommitData
+
+    bundles.filterNot(b => Seq("pregs_", "rat_").exists(s => b.desiredCppName.contains(s))) ++ archRegs ++ commitDatas
+  }
+}
+
+class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
+  val in = IO(Input(MixedVec(bundles)))
+
+  def hasBundle(name: String): Boolean = in.exists(_.desiredCppName == name)
+  val replaceReg = if (!config.lazyArchUpdate && hasBundle("pregs_int")) { // extract ArchReg in Hardware
+    Preprocess.replaceRegs(in)
+  } else {
+    in
   }
 
   // LoadEvent will not be checked when single-core
   val skipLoad = if (in.count(_.isUniqueIdentifier) == 1) {
-    withCommitData.filterNot(_.desiredCppName == "load")
+    replaceReg.filterNot(_.desiredCppName == "load")
   } else {
-    withCommitData
+    replaceReg
   }
 
   val preprocessed = MixedVecInit(skipLoad.toSeq)

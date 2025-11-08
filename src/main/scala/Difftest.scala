@@ -351,7 +351,7 @@ class DiffArchFpDelayedUpdate extends DiffArchDelayedUpdate(32) {
   override val desiredCppName: String = "regs_fp_delayed"
 }
 
-class DiffArchFpRegState extends ArchIntRegState with DifftestBundle {
+class DiffArchFpRegState extends DiffArchIntRegState {
   override val desiredCppName: String = "regs_fp"
   override val desiredOffset: Int = 2
   override val updateDependency: Seq[String] = Seq("commit", "event")
@@ -365,33 +365,35 @@ class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
-class DiffArchIntRenameTable(pregIdxWidth: Int) extends ArchRenameTable(pregIdxWidth) with DifftestBundle {
-  override val desiredCppName: String = "rat_int"
+abstract class DiffArchRenameTable(numRegs: Int, pregIdxWidth: Int)
+  extends ArchRenameTable(numRegs, pregIdxWidth)
+  with DifftestBundle {
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
   override def classArgs: Map[String, Any] = Map("pregIdxWidth" -> pregIdxWidth)
 }
-class DiffArchFpRenameTable(pregIdxWidth: Int) extends DiffArchIntRenameTable(pregIdxWidth) {
+class DiffArchIntRenameTable(pregIdxWidth: Int) extends DiffArchRenameTable(32, pregIdxWidth) {
+  override val desiredCppName: String = "rat_int"
+}
+class DiffArchFpRenameTable(pregIdxWidth: Int) extends DiffArchRenameTable(32, pregIdxWidth) {
   override val desiredCppName: String = "rat_fp"
 }
-class DiffArchVecRenameTable(pregIdxWidth: Int) extends ArchVecRenameTable(pregIdxWidth) with DifftestBundle {
+class DiffArchVecRenameTable(pregIdxWidth: Int) extends DiffArchRenameTable(64, pregIdxWidth) {
   override val desiredCppName: String = "rat_vec"
-  override val updateDependency: Seq[String] = Seq("commit", "event")
-  override val supportsDelta: Boolean = true
-  override def classArgs: Map[String, Any] = Map("pregIdxWidth" -> pregIdxWidth)
 }
-class DiffPhyIntRegState(numRegs: Int) extends PhyRegState(numRegs) with DifftestBundle {
-  override val desiredCppName: String = "pregs_int"
+
+abstract class DiffPhyRegState(numRegs: Int) extends PhyRegState(numRegs) with DifftestBundle {
   override val supportsDelta: Boolean = true
   override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
 }
-class DiffPhyFpRegState(numRegs: Int) extends DiffPhyIntRegState(numRegs) with DifftestBundle {
+class DiffPhyIntRegState(numRegs: Int) extends DiffPhyRegState(numRegs) {
+  override val desiredCppName: String = "pregs_int"
+}
+class DiffPhyFpRegState(numRegs: Int) extends DiffPhyRegState(numRegs) {
   override val desiredCppName: String = "pregs_fp"
 }
-class DiffPhyVecRegState(numRegs: Int) extends PhyVecRegState(numRegs) with DifftestBundle {
+class DiffPhyVecRegState(numRegs: Int) extends DiffPhyRegState(numRegs) {
   override val desiredCppName: String = "pregs_vec"
-  override val supportsDelta: Boolean = true
-  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
 }
 
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
