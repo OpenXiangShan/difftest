@@ -61,11 +61,11 @@ class UARTIO extends Bundle {
 trait HasDiffTestInterfaces {
   def cpuName: Option[String] = None
 
-  def connectTopIOs(difftest: DifftestTopIO): Unit = {}
+  def connectTopIOs(difftest: DifftestTopIO): Seq[Data] = Seq.empty
 }
 
 // Top-level module for DiffTest simulation. Will be created by DifftestModule.top
-class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Module {
+class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Module {
   val cpu = Module(cpuGen)
 
   val cpuName = cpu.cpuName.getOrElse(cpu.getClass.getName.split("\\.").last)
@@ -102,7 +102,11 @@ class SimTop[T <: Module with HasDiffTestInterfaces](cpuGen: => T) extends Modul
     }
   }
 
-  cpu.connectTopIOs(difftest)
+  val cpuIO = cpu.connectTopIOs(difftest)
+  cpuIO.foreach { gen =>
+    val io = IO(chiselTypeOf(gen)).suggestName(gen.instanceName)
+    io <> gen
+  }
 
   // There should not be anymore IOs
   require(DifftestWiring.isEmpty, s"pending wires left: ${DifftestWiring.getPending}")
