@@ -365,34 +365,40 @@ class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
-abstract class DiffArchRenameTable(numRegs: Int, pregIdxWidth: Int)
-  extends ArchRenameTable(numRegs, pregIdxWidth)
+abstract class DiffArchRenameTable(numRegs: Int, val numPregs: Int)
+  extends ArchRenameTable(numRegs, numPregs)
   with DifftestBundle {
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
-  override def classArgs: Map[String, Any] = Map("pregIdxWidth" -> pregIdxWidth)
+  override def classArgs: Map[String, Any] = Map("numPregs" -> numPregs)
 }
-class DiffArchIntRenameTable(pregIdxWidth: Int) extends DiffArchRenameTable(32, pregIdxWidth) {
+
+class DiffArchIntRenameTable(numPregs: Int) extends DiffArchRenameTable(32, numPregs) {
   override val desiredCppName: String = "rat_int"
 }
-class DiffArchFpRenameTable(pregIdxWidth: Int) extends DiffArchRenameTable(32, pregIdxWidth) {
+
+class DiffArchFpRenameTable(numPregs: Int) extends DiffArchRenameTable(32, numPregs) {
   override val desiredCppName: String = "rat_fp"
 }
-class DiffArchVecRenameTable(pregIdxWidth: Int) extends DiffArchRenameTable(64, pregIdxWidth) {
+
+class DiffArchVecRenameTable(numPregs: Int) extends DiffArchRenameTable(64, numPregs) {
   override val desiredCppName: String = "rat_vec"
 }
 
-abstract class DiffPhyRegState(numRegs: Int) extends PhyRegState(numRegs) with DifftestBundle {
+abstract class DiffPhyRegState(val numPregs: Int) extends PhyRegState(numPregs) with DifftestBundle {
   override val supportsDelta: Boolean = true
-  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
+  override def classArgs: Map[String, Any] = Map("numPregs" -> numPregs)
 }
-class DiffPhyIntRegState(numRegs: Int) extends DiffPhyRegState(numRegs) {
+
+class DiffPhyIntRegState(numPregs: Int) extends DiffPhyRegState(numPregs) {
   override val desiredCppName: String = "pregs_int"
 }
-class DiffPhyFpRegState(numRegs: Int) extends DiffPhyRegState(numRegs) {
+
+class DiffPhyFpRegState(numPregs: Int) extends DiffPhyRegState(numPregs) {
   override val desiredCppName: String = "pregs_fp"
 }
-class DiffPhyVecRegState(numRegs: Int) extends DiffPhyRegState(numRegs) {
+
+class DiffPhyVecRegState(numPregs: Int) extends DiffPhyRegState(numPregs) {
   override val desiredCppName: String = "pregs_vec"
 }
 

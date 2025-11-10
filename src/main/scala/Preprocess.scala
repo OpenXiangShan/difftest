@@ -32,18 +32,31 @@ object Preprocess {
     Seq(("int", new DiffArchIntRegState), ("fp", new DiffArchFpRegState), ("vec", new DiffArchVecRegState)).flatMap {
       case (suffix, gen) =>
         val pregs = bundles.filter(_.desiredCppName == "pregs_" + suffix).asInstanceOf[Seq[DiffPhyRegState]]
-        val rats = bundles.filter(_.desiredCppName == "rat_" + suffix).asInstanceOf[Seq[DiffArchRenameTable]]
-        pregs.zip(rats).map { case (preg, rat) =>
+        if (pregs.nonEmpty) {
+          require(!bundles.exists(_.desiredCppName == "regs_" + suffix))
           if (isHardware) {
-            val archReg = Wire(gen)
-            archReg.coreid := preg.coreid
-            archReg.value.zipWithIndex.foreach { case (data, idx) =>
-              data := preg.value(rat.value(idx))
+            val needRat = pregs.head.numPregs != gen.value.size
+            val rats = bundles.filter(_.desiredCppName == "rat_" + suffix).asInstanceOf[Seq[DiffArchRenameTable]]
+            if (needRat) require(rats.length == pregs.length)
+            pregs.zipWithIndex.map { case (preg, idx) =>
+              val archReg = Wire(gen)
+              archReg.coreid := preg.coreid
+              if (needRat) {
+                val rat = rats(idx)
+                require(rat.numPregs == preg.numPregs)
+                archReg.value.zipWithIndex.foreach { case (data, vid) =>
+                  data := preg.value(rat.value(vid))
+                }
+              } else {
+                archReg.value := preg.value
+              }
+              archReg
             }
-            archReg
           } else {
-            gen
+            Seq.fill(pregs.length)(gen)
           }
+        } else {
+          Seq.empty
         }
     }
   }
@@ -74,7 +87,10 @@ object Preprocess {
         gen.coreid := c.coreid
         gen.index := c.index
         gen.valid := c.valid && (c.v0wen || c.vecwen)
-        gen.data := VecInit(c.otherwpdest.map { wpdest => vreg(wpdest) })
+        gen.data := VecInit(c.otherwpdest.flatMap { wpdest =>
+          val splitDest = (wpdest << 1).asUInt
+          Seq(vreg(splitDest), vreg(splitDest + 1.U))
+        })
         gen
       }
       Seq(cd) ++ vcd.toSeq
@@ -87,8 +103,8 @@ object Preprocess {
 class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
 
-  def hasBundle(name: String): Boolean = in.exists(_.desiredCppName == name)
-  val replaceReg = if (!config.lazyArchUpdate && hasBundle("pregs_int")) { // extract ArchReg in Hardware
+  val replaceReg = if (!config.lazyArchUpdate && in.exists(_.desiredCppName == "pregs_int")) {
+    // extract ArchReg in Hardware
     Preprocess.replaceRegs(in)
   } else {
     in

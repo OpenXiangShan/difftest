@@ -175,12 +175,12 @@ class TriggerCSRState extends DifftestBaseBundle {
   val tinfo = UInt(64.W)
 }
 
-class ArchRenameTable(numRegs: Int, pregIdxWidth: Int) extends DifftestBaseBundle {
-  val value = Vec(numRegs, UInt(pregIdxWidth.W))
+class ArchRenameTable(numRegs: Int, numPregs: Int) extends DifftestBaseBundle {
+  val value = Vec(numRegs, UInt(log2Ceil(numPregs).W))
 }
 
-class PhyRegState(numRegs: Int) extends DifftestBaseBundle {
-  val value = Vec(numRegs, UInt(64.W))
+class PhyRegState(numPregs: Int) extends DifftestBaseBundle {
+  val value = Vec(numPregs, UInt(64.W))
 }
 
 class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
@@ -194,7 +194,7 @@ class VecDataWriteback(val numElements: Int) extends DifftestBaseBundle with Has
 class ArchRegState(numRegs: Int) extends DifftestBaseBundle {
   val value = Vec(numRegs, UInt(64.W))
 
-  def apply(i: UInt): UInt = value(i(log2Ceil(numRegs + 1), 0))
+  def apply(i: UInt): UInt = value(i(log2Ceil(numRegs), 0))
   def apply(i: Int): UInt = value(i)
   def toSeq: Seq[UInt] = value
 
