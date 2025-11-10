@@ -33,11 +33,14 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/..
           proxychains git clone -b dev_difftest --single-branch --depth 1 https://github.com/OpenXiangShan/env-scripts.git
+          cd env-scripts
+          echo "ENV_SCRIPTS_HOME=$(pwd)" >> $GITHUB_ENV
 
       - name: Build NutShell
         run: |
           cd $NOOP_HOME
           make verilog BOARD=fpgadiff MILL_ARGS="--difftest-config ESBIF" -j2 
+          cp -i ./difftest/src/test/vsrc/fpga/fpga_clock_gate.v ./build/rtl/
 
       - name: Create FPGA project
         run: |
@@ -46,52 +49,19 @@ jobs:
           make update_core_flist CORE_DIR=$DUT_HOME
           make vivado CPU=nutshell
 
-      - name: Build FPGA bitstream
+      - name: Build FPGA synth
         run: |
           source /nfs/home/tools/Xilinx/Vivado/2020.2/settings64.sh
-          cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
-          make bitstream PRJ=fpga_nutshell/fpga_nutshell.xpr
-
-      - name: Wait for synthesis & report (nutshell)
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE/../env-scripts/fpga_diff"
-          BIT_DIR="fpga_nutshell/fpga_nutshell.runs/impl_1"
-          REPORT="vivado-analyse.txt"
-          TIMEOUT_MIN=180
-          END=$(( $(date +%s) + TIMEOUT_MIN*60 ))
-          echo "[wait] Waiting Vivado to finish and bitstream to appear..."
-          while true; do
-            BIT_OK=$(ls "$BIT_DIR"/*.bit 2>/dev/null || true)
-            if pgrep -f '[v]ivado' >/dev/null 2>&1; then
-              VIVADO_ALIVE=yes
-            else
-              VIVADO_ALIVE=no
-            fi
-            if [ -n "$BIT_OK" ] && [ "$VIVADO_ALIVE" = no ]; then
-              echo "[wait] Vivado exited and bitstream found."
-              break
-            fi
-            if [ $(date +%s) -gt $END ]; then
-              echo "[wait] Timeout (${TIMEOUT_MIN}m). Vivado or bitstream not ready." >&2
-              [ -n "$BIT_OK" ] || echo "[wait] Missing bit file under $BIT_DIR" >&2
-              echo "[wait] Vivado alive: $VIVADO_ALIVE" >&2
-              exit 1
-            fi
-            sleep 30
-          done
-          ls -lh "$BIT_DIR"/*.bit
-
-          # Generate report AFTER Vivado finishes
+          cd $ENV_SCRIPTS_HOME/fpga_diff
+          make synth PRJ=fpga_nutshell/fpga_nutshell.xpr
           bash ./tools/generate_reports.sh nutshell
-          test -f "$REPORT" || { echo "[wait] $REPORT not generated" >&2; exit 1; }
 
       - name: Extract Vivado Hierarchical utilization
         run: |
           set -euo pipefail
-          IN_PATH="${IN_PATH:-$GITHUB_WORKSPACE/../env-scripts/fpga_diff/vivado-analyse.txt}"
+          IN_PATH="$ENV_SCRIPTS_HOME/fpga_diff/"
           OUT_PATH="$RUNNER_TEMP/vivado_hier.md"
-          python3 "$GITHUB_WORKSPACE/scripts/fpga_sim/ci.py" --input "$IN_PATH" --output "$OUT_PATH" --format markdown
+          python3 "$GITHUB_WORKSPACE/scripts/fpga_sim/ci.py" --input "$IN_PATH" --output "$OUT_PATH" --format markdown --cpu nutshell
           echo "VIVADO_HIER_MD=$OUT_PATH" >> "$GITHUB_ENV"
 
       - name: Comment utilization to PR
@@ -102,13 +72,14 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync(process.env.VIVADO_HIER_MD, 'utf8');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
+            let body;
+            try {
+              body = fs.readFileSync(process.env.VIVADO_HIER_MD, 'utf8');
+              if (!body.trim()) throw new Error('empty');
+            } catch (e) {
+              body = 'Vivado Hierarchical utilization: section missing or extract failed. Please check the job logs for runme.log output.';
+            }
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
 
   test-fpga-xiangshan-miniconfig:
     if: ${{ github.event_name == 'schedule' }}
@@ -152,10 +123,10 @@ jobs:
           make update_core_flist CORE_DIR=$DUT_HOME
           make vivado CPU=xiangshan
 
-      - name: Build FPGA bitstream
+      - name: Build FPGA synth
         run: |
           cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
-          make bitstream PRJ=fpga_xiangshan/fpga_xiangshan.xpr
+          make synth PRJ=fpga_xiangshan/fpga_xiangshan.xpr
           bash ./tools/generate_reports.sh xiangshan
 
       - name: Print Vivado Hierarchical utilization to logs
@@ -163,4 +134,5 @@ jobs:
           set -euo pipefail
           IN_PATH="${IN_PATH:-$GITHUB_WORKSPACE/../env-scripts/fpga_diff/vivado-analyse.txt}"
           echo "===== Vivado Hierarchical utilization ====="
-          python3 "$GITHUB_WORKSPACE/tools/ci/parse_vivado_hier.py" --input "$IN_PATH" --format markdown
+          # Use unified extractor; it will print env-scripts logs and fail if section missing
+          python3 "$GITHUB_WORKSPACE/scripts/fpga_sim/ci.py" --input "$IN_PATH" --format markdown --cpu xiangshan
