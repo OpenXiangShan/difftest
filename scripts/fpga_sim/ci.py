@@ -27,7 +27,7 @@ HIER_HEADER_PATTERNS = [
     re.compile(r'^\s*Hierarchical utilization\b.*$', re.I),
 ]
 
-# Generic delimiter (other section headings) ¨C a line of dashes or equals enclosing text.
+# Generic delimiter (other section headings) ï¿½C a line of dashes or equals enclosing text.
 GENERIC_HEADER = re.compile(r'^\s*(?:[-=]{4,}).*(?:[-=]{4,})\s*$')
 
 # Explicit stop keywords (Timing section).
@@ -54,8 +54,13 @@ def should_stop(line):
         if kw.lower() in line.lower():
             return True
     # Generic header that is NOT the same hierarchical header
-    if GENERIC_HEADER.match(line) and not is_hier_header(line):
-        return True
+    if GENERIC_HEADER.match(line):
+        # If all chars are = or -, this is not a generic header
+        if len(set(list(line.strip()))) == 1:
+            return False
+        else:
+            if not is_hier_header(line):
+                return True
     return False
 
 def extract_section(text):
@@ -68,6 +73,7 @@ def extract_section(text):
     collected = [lines[start]]
     for j in range(start + 1, len(lines)):
         if should_stop(lines[j]):
+            
             break
         collected.append(lines[j])
     # Trim trailing blank lines
@@ -242,8 +248,8 @@ def main():
 
     with open(in_path, 'r', encoding='utf-8', errors='ignore') as f:
         raw = f.read()
-
     section = extract_section(raw)
+
     if section is None:
         base = os.path.dirname(os.path.abspath(in_path))
         cpu = args.cpu or infer_cpu_from_path(base)
@@ -253,7 +259,7 @@ def main():
         sys.stderr.write('[ci.py] Hierarchical utilization section not found.\n')
         sys.exit(3)
     else:
-        if args.format == 'markdown':
+        if args.format == 'markdown' or args.output.endswith('.md'):
             out_text = 'Vivado Hierarchical utilization:\n\n```txt\n' + section.rstrip('\n') + '\n```\n'
         else:
             out_text = section
