@@ -47,7 +47,7 @@ case class GatewayConfig(
   traceDump: Boolean = false,
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
-  lazyArchUpdate: Boolean = false,
+  softArchUpdate: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
 ) {
@@ -64,7 +64,7 @@ case class GatewayConfig(
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
     hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring || traceDump || traceLoad || needPreprocess
-  def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo || !lazyArchUpdate
+  def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo || !softArchUpdate
   def useDPICtype: Boolean = !isFPGA && !isGSIM
   // Macros Generation for Cpp and Verilog
   def cppMacros: Seq[String] = {
@@ -162,7 +162,7 @@ object Gateway {
       case 'H' => config = config.copy(hierarchicalWiring = true)
       case 'F' => config = config.copy(isFPGA = true)
       case 'G' => config = config.copy(isGSIM = true)
-      case 'U' => config = config.copy(lazyArchUpdate = true)
+      case 'U' => config = config.copy(softArchUpdate = true)
       case x   => println(s"Unknown Gateway Config $x")
     }
     config.check()

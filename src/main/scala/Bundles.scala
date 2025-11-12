@@ -175,12 +175,12 @@ class TriggerCSRState extends DifftestBaseBundle {
   val tinfo = UInt(64.W)
 }
 
-class ArchRenameTable(numRegs: Int, numPregs: Int) extends DifftestBaseBundle {
-  val value = Vec(numRegs, UInt(log2Ceil(numPregs).W))
+class ArchRenameTable(numRegs: Int, numPhyRegs: Int) extends DifftestBaseBundle {
+  val value = Vec(numRegs, UInt(log2Ceil(numPhyRegs).W))
 }
 
-class PhyRegState(numPregs: Int) extends DifftestBaseBundle {
-  val value = Vec(numPregs, UInt(64.W))
+class PhyRegState(numPhyRegs: Int) extends DifftestBaseBundle {
+  val value = Vec(numPhyRegs, UInt(64.W))
 }
 
 class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
@@ -205,6 +205,7 @@ class ArchRegState(numRegs: Int) extends DifftestBaseBundle {
     VecInit(value.zip(that.value).map(v => v._1 =/= v._2)).asUInt.orR
   }
 }
+
 class ArchIntRegState extends ArchRegState(32) {
   def names: Seq[String] = Seq(
     "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "s2",

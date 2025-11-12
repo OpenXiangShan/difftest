@@ -35,7 +35,7 @@ object Preprocess {
         if (pregs.nonEmpty) {
           require(!bundles.exists(_.desiredCppName == "regs_" + suffix))
           if (isHardware) {
-            val needRat = pregs.head.numPregs != gen.value.size
+            val needRat = pregs.head.numPhyRegs != gen.value.size
             val rats = bundles.filter(_.desiredCppName == "rat_" + suffix).asInstanceOf[Seq[DiffArchRenameTable]]
             if (needRat) require(rats.length == pregs.length)
             pregs.zipWithIndex.map { case (preg, idx) =>
@@ -43,7 +43,7 @@ object Preprocess {
               archReg.coreid := preg.coreid
               if (needRat) {
                 val rat = rats(idx)
-                require(rat.numPregs == preg.numPregs)
+                require(rat.numPhyRegs == preg.numPhyRegs)
                 archReg.value.zipWithIndex.foreach { case (data, vid) =>
                   data := preg.value(rat.value(vid))
                 }
@@ -103,7 +103,7 @@ object Preprocess {
 class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
 
-  val replaceReg = if (!config.lazyArchUpdate && in.exists(_.desiredCppName == "pregs_int")) {
+  val replaceReg = if (!config.softArchUpdate && in.exists(_.desiredCppName == "pregs_int")) {
     // extract ArchReg in Hardware
     Preprocess.replaceRegs(in)
   } else {
