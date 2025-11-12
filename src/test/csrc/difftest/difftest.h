@@ -411,26 +411,6 @@ protected:
 #endif // CONFIG_DIFFTEST_FPWRITEBACK
     } else
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-        if (dut->commit[i].vecwen) {
-      return
-#ifdef CONFIG_DIFFTEST_VECWRITEBACK
-          dut->wb_vec[dut->commit[i].wpdest].data[0];
-#else
-          dut->regs_vec.value[dut->commit[i].wdest];
-#endif // CONFIG_DIFFTEST_VECWRITEBACK
-    } else
-#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-        if (dut->commit[i].v0wen) {
-      return
-#ifdef CONFIG_DIFFTEST_VECWRITEBACK
-          dut->wb_v0[dut->commit[i].wpdest].data[0];
-#else
-          dut->regs_vec.value[dut->commit[i].wdest];
-#endif // CONFIG_DIFFTEST_VECWRITEBACK
-    } else
-#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
       return
 #ifdef CONFIG_DIFFTEST_INTWRITEBACK
           dut->wb_int[dut->commit[i].wpdest].data;
