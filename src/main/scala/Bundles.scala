@@ -175,6 +175,14 @@ class TriggerCSRState extends DifftestBaseBundle {
   val tinfo = UInt(64.W)
 }
 
+class ArchRenameTable(numRegs: Int, numPhyRegs: Int) extends DifftestBaseBundle {
+  val value = Vec(numRegs, UInt(log2Ceil(numPhyRegs).W))
+}
+
+class PhyRegState(numPhyRegs: Int) extends DifftestBaseBundle {
+  val value = Vec(numPhyRegs, UInt(64.W))
+}
+
 class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
   val data = UInt(64.W)
 }
@@ -183,24 +191,26 @@ class VecDataWriteback(val numElements: Int) extends DifftestBaseBundle with Has
   val data = Vec(2, UInt(64.W))
 }
 
-class ArchIntRegState extends DifftestBaseBundle {
-  val value = Vec(32, UInt(64.W))
+class ArchRegState(numRegs: Int) extends DifftestBaseBundle {
+  val value = Vec(numRegs, UInt(64.W))
 
-  def apply(i: UInt): UInt = value(i(4, 0))
+  def apply(i: UInt): UInt = value(i(log2Ceil(numRegs), 0))
   def apply(i: Int): UInt = value(i)
-
   def toSeq: Seq[UInt] = value
+
+  def ===(that: ArchRegState): Bool = {
+    VecInit(value.zip(that.value).map(v => v._1 === v._2)).asUInt.andR
+  }
+  def =/=(that: ArchRegState): Bool = {
+    VecInit(value.zip(that.value).map(v => v._1 =/= v._2)).asUInt.orR
+  }
+}
+
+class ArchIntRegState extends ArchRegState(32) {
   def names: Seq[String] = Seq(
     "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "s2",
     "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
   )
-
-  def ===(that: ArchIntRegState): Bool = {
-    VecInit(value.zip(that.value).map(v => v._1 === v._2)).asUInt.andR
-  }
-  def =/=(that: ArchIntRegState): Bool = {
-    VecInit(value.zip(that.value).map(v => v._1 =/= v._2)).asUInt.orR
-  }
 }
 
 class ArchFpRegState extends ArchIntRegState {
@@ -210,9 +220,7 @@ class ArchFpRegState extends ArchIntRegState {
   )
 }
 
-class ArchVecRegState extends DifftestBaseBundle {
-  val value = Vec(64, UInt(64.W))
-}
+class ArchVecRegState extends ArchRegState(64)
 
 class ArchDelayedUpdate(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
   val data = UInt(64.W)
