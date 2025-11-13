@@ -1040,7 +1040,7 @@ int Difftest::do_refill_check(int cacheid) {
             return 0;
           }
 #endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
-          Info("cacheid=%d,idtfr=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->idtfr, realpaddr);
+          Info("cacheid=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, realpaddr);
           Info("addr: %lx\nGold: ", dut_refill->addr);
           for (int j = 0; j < 8; j++) {
             read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
