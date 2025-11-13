@@ -21,6 +21,8 @@
 #include "tracertl.h"
 #include "trace_decompress.h"
 
+#include <tracertl_dut_info.h>
+
 TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t max_insts, uint64_t skip_traceinstr)
 {
   pre_readfile(trace_file_name, skip_traceinstr);
@@ -487,35 +489,41 @@ void TraceReader::checkDrive() {
   METHOD_TRACE();
 }
 
-// FIXME: currently, struct Instruction is of multiple of 64bits,
-// not need to consider the unaligned case.
 void TraceReader::read_by_axis(char *tvalid, char *last, uint64_t *validVec,
     uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3,
     uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7) {
 
+  static_assert(TRACERTL_FPGA_AXIS_WIDTH == 512, "FPGA AXIS width should be 512");
+
   // 1. read many instruction into a large array. one array, one complete axis-stream packet
   // 2. send the pakcet through multiply transport
-  const int busBytes = (512 / 8);
-  const int arrayInstNum = 1 * 16; // instructions number per packet
-  // const int arrayInstNum = 200 * 16; // instructions number per packet
-  const int arrayBytes = arrayInstNum * sizeof(Instruction); // bytes per packet
-  const int maxReadCycles = (arrayBytes + busBytes - 1) / busBytes; // cycles per packet
-  const int plusExtraInstNum = ((maxReadCycles * busBytes) + sizeof(Instruction) - 1) / sizeof(Instruction); // ask for more space to avoid segment fault
-  const uint64_t lastValidVec = ((maxReadCycles % busBytes) == 0) ?
-    ~0ULL : ((1ULL << (maxReadCycles % busBytes)) - 1);
+  const int busBits = TRACERTL_FPGA_AXIS_WIDTH;
+  const int packetInstNum = TRACERTL_FPGA_PACKET_INST_NUM; // instructions number per packet
+  const int packetBits = packetInstNum * TRACERTL_INST_BIT_WIDTH; // bytes per packet
+  const int maxReadCycles = (packetBits + busBits - 1) / busBits; // cycles per packet
+  const int maxReadBytes = (maxReadCycles * busBits) / 8;
+  const uint64_t lastValidVec = ~0ULL;
+  static_assert(TRACERTL_FPGA_PACKET_CYCLE_NUM == maxReadCycles, "maxReadCycles should be equal to TRACERTL_FPGA_PACKET_CYCLE_NUM");
+
   static bool array_valid = false;
-  static Instruction array[plusExtraInstNum];
+  static Instruction arrayRaw[TRACERTL_FPGA_PACKET_INST_NUM];
+  static TraceFpgaInstruction arrayFPGA[TRACERTL_FPGA_PACKET_INST_NUM];
+  static BitWriter bitWriter(maxReadBytes);
   static int read_cycle_num = 0;
   static uint64_t packet_count = 0;
   static uint64_t total_read_cycle = 0;
-  uint64_t *arrayLongType = (uint64_t *)array;
+  uint64_t *arrayLongType = (uint64_t *)bitWriter.data();
 
   static int first_time_dump = true;
 
   if (!array_valid) {
     array_valid = true;
-    for (int i = 0; i < arrayInstNum; i ++) {
-      read(array[i]);
+    bitWriter.reset();
+
+    for (int i = 0; i < packetInstNum; i ++) {
+      read(arrayRaw[i]);
+      arrayFPGA[i].genFrom(arrayRaw[i]);
+      arrayFPGA[i].serialize(bitWriter);
     }
     if (first_time_dump) {
       first_time_dump = false;
@@ -549,95 +557,42 @@ void TraceReader::check_by_axis(char last, uint64_t valid,
   uint64_t data0, uint64_t data1, uint64_t data2, uint64_t data3,
   uint64_t data4, uint64_t data5, uint64_t data6, uint64_t data7) {
 
-  typedef union CommitBundleInfo {
-    struct {
-      uint64_t pcVA:39;
-      uint64_t instNum:8;  // use uint64_t, not uint8_t, to keep sizeof is 8
-      uint64_t padding:17; // use uint64_t, not uint8_t, to keep sizeof is 8
-    };
-    uint64_t value;
+  const int collectBits = TRACERTL_FPGA_COLLECT_INST_WIDTH * TRACERTL_FPGA_COLLECT_INST_NUM;
+  const int maxCycles = (collectBits + TRACERTL_FPGA_AXIS_WIDTH - 1) / TRACERTL_FPGA_AXIS_WIDTH;
+  const int maxDWords = (maxCycles * TRACERTL_FPGA_AXIS_WIDTH) / 64;
 
-    void dump() {
-      printf("value %lx: pcVA %lx instNum %d padding %x", value, pcVA, instNum, padding);
-    }
-  } CommitBundle;
-
-  if (sizeof(CommitBundle) != 8) {
-    printf("TraceRTL CommitBundle size wrong %lu\n", sizeof(CommitBundle));
-    exit(1);
-  }
-
-  const int CommitCheckInstNum = 128;
-  const int BusBytes = (512 / 8);
-  const int CommitCheckRawBytes = CommitCheckInstNum * sizeof(CommitBundle); // but data not align
-  const int CommitCheckRawCycles = (CommitCheckRawBytes + BusBytes - 1) / BusBytes; // cycles per packet
-  const int PlusExtraBytes = CommitCheckRawCycles * BusBytes; // ask for more space to avoid segment fault
-
-  static bool first_time_dump = true;
-  if (first_time_dump) {
-    first_time_dump = false;
-    printf("sizeofBundle %lu CommitCheckInstNum %d CommitCheckRawBytes %d CommitCheckRawCycles %d PlusExtraBytes %d\n",
-      sizeof(CommitBundle),
-      CommitCheckInstNum, CommitCheckRawBytes, CommitCheckRawCycles, PlusExtraBytes);
-  }
+  static_assert(TRACERTL_FPGA_AXIS_WIDTH == 512, "FPGA AXIS width should be 512");
+  static_assert(TRACERTL_FPGA_COLLECT_CYCLE_NUM == maxCycles, "maxCycles should be equal to TRACERTL_FPGA_COLLECT_CYCLE_NUM");
 
   static int cycle_count = 0;
   static int actual_validBits_num = 0;
-  static uint64_t commit_check_buffer[PlusExtraBytes/(64/8)];
+  static uint64_t collectBuffer[maxDWords];
   static uint64_t packet_count = 0;
 
   int index = cycle_count << 3;
-  commit_check_buffer[index + 0] = data0;
-  commit_check_buffer[index + 1] = data1;
-  commit_check_buffer[index + 2] = data2;
-  commit_check_buffer[index + 3] = data3;
-  commit_check_buffer[index + 4] = data4;
-  commit_check_buffer[index + 5] = data5;
-  commit_check_buffer[index + 6] = data6;
-  commit_check_buffer[index + 7] = data7;
+  collectBuffer[index + 0] = data0;
+  collectBuffer[index + 1] = data1;
+  collectBuffer[index + 2] = data2;
+  collectBuffer[index + 3] = data3;
+  collectBuffer[index + 4] = data4;
+  collectBuffer[index + 5] = data5;
+  collectBuffer[index + 6] = data6;
+  collectBuffer[index + 7] = data7;
   cycle_count += 1;
-  // actual_validBits_num += std::popcount(valid);
-  actual_validBits_num += last ? __builtin_popcountll(valid) : 64;
-  // TODO: for RTL part, actualNum is not supported
-  bool lastCycle = (cycle_count == CommitCheckRawCycles);
+  bool lastCycle = (cycle_count == maxCycles);
 
-  if ((data0 == 0) && ((valid & 0xffUL) != 0) ||
-      (data1 == 0) && ((valid & 0xff00UL) != 0) ||
-      (data2 == 0) && ((valid & 0xff0000UL) != 0) ||
-      (data3 == 0) && ((valid & 0xff000000UL) != 0) ||
-      (data4 == 0) && ((valid & 0xff00000000UL) != 0) ||
-      (data5 == 0) && ((valid & 0xff0000000000UL) != 0) ||
-      (data6 == 0) && ((valid & 0xff000000000000UL) != 0) ||
-      (data7 == 0) && ((valid & 0xff00000000000000UL) != 0) ||
-      (valid == 0)) {
-    printf("Error: TraceRTL Commit data or valid is zero\n");
-    printf("Check_by_axis[%lu|%d/%d] last %d valid %lx data:",
-      packet_count, cycle_count, CommitCheckRawCycles, last, valid);
-    printf(" %016lx %016lx %016lx %016lx %016lx %016lx %016lx %016lx\n",
-      data7, data6, data5, data4, data3, data2, data1, data0);
-    setError();
-    return ;
-  }
-
-  if (cycle_count > CommitCheckRawBytes) {
-    printf("TraceRTL Commit cycle_count %d exceed max %d\n", cycle_count, CommitCheckRawCycles);
-    fflush(stdout);
-    setError();
-    return ;
-  }
-  if (packet_count > 1000000000) {
-    printf("TraceRTL Commit packet_count exceed 1 billion\n");
+  if (cycle_count > maxCycles) {
+    printf("TraceRTL Commit cycle_count %d exceed max %d\n", cycle_count, maxCycles);
     fflush(stdout);
     setError();
     return ;
   }
 
   if (last) {
-    int actual_instNum = actual_validBits_num / sizeof(CommitBundle);
-
-    CommitBundle committedInst[actual_instNum];
-    for (int i = 0; i < actual_instNum; i++) {
-      committedInst[i].value = commit_check_buffer[i];
+    BitReader bitReader((uint8_t *)collectBuffer, maxDWords * 8);
+    TraceFpgaCollectStruct committedInst[TRACERTL_FPGA_COLLECT_INST_NUM];
+    for (int i = 0; i < TRACERTL_FPGA_COLLECT_INST_NUM; i++) {
+      committedInst[i].deserialize(bitReader);
     }
 
     packet_count ++;
@@ -646,7 +601,7 @@ void TraceReader::check_by_axis(char last, uint64_t valid,
 
     // below is same with the old checkCommit
 
-    for (int i = 0; i < actual_instNum; i ++) {
+    for (int i = 0; i < TRACERTL_FPGA_COLLECT_INST_NUM; i ++) {
       if (i == 0) {
         while (!pendingInstList.empty()) {
           if (pendingInstList.front().isCtrlForceJump()) {
