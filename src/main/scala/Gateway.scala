@@ -208,7 +208,7 @@ object Gateway {
       val endpoint = Module(new GatewayEndpoint(instanceWithDelay.toSeq, config))
       endpoint.in := gatewayIn
       GatewayResult(
-        instances = getInstance(endpoint.instances),
+        instances = endpoint.instances,
         structPacked = Some(config.isBatch),
         structAligned = Some(config.isDelta),
         step = Some(endpoint.step),
@@ -258,7 +258,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   } else {
     WireInit(validated)
   }
-  val instances = chiselTypeOf(squashed).map(_.bits).toSeq
+  val instances = Gateway.getInstance(chiselTypeOf(squashed).map(_.bits).toSeq)
   val deltas = if (config.isDelta) {
     WireInit(Delta(squashed, config))
   } else {

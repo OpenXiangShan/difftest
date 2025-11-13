@@ -191,7 +191,7 @@ class VecDataWriteback(val numElements: Int) extends DifftestBaseBundle with Has
   val data = Vec(2, UInt(64.W))
 }
 
-class ArchRegState(numRegs: Int) extends DifftestBaseBundle {
+class ArchRegState(val numRegs: Int) extends DifftestBaseBundle {
   val value = Vec(numRegs, UInt(64.W))
 
   def apply(i: UInt): UInt = value(i(log2Ceil(numRegs), 0))

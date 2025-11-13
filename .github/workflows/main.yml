@@ -267,10 +267,10 @@ jobs:
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO
             make clean
 
-      - name: Verilator Build with VCS Top (with GlobalEnable Squash Replay Batch InternalStep Delta NonBlock PerfCnt Query)
+      - name: Verilator Build with VCS Top (with SoftArchUpdate GlobalEnable Squash Replay Batch InternalStep Delta NonBlock PerfCnt Query)
         run: |
             cd $NOOP_HOME
-            make simv MILL_ARGS="--difftest-config ESRBIDNP" DIFFTEST_PERFCNT=1 DIFFTEST_QUERY=1 VCS=verilator -j2
+            make simv MILL_ARGS="--difftest-config UESRBIDNP" DIFFTEST_PERFCNT=1 DIFFTEST_QUERY=1 VCS=verilator -j2
             ./build/simv +workload=$WORKLOAD +no-diff +max-cycles=100000
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO
             make clean
