@@ -273,23 +273,6 @@ void Difftest::do_replay() {
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
-void Difftest::update_dut_archreg() {
-#if defined(CONFIG_DIFFTEST_PHYINTREGSTATE) && defined(CONFIG_DIFFTEST_ARCHINTRENAMETABLE)
-  for (int i = 0; i < 32; i++) {
-    dut->regs_int.value[i] = dut->pregs_int.value[dut->rat_int.value[i]];
-  }
-#endif
-#if defined(CONFIG_DIFFTEST_PHYFPREGSTATE) && defined(CONFIG_DIFFTEST_ARCHFPRENAMETABLE)
-  for (int i = 0; i < 32; i++) {
-    dut->regs_fp.value[i] = dut->pregs_fp.value[dut->rat_fp.value[i]];
-  }
-#endif
-#if defined(CONFIG_DIFFTEST_PHYVECREGSTATE) && defined(CONFIG_DIFFTEST_ARCHVECRENAMETABLE)
-  for (int i = 0; i < 64; i++) {
-    dut->regs_vec.value[i] = dut->pregs_vec.value[dut->rat_vec.value[i]];
-  }
-#endif
-}
 int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_REPLAY
   static int replay_step = 0;
@@ -326,7 +309,6 @@ int Difftest::step() {
 
 inline int Difftest::check_all() {
   progress = false;
-  update_dut_archreg();
 
   if (check_timeout()) {
     return 1;
