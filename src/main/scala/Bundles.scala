@@ -315,7 +315,6 @@ class L2TLBEvent extends DifftestBaseBundle with HasValid {
 class RefillEvent extends DifftestBaseBundle with HasValid {
   val addr = UInt(64.W)
   val data = Vec(8, UInt(64.W))
-  val idtfr = UInt(8.W) // identifier for flexible usage
 }
 
 class ScEvent extends DifftestBaseBundle with HasValid {
