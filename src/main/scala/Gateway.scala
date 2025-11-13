@@ -215,7 +215,7 @@ object Gateway {
         fpgaIO = endpoint.fpgaIO,
       )
     } else {
-      GatewayResult(instances = getInstance(instances)) + GatewaySink.collect(config)
+      GatewayResult(instances = getInstance(instances)) + GatewaySink.collect(config, getInstance(instances))
     }
     sink + GatewayResult(
       cppMacros = config.cppMacros,
@@ -295,7 +295,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     }
   }
 
-  GatewaySink.collect(config)
+  GatewaySink.collect(config, instances)
 
 }
 
@@ -314,10 +314,10 @@ object GatewaySink {
     }
   }
 
-  def collect(config: GatewayConfig): GatewayResult = {
+  def collect(config: GatewayConfig, instances: Seq[DifftestBundle]): GatewayResult = {
     config.style match {
-      case "dpic" => DPIC.collect(config)
-      case _      => DPIC.collect(config) // Default: DPI-C
+      case "dpic" => DPIC.collect(config, instances)
+      case _      => DPIC.collect(config, instances) // Default: DPI-C
     }
   }
 }
