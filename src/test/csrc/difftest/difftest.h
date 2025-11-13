@@ -423,12 +423,13 @@ protected:
   inline uint64_t get_commit_data(int i) {
 #if defined(CONFIG_DIFFTEST_COMMITDATA)
     return dut->commit_data[i].data;
-#elif defined(CONFIG_DIFFTEST_ARCHFPREGSTATE)
+#else
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
     if (dut->commit[i].fpwen) {
       return get_fp_data(i);
     } else
-#else
-    return get_int_data(i);
+#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
+      return get_int_data(i);
 #endif // CONFIG_DIFFTEST_COMMITDATA
   }
   inline bool has_wfi() {
