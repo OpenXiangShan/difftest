@@ -112,12 +112,9 @@ SIM_LDFLAGS  += -lsqlite3
 endif
 
 # ChiselMap
-WITH_CHISELMAP ?= 1
 ifeq ($(WITH_CHISELMAP), 1)
 SIM_CXXFILES += $(BUILD_DIR)/chisel_map.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_MAP
-else
-$(error WITH_CHISELMAP is not set)
 endif
 
 # ConstantIn
