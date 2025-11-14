@@ -949,12 +949,8 @@ int Difftest::do_store_check() {
 // cacheid: 0 -> icache
 //          1 -> dcache
 //          2 -> pagecache
-//          3 -> icache PIQ refill ipf
-//          4 -> icache mainPipe port0 toIFU
-//          5 -> icache mainPipe port1 toIFU
-//          6 -> icache ipf refill cache
-//          7 -> icache mainPipe port0 read PIQ
-//          8 -> icache mainPipe port1 read PIQ
+//          3 -> icache mainPipe read cacheline 0 (masked)
+//          4 -> icache mainPipe read cacheline 1 (masked)
 int Difftest::do_refill_check(int cacheid) {
 #ifdef CONFIG_DIFFTEST_REFILLEVENT
   auto dut_refill = &(dut->refill[cacheid]);
@@ -980,7 +976,7 @@ int Difftest::do_refill_check(int cacheid) {
     }
     for (int i = 0; i < 8; i++) {
       read_goldenmem(dut_refill->addr + i * 8, &buf, 8, &flag_buf);
-      if (dut_refill->data[i] != *((uint64_t *)buf)) {
+      if ((dut_refill->mask & (1 << i)) && dut_refill->data[i] != *((uint64_t *)buf)) {
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
         if (cmo_inval_event_set.find(dut_refill->addr) != cmo_inval_event_set.end()) {
           // If the data inconsistency occurs in the cache block operated by CBO.INVAL,
@@ -1022,7 +1018,7 @@ int Difftest::do_refill_check(int cacheid) {
             return 0;
           }
 #endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
-          Info("cacheid=%d,realpaddr=0x%lx: Refill test failed!\n", cacheid, realpaddr);
+          Info("cacheid=%d,mask=%x,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->mask, realpaddr);
           Info("addr: %lx\nGold: ", dut_refill->addr);
           for (int j = 0; j < 8; j++) {
             read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
