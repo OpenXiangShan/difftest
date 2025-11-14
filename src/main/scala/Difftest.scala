@@ -388,6 +388,7 @@ class DiffArchVecRenameTable(numPhyRegs: Int) extends DiffArchRenameTable(64, nu
 abstract class DiffPhyRegState(val numPhyRegs: Int) extends PhyRegState(numPhyRegs) with DifftestBundle {
   override val supportsDelta: Boolean = true
   override def classArgs: Map[String, Any] = Map("numPhyRegs" -> numPhyRegs)
+  override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
 class DiffPhyIntRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {

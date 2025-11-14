@@ -662,24 +662,20 @@ void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
   bool reg_mismatch = false;
 
   for (int vdidx = 0; vdidx < vdNum; vdidx++) {
-#ifndef CONFIG_DIFFTEST_COMMITDATA
-    bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
-    auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
-    uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vec[vecNextPdest].data;
-#endif // !CONFIG_DIFFTEST_COMMITDATA
-
     auto vecNextLdest = vecFirstLdest + vdidx;
-
     for (int i = 0; i < VLENE_64; i++) {
-#ifdef CONFIG_DIFFTEST_COMMITDATA
+      int dataIndex = VLENE_64 * vdidx + i;
+#ifdef CONFIG_DIFFTEST_VECCOMMITDATA
 #ifdef CONFIG_DIFFTEST_SQUASH
-      uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
+      uint64_t dutRegData = load_event.vecCommitData[dataIndex];
 #else
-      uint64_t dutRegData = dut->vec_commit_data[index].data[VLENE_64 * vdidx + i];
+      uint64_t dutRegData = dut->vec_commit_data[index].data[dataIndex];
 #endif // CONFIG_DIFFTEST_SQUASH
 #else
-      uint64_t dutRegData = dutRegPtr[i];
-#endif // CONFIG_DIFFTEST_COMMITDATA
+      // TODO: support Squash without vec_commit_data (i.e. update ArchReg in software)
+      auto vecNextPdest = dut->commit[index].otherwpdest[dataIndex];
+      uint64_t dutRegData = dut->pregs_vec.value[vecPdest];
+#endif // CONFIG_DIFFTEST_VECCOMMITDATA
 
       uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
       reg_mismatch |= dutRegData != *refRegPtr;
