@@ -412,8 +412,15 @@ object DPIC {
     if (phyRegs.nonEmpty) {
       interfaceCpp += "void diffstate_update_archreg(DiffTestState* dut) {"
       phyRegs.foreach { p =>
-        val hasRat = instances.exists(_.desiredCppName == p.desiredCppName.replace("pregs", "rat"))
-        interfaceCpp += p.asInstanceOf[DiffPhyRegState].cppUpdateArch(hasRat, "dut")
+        val suffix = p.desiredCppName.replace("pregs_", "")
+        val (regName, pregName, ratName) = (s"regs_$suffix", s"pregs_$suffix", s"rat_$suffix")
+        val regSize = instances.find(_.desiredCppName == regName).get.bits.asInstanceOf[ArchRegState].numRegs
+        val index = if (instances.exists(_.desiredCppName == ratName)) {
+          s"dut->$ratName.value[i]"
+        } else {
+          "i"
+        }
+        interfaceCpp += s"  for (int i = 0; i < $regSize; i++) { dut->$regName.value[i] = dut->$pregName.value[$index]; }"
       }
       interfaceCpp += "}"
     }

@@ -388,11 +388,6 @@ class DiffArchVecRenameTable(numPhyRegs: Int) extends DiffArchRenameTable(64, nu
 abstract class DiffPhyRegState(val numPhyRegs: Int) extends PhyRegState(numPhyRegs) with DifftestBundle {
   override val supportsDelta: Boolean = true
   override def classArgs: Map[String, Any] = Map("numPhyRegs" -> numPhyRegs)
-  def cppUpdateArch(hasRat: Boolean, ptr: String): String = {
-    val suffix = desiredCppName.replace("pregs_", "")
-    val index = if (hasRat) s"$ptr->rat_$suffix.value[i]" else "i"
-    s"  for (int i = 0; i < ${value.size}; i++) { $ptr->regs_$suffix.value[i] = $ptr->pregs_$suffix.value[$index]; }"
-  }
 }
 
 class DiffPhyIntRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {
