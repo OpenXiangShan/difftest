@@ -83,15 +83,13 @@ object Preprocess {
       cd.data := Mux(c.fpwen, fpData, intData)
       // Also skip vec_commit_data (used in vec_load check) for single core
       val vcd = Option.when(phyVecs.nonEmpty && numCores > 1) {
-        val vreg = phyVecs(coreID).value
         val gen = Wire(new DiffVecCommitData)
         gen.coreid := c.coreid
         gen.index := c.index
         gen.valid := c.valid && (c.v0wen || c.vecwen)
-        gen.data := VecInit(c.otherwpdest.flatMap { wpdest =>
-          val splitDest = (wpdest << 1).asUInt
-          Seq(vreg(splitDest), vreg(splitDest + 1.U))
-        })
+        gen.data := c.otherwpdest.map { wpdest =>
+          phyVecs(coreID).value(wpdest)
+        }
         gen
       }
       Seq(cd) ++ vcd.toSeq
