@@ -179,7 +179,7 @@ class DiffState {
 public:
   bool dump_commit_trace = false;
 
-  DiffState();
+  DiffState(int coreid);
   void record_group(uint64_t pc, uint32_t count) {
     if (retire_group_queue.size() >= DEBUG_GROUP_TRACE_SIZE) {
       retire_group_queue.pop();
@@ -196,9 +196,10 @@ public:
   void record_interrupt(uint64_t pc, uint32_t inst, uint64_t cause) {
     push_back_trace(new InterruptTrace(pc, inst, cause));
   };
-  void display(int coreid);
+  void display();
 
 private:
+  int coreid;
   const bool use_spike;
 
   static const int DEBUG_GROUP_TRACE_SIZE = 16;
@@ -207,6 +208,7 @@ private:
   static const int DEBUG_INST_TRACE_SIZE = 32;
   std::queue<CommitTrace *> commit_trace;
 
+  uint64_t commit_counter = 0;
   void push_back_trace(CommitTrace *trace) {
     if (commit_trace.size() >= DEBUG_INST_TRACE_SIZE) {
       delete commit_trace.front();
@@ -214,7 +216,10 @@ private:
     }
     commit_trace.push(trace);
     if (dump_commit_trace) {
-      static uint64_t commit_counter = 0;
+      // Traces from multiple cores may mix together. Use coreid to distinguish them.
+      if (NUM_CORES > 1) {
+        printf("[%d]", coreid);
+      }
       trace->display_line(commit_counter, use_spike, false);
       commit_counter++;
       fflush(stdout);
