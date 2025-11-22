@@ -184,7 +184,7 @@ void difftest_replay_head(int head) {
 #endif // CONFIG_DIFFTEST_REPLAY
 
 Difftest::Difftest(int coreid) : id(coreid) {
-  state = new DiffState();
+  state = new DiffState(coreid);
 #ifdef CONFIG_DIFFTEST_REPLAY
   state_ss = (DiffState *)malloc(sizeof(DiffState));
 #endif // CONFIG_DIFFTEST_REPLAY
@@ -1646,7 +1646,7 @@ void Difftest::display() {
   Info("the first commit instr pc of DUT is 0x%016lx\nthe first commit instr pc of REF is 0x%016lx\n",
        dut_commit_first_pc, ref_commit_first_pc);
 
-  state->display(this->id);
+  state->display();
 
   Info("\n==============  REF Regs  ==============\n");
   fflush(stdout);
@@ -1688,7 +1688,7 @@ void Difftest::warmup_display_stats() {
        this->id, instrCnt, cycleCnt, ipc);
 }
 
-void DiffState::display(int coreid) {
+void DiffState::display() {
   Info("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
   int group_index = 0;
   while (!retire_group_queue.empty()) {
@@ -1713,4 +1713,4 @@ void DiffState::display(int coreid) {
   fflush(stdout);
 }
 
-DiffState::DiffState() : use_spike(spike_valid()) {}
+DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {}
