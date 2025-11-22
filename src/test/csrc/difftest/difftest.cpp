@@ -456,6 +456,9 @@ inline int Difftest::check_all() {
 #endif
     display();
     proxy->display(dut);
+    if (pc_mismatch) {
+      REPORT_DIFFERENCE("pc", ref_commit_first_pc, ref_commit_first_pc, dut_commit_first_pc);
+    }
 #ifdef FUZZER_LIB
     stats.exit_code = SimExitCode::difftest;
 #endif // FUZZER_LIB
@@ -1642,10 +1645,6 @@ void Difftest::do_sync_custom_mflushpwr() {
 #endif
 
 void Difftest::display() {
-  Info("\n==============  In the last commit group  ==============\n");
-  Info("the first commit instr pc of DUT is 0x%016lx\nthe first commit instr pc of REF is 0x%016lx\n",
-       dut_commit_first_pc, ref_commit_first_pc);
-
   state->display();
 
   Info("\n==============  REF Regs  ==============\n");

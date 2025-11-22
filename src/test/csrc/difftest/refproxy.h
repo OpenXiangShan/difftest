@@ -484,4 +484,7 @@ struct InterruptDelegate {
 extern const char *difftest_ref_so;
 extern uint8_t *ref_golden_mem;
 
+#define REPORT_DIFFERENCE(name, pc_val, right_val, wrong_val) \
+  Info("%7s different at pc = 0x%010lx, right= 0x%016lx, wrong = 0x%016lx\n", name, pc_val, right_val, wrong_val);
+
 #endif
