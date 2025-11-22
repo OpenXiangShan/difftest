@@ -211,18 +211,15 @@ int RefProxy::compare(DiffTestState *dut) {
 
 void RefProxy::display(DiffTestState *dut) {
   if (dut) {
-#define PROXY_COMPARE_AND_DISPLAY(field, field_names)                     \
-  do {                                                                    \
-    uint64_t *_ptr_dut = (uint64_t *)(&((dut)->field));                   \
-    uint64_t *_ptr_ref = (uint64_t *)(&(field));                          \
-    for (int i = 0; i < sizeof(field) / sizeof(uint64_t); i++) {          \
-      if (_ptr_dut[i] != _ptr_ref[i]) {                                   \
-        Info(                                                             \
-            "%7s different at pc = 0x%010lx, right= 0x%016lx, "           \
-            "wrong = 0x%016lx\n",                                         \
-            field_names[i], dut->commit[0].pc, _ptr_ref[i], _ptr_dut[i]); \
-      }                                                                   \
-    }                                                                     \
+#define PROXY_COMPARE_AND_DISPLAY(field, field_names)                                   \
+  do {                                                                                  \
+    uint64_t *_ptr_dut = (uint64_t *)(&((dut)->field));                                 \
+    uint64_t *_ptr_ref = (uint64_t *)(&(field));                                        \
+    for (int i = 0; i < sizeof(field) / sizeof(uint64_t); i++) {                        \
+      if (_ptr_dut[i] != _ptr_ref[i]) {                                                 \
+        REPORT_DIFFERENCE(field_names[i], dut->commit[0].pc, _ptr_ref[i], _ptr_dut[i]); \
+      }                                                                                 \
+    }                                                                                   \
   } while (0);
 
     PROXY_COMPARE_AND_DISPLAY(regs_int, regs_name_int)
