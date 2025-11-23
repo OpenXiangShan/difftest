@@ -135,6 +135,7 @@ public:
   REF_DEBUG_MODE(f)
 
 #define REF_OPTIONAL(f)                                                                                     \
+  f(ref_init_v2, difftest_init_v2, void, unsigned)                                                          \
   f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
   f(load_flash_bin_v2, difftest_load_flash_v2, void, const uint8_t*, size_t)                                \
   f(ref_status, difftest_status, int, )                                                                     \
@@ -147,7 +148,7 @@ public:
   f(ref_memcpy_init, difftest_memcpy_init, void, uint64_t, void*, size_t, bool)                             \
   f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                                                    \
   f(ref_virtual_interrupt_is_hvictl_inject, difftest_virtual_interrupt_is_hvictl_inject, void, bool)        \
-  f(ref_interrupt_delegate, difftest_interrupt_delegate, void, void*)                                    \
+  f(ref_interrupt_delegate, difftest_interrupt_delegate, void, void*)                                       \
   f(disambiguation_state, difftest_disambiguation_state, int, )                                             \
   f(ref_non_reg_interrupt_pending, difftest_non_reg_interrupt_pending, void, void*)                         \
   f(raise_mhpmevent_overflow, difftest_raise_mhpmevent_overflow, void, uint64_t)                            \
@@ -155,8 +156,8 @@ public:
   f(ref_get_store_event_other_info, difftest_get_store_event_other_info, void, void*)                       \
   f(ref_sync_aia, difftest_sync_aia, void, void*)                                                           \
   f(ref_sync_custom_mflushpwr, difftest_sync_custom_mflushpwr, void, bool)                                  \
-  f(ref_get_vec_load_vdNum, difftest_get_vec_load_vdNum, int, )                                                 \
-  f(ref_get_vec_load_dual_goldenmem_reg, difftest_get_vec_load_dual_goldenmem_reg, void*, )                                                       \
+  f(ref_get_vec_load_vdNum, difftest_get_vec_load_vdNum, int, )                                             \
+  f(ref_get_vec_load_dual_goldenmem_reg, difftest_get_vec_load_dual_goldenmem_reg, void*, )                 \
   f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
