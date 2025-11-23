@@ -488,7 +488,6 @@ protected:
   } replay_status;
 
   DiffState *state_ss = NULL;
-  int proxy_reg_size = 0;
   uint8_t *proxy_reg_ss = NULL;
   uint64_t squash_csr_buf[4096];
   bool can_replay();

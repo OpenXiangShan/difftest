@@ -970,12 +970,7 @@ void Emulator::snapshot_save() {
   snapshot_write(&cycleCnt, sizeof(cycleCnt));
 
   auto proxy = diff->proxy;
-  snapshot_write(&proxy->regs_int, sizeof(proxy->regs_int));
-#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  snapshot_write(&proxy->regs_fp, sizeof(proxy->regs_fp));
-#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-  snapshot_write(&proxy->csr, sizeof(proxy->csr));
-  snapshot_write(&proxy->pc, sizeof(proxy->pc));
+  snapshot_write(&proxy->state, sizeof(proxy->state));
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   proxy->mem_init(PMEM_BASE, buf, size, REF_TO_DUT);
@@ -1013,13 +1008,8 @@ void Emulator::snapshot_load(const char *filename) {
   snapshot_read(cycleCnt, sizeof(*cycleCnt));
 
   auto proxy = diff->proxy;
-  snapshot_read(&proxy->regs_int, sizeof(proxy->regs_int));
-#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  snapshot_read(&proxy->regs_fp, sizeof(proxy->regs_fp));
-#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-  snapshot_read(&proxy->csr, sizeof(proxy->csr));
-  snapshot_read(&proxy->pc, sizeof(proxy->pc));
-  proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);
+  snapshot_read(&proxy->state, sizeof(proxy->state));
+  proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
 
   char *buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   snapshot_read(buf, size);

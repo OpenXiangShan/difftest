@@ -144,32 +144,32 @@ RefProxy::~RefProxy() {
 }
 
 void RefProxy::regcpy(DiffTestState *dut) {
-  memcpy(&regs_int, dut->regs_int.value, 32 * sizeof(uint64_t));
+  memcpy(&state.regs_int, dut->regs_int.value, 32 * sizeof(uint64_t));
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  memcpy(&regs_fp, dut->regs_fp.value, 32 * sizeof(uint64_t));
+  memcpy(&state.regs_fp, dut->regs_fp.value, 32 * sizeof(uint64_t));
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-  memcpy(&csr, &dut->csr, sizeof(csr));
-  pc = dut->commit[0].pc;
+  memcpy(&state.csr, &dut->csr, sizeof(state.csr));
+  state.pc = dut->commit[0].pc;
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
-  memcpy(&hcsr, &dut->hcsr, sizeof(hcsr));
+  memcpy(&state.hcsr, &dut->hcsr, sizeof(state.hcsr));
 #endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  memcpy(&regs_vec, &dut->regs_vec.value, sizeof(regs_vec));
+  memcpy(&state.regs_vec, &dut->regs_vec.value, sizeof(state.regs_vec));
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
-  memcpy(&vcsr, &dut->vcsr, sizeof(vcsr));
+  memcpy(&state.vcsr, &dut->vcsr, sizeof(state.vcsr));
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
 #ifdef CONFIG_DIFFTEST_FPCSRSTATE
-  memcpy(&fcsr, &dut->fcsr, sizeof(fcsr));
+  memcpy(&state.fcsr, &dut->fcsr, sizeof(state.fcsr));
 #endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
-  memcpy(&triggercsr, &dut->triggercsr, sizeof(triggercsr));
+  memcpy(&state.triggercsr, &dut->triggercsr, sizeof(state.triggercsr));
 #endif //CONFIG_DIFFTEST_TRIGGERCSRSTATE
-  ref_regcpy(&regs_int, DUT_TO_REF, false);
+  ref_regcpy(&state, DUT_TO_REF, false);
 };
 
 int RefProxy::compare(DiffTestState *dut) {
-#define PROXY_COMPARE(field) memcmp(&(dut->field), &(field), sizeof(field))
+#define PROXY_COMPARE(field) memcmp(&(dut->field), &(state.field), sizeof(state.field))
 
   const int results[] = {PROXY_COMPARE(regs_int),
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
@@ -214,8 +214,8 @@ void RefProxy::display(DiffTestState *dut) {
 #define PROXY_COMPARE_AND_DISPLAY(field, field_names)                                   \
   do {                                                                                  \
     uint64_t *_ptr_dut = (uint64_t *)(&((dut)->field));                                 \
-    uint64_t *_ptr_ref = (uint64_t *)(&(field));                                        \
-    for (int i = 0; i < sizeof(field) / sizeof(uint64_t); i++) {                        \
+    uint64_t *_ptr_ref = (uint64_t *)(&(state.field));                                  \
+    for (int i = 0; i < sizeof(state.field) / sizeof(uint64_t); i++) {                  \
       if (_ptr_dut[i] != _ptr_ref[i]) {                                                 \
         REPORT_DIFFERENCE(field_names[i], dut->commit[0].pc, _ptr_ref[i], _ptr_dut[i]); \
       }                                                                                 \

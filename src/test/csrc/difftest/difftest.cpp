@@ -214,8 +214,7 @@ void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   enable_vec_load_goldenmem_check = proxy->check_ref_vec_load_goldenmem();
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_REPLAY
-  proxy_reg_size = proxy->get_reg_size();
-  proxy_reg_ss = (uint8_t *)malloc(proxy_reg_size);
+  proxy_reg_ss = (uint8_t *)malloc(sizeof(ref_state_t));
 #endif // CONFIG_DIFFTEST_REPLAY
 }
 
@@ -241,7 +240,7 @@ bool Difftest::in_replay_range() {
 
 void Difftest::replay_snapshot() {
   memcpy(state_ss, state, sizeof(DiffState));
-  memcpy(proxy_reg_ss, &proxy->regs_int, proxy_reg_size);
+  memcpy(proxy_reg_ss, &proxy->state, sizeof(ref_state_t));
   proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
   proxy->ref_store_log_reset();
   proxy->set_store_log(true);
@@ -255,8 +254,8 @@ void Difftest::do_replay() {
   replay_status.trace_head = info.trace_head;
   replay_status.trace_size = info.trace_size;
   memcpy(state, state_ss, sizeof(DiffState));
-  memcpy(&proxy->regs_int, proxy_reg_ss, proxy_reg_size);
-  proxy->ref_regcpy(&proxy->regs_int, DUT_TO_REF, false);
+  memcpy(&proxy->state, proxy_reg_ss, sizeof(ref_state_t));
+  proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
   proxy->ref_store_log_restore();
   goldenmem_store_log_restore();
@@ -406,7 +405,7 @@ inline int Difftest::check_all() {
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
     if (dut->commit[0].valid) {
       dut_commit_first_pc = dut->commit[0].pc;
-      ref_commit_first_pc = proxy->pc;
+      ref_commit_first_pc = proxy->state.pc;
       if (dut_commit_first_pc != ref_commit_first_pc) {
         pc_mismatch = true;
       }
