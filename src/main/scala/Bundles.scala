@@ -243,7 +243,6 @@ class MatrixCSRState extends DifftestBaseBundle {
   val mrlenb = UInt(64.W)
   val mamul = UInt(64.W)
   val mtok = UInt(64.W)
-  val mstart = UInt(64.W)
   val mcsr = UInt(64.W)
 }
 
