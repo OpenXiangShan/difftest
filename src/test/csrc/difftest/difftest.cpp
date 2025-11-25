@@ -536,7 +536,7 @@ int Difftest::do_instr_commit(int i) {
 
   // store the writeback info to debug array
 #ifdef BASIC_DIFFTEST_ONLY
-  uint64_t commit_pc = proxy->pc;
+  uint64_t commit_pc = proxy->state.pc;
 #else
   uint64_t commit_pc = dut->commit[i].pc;
 #endif
