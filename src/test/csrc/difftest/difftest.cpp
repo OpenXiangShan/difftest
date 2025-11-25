@@ -613,7 +613,7 @@ int Difftest::do_amuctrl_check() {
     auto types = amu_event.types;
     auto typed = amu_event.typed;
     auto transpose = amu_event.isfp;
-    auto isacc = amu_event.isacc;
+    auto isacc = amu_event.issigned;
     auto base = amu_event.base;
     auto stride = amu_event.stride;
     uint64_t pc = amu_event.pc;
@@ -638,7 +638,7 @@ int Difftest::do_amuctrl_check() {
         case 1: // MLS
           printf("                md %d, ls %d, transpose %d, isacc %d,\n"
                  "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                 amu_event.md, amu_event.sat, amu_event.isfp, amu_event.isacc,
+                 amu_event.md, amu_event.sat, amu_event.isfp, amu_event.issigned,
                  amu_event.base, amu_event.stride, amu_event.mtilem, amu_event.mtilen, amu_event.types);
           break;
         case 2: // MRelease
