@@ -507,23 +507,20 @@ void TraceReader::read_by_axis(char *tvalid, char *last, uint64_t *validVec,
 
   static bool array_valid = false;
   static Instruction arrayRaw[TRACERTL_FPGA_PACKET_INST_NUM];
-  static TraceFpgaInstruction arrayFPGA[TRACERTL_FPGA_PACKET_INST_NUM];
-  static BitWriter bitWriter(maxReadBytes);
+  static uint64_t arrayLongType[maxReadBytes / 8];
   static int read_cycle_num = 0;
   static uint64_t packet_count = 0;
   static uint64_t total_read_cycle = 0;
-  uint64_t *arrayLongType = (uint64_t *)bitWriter.data();
+  TraceFpgaInstruction *arrayFPGA = (TraceFpgaInstruction *)arrayLongType;
 
   static int first_time_dump = true;
 
   if (!array_valid) {
     array_valid = true;
-    bitWriter.reset();
 
     for (int i = 0; i < packetInstNum; i ++) {
       read(arrayRaw[i]);
       arrayFPGA[i].genFrom(arrayRaw[i]);
-      arrayFPGA[i].serialize(bitWriter);
     }
     if (first_time_dump) {
       first_time_dump = false;
@@ -589,11 +586,7 @@ void TraceReader::check_by_axis(char last, uint64_t valid,
   }
 
   if (last) {
-    BitReader bitReader((uint8_t *)collectBuffer, maxDWords * 8);
-    TraceFpgaCollectStruct committedInst[TRACERTL_FPGA_COLLECT_INST_NUM];
-    for (int i = 0; i < TRACERTL_FPGA_COLLECT_INST_NUM; i++) {
-      committedInst[i].deserialize(bitReader);
-    }
+    TraceFpgaCollectStruct *committedInst = (TraceFpgaCollectStruct *)collectBuffer;
 
     packet_count ++;
     cycle_count = 0;
@@ -704,7 +697,7 @@ void TraceReader::dump_uncommited_inst() {
   printf("UnCommitted Inst: ========================\n");
   int count = 0;
   for (auto inst : pendingInstList) {
-    if (count > 100) { break; }
+    if (count > 400) { break; }
     count ++;
     inst.dump();
   }
