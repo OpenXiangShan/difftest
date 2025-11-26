@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "args.h"
 #include "device.h"
 #include "diffstate.h"
 #include "difftest.h"
@@ -43,12 +44,8 @@ enum {
   FPGA_FAIL,
 } fpga_state;
 
-static char work_load[256] = "/dev/zero";
-static char *flash_bin_file = NULL;
 static uint8_t fpga_result = FPGA_RUN;
-static bool enable_difftest = true;
-static uint64_t max_instrs = 0;
-static uint64_t warmup_instr = 0;
+static CommonArgs args;
 
 void fpga_init();
 void fpga_step();
@@ -59,8 +56,8 @@ FpgaXdma *xdma_device = NULL;
 #ifdef USE_SERIAL_PORT
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
-int main(int argc, char *argv[]) {
-  args_parsing(argc, argv);
+int main(int argc, const char *argv[]) {
+  args = parse_args(argc, argv);
 
   fpga_init();
 
@@ -69,13 +66,6 @@ int main(int argc, char *argv[]) {
   fpga_finish();
   printf("difftest releases the fpga device and exits\n");
   return 0;
-}
-
-void set_diff_ref_so(char *s) {
-  extern const char *difftest_ref_so;
-  char *buf = (char *)malloc(256);
-  strcpy(buf, s);
-  difftest_ref_so = buf;
 }
 
 void fpga_init() {
@@ -90,8 +80,8 @@ void fpga_init() {
   serial_port->start();
 #endif // USE_SERIAL_PORT
 
-  init_ram(work_load, DEFAULT_EMU_RAM_SIZE);
-  init_flash(flash_bin_file);
+  init_ram(args.image, DEFAULT_EMU_RAM_SIZE);
+  init_flash(args.flash_bin);
 
   difftest_init();
 
@@ -101,7 +91,7 @@ void fpga_init() {
 
 #ifndef FPGA_SIM
 #ifdef USE_XDMA_DDR_LOAD
-  xdma_device->ddr_load_workload(work_load);
+  xdma_device->ddr_load_workload(args.image);
 #endif // USE_XDMA_DDR_LOAD
   xdma_device->fpga_reset_io(false);
 #endif // FPGA_SIM
@@ -137,7 +127,7 @@ void fpga_display_result(int ret) {
       default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n", ret);
     }
     difftest[i]->display_stats();
-    if (warmup_instr != 0) {
+    if (args.warmup_instr != 0) {
       difftest[i]->warmup_display_stats();
     }
   }
@@ -145,7 +135,7 @@ void fpga_display_result(int ret) {
 
 int fpga_get_result(uint8_t step) {
   // Compare DUT and REF
-  int trapCode = difftest_nstep(step, enable_difftest);
+  int trapCode = difftest_nstep(step, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
     if (trapCode == STATE_GOODTRAP)
       return FPGA_GOODTRAP;
@@ -153,21 +143,21 @@ int fpga_get_result(uint8_t step) {
       return FPGA_FAIL;
   }
   // Max Instr Limit Check
-  if (max_instrs != 0) {
+  if (args.max_instr != -1) {
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
-      if (trap->instrCnt >= max_instrs) {
+      if (trap->instrCnt >= args.max_instr) {
         return FPGA_EXCEED;
       }
     }
   }
   // Warmup Check
-  if (warmup_instr != 0) {
+  if (args.warmup_instr != -1) {
     bool finish = false;
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
-      if (trap->instrCnt >= warmup_instr) {
-        warmup_instr = -1; // maxium of uint64_t
+      if (trap->instrCnt >= args.warmup_instr) {
+        args.warmup_instr = -1; // maxium of uint64_t
         finish = true;
         break;
       }
@@ -176,6 +166,31 @@ int fpga_get_result(uint8_t step) {
       // Record Instr/Cycle for soft warmup
       for (int i = 0; i < NUM_CORES; i++) {
         difftest[i]->warmup_record();
+      }
+    }
+  }
+  // Trace Debug Support
+  if (args.enable_ref_trace) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      bool is_debug = difftest[i]->proxy->get_debug();
+      if (trap->cycleCnt >= args.log_begin && !is_debug) {
+        difftest[i]->proxy->set_debug(true);
+      }
+      if (trap->cycleCnt >= args.log_end && is_debug) {
+        difftest[i]->proxy->set_debug(false);
+      }
+    }
+  }
+  if (args.enable_commit_trace) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      bool is_commit_trace = difftest[i]->get_commit_trace();
+      if (trap->cycleCnt >= args.log_begin && !is_commit_trace) {
+        difftest[i]->set_commit_trace(true);
+      }
+      if (trap->cycleCnt >= args.log_end && is_commit_trace) {
+        difftest[i]->set_commit_trace(false);
       }
     }
   }
@@ -190,39 +205,5 @@ extern "C" void fpga_nstep(uint8_t step) {
     fpga_display_result(ret);
     fpga_result = ret;
     xdma_device->stop();
-  }
-}
-
-void args_parsing(int argc, char *argv[]) {
-  int opt;
-  int option_index = 0;
-  static struct option long_options[] = {{"diff", required_argument, 0, 0},
-                                         {"max-instrs", required_argument, 0, 0},
-                                         {"warmup-instr", required_argument, 0, 0},
-                                         {"flash", required_argument, 0, 0},
-                                         {0, 0, 0, 0}};
-
-  while ((opt = getopt_long(argc, argv, "i:", long_options, &option_index)) != -1) {
-    switch (opt) {
-      case 0:
-        if (strcmp(long_options[option_index].name, "diff") == 0) {
-          set_diff_ref_so(optarg);
-        } else if (strcmp(long_options[option_index].name, "max-instrs") == 0) {
-          max_instrs = std::stoul(optarg, nullptr, 10);
-        } else if (strcmp(long_options[option_index].name, "warmup-instr") == 0) {
-          warmup_instr = std::stoul(optarg, nullptr, 10);
-        } else if (strcmp(long_options[option_index].name, "flash") == 0) {
-          flash_bin_file = (char *)malloc(256);
-          strcpy(flash_bin_file, optarg);
-        }
-        break;
-      case 'i': strncpy(work_load, optarg, sizeof(work_load) - 1); break;
-      default:
-        std::cerr
-            << "Usage: " << argv[0]
-            << " [--diff <path>] [-i <workload>] [--max-instrs <num>] [--warmup-instr <num>] [--flash <flash_img>]"
-            << std::endl;
-        exit(EXIT_FAILURE);
-    }
   }
 }

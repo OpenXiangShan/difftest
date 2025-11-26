@@ -50,9 +50,11 @@ import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
-import "DPI-C" function void set_ram_size(longint size);
+import "DPI-C" function void set_ram_size(string size);
 import "DPI-C" function void set_overwrite_autoset();
 import "DPI-C" function void set_warmup_instr(longint instrs);
+import "DPI-C" function void set_ref_trace();
+import "DPI-C" function void set_commit_trace();
 `ifdef WITH_DRAMSIM3
 import "DPI-C" function void simv_tick();
 `endif // WITH_DRAMSIM3
@@ -85,7 +87,7 @@ string diff_ref_so;
 string workload_list;
 string iotrace_name;
 longint overwrite_nbytes;
-longint ram_size;
+string ram_size;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
@@ -138,7 +140,7 @@ initial begin
   end
   // size of the gcpt used
   if ($test$plusargs("ram_size")) begin
-    $value$plusargs("ram_size=%d", ram_size);
+    $value$plusargs("ram_size=%s", ram_size);
     set_ram_size(ram_size);
   end
   // auto set gcpt used size
@@ -167,6 +169,13 @@ initial begin
   if ($test$plusargs("max-instrs")) begin
     $value$plusargs("max-instrs=%d", max_instrs);
     set_max_instrs(max_instrs);
+  end
+  // set trace debug support
+  if ($test$plusargs("dump-ref-trace")) begin
+    set_ref_trace();
+  end
+  if ($test$plusargs("dump-commit-trace")) begin
+    set_commit_trace();
   end
 `ifdef CONFIG_DIFFTEST_IOTRACE
   // set difftest iotrace directory path
