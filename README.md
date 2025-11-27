@@ -157,6 +157,7 @@ coherence via RefillTest.
 | `DiffArchFpDelayedUpdate` | Delayed floating-point writeback | No |
 | `DiffStoreEvent` | Store operations | No |
 | `DiffSbufferEvent` | Store buffer operations | No |
+| `DiffMatrixStoreEvent` | Matrix store events | No |
 | `DiffLoadEvent` | Load operations | No |
 | `DiffAtomicEvent` | Atomic operations | No |
 | `DiffL1TLBEvent` | L1 TLB operations | No |
