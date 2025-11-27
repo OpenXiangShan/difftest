@@ -142,12 +142,21 @@ coherence via RefillTest.
 | `DiffArchFpRegState` | Floating-point registers | No |
 | `DiffArchVecRegState` | Vector registers | No |
 | `DiffCSRState` | Control and status registers (CSRs) | Yes |
+| `DiffFpCSRState` | CSRs for the Floating-point extension | No |
 | `DiffVecCSRState` | CSRs for the Vector extension | No |
 | `DiffHCSRState` | CSRs for the Hypervisor extension | No |
+| `DiffTriggerCSRState` | CSRs for the Trigger support | No |
 | `DiffDebugMode` | Debug mode registers | No |
 | `DiffIntWriteback` | General-purpose writeback operations | No |
 | `DiffFpWriteback` | Floating-point writeback operations | No |
 | `DiffVecWriteback` | Vector writeback operations | No |
+| `DiffVecV0Writeback` | Vector `V0` writeback operations | No |
+| `DiffPhyIntRegState` | Physical general-purpose registers | No |
+| `DiffPhyFpRegState` | Physical floating-point registers | No |
+| `DiffPhyVecRegState` | Physical vector registers | No |
+| `DiffArchIntRenameTable` | Rename table for general-purpose registers | No |
+| `DiffArchFpRenameTable` | Rename table for floating-point registers | No |
+| `DiffArchVecRenameTable` | Rename table for vector registers | No |
 | `DiffArchIntDelayedUpdate` | Delayed general-purpose writeback | No |
 | `DiffArchFpDelayedUpdate` | Delayed floating-point writeback | No |
 | `DiffStoreEvent` | Store operations | No |
@@ -164,6 +173,7 @@ coherence via RefillTest.
 | `DiffSyncAIAEvent` | Synchronization of AIA | No |
 | `DiffSyncCustomMflushpwrEvent` | custom CSR mflushpwr | No |
 | `DiffUncacheMMStoreEvent` | Uncache buffer main memory store operations | No |
+| `DiffCMOInvalEvent` | Commit of cbo.inval | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 They will be automatically created when calling `DifftestModule.finish(cpu: String)`.
