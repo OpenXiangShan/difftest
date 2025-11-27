@@ -45,6 +45,7 @@ class DifftestInterfaces extends Module {
   val sbuffer_event = DifftestModule(new DiffSbufferEvent, dontCare = true)
   val uncache_mm_store = DifftestModule(new DiffUncacheMMStoreEvent, dontCare = true)
   val store_event = DifftestModule(new DiffStoreEvent, dontCare = true)
+  val matrix_store_event = DifftestModule(new DiffMatrixStoreEvent, dontCare = true)
   val load_event = DifftestModule(new DiffLoadEvent, dontCare = true)
   val atomic_event = DifftestModule(new DiffAtomicEvent, dontCare = true)
   val cmo_inval_event = DifftestModule(new DiffCMOInvalEvent, dontCare = true)
