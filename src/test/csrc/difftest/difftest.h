@@ -316,6 +316,10 @@ public:
     state->dump_commit_trace = enable;
   }
 
+  bool get_commit_trace() {
+    return state->dump_commit_trace;
+  }
+
   void warmup_record() {
     auto trap = get_trap_event();
     warmup_info.instrCnt = trap->instrCnt;

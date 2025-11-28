@@ -774,18 +774,20 @@ int Emulator::tick() {
     }
 #endif
     if (args.enable_ref_trace) {
-      if (trap->cycleCnt == args.log_begin) {
+      bool is_debug = difftest[i]->proxy->get_debug();
+      if (trap->cycleCnt >= args.log_begin && !is_debug) {
         difftest[i]->proxy->set_debug(true);
       }
-      if (trap->cycleCnt == args.log_end) {
+      if (trap->cycleCnt >= args.log_end && is_debug) {
         difftest[i]->proxy->set_debug(false);
       }
     }
     if (args.enable_commit_trace) {
-      if (trap->cycleCnt == args.log_begin) {
+      bool is_commit_trace = difftest[i]->get_commit_trace();
+      if (trap->cycleCnt >= args.log_begin && !is_commit_trace) {
         difftest[i]->set_commit_trace(true);
       }
-      if (trap->cycleCnt == args.log_end) {
+      if (trap->cycleCnt >= args.log_end && is_commit_trace) {
         difftest[i]->set_commit_trace(false);
       }
     }
