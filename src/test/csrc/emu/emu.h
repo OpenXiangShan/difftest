@@ -46,7 +46,7 @@ struct EmuArgs {
   uint64_t ipc_last_cycle;
   uint64_t ipc_times;
 #endif
-  const char *image = nullptr;
+  const char *image = "/dev/zero";
   const char *instr_trace = nullptr;
   const char *gcpt_restore = nullptr;
   const char *snapshot_path = nullptr;

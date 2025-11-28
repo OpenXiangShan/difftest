@@ -307,11 +307,6 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
     }
   }
 
-  if (args.image == NULL) {
-    Info("Hint: --image=IMAGE_FILE is not specified. Use /dev/zero instead.\n");
-    args.image = "/dev/zero";
-  }
-
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
 #ifdef ENABLE_IPC
