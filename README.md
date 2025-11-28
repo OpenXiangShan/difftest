@@ -122,6 +122,8 @@ object Main extends App {
 
 We provide example designs, including:
 - [XiangShan](https://github.com/OpenXiangShan/XiangShan)
+- [XiangShan (2nd Gen, Nanhu)](https://github.com/OpenXiangShan/XiangShan/tree/nanhu)
+- [XiangShan (1st Gen, Yanqihu)](https://github.com/OpenXiangShan/XiangShan/tree/yanqihu)
 - [NutShell](https://github.com/OSCPU/NutShell/tree/dev-difftest)
 - [Rocket](https://github.com/OpenXiangShan/rocket-chip/tree/dev-difftest)
 
