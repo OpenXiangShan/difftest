@@ -48,8 +48,8 @@ sealed trait DifftestBaseBundle extends Bundle {
   }
 }
 
-class DeltaElem extends DifftestBaseBundle {
-  val data = UInt(64.W)
+class DeltaElem(elemBytes: Int) extends DifftestBaseBundle {
+  val data = UInt((elemBytes * 8).W)
 }
 
 class ArchEvent extends DifftestBaseBundle with HasValid {
@@ -374,4 +374,8 @@ class AIAEvent extends DifftestBaseBundle with HasValid {
 
 class SyncCustomMflushpwrEvent extends DifftestBaseBundle with HasValid {
   val l2FlushDone = Bool()
+}
+
+class DeltaInfo extends DifftestBaseBundle {
+  val inPending = UInt(8.W)
 }
