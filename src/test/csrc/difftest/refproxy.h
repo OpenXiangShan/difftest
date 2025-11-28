@@ -355,6 +355,10 @@ public:
     sync_config();
   }
 
+  inline bool get_debug() {
+    return config.debug_difftest;
+  }
+
   inline void set_illegal_mem_access(bool ignored = false) {
     config.ignore_illegal_mem_access = ignored;
     sync_config();
