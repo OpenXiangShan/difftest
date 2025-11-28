@@ -375,3 +375,7 @@ class AIAEvent extends DifftestBaseBundle with HasValid {
 class SyncCustomMflushpwrEvent extends DifftestBaseBundle with HasValid {
   val l2FlushDone = Bool()
 }
+
+class DeltaInfo extends DifftestBaseBundle {
+  val inPending = UInt(8.W)
+}
