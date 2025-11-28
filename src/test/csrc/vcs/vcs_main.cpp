@@ -14,7 +14,9 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "args.h"
 #include "device.h"
+#include "string.h"
 #ifndef CONFIG_NO_DIFFTEST
 #include "difftest.h"
 #endif // CONFIG_NO_DIFFTEST
@@ -38,16 +40,8 @@
 #endif // FPGA_SIM
 
 static bool has_reset = false;
-static char bin_file[256] = "/dev/zero";
-uint64_t copy_ram_offset = 0;
-static char *flash_bin_file = NULL;
-static char *gcpt_restore_bin = NULL;
-static bool enable_difftest = true;
-static uint64_t max_instrs = 0;
 static char *workload_list = NULL;
-static uint32_t overwrite_nbytes = 0xe00;
-static uint64_t ram_size = 0;
-static uint64_t warmup_instr = 0;
+static CommonArgs args;
 
 enum {
   SIMV_RUN,
@@ -59,54 +53,62 @@ enum {
 
 extern "C" void set_bin_file(char *s) {
   printf("ram image:%s\n", s);
-  strcpy(bin_file, s);
+  args.image = strdup(s);
 }
 
 extern "C" void set_copy_ram_offset(char *s) {
-  copy_ram_offset = parse_ramsize(s);
+  args.copy_ram_offset = parse_ramsize(s);
 }
 
 extern "C" void set_flash_bin(char *s) {
   printf("flash image:%s\n", s);
-  flash_bin_file = (char *)malloc(256);
-  strcpy(flash_bin_file, s);
+  args.flash_bin = strdup(s);
 }
 
 extern "C" void set_overwrite_nbytes(uint64_t len) {
-  overwrite_nbytes = len;
+  args.overwrite_nbytes = len;
 }
 
-extern "C" void set_ram_size(uint64_t size) {
-  printf("ram size:0x%lx\n", size);
-  ram_size = size;
+extern "C" void set_ram_size(char *size) {
+  printf("ram size: %s\n", size);
+  args.ram_size = strdup(size);
 }
 
 extern "C" void set_overwrite_autoset() {
-  FILE *fp = fopen(gcpt_restore_bin, "rb");
+  FILE *fp = fopen(args.gcpt_restore, "rb");
   if (fp == NULL) {
     printf("set the gcpt path before using auto set");
     return;
   }
   // Get the lower four bytes
   fseek(fp, 4, SEEK_SET);
-  fread(&overwrite_nbytes, sizeof(uint32_t), 1, fp);
+  fread(&args.overwrite_nbytes, sizeof(uint32_t), 1, fp);
   fclose(fp);
 }
 
 // Support workload warms up and clean LogPerf after warmup instrs
 extern "C" void set_warmup_instr(uint64_t instrs) {
-  warmup_instr = instrs;
+  args.warmup_instr = instrs;
   printf("Warmup instrs:%ld\n", instrs);
 }
 
 extern "C" void set_gcpt_bin(char *s) {
-  gcpt_restore_bin = (char *)malloc(256);
-  strcpy(gcpt_restore_bin, s);
+  args.gcpt_restore = strdup(s);
 }
 
 extern "C" void set_max_instrs(uint64_t mc) {
   printf("set max instrs: %lu\n", mc);
-  max_instrs = mc;
+  args.max_instr = mc;
+}
+
+extern "C" void set_ref_trace() {
+  printf("dump_ref_trace is enabled\n");
+  args.enable_ref_trace = true;
+}
+
+extern "C" void set_commit_trace() {
+  printf("dump_commit_trace is enabled\n");
+  args.enable_commit_trace = true;
 }
 
 extern "C" uint64_t get_stuck_limit() {
@@ -121,9 +123,7 @@ extern "C" uint64_t get_stuck_limit() {
 extern const char *difftest_ref_so;
 extern "C" void set_diff_ref_so(char *s) {
   printf("diff-test ref so:%s\n", s);
-  char *buf = (char *)malloc(256);
-  strcpy(buf, s);
-  difftest_ref_so = buf;
+  difftest_ref_so = strdup(s);
 }
 #else
 extern "C" void set_diff_ref_so(char *s) {
@@ -132,8 +132,7 @@ extern "C" void set_diff_ref_so(char *s) {
 #endif // CONFIG_NO_DIFFTEST
 
 extern "C" void set_workload_list(char *s) {
-  workload_list = (char *)malloc(256);
-  strcpy(workload_list, s);
+  workload_list = strdup(s);
   printf("set workload list %s \n", workload_list);
 }
 
@@ -169,7 +168,7 @@ extern "C" bool workload_list_completed() {
 
 extern "C" void set_no_diff() {
   printf("disable diff-test\n");
-  enable_difftest = false;
+  args.enable_diff = false;
 }
 
 extern "C" void set_simjtag() {
@@ -183,19 +182,22 @@ extern "C" uint8_t simv_init() {
   }
   common_init("simv");
 
-  ram_size = ram_size > 0 ? ram_size : DEFAULT_EMU_RAM_SIZE;
-  init_ram(bin_file, ram_size);
+  uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
+  if (args.ram_size) {
+    ram_size = parse_ramsize(args.ram_size);
+  }
+  init_ram(args.image, ram_size);
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);
 #endif
-  if (gcpt_restore_bin != NULL) {
-    overwrite_ram(gcpt_restore_bin, overwrite_nbytes);
+  if (args.gcpt_restore != NULL) {
+    overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }
-  if (copy_ram_offset) {
-    copy_ram(copy_ram_offset);
+  if (args.copy_ram_offset) {
+    copy_ram(args.copy_ram_offset);
   }
 
-  init_flash(flash_bin_file);
+  init_flash(args.flash_bin);
 
 #ifndef CONFIG_NO_DIFFTEST
   difftest_init();
@@ -204,7 +206,7 @@ extern "C" uint8_t simv_init() {
   init_device();
 
 #ifndef CONFIG_NO_DIFFTEST
-  if (enable_difftest) {
+  if (args.enable_diff) {
     init_goldenmem();
     init_nemuproxy(ram_size);
   }
@@ -267,7 +269,7 @@ void simv_finish() {
 
 #ifndef CONFIG_NO_DIFFTEST
   difftest_finish();
-  if (enable_difftest) {
+  if (args.enable_diff) {
     goldenmem_finish();
   }
 #endif // CONFIG_NO_DIFFTEST
@@ -288,7 +290,7 @@ int simv_get_result(uint8_t step) {
   }
 #ifndef CONFIG_NO_DIFFTEST
   // Compare DUT and REF
-  int trapCode = difftest_nstep(step, enable_difftest);
+  int trapCode = difftest_nstep(step, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
     if (trapCode == STATE_GOODTRAP)
       return SIMV_GOODTRAP;
@@ -296,21 +298,21 @@ int simv_get_result(uint8_t step) {
       return SIMV_FAIL;
   }
   // Max Instr Limit Check
-  if (max_instrs != 0) {
+  if (args.max_instr != -1) {
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
-      if (trap->instrCnt >= max_instrs) {
+      if (trap->instrCnt >= args.max_instr) {
         return SIMV_EXCEED;
       }
     }
   }
   // Warmup Check
-  if (warmup_instr != 0) {
+  if (args.warmup_instr != -1) {
     bool finish = false;
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
-      if (trap->instrCnt >= warmup_instr) {
-        warmup_instr = -1; // maxium of uint64_t
+      if (trap->instrCnt >= args.warmup_instr) {
+        args.warmup_instr = -1; // maxium of uint64_t
         finish = true;
         break;
       }
@@ -323,6 +325,31 @@ int simv_get_result(uint8_t step) {
       }
       // perfCtrl_clean/dump will set according to SIMV_WARMUP
       return SIMV_WARMUP;
+    }
+  }
+  // Trace Debug Support
+  if (args.enable_ref_trace) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      bool is_debug = difftest[i]->proxy->get_debug();
+      if (trap->cycleCnt >= args.log_begin && !is_debug) {
+        difftest[i]->proxy->set_debug(true);
+      }
+      if (trap->cycleCnt >= args.log_end && is_debug) {
+        difftest[i]->proxy->set_debug(false);
+      }
+    }
+  }
+  if (args.enable_commit_trace) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      bool is_commit_trace = difftest[i]->get_commit_trace();
+      if (trap->cycleCnt >= args.log_begin && !is_commit_trace) {
+        difftest[i]->set_commit_trace(true);
+      }
+      if (trap->cycleCnt >= args.log_end && is_commit_trace) {
+        difftest[i]->set_commit_trace(false);
+      }
     }
   }
 #endif // CONFIG_NO_DIFFTEST
@@ -344,7 +371,7 @@ void simv_display_result(int ret) {
       default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n", ret);
     }
     difftest[i]->display_stats();
-    if (warmup_instr != 0 && ret != SIMV_WARMUP) {
+    if (args.warmup_instr != -1 && ret != SIMV_WARMUP) {
       difftest[i]->warmup_display_stats();
     }
   }
