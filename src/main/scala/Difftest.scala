@@ -671,8 +671,8 @@ object DifftestModule {
     structAligned: Boolean,
   ): Unit = {
     val difftestCpp = ListBuffer.empty[String]
-    difftestCpp += "#ifndef __DIFFSTATE_H__"
-    difftestCpp += "#define __DIFFSTATE_H__"
+    difftestCpp += "#ifndef __DIFFTEST_STATE_H__"
+    difftestCpp += "#define __DIFFTEST_STATE_H__"
     difftestCpp += ""
     difftestCpp += "#include <cstdint>"
     difftestCpp += ""
@@ -760,9 +760,9 @@ object DifftestModule {
          |void difftest_query_finish();
          |#endif // CONFIG_DIFFTEST_QUERY
          |""".stripMargin
-    difftestCpp += "#endif // __DIFFSTATE_H__"
+    difftestCpp += "#endif // __DIFFTEST_STATE_H__"
     difftestCpp += ""
-    FileControl.write(difftestCpp, "diffstate.h")
+    FileControl.write(difftestCpp, "difftest-state.h")
   }
 
   def createCppExtModule(name: String, func: String, header: Option[String]): Unit = {

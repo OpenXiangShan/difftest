@@ -400,7 +400,7 @@ object DPIC {
     interfaceCpp += "#define __DIFFTEST_DPIC_H__"
     interfaceCpp += ""
     interfaceCpp += "#include <cstdint>"
-    interfaceCpp += "#include \"diffstate.h\""
+    interfaceCpp += "#include \"difftest-state.h\""
     interfaceCpp += "#if defined(CONFIG_DIFFTEST_BATCH) && !defined(CONFIG_DIFFTEST_FPGA)"
     interfaceCpp += "#include \"svdpi.h\""
     interfaceCpp += "#endif // CONFIG_DIFFTEST_BATCH && !CONFIG_DIFFTEST_FPGA"

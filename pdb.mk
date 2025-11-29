@@ -28,7 +28,7 @@ $(PDB_OBJ_DIR)/python.i:
 	mkdir -p $(PYTHON_DIR)
 	cp $(PDB_SWIG_DIR)/swig.i $(PDB_OBJ_DIR)/python.i
 	echo "%extend DiffTestState {" >> $(PDB_OBJ_DIR)/python.i
-	cat $(BUILD_DIR)/generated-src/diffstate.h|grep Difftest|grep "\["|sed "s/\[/\ /g"|sed "s/\]/\ /g"|awk '{print $$1 " *get_"$$2"(int index){if(index<"$$3"){return &(self->"$$2"[index]);} return NULL;}"}' >> $(PDB_OBJ_DIR)/python.i
+	cat $(BUILD_DIR)/generated-src/difftest-state.h|grep Difftest|grep "\["|sed "s/\[/\ /g"|sed "s/\]/\ /g"|awk '{print $$1 " *get_"$$2"(int index){if(index<"$$3"){return &(self->"$$2"[index]);} return NULL;}"}' >> $(PDB_OBJ_DIR)/python.i
 	echo "}" >> $(PDB_OBJ_DIR)/python.i
 
 $(PDB_OBJ_DIR)/difftest_wrap.cpp: $(PDB_OBJ_DIR)/python.i

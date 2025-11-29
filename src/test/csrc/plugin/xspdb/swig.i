@@ -6,7 +6,7 @@
 #include "ram.h"
 #include "flash.h"
 #include "device.h"
-#include "diffstate.h"
+#include "difftest-state.h"
 #include "difftrace.h"
 #include "refproxy.h"
 %}
@@ -50,7 +50,7 @@
 %include "ram.h"
 %include "flash.h"
 %include "device.h"
-%include "diffstate.h"
+%include "difftest-state.h"
 %include "difftrace.h"
 %include "refproxy.h"
 
@@ -76,4 +76,3 @@ GAL_METHODS(DifftestInstrCommit, instr)
 GAL_METHODS(DifftestTrapEvent, pc)
 GAL_METHODS(DifftestTrapEvent, code)
 GAL_METHODS(DifftestTrapEvent, hasTrap)
-

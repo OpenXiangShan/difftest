@@ -1684,30 +1684,3 @@ void Difftest::warmup_display_stats() {
                           ", IPC = %lf\n" ANSI_COLOR_RESET,
        this->id, instrCnt, cycleCnt, ipc);
 }
-
-void DiffState::display() {
-  Info("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
-  int group_index = 0;
-  while (!retire_group_queue.empty()) {
-    auto retire_group = retire_group_queue.front();
-    auto pc = retire_group.first;
-    auto cnt = retire_group.second;
-    retire_group_queue.pop();
-    Info("commit group [%02d]: pc %010lx cmtcnt %d%s\n", group_index, pc, cnt,
-         retire_group_queue.empty() ? " <--" : "");
-    group_index++;
-  }
-
-  Info("\n============== Commit Instr Trace ==============\n");
-  int commit_index = 0;
-  while (!commit_trace.empty()) {
-    CommitTrace *trace = commit_trace.front();
-    commit_trace.pop();
-    trace->display_line(commit_index, use_spike, commit_trace.empty());
-    commit_index++;
-  }
-
-  fflush(stdout);
-}
-
-DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {}
