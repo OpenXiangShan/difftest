@@ -43,7 +43,7 @@ object Delta {
 
     deltaCpp += "#ifndef __DIFFTEST_DELTA_H__"
     deltaCpp += "#define __DIFFTEST_DELTA_H__"
-    deltaCpp += "#include \"diffstate.h\""
+    deltaCpp += "#include \"difftest-state.h\""
     deltaCpp +=
       s"""
          |typedef struct {

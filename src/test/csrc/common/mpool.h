@@ -17,7 +17,6 @@
 #define __MPOOL_H__
 
 #include "common.h"
-#include "diffstate.h"
 #include <atomic>
 #include <condition_variable>
 #include <functional>

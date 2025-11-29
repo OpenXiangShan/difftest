@@ -40,7 +40,7 @@ object Query {
          |#define __DIFFTEST_QUERY_H__
          |
          |#include <cstdint>
-         |#include "diffstate.h"
+         |#include "difftest-state.h"
          |#include "query.h"
          |
          |#ifdef CONFIG_DIFFTEST_QUERY

@@ -16,7 +16,6 @@
 
 #include "args.h"
 #include "device.h"
-#include "diffstate.h"
 #include "difftest.h"
 #include "flash.h"
 #include "goldenmem.h"

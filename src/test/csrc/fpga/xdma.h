@@ -17,7 +17,6 @@
 #define __XDMA_H__
 
 #include "common.h"
-#include "diffstate.h"
 #include "mpool.h"
 #include <atomic>
 #include <queue>

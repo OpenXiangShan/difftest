@@ -21,7 +21,7 @@
 #define NUM_CORES 1
 #endif
 
-#include "diffstate.h"
+#include "difftest-state.h"
 
 #if defined(CPU_NUTSHELL)
 #elif defined(CPU_XIANGSHAN)
