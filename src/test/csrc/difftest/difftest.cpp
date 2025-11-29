@@ -33,7 +33,7 @@
 
 Difftest **difftest = NULL;
 
-int difftest_init() {
+int difftest_init(bool enabled, size_t ramsize) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_perfcnt_init();
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -48,13 +48,12 @@ int difftest_init() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
     difftest[i]->dut = diffstate_buffer[i]->get(0, 0);
+    if (enabled) {
+      difftest[i]->update_nemuproxy(i, ramsize);
+    }
   }
-  return 0;
-}
-
-int init_nemuproxy(size_t ramsize = 0) {
-  for (int i = 0; i < NUM_CORES; i++) {
-    difftest[i]->update_nemuproxy(i, ramsize);
+  if (enabled) {
+    init_goldenmem();
   }
   return 0;
 }

@@ -200,17 +200,10 @@ extern "C" uint8_t simv_init() {
   init_flash(args.flash_bin);
 
 #ifndef CONFIG_NO_DIFFTEST
-  difftest_init();
+  difftest_init(args.enable_diff, ram_size);
 #endif // CONFIG_NO_DIFFTEST
 
   init_device();
-
-#ifndef CONFIG_NO_DIFFTEST
-  if (args.enable_diff) {
-    init_goldenmem();
-    init_nemuproxy(ram_size);
-  }
-#endif // CONFIG_NO_DIFFTEST
 
 #ifdef FPGA_SIM
   xdma_sim_open(0, false);

@@ -502,7 +502,7 @@ protected:
 };
 
 extern Difftest **difftest;
-int difftest_init();
+int difftest_init(bool enabled, size_t ramsize);
 
 int difftest_nstep(int step, bool enable_diff);
 void difftest_switch_zone();
@@ -513,8 +513,6 @@ void difftest_finish();
 
 void difftest_trace_read();
 void difftest_trace_write(int step);
-
-int init_nemuproxy(size_t);
 
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_scope();

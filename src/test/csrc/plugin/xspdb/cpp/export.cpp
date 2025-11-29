@@ -66,10 +66,6 @@ void GoldenMemFinish() {
   goldenmem_finish();
 }
 
-int NemuProxyInit(uint64_t size) {
-  return init_nemuproxy((size_t)size);
-}
-
 void SetProxyRefSo(uint64_t addr) {
   difftest_ref_so = (const char *)addr;
 }

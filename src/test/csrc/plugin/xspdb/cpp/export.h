@@ -24,7 +24,6 @@ int GetDifftestStat();
 
 void GoldenMemInit();
 void GoldenMemFinish();
-int NemuProxyInit(uint64_t size);
 void SetProxyRefSo(uint64_t addr);
 uint64_t GetProxyRefSo();
 
