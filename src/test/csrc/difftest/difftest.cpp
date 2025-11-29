@@ -1553,7 +1553,7 @@ int Difftest::apply_delayed_writeback() {
           return 1;                                                          \
         }                                                                    \
         delayed[i]++;                                                        \
-        dut->regs.value[i] = proxy->regs.value[i];                           \
+        dut->regs.value[i] = proxy->state.regs.value[i];                     \
       }                                                                      \
     }                                                                        \
   } while (0);

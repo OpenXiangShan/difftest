@@ -294,13 +294,13 @@ static uint64_t read_mtvec(uint64_t paddr) {
 #endif // CPU_ROCKET_CHIP
 
 bool RefProxy::do_csr_waive(DiffTestState *dut) {
-#define CSR_WAIVE(field, mapping)                             \
-  do {                                                        \
-    uint64_t v = mapping(csr.field);                          \
-    if (csr.field != dut->csr.field && dut->csr.field == v) { \
-      csr.field = v;                                          \
-      has_waive = true;                                       \
-    }                                                         \
+#define CSR_WAIVE(field, mapping)                                   \
+  do {                                                              \
+    uint64_t v = mapping(state.csr.field);                          \
+    if (state.csr.field != dut->csr.field && dut->csr.field == v) { \
+      state.csr.field = v;                                          \
+      has_waive = true;                                             \
+    }                                                               \
   } while (0);
 
   bool has_waive = false;
