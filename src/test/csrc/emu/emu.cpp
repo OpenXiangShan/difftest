@@ -165,7 +165,8 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #ifndef CONFIG_NO_DIFFTEST
   // init difftest
-  difftest_init();
+  auto ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
+  difftest_init(args.enable_diff, ref_ramsize);
 
   // init difftest traces
   if (args.trace_name) {
@@ -177,13 +178,6 @@ Emulator::Emulator(int argc, const char *argv[])
 
   init_device();
 
-#ifndef CONFIG_NO_DIFFTEST
-  if (args.enable_diff) {
-    init_goldenmem();
-    size_t ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
-    init_nemuproxy(ref_ramsize);
-  }
-#endif // CONFIG_NO_DIFFTEST
 #ifdef ENABLE_RUNAHEAD
   if (args.enable_runahead) {
     runahead_init();
