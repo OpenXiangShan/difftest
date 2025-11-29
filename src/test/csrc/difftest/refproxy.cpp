@@ -148,39 +148,39 @@ RefProxy::~RefProxy() {
 }
 
 void RefProxy::regcpy(DiffTestState *dut) {
-  memcpy(&state.regs_xrf, dut->regs_xrf.value, 32 * sizeof(uint64_t));
+  memcpy(&state.xrf, dut->regs.xrf.value, sizeof(state.xrf));
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  memcpy(&state.regs_frf, dut->regs_frf.value, 32 * sizeof(uint64_t));
+  memcpy(&state.frf, dut->regs.frf.value, sizeof(state.frf));
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-  memcpy(&state.csr, &dut->csr, sizeof(state.csr));
+  memcpy(&state.csr, &dut->regs.csr, sizeof(state.csr));
   state.pc = dut->commit[0].pc;
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
-  memcpy(&state.hcsr, &dut->hcsr, sizeof(state.hcsr));
+  memcpy(&state.hcsr, &dut->regs.hcsr, sizeof(state.hcsr));
 #endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  memcpy(&state.regs_vrf, &dut->regs_vrf.value, sizeof(state.regs_vrf));
+  memcpy(&state.vrf, &dut->regs.vrf.value, sizeof(state.vrf));
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
-  memcpy(&state.vcsr, &dut->vcsr, sizeof(state.vcsr));
+  memcpy(&state.vcsr, &dut->regs.vcsr, sizeof(state.vcsr));
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
 #ifdef CONFIG_DIFFTEST_FPCSRSTATE
-  memcpy(&state.fcsr, &dut->fcsr, sizeof(state.fcsr));
+  memcpy(&state.fcsr, &dut->regs.fcsr, sizeof(state.fcsr));
 #endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
-  memcpy(&state.triggercsr, &dut->triggercsr, sizeof(state.triggercsr));
+  memcpy(&state.triggercsr, &dut->regs.triggercsr, sizeof(state.triggercsr));
 #endif //CONFIG_DIFFTEST_TRIGGERCSRSTATE
   ref_regcpy(&state, DUT_TO_REF, false);
 };
 
 int RefProxy::compare(DiffTestState *dut) {
-#define PROXY_COMPARE(field) memcmp(&(dut->field), &(state.field), sizeof(state.field))
+#define PROXY_COMPARE(field) memcmp(&(dut->regs.field), &(state.field), sizeof(state.field))
 
-  const int results[] = {PROXY_COMPARE(regs_xrf),
+  const int results[] = {PROXY_COMPARE(xrf),
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-                         PROXY_COMPARE(regs_frf),
+                         PROXY_COMPARE(frf),
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-                         PROXY_COMPARE(regs_vrf),
+                         PROXY_COMPARE(vrf),
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
                          PROXY_COMPARE(vcsr),
@@ -217,7 +217,7 @@ void RefProxy::display(DiffTestState *dut) {
   if (dut) {
 #define PROXY_COMPARE_AND_DISPLAY(field, field_names)                                   \
   do {                                                                                  \
-    uint64_t *_ptr_dut = (uint64_t *)(&((dut)->field));                                 \
+    uint64_t *_ptr_dut = (uint64_t *)(&((dut)->regs.field));                            \
     uint64_t *_ptr_ref = (uint64_t *)(&(state.field));                                  \
     for (int i = 0; i < sizeof(state.field) / sizeof(uint64_t); i++) {                  \
       if (_ptr_dut[i] != _ptr_ref[i]) {                                                 \
@@ -226,16 +226,16 @@ void RefProxy::display(DiffTestState *dut) {
     }                                                                                   \
   } while (0);
 
-    PROXY_COMPARE_AND_DISPLAY(regs_xrf, regs_name_int)
+    PROXY_COMPARE_AND_DISPLAY(xrf, regs_name_int)
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-    PROXY_COMPARE_AND_DISPLAY(regs_frf, regs_name_fp)
+    PROXY_COMPARE_AND_DISPLAY(frf, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
     PROXY_COMPARE_AND_DISPLAY(csr, regs_name_csr)
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
     PROXY_COMPARE_AND_DISPLAY(hcsr, regs_name_hcsr)
 #endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    PROXY_COMPARE_AND_DISPLAY(regs_vrf, regs_name_vec)
+    PROXY_COMPARE_AND_DISPLAY(vrf, regs_name_vec)
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
     PROXY_COMPARE_AND_DISPLAY(vcsr, regs_name_vec_csr)
@@ -294,13 +294,13 @@ static uint64_t read_mtvec(uint64_t paddr) {
 #endif // CPU_ROCKET_CHIP
 
 bool RefProxy::do_csr_waive(DiffTestState *dut) {
-#define CSR_WAIVE(field, mapping)                                   \
-  do {                                                              \
-    uint64_t v = mapping(state.csr.field);                          \
-    if (state.csr.field != dut->csr.field && dut->csr.field == v) { \
-      state.csr.field = v;                                          \
-      has_waive = true;                                             \
-    }                                                               \
+#define CSR_WAIVE(field, mapping)                                             \
+  do {                                                                        \
+    uint64_t v = mapping(state.csr.field);                                    \
+    if (state.csr.field != dut->regs.csr.field && dut->regs.csr.field == v) { \
+      state.csr.field = v;                                                    \
+      has_waive = true;                                                       \
+    }                                                                         \
   } while (0);
 
   bool has_waive = false;

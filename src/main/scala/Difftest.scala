@@ -53,10 +53,12 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   // Used to detect the number of cores. Must be used only by one Bundle.
   def isUniqueIdentifier: Boolean = false
-  // A desired offset in the C++ struct can be specified.
-  val desiredOffset: Int = 999
+  // A desired offset for registers to be compared with the REF in the C++ struct can be specified.
+  // Since currently we cannot check the semantic correctness, this should strictly match the REF.
+  val desiredRegOffset: Option[Int] = None
 
   val desiredCppName: String
+  def actualCppName: String = if (desiredRegOffset.isDefined) s"regs.$desiredCppName" else desiredCppName
   def desiredModuleName: String = {
     val className = {
       val name = this.getClass.getName.replace("$", ".").replace("Diff", "Difftest")
@@ -65,7 +67,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     className.split("\\.").filterNot(_.forall(java.lang.Character.isDigit)).last
   }
 
-  def order: (Int, String) = (desiredOffset, desiredModuleName)
+  def order: (Int, String) = (desiredRegOffset.getOrElse(999), desiredModuleName)
 
   def isIndexed: Boolean = this.isInstanceOf[DifftestWithIndex]
   def getIndex: Option[UInt] = {
@@ -284,14 +286,14 @@ class DiffTrapEvent extends TrapEvent with DifftestBundle {
 
 class DiffCSRState extends CSRState with DifftestBundle {
   override val desiredCppName: String = "csr"
-  override val desiredOffset: Int = 1
+  override val desiredRegOffset: Option[Int] = Some(2)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
 
 class DiffHCSRState extends HCSRState with DifftestBundle {
   override val desiredCppName: String = "hcsr"
-  override val desiredOffset: Int = 6
+  override val desiredRegOffset: Option[Int] = Some(3)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
@@ -306,6 +308,7 @@ class DiffDebugMode extends DebugModeCSRState with DifftestBundle {
 
 class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
   override val desiredCppName: String = "triggercsr"
+  override val desiredRegOffset: Option[Int] = Some(7)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
@@ -334,8 +337,8 @@ class DiffVecV0Writeback(numRegs: Int = 32) extends DiffVecWriteback(numRegs) {
 }
 
 class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
-  override val desiredCppName: String = "regs_xrf"
-  override val desiredOffset: Int = 0
+  override val desiredCppName: String = "xrf"
+  override val desiredRegOffset: Option[Int] = Some(0)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
@@ -356,15 +359,15 @@ class DiffArchFpDelayedUpdate extends DiffArchDelayedUpdate(32) {
 }
 
 class DiffArchFpRegState extends DiffArchIntRegState {
-  override val desiredCppName: String = "regs_frf"
-  override val desiredOffset: Int = 2
+  override val desiredCppName: String = "frf"
+  override val desiredRegOffset: Option[Int] = Some(1)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
 
 class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
-  override val desiredCppName: String = "regs_vrf"
-  override val desiredOffset: Int = 4
+  override val desiredCppName: String = "vrf"
+  override val desiredRegOffset: Option[Int] = Some(4)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
@@ -409,14 +412,14 @@ class DiffPhyVecRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {
 
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
   override val desiredCppName: String = "vcsr"
-  override val desiredOffset: Int = 5
+  override val desiredRegOffset: Option[Int] = Some(5)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
 
 class DiffFpCSRState extends FpCSRState with DifftestBundle {
   override val desiredCppName: String = "fcsr"
-  override val desiredOffset: Int = 7
+  override val desiredRegOffset: Option[Int] = Some(6)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
@@ -715,8 +718,7 @@ object DifftestModule {
       })
 
     // create top-level difftest struct
-    difftestCpp += "typedef struct {"
-    for ((className, cppInstances) <- uniqBundles.toSeq.sortBy(_._2.head.order)) {
+    def toCppField(className: String, cppInstances: Seq[DifftestBundle]): String = {
       val bundleType = cppInstances.head
       val instanceName = bundleType.desiredCppName
       val cppIsArray = bundleType.isInstanceOf[DifftestWithIndex] || bundleType.isFlatten
@@ -725,7 +727,21 @@ object DifftestModule {
       require(nInstances % numCores == 0, s"Cores seem to have different # of $instanceName")
       require(cppIsArray || nInstances == numCores, s"# of $instanceName should not be $nInstances")
       val arrayWidth = if (cppIsArray) s"[$instanceCount]" else ""
-      difftestCpp += f"  $className%-30s $instanceName$arrayWidth;"
+      f"$className%-30s $instanceName$arrayWidth"
+    }
+    val (regStateBundles, eventBundles) = uniqBundles.toSeq.partition(_._2.head.desiredRegOffset.isDefined)
+    // create DiffTestRegState
+    difftestCpp += "typedef struct {"
+    for ((className, cppInstances) <- regStateBundles.sortBy(_._2.head.desiredRegOffset.get)) {
+      difftestCpp += f"  ${toCppField(className, cppInstances)};"
+    }
+    difftestCpp += "} DiffTestRegState;"
+    difftestCpp += ""
+    // create DiffTestState (RegState + others)
+    difftestCpp += "typedef struct {"
+    difftestCpp += "  DiffTestRegState regs;"
+    for ((className, cppInstances) <- eventBundles.sortBy(_._2.head.desiredModuleName)) {
+      difftestCpp += f"  ${toCppField(className, cppInstances)};"
     }
     difftestCpp += "} DiffTestState;"
     difftestCpp += ""

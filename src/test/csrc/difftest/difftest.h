@@ -149,14 +149,14 @@ public:
   uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-        is_fp ? dut->regs_frf.value + src :
+        is_fp ? dut->regs.frf.value + src :
 #endif
-              dut->regs_xrf.value + src;
+              dut->regs.xrf.value + src;
   }
 
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
   inline uint64_t *arch_vecreg(uint8_t src) {
-    return dut->regs_vrf.value + src;
+    return dut->regs.vrf.value + src;
   }
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 
@@ -276,7 +276,7 @@ protected:
 #elif defined(CONFIG_DIFFTEST_INTWRITEBACK)
     return dut->wb_xrf[dut->commit[i].wpdest].data;
 #else
-    return dut->regs_xrf.value[dut->commit[i].wdest];
+    return dut->regs.xrf.value[dut->commit[i].wdest];
 #endif
   }
 
@@ -287,7 +287,7 @@ protected:
 #elif defined(CONFIG_DIFFTEST_FPWRITEBACK)
     return dut->wb_frf[dut->commit[i].wpdest].data;
 #else
-    return dut->regs_frf.value[dut->commit[i].wdest];
+    return dut->regs.frf.value[dut->commit[i].wdest];
 #endif
   }
 #endif

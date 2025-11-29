@@ -185,7 +185,7 @@ object Gateway {
   }
 
   def getInstance(bundles: Seq[DifftestBundle]): Seq[DifftestBundle] = {
-    val archRegs = if (!bundles.exists(_.desiredCppName == "regs_xrf")) {
+    val archRegs = if (!bundles.exists(_.desiredCppName == "xrf")) {
       Preprocess.getArchRegs(bundles, false)
     } else {
       Seq.empty

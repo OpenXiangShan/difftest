@@ -53,8 +53,9 @@ object Delta {
 
     def deltaSync(dst: String, src: String): Seq[String] = {
       deltaInsts.map { inst =>
-        val name = inst.desiredCppName
-        s"memcpy(&($dst->$name), $src->${name}_elem, sizeof(${inst.desiredModuleName}));"
+        val destName = inst.actualCppName
+        val srcName = inst.desiredCppName
+        s"memcpy(&($dst->$destName), $src->${srcName}_elem, sizeof(${inst.desiredModuleName}));"
       }.toSeq
     }
     deltaCpp +=
