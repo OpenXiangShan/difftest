@@ -197,8 +197,6 @@ protected:
 
   int id;
 
-  uint64_t last_commit = 0;
-
   // For compare the first instr pc of a commit group
   bool pc_mismatch = false;
   uint64_t dut_commit_first_pc = 0;
@@ -228,7 +226,7 @@ protected:
 #endif
 
   void update_last_commit() {
-    last_commit = get_trap_event()->cycleCnt;
+    state->last_commit_cycle = get_trap_event()->cycleCnt;
   }
 
   ArchEventChecker *arch_event_checker = nullptr;

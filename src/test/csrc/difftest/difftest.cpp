@@ -1032,7 +1032,7 @@ void Difftest::cmo_inval_event_record() {
 int Difftest::check_timeout() {
   uint64_t cycleCnt = get_trap_event()->cycleCnt;
   // check whether there're any commits since the simulation starts
-  if (!state->has_commit && cycleCnt > last_commit + first_commit_limit) {
+  if (!state->has_commit && cycleCnt > state->last_commit_cycle + first_commit_limit) {
     Info("The first instruction of core %d at 0x%lx does not commit after %lu cycles.\n", id, FIRST_INST_ADDRESS,
          first_commit_limit);
     display();
@@ -1040,14 +1040,14 @@ int Difftest::check_timeout() {
   }
 
   // NOTE: the WFI instruction may cause the CPU to halt for more than `stuck_limit` cycles.
-  // We update the `last_commit` if the CPU has a WFI instruction
+  // We update the `last_commit_cycle` if the CPU has a WFI instruction
   // to allow the CPU to run at most `stuck_limit` cycles after WFI resumes execution.
   if (has_wfi()) {
     update_last_commit();
   }
 
   // check whether there're any commits in the last `stuck_limit` cycles
-  if (state->has_commit && cycleCnt > last_commit + stuck_commit_limit) {
+  if (state->has_commit && cycleCnt > state->last_commit_cycle + stuck_commit_limit) {
     Info(
         "No instruction of core %d commits for %lu cycles, maybe get stuck\n"
         "(please also check whether a fence.i instruction requires more than %lu cycles to flush the icache)\n",
