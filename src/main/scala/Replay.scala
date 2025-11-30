@@ -109,7 +109,7 @@ class ReplayControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |
        |// For the C/C++ interface
        |export "DPI-C" function set_replay_head;
-       |function set_replay_head(int head);
+       |function void set_replay_head(int head);
        |  replay = 1'b1;
        |  replay_head = head;
        |endfunction
