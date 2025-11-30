@@ -417,7 +417,9 @@ inline int Difftest::check_all() {
           return 1;
         }
 #ifndef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_LOADEVENT
         do_load_check(i);
+#endif // CONFIG_DIFFTEST_LOADEVENT
         if (do_store_check()) {
           return 1;
         }
@@ -606,7 +608,9 @@ int Difftest::do_instr_commit(int i) {
     proxy->ref_exec(1);
 #ifdef CONFIG_DIFFTEST_SQUASH
     commit_stamp = (commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
-    do_load_check(i);
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+    do_load_check_squash();
+#endif // CONFIG_DIFFTEST_LOADEVENT
     if (do_store_check()) {
       return 1;
     }
@@ -761,20 +765,10 @@ void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
 }
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
 
+#ifdef CONFIG_DIFFTEST_LOADEVENT
 void Difftest::do_load_check(int i) {
   // Handle load instruction carefully for SMP
-#ifdef CONFIG_DIFFTEST_LOADEVENT
   if (NUM_CORES > 1) {
-#ifdef CONFIG_DIFFTEST_SQUASH
-    if (load_event_queue.empty())
-      return;
-    auto load_event = load_event_queue.front();
-    if (load_event.stamp != commit_stamp)
-      return;
-    bool regWen = load_event.regWen;
-    auto refRegPtr = proxy->arch_reg(load_event.wdest, load_event.fpwen);
-    auto commitData = load_event.commitData;
-#else
     auto load_event = dut->load[i];
     if (!load_event.valid)
       return;
@@ -782,128 +776,144 @@ void Difftest::do_load_check(int i) {
         ((dut->commit[i].rfwen && dut->commit[i].wdest != 0) || dut->commit[i].fpwen) && !dut->commit[i].vecwen;
     auto refRegPtr = proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen);
     auto commitData = get_commit_data(i);
-#endif // CONFIG_DIFFTEST_SQUASH
+    do_load_check(load_event, regWen, refRegPtr, commitData);
 
-#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
-    if (load_event.isVLoad) {
-      do_vec_load_check(i, load_event);
-#ifdef CONFIG_DIFFTEST_SQUASH
-      load_event_queue.pop();
+    dut->load[i].valid = 0;
+  }
+}
+#endif // CONFIG_DIFFTEST_LOADEVENT
+
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
+void Difftest::do_load_check_squash() {
+#if NUM_CORES > 1
+  if (load_event_queue.empty())
+    return;
+  auto load_event = load_event_queue.front();
+  if (load_event.stamp != commit_stamp)
+    return;
+  bool regWen = load_event.regWen;
+  auto refRegPtr = proxy->arch_reg(load_event.wdest, load_event.fpwen);
+  auto commitData = load_event.commitData;
+  do_load_check(load_event, regWen, refRegPtr, commitData);
+
+  load_event_queue.pop();
+#endif // NUM_CORES > 1
+}
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
+
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+void Difftest::do_load_check(DifftestLoadEvent load_event, bool regWen, uint64_t *refRegPtr, uint64_t commitData) {
+  if (load_event.isVLoad) {
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+    do_vec_load_check(i, load_event);
 #else
-      dut->load[i].valid = 0;
-#endif // CONFIG_DIFFTEST_SQUASH
-      return;
-    }
-#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
+    Info("isVLoad should never be set if vector is not enabled\n");
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+    return;
+  }
 
-    if (load_event.isLoad || load_event.isAtomic) {
-      proxy->sync();
-      if (regWen && *refRegPtr != commitData) {
-        uint64_t golden;
-        uint64_t golden_flag;
-        uint64_t mask = 0xFFFFFFFFFFFFFFFF;
-        int len = 0;
-        if (load_event.isLoad) {
-          switch (load_event.opType) {
-            case 0:  // lb
-            case 4:  // lbu
-            case 16: // hlvb
-            case 20: // hlvbu
-              len = 1;
-              break;
+  if (load_event.isLoad || load_event.isAtomic) {
+    proxy->sync();
+    if (regWen && *refRegPtr != commitData) {
+      uint64_t golden;
+      uint64_t golden_flag;
+      uint64_t mask = 0xFFFFFFFFFFFFFFFF;
+      int len = 0;
+      if (load_event.isLoad) {
+        switch (load_event.opType) {
+          case 0:  // lb
+          case 4:  // lbu
+          case 16: // hlvb
+          case 20: // hlvbu
+            len = 1;
+            break;
 
-            case 1:  // lh
-            case 5:  // lhu
-            case 17: // hlvh
-            case 21: // hlvhu
-            case 29: // hlvxhu
-              len = 2;
-              break;
+          case 1:  // lh
+          case 5:  // lhu
+          case 17: // hlvh
+          case 21: // hlvhu
+          case 29: // hlvxhu
+            len = 2;
+            break;
 
-            case 2:  // lw
-            case 6:  // lwu
-            case 18: // hlvw
-            case 22: // hlvwu
-            case 30: // hlvxwu
-              len = 4;
-              break;
-
-            case 3:  // ld
-            case 19: // hlvd
-              len = 8;
-              break;
-
-            default: Info("Unknown fuOpType: 0x%x\n", load_event.opType);
-          }
-        } else if (load_event.isAtomic) {
-          if (load_event.opType % 2 == 0) {
+          case 2:  // lw
+          case 6:  // lwu
+          case 18: // hlvw
+          case 22: // hlvwu
+          case 30: // hlvxwu
             len = 4;
-          } else { // load_event.opType % 2 == 1
+            break;
+
+          case 3:  // ld
+          case 19: // hlvd
             len = 8;
-          }
+            break;
+
+          default: Info("Unknown fuOpType: 0x%x\n", load_event.opType);
         }
-        read_goldenmem(load_event.paddr, &golden, len, &golden_flag);
-        if (load_event.isLoad) {
-          switch (len) {
-            case 1:
-              golden = (int64_t)(int8_t)golden;
-              golden_flag = (int64_t)(int8_t)golden_flag;
-              mask = (uint64_t)(0xFF);
-              break;
-            case 2:
-              golden = (int64_t)(int16_t)golden;
-              golden_flag = (int64_t)(int16_t)golden_flag;
-              mask = (uint64_t)(0xFFFF);
-              break;
-            case 4:
-              golden = (int64_t)(int32_t)golden;
-              golden_flag = (int64_t)(int32_t)golden_flag;
-              mask = (uint64_t)(0xFFFFFFFF);
-              break;
-          }
-        }
-        if (golden == commitData || load_event.isAtomic) { //  atomic instr carefully handled
-          proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
-          if (regWen) {
-            *refRegPtr = commitData;
-            proxy->sync(true);
-          }
-        } else if (load_event.isLoad && golden_flag != 0) {
-          // goldenmem check failed, but the flag is set, so use DUT data to reset
-          Info("load check of uncache mm store flag\n");
-          Info("  DUT data: 0x%lx, regWen: %d, refRegPtr: 0x%lx\n", commitData, regWen, refRegPtr);
-          proxy->ref_memcpy(load_event.paddr, &commitData, len, DUT_TO_REF);
-          update_goldenmem(load_event.paddr, &commitData, mask, len);
-          if (regWen) {
-            *refRegPtr = commitData;
-            proxy->sync(true);
-          }
-        } else {
-#ifdef DEBUG_SMP
-          // goldenmem check failed as well, raise error
-          Info("---  SMP difftest mismatch!\n");
-          Info("---  Trying to probe local data of another core\n");
-          uint64_t buf;
-          difftest[(NUM_CORES - 1) - this->id]->proxy->memcpy(load_event.paddr, &buf, len, DIFFTEST_TO_DUT);
-          Info("---    content: %lx\n", buf);
-#else
-          proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
-          if (regWen) {
-            *refRegPtr = commitData;
-            proxy->sync(true);
-          }
-#endif
+      } else if (load_event.isAtomic) {
+        if (load_event.opType % 2 == 0) {
+          len = 4;
+        } else { // load_event.opType % 2 == 1
+          len = 8;
         }
       }
-    }
-#ifdef CONFIG_DIFFTEST_SQUASH
-    load_event_queue.pop();
+      read_goldenmem(load_event.paddr, &golden, len, &golden_flag);
+      if (load_event.isLoad) {
+        switch (len) {
+          case 1:
+            golden = (int64_t)(int8_t)golden;
+            golden_flag = (int64_t)(int8_t)golden_flag;
+            mask = (uint64_t)(0xFF);
+            break;
+          case 2:
+            golden = (int64_t)(int16_t)golden;
+            golden_flag = (int64_t)(int16_t)golden_flag;
+            mask = (uint64_t)(0xFFFF);
+            break;
+          case 4:
+            golden = (int64_t)(int32_t)golden;
+            golden_flag = (int64_t)(int32_t)golden_flag;
+            mask = (uint64_t)(0xFFFFFFFF);
+            break;
+        }
+      }
+      if (golden == commitData || load_event.isAtomic) { //  atomic instr carefully handled
+        proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
+        if (regWen) {
+          *refRegPtr = commitData;
+          proxy->sync(true);
+        }
+      } else if (load_event.isLoad && golden_flag != 0) {
+        // goldenmem check failed, but the flag is set, so use DUT data to reset
+        Info("load check of uncache mm store flag\n");
+        Info("  DUT data: 0x%lx, regWen: %d, refRegPtr: 0x%lx\n", commitData, regWen, refRegPtr);
+        proxy->ref_memcpy(load_event.paddr, &commitData, len, DUT_TO_REF);
+        update_goldenmem(load_event.paddr, &commitData, mask, len);
+        if (regWen) {
+          *refRegPtr = commitData;
+          proxy->sync(true);
+        }
+      } else {
+#ifdef DEBUG_SMP
+        // goldenmem check failed as well, raise error
+        Info("---  SMP difftest mismatch!\n");
+        Info("---  Trying to probe local data of another core\n");
+        uint64_t buf;
+        difftest[(NUM_CORES - 1) - this->id]->proxy->memcpy(load_event.paddr, &buf, len, DIFFTEST_TO_DUT);
+        Info("---    content: %lx\n", buf);
 #else
-    dut->load[i].valid = 0;
-#endif // CONFIG_DIFFTEST_SQUASH
+        proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
+        if (regWen) {
+          *refRegPtr = commitData;
+          proxy->sync(true);
+        }
+#endif
+      }
+    }
   }
-#endif // CONFIG_DIFFTEST_LOADEVENT
 }
+#endif // CONFIG_DIFFTEST_LOADEVENT
 
 int Difftest::do_store_check() {
 #ifdef CONFIG_DIFFTEST_STOREEVENT
