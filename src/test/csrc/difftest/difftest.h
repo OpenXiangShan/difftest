@@ -130,8 +130,8 @@ public:
   }
 
 #ifdef DEBUG_REFILL
-  void save_track_instr(uint64_t instr) {
-    track_instr = instr;
+  void set_track_instr(uint64_t instr) {
+    state->track_instr = instr;
   }
 #endif
 
@@ -173,22 +173,13 @@ protected:
   uint64_t ref_commit_first_pc = 0;
 
   DiffState *state = NULL;
-#ifdef DEBUG_REFILL
-  uint64_t track_instr = 0;
-#endif
 
 #ifdef CONFIG_DIFFTEST_SQUASH
-  int commit_stamp = 0;
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   std::queue<DifftestLoadEvent> load_event_queue;
   void load_event_record();
 #endif // CONFIG_DIFFTEST_LOADEVENT
 #endif // CONFIG_DIFFTEST_SQUASH
-
-#ifdef CONFIG_DIFFTEST_STOREEVENT
-  std::queue<DifftestStoreEvent> store_event_queue;
-  void store_event_record();
-#endif
 
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
   std::unordered_set<uint64_t> cmo_inval_event_set;
@@ -208,6 +199,9 @@ protected:
 #endif // CONFIG_DIFFTEST_LRSCEVENT
 #ifdef CONFIG_DIFFTEST_REFILLEVENT
   RefillChecker *refill_checker[CONFIG_DIFF_REFILL_WIDTH] = {nullptr};
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+  CmoInvalRecorder *cmo_inval_recorder = nullptr;
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 #ifdef CONFIG_DIFFTEST_L1TLBEVENT
   L1TLBChecker *l1tlb_checker[CONFIG_DIFF_L1TLB_WIDTH] = {nullptr};
@@ -231,6 +225,27 @@ protected:
   CriticalErrorChecker *critical_error_checker = nullptr;
 #endif // CONFIG_DIFFTEST_CRITICALERROREVENT
 
+  GoldenMemoryInit *golden_memory_init_checker = nullptr;
+#ifdef CONFIG_DIFFTEST_SBUFFEREVENT
+  SbufferChecker *sbuffer_checker[CONFIG_DIFF_SBUFFER_WIDTH] = {nullptr};
+#endif // CONFIG_DIFFTEST_SBUFFEREVENT
+#ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+  UncacheMmStoreChecker *uncache_mm_store_checker[CONFIG_DIFF_UNCACHE_MM_STORE_WIDTH] = {nullptr};
+#endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+#ifdef CONFIG_DIFFTEST_ATOMICEVENT
+  AtomicChecker *atomic_checker = nullptr;
+#endif // CONFIG_DIFFTEST_ATOMICEVENT
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  StoreRecorder *store_recorder[CONFIG_DIFF_STORE_WIDTH] = {nullptr};
+  StoreChecker *store_checker = nullptr;
+#endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+  LoadChecker *load_checker[CONFIG_DIFF_LOADEVENT_WIDTH] = {nullptr};
+#ifdef CONFIG_DIFFTEST_SQUASH
+  LoadSquashChecker *load_squash_checker = nullptr;
+#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_LOADEVENT
+
   int check_all();
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   void do_load_check(int index);
@@ -242,7 +257,6 @@ protected:
   void do_vec_load_check(int index, DifftestLoadEvent load_event);
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #endif // CONFIG_DIFFTEST_LOADEVENT
-  int do_store_check();
   int do_golden_memory_update();
 
   inline bool in_disambiguation_state() {

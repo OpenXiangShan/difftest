@@ -113,4 +113,18 @@ int RefillChecker::check(const DifftestRefillEvent &probe) {
   return 0;
 }
 
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+bool CmoInvalRecorder::get_valid(const DifftestCmoInvalEvent &probe) {
+  return probe.valid;
+}
+
+void CmoInvalRecorder::clear_valid(DifftestCmoInvalEvent &probe) {
+  probe.valid = 0;
+}
+
+int CmoInvalRecorder::check(const DifftestCmoInvalEvent &probe) {
+  cmo_inval_event_set.insert(probe.addr);
+}
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
+
 #endif // CONFIG_DIFFTEST_REFILLEVENT

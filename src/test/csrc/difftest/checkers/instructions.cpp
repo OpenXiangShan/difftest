@@ -91,6 +91,9 @@ bool InstrCommitChecker::get_valid(const DifftestInstrCommit &probe) {
 
 void InstrCommitChecker::clear_valid(DifftestInstrCommit &probe) {
   probe.valid = 0;
+#ifdef CONFIG_DIFFTEST_SQUASH
+  state->commit_stamp = (state->commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+#endif // CONFIG_DIFFTEST_SQUASH
 }
 
 int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
@@ -166,13 +169,6 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
   // when there's a fused instruction, let proxy execute more instructions.
   for (int j = 0; j < probe.nFused + 1; j++) {
     proxy->ref_exec(1);
-#ifdef CONFIG_DIFFTEST_SQUASH
-    commit_stamp = (commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
-    do_load_check(i);
-    if (do_store_check()) {
-      return 1;
-    }
-#endif // CONFIG_DIFFTEST_SQUASH
   }
 
   return 0;

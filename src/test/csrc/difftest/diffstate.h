@@ -117,6 +117,17 @@ public:
   int delayed_fp[32] = {0};
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
 
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  std::queue<DifftestStoreEvent> store_event_queue;
+#endif // CONFIG_DIFFTEST_STOREEVENT
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+  int commit_stamp = 0;
+#endif // CONFIG_DIFFTEST_SQUASH
+#ifdef DEBUG_REFILL
+  uint64_t track_instr = 0;
+#endif // DEBUG_REFILL
+
   bool dump_commit_trace = false;
 
   DiffState(int coreid);

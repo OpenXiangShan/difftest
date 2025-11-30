@@ -224,6 +224,10 @@ void Difftest::init_checkers() {
     refill_checker[i] =
         new RefillChecker([this, i]() -> DifftestRefillEvent & { return dut->refill[i]; }, state, proxy);
   }
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+  cmo_inval_recorder =
+      new CmoInvalRecorder([this]() -> DifftestCmoInvalEvent & { return dut->cmo_inval; }, state, proxy);
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 #ifdef CONFIG_DIFFTEST_L1TLBEVENT
   for (int i = 0; i < CONFIG_DIFF_L1TLB_WIDTH; i++) {
@@ -254,6 +258,39 @@ void Difftest::init_checkers() {
   critical_error_checker =
       new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy);
 #endif // CONFIG_DIFFTEST_CRITICALERROREVENT
+
+  golden_memory_init_checker =
+      new GoldenMemoryInit([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy);
+#ifdef CONFIG_DIFFTEST_SBUFFEREVENT
+  for (int i = 0; i < CONFIG_DIFF_SBUFFER_WIDTH; i++) {
+    sbuffer_checker[i] =
+        new SbufferChecker([this, i]() -> DifftestSbufferEvent & { return dut->sbuffer[i]; }, state, proxy);
+  }
+#endif // CONFIG_DIFFTEST_SBUFFEREVENT
+#ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+  for (int i = 0; i < CONFIG_DIFF_UNCACHE_MM_STORE_WIDTH; i++) {
+    uncache_mm_store_checker = new UncacheMmStoreChecker(
+        [this, i]() -> DifftestUncacheMmStoreEvent & { return dut->uncache_mm_store[i]; }, state, proxy);
+  }
+#endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+#ifdef CONFIG_DIFFTEST_ATOMICEVENT
+  atomic_checker = new AtomicChecker([this]() -> DifftestAtomicEvent & { return dut->atomic; }, state, proxy);
+#endif // CONFIG_DIFFTEST_ATOMICEVENT
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
+    store_recorder[i] = new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy);
+  }
+  store_checker = new StoreChecker(state, proxy);
+#endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+  for (int i = 0; i < CONFIG_DIFF_LOADEVENT_WIDTH; i++) {
+    load_checker[i] = new LoadChecker([this, i]() -> DifftestLoadEvent & { return dut->load[i]; }, state, proxy,
+                                      [this]() -> const DiffTestState & { return *dut; });
+  }
+#ifdef CONFIG_DIFFTEST_SQUASH
+  load_squash_checker = new LoadSquashChecker(state, proxy, [this]() -> const DiffTestState & { return *dut; });
+#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_LOADEVENT
 }
 
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
@@ -314,8 +351,8 @@ void Difftest::do_replay() {
   difftest_replay_head(info.trace_head);
   // clear buffered queue
 #ifdef CONFIG_DIFFTEST_STOREEVENT
-  while (!store_event_queue.empty())
-    store_event_queue.pop();
+  while (!state->store_event_queue.empty())
+    state->store_event_queue.pop();
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
   while (!load_event_queue.empty())
@@ -369,12 +406,20 @@ inline int Difftest::check_all() {
   // Each cycle is checked for an store event, and recorded in queue.
   // It is checked every time an instruction is committed and queue has content.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
-  store_event_record();
+  for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
+    if (int ret = store_recorder[i]->step()) {
+      return ret;
+    }
+  }
 #endif
 
 #ifdef CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-  load_event_record();
+  for (int i = 0; i < CONFIG_DIFF_LOADEVENT_WIDTH; i++) {
+    if (int ret = load_checker[i]->step()) {
+      return ret;
+    }
+  }
 #endif // CONFIG_DIFFTEST_LOADEVENT
 #endif // CONFIG_DIFFTEST_SQUASH
 
@@ -385,7 +430,7 @@ inline int Difftest::check_all() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-  cmo_inval_event_record();
+  cmo_inval_recorder->step();
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 
 #ifdef DEBUG_REFILL
@@ -466,19 +511,23 @@ inline int Difftest::check_all() {
 #endif
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
+        num_commit += 1 + dut->commit[i].nFused;
         if (instr_commit_checker[i]->step()) {
           return 1;
         }
-#ifndef CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-        do_load_check(i);
+#ifdef CONFIG_DIFFTEST_SQUASH
+        load_squash_checker->step();
+#else
+        load_checker[i]->step();
+#endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_LOADEVENT
-        if (do_store_check()) {
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+        // check is the same for all checkers
+        if (store_checker->step()) {
           return 1;
         }
-#endif // CONFIG_DIFFTEST_SQUASH
-        dut->commit[i].valid = 0;
-        num_commit += 1 + dut->commit[i].nFused;
+#endif // CONFIG_DIFFTEST_STOREEVENT
       }
     }
   }
@@ -522,555 +571,37 @@ inline int Difftest::check_all() {
   return 0;
 }
 
-#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
-void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
-  if (!enable_vec_load_goldenmem_check) {
-    return;
-  }
-
-  // ===============================================================
-  //                      Comparison data
-  // ===============================================================
-  uint32_t vdNum = proxy->get_ref_vdNum();
-
-  proxy->sync();
-
-#ifdef CONFIG_DIFFTEST_SQUASH
-  auto vecFirstLdest = load_event.wdest;
-#else
-  auto vecFirstLdest = dut->commit[index].wdest;
-#endif // CONFIG_DIFFTEST_SQUASH
-
-  bool reg_mismatch = false;
-
-  for (int vdidx = 0; vdidx < vdNum; vdidx++) {
-    auto vecNextLdest = vecFirstLdest + vdidx;
-    for (int i = 0; i < VLENE_64; i++) {
-      int dataIndex = VLENE_64 * vdidx + i;
-#ifdef CONFIG_DIFFTEST_VECCOMMITDATA
-#ifdef CONFIG_DIFFTEST_SQUASH
-      uint64_t dutRegData = load_event.vecCommitData[dataIndex];
-#else
-      uint64_t dutRegData = dut->vec_commit_data[index].data[dataIndex];
-#endif // CONFIG_DIFFTEST_SQUASH
-#else
-      // TODO: support Squash without vec_commit_data (i.e. update ArchReg in software)
-      auto vecNextPdest = dut->commit[index].otherwpdest[dataIndex];
-      uint64_t dutRegData = dut->pregs_vrf.value[vecPdest];
-#endif // CONFIG_DIFFTEST_VECCOMMITDATA
-
-      uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
-      reg_mismatch |= dutRegData != *refRegPtr;
-    }
-  }
-
-  // ===============================================================
-  //                      Regs Mismatch handle
-  // ===============================================================
-  bool goldenmem_mismatch = false;
-
-  if (reg_mismatch) {
-    // ===============================================================
-    //                      Check golden memory
-    // ===============================================================
-    uint64_t *vec_goldenmem_regPtr = (uint64_t *)proxy->get_vec_goldenmem_reg();
-
-    if (vec_goldenmem_regPtr == nullptr) {
-      Info("Vector Load comparison failed and no consistency check with golden mem was performed.\n");
-      return;
-    }
-
-    for (int vdidx = 0; vdidx < vdNum; vdidx++) {
-#ifndef CONFIG_DIFFTEST_COMMITDATA
-      bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
-      auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
-      uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vrf[vecNextPdest].data;
-#endif // !CONFIG_DIFFTEST_COMMITDATA
-
-      for (int i = 0; i < VLENE_64; i++) {
-#ifdef CONFIG_DIFFTEST_COMMITDATA
-#ifdef CONFIG_DIFFTEST_SQUASH
-        uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
-#else
-        uint64_t dutRegData = dut->vec_commit_data[index].data[VLENE_64 * vdidx + i];
-#endif // CONFIG_DIFFTEST_SQUASH
-#else
-        uint64_t dutRegData = dutRegPtr[i];
-#endif // CONFIG_DIFFTEST_COMMITDATA
-
-        goldenmem_mismatch |= dutRegData != vec_goldenmem_regPtr[VLENE_64 * vdidx + i];
-      }
-    }
-
-    if (!goldenmem_mismatch) {
-      // ===============================================================
-      //                      sync memory and regs
-      // ===============================================================
-      proxy->vec_update_goldenmem();
-
-      for (int vdidx = 0; vdidx < vdNum; vdidx++) {
-#ifndef CONFIG_DIFFTEST_COMMITDATA
-        bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
-        auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
-        uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vrf[vecNextPdest].data;
-#endif // !CONFIG_DIFFTEST_COMMITDATA
-
-        auto vecNextLdest = vecFirstLdest + vdidx;
-
-        for (int i = 0; i < VLENE_64; i++) {
-#ifdef CONFIG_DIFFTEST_COMMITDATA
-#ifdef CONFIG_DIFFTEST_SQUASH
-          uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
-#else
-          uint64_t dutRegData = dut->vec_commit_data[index].data[VLENE_64 * vdidx + i];
-#endif // CONFIG_DIFFTEST_SQUASH
-#else
-          uint64_t dutRegData = dutRegPtr[i];
-#endif // CONFIG_DIFFTEST_COMMITDATA
-
-          uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
-          *refRegPtr = dutRegData;
-        }
-      }
-
-      proxy->sync(true);
-    } else {
-      Info("Vector Load register and golden memory mismatch\n");
-    }
-  }
-}
-#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
-
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-void Difftest::do_load_check(int i) {
-  // Handle load instruction carefully for SMP
-  if (NUM_CORES > 1) {
-    auto load_event = dut->load[i];
-    if (!load_event.valid)
-      return;
-    bool regWen =
-        ((dut->commit[i].rfwen && dut->commit[i].wdest != 0) || dut->commit[i].fpwen) && !dut->commit[i].vecwen;
-    auto refRegPtr = proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen);
-    auto commitData = get_commit_data(i);
-    do_load_check(load_event, regWen, refRegPtr, commitData);
-
-    dut->load[i].valid = 0;
-  }
-}
-#endif // CONFIG_DIFFTEST_LOADEVENT
-
-#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
-void Difftest::do_load_check_squash() {
-#if NUM_CORES > 1
-  if (load_event_queue.empty())
-    return;
-  auto load_event = load_event_queue.front();
-  if (load_event.stamp != commit_stamp)
-    return;
-  bool regWen = load_event.regWen;
-  auto refRegPtr = proxy->arch_reg(load_event.wdest, load_event.fpwen);
-  auto commitData = load_event.commitData;
-  do_load_check(load_event, regWen, refRegPtr, commitData);
-
-  load_event_queue.pop();
-#endif // NUM_CORES > 1
-}
-#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
-
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-void Difftest::do_load_check(DifftestLoadEvent load_event, bool regWen, uint64_t *refRegPtr, uint64_t commitData) {
-  if (load_event.isVLoad) {
-#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    do_vec_load_check(i, load_event);
-#else
-    Info("isVLoad should never be set if vector is not enabled\n");
-#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
-    return;
-  }
-
-  if (load_event.isLoad || load_event.isAtomic) {
-    proxy->sync();
-    if (regWen && *refRegPtr != commitData) {
-      uint64_t golden;
-      uint64_t golden_flag;
-      uint64_t mask = 0xFFFFFFFFFFFFFFFF;
-      int len = 0;
-      if (load_event.isLoad) {
-        switch (load_event.opType) {
-          case 0:  // lb
-          case 4:  // lbu
-          case 16: // hlvb
-          case 20: // hlvbu
-            len = 1;
-            break;
-
-          case 1:  // lh
-          case 5:  // lhu
-          case 17: // hlvh
-          case 21: // hlvhu
-          case 29: // hlvxhu
-            len = 2;
-            break;
-
-          case 2:  // lw
-          case 6:  // lwu
-          case 18: // hlvw
-          case 22: // hlvwu
-          case 30: // hlvxwu
-            len = 4;
-            break;
-
-          case 3:  // ld
-          case 19: // hlvd
-            len = 8;
-            break;
-
-          default: Info("Unknown fuOpType: 0x%x\n", load_event.opType);
-        }
-      } else if (load_event.isAtomic) {
-        if (load_event.opType % 2 == 0) {
-          len = 4;
-        } else { // load_event.opType % 2 == 1
-          len = 8;
-        }
-      }
-      read_goldenmem(load_event.paddr, &golden, len, &golden_flag);
-      if (load_event.isLoad) {
-        switch (len) {
-          case 1:
-            golden = (int64_t)(int8_t)golden;
-            golden_flag = (int64_t)(int8_t)golden_flag;
-            mask = (uint64_t)(0xFF);
-            break;
-          case 2:
-            golden = (int64_t)(int16_t)golden;
-            golden_flag = (int64_t)(int16_t)golden_flag;
-            mask = (uint64_t)(0xFFFF);
-            break;
-          case 4:
-            golden = (int64_t)(int32_t)golden;
-            golden_flag = (int64_t)(int32_t)golden_flag;
-            mask = (uint64_t)(0xFFFFFFFF);
-            break;
-        }
-      }
-      if (golden == commitData || load_event.isAtomic) { //  atomic instr carefully handled
-        proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
-        if (regWen) {
-          *refRegPtr = commitData;
-          proxy->sync(true);
-        }
-      } else if (load_event.isLoad && golden_flag != 0) {
-        // goldenmem check failed, but the flag is set, so use DUT data to reset
-        Info("load check of uncache mm store flag\n");
-        Info("  DUT data: 0x%lx, regWen: %d, refRegPtr: 0x%lx\n", commitData, regWen, refRegPtr);
-        proxy->ref_memcpy(load_event.paddr, &commitData, len, DUT_TO_REF);
-        update_goldenmem(load_event.paddr, &commitData, mask, len);
-        if (regWen) {
-          *refRegPtr = commitData;
-          proxy->sync(true);
-        }
-      } else {
-#ifdef DEBUG_SMP
-        // goldenmem check failed as well, raise error
-        Info("---  SMP difftest mismatch!\n");
-        Info("---  Trying to probe local data of another core\n");
-        uint64_t buf;
-        difftest[(NUM_CORES - 1) - this->id]->proxy->memcpy(load_event.paddr, &buf, len, DIFFTEST_TO_DUT);
-        Info("---    content: %lx\n", buf);
-#else
-        proxy->ref_memcpy(load_event.paddr, &golden, len, DUT_TO_REF);
-        if (regWen) {
-          *refRegPtr = commitData;
-          proxy->sync(true);
-        }
-#endif
-      }
-    }
-  }
-}
-#endif // CONFIG_DIFFTEST_LOADEVENT
-
-int Difftest::do_store_check() {
-#ifdef CONFIG_DIFFTEST_STOREEVENT
-  while (!store_event_queue.empty()) {
-    auto store_event = store_event_queue.front();
-#ifdef CONFIG_DIFFTEST_SQUASH
-    if (store_event.stamp != commit_stamp)
-      return 0;
-#endif // CONFIG_DIFFTEST_SQUASH
-    auto addr = store_event.addr;
-    auto data = store_event.data;
-    auto mask = store_event.mask;
-
-    if (proxy->store_commit(&addr, &data, &mask)) {
-#ifdef FUZZING
-      if (in_disambiguation_state()) {
-        Info("Store mismatch detected with a disambiguation state at pc = 0x%lx.\n", dut->trap.pc);
-        return 0;
-      }
-#endif
-      uint64_t pc = store_event.pc;
-      display();
-
-      Info("\n==============  Store Commit Event (Core %d)  ==============\n", this->id);
-      proxy->get_store_event_other_info(&pc);
-      Info("Mismatch for store commits \n");
-      Info("  REF commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx\n", addr, data, mask, pc);
-      Info("  DUT commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx, robidx 0x%x\n", store_event.addr,
-           store_event.data, store_event.mask, store_event.pc, store_event.robidx);
-
-      store_event_queue.pop();
-      return 1;
-    }
-
-    store_event_queue.pop();
-  }
-#endif // CONFIG_DIFFTEST_STOREEVENT
-  return 0;
-}
-
-inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[], uint64_t atomicMask,
-                         uint64_t atomicCmp[], uint8_t atomicFuop, uint64_t atomicOut[]) {
-  // We need to do atmoic operations here so as to update goldenMem
-  if (!(atomicMask == 0xf || atomicMask == 0xf0 || atomicMask == 0xff || atomicMask == 0xffff)) {
-    Info("Unrecognized mask: %lx\n", atomicMask);
-    return 1;
-  }
-
-  if (atomicMask == 0xff) {
-    uint64_t rs = atomicData[0]; // rs2
-    uint64_t t = atomicOut[0];   // original value
-    uint64_t cmp = atomicCmp[0]; // rd, data to be compared
-    uint64_t ret;
-    uint64_t mem;
-    read_goldenmem(atomicAddr, &mem, 8);
-    if (mem != t && atomicFuop != 007 && atomicFuop != 003) { // ignore sc_d & lr_d
-      Info("Core %d atomic instr mismatch goldenMem, mem: 0x%lx, t: 0x%lx, op: 0x%x, addr: 0x%lx\n", coreid, mem, t,
-           atomicFuop, atomicAddr);
-      return 1;
-    }
-    switch (atomicFuop) {
-      case 002:
-      case 003: ret = t; break;
-      // if sc fails(aka atomicOut == 1), no update to goldenmem
-      case 006:
-      case 007:
-        if (t == 1)
-          return 0;
-        ret = rs;
-        break;
-      case 012:
-      case 013: ret = rs; break;
-      case 016:
-      case 017: ret = t + rs; break;
-      case 022:
-      case 023: ret = (t ^ rs); break;
-      case 026:
-      case 027: ret = t & rs; break;
-      case 032:
-      case 033: ret = t | rs; break;
-      case 036:
-      case 037: ret = ((int64_t)t < (int64_t)rs) ? t : rs; break;
-      case 042:
-      case 043: ret = ((int64_t)t > (int64_t)rs) ? t : rs; break;
-      case 046:
-      case 047: ret = (t < rs) ? t : rs; break;
-      case 052:
-      case 053: ret = (t > rs) ? t : rs; break;
-      case 054:
-      case 056:
-      case 057: ret = (t == cmp) ? rs : t; break;
-      default: Info("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
-    }
-    update_goldenmem(atomicAddr, &ret, atomicMask, 8);
-  }
-
-  if (atomicMask == 0xf || atomicMask == 0xf0) {
-    uint32_t rs = (uint32_t)atomicData[0]; // rs2
-    uint32_t t = (uint32_t)atomicOut[0];   // original value
-    uint32_t cmp = (uint32_t)atomicCmp[0]; // rd, data to be compared
-    uint32_t ret;
-    uint32_t mem;
-    uint64_t mem_raw;
-    uint64_t ret_sel;
-    atomicAddr = (atomicAddr & 0xfffffffffffffff8);
-    read_goldenmem(atomicAddr, &mem_raw, 8);
-
-    if (atomicMask == 0xf)
-      mem = (uint32_t)mem_raw;
-    else
-      mem = (uint32_t)(mem_raw >> 32);
-
-    if (mem != t && atomicFuop != 006 && atomicFuop != 002) { // ignore sc_w & lr_w
-      Info("Core %d atomic instr mismatch goldenMem, rawmem: 0x%lx mem: 0x%x, t: 0x%x, op: 0x%x, addr: 0x%lx\n", coreid,
-           mem_raw, mem, t, atomicFuop, atomicAddr);
-      return 1;
-    }
-    switch (atomicFuop) {
-      case 002:
-      case 003: ret = t; break;
-      // if sc fails(aka atomicOut == 1), no update to goldenmem
-      case 006:
-      case 007:
-        if (t == 1)
-          return 0;
-        ret = rs;
-        break;
-      case 012:
-      case 013: ret = rs; break;
-      case 016:
-      case 017: ret = t + rs; break;
-      case 022:
-      case 023: ret = (t ^ rs); break;
-      case 026:
-      case 027: ret = t & rs; break;
-      case 032:
-      case 033: ret = t | rs; break;
-      case 036:
-      case 037: ret = ((int32_t)t < (int32_t)rs) ? t : rs; break;
-      case 042:
-      case 043: ret = ((int32_t)t > (int32_t)rs) ? t : rs; break;
-      case 046:
-      case 047: ret = (t < rs) ? t : rs; break;
-      case 052:
-      case 053: ret = (t > rs) ? t : rs; break;
-      case 054:
-      case 056:
-      case 057: ret = (t == cmp) ? rs : t; break;
-      default: Info("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
-    }
-    ret_sel = ret;
-    if (atomicMask == 0xf0)
-      ret_sel = (ret_sel << 32);
-    update_goldenmem(atomicAddr, &ret_sel, atomicMask, 8);
-  }
-
-  if (atomicMask == 0xffff) {
-    uint64_t meml, memh;
-    uint64_t retl, reth;
-    read_goldenmem(atomicAddr, &meml, 8);
-    read_goldenmem(atomicAddr + 8, &memh, 8);
-    if (meml != atomicOut[0] || memh != atomicOut[1]) {
-      Info("Core %d atomic instr mismatch goldenMem, mem: 0x%lx 0x%lx, t: 0x%lx 0x%lx, op: 0x%x, addr: 0x%lx\n", coreid,
-           memh, meml, atomicOut[1], atomicOut[0], atomicFuop, atomicAddr);
-      return 1;
-    }
-    switch (atomicFuop) {
-      case 054: {
-        bool success = atomicOut[0] == atomicCmp[0] && atomicOut[1] == atomicCmp[1];
-        retl = success ? atomicData[0] : atomicOut[0];
-        reth = success ? atomicData[1] : atomicOut[1];
-        break;
-      }
-      default: Info("Unknown atomic fuOpType: 0x%x\n", atomicFuop);
-    }
-    update_goldenmem(atomicAddr, &retl, 0xff, 8);
-    update_goldenmem(atomicAddr + 8, &reth, 0xff, 8);
-  }
-  return 0;
-}
-
-void dumpGoldenMem(const char *banner, uint64_t addr, uint64_t time) {
-#ifdef DEBUG_REFILL
-  char buf[512];
-  if (addr == 0) {
-    return;
-  }
-  Info("============== %s =============== time = %ld\ndata: ", banner, time);
-  for (int i = 0; i < 8; i++) {
-    read_goldenmem(addr + i * 8, &buf, 8);
-    Info("%016lx", *((uint64_t *)buf));
-  }
-  Info("\n");
-#endif
-}
-
 #ifdef DEBUG_GOLDENMEM
 int Difftest::do_golden_memory_update() {
-  // Update Golden Memory info
-  uint64_t cycleCnt = get_trap_event()->cycleCnt;
-  static bool initDump = true;
-  if (cycleCnt >= 100 && initDump) {
-    initDump = false;
-    dumpGoldenMem("Init", track_instr, cycleCnt);
+  if (int ret = golden_memory_init_checker->step()) {
+    return ret;
   }
 
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
   for (int i = 0; i < CONFIG_DIFF_UNCACHE_MM_STORE_WIDTH; i++) {
-    if (dut->uncache_mm_store[i].valid) {
-      dut->uncache_mm_store[i].valid = 0;
-      // the flag is set only in the case of multi-cores and uncache mm store
-      uint8_t flag = NUM_CORES > 1 ? 1 : 0;
-      update_goldenmem(dut->uncache_mm_store[i].addr, dut->uncache_mm_store[i].data, dut->uncache_mm_store[i].mask, 8,
-                       flag);
-      if (dut->uncache_mm_store[i].addr == track_instr) {
-        dumpGoldenMem("Uncache MM Store", track_instr, cycleCnt);
-      }
+    if (int ret = uncache_mm_store_checker[i]->step()) {
+      return ret;
     }
   }
 #endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+
 #ifdef CONFIG_DIFFTEST_SBUFFEREVENT
   for (int i = 0; i < CONFIG_DIFF_SBUFFER_WIDTH; i++) {
-    if (dut->sbuffer[i].valid) {
-      dut->sbuffer[i].valid = 0;
-      update_goldenmem(dut->sbuffer[i].addr, dut->sbuffer[i].data, dut->sbuffer[i].mask, 64);
-      if (dut->sbuffer[i].addr == track_instr) {
-        dumpGoldenMem("Store", track_instr, cycleCnt);
-      }
+    if (int ret = sbuffer_checker[i]->step()) {
+      return ret;
     }
   }
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
 #ifdef CONFIG_DIFFTEST_ATOMICEVENT
-  if (dut->atomic.valid) {
-    dut->atomic.valid = 0;
-    int ret = handle_atomic(id, dut->atomic.addr, (uint64_t *)dut->atomic.data, dut->atomic.mask,
-                            (uint64_t *)dut->atomic.cmp, dut->atomic.fuop, (uint64_t *)dut->atomic.out);
-    if (dut->atomic.addr == track_instr) {
-      dumpGoldenMem("Atmoic", track_instr, cycleCnt);
-    }
-    if (ret)
-      return ret;
+  if (int ret = atomic_checker->step()) {
+    return ret;
   }
 #endif // CONFIG_DIFFTEST_ATOMICEVENT
 
   return 0;
 }
 #endif
-
-#ifdef CONFIG_DIFFTEST_STOREEVENT
-void Difftest::store_event_record() {
-  for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
-    if (dut->store[i].valid) {
-      store_event_queue.push(dut->store[i]);
-      dut->store[i].valid = 0;
-    }
-  }
-}
-#endif
-
-#ifdef CONFIG_DIFFTEST_SQUASH
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-void Difftest::load_event_record() {
-  for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
-    if (dut->load[i].valid) {
-      load_event_queue.push(dut->load[i]);
-      dut->load[i].valid = 0;
-    }
-  }
-}
-#endif // CONFIG_DIFFTEST_LOADEVENT
-#endif // CONFIG_DIFFTEST_SQUASH
-
-#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-void Difftest::cmo_inval_event_record() {
-  if (dut->cmo_inval.valid) {
-    cmo_inval_event_set.insert(dut->cmo_inval.addr);
-    dut->cmo_inval.valid = 0;
-  }
-}
-#endif // CONFIG_DIFFTEST_CMOINVALEVENT
 
 int Difftest::update_delayed_writeback() {
 #define CHECK_DELAYED_WB(wb, delayed, n, regs_name)                                                \

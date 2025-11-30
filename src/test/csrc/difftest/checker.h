@@ -21,6 +21,31 @@
 #include "diffstate.h"
 #include "refproxy.h"
 
+class SimpleChecker {
+public:
+  SimpleChecker(DiffState *state, REF_PROXY *proxy) : state(state), proxy(proxy) {}
+  virtual ~SimpleChecker() = default;
+
+  int step() {
+    if (get_valid()) {
+      int ret = check();
+      clear_valid();
+      return ret;
+    }
+    return 0;
+  }
+
+protected:
+  DiffState *state;
+  REF_PROXY *proxy;
+
+  virtual bool get_valid() {
+    return true;
+  }
+  virtual void clear_valid() {}
+  virtual int check() = 0;
+};
+
 template <typename Probe> class DiffTestChecker {
 public:
   using GetProbeFn = std::function<Probe &()>;
@@ -48,8 +73,8 @@ protected:
   virtual bool get_valid(const Probe &probe) {
     return true;
   }
-  virtual int check(const Probe &probe) = 0;
   virtual void clear_valid(Probe &probe) {}
+  virtual int check(const Probe &probe) = 0;
 };
 
 class ArchEventChecker : public DiffTestChecker<DifftestArchEvent> {
@@ -166,6 +191,19 @@ private:
   void clear_valid(DifftestRefillEvent &probe) override;
   int check(const DifftestRefillEvent &probe) override;
 };
+
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+class CmoInvalRecorder : public DiffTestChecker<DifftestCmoInvalEvent> {
+public:
+  CmoInvalRecorder(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestCmoInvalEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestCmoInvalEvent &probe) override;
+  void clear_valid(DifftestCmoInvalEvent &probe) override;
+  int check(const DifftestCmoInvalEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
@@ -232,5 +270,110 @@ private:
   int check(const DifftestCriticalErrorEvent &probe) override;
 };
 #endif
+
+class GoldenMemoryInit : public DiffTestChecker<DifftestTrapEvent> {
+public:
+  GoldenMemoryInit(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestTrapEvent>(get_probe, state, proxy) {}
+
+private:
+  bool initDump = true;
+
+  bool get_valid(const DifftestTrapEvent &probe) override;
+  void clear_valid(DifftestTrapEvent &probe) override;
+  int check(const DifftestTrapEvent &probe) override;
+};
+
+#ifdef CONFIG_DIFFTEST_SBUFFEREVENT
+class SbufferChecker : public DiffTestChecker<DifftestSbufferEvent> {
+public:
+  SbufferChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestSbufferEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestSbufferEvent &probe) override;
+  void clear_valid(DifftestSbufferEvent &probe) override;
+  int check(const DifftestSbufferEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_SBUFFEREVENT
+
+#ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+class UncacheMmStoreChecker : public DiffTestChecker<DifftestUncacheMmStoreEvent> {
+public:
+  UncacheMmStoreChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestUncacheMmStoreEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestUncacheMmStoreEvent &probe) override;
+  void clear_valid(DifftestUncacheMmStoreEvent &probe) override;
+  int check(const DifftestUncacheMmStoreEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
+
+#ifdef CONFIG_DIFFTEST_ATOMICEVENT
+class AtomicChecker : public DiffTestChecker<DifftestAtomicEvent> {
+public:
+  AtomicChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestAtomicEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestAtomicEvent &probe) override;
+  void clear_valid(DifftestAtomicEvent &probe) override;
+  int check(const DifftestAtomicEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_ATOMICEVENT
+
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+class LoadChecker : public DiffTestChecker<DifftestLoadEvent> {
+public:
+  LoadChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy,
+              std::function<const DiffTestState &()> get_dut_state)
+      : DiffTestChecker<DifftestLoadEvent>(get_probe, state, proxy), get_dut_state(std::move(get_dut_state)) {}
+
+private:
+  std::function<const DiffTestState &()> get_dut_state;
+
+  bool get_valid(const DifftestLoadEvent &probe) override;
+  void clear_valid(DifftestLoadEvent &probe) override;
+  int check(const DifftestLoadEvent &probe) override;
+};
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+class LoadSquashChecker : public SimpleChecker {
+public:
+  LoadSquashChecker(DiffState *state, REF_PROXY *proxy, std::function<const DiffTestState &()> get_dut_state)
+      : SimpleChecker(state, proxy), get_dut_state(std::move(get_dut_state)) {}
+
+private:
+  std::function<const DiffTestState &()> get_dut_state;
+
+  bool get_valid() override;
+  void clear_valid() override;
+  int check() override;
+};
+
+#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_LOADEVENT
+
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+class StoreRecorder : public DiffTestChecker<DifftestStoreEvent> {
+public:
+  StoreRecorder(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestStoreEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestStoreEvent &probe) override;
+  void clear_valid(DifftestStoreEvent &probe) override;
+  int check(const DifftestStoreEvent &probe) override;
+};
+
+class StoreChecker : public SimpleChecker {
+public:
+  StoreChecker(DiffState *state, REF_PROXY *proxy) : SimpleChecker(state, proxy) {}
+
+private:
+  int check() override;
+};
+#endif // CONFIG_DIFFTEST_STOREEVENT
 
 #endif // __DIFFTEST_CHECKER_H__
