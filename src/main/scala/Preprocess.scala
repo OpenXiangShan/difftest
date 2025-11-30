@@ -33,7 +33,7 @@ object Preprocess {
       case (suffix, gen) =>
         val pregs = bundles.filter(_.desiredCppName == "pregs_" + suffix).asInstanceOf[Seq[DiffPhyRegState]]
         if (pregs.nonEmpty) {
-          require(!bundles.exists(_.desiredCppName == "regs_" + suffix))
+          require(!bundles.exists(_.desiredCppName == suffix))
           if (isHardware) {
             val needRat = pregs.head.numPhyRegs != gen.value.size
             val rats = bundles.filter(_.desiredCppName == "rat_" + suffix).asInstanceOf[Seq[DiffArchRenameTable]]

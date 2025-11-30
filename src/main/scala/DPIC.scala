@@ -90,9 +90,9 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
     val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
     val dut_index = if (config.isBatch) "dut_index" else "0"
     val packet = if (config.isDelta && gen.isDeltaElem) {
-      s"DELTA_BUF(${prefix}coreid)->${gen.desiredCppName}"
+      s"DELTA_BUF(${prefix}coreid)->${gen.actualCppName}"
     } else {
-      s"DUT_BUF(${prefix}coreid, $dut_zone, $dut_index)->${gen.desiredCppName}"
+      s"DUT_BUF(${prefix}coreid, $dut_zone, $dut_index)->${gen.actualCppName}"
     }
     val index = if (gen.isIndexed) s"[${prefix}index]" else if (gen.isFlatten) s"[${prefix}address]" else ""
     s"auto packet = &($packet$index);"
@@ -413,8 +413,8 @@ object DPIC {
       interfaceCpp += "void diffstate_update_archreg(DiffTestState* dut) {"
       phyRegs.foreach { p =>
         val suffix = p.desiredCppName.replace("pregs_", "")
-        val (regName, pregName, ratName) = (s"regs_$suffix", s"pregs_$suffix", s"rat_$suffix")
-        val regSize = instances.find(_.desiredCppName == regName).get.bits.asInstanceOf[ArchRegState].numRegs
+        val (regName, pregName, ratName) = (s"regs.$suffix", s"pregs_$suffix", s"rat_$suffix")
+        val regSize = instances.find(_.desiredCppName == suffix).get.bits.asInstanceOf[ArchRegState].numRegs
         val index = if (instances.exists(_.desiredCppName == ratName)) {
           s"dut->$ratName.value[i]"
         } else {

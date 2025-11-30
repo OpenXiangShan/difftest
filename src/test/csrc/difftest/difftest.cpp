@@ -490,12 +490,12 @@ void Difftest::do_exception() {
     struct ExecutionGuide guide;
     guide.force_raise_exception = true;
     guide.exception_num = dut->event.exception;
-    guide.mtval = dut->csr.mtval;
-    guide.stval = dut->csr.stval;
+    guide.mtval = dut->regs.csr.mtval;
+    guide.stval = dut->regs.csr.stval;
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
-    guide.mtval2 = dut->hcsr.mtval2;
-    guide.htval = dut->hcsr.htval;
-    guide.vstval = dut->hcsr.vstval;
+    guide.mtval2 = dut->regs.hcsr.mtval2;
+    guide.htval = dut->regs.hcsr.htval;
+    guide.vstval = dut->regs.hcsr.vstval;
 #endif // CONFIG_DIFFTEST_HCSRSTATE
     guide.force_set_jump_target = false;
     proxy->guided_exec(guide);
@@ -1541,7 +1541,7 @@ int Difftest::update_delayed_writeback() {
 }
 
 int Difftest::apply_delayed_writeback() {
-#define APPLY_DELAYED_WB(delayed, regs, regs_name)                           \
+#define APPLY_DELAYED_WB(delayed, reg_type, regs_name)                       \
   do {                                                                       \
     static const int m = delay_wb_limit;                                     \
     for (int i = 0; i < 32; i++) {                                           \
@@ -1553,16 +1553,16 @@ int Difftest::apply_delayed_writeback() {
           return 1;                                                          \
         }                                                                    \
         delayed[i]++;                                                        \
-        dut->regs.value[i] = proxy->state.regs.value[i];                     \
+        dut->regs.reg_type.value[i] = proxy->state.reg_type.value[i];        \
       }                                                                      \
     }                                                                        \
   } while (0);
 
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  APPLY_DELAYED_WB(delayed_int, regs_xrf, regs_name_int)
+  APPLY_DELAYED_WB(delayed_int, xrf, regs_name_int)
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  APPLY_DELAYED_WB(delayed_fp, regs_frf, regs_name_fp)
+  APPLY_DELAYED_WB(delayed_fp, frf, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   return 0;
 }
@@ -1649,7 +1649,7 @@ void Difftest::display() {
   Info("\n==============  REF Regs  ==============\n");
   fflush(stdout);
   proxy->ref_reg_display();
-  Info("privilegeMode: %lu\n", dut->csr.privilegeMode);
+  Info("privilegeMode: %lu\n", dut->regs.csr.privilegeMode);
 }
 
 void CommitTrace::display(bool use_spike) {
