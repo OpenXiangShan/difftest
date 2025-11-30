@@ -729,7 +729,7 @@ void Emulator::snapshot_load(const char *filename) {
   proxy->ref_csrcpy(csr_buf, DUT_TO_REF);
 
   // No one uses snapshot when !has_commit, isn't it?
-  diff->has_commit = 1;
+  diff->set_has_commit();
 #endif // CONFIG_NO_DIFFTEST
 
   long sdcard_offset = 0;
