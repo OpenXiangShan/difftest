@@ -307,7 +307,7 @@ int Difftest::step() {
 }
 
 inline int Difftest::check_all() {
-  progress = false;
+  state->has_progress = false;
 
   if (check_timeout()) {
     return 1;
@@ -432,7 +432,7 @@ inline int Difftest::check_all() {
     return 1;
   }
 
-  if (!progress) {
+  if (!state->has_progress) {
     return 0;
   }
 
@@ -479,7 +479,7 @@ void Difftest::do_interrupt() {
   intrDeleg.irToVS = dut->event.irToVS;
   proxy->intr_delegate(intrDeleg);
   proxy->raise_intr(dut->event.interrupt | (1ULL << 63));
-  progress = true;
+  state->has_progress = true;
 }
 
 void Difftest::do_exception() {
@@ -529,7 +529,7 @@ void Difftest::do_exception() {
   lastExceptionPC = dut->event.exceptionPC;
 #endif // FUZZING
 
-  progress = true;
+  state->has_progress = true;
 }
 
 int Difftest::do_instr_commit(int i) {
@@ -558,7 +558,7 @@ int Difftest::do_instr_commit(int i) {
   }
 #endif // FUZZING
 
-  progress = true;
+  state->has_progress = true;
   update_last_commit();
 
   // isDelayeWb
@@ -617,9 +617,9 @@ int Difftest::do_instr_commit(int i) {
 }
 
 void Difftest::do_first_instr_commit() {
-  if (!has_commit && dut->commit[0].valid) {
+  if (!state->has_commit && dut->commit[0].valid) {
     Info("The first instruction of core %d has commited. Difftest enabled. \n", id);
-    has_commit = 1;
+    state->has_commit = 1;
     nemu_this_pc = FIRST_INST_ADDRESS;
 
     proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
@@ -1477,7 +1477,7 @@ void Difftest::cmo_inval_event_record() {
 int Difftest::check_timeout() {
   uint64_t cycleCnt = get_trap_event()->cycleCnt;
   // check whether there're any commits since the simulation starts
-  if (!has_commit && cycleCnt > last_commit + first_commit_limit) {
+  if (!state->has_commit && cycleCnt > state->last_commit_cycle + first_commit_limit) {
     Info("The first instruction of core %d at 0x%lx does not commit after %lu cycles.\n", id, FIRST_INST_ADDRESS,
          first_commit_limit);
     display();
@@ -1485,14 +1485,14 @@ int Difftest::check_timeout() {
   }
 
   // NOTE: the WFI instruction may cause the CPU to halt for more than `stuck_limit` cycles.
-  // We update the `last_commit` if the CPU has a WFI instruction
+  // We update the `last_commit_cycle` if the CPU has a WFI instruction
   // to allow the CPU to run at most `stuck_limit` cycles after WFI resumes execution.
   if (has_wfi()) {
     update_last_commit();
   }
 
   // check whether there're any commits in the last `stuck_limit` cycles
-  if (has_commit && cycleCnt > last_commit + stuck_commit_limit) {
+  if (state->has_commit && cycleCnt > state->last_commit_cycle + stuck_commit_limit) {
     Info(
         "No instruction of core %d commits for %lu cycles, maybe get stuck\n"
         "(please also check whether a fence.i instruction requires more than %lu cycles to flush the icache)\n",
@@ -1526,7 +1526,7 @@ int Difftest::update_delayed_writeback() {
         } else {                                                                                   \
           delayed[delay->address] = 0;                                                             \
         }                                                                                          \
-        progress = true;                                                                           \
+        state->has_progress = true;                                                                \
       }                                                                                            \
     }                                                                                              \
   } while (0);

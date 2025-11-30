@@ -112,7 +112,7 @@ bool Runahead::checkpoint_num_exceed_limit() {
 // If it is the first valid inst to be runahead, some init work will be done
 // in do_first_instr_runahead().
 int Runahead::do_instr_runahead() {
-  if (!has_commit) {
+  if (!state->has_commit) {
     do_first_instr_runahead();
   }
   request_slave_runahead();
@@ -126,7 +126,7 @@ int Runahead::do_instr_runahead() {
 // Return -1 if no checkpoint is needed (inst is not jump)
 // Will raise error if the number of checkpoints exceeds limit
 pid_t Runahead::do_instr_runahead_pc_guided(uint64_t jump_target_pc) {
-  assert(has_commit);
+  assert(state->has_commit);
   // check if checkpoint list is full
   if (checkpoint_num_exceed_limit()) {
     runahead_debug("Checkpoint list is full, you may forget to free resolved checkpoints\n");
@@ -219,9 +219,9 @@ void Runahead::restart() {}
 void Runahead::update_debug_info(void *dest_buffer) {}
 
 void Runahead::do_first_instr_runahead() {
-  if (!has_commit && dut_ptr->runahead[0].valid && dut_ptr->runahead[0].pc == FIRST_INST_ADDRESS) {
+  if (!state->has_commit && dut_ptr->runahead[0].valid && dut_ptr->runahead[0].pc == FIRST_INST_ADDRESS) {
     runahead_debug("The first instruction of core %d start to run ahead.\n", id);
-    has_commit = 1;
+    state->has_commit = 1;
     // nemu_this_pc = dut_ptr->runahead[0].pc;
 
     proxy->memcpy(PMEM_BASE, get_img_start(), get_img_size(), DIFFTEST_TO_REF);

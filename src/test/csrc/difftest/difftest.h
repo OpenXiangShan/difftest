@@ -104,7 +104,6 @@ public:
   ~Difftest();
   REF_PROXY *proxy = NULL;
   uint32_t num_commit = 0; // # of commits if made progress
-  bool has_commit = false;
   WarmupInfo warmup_info;
   // Trigger a difftest checking procdure
   int step();
@@ -191,6 +190,10 @@ public:
   }
   void warmup_display_stats();
 
+  void set_has_commit() {
+    state->has_commit = true;
+  }
+
 protected:
   DiffTrace<DiffTestState> *difftrace = nullptr;
 
@@ -218,9 +221,6 @@ protected:
   const uint64_t delay_wb_limit = 80;
 
   int id;
-
-  bool progress = false;
-  uint64_t last_commit = 0;
 
   // For compare the first instr pc of a commit group
   bool pc_mismatch = false;
@@ -252,7 +252,7 @@ protected:
 #endif
 
   void update_last_commit() {
-    last_commit = get_trap_event()->cycleCnt;
+    state->last_commit_cycle = get_trap_event()->cycleCnt;
   }
   int check_timeout();
   int check_all();
