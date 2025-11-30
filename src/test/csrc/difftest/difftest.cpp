@@ -675,7 +675,7 @@ void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
 #else
       // TODO: support Squash without vec_commit_data (i.e. update ArchReg in software)
       auto vecNextPdest = dut->commit[index].otherwpdest[dataIndex];
-      uint64_t dutRegData = dut->pregs_vec.value[vecPdest];
+      uint64_t dutRegData = dut->pregs_vrf.value[vecPdest];
 #endif // CONFIG_DIFFTEST_VECCOMMITDATA
 
       uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
@@ -703,7 +703,7 @@ void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
 #ifndef CONFIG_DIFFTEST_COMMITDATA
       bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
       auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
-      uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vec[vecNextPdest].data;
+      uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vrf[vecNextPdest].data;
 #endif // !CONFIG_DIFFTEST_COMMITDATA
 
       for (int i = 0; i < VLENE_64; i++) {
@@ -731,7 +731,7 @@ void Difftest::do_vec_load_check(int index, DifftestLoadEvent load_event) {
 #ifndef CONFIG_DIFFTEST_COMMITDATA
         bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
         auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
-        uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vec[vecNextPdest].data;
+        uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vrf[vecNextPdest].data;
 #endif // !CONFIG_DIFFTEST_COMMITDATA
 
         auto vecNextLdest = vecFirstLdest + vdidx;
@@ -1558,10 +1558,10 @@ int Difftest::apply_delayed_writeback() {
   } while (0);
 
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  APPLY_DELAYED_WB(delayed_int, regs_int, regs_name_int)
+  APPLY_DELAYED_WB(delayed_int, regs_xrf, regs_name_int)
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  APPLY_DELAYED_WB(delayed_fp, regs_fp, regs_name_fp)
+  APPLY_DELAYED_WB(delayed_fp, regs_frf, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   return 0;
 }

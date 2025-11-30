@@ -148,9 +148,9 @@ RefProxy::~RefProxy() {
 }
 
 void RefProxy::regcpy(DiffTestState *dut) {
-  memcpy(&state.regs_int, dut->regs_int.value, 32 * sizeof(uint64_t));
+  memcpy(&state.regs_xrf, dut->regs_xrf.value, 32 * sizeof(uint64_t));
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  memcpy(&state.regs_fp, dut->regs_fp.value, 32 * sizeof(uint64_t));
+  memcpy(&state.regs_frf, dut->regs_frf.value, 32 * sizeof(uint64_t));
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
   memcpy(&state.csr, &dut->csr, sizeof(state.csr));
   state.pc = dut->commit[0].pc;
@@ -158,7 +158,7 @@ void RefProxy::regcpy(DiffTestState *dut) {
   memcpy(&state.hcsr, &dut->hcsr, sizeof(state.hcsr));
 #endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  memcpy(&state.regs_vec, &dut->regs_vec.value, sizeof(state.regs_vec));
+  memcpy(&state.regs_vrf, &dut->regs_vrf.value, sizeof(state.regs_vrf));
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
   memcpy(&state.vcsr, &dut->vcsr, sizeof(state.vcsr));
@@ -175,12 +175,12 @@ void RefProxy::regcpy(DiffTestState *dut) {
 int RefProxy::compare(DiffTestState *dut) {
 #define PROXY_COMPARE(field) memcmp(&(dut->field), &(state.field), sizeof(state.field))
 
-  const int results[] = {PROXY_COMPARE(regs_int),
+  const int results[] = {PROXY_COMPARE(regs_xrf),
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-                         PROXY_COMPARE(regs_fp),
+                         PROXY_COMPARE(regs_frf),
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-                         PROXY_COMPARE(regs_vec),
+                         PROXY_COMPARE(regs_vrf),
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
                          PROXY_COMPARE(vcsr),
@@ -226,16 +226,16 @@ void RefProxy::display(DiffTestState *dut) {
     }                                                                                   \
   } while (0);
 
-    PROXY_COMPARE_AND_DISPLAY(regs_int, regs_name_int)
+    PROXY_COMPARE_AND_DISPLAY(regs_xrf, regs_name_int)
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-    PROXY_COMPARE_AND_DISPLAY(regs_fp, regs_name_fp)
+    PROXY_COMPARE_AND_DISPLAY(regs_frf, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
     PROXY_COMPARE_AND_DISPLAY(csr, regs_name_csr)
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
     PROXY_COMPARE_AND_DISPLAY(hcsr, regs_name_hcsr)
 #endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    PROXY_COMPARE_AND_DISPLAY(regs_vec, regs_name_vec)
+    PROXY_COMPARE_AND_DISPLAY(regs_vrf, regs_name_vec)
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
     PROXY_COMPARE_AND_DISPLAY(vcsr, regs_name_vec_csr)
