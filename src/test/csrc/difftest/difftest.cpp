@@ -45,15 +45,16 @@ int difftest_init(bool enabled, size_t ramsize) {
 #endif // CONFIG_DIFFTEST_QUERY
   diffstate_buffer_init();
   difftest = new Difftest *[NUM_CORES];
+  // put init_goldenmem before update_nemuproxy because the latter requires goldenmem
+  if (enabled) {
+    init_goldenmem();
+  }
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i] = new Difftest(i);
     difftest[i]->dut = diffstate_buffer[i]->get(0, 0);
     if (enabled) {
       difftest[i]->update_nemuproxy(i, ramsize);
     }
-  }
-  if (enabled) {
-    init_goldenmem();
   }
   return 0;
 }
