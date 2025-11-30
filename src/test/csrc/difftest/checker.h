@@ -23,12 +23,17 @@
 
 template <typename Probe> class DiffTestChecker {
 public:
-  DiffTestChecker(DiffState *state, REF_PROXY *proxy) : state(state), proxy(proxy) {}
+  using GetProbeFn = std::function<Probe &()>;
+  using GetRegsFn = std::function<const DiffTestRegState &()>;
+
+  DiffTestChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : get_probe(std::move(get_probe)), state(state), proxy(proxy) {}
   virtual ~DiffTestChecker() = default;
 
-  int step(Probe &probe, const DiffTestRegState &regs) {
+  int step() {
+    Probe &probe = get_probe();
     if (get_valid(probe)) {
-      int ret = check(probe, regs);
+      int ret = check(probe);
       clear_valid(probe);
       return ret;
     }
@@ -36,98 +41,109 @@ public:
   }
 
 protected:
+  GetProbeFn get_probe;
   DiffState *state;
   REF_PROXY *proxy;
 
   virtual bool get_valid(const Probe &probe) {
     return true;
   }
-  virtual int check(const Probe &probe, const DiffTestRegState &regs) = 0;
+  virtual int check(const Probe &probe) = 0;
   virtual void clear_valid(Probe &probe) {}
 };
 
 class ArchEventChecker : public DiffTestChecker<DifftestArchEvent> {
 public:
-  ArchEventChecker(DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestArchEvent>(state, proxy) {}
+  ArchEventChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy, GetRegsFn get_regs)
+      : DiffTestChecker<DifftestArchEvent>(get_probe, state, proxy), get_regs(std::move(get_regs)) {}
 
 private:
+  GetRegsFn get_regs;
+
   bool get_valid(const DifftestArchEvent &probe) override;
   void clear_valid(DifftestArchEvent &probe) override;
-  int check(const DifftestArchEvent &probe, const DiffTestRegState &regs) override;
+  int check(const DifftestArchEvent &probe) override;
 
-  int do_exception(const DifftestArchEvent &probe, const DiffTestRegState &regs);
+  int do_exception(const DifftestArchEvent &probe);
   int do_interrupt(const DifftestArchEvent &probe);
 };
 
 class FirstInstrCommitChecker : public DiffTestChecker<DifftestInstrCommit> {
 public:
-  FirstInstrCommitChecker(DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestInstrCommit>(state, proxy) {}
+  FirstInstrCommitChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy, GetRegsFn get_regs)
+      : DiffTestChecker<DifftestInstrCommit>(get_probe, state, proxy), get_regs(std::move(get_regs)) {}
 
 private:
+  GetRegsFn get_regs;
+
   bool get_valid(const DifftestInstrCommit &probe) override;
   void clear_valid(DifftestInstrCommit &probe) override;
-  int check(const DifftestInstrCommit &probe, const DiffTestRegState &regs) override;
+  int check(const DifftestInstrCommit &probe) override;
 };
 
 class InstrCommitChecker : public DiffTestChecker<DifftestInstrCommit> {
 public:
-  InstrCommitChecker(DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestInstrCommit>(state, proxy) {}
+  InstrCommitChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy,
+                     std::function<const DiffTestState &()> get_dut_state)
+      : DiffTestChecker<DifftestInstrCommit>(get_probe, state, proxy), get_dut_state(std::move(get_dut_state)) {}
+
 private:
+  std::function<const DiffTestState &()> get_dut_state;
+
   bool get_valid(const DifftestInstrCommit &probe) override;
   void clear_valid(DifftestInstrCommit &probe) override;
-  int check(const DifftestInstrCommit &probe, const DiffTestRegState &regs) override;
+  int check(const DifftestInstrCommit &probe) override;
 };
 
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
 class LrScChecker : public DiffTestChecker<DifftestLrScEvent> {
 public:
-  LrScChecker(DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestLrScEvent>(state, proxy) {}
+  LrScChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestLrScEvent>(get_probe, state, proxy) {}
+
 private:
   bool get_valid(const DifftestLrScEvent &probe) override;
   void clear_valid(DifftestLrScEvent &probe) override;
-  int check(const DifftestLrScEvent &probe, const DiffTestRegState &regs) override;
+  int check(const DifftestLrScEvent &probe) override;
 };
 #endif // CONFIG_DIFFTEST_LRSCEVENT
 
 #ifdef CONFIG_DIFFTEST_L1TLBEVENT
 class L1TLBChecker : public DiffTestChecker<DifftestL1TLBEvent> {
 public:
-  L1TLBChecker(DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestL1TLBEvent>(state, proxy) {}
+  L1TLBChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestL1TLBEvent>(get_probe, state, proxy) {}
 
 private:
   bool get_valid(const DifftestL1TLBEvent &probe) override;
   void clear_valid(DifftestL1TLBEvent &probe) override;
-  int check(const DifftestL1TLBEvent &probe, const DiffTestRegState &regs) override;
+  int check(const DifftestL1TLBEvent &probe) override;
 };
 #endif // CONFIG_DIFFTEST_L1TLBEVENT
 
 #ifdef CONFIG_DIFFTEST_L2TLBEVENT
 class L2TLBChecker : public DiffTestChecker<DifftestL2TLBEvent> {
 public:
-  L2TLBChecker(DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestL2TLBEvent>(state, proxy) {}
+  L2TLBChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestL2TLBEvent>(get_probe, state, proxy) {}
 
 private:
   bool get_valid(const DifftestL2TLBEvent &probe) override;
   void clear_valid(DifftestL2TLBEvent &probe) override;
-  int check(const DifftestL2TLBEvent &probe, const DiffTestRegState &regs) override;
+  int check(const DifftestL2TLBEvent &probe) override;
 };
 #endif // CONFIG_DIFFTEST_L2TLBEVENT
 
 #ifdef CONFIG_DIFFTEST_REFILLEVENT
 class RefillChecker : public DiffTestChecker<DifftestRefillEvent> {
 public:
-  RefillChecker(DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestRefillEvent>(state, proxy) {}
+  RefillChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestRefillEvent>(get_probe, state, proxy) {}
+
 private:
   bool get_valid(const DifftestRefillEvent &probe) override;
   void clear_valid(DifftestRefillEvent &probe) override;
-  int check(const DifftestRefillEvent &probe, const DiffTestRegState &regs) override;
+  int check(const DifftestRefillEvent &probe) override;
 };
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 

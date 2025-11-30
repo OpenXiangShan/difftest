@@ -26,7 +26,7 @@ void RefillChecker::clear_valid(DifftestRefillEvent &probe) {
   probe.valid = 0;
 }
 
-int RefillChecker::check(const DifftestRefillEvent &probe, const DiffTestRegState &regs) {
+int RefillChecker::check(const DifftestRefillEvent &probe) {
   static int delay = 0;
   delay = delay * 2;
   if (delay > 16) {

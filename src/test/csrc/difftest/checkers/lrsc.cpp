@@ -24,7 +24,7 @@ void LrScChecker::clear_valid(DifftestLrScEvent &probe) {
   probe.valid = 0;
 }
 
-int LrScChecker::check(const DifftestLrScEvent &probe, const DiffTestRegState &regs) {
+int LrScChecker::check(const DifftestLrScEvent &probe) {
   // sync lr/sc reg microarchitectural status to the REF
   struct SyncState sync;
   sync.sc_fail = !probe.success;

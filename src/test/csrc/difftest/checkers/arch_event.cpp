@@ -51,14 +51,14 @@ void ArchEventChecker::clear_valid(DifftestArchEvent &probe) {
   probe.valid = 0;
 }
 
-int ArchEventChecker::check(const DifftestArchEvent &probe, const DiffTestRegState &regs) {
+int ArchEventChecker::check(const DifftestArchEvent &probe) {
   // interrupt has a higher priority than exception
   // TODO: we should ensure they don't happen at the same time
   int return_code = 0;
   if (probe.interrupt) {
     return_code = do_interrupt(probe);
   } else {
-    return_code = do_exception(probe, regs);
+    return_code = do_exception(probe);
   }
   return return_code;
 }
@@ -79,11 +79,12 @@ int ArchEventChecker::do_interrupt(const DifftestArchEvent &probe) {
   return 0;
 }
 
-int ArchEventChecker::do_exception(const DifftestArchEvent &probe, const DiffTestRegState &regs) {
+int ArchEventChecker::do_exception(const DifftestArchEvent &probe) {
   state->record_exception(probe.exceptionPC, probe.exceptionInst, probe.exception);
   if (probe.exception == EX_IPF || probe.exception == EX_LPF || probe.exception == EX_SPF ||
       probe.exception == EX_IGPF || probe.exception == EX_LGPF || probe.exception == EX_SGPF ||
       probe.exception == EX_HWE) {
+    const auto &regs = get_regs();
     struct ExecutionGuide guide;
     guide.force_raise_exception = true;
     guide.exception_num = probe.exception;

@@ -30,15 +30,6 @@
 #include "emu.h"
 #endif // FUZZING
 
-#define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && f >= DEBUG_MEM_BASE && v)
-#define IS_LOAD_STORE(instr)   (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
-#define IS_TRIGGERCSR(instr)   (((instr & 0x7f) == 0x73) && ((instr & (0xff0 << 20)) == (0x7a0 << 20)))
-#define IS_DEBUGCSR(instr)     (((instr & 0x7f) == 0x73) && ((instr & (0xffe << 20)) == (0x7b0 << 20))) // 7b0 and 7b1
-#ifdef DEBUG_MODE_DIFF
-#define DEBUG_MODE_SKIP(v, f, instr) DEBUG_MEM_REGION(v, f) && (IS_LOAD_STORE(instr) || IS_TRIGGERCSR(instr))
-#else
-#define DEBUG_MODE_SKIP(v, f, instr) false
-#endif
 #define PAGE_SHIFT 12
 #define PAGE_SIZE  (1ul << PAGE_SHIFT)
 #define PAGE_MASK  (PAGE_SIZE - 1)
@@ -231,18 +222,18 @@ protected:
 
   ArchEventChecker *arch_event_checker = nullptr;
   FirstInstrCommitChecker *first_instr_commit_checker = nullptr;
-  InstrCommitChecker *instr_commit_checker = nullptr;
+  InstrCommitChecker *instr_commit_checker[CONFIG_DIFF_COMMIT_WIDTH] = {nullptr};
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
   LrScChecker *lrsc_checker = nullptr;
 #endif // CONFIG_DIFFTEST_LRSCEVENT
 #ifdef CONFIG_DIFFTEST_REFILLEVENT
-  RefillChecker *refill_checker = nullptr;
+  RefillChecker *refill_checker[CONFIG_DIFF_REFILL_WIDTH] = {nullptr};
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 #ifdef CONFIG_DIFFTEST_L1TLBEVENT
-  L1TLBChecker *l1tlb_checker = nullptr;
+  L1TLBChecker *l1tlb_checker[CONFIG_DIFF_L1TLB_WIDTH] = {nullptr};
 #endif // CONFIG_DIFFTEST_L1TLBEVENT
 #ifdef CONFIG_DIFFTEST_L2TLBEVENT
-  L2TLBChecker *l2tlb_checker = nullptr;
+  L2TLBChecker *l2tlb_checker[CONFIG_DIFF_L2TLB_WIDTH] = {nullptr};
 #endif // CONFIG_DIFFTEST_L2TLBEVENT
 
   int check_timeout();
@@ -254,40 +245,6 @@ protected:
   int do_store_check();
   int do_golden_memory_update();
 
-  inline uint64_t get_int_data(int i) {
-#if defined(CONFIG_DIFFTEST_PHYINTREGSTATE)
-    return dut->pregs_xrf.value[dut->commit[i].wpdest];
-#elif defined(CONFIG_DIFFTEST_INTWRITEBACK)
-    return dut->wb_xrf[dut->commit[i].wpdest].data;
-#else
-    return dut->regs.xrf.value[dut->commit[i].wdest];
-#endif
-  }
-
-#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  inline uint64_t get_fp_data(int i) {
-#if defined(CONFIG_DIFFTEST_PHYFPREGSTATE)
-    return dut->pregs_frf.value[dut->commit[i].wpdest];
-#elif defined(CONFIG_DIFFTEST_FPWRITEBACK)
-    return dut->wb_frf[dut->commit[i].wpdest].data;
-#else
-    return dut->regs.frf.value[dut->commit[i].wdest];
-#endif
-  }
-#endif
-
-  inline uint64_t get_commit_data(int i) {
-#if defined(CONFIG_DIFFTEST_COMMITDATA)
-    return dut->commit_data[i].data;
-#else
-#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-    if (dut->commit[i].fpwen) {
-      return get_fp_data(i);
-    } else
-#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-      return get_int_data(i);
-#endif // CONFIG_DIFFTEST_COMMITDATA
-  }
   inline bool has_wfi() {
     return dut->trap.hasWFI;
   }
@@ -307,12 +264,6 @@ protected:
     return was_found;
   }
 
-#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  int delayed_int[32] = {0};
-#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  int delayed_fp[32] = {0};
-#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   int update_delayed_writeback();
   int apply_delayed_writeback();
 

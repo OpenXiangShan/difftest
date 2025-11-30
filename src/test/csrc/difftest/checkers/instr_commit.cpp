@@ -16,6 +16,16 @@
 
 #include "checker.h"
 
+#define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && f >= DEBUG_MEM_BASE && v)
+#define IS_LOAD_STORE(instr)   (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
+#define IS_TRIGGERCSR(instr)   (((instr & 0x7f) == 0x73) && ((instr & (0xff0 << 20)) == (0x7a0 << 20)))
+#define IS_DEBUGCSR(instr)     (((instr & 0x7f) == 0x73) && ((instr & (0xffe << 20)) == (0x7b0 << 20))) // 7b0 and 7b1
+#ifdef DEBUG_MODE_DIFF
+#define DEBUG_MODE_SKIP(v, f, instr) DEBUG_MEM_REGION(v, f) && (IS_LOAD_STORE(instr) || IS_TRIGGERCSR(instr))
+#else
+#define DEBUG_MODE_SKIP(v, f, instr) false
+#endif
+
 bool InstrCommitChecker::get_valid(const DifftestInstrCommit &probe) {
   return probe.valid;
 }
@@ -24,7 +34,9 @@ void InstrCommitChecker::clear_valid(DifftestInstrCommit &probe) {
   probe.valid = 0;
 }
 
-int InstrCommitChecker::check(const DifftestInstrCommit &probe, const DiffTestRegState &regs) {
+int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
+  const auto &dut = get_dut_state();
+
   // store the writeback info to debug array
 #ifdef BASIC_DIFFTEST_ONLY
   uint64_t commit_pc = proxy->state.pc;
@@ -32,9 +44,9 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe, const DiffTestRe
   uint64_t commit_pc = probe.pc;
 #endif
   uint64_t commit_instr = probe.instr;
-  state->record_inst(commit_pc, commit_instr, (probe.rfwen | probe.fpwen | probe.vecwen),
-                     probe.wdest, get_commit_data(i), probe.skip != 0, probe.special & 0x1,
-                     probe.lqIdx, probe.sqIdx, probe.robIdx, probe.isLoad,
+  uint64_t commit_data = get_commit_data(&dut, probe.wdest);
+  state->record_inst(commit_pc, commit_instr, (probe.rfwen | probe.fpwen | probe.vecwen), probe.wdest, commit_data,
+                     probe.skip != 0, probe.special & 0x1, probe.lqIdx, probe.sqIdx, probe.robIdx, probe.isLoad,
                      probe.isStore);
 
 #ifdef FUZZING
@@ -50,25 +62,25 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe, const DiffTestRe
 #endif // FUZZING
 
   state->has_progress = true;
-  update_last_commit();
+  state->last_commit_cycle = get_cycles(&dut);
 
   // isDelayeWb
   if (probe.special & 0x1) {
     int *status =
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-        probe.rfwen ? delayed_int :
+        probe.rfwen ? state->delayed_int :
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-        probe.fpwen ? delayed_fp
-                             :
+        probe.fpwen ? state->delayed_fp
+                    :
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-                             nullptr;
+                    nullptr;
     if (status) {
       if (status[probe.wdest]) {
-        display();
+        // display();
         Info("The delayed register %s has already been delayed for %d cycles\n",
              (probe.rfwen ? regs_name_int : regs_name_fp)[probe.wdest], status[probe.wdest]);
-        raise_trap(STATE_ABORT);
+        // raise_trap(STATE_ABORT);
         return 1;
       }
       status[probe.wdest] = 1;
@@ -86,8 +98,8 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe, const DiffTestRe
   // to skip the checking of an instruction, just copy the reg state to reference design
   if (probe.skip || (DEBUG_MODE_SKIP(probe.valid, probe.pc, probe.inst))) {
     // We use the physical register file to get wdata
-    proxy->skip_one(probe.isRVC, (probe.rfwen && probe.wdest != 0), probe.fpwen,
-                    probe.vecwen, probe.wdest, get_commit_data(i));
+    proxy->skip_one(probe.isRVC, (probe.rfwen && probe.wdest != 0), probe.fpwen, probe.vecwen, probe.wdest,
+                    commit_data);
     return 0;
   }
 

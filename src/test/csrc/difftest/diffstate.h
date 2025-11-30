@@ -110,6 +110,13 @@ public:
   bool has_commit = false;
   uint64_t last_commit_cycle = 0;
 
+#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
+  int delayed_int[32] = {0};
+#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
+#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
+  int delayed_fp[32] = {0};
+#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
+
   bool dump_commit_trace = false;
 
   DiffState(int coreid);
@@ -158,5 +165,8 @@ private:
     }
   }
 };
+
+extern uint64_t get_commit_data(const DiffTestState *state, int index);
+extern uint64_t get_cycles(const DiffTestState *state);
 
 #endif // __DIFFSTATE_H__

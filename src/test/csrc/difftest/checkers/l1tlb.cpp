@@ -27,7 +27,7 @@ void L1TLBChecker::clear_valid(DifftestL1TLBEvent &probe) {
   probe.valid = 0;
 }
 
-int L1TLBChecker::check(const DifftestL1TLBEvent &probe, const DiffTestRegState &regs) {
+int L1TLBChecker::check(const DifftestL1TLBEvent &probe) {
   PTE pte;
   uint64_t paddr;
   uint8_t difftest_level;

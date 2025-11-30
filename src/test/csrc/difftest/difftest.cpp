@@ -206,20 +206,33 @@ Difftest::~Difftest() {
 }
 
 void Difftest::init_checkers() {
-  arch_event_checker = new ArchEventChecker(state, proxy);
-  first_instr_commit_checker = new FirstInstrCommitChecker(state, proxy);
-  instr_commit_checker = new InstrCommitChecker(state, proxy);
+  arch_event_checker = new ArchEventChecker([this]() -> DifftestArchEvent & { return dut->event; }, state, proxy,
+                                            [this]() -> const DiffTestRegState & { return dut->regs; });
+  first_instr_commit_checker =
+      new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state, proxy,
+                                  [this]() -> const DiffTestRegState & { return dut->regs; });
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    instr_commit_checker[i] = new InstrCommitChecker([this, i]() -> DifftestInstrCommit & { return dut->commit[i]; },
+                                                     state, proxy, [this]() -> const DiffTestState & { return *dut; });
+  }
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-  lrsc_checker = new LrScChecker(state, proxy);
+  lrsc_checker = new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy);
 #endif // CONFIG_DIFFTEST_LRSCEVENT
 #ifdef CONFIG_DIFFTEST_REFILLEVENT
-  refill_checker = new RefillChecker(state, proxy);
+  for (int i = 0; i < CONFIG_DIFF_REFILL_WIDTH; i++) {
+    refill_checker[i] =
+        new RefillChecker([this, i]() -> DifftestRefillEvent & { return dut->refill[i]; }, state, proxy);
+  }
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 #ifdef CONFIG_DIFFTEST_L1TLBEVENT
-  l1tlb_checker = new L1TLBChecker(state, proxy);
+  for (int i = 0; i < CONFIG_DIFF_L1TLB_WIDTH; i++) {
+    l1tlb_checker[i] = new L1TLBChecker([this, i]() -> DifftestL1TLBEvent & { return dut->l1tlb[i]; }, state, proxy);
+  }
 #endif // CONFIG_DIFFTEST_L1TLBEVENT
 #ifdef CONFIG_DIFFTEST_L2TLBEVENT
-  l2tlb_checker = new L2TLBChecker(state, proxy);
+  for (int i = 0; i < CONFIG_DIFF_L2TLB_WIDTH; i++) {
+    l2tlb_checker[i] = new L2TLBChecker([this, i]() -> DifftestL2TLBEvent & { return dut->l2tlb[i]; }, state, proxy);
+  }
 #endif // CONFIG_DIFFTEST_L2TLBEVENT
 }
 
@@ -331,7 +344,7 @@ inline int Difftest::check_all() {
   if (check_timeout()) {
     return 1;
   }
-  first_instr_commit_checker->step(dut->commit[0], dut->regs);
+  first_instr_commit_checker->step();
 
   // Each cycle is checked for an store event, and recorded in queue.
   // It is checked every time an instruction is committed and queue has content.
@@ -358,7 +371,7 @@ inline int Difftest::check_all() {
 #ifdef DEBUG_REFILL
 #ifdef CONFIG_DIFFTEST_REFILLEVENT
   for (int i = 0; i < CONFIG_DIFF_REFILL_WIDTH; i++) {
-    if (int ret = refill_checker->step(dut->refill[i], dut->regs)) {
+    if (int ret = refill_checker[i]->step()) {
       return ret;
     }
   }
@@ -368,8 +381,9 @@ inline int Difftest::check_all() {
 #ifdef DEBUG_L2TLB
 #ifdef CONFIG_DIFFTEST_L2TLBEVENT
   for (int i = 0; i < CONFIG_DIFF_L2TLB_WIDTH; i++) {
-    if (int ret = l2tlb_checker->step(dut->l2tlb[i], dut->regs))
+    if (int ret = l2tlb_checker[i]->step()) {
       return ret;
+    }
   }
 #endif // CONFIG_DIFFTEST_L2TLBEVENT
 #endif
@@ -377,8 +391,9 @@ inline int Difftest::check_all() {
 #ifdef DEBUG_L1TLB
 #ifdef CONFIG_DIFFTEST_L1TLBEVENT
   for (int i = 0; i < CONFIG_DIFF_L1TLB_WIDTH; i++) {
-    if (int ret = l1tlb_checker->step(dut->l1tlb[i], dut->regs))
+    if (int ret = l1tlb_checker[i]->step()) {
       return ret;
+    }
   }
 #endif // CONFIG_DIFFTEST_L1TLBEVENT
 #endif
@@ -394,7 +409,7 @@ inline int Difftest::check_all() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-  lrsc_checker->step(dut->lrsc, dut->regs);
+  lrsc_checker->step();
 #endif
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
@@ -416,7 +431,7 @@ inline int Difftest::check_all() {
 
   num_commit = 0; // reset num_commit this cycle to 0
   if (dut->event.valid) {
-    if (int ret = arch_event_checker->step(dut->event, dut->regs)) {
+    if (int ret = arch_event_checker->step()) {
       return ret;
     }
   } else {
@@ -431,7 +446,7 @@ inline int Difftest::check_all() {
 #endif
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
-        if (instr_commit_checker->step(dut->commit[i], dut->regs)) {
+        if (instr_commit_checker[i]->step()) {
           return 1;
         }
 #ifndef CONFIG_DIFFTEST_SQUASH
@@ -1087,10 +1102,10 @@ int Difftest::update_delayed_writeback() {
   } while (0);
 
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  CHECK_DELAYED_WB(regs_int_delayed, delayed_int, CONFIG_DIFF_REGS_INT_DELAYED_WIDTH, regs_name_int)
+  CHECK_DELAYED_WB(regs_int_delayed, state->delayed_int, CONFIG_DIFF_REGS_INT_DELAYED_WIDTH, regs_name_int)
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  CHECK_DELAYED_WB(regs_fp_delayed, delayed_fp, CONFIG_DIFF_REGS_FP_DELAYED_WIDTH, regs_name_fp)
+  CHECK_DELAYED_WB(regs_fp_delayed, state->delayed_fp, CONFIG_DIFF_REGS_FP_DELAYED_WIDTH, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   return 0;
 }
@@ -1114,10 +1129,10 @@ int Difftest::apply_delayed_writeback() {
   } while (0);
 
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  APPLY_DELAYED_WB(delayed_int, xrf, regs_name_int)
+  APPLY_DELAYED_WB(state->delayed_int, xrf, regs_name_int)
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  APPLY_DELAYED_WB(delayed_fp, frf, regs_name_fp)
+  APPLY_DELAYED_WB(state->delayed_fp, frf, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   return 0;
 }
@@ -1205,20 +1220,6 @@ void Difftest::display() {
   fflush(stdout);
   proxy->ref_reg_display();
   Info("privilegeMode: %lu\n", dut->regs.csr.privilegeMode);
-}
-
-void CommitTrace::display(bool use_spike) {
-  Info("%s pc %016lx inst %08x", get_type(), pc, inst);
-  display_custom();
-  if (use_spike) {
-    Info(" %s", spike_dasm(inst));
-  }
-}
-
-void CommitTrace::display_line(int index, bool use_spike, bool is_retire) {
-  Info("[%02d] ", index);
-  display(use_spike);
-  Info("%s\n", is_retire ? " <--" : "");
 }
 
 void Difftest::display_stats() {

@@ -27,7 +27,7 @@ void L2TLBChecker::clear_valid(DifftestL2TLBEvent &probe) {
   probe.valid = 0;
 }
 
-int L2TLBChecker::check(const DifftestL2TLBEvent &probe, const DiffTestRegState &regs) {
+int L2TLBChecker::check(const DifftestL2TLBEvent &probe) {
   Satp *satp = (Satp *)&probe.satp;
   Satp *vsatp = (Satp *)&probe.vsatp;
   Hgatp *hgatp = (Hgatp *)&probe.hgatp;
@@ -73,26 +73,24 @@ int L2TLBChecker::check(const DifftestL2TLBEvent &probe, const DiffTestRegState 
       bool difftest_gpf = !r_s2.pte.v || (!r_s2.pte.r && r_s2.pte.w);
       bool difftest_pf = !pte.v || (!pte.r && pte.w);
       bool s1_check_fail = pte.difftest_ppn != probe.ppn[j] || pte.difftest_perm != probe.perm ||
-                            pte.difftest_pbmt != probe.pbmt || difftest_level != probe.level ||
-                            difftest_pf != probe.pf;
-      bool s2_check_fail = hasS2xlate ? r_s2.pte.difftest_ppn != probe.s2ppn ||
-                                            r_s2.pte.difftest_perm != probe.g_perm ||
-                                            r_s2.pte.difftest_pbmt != probe.g_pbmt ||
-                                            r_s2.level != probe.g_level || difftest_gpf != probe.gpf
-                                      : false;
+                           pte.difftest_pbmt != probe.pbmt || difftest_level != probe.level || difftest_pf != probe.pf;
+      bool s2_check_fail = hasS2xlate
+                               ? r_s2.pte.difftest_ppn != probe.s2ppn || r_s2.pte.difftest_perm != probe.g_perm ||
+                                     r_s2.pte.difftest_pbmt != probe.g_pbmt || r_s2.level != probe.g_level ||
+                                     difftest_gpf != probe.gpf
+                               : false;
       if (s1_check_fail || s2_check_fail) {
-        Info("Warning: L2TLB resp test of core %d index %d sector %d failed! vpn = %lx\n", id, i, j,
-              probe.vpn + j);
+        Info("Warning: L2TLB resp test of core %d index %d sector %d failed! vpn = %lx\n", id, i, j, probe.vpn + j);
         Info("  REF commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", pte.difftest_ppn, pte.difftest_perm,
-              difftest_level, difftest_pf);
+             difftest_level, difftest_pf);
         if (hasS2xlate)
-          Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", r_s2.pte.difftest_ppn,
-                r_s2.pte.difftest_perm, r_s2.level, difftest_gpf);
-        Info("  DUT commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", probe.ppn[j], probe.perm,
-              probe.level, probe.pf);
+          Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", r_s2.pte.difftest_ppn, r_s2.pte.difftest_perm,
+               r_s2.level, difftest_gpf);
+        Info("  DUT commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", probe.ppn[j], probe.perm, probe.level,
+             probe.pf);
         if (hasS2xlate)
-          Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", probe.s2ppn, probe.g_perm,
-                probe.g_level, probe.gpf);
+          Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", probe.s2ppn, probe.g_perm, probe.g_level,
+               probe.gpf);
         return 1;
       }
     }
