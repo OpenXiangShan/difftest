@@ -29,7 +29,7 @@ object Preprocess {
   }
 
   def getArchRegs(bundles: Seq[DifftestBundle], isHardware: Boolean): Seq[ArchRegState with DifftestBundle] = {
-    Seq(("int", new DiffArchIntRegState), ("fp", new DiffArchFpRegState), ("vec", new DiffArchVecRegState)).flatMap {
+    Seq(("xrf", new DiffArchIntRegState), ("frf", new DiffArchFpRegState), ("vrf", new DiffArchVecRegState)).flatMap {
       case (suffix, gen) =>
         val pregs = bundles.filter(_.desiredCppName == "pregs_" + suffix).asInstanceOf[Seq[DiffPhyRegState]]
         if (pregs.nonEmpty) {
@@ -69,9 +69,9 @@ object Preprocess {
     val archRegs = getArchRegs(bundles, true)
 
     val commits = getBundle[DiffInstrCommit]("commit")
-    val phyInts = getBundle[DiffPhyIntRegState]("pregs_int")
-    val phyFps = getBundle[DiffPhyFpRegState]("pregs_fp")
-    val phyVecs = getBundle[DiffPhyVecRegState]("pregs_vec")
+    val phyInts = getBundle[DiffPhyIntRegState]("pregs_xrf")
+    val phyFps = getBundle[DiffPhyFpRegState]("pregs_frf")
+    val phyVecs = getBundle[DiffPhyVecRegState]("pregs_vrf")
     val commitDatas = commits.zipWithIndex.flatMap { case (c, idx) =>
       val coreID = idx / (commits.length / numCores)
       val intData = phyInts(coreID).value(c.wpdest)
@@ -102,7 +102,7 @@ object Preprocess {
 class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
 
-  val replaceReg = if (!config.softArchUpdate && in.exists(_.desiredCppName == "pregs_int")) {
+  val replaceReg = if (!config.softArchUpdate && in.exists(_.desiredCppName == "pregs_xrf")) {
     // extract ArchReg in Hardware
     Preprocess.replaceRegs(in)
   } else {

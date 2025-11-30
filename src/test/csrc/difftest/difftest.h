@@ -149,14 +149,14 @@ public:
   uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-        is_fp ? dut->regs_fp.value + src :
+        is_fp ? dut->regs_frf.value + src :
 #endif
-              dut->regs_int.value + src;
+              dut->regs_xrf.value + src;
   }
 
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
   inline uint64_t *arch_vecreg(uint8_t src) {
-    return dut->regs_vec.value + src;
+    return dut->regs_vrf.value + src;
   }
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 
@@ -272,22 +272,22 @@ protected:
 
   inline uint64_t get_int_data(int i) {
 #if defined(CONFIG_DIFFTEST_PHYINTREGSTATE)
-    return dut->pregs_int.value[dut->commit[i].wpdest];
+    return dut->pregs_xrf.value[dut->commit[i].wpdest];
 #elif defined(CONFIG_DIFFTEST_INTWRITEBACK)
-    return dut->wb_int[dut->commit[i].wpdest].data;
+    return dut->wb_xrf[dut->commit[i].wpdest].data;
 #else
-    return dut->regs_int.value[dut->commit[i].wdest];
+    return dut->regs_xrf.value[dut->commit[i].wdest];
 #endif
   }
 
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
   inline uint64_t get_fp_data(int i) {
 #if defined(CONFIG_DIFFTEST_PHYFPREGSTATE)
-    return dut->pregs_fp.value[dut->commit[i].wpdest];
+    return dut->pregs_frf.value[dut->commit[i].wpdest];
 #elif defined(CONFIG_DIFFTEST_FPWRITEBACK)
-    return dut->wb_fp[dut->commit[i].wpdest].data;
+    return dut->wb_frf[dut->commit[i].wpdest].data;
 #else
-    return dut->regs_fp.value[dut->commit[i].wdest];
+    return dut->regs_frf.value[dut->commit[i].wdest];
 #endif
   }
 #endif

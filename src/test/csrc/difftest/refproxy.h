@@ -181,9 +181,9 @@ private:
 };
 
 typedef struct __attribute__((packed)) {
-  DifftestArchIntRegState regs_int;
+  DifftestArchIntRegState regs_xrf;
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  DifftestArchFpRegState regs_fp;
+  DifftestArchFpRegState regs_frf;
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
   DifftestCSRState csr;
   uint64_t pc;
@@ -191,7 +191,7 @@ typedef struct __attribute__((packed)) {
   DifftestHCSRState hcsr;
 #endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  DifftestArchVecRegState regs_vec;
+  DifftestArchVecRegState regs_vrf;
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
   DifftestVecCSRState vcsr;
@@ -216,18 +216,18 @@ public:
   inline uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-        is_fp ? state.regs_fp.value + src :
+        is_fp ? state.regs_frf.value + src :
 #endif
-              state.regs_int.value + src;
+              state.regs_xrf.value + src;
   }
 
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
   inline uint64_t *arch_vecreg(uint8_t src) {
-    return state.regs_vec.value + src;
+    return state.regs_vrf.value + src;
   }
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
   inline void sync(bool is_from_dut = false) {
-    ref_regcpy(&state.regs_int, is_from_dut, is_from_dut);
+    ref_regcpy(&state.regs_xrf, is_from_dut, is_from_dut);
   }
 
   void regcpy(DiffTestState *dut);
@@ -243,10 +243,10 @@ public:
       state.pc += isRVC ? 2 : 4;
 
       if (rfwen)
-        state.regs_int.value[wdest] = wdata;
+        state.regs_xrf.value[wdest] = wdata;
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
       if (fpwen)
-        state.regs_fp.value[wdest] = wdata;
+        state.regs_frf.value[wdest] = wdata;
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
       // TODO: vec skip is not supported at this time.
