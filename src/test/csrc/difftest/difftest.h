@@ -232,10 +232,16 @@ protected:
 #endif // CONFIG_DIFFTEST_CRITICALERROREVENT
 
   int check_all();
-#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
-  void do_vec_load_check(int index, DifftestLoadEvent load_event);
-#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
+#ifdef CONFIG_DIFFTEST_LOADEVENT
   void do_load_check(int index);
+  void do_load_check(DifftestLoadEvent load_event, bool regWen, uint64_t *refRegPtr, uint64_t commitData);
+#ifdef CONFIG_DIFFTEST_SQUASH
+  void do_load_check_squash();
+#endif // CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+  void do_vec_load_check(int index, DifftestLoadEvent load_event);
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+#endif // CONFIG_DIFFTEST_LOADEVENT
   int do_store_check();
   int do_golden_memory_update();
 
