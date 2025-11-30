@@ -105,6 +105,10 @@ public:
 
 class DiffState {
 public:
+  bool has_progress = false;
+  bool has_commit = false;
+  uint64_t last_commit_cycle = 0;
+
   bool dump_commit_trace = false;
 
   DiffState(int coreid);
