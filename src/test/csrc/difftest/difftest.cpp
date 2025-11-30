@@ -215,6 +215,7 @@ void Difftest::init_checkers() {
     instr_commit_checker[i] = new InstrCommitChecker([this, i]() -> DifftestInstrCommit & { return dut->commit[i]; },
                                                      state, proxy, [this]() -> const DiffTestState & { return *dut; });
   }
+  timeout_checker = new TimeoutChecker([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy);
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
   lrsc_checker = new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy);
 #endif // CONFIG_DIFFTEST_LRSCEVENT
@@ -234,6 +235,25 @@ void Difftest::init_checkers() {
     l2tlb_checker[i] = new L2TLBChecker([this, i]() -> DifftestL2TLBEvent & { return dut->l2tlb[i]; }, state, proxy);
   }
 #endif // CONFIG_DIFFTEST_L2TLBEVENT
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+  non_reg_interrupt_pending_checker = new NonRegInterruptPendingChecker(
+      [this]() -> DifftestNonRegInterruptPendingEvent & { return dut->non_reg_interrupt_pending; }, state, proxy);
+#endif // CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  mhpmevent_overflow_checker = new MhpmeventOverflowChecker(
+      [this]() -> DifftestMhpmeventOverflowEvent & { return dut->mhpmevent_overflow; }, state, proxy);
+#endif // CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+  aia_checker = new AiaChecker([this]() -> DifftestSyncAiaEvent & { return dut->sync_aia; }, state, proxy);
+#endif // CONFIG_DIFFTEST_SYNCAIAEVENT
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+  custom_mflushpwr_checker = new CustomMflushpwrChecker(
+      [this]() -> DifftestSyncCustomMflushpwrEvent & { return dut->sync_custom_mflushpwr; }, state, proxy);
+#endif // CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  critical_error_checker =
+      new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy);
+#endif // CONFIG_DIFFTEST_CRITICALERROREVENT
 }
 
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
@@ -341,8 +361,8 @@ int Difftest::step() {
 inline int Difftest::check_all() {
   state->has_progress = false;
 
-  if (check_timeout()) {
-    return 1;
+  if (int ret = timeout_checker->step()) {
+    return ret;
   }
   first_instr_commit_checker->step();
 
@@ -413,20 +433,20 @@ inline int Difftest::check_all() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  do_non_reg_interrupt_pending();
+  non_reg_interrupt_pending_checker->step();
 #endif
 
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  do_mhpmevent_overflow();
+  mhpmevent_overflow_checker->step();
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  do_raise_critical_error();
+  critical_error_checker->step();
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  do_sync_aia();
+  aia_checker->step();
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  do_sync_custom_mflushpwr();
+  custom_mflushpwr_checker->step();
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
@@ -1044,38 +1064,6 @@ void Difftest::cmo_inval_event_record() {
 }
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 
-int Difftest::check_timeout() {
-  uint64_t cycleCnt = get_trap_event()->cycleCnt;
-  // check whether there're any commits since the simulation starts
-  if (!state->has_commit && cycleCnt > state->last_commit_cycle + first_commit_limit) {
-    Info("The first instruction of core %d at 0x%lx does not commit after %lu cycles.\n", id, FIRST_INST_ADDRESS,
-         first_commit_limit);
-    display();
-    return 1;
-  }
-
-  // NOTE: the WFI instruction may cause the CPU to halt for more than `stuck_limit` cycles.
-  // We update the `last_commit_cycle` if the CPU has a WFI instruction
-  // to allow the CPU to run at most `stuck_limit` cycles after WFI resumes execution.
-  if (has_wfi()) {
-    update_last_commit();
-  }
-
-  // check whether there're any commits in the last `stuck_limit` cycles
-  if (state->has_commit && cycleCnt > state->last_commit_cycle + stuck_commit_limit) {
-    Info(
-        "No instruction of core %d commits for %lu cycles, maybe get stuck\n"
-        "(please also check whether a fence.i instruction requires more than %lu cycles to flush the icache)\n",
-        id, stuck_commit_limit, stuck_commit_limit);
-    Info("Let REF run one more instruction.\n");
-    proxy->ref_exec(1);
-    display();
-    return 1;
-  }
-
-  return 0;
-}
-
 int Difftest::update_delayed_writeback() {
 #define CHECK_DELAYED_WB(wb, delayed, n, regs_name)                                                \
   do {                                                                                             \
@@ -1141,77 +1129,6 @@ void Difftest::raise_trap(int trapCode) {
   dut->trap.hasTrap = 1;
   dut->trap.code = trapCode;
 }
-
-#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-void Difftest::do_non_reg_interrupt_pending() {
-  if (dut->non_reg_interrupt_pending.valid) {
-    struct NonRegInterruptPending ip;
-    ip.platformIRPMeip = dut->non_reg_interrupt_pending.platformIRPMeip;
-    ip.platformIRPMtip = dut->non_reg_interrupt_pending.platformIRPMtip;
-    ip.platformIRPMsip = dut->non_reg_interrupt_pending.platformIRPMsip;
-    ip.platformIRPSeip = dut->non_reg_interrupt_pending.platformIRPSeip;
-    ip.platformIRPStip = dut->non_reg_interrupt_pending.platformIRPStip;
-    ip.platformIRPVseip = dut->non_reg_interrupt_pending.platformIRPVseip;
-    ip.platformIRPVstip = dut->non_reg_interrupt_pending.platformIRPVstip;
-    ip.fromAIAMeip = dut->non_reg_interrupt_pending.fromAIAMeip;
-    ip.fromAIASeip = dut->non_reg_interrupt_pending.fromAIASeip;
-    ip.localCounterOverflowInterruptReq = dut->non_reg_interrupt_pending.localCounterOverflowInterruptReq;
-
-    proxy->non_reg_interrupt_pending(ip);
-    dut->non_reg_interrupt_pending.valid = 0;
-  }
-}
-#endif
-
-#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-void Difftest::do_mhpmevent_overflow() {
-  if (dut->mhpmevent_overflow.valid) {
-    proxy->mhpmevent_overflow(dut->mhpmevent_overflow.mhpmeventOverflow);
-    dut->mhpmevent_overflow.valid = 0;
-  }
-}
-#endif
-
-#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-void Difftest::do_raise_critical_error() {
-  if (dut->critical_error.valid) {
-    bool ref_critical_error = proxy->raise_critical_error();
-    if (ref_critical_error == dut->critical_error.criticalError) {
-      Info("Core %d dump: " ANSI_COLOR_RED
-           "HIT CRITICAL ERROR: please check if software cause a double trap. \n" ANSI_COLOR_RESET,
-           this->id);
-      raise_trap(STATE_GOODTRAP);
-    } else {
-      display();
-      Info("Core %d dump: DUT critical_error diff REF \n", this->id);
-      raise_trap(STATE_ABORT);
-    }
-  }
-}
-#endif
-
-#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-void Difftest::do_sync_aia() {
-  if (dut->sync_aia.valid) {
-    struct FromAIA aia;
-    aia.mtopei = dut->sync_aia.mtopei;
-    aia.stopei = dut->sync_aia.stopei;
-    aia.vstopei = dut->sync_aia.vstopei;
-    aia.hgeip = dut->sync_aia.hgeip;
-    proxy->sync_aia(aia);
-    dut->sync_aia.valid = 0;
-  }
-}
-#endif
-
-#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-void Difftest::do_sync_custom_mflushpwr() {
-  if (dut->sync_custom_mflushpwr.valid) {
-    proxy->sync_custom_mflushpwr(dut->sync_custom_mflushpwr.l2FlushDone);
-    dut->sync_custom_mflushpwr.valid = 0;
-  }
-}
-#endif
 
 void Difftest::display() {
   state->display();

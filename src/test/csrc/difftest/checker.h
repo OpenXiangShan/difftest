@@ -95,6 +95,27 @@ private:
   int check(const DifftestInstrCommit &probe) override;
 };
 
+class TimeoutChecker : public DiffTestChecker<DifftestTrapEvent> {
+public:
+#ifdef CONFIG_DIFFTEST_SQUASH
+  static const uint64_t timeout_scale = 256;
+#else
+  static const uint64_t timeout_scale = 1;
+#endif // CONFIG_DIFFTEST_SQUASH
+#if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
+  static const uint64_t first_commit_limit = 1000;
+#elif defined(CPU_XIANGSHAN)
+  static const uint64_t first_commit_limit = 15000;
+#endif
+  static const uint64_t stuck_commit_limit = first_commit_limit * timeout_scale;
+
+  TimeoutChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestTrapEvent>(get_probe, state, proxy) {}
+
+private:
+  int check(const DifftestTrapEvent &probe) override;
+};
+
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
 class LrScChecker : public DiffTestChecker<DifftestLrScEvent> {
 public:
@@ -146,5 +167,70 @@ private:
   int check(const DifftestRefillEvent &probe) override;
 };
 #endif // CONFIG_DIFFTEST_REFILLEVENT
+
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+class NonRegInterruptPendingChecker : public DiffTestChecker<DifftestNonRegInterruptPendingEvent> {
+public:
+  NonRegInterruptPendingChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestNonRegInterruptPendingEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestNonRegInterruptPendingEvent &probe) override;
+  void clear_valid(DifftestNonRegInterruptPendingEvent &probe) override;
+  int check(const DifftestNonRegInterruptPendingEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+class MhpmeventOverflowChecker : public DiffTestChecker<DifftestMhpmeventOverflowEvent> {
+public:
+  MhpmeventOverflowChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestMhpmeventOverflowEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestMhpmeventOverflowEvent &probe) override;
+  void clear_valid(DifftestMhpmeventOverflowEvent &probe) override;
+  int check(const DifftestMhpmeventOverflowEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+class AiaChecker : public DiffTestChecker<DifftestSyncAiaEvent> {
+public:
+  AiaChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestSyncAiaEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestSyncAiaEvent &probe) override;
+  void clear_valid(DifftestSyncAiaEvent &probe) override;
+  int check(const DifftestSyncAiaEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_SYNCAIAEVENT
+
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+class CustomMflushpwrChecker : public DiffTestChecker<DifftestSyncCustomMflushpwrEvent> {
+public:
+  CustomMflushpwrChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestSyncCustomMflushpwrEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestSyncCustomMflushpwrEvent &probe) override;
+  void clear_valid(DifftestSyncCustomMflushpwrEvent &probe) override;
+  int check(const DifftestSyncCustomMflushpwrEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+class CriticalErrorChecker : public DiffTestChecker<DifftestCriticalErrorEvent> {
+public:
+  CriticalErrorChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
+      : DiffTestChecker<DifftestCriticalErrorEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestCriticalErrorEvent &probe) override;
+  void clear_valid(DifftestCriticalErrorEvent &probe) override;
+  int check(const DifftestCriticalErrorEvent &probe) override;
+};
+#endif
 
 #endif // __DIFFTEST_CHECKER_H__

@@ -517,13 +517,20 @@ int Emulator::tick() {
     step = dut_ptr->get_difftest_step();
   }
 
+  // Check whether DiffTest has produced any progress (step)
+  // When batch is enabled, the stuck limit should be scaled accordingly
+#ifdef CONFIG_DIFFTEST_BATCH
+  static const uint64_t stuck_limit = TimeoutChecker::stuck_commit_limit * CONFIG_DIFFTEST_BATCH_SIZE;
+#else
+  static const uint64_t stuck_limit = TimeoutChecker::stuck_commit_limit;
+#endif // CONFIG_DIFFTEST_BATCH
   static uint64_t stuck_timer = 0;
   if (step) {
     stuck_timer = 0;
   } else {
     stuck_timer++;
-    if (stuck_timer >= Difftest::stuck_limit) {
-      Info("No difftest check for more than %lu cycles, maybe get stuck.", Difftest::stuck_limit);
+    if (stuck_timer >= stuck_limit) {
+      Info("No difftest check for more than %lu cycles, maybe get stuck.", stuck_limit);
       return STATE_ABORT;
     }
   }

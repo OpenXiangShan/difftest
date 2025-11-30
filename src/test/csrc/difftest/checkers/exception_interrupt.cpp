@@ -129,3 +129,54 @@ int ArchEventChecker::do_exception(const DifftestArchEvent &probe) {
 
   return 0;
 }
+
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+bool NonRegInterruptPendingChecker::get_valid(const DifftestNonRegInterruptPendingEvent &probe) {
+  return probe.valid;
+}
+
+void NonRegInterruptPendingChecker::clear_valid(DifftestNonRegInterruptPendingEvent &probe) {
+  probe.valid = 0;
+}
+
+int NonRegInterruptPendingChecker::check(const DifftestNonRegInterruptPendingEvent &probe) {
+  struct NonRegInterruptPending ip;
+  ip.platformIRPMeip = probe.platformIRPMeip;
+  ip.platformIRPMtip = probe.platformIRPMtip;
+  ip.platformIRPMsip = probe.platformIRPMsip;
+  ip.platformIRPSeip = probe.platformIRPSeip;
+  ip.platformIRPStip = probe.platformIRPStip;
+  ip.platformIRPVseip = probe.platformIRPVseip;
+  ip.platformIRPVstip = probe.platformIRPVstip;
+  ip.fromAIAMeip = probe.fromAIAMeip;
+  ip.fromAIASeip = probe.fromAIASeip;
+  ip.localCounterOverflowInterruptReq = probe.localCounterOverflowInterruptReq;
+  proxy->non_reg_interrupt_pending(ip);
+  return 0;
+}
+#endif // CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+bool CriticalErrorChecker::get_valid(const DifftestCriticalErrorEvent &probe) {
+  return probe.valid;
+}
+
+void CriticalErrorChecker::clear_valid(DifftestCriticalErrorEvent &probe) {
+  probe.valid = 0;
+}
+
+int CriticalErrorChecker::check(const DifftestCriticalErrorEvent &probe) {
+  bool ref_critical_error = proxy->raise_critical_error();
+  if (ref_critical_error == probe.criticalError) {
+    Info("Core %d dump: " ANSI_COLOR_RED
+         "HIT CRITICAL ERROR: please check if software cause a double trap. \n" ANSI_COLOR_RESET,
+         this->id);
+    // TODO
+    // raise_trap(STATE_GOODTRAP);
+  } else {
+    // display();
+    Info("Core %d dump: DUT critical_error diff REF \n", this->id);
+    // raise_trap(STATE_ABORT);
+  }
+}
+#endif

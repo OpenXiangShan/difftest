@@ -163,27 +163,6 @@ public:
 protected:
   DiffTrace<DiffTestState> *difftrace = nullptr;
 
-#ifdef CONFIG_DIFFTEST_BATCH
-  static const uint64_t commit_storage = CONFIG_DIFFTEST_BATCH_SIZE;
-#else
-  static const uint64_t commit_storage = 1;
-#endif // CONFIG_DIFFTEST_BATCH
-#ifdef CONFIG_DIFFTEST_SQUASH
-  static const uint64_t timeout_scale = 256;
-#else
-  static const uint64_t timeout_scale = 1;
-#endif // CONFIG_DIFFTEST_SQUASH
-#if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
-  static const uint64_t first_commit_limit = 1000;
-#elif defined(CPU_XIANGSHAN)
-  static const uint64_t first_commit_limit = 15000;
-#endif
-  static const uint64_t stuck_commit_limit = first_commit_limit * timeout_scale;
-
-public:
-  static const uint64_t stuck_limit = stuck_commit_limit * commit_storage;
-
-protected:
   const uint64_t delay_wb_limit = 80;
 
   int id;
@@ -223,6 +202,7 @@ protected:
   ArchEventChecker *arch_event_checker = nullptr;
   FirstInstrCommitChecker *first_instr_commit_checker = nullptr;
   InstrCommitChecker *instr_commit_checker[CONFIG_DIFF_COMMIT_WIDTH] = {nullptr};
+  TimeoutChecker *timeout_checker = nullptr;
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
   LrScChecker *lrsc_checker = nullptr;
 #endif // CONFIG_DIFFTEST_LRSCEVENT
@@ -235,8 +215,22 @@ protected:
 #ifdef CONFIG_DIFFTEST_L2TLBEVENT
   L2TLBChecker *l2tlb_checker[CONFIG_DIFF_L2TLB_WIDTH] = {nullptr};
 #endif // CONFIG_DIFFTEST_L2TLBEVENT
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+  NonRegInterruptPendingChecker *non_reg_interrupt_pending_checker = nullptr;
+#endif // CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  MhpmeventOverflowChecker *mhpmevent_overflow_checker = nullptr;
+#endif // CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+  AiaChecker *aia_checker = nullptr;
+#endif // CONFIG_DIFFTEST_SYNCAIAEVENT
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+  CustomMflushpwrChecker *custom_mflushpwr_checker = nullptr;
+#endif // CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  CriticalErrorChecker *critical_error_checker = nullptr;
+#endif // CONFIG_DIFFTEST_CRITICALERROREVENT
 
-  int check_timeout();
   int check_all();
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
   void do_vec_load_check(int index, DifftestLoadEvent load_event);
@@ -245,9 +239,6 @@ protected:
   int do_store_check();
   int do_golden_memory_update();
 
-  inline bool has_wfi() {
-    return dut->trap.hasWFI;
-  }
   inline bool in_disambiguation_state() {
     static bool was_found = false;
 #ifdef FUZZING
@@ -268,18 +259,10 @@ protected:
   int apply_delayed_writeback();
 
   void raise_trap(int trapCode);
-#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  void do_non_reg_interrupt_pending();
-#endif
-#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  void do_mhpmevent_overflow();
-#endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
   void do_raise_critical_error();
 #endif
-#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  void do_sync_aia();
-#endif
+
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
   void do_sync_custom_mflushpwr();
 #endif
