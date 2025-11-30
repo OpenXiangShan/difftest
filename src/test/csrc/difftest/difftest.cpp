@@ -54,6 +54,7 @@ int difftest_init(bool enabled, size_t ramsize) {
     difftest[i]->dut = diffstate_buffer[i]->get(0, 0);
     if (enabled) {
       difftest[i]->update_nemuproxy(i, ramsize);
+      difftest[i]->init_checkers();
     }
   }
   return 0;
@@ -204,6 +205,24 @@ Difftest::~Difftest() {
 #endif // CONFIG_DIFFTEST_REPLAY
 }
 
+void Difftest::init_checkers() {
+  arch_event_checker = new ArchEventChecker(state, proxy);
+  first_instr_commit_checker = new FirstInstrCommitChecker(state, proxy);
+  instr_commit_checker = new InstrCommitChecker(state, proxy);
+#ifdef CONFIG_DIFFTEST_LRSCEVENT
+  lrsc_checker = new LrScChecker(state, proxy);
+#endif // CONFIG_DIFFTEST_LRSCEVENT
+#ifdef CONFIG_DIFFTEST_REFILLEVENT
+  refill_checker = new RefillChecker(state, proxy);
+#endif // CONFIG_DIFFTEST_REFILLEVENT
+#ifdef CONFIG_DIFFTEST_L1TLBEVENT
+  l1tlb_checker = new L1TLBChecker(state, proxy);
+#endif // CONFIG_DIFFTEST_L1TLBEVENT
+#ifdef CONFIG_DIFFTEST_L2TLBEVENT
+  l2tlb_checker = new L2TLBChecker(state, proxy);
+#endif // CONFIG_DIFFTEST_L2TLBEVENT
+}
+
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
 bool enable_vec_load_goldenmem_check = true;
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
@@ -307,12 +326,12 @@ int Difftest::step() {
 }
 
 inline int Difftest::check_all() {
-  progress = false;
+  state->has_progress = false;
 
   if (check_timeout()) {
     return 1;
   }
-  do_first_instr_commit();
+  first_instr_commit_checker->step(dut->commit[0], dut->regs);
 
   // Each cycle is checked for an store event, and recorded in queue.
   // It is checked every time an instruction is committed and queue has content.
@@ -339,23 +358,29 @@ inline int Difftest::check_all() {
 #ifdef DEBUG_REFILL
 #ifdef CONFIG_DIFFTEST_REFILLEVENT
   for (int i = 0; i < CONFIG_DIFF_REFILL_WIDTH; i++) {
-    if (do_refill_check(i)) {
-      return 1;
+    if (int ret = refill_checker->step(dut->refill[i], dut->regs)) {
+      return ret;
     }
   }
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 #endif
 
 #ifdef DEBUG_L2TLB
-  if (do_l2tlb_check()) {
-    return 1;
+#ifdef CONFIG_DIFFTEST_L2TLBEVENT
+  for (int i = 0; i < CONFIG_DIFF_L2TLB_WIDTH; i++) {
+    if (int ret = l2tlb_checker->step(dut->l2tlb[i], dut->regs))
+      return ret;
   }
+#endif // CONFIG_DIFFTEST_L2TLBEVENT
 #endif
 
 #ifdef DEBUG_L1TLB
-  if (do_l1tlb_check()) {
-    return 1;
+#ifdef CONFIG_DIFFTEST_L1TLBEVENT
+  for (int i = 0; i < CONFIG_DIFF_L1TLB_WIDTH; i++) {
+    if (int ret = l1tlb_checker->step(dut->l1tlb[i], dut->regs))
+      return ret;
   }
+#endif // CONFIG_DIFFTEST_L1TLBEVENT
 #endif
 
 #ifdef DEBUG_MODE_DIFF
@@ -369,13 +394,7 @@ inline int Difftest::check_all() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-  // sync lr/sc reg microarchitectural status to the REF
-  if (dut->lrsc.valid) {
-    dut->lrsc.valid = 0;
-    struct SyncState sync;
-    sync.sc_fail = !dut->lrsc.success;
-    proxy->uarchstatus_sync((uint64_t *)&sync);
-  }
+  lrsc_checker->step(dut->lrsc, dut->regs);
 #endif
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
@@ -397,10 +416,9 @@ inline int Difftest::check_all() {
 
   num_commit = 0; // reset num_commit this cycle to 0
   if (dut->event.valid) {
-    // interrupt has a higher priority than exception
-    dut->event.interrupt ? do_interrupt() : do_exception();
-    dut->event.valid = 0;
-    dut->commit[0].valid = 0;
+    if (int ret = arch_event_checker->step(dut->event, dut->regs)) {
+      return ret;
+    }
   } else {
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
     if (dut->commit[0].valid) {
@@ -413,7 +431,7 @@ inline int Difftest::check_all() {
 #endif
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
-        if (do_instr_commit(i)) {
+        if (instr_commit_checker->step(dut->commit[i], dut->regs)) {
           return 1;
         }
 #ifndef CONFIG_DIFFTEST_SQUASH
@@ -432,7 +450,7 @@ inline int Difftest::check_all() {
     return 1;
   }
 
-  if (!progress) {
+  if (!state->has_progress) {
     return 0;
   }
 
@@ -465,181 +483,6 @@ inline int Difftest::check_all() {
   }
 
   return 0;
-}
-
-void Difftest::do_interrupt() {
-  state->record_interrupt(dut->event.exceptionPC, dut->event.exceptionInst, dut->event.interrupt);
-  if (dut->event.hasNMI) {
-    proxy->trigger_nmi(dut->event.hasNMI);
-  } else if (dut->event.virtualInterruptIsHvictlInject) {
-    proxy->virtual_interrupt_is_hvictl_inject(dut->event.virtualInterruptIsHvictlInject);
-  }
-  struct InterruptDelegate intrDeleg;
-  intrDeleg.irToHS = dut->event.irToHS;
-  intrDeleg.irToVS = dut->event.irToVS;
-  proxy->intr_delegate(intrDeleg);
-  proxy->raise_intr(dut->event.interrupt | (1ULL << 63));
-  progress = true;
-}
-
-void Difftest::do_exception() {
-  state->record_exception(dut->event.exceptionPC, dut->event.exceptionInst, dut->event.exception);
-  if (dut->event.exception == EX_IPF || dut->event.exception == EX_LPF || dut->event.exception == EX_SPF ||
-      dut->event.exception == EX_IGPF || dut->event.exception == EX_LGPF || dut->event.exception == EX_SGPF ||
-      dut->event.exception == EX_HWE) {
-    struct ExecutionGuide guide;
-    guide.force_raise_exception = true;
-    guide.exception_num = dut->event.exception;
-    guide.mtval = dut->regs.csr.mtval;
-    guide.stval = dut->regs.csr.stval;
-#ifdef CONFIG_DIFFTEST_HCSRSTATE
-    guide.mtval2 = dut->regs.hcsr.mtval2;
-    guide.htval = dut->regs.hcsr.htval;
-    guide.vstval = dut->regs.hcsr.vstval;
-#endif // CONFIG_DIFFTEST_HCSRSTATE
-    guide.force_set_jump_target = false;
-    proxy->guided_exec(guide);
-  } else {
-#ifdef DEBUG_MODE_DIFF
-    if (DEBUG_MEM_REGION(true, dut->event.exceptionPC)) {
-      debug_mode_copy(dut->event.exceptionPC, 4, dut->event.exceptionInst);
-    }
-#endif
-    proxy->ref_exec(1);
-  }
-
-#ifdef FUZZING
-  static uint64_t lastExceptionPC = 0xdeadbeafUL;
-  static int sameExceptionPCCount = 0;
-  if (dut->event.exceptionPC == lastExceptionPC) {
-    if (sameExceptionPCCount >= 5) {
-      Info("Found infinite loop at exception_pc %lx. Exiting.\n", dut->event.exceptionPC);
-      dut->trap.hasTrap = 1;
-      dut->trap.code = STATE_FUZZ_COND;
-#ifdef FUZZER_LIB
-      stats.exit_code = SimExitCode::exception_loop;
-#endif // FUZZER_LIB
-      return;
-    }
-    sameExceptionPCCount++;
-  }
-  if (!sameExceptionPCCount && dut->event.exceptionPC != lastExceptionPC) {
-    sameExceptionPCCount = 0;
-  }
-  lastExceptionPC = dut->event.exceptionPC;
-#endif // FUZZING
-
-  progress = true;
-}
-
-int Difftest::do_instr_commit(int i) {
-
-  // store the writeback info to debug array
-#ifdef BASIC_DIFFTEST_ONLY
-  uint64_t commit_pc = proxy->state.pc;
-#else
-  uint64_t commit_pc = dut->commit[i].pc;
-#endif
-  uint64_t commit_instr = dut->commit[i].instr;
-  state->record_inst(commit_pc, commit_instr, (dut->commit[i].rfwen | dut->commit[i].fpwen | dut->commit[i].vecwen),
-                     dut->commit[i].wdest, get_commit_data(i), dut->commit[i].skip != 0, dut->commit[i].special & 0x1,
-                     dut->commit[i].lqIdx, dut->commit[i].sqIdx, dut->commit[i].robIdx, dut->commit[i].isLoad,
-                     dut->commit[i].isStore);
-
-#ifdef FUZZING
-  // isExit
-  if (dut->commit[i].special & 0x2) {
-    dut->trap.hasTrap = 1;
-    dut->trap.code = STATE_SIM_EXIT;
-#ifdef FUZZER_LIB
-    stats.exit_code = SimExitCode::sim_exit;
-#endif // FUZZER_LIB
-    return 0;
-  }
-#endif // FUZZING
-
-  progress = true;
-  update_last_commit();
-
-  // isDelayeWb
-  if (dut->commit[i].special & 0x1) {
-    int *status =
-#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-        dut->commit[i].rfwen ? delayed_int :
-#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-        dut->commit[i].fpwen ? delayed_fp
-                             :
-#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-                             nullptr;
-    if (status) {
-      if (status[dut->commit[i].wdest]) {
-        display();
-        Info("The delayed register %s has already been delayed for %d cycles\n",
-             (dut->commit[i].rfwen ? regs_name_int : regs_name_fp)[dut->commit[i].wdest], status[dut->commit[i].wdest]);
-        raise_trap(STATE_ABORT);
-        return 1;
-      }
-      status[dut->commit[i].wdest] = 1;
-    }
-  }
-
-#ifdef DEBUG_MODE_DIFF
-  if (spike_valid() && (IS_DEBUGCSR(commit_instr) || IS_TRIGGERCSR(commit_instr))) {
-    Info("s0 is %016lx ", dut->regs.gpr[8]);
-    Info("pc is %lx %s\n", commit_pc, spike_dasm(commit_instr));
-  }
-#endif
-
-  // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
-  // to skip the checking of an instruction, just copy the reg state to reference design
-  if (dut->commit[i].skip || (DEBUG_MODE_SKIP(dut->commit[i].valid, dut->commit[i].pc, dut->commit[i].inst))) {
-    // We use the physical register file to get wdata
-    proxy->skip_one(dut->commit[i].isRVC, (dut->commit[i].rfwen && dut->commit[i].wdest != 0), dut->commit[i].fpwen,
-                    dut->commit[i].vecwen, dut->commit[i].wdest, get_commit_data(i));
-    return 0;
-  }
-
-  // Default: single step exec
-  // when there's a fused instruction, let proxy execute more instructions.
-  for (int j = 0; j < dut->commit[i].nFused + 1; j++) {
-    proxy->ref_exec(1);
-#ifdef CONFIG_DIFFTEST_SQUASH
-    commit_stamp = (commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
-    do_load_check(i);
-    if (do_store_check()) {
-      return 1;
-    }
-#endif // CONFIG_DIFFTEST_SQUASH
-  }
-
-  return 0;
-}
-
-void Difftest::do_first_instr_commit() {
-  if (!has_commit && dut->commit[0].valid) {
-    Info("The first instruction of core %d has commited. Difftest enabled. \n", id);
-    has_commit = 1;
-    nemu_this_pc = FIRST_INST_ADDRESS;
-
-    proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
-    simMemory->clone_on_demand(
-        [this](uint64_t offset, void *src, size_t n) {
-          uint64_t dest_addr = PMEM_BASE + offset;
-          proxy->mem_init(dest_addr, src, n, DUT_TO_REF);
-        },
-        true);
-    // Use a temp variable to store the current pc of dut
-    uint64_t dut_this_pc = dut->commit[0].pc;
-    // NEMU should always start at FIRST_INST_ADDRESS
-    dut->commit[0].pc = FIRST_INST_ADDRESS;
-    proxy->regcpy(dut);
-    dut->commit[0].pc = dut_this_pc;
-    // Do not reconfig simulator 'proxy->update_config(&nemu_config)' here:
-    // If this is main sim thread, simulator has its own initial config
-    // If this process is checkpoint wakeuped, simulator's config has already been updated,
-    // do not override it.
-  }
 }
 
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
@@ -944,294 +787,6 @@ int Difftest::do_store_check() {
   return 0;
 }
 
-// cacheid: 0 -> icache
-//          1 -> dcache
-//          2 -> pagecache
-//          3 -> icache mainPipe read cacheline 0 (masked)
-//          4 -> icache mainPipe read cacheline 1 (masked)
-int Difftest::do_refill_check(int cacheid) {
-#ifdef CONFIG_DIFFTEST_REFILLEVENT
-  auto dut_refill = &(dut->refill[cacheid]);
-  if (!dut_refill->valid) {
-    return 0;
-  }
-  dut_refill->valid = 0;
-  static int delay = 0;
-  delay = delay * 2;
-  if (delay > 16) {
-    return 1;
-  }
-  static uint64_t last_valid_addr = 0;
-  char buf[512];
-  char flag_buf[512];
-  uint64_t realpaddr = dut_refill->addr;
-  dut_refill->addr = dut_refill->addr - dut_refill->addr % 64;
-  if (dut_refill->addr != last_valid_addr) {
-    last_valid_addr = dut_refill->addr;
-    if (!in_pmem(dut_refill->addr)) {
-      // speculated illegal mem access should be ignored
-      return 0;
-    }
-    for (int i = 0; i < 8; i++) {
-      read_goldenmem(dut_refill->addr + i * 8, &buf, 8, &flag_buf);
-      if ((dut_refill->mask & (1 << i)) && dut_refill->data[i] != *((uint64_t *)buf)) {
-#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-        if (cmo_inval_event_set.find(dut_refill->addr) != cmo_inval_event_set.end()) {
-          // If the data inconsistency occurs in the cache block operated by CBO.INVAL,
-          // it is considered reasonable and the DUT data is used to update goldenMem.
-          Info("INFO: Sync GoldenMem using refill Data from DUT (Because of CBO.INVAL):\n");
-          Info("      cacheid=%d, addr: %lx\n      Gold: ", cacheid, dut_refill->addr);
-          for (int j = 0; j < 8; j++) {
-            read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
-            Info("%016lx", *((uint64_t *)buf));
-          }
-          Info("\n      Core: ");
-          for (int j = 0; j < 8; j++) {
-            Info("%016lx", dut_refill->data[j]);
-          }
-          Info("\n");
-          update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
-          proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
-          cmo_inval_event_set.erase(dut_refill->addr);
-          return 0;
-        } else {
-#endif // CONFIG_DIFFTEST_CMOINVALEVENT
-#ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
-          // in multi-core, uncache mm store may cause data inconsistencies.
-          // so here needs to override the nemu value with the dut value by cacheline granularity.
-          if (*((uint64_t *)flag_buf) != 0) {
-            Info("INFO: Sync GoldenMem using refill Data from DUT (Because of uncache main-mem store):\n");
-            Info("      cacheid=%d, addr: %lx\n      Gold: ", cacheid, dut_refill->addr);
-            for (int j = 0; j < 8; j++) {
-              read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
-              Info("%016lx", *((uint64_t *)buf));
-            }
-            Info("\n      Core: ");
-            for (int j = 0; j < 8; j++) {
-              Info("%016lx", dut_refill->data[j]);
-            }
-            Info("\n");
-            update_goldenmem(dut_refill->addr, dut_refill->data, 0xffffffffffffffffUL, 64);
-            proxy->ref_memcpy(dut_refill->addr, dut_refill->data, 64, DUT_TO_REF);
-            return 0;
-          }
-#endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
-          Info("cacheid=%d,mask=%x,realpaddr=0x%lx: Refill test failed!\n", cacheid, dut_refill->mask, realpaddr);
-          Info("addr: %lx\nGold: ", dut_refill->addr);
-          for (int j = 0; j < 8; j++) {
-            read_goldenmem(dut_refill->addr + j * 8, &buf, 8);
-            Info("%016lx", *((uint64_t *)buf));
-          }
-          Info("\nCore: ");
-          for (int j = 0; j < 8; j++) {
-            Info("%016lx", dut_refill->data[j]);
-          }
-          Info("\n");
-          // continue run some cycle before aborted to dump wave
-          if (delay == 0) {
-            delay = 1;
-          }
-          return 0;
-#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-        }
-#endif // CONFIG_DIFFTEST_CMOINVALEVENT
-      }
-    }
-  }
-#endif // CONFIG_DIFFTEST_REFILLEVENT
-  return 0;
-}
-
-typedef struct {
-  PTE pte;
-  uint8_t level;
-} r_s2xlate;
-
-r_s2xlate do_s2xlate(Hgatp *hgatp, uint64_t gpaddr) {
-  PTE pte;
-  uint64_t hpaddr;
-  uint8_t level;
-  uint64_t pg_base = hgatp->ppn << 12;
-  r_s2xlate r_s2;
-  if (hgatp->mode == 0) {
-    r_s2.pte.ppn = gpaddr >> 12;
-    r_s2.level = 0;
-    return r_s2;
-  }
-  int max_level = hgatp->mode == 8 ? 2 : 3;
-  for (level = max_level; level >= 0; level--) {
-    hpaddr = pg_base + GVPNi(gpaddr, level, max_level) * sizeof(uint64_t);
-    read_goldenmem(hpaddr, &pte.val, 8);
-    pg_base = pte.ppn << 12;
-    if (!pte.v || pte.r || pte.x || pte.w || level == 0) {
-      break;
-    }
-  }
-  r_s2.pte = pte;
-  r_s2.level = level;
-  return r_s2;
-}
-
-int Difftest::do_l1tlb_check() {
-#ifdef CONFIG_DIFFTEST_L1TLBEVENT
-  for (int i = 0; i < CONFIG_DIFF_L1TLB_WIDTH; i++) {
-    if (!dut->l1tlb[i].valid) {
-      continue;
-    }
-    dut->l1tlb[i].valid = 0;
-    PTE pte;
-    uint64_t paddr;
-    uint8_t difftest_level;
-    r_s2xlate r_s2;
-    bool isNapot = false;
-
-    Satp *satp = (Satp *)&dut->l1tlb[i].satp;
-    Satp *vsatp = (Satp *)&dut->l1tlb[i].vsatp;
-    Hgatp *hgatp = (Hgatp *)&dut->l1tlb[i].hgatp;
-    uint8_t hasS2xlate = dut->l1tlb[i].s2xlate != noS2xlate;
-    uint8_t onlyS2 = dut->l1tlb[i].s2xlate == onlyStage2;
-    uint8_t hasAllStage = dut->l1tlb[i].s2xlate == allStage;
-    uint64_t pg_base = (hasS2xlate ? vsatp->ppn : satp->ppn) << 12;
-    int mode = hasS2xlate ? vsatp->mode : satp->mode;
-    int max_level = mode == 8 ? 2 : 3;
-    if (onlyS2) {
-      r_s2 = do_s2xlate(hgatp, dut->l1tlb[i].vpn << 12);
-      pte = r_s2.pte;
-      difftest_level = r_s2.level;
-    } else {
-      for (difftest_level = max_level; difftest_level >= 0; difftest_level--) {
-        paddr = pg_base + VPNi(dut->l1tlb[i].vpn, difftest_level) * sizeof(uint64_t);
-        if (hasAllStage) {
-          r_s2 = do_s2xlate(hgatp, paddr);
-          uint64_t pg_mask = ((1ull << VPNiSHFT(r_s2.level)) - 1);
-          if (r_s2.level == 0 && r_s2.pte.n) {
-            pg_mask = ((1ull << NAPOTSHFT) - 1);
-          }
-          pg_base = (r_s2.pte.ppn << 12 & ~pg_mask) | (paddr & pg_mask & ~PAGE_MASK);
-          paddr = pg_base | (paddr & PAGE_MASK);
-        }
-        read_goldenmem(paddr, &pte.val, 8);
-        pg_base = pte.ppn << 12;
-        if (!pte.v || pte.r || pte.x || pte.w || difftest_level == 0) {
-          break;
-        }
-      }
-      if (difftest_level > 0 && pte.v) {
-        uint64_t pg_mask = ((1ull << VPNiSHFT(difftest_level)) - 1);
-        pg_base = (pte.ppn << 12 & ~pg_mask) | (dut->l1tlb[i].vpn << 12 & pg_mask & ~PAGE_MASK);
-      } else if (difftest_level == 0 && pte.n) {
-        isNapot = true;
-        uint64_t pg_mask = ((1ull << NAPOTSHFT) - 1);
-        pg_base = (pte.ppn << 12 & ~pg_mask) | (dut->l1tlb[i].vpn << 12 & pg_mask & ~PAGE_MASK);
-      }
-      if (hasAllStage && pte.v) {
-        r_s2 = do_s2xlate(hgatp, pg_base);
-        pte = r_s2.pte;
-        difftest_level = r_s2.level;
-        if (difftest_level == 0 && pte.n) {
-          isNapot = true;
-        }
-      }
-    }
-    if (isNapot) {
-      dut->l1tlb[i].ppn = dut->l1tlb[i].ppn >> 4 << 4;
-      pte.difftest_ppn = pte.difftest_ppn >> 4 << 4;
-    } else {
-      dut->l1tlb[i].ppn = dut->l1tlb[i].ppn >> difftest_level * 9 << difftest_level * 9;
-    }
-    if (pte.difftest_ppn != dut->l1tlb[i].ppn) {
-      Info("Warning: l1tlb resp test of core %d index %d failed! vpn = %lx\n", id, i, dut->l1tlb[i].vpn);
-      Info("  REF commits pte.val: 0x%lx, dut s2xlate: %d\n", pte.val, dut->l1tlb[i].s2xlate);
-      Info("  REF commits ppn 0x%lx, DUT commits ppn 0x%lx\n", pte.difftest_ppn, dut->l1tlb[i].ppn);
-      Info("  REF commits perm 0x%02x, level %d, pf %d\n", pte.difftest_perm, difftest_level, !pte.difftest_v);
-      return 0;
-    }
-  }
-#endif // CONFIG_DIFFTEST_L1TLBEVENT
-  return 0;
-}
-
-int Difftest::do_l2tlb_check() {
-#ifdef CONFIG_DIFFTEST_L2TLBEVENT
-  for (int i = 0; i < CONFIG_DIFF_L2TLB_WIDTH; i++) {
-    if (!dut->l2tlb[i].valid) {
-      continue;
-    }
-    dut->l2tlb[i].valid = 0;
-    Satp *satp = (Satp *)&dut->l2tlb[i].satp;
-    Satp *vsatp = (Satp *)&dut->l2tlb[i].vsatp;
-    Hgatp *hgatp = (Hgatp *)&dut->l2tlb[i].hgatp;
-    PTE pte;
-    r_s2xlate r_s2;
-    r_s2xlate check_s2;
-    uint64_t paddr;
-    uint8_t difftest_level;
-    for (int j = 0; j < 8; j++) {
-      if (dut->l2tlb[i].valididx[j]) {
-        uint8_t hasS2xlate = dut->l2tlb[i].s2xlate != noS2xlate;
-        uint8_t onlyS2 = dut->l2tlb[i].s2xlate == onlyStage2;
-        uint64_t pg_base = (hasS2xlate ? vsatp->ppn : satp->ppn) << 12;
-        int mode = hasS2xlate ? vsatp->mode : satp->mode;
-        int max_level = mode == 8 ? 2 : 3;
-        if (onlyS2) {
-          r_s2 = do_s2xlate(hgatp, dut->l2tlb[i].vpn << 12);
-          uint64_t pg_mask = ((1ull << VPNiSHFT(r_s2.level)) - 1);
-          uint64_t s2_pg_base = r_s2.pte.ppn << 12;
-          pg_base = (s2_pg_base & ~pg_mask) | (paddr & pg_mask & ~PAGE_MASK);
-          paddr = pg_base | (paddr & PAGE_MASK);
-        }
-        for (difftest_level = max_level; difftest_level >= 0; difftest_level--) {
-          paddr = pg_base + VPNi(dut->l2tlb[i].vpn + j, difftest_level) * sizeof(uint64_t);
-          if (hasS2xlate) {
-            r_s2 = do_s2xlate(hgatp, paddr);
-            uint64_t pg_mask = ((1ull << VPNiSHFT(r_s2.level)) - 1);
-            pg_base = (r_s2.pte.ppn << 12 & ~pg_mask) | (paddr & pg_mask & ~PAGE_MASK);
-            paddr = pg_base | (paddr & PAGE_MASK);
-          }
-          read_goldenmem(paddr, &pte.val, 8);
-          if (!pte.v || pte.r || pte.x || pte.w || difftest_level == 0) {
-            break;
-          }
-          pg_base = pte.ppn << 12;
-        }
-
-        if (hasS2xlate) {
-          r_s2 = do_s2xlate(hgatp, pg_base);
-          if (dut->l2tlb[i].pteidx[j])
-            check_s2 = r_s2;
-        }
-        bool difftest_gpf = !r_s2.pte.v || (!r_s2.pte.r && r_s2.pte.w);
-        bool difftest_pf = !pte.v || (!pte.r && pte.w);
-        bool s1_check_fail = pte.difftest_ppn != dut->l2tlb[i].ppn[j] || pte.difftest_perm != dut->l2tlb[i].perm ||
-                             pte.difftest_pbmt != dut->l2tlb[i].pbmt || difftest_level != dut->l2tlb[i].level ||
-                             difftest_pf != dut->l2tlb[i].pf;
-        bool s2_check_fail = hasS2xlate ? r_s2.pte.difftest_ppn != dut->l2tlb[i].s2ppn ||
-                                              r_s2.pte.difftest_perm != dut->l2tlb[i].g_perm ||
-                                              r_s2.pte.difftest_pbmt != dut->l2tlb[i].g_pbmt ||
-                                              r_s2.level != dut->l2tlb[i].g_level || difftest_gpf != dut->l2tlb[i].gpf
-                                        : false;
-        if (s1_check_fail || s2_check_fail) {
-          Info("Warning: L2TLB resp test of core %d index %d sector %d failed! vpn = %lx\n", id, i, j,
-               dut->l2tlb[i].vpn + j);
-          Info("  REF commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", pte.difftest_ppn, pte.difftest_perm,
-               difftest_level, difftest_pf);
-          if (hasS2xlate)
-            Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", r_s2.pte.difftest_ppn,
-                 r_s2.pte.difftest_perm, r_s2.level, difftest_gpf);
-          Info("  DUT commits ppn 0x%lx, perm 0x%02x, level %d, pf %d\n", dut->l2tlb[i].ppn[j], dut->l2tlb[i].perm,
-               dut->l2tlb[i].level, dut->l2tlb[i].pf);
-          if (hasS2xlate)
-            Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", dut->l2tlb[i].s2ppn, dut->l2tlb[i].g_perm,
-                 dut->l2tlb[i].g_level, dut->l2tlb[i].gpf);
-          return 1;
-        }
-      }
-    }
-  }
-#endif // CONFIG_DIFFTEST_L1TLBEVENT
-  return 0;
-}
-
 inline int handle_atomic(int coreid, uint64_t atomicAddr, uint64_t atomicData[], uint64_t atomicMask,
                          uint64_t atomicCmp[], uint8_t atomicFuop, uint64_t atomicOut[]) {
   // We need to do atmoic operations here so as to update goldenMem
@@ -1477,7 +1032,7 @@ void Difftest::cmo_inval_event_record() {
 int Difftest::check_timeout() {
   uint64_t cycleCnt = get_trap_event()->cycleCnt;
   // check whether there're any commits since the simulation starts
-  if (!has_commit && cycleCnt > last_commit + first_commit_limit) {
+  if (!state->has_commit && cycleCnt > last_commit + first_commit_limit) {
     Info("The first instruction of core %d at 0x%lx does not commit after %lu cycles.\n", id, FIRST_INST_ADDRESS,
          first_commit_limit);
     display();
@@ -1492,7 +1047,7 @@ int Difftest::check_timeout() {
   }
 
   // check whether there're any commits in the last `stuck_limit` cycles
-  if (has_commit && cycleCnt > last_commit + stuck_commit_limit) {
+  if (state->has_commit && cycleCnt > last_commit + stuck_commit_limit) {
     Info(
         "No instruction of core %d commits for %lu cycles, maybe get stuck\n"
         "(please also check whether a fence.i instruction requires more than %lu cycles to flush the icache)\n",
@@ -1526,7 +1081,7 @@ int Difftest::update_delayed_writeback() {
         } else {                                                                                   \
           delayed[delay->address] = 0;                                                             \
         }                                                                                          \
-        progress = true;                                                                           \
+        state->has_progress = true;                                                                \
       }                                                                                            \
     }                                                                                              \
   } while (0);

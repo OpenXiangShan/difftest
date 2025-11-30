@@ -105,6 +105,10 @@ public:
 
 class DiffState {
 public:
+  int coreid;
+  bool has_progress = false;
+  bool has_commit = false;
+
   bool dump_commit_trace = false;
 
   DiffState(int coreid);
@@ -127,7 +131,6 @@ public:
   void display();
 
 private:
-  int coreid;
   const bool use_spike;
 
   static const int DEBUG_GROUP_TRACE_SIZE = 16;

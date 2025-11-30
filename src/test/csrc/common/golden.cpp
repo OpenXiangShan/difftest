@@ -129,3 +129,28 @@ uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
   pmem_write(addr, result);
   return (mask == 0xf0) ? rop << 32 : rop;
 }
+
+r_s2xlate do_s2xlate(Hgatp *hgatp, uint64_t gpaddr) {
+  PTE pte;
+  uint64_t hpaddr;
+  uint8_t level;
+  uint64_t pg_base = hgatp->ppn << 12;
+  r_s2xlate r_s2;
+  if (hgatp->mode == 0) {
+    r_s2.pte.ppn = gpaddr >> 12;
+    r_s2.level = 0;
+    return r_s2;
+  }
+  int max_level = hgatp->mode == 8 ? 2 : 3;
+  for (level = max_level; level >= 0; level--) {
+    hpaddr = pg_base + GVPNi(gpaddr, level, max_level) * sizeof(uint64_t);
+    read_goldenmem(hpaddr, &pte.val, 8);
+    pg_base = pte.ppn << 12;
+    if (!pte.v || pte.r || pte.x || pte.w || level == 0) {
+      break;
+    }
+  }
+  r_s2.pte = pte;
+  r_s2.level = level;
+  return r_s2;
+}

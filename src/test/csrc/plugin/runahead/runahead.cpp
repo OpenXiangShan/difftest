@@ -221,7 +221,7 @@ void Runahead::update_debug_info(void *dest_buffer) {}
 void Runahead::do_first_instr_runahead() {
   if (!has_commit && dut_ptr->runahead[0].valid && dut_ptr->runahead[0].pc == FIRST_INST_ADDRESS) {
     runahead_debug("The first instruction of core %d start to run ahead.\n", id);
-    has_commit = 1;
+    state.has_commit = 1;
     // nemu_this_pc = dut_ptr->runahead[0].pc;
 
     proxy->memcpy(PMEM_BASE, get_img_start(), get_img_size(), DIFFTEST_TO_REF);

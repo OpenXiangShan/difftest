@@ -70,4 +70,10 @@ typedef union atpStruct {
 #define GVPNi(addr, i, max) (((addr) >> (9 * (i) + 12)) & ((i == 3 || (i == 2 && max == 2)) ? 0x7ff : 0x1ff))
 #define VPNi(vpn, i)        (((vpn) >> (9 * (i))) & 0x1ff)
 #define NAPOTSHFT           (12 + 4) // only support 64kb page
-#endif
+
+typedef struct {
+  PTE pte;
+  uint8_t level;
+} r_s2xlate;
+
+#endif // __GOLDEN_H__

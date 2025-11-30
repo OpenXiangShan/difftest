@@ -230,7 +230,7 @@ public:
     ref_regcpy(&state.xrf, is_from_dut, is_from_dut);
   }
 
-  void regcpy(DiffTestState *dut);
+  void regcpy(const DiffTestRegState *regs, uint64_t pc);
   int compare(DiffTestState *dut);
   void display(DiffTestState *dut = nullptr);
 

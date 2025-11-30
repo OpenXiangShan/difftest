@@ -17,6 +17,7 @@
 #ifndef __DIFFTEST_H__
 #define __DIFFTEST_H__
 
+#include "checker.h"
 #include "common.h"
 #include "diffstate.h"
 #include "difftrace.h"
@@ -28,33 +29,6 @@
 #ifdef FUZZING
 #include "emu.h"
 #endif // FUZZING
-
-enum {
-  EX_IAM,       // instruction address misaligned
-  EX_IAF,       // instruction address fault
-  EX_II,        // illegal instruction
-  EX_BP,        // breakpoint
-  EX_LAM,       // load address misaligned
-  EX_LAF,       // load address fault
-  EX_SAM,       // store/amo address misaligned
-  EX_SAF,       // store/amo address fault
-  EX_ECU,       // ecall from U-mode or VU-mode
-  EX_ECS,       // ecall from HS-mode
-  EX_ECVS,      // ecall from VS-mode, H-extention
-  EX_ECM,       // ecall from M-mode
-  EX_IPF,       // instruction page fault
-  EX_LPF,       // load page fault
-  EX_RS0,       // reserved
-  EX_SPF,       // store/amo page fault
-  EX_DT,        // double trap
-  EX_RS1,       // reserved
-  EX_SWC,       // software check
-  EX_HWE,       // hardware error
-  EX_IGPF = 20, // instruction guest-page fault, H-extention
-  EX_LGPF,      // load guest-page fault, H-extention
-  EX_VI,        // virtual instruction, H-extention
-  EX_SGPF       // store/amo guest-page fault, H-extention
-};
 
 #define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && f >= DEBUG_MEM_BASE && v)
 #define IS_LOAD_STORE(instr)   (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
@@ -104,11 +78,11 @@ public:
   ~Difftest();
   REF_PROXY *proxy = NULL;
   uint32_t num_commit = 0; // # of commits if made progress
-  bool has_commit = false;
   WarmupInfo warmup_info;
   // Trigger a difftest checking procdure
   int step();
   void update_nemuproxy(int, size_t);
+  void init_checkers();
   inline bool get_trap_valid() {
     return dut->trap.hasTrap;
   }
@@ -191,6 +165,10 @@ public:
   }
   void warmup_display_stats();
 
+  void set_has_commit() {
+    state->has_commit = true;
+  }
+
 protected:
   DiffTrace<DiffTestState> *difftrace = nullptr;
 
@@ -219,7 +197,6 @@ protected:
 
   int id;
 
-  bool progress = false;
   uint64_t last_commit = 0;
 
   // For compare the first instr pc of a commit group
@@ -227,7 +204,6 @@ protected:
   uint64_t dut_commit_first_pc = 0;
   uint64_t ref_commit_first_pc = 0;
 
-  uint64_t nemu_this_pc;
   DiffState *state = NULL;
 #ifdef DEBUG_REFILL
   uint64_t track_instr = 0;
@@ -254,20 +230,30 @@ protected:
   void update_last_commit() {
     last_commit = get_trap_event()->cycleCnt;
   }
+
+  ArchEventChecker *arch_event_checker = nullptr;
+  FirstInstrCommitChecker *first_instr_commit_checker = nullptr;
+  InstrCommitChecker *instr_commit_checker = nullptr;
+#ifdef CONFIG_DIFFTEST_LRSCEVENT
+  LrScChecker *lrsc_checker = nullptr;
+#endif // CONFIG_DIFFTEST_LRSCEVENT
+#ifdef CONFIG_DIFFTEST_REFILLEVENT
+  RefillChecker *refill_checker = nullptr;
+#endif // CONFIG_DIFFTEST_REFILLEVENT
+#ifdef CONFIG_DIFFTEST_L1TLBEVENT
+  L1TLBChecker *l1tlb_checker = nullptr;
+#endif // CONFIG_DIFFTEST_L1TLBEVENT
+#ifdef CONFIG_DIFFTEST_L2TLBEVENT
+  L2TLBChecker *l2tlb_checker = nullptr;
+#endif // CONFIG_DIFFTEST_L2TLBEVENT
+
   int check_timeout();
   int check_all();
-  void do_first_instr_commit();
-  void do_interrupt();
-  void do_exception();
-  int do_instr_commit(int index);
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
   void do_vec_load_check(int index, DifftestLoadEvent load_event);
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
   void do_load_check(int index);
   int do_store_check();
-  int do_refill_check(int cacheid);
-  int do_l1tlb_check();
-  int do_l2tlb_check();
   int do_golden_memory_update();
 
   inline uint64_t get_int_data(int i) {
