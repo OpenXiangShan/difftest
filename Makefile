@@ -20,7 +20,6 @@ export NOOP_HOME
 
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
-NUM_CORES  ?= 1
 
 BUILD_DIR  = $(DESIGN_DIR)/build
 
@@ -71,6 +70,10 @@ SIM_CXXFLAGS   += -I$(PLUGIN_INC_DIR)
 GEN_VSRC_DIR = $(BUILD_DIR)/generated-src
 VSRC_DIR   = $(abspath ./src/test/vsrc/common)
 SIM_VSRC = $(shell find $(VSRC_DIR) -name "*.v" -or -name "*.sv")
+
+ifneq ($(NUM_CORES),)
+SIM_CXXFLAGS += -DNUM_CORES=$(NUM_CORES)
+endif
 
 # DiffTest support
 DIFFTEST_CSRC_DIR = $(abspath ./src/test/csrc/difftest)

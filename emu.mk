@@ -27,7 +27,7 @@ EMU_CSRC_DIR   = $(abspath ./src/test/csrc/emu)
 EMU_CONFIG_DIR = $(abspath ./config)
 
 EMU_CXXFILES  = $(SIM_CXXFILES) $(shell find $(EMU_CSRC_DIR) -name "*.cpp")
-EMU_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(EMU_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
+EMU_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(EMU_CSRC_DIR)
 
 EMU_HEADERS := $(shell find $(SIM_CSRC_DIR) -name "*.h")      \
                $(shell find $(DIFFTEST_CSRC_DIR) -name "*.h") \
