@@ -5,7 +5,7 @@ picker_include   = $(shell picker --show_xcom_lib_location_cpp|grep include|awk 
 
 PDB_SWIG_DIR     = $(abspath src/test/csrc/plugin/xspdb)
 PDB_CXXFILES     = $(SIM_CXXFILES) $(shell find $(PDB_SWIG_DIR)/cpp -name "*.cpp") $(shell find $(SIM_CONFIG_DIR) -name "*.cpp")
-PDB_CXXFLAGS     = $(LIB_CXXFLAGS) $(subst \\\",\", $(SIM_CXXFLAGS)) -DNUM_CORES=$(NUM_CORES)
+PDB_CXXFLAGS     = $(LIB_CXXFLAGS) $(subst \\\",\", $(SIM_CXXFLAGS))
 
 ifeq ($(WITH_DRAMSIM3),1)
 PDB_LD_LIB       = -L $(DRAMSIM3_HOME)/ -ldramsim3 -Wl,-rpath-link=$(DRAMSIM3_HOME)/libdramsim3.so
