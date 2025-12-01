@@ -42,6 +42,9 @@ object Query {
          |#include <cstdint>
          |#include "difftest-state.h"
          |#include "query.h"
+         |#ifdef CONFIG_DIFFTEST_DELTA
+         |#include "difftest-delta.h"
+         |#endif // CONFIG_DIFFTEST_DELTA
          |
          |#ifdef CONFIG_DIFFTEST_QUERY
          |

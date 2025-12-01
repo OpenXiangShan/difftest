@@ -549,6 +549,10 @@ class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle
   }
 }
 
+class DiffDeltaInfo extends DeltaInfo with DifftestBundle {
+  override val desiredCppName: String = "delta_info"
+}
+
 trait DifftestModule[T <: DifftestBundle] {
   val io: T
 }

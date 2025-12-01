@@ -89,7 +89,7 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   def getPacketDecl(gen: DifftestBundle, prefix: String, config: GatewayConfig): String = {
     val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
     val dut_index = if (config.isBatch) "dut_index" else "0"
-    val packet = if (config.isDelta && gen.isDeltaElem) {
+    val packet = if (config.isDelta && (gen.isDeltaElem || gen.desiredCppName == "delta_info")) {
       s"DELTA_BUF(${prefix}coreid)->${gen.actualCppName}"
     } else {
       s"DUT_BUF(${prefix}coreid, $dut_zone, $dut_index)->${gen.actualCppName}"
@@ -292,6 +292,13 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
       (structDecl, infoLen)
     }
     val (batchDecl, infoLen) = parse(batchIO)
+    val stepPending = if (config.isDelta) {
+      """
+        |      if (dStats->need_pending())
+        |        continue; // Not changing dut_index
+        |      dStats->sync(0, dut_index);
+        |""".stripMargin
+    } else ""
     Seq(s"""
            |  enum DifftestBundleType {
            |  ${bundleEnum.mkString(",\n  ")}
@@ -299,27 +306,28 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |  static int dut_index = 0;
            |  $batchDecl
            |  for (int i = 0; i < $infoLen; i++) {
+           |    if (!diffstate_buffer) return;
            |    uint8_t id = info[i].id;
            |    uint8_t num = info[i].num;
            |    uint32_t coreid, index, address;
            |    if (id == BatchFinish) {
-           |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
-           |#ifdef FPGA_HOST
-           |      extern void fpga_nstep(uint8_t step);
-           |      fpga_nstep(num);
-           |#else
-           |      extern void simv_nstep(uint8_t step);
-           |      simv_nstep(num);
-           |#endif // FPGA_HOST
-           |#endif // CONFIG_DIFFTEST_INTERNAL_STEP
            |      break;
            |    }
            |    else if (id == BatchStep) {
-           |      ${if (config.isDelta) "dStats->sync(0, dut_index);" else ""}
+           |      $stepPending
            |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
            |#ifdef CONFIG_DIFFTEST_QUERY
            |      difftest_query_step();
            |#endif // CONFIG_DIFFTEST_QUERY
+           |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
+           |#ifdef FPGA_HOST
+           |      extern void fpga_nstep(uint8_t step);
+           |      fpga_nstep(1);
+           |#else
+           |      extern void simv_nstep(uint8_t step);
+           |      simv_nstep(1);
+           |#endif // FPGA_HOST
+           |#endif // CONFIG_DIFFTEST_INTERNAL_STEP
            |      continue;
            |    }
            |    $bundleAssign
