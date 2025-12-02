@@ -24,6 +24,23 @@ jobs:
         run: |
           make
 
+      - name: Copy the Profile File
+        run: |
+          mv build/generated-src/difftest_profile.json .
+          make clean
+
+      - name: Generate Verilog using Profile
+        run: |
+          make PROFILE=./difftest_profile.json NUM_CORES=4
+
+      - name: Generate EMU using Profile-Generated RTL
+        run: |
+          make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
+
+      - name: Clean the Profile File
+        run: |
+          rm -f ./difftest_profile.json
+
   test-verilator-nutshell:
     runs-on: ubuntu-latest
     container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
