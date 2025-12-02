@@ -647,7 +647,7 @@ void Difftest::do_first_instr_commit() {
 }
 
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_ARCHVECREGSTATE)
-void Difftest::do_vec_load_check(DifftestLoadEvent load_event, uint8_t vecFirstLdest, uint64_t vecCommitData[]) {
+void Difftest::do_vec_load_check(DifftestLoadEvent &load_event, uint8_t vecFirstLdest, uint64_t vecCommitData[]) {
   if (!enable_vec_load_goldenmem_check) {
     return;
   }
@@ -777,7 +777,7 @@ void Difftest::do_load_check_squash() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-void Difftest::do_load_check(DifftestLoadEvent load_event, bool regWen, uint64_t *refRegPtr, uint64_t commitData) {
+void Difftest::do_load_check(DifftestLoadEvent &load_event, bool regWen, uint64_t *refRegPtr, uint64_t commitData) {
   if (load_event.isLoad || load_event.isAtomic) {
     proxy->sync();
     if (regWen && *refRegPtr != commitData) {

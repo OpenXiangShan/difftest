@@ -262,12 +262,12 @@ protected:
   int do_instr_commit(int index);
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   void do_load_check(int index);
-  void do_load_check(DifftestLoadEvent load_event, bool regWen, uint64_t *refRegPtr, uint64_t commitData);
+  void do_load_check(DifftestLoadEvent &load_event, bool regWen, uint64_t *refRegPtr, uint64_t commitData);
 #ifdef CONFIG_DIFFTEST_SQUASH
   void do_load_check_squash();
 #endif // CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  void do_vec_load_check(int index, DifftestLoadEvent load_event);
+  void do_vec_load_check(DifftestLoadEvent &load_event, uint8_t vecFirstLdest, uint64_t vecCommitData[]);
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #endif // CONFIG_DIFFTEST_LOADEVENT
   int do_store_check();
