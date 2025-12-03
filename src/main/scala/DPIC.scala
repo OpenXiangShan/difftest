@@ -344,7 +344,7 @@ private class DummyDPICWrapper(gen: Valid[DifftestBundle], config: GatewayConfig
   val io = IO(Input(gen))
   val dpic = Module(new DPIC(gen.bits, config))
   dpic.clock := clock
-  dpic.enable := io.valid && control.enable
+  dpic.enable := io.valid && control.enable && !reset.asBool
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
   dpic.io := io.bits
 }
@@ -358,7 +358,7 @@ private class DummyDPICBatchWrapper(
   val io = IO(Input(batchIO))
   val dpic = Module(new DPICBatch(template, batchIO, config))
   dpic.clock := clock
-  dpic.enable := control.enable
+  dpic.enable := control.enable && !reset.asBool
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
   dpic.io := io.asUInt
 }
