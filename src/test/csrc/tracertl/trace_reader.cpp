@@ -25,8 +25,11 @@
 
 TraceReader::TraceReader(const char *trace_file_name, bool enable_gen_paddr, uint64_t max_insts, uint64_t skip_traceinstr)
 {
+  printf("[TraceRTL] pre_readfile...\n");
   pre_readfile(trace_file_name, skip_traceinstr);
+  printf("[TraceRTL] mid_construct...\n");
   mid_construct(max_insts, enable_gen_paddr);
+  printf("[TraceRTL] post_opt...\n");
   post_opt();
 
   printf("[TraceRTL] TraceReader Finished.\n");
@@ -168,7 +171,6 @@ void TraceReader::mid_construct(uint64_t max_insts, bool enable_gen_paddr) {
   trace_icache->construct(instList_preread);
   printf("[TraceRTL] TraceICache Constructed.\n");
   fflush(stdout);
-
 }
 
 void TraceReader::post_opt() {
@@ -210,7 +212,7 @@ bool TraceReader::prepareRead() {
   readBufferNeedReload = false;
 
   for (int i = 0; i < TraceReadBufferSize; i++) {
-    bool ret = read(readBuffer[i]);
+    bool ret = read(readBuffer[i], true);
 
     if (!ret) {
       METHOD_TRACE();
@@ -226,7 +228,7 @@ bool TraceReader::prepareRead() {
 }
 
 
-bool TraceReader::read(Instruction &inst) {
+bool TraceReader::read(Instruction &inst, bool record = true) {
   // read a inst from redirect buffer
   METHOD_TRACE();
   if (!redirectInstList.empty()) {
@@ -263,15 +265,18 @@ bool TraceReader::read(Instruction &inst) {
     }
   }
 
-  pendingInstList.push_back(inst); // for commit check
-  driveInstInput.push_back(inst); // for ibuffer drive check
-
-#ifndef TRACERTL_FPGA
-  if (pendingInstList.size() > 2000) {
-    setError();
-    printf("[TraceRTL] pendingInstList has too many inst, more than 2000. Check it.\n");
+  // no commit check, no record
+  if (record) {
+    pendingInstList.push_back(inst); // for commit check
+    driveInstInput.push_back(inst); // for ibuffer drive check
   }
-#endif
+
+// #ifndef TRACERTL_FPGA
+//   if (pendingInstList.size() > 2000) {
+//     setError();
+//     printf("[TraceRTL] pendingInstList has too many inst, more than 2000. Check it.\n");
+//   }
+// #endif
 
 //  inst.dump();
 
@@ -489,6 +494,22 @@ void TraceReader::checkDrive() {
   METHOD_TRACE();
 }
 
+size_t TraceReader::getFpgaPacketSize(size_t inst_num) {
+  return sizeof(TraceFpgaInstruction) * inst_num;
+}
+bool TraceReader::readFpgaInsts(char *buffer, size_t inst_num) {
+  TraceFpgaInstruction *fpgaInstBuf = (TraceFpgaInstruction *)buffer;
+  Instruction tmpInst;
+  for (int i = 0; i < inst_num; i ++) {
+    if (!read(tmpInst, false)) { return false; }
+    fpgaInstBuf[i].genFrom(tmpInst);
+  }
+  return true;
+}
+size_t TraceReader::getFpgaResponseSize(size_t inst_num) {
+  return sizeof(TraceFpgaCollectStruct) * inst_num;
+}
+
 void TraceReader::read_by_axis(char *tvalid, char *last, uint64_t *validVec,
     uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3,
     uint64_t *data4, uint64_t *data5, uint64_t *data6, uint64_t *data7) {
@@ -652,6 +673,62 @@ void TraceReader::check_by_axis(char last, uint64_t valid,
     }
     METHOD_TRACE();
   }
+}
+
+bool TraceReader::fpgaCommitDiff(TraceFpgaCollectStruct *buf, size_t inst_num) {
+  if (isError() || isStuck() || isErrorDrive()) {
+    return false;
+  }
+
+  for (int i = 0; i < inst_num; i ++) {
+    while (pendingInstList.front().isCtrlForceJump()) {
+      pendingInstList.pop_front();
+    }
+    if (pendingInstList.size() < inst_num) {
+      setError();
+      printf("TraceRTL FPGA pendingInstList size %zu less then instNum %lu\n", pendingInstList.size(), inst_num);
+      fflush(stdout);
+
+      size_t pSize = pendingInstList.size();
+      for (int i = 0; i < pSize; i++) {
+        pendingInstList.pop_front();
+        buf[i].dump();
+      }
+
+      return false;
+    }
+    if (!pendingInstList.front().pc_va_match(buf[i].pcVA)) {
+      setError();
+      printf("TraceRTL FPGA Commit PC Mismatch\n");
+    }
+    if (isError()) {
+      errorInst.instr = 0; // invalid
+      errorInst.instr_pc = buf[i].pcVA;
+      errorInst.instNum = buf[i].instNum;
+      errorInst.instID = commit_inst_num.get();
+      return false;
+    }
+    for (int i = 0; i < buf[i].instNum; i++) {
+      committedInstList.push_back(pendingInstList.front());
+      if (committedInstList.size() > CommittedInstSize) {
+        committedInstList.pop_front();
+      }
+      pendingInstList.pop_front();
+    }
+    TraceCollectInstruction dut;
+    dut.instr_pc = buf[i].pcVA;
+    dut.instr = 0;
+    dut.instNum = buf[i].instNum;
+    dut.instID = commit_inst_num.get();
+    dutCommittedInstList.push_back(dut);
+    if (dutCommittedInstList.size() > DutCommittedInstSize) {
+      dutCommittedInstList.pop_front();
+    }
+
+    setCommit();
+    commit_inst_num.add(inst_num);
+  }
+  return true;
 }
 
 // replace CheckCommit in FPGA mode

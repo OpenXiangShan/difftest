@@ -25,8 +25,7 @@
 
 #include "trace_format.h"
 #include "trace_paddr_allocator.h"
-#include "emu.h"
-
+#include <tracertl_dut_info.h>
 
 enum TraceStatus {
   TRACE_IDLE,
@@ -147,7 +146,12 @@ public:
   bool readFromBuffer(Instruction &inst, uint8_t idx);
   bool prepareRead();
   // Used by prepareRead
-  bool read(Instruction &inst);
+  bool read(Instruction &inst, bool record);
+
+  size_t getFpgaPacketSize(size_t inst_num);
+  bool readFpgaInsts(char *buffer, size_t inst_num);
+  size_t getFpgaResponseSize(size_t inst_num);
+  bool fpgaCommitDiff(TraceFpgaCollectStruct *buf, size_t inst_num);
 
   void read_by_axis(char *tvalid, char *last, uint64_t *valid,
     uint64_t *data0, uint64_t *data1, uint64_t *data2, uint64_t *data3,

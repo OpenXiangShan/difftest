@@ -89,6 +89,13 @@ SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
 endif
 endif
 
+ifeq ($(FPGA),1)
+$(info FPGA is enabled. ChiselDB, ChiselMap and ConstantIn are implicitly disabled.)
+WITH_CHISELDB = 0
+WITH_CONSTANTIN = 0
+WITH_CHISELMAP = 0
+endif
+
 # TraceRTL mode
 # TRACERTL_MODE ?= 1
 ifeq ($(TRACERTL_MODE), 1)
@@ -104,7 +111,7 @@ SIM_CXXFLAGS += -DTRACERTL_FPGA
 endif
 
 # ChiselDB
-WITH_CHISELDB ?= 1
+# WITH_CHISELDB ?= 1
 ifeq ($(WITH_CHISELDB), 1)
 SIM_CXXFILES += $(BUILD_DIR)/chisel_db.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CHISEL_DB
