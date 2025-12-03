@@ -48,8 +48,8 @@ sealed trait DifftestBaseBundle extends Bundle {
   }
 }
 
-class DeltaElem(elemBytes: Int) extends DifftestBaseBundle {
-  val data = UInt((elemBytes * 8).W)
+class DeltaElem(elemWidth: Int) extends DifftestBaseBundle {
+  val data = UInt(elemWidth.W)
 }
 
 class ArchEvent extends DifftestBaseBundle with HasValid {

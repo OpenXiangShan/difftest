@@ -38,7 +38,7 @@ object Delta {
     val deltaInsts = instances.filter(_.supportsDelta).distinct
     val deltaDecl = deltaInsts.map { inst =>
       val len = inst.dataElements.flatMap(_._3).length
-      val elemType = s"uint${inst.deltaElemBytes * 8}_t"
+      val elemType = s"uint${inst.deltaElemWidth}_t"
       s"$elemType ${inst.desiredCppName}_elem[$len];"
     }
 
