@@ -279,8 +279,6 @@ protected:
   inline uint64_t get_int_data(int i) {
 #if defined(CONFIG_DIFFTEST_PHYINTREGSTATE)
     return dut->pregs_xrf.value[dut->commit[i].wpdest];
-#elif defined(CONFIG_DIFFTEST_INTWRITEBACK)
-    return dut->wb_xrf[dut->commit[i].wpdest].data;
 #else
     return dut->regs.xrf.value[dut->commit[i].wdest];
 #endif
@@ -290,8 +288,6 @@ protected:
   inline uint64_t get_fp_data(int i) {
 #if defined(CONFIG_DIFFTEST_PHYFPREGSTATE)
     return dut->pregs_frf.value[dut->commit[i].wpdest];
-#elif defined(CONFIG_DIFFTEST_FPWRITEBACK)
-    return dut->wb_frf[dut->commit[i].wpdest].data;
 #else
     return dut->regs.frf.value[dut->commit[i].wdest];
 #endif

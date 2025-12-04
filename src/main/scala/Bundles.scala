@@ -48,7 +48,7 @@ sealed trait DifftestBaseBundle extends Bundle {
   }
 }
 
-class DeltaElem(elemWidth: Int) extends DifftestBaseBundle {
+private[difftest] class DeltaElem(elemWidth: Int) extends DifftestBaseBundle {
   val data = UInt(elemWidth.W)
 }
 
@@ -93,11 +93,11 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
 }
 
 // Instantiate inside DiffTest, work for get_commit_data specially
-class CommitData extends DifftestBaseBundle with HasValid {
+private[difftest] class CommitData extends DifftestBaseBundle with HasValid {
   val data = UInt(64.W)
 }
 
-class VecCommitData extends DifftestBaseBundle with HasValid {
+private[difftest] class VecCommitData extends DifftestBaseBundle with HasValid {
   val data = Vec(16, UInt(64.W))
 }
 
@@ -180,14 +180,6 @@ class ArchRenameTable(numRegs: Int, numPhyRegs: Int) extends DifftestBaseBundle 
 
 class PhyRegState(numPhyRegs: Int) extends DifftestBaseBundle {
   val value = Vec(numPhyRegs, UInt(64.W))
-}
-
-class DataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
-  val data = UInt(64.W)
-}
-
-class VecDataWriteback(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
-  val data = Vec(2, UInt(64.W))
 }
 
 class ArchRegState(val numRegs: Int) extends DifftestBaseBundle {
@@ -355,7 +347,7 @@ class MhpmeventOverflowEvent extends DifftestBaseBundle with HasValid {
   val mhpmeventOverflow = UInt(64.W)
 }
 
-class TraceInfo extends DifftestBaseBundle with HasValid {
+private[difftest] class TraceInfo extends DifftestBaseBundle with HasValid {
   val in_replay = Bool()
   val trace_head = UInt(16.W)
   val trace_size = UInt(16.W)
@@ -376,6 +368,6 @@ class SyncCustomMflushpwrEvent extends DifftestBaseBundle with HasValid {
   val l2FlushDone = Bool()
 }
 
-class DeltaInfo extends DifftestBaseBundle {
+private[difftest] class DeltaInfo extends DifftestBaseBundle {
   val inPending = UInt(8.W)
 }

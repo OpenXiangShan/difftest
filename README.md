@@ -140,25 +140,18 @@ coherence via RefillTest.
 | `DiffArchEvent` | Exceptions and interrupts | Yes |
 | `DiffInstrCommit` | Executed instructions | Yes |
 | `DiffTrapEvent` | Simulation environment call | Yes |
-| `DiffArchIntRegState` | General-purpose registers | Yes |
-| `DiffArchFpRegState` | Floating-point registers | No |
-| `DiffArchVecRegState` | Vector registers | No |
 | `DiffCSRState` | Control and status registers (CSRs) | Yes |
+| `DiffPhyIntRegState`<br>~~`(DiffArchIntRegState)`~~ | Physical general-purpose registers<br>(Act as `DiffArchIntRegState` when `numPhyRegs = 32`) | Yes |
+| `DiffPhyFpRegState`<br>~~`(DiffArchFpRegState)`~~ | Physical floating-point registers<br>(Act as `DiffArchFpRegState` when `numPhyRegs = 32`) | No |
+| `DiffPhyVecRegState`<br>~~`(DiffArchVecRegState)`~~ | Physical vector registers<br>(Act as `DiffArchVecRegState` when `numPhyRegs = 64`) | No |
+| `DiffArchIntRenameTable` | Rename table for general-purpose registers<br>(Only instantiated when `numPhyRegs > 32`) | No |
+| `DiffArchFpRenameTable` | Rename table for floating-point registers<br>(Only instantiated when `numPhyRegs > 32`) | No |
+| `DiffArchVecRenameTable` | Rename table for vector registers<br>(Only instantiated when `numPhyRegs > 64`) | No |
 | `DiffFpCSRState` | CSRs for the Floating-point extension | No |
 | `DiffVecCSRState` | CSRs for the Vector extension | No |
 | `DiffHCSRState` | CSRs for the Hypervisor extension | No |
 | `DiffTriggerCSRState` | CSRs for the Trigger support | No |
 | `DiffDebugMode` | Debug mode registers | No |
-| `DiffIntWriteback` | General-purpose writeback operations | No |
-| `DiffFpWriteback` | Floating-point writeback operations | No |
-| `DiffVecWriteback` | Vector writeback operations | No |
-| `DiffVecV0Writeback` | Vector `V0` writeback operations | No |
-| `DiffPhyIntRegState` | Physical general-purpose registers | No |
-| `DiffPhyFpRegState` | Physical floating-point registers | No |
-| `DiffPhyVecRegState` | Physical vector registers | No |
-| `DiffArchIntRenameTable` | Rename table for general-purpose registers | No |
-| `DiffArchFpRenameTable` | Rename table for floating-point registers | No |
-| `DiffArchVecRenameTable` | Rename table for vector registers | No |
 | `DiffArchIntDelayedUpdate` | Delayed general-purpose writeback | No |
 | `DiffArchFpDelayedUpdate` | Delayed floating-point writeback | No |
 | `DiffStoreEvent` | Store operations | No |

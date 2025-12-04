@@ -221,7 +221,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   }
 }
 
-class DiffDeltaElem(gen: DifftestBundle)
+private[difftest] class DiffDeltaElem(gen: DifftestBundle)
   extends DeltaElem(gen.deltaElemWidth)
   with DifftestBundle
   with DifftestWithIndex {
@@ -260,12 +260,12 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with Dif
   override def classArgs: Map[String, Any] = Map("nPhyRegs" -> nPhyRegs)
 }
 
-class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
+private[difftest] class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "commit_data"
   override def supportsSquashBase: Bool = true.B
 }
 
-class DiffVecCommitData extends VecCommitData with DifftestBundle with DifftestWithIndex {
+private[difftest] class DiffVecCommitData extends VecCommitData with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "vec_commit_data"
   override def supportsSquashBase: Bool = true.B
 }
@@ -304,30 +304,7 @@ class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
-class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
-  override val desiredCppName: String = "wb_xrf"
-  override protected val needFlatten: Boolean = true
-  // It is required for MMIO/Load(only for multi-core) data synchronization, and commit instr trace record
-  override def supportsSquashBase: Bool = true.B
-  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
-}
-
-class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
-  override val desiredCppName: String = "wb_frf"
-}
-
-class DiffVecWriteback(numRegs: Int = 32) extends VecDataWriteback(numRegs) with DifftestBundle {
-  override val desiredCppName: String = "wb_vrf"
-  override protected val needFlatten: Boolean = true
-  override def supportsSquashBase: Bool = true.B
-  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
-}
-
-class DiffVecV0Writeback(numRegs: Int = 32) extends DiffVecWriteback(numRegs) {
-  override val desiredCppName: String = "wb_v0"
-}
-
-class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
+private[difftest] class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "xrf"
   override val desiredRegOffset: Option[Int] = Some(0)
   override val updateDependency: Seq[String] = Seq("commit", "event")
@@ -349,14 +326,14 @@ class DiffArchFpDelayedUpdate extends DiffArchDelayedUpdate(32) {
   override val desiredCppName: String = "regs_fp_delayed"
 }
 
-class DiffArchFpRegState extends DiffArchIntRegState {
+private[difftest] class DiffArchFpRegState extends DiffArchIntRegState {
   override val desiredCppName: String = "frf"
   override val desiredRegOffset: Option[Int] = Some(1)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
 
-class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
+private[difftest] class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
   override val desiredCppName: String = "vrf"
   override val desiredRegOffset: Option[Int] = Some(4)
   override val updateDependency: Seq[String] = Seq("commit", "event")
@@ -429,7 +406,7 @@ class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithInd
   override val desiredCppName: String = "store"
 }
 
-class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
+private[difftest] class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
   override val squashQueue: Boolean = true
 }
 
@@ -438,7 +415,7 @@ class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex
   override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
 }
 
-class DiffLoadEventQueue extends DiffLoadEvent with DifftestWithStamp with DiffTestIsInherited {
+private[difftest] class DiffLoadEventQueue extends DiffLoadEvent with DifftestWithStamp with DiffTestIsInherited {
   val commitData = UInt(64.W)
   val vecCommitData = Vec(16, UInt(64.W))
   val regWen = Bool()
@@ -518,7 +495,7 @@ class DiffSyncCustomMflushpwrEvent extends SyncCustomMflushpwrEvent with Difftes
   override val desiredCppName: String = "sync_custom_mflushpwr"
 }
 
-class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
+private[difftest] class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 
   override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
@@ -540,7 +517,7 @@ class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle
   }
 }
 
-class DiffDeltaInfo extends DeltaInfo with DifftestBundle {
+private[difftest] class DiffDeltaInfo extends DeltaInfo with DifftestBundle {
   override val desiredCppName: String = "delta_info"
 }
 
