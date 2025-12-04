@@ -349,7 +349,7 @@ jobs:
       - name: FPGA-difftest Build (no THREAD, no ASYNC_CLK)
         run: |
             cd $NOOP_HOME
-            make sim-verilog MILL_ARGS="--difftest-config ESBIDF" -j2
+            make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 DIFFTEST_PERFCNT=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1
             bash difftest/scripts/fpga_sim/ci.sh
@@ -358,7 +358,7 @@ jobs:
       - name: FPGA-difftest Build (with THREAD and ASYNC_CLK)
         run: |
             cd $NOOP_HOME
-            make sim-verilog MILL_ARGS="--difftest-config ESBIDF" -j2
+            make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 USE_THREAD_MEMPOOL=1 DIFFTEST_PERFCNT=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2N=1
             bash difftest/scripts/fpga_sim/ci.sh
