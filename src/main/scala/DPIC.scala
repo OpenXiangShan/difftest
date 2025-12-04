@@ -418,7 +418,7 @@ object DPIC {
     }
     val phyRegs = instances.distinctBy(_.desiredCppName).filter(_.desiredCppName.contains("pregs"))
     if (phyRegs.nonEmpty) {
-      interfaceCpp += "void diffstate_update_archreg(DiffTestState* dut) {"
+      interfaceCpp += "static inline void diffstate_update_archreg(DiffTestState* dut) {"
       phyRegs.foreach { p =>
         val suffix = p.desiredCppName.replace("pregs_", "")
         val (regName, pregName, ratName) = (s"regs.$suffix", s"pregs_$suffix", s"rat_$suffix")
