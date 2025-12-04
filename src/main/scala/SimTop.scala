@@ -62,6 +62,9 @@ trait HasDiffTestInterfaces {
   def cpuName: Option[String] = None
 
   def connectTopIOs(difftest: DifftestTopIO): Seq[Data] = Seq.empty
+  def connectTopIOsWithName(difftest: DifftestTopIO): Seq[(Data, String)] = connectTopIOs(difftest).map { gen =>
+    (gen, gen.instanceName)
+  }
 }
 
 // Top-level module for DiffTest simulation. Will be created by DifftestModule.top
@@ -102,9 +105,9 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Mo
     }
   }
 
-  val cpuIO = cpu.connectTopIOs(difftest)
-  cpuIO.foreach { gen =>
-    val io = IO(chiselTypeOf(gen)).suggestName(gen.instanceName)
+  val cpuIO = cpu.connectTopIOsWithName(difftest)
+  cpuIO.foreach { case (gen, name) =>
+    val io = IO(chiselTypeOf(gen)).suggestName(name)
     io <> gen
   }
 
