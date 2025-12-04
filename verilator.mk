@@ -130,8 +130,8 @@ ifeq ($(REMOTE),localhost)
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
 						OPT_FAST=$(OPT_FAST) \
-						PGO_CFLAGS=$(PGO_CFLAGS) \
-						PGO_LDFLAGS=$(PGO_LDFLAGS) \
+						PGO_CFLAGS="$(PGO_CFLAGS)" \
+						PGO_LDFLAGS="$(PGO_LDFLAGS)" \
 						-C $(VERILATOR_BUILD_DIR) -f $(VERILATOR_MK) $(EMU_COMPILE_FILTER)
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 else
@@ -147,6 +147,8 @@ $(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILAT
 	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 ifdef PGO_WORKLOAD
+ifneq ($(PGO_BOLT),1)
+	@echo "If available, please use install llvm-bolt for much reduced PGO build time."
 	@echo "Building PGO profile..."
 	@stat $(PGO_WORKLOAD) > /dev/null
 	@$(MAKE) verilator-clean-obj
@@ -189,6 +191,31 @@ endif # ifdef LLVM_PROFDATA
 	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
 					   PGO_CFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)"
+else # ifneq ($(PGO_BOLT),1)
+	@echo "Building emu..."
+	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) PGO_LDFLAGS="-Wl,--emit-relocs"
+	@mv $(VERILATOR_TARGET) $(VERILATOR_TARGET).pre-bolt
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
+	@echo "Training emu with PGO Workload..."
+	@mkdir -p $(VERILATOR_PGO_DIR)
+	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
+	@((perf record -j any,u -o $(VERILATOR_PGO_DIR)/perf.data -- sh -c "\
+		$(VERILATOR_TARGET).pre-bolt -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+			1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
+			2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
+			$(PGO_EMU_ARGS)") && \
+		perf2bolt -p=$(VERILATOR_PGO_DIR)/perf.data -o=$(VERILATOR_PGO_DIR)/perf.fdata $(VERILATOR_TARGET).pre-bolt) || \
+		(echo -e "\033[31mlinux-perf is not available, fallback to instrumentation-based PGO\033[0m" && \
+		$(LLVM_BOLT) $(VERILATOR_TARGET).pre-bolt \
+			-instrument --instrumentation-file=$(VERILATOR_PGO_DIR)/perf.fdata \
+			-o $(VERILATOR_PGO_DIR)/emu.instrumented && \
+		$(VERILATOR_PGO_DIR)/emu.instrumented -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+			1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
+			2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
+			$(PGO_EMU_ARGS))
+	@echo "Processing BOLT profile data..."
+	@$(LLVM_BOLT) $(VERILATOR_TARGET).pre-bolt -o $(VERILATOR_TARGET) -data=$(VERILATOR_PGO_DIR)/perf.fdata -reorder-blocks=ext-tsp
+endif # ifneq ($(PGO_BOLT),1)
 else # ifdef PGO_WORKLOAD
 	@echo "Building emu..."
 	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST)

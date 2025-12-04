@@ -42,7 +42,7 @@ GSIM_CXXFILES = $(EMU_CXXFILES) $(shell find $(GSIM_OTHER_CSRC_DIR) -name "*.cpp
 # We need to replace extra '\' as this is native in Makefile for GSIM
 GSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GSIM_CXXFLAGS += -I$(GSIM_OTHER_CSRC_DIR) -I$(GSIM_GEN_CSRC_DIR)/ -DGSIM
-GSIM_CXXFLAGS += -O3 -fbracket-depth=2048 -Wno-parentheses-equality $(PGO_CFLAGS)
+GSIM_CXXFLAGS += $(EMU_OPTIMIZE) -fbracket-depth=2048 -Wno-parentheses-equality $(PGO_CFLAGS)
 GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
 
 # $(1): object file
@@ -81,11 +81,11 @@ gsim-clean-obj:
 
 # Profile Guided Optimization
 GSIM_EMU_PGO_DIR  = $(GSIM_EMU_BUILD_DIR)/pgo
-PGO_MAX_CYCLE ?= 2000000
-PGO_EMU_ARGS ?= --no-diff
 
 gsim-gen-emu:
 ifdef PGO_WORKLOAD
+ifneq ($(PGO_BOLT),1)
+	@echo "If available, please use install llvm-bolt for much reduced PGO build time."
 	@echo "Building PGO profile..."
 	@stat $(PGO_WORKLOAD) > /dev/null
 	@$(MAKE) gsim-clean-obj
@@ -128,6 +128,31 @@ endif # ifdef LLVM_PROFDATA
 	@$(MAKE) gsim-build-emu \
 					   PGO_CFLAGS="-fprofile-use=$(GSIM_EMU_PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-use=$(GSIM_EMU_PGO_DIR)"
+else # ifneq ($(PGO_BOLT),1)
+	@echo "Building emu..."
+	@$(MAKE) gsim-build-emu PGO_LDFLAGS="-Wl,--emit-relocs"
+	@mv $(GSIM_EMU_TARGET) $(GSIM_EMU_TARGET).pre-bolt
+	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
+	@echo "Training emu with PGO Workload..."
+	@mkdir -p $(GSIM_EMU_PGO_DIR)
+	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
+	@((perf record -j any,u -o $(GSIM_EMU_PGO_DIR)/perf.data -- sh -c "\
+		$(GSIM_EMU_TARGET).pre-bolt -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+			1>$(GSIM_EMU_PGO_DIR)/`date +%s`.log \
+			2>$(GSIM_EMU_PGO_DIR)/`date +%s`.err \
+			$(PGO_EMU_ARGS)") && \
+		perf2bolt -p=$(GSIM_EMU_PGO_DIR)/perf.data -o=$(GSIM_EMU_PGO_DIR)/perf.fdata $(GSIM_EMU_TARGET).pre-bolt) || \
+		(echo -e "\033[31mlinux-perf is not available, fallback to instrumentation-based PGO\033[0m" && \
+		$(LLVM_BOLT) $(GSIM_EMU_TARGET).pre-bolt \
+			-instrument --instrumentation-file=$(GSIM_EMU_PGO_DIR)/perf.fdata \
+			-o $(GSIM_EMU_PGO_DIR)/emu.instrumented && \
+		$(GSIM_EMU_PGO_DIR)/emu.instrumented -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+			1>$(GSIM_EMU_PGO_DIR)/`date +%s`.log \
+			2>$(GSIM_EMU_PGO_DIR)/`date +%s`.err \
+			$(PGO_EMU_ARGS))
+	@echo "Processing BOLT profile data..."
+	@$(LLVM_BOLT) $(GSIM_EMU_TARGET).pre-bolt -o $(GSIM_EMU_TARGET) -data=$(GSIM_EMU_PGO_DIR)/perf.fdata -reorder-blocks=ext-tsp
+endif # ifneq ($(PGO_BOLT),1)
 else # ifdef PGO_WORKLOAD
 	@echo "Building emu..."
 	$(MAKE) gsim-build-emu

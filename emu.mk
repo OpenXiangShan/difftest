@@ -58,6 +58,18 @@ EMU_COVERAGE ?=
 # optimization level for RTL simulators
 EMU_OPTIMIZE ?= -O3
 
+PGO_MAX_CYCLE ?= 100000
+PGO_EMU_ARGS ?= --no-diff
+
+LLVM_BOLT ?= $(shell readlink -f `command -v llvm-bolt 2> /dev/null`)
+# We use readlink -f to get the absolute path of llvm-bolt, it's
+# needed since we use argv[0]/../lib/libbolt_rt_instr.a as the path
+# to find the runtime library inside llvm-bolt. It's a workaround
+# for LLVM before commit abc2eae682("[BOLT] Enable standalone build (llvm#97130)").
+# Ref: https://github.com/llvm/llvm-project/blob/release/18.x/bolt/lib/RuntimeLibs/RuntimeLibrary.cpp#L33
+# Ref: https://github.com/llvm/llvm-project/blob/release/18.x/bolt/tools/driver/llvm-bolt.cpp#L187
+PGO_BOLT ?= $(shell if [ -x "$(LLVM_BOLT)" ]; then echo 1; else echo 0; fi)
+
 include verilator.mk
 include gsim.mk
 
