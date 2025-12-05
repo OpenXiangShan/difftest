@@ -10,8 +10,10 @@
 #include <queue>
 #include <mutex>
 
+#ifdef FPGA_TRACEINST
 std::queue<TraceFpgaInstruction> fpga_sim_pending_insts;
 std::mutex fpga_sim_pending_insts_lock;
+#endif
 
 bool fpga_sim_write(char *buf, size_t size) {
 // #ifdef FPGA_TRACEINST

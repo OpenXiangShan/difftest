@@ -252,8 +252,9 @@ include verilator.mk
 include vcs.mk
 include palladium.mk
 include libso.mk
+include tracertl-fpgahost.mk
 
-clean: vcs-clean pldm-clean
+clean: vcs-clean pldm-clean tracertl-fpgahost-clean
 	rm -rf $(BUILD_DIR)
 
 format: scala-format clang-format

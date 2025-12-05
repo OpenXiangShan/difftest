@@ -29,8 +29,8 @@
 #include "xdma.h"
 
 #ifdef FPGA_TRACEINST
-#include "../trace_reader.h"
-#include "../tracertl.h"
+#include <trace_reader.h>
+#include <tracertl.h>
 #include <tracertl_dut_info.h>
 extern TraceReader *trace_reader;
 #endif // FPGA_TRACEINST
@@ -55,7 +55,9 @@ void trace_reader_init();
 int main(int argc, char *argv[]) {
   args_parsing(argc, argv);
 
+#ifdef FPGA_TRACEINST
   trace_reader_init();
+#endif
   // init fpga-xdma
   printf("fpga init...\n");
   fflush(stdout);
@@ -234,7 +236,9 @@ void args_parsing(int argc, char *argv[]) {
 }
 
 void trace_reader_init() {
+#ifdef FPGA_TRACEINST
   trace_icache = new TraceICache(nullptr);
   trace_fastsim = new TraceFastSimManager(false, 0);
   trace_reader = new TraceReader(tracertl_file.c_str(), false, 40000000, 0);
+#endif
 }
