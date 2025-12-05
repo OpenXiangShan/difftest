@@ -44,19 +44,20 @@ case class BundleProfile(
 case class DifftestProfile(
   cpu: String,
   numCores: Int,
+  cmdConfigs: Seq[String],
   bundles: Seq[BundleProfile],
 ) {
   def toJsonString: String = Serialization.writePretty(this)(DefaultFormats)
 }
 
 object DifftestProfile {
-  def fromBundles(cpu: String, bundles: Seq[(DifftestBundle, Int)]): DifftestProfile = {
+  def fromBundles(cpu: String, cmdConfigs: Seq[String], bundles: Seq[(DifftestBundle, Int)]): DifftestProfile = {
     val numCores = bundles.count(_._1.isUniqueIdentifier)
     // Note: numCores may be 0 when difftest interfaces are not connected
     require(numCores == 0 || bundles.length % numCores == 0, "cannot create the profile if cores are not symmetric")
     val nBundles = if (numCores > 0) bundles.length / numCores else 0
     val bundleProfiles = bundles.take(nBundles).map { case (b, d) => BundleProfile.fromBundle(b, d) }
-    DifftestProfile(cpu, numCores, bundleProfiles)
+    DifftestProfile(cpu, numCores, cmdConfigs, bundleProfiles)
   }
 
   def fromJson(filename: String): DifftestProfile = {
@@ -64,6 +65,7 @@ object DifftestProfile {
     val profiles = JsonMethods.parse(profileStr).extract(DefaultFormats, manifest[Map[String, Any]])
     val cpu = profiles("cpu").asInstanceOf[String]
     val numCores = profiles("numCores").asInstanceOf[BigInt].toInt
+    val cmdConfigs = profiles("cmdConfigs").asInstanceOf[Seq[String]]
     val bundles = profiles("bundles").asInstanceOf[List[Map[String, Any]]].map { bundleProfileMap =>
       BundleProfile(
         bundleProfileMap("className").asInstanceOf[String],
@@ -71,7 +73,7 @@ object DifftestProfile {
         bundleProfileMap("delay").asInstanceOf[BigInt].toInt,
       )
     }
-    DifftestProfile(cpu, numCores, bundles)
+    DifftestProfile(cpu, numCores, cmdConfigs, bundles)
   }
 }
 
@@ -82,14 +84,20 @@ object BundleProfile {
 }
 
 object Profile {
-  def generateJson(cpu: String, bundles: Seq[(DifftestBundle, Int)], profileName: String = "difftest"): Unit = {
-    val difftestProfile = DifftestProfile.fromBundles(cpu, bundles)
+  def generateJson(
+    cpu: String,
+    cmdConfigs: Seq[String],
+    bundles: Seq[(DifftestBundle, Int)],
+    profileName: String = "difftest",
+  ): Unit = {
+    val difftestProfile = DifftestProfile.fromBundles(cpu, cmdConfigs, bundles)
     FileControl.write(Seq(difftestProfile.toJsonString), s"${profileName}_profile.json")
   }
 
   // This function generates the json profile for current DiffTest interfaces.
   def generateJson(cpu: String): Unit = {
+    val cmdConfigs = DifftestModule.get_command_configs()
     val bundles = DifftestModule.get_current_interfaces()
-    generateJson(cpu, bundles)
+    generateJson(cpu, cmdConfigs, bundles)
   }
 }

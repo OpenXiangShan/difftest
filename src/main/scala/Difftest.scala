@@ -531,9 +531,11 @@ object DifftestModule {
   private val cppExtModules = ListBuffer.empty[(String, String)]
   private val cppExtHeaders = ListBuffer.empty[String]
   private val nameExcludes = ListBuffer.empty[String]
+  private val cmdConfigs = ListBuffer.empty[String]
 
   // Some FIRTOOL options are customized for DiffTest
   def parseArgs(args: Array[String]): (Array[String], Seq[FirtoolOption]) = {
+    cmdConfigs ++= args
     @tailrec
     def nextOption(args: Array[String], list: List[String]): Array[String] = {
       list match {
@@ -572,6 +574,8 @@ object DifftestModule {
 
   def get_current_interfaces(): Seq[(DifftestBundle, Int)] = interfaces.toSeq
 
+  def get_command_configs(): Seq[String] = cmdConfigs.toSeq
+
   def collect(cpu: String): GatewayResult = {
     val gateway = Gateway.collect()
     generateCppHeader(
@@ -585,7 +589,7 @@ object DifftestModule {
       generateCppExtModules()
     }
     generateVerilogHeader(cpu, gateway.vMacros)
-    Profile.generateJson(cpu, interfaces.toSeq)
+    Profile.generateJson(cpu, cmdConfigs.toSeq, interfaces.toSeq)
     gateway
   }
 
