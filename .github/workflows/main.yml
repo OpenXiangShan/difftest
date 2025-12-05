@@ -11,7 +11,7 @@ on:
 jobs:
   test-difftest-main:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +43,7 @@ jobs:
 
   test-verilator-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
     needs: test-difftest-main
 
@@ -88,10 +88,17 @@ jobs:
             ./build/emu --no-diff -C 10000
             make clean
 
-      - name: Basic Difftest with PGO build
+      - name: Basic Difftest with PGO build using compiler instrumentation
         run: |
             cd $NOOP_HOME
-            make emu PGO_WORKLOAD=$WORKLOAD LLVM_PROFDATA=llvm-profdata PGO_EMU_ARGS="--diff $REF_SO 2>/dev/null" -j2
+            make emu PGO_WORKLOAD=$WORKLOAD LLVM_PROFDATA=llvm-profdata PGO_EMU_ARGS="--diff $REF_SO 2>/dev/null" PGO_BOLT=0 -j2
+            ./build/emu -i $WORKLOAD --diff $REF_SO
+            make clean
+
+      - name: Basic Difftest with PGO build using BOLT
+        run: |
+            cd $NOOP_HOME
+            make emu PGO_WORKLOAD=$WORKLOAD PGO_EMU_ARGS="--diff $REF_SO 2>/dev/null" PGO_BOLT=1 -j2
             ./build/emu -i $WORKLOAD --diff $REF_SO
             make clean
 
