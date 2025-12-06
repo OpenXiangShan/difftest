@@ -33,3 +33,7 @@ fpga-host: $(FPGA_TARGET)
 
 fpga-clean:
 	rm -f $(FPGA_TARGET)
+
+RELEASE_DIR ?= $(NOOP_HOME)
+fpga-release:
+	bash ./scripts/fpga/release.sh $(NOOP_HOME) $(RELEASE_DIR)
