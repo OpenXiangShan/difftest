@@ -370,3 +370,10 @@ jobs:
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2N=1
             bash difftest/scripts/fpga_sim/ci.sh
             make -C difftest fpga-clean vcs-clean
+
+
+      - name: FPGA-difftest Release
+        run: |
+            cd $NOOP_HOME
+            make verilog BOARD=fpgadiff MILL_ARGS="--difftest-config ESBIDUF" -j2
+            make -C difftest fpga-release
