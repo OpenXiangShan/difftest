@@ -193,7 +193,7 @@ endif # ifdef LLVM_PROFDATA
 					   PGO_LDFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)"
 else # ifneq ($(PGO_BOLT),1)
 	@echo "Building emu..."
-	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) PGO_LDFLAGS="-Wl,--emit-relocs"
+	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) PGO_LDFLAGS="-Wl,--emit-relocs -fuse-ld=ld"
 	@mv $(VERILATOR_TARGET) $(VERILATOR_TARGET).pre-bolt
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 	@echo "Training emu with PGO Workload..."
