@@ -14,9 +14,10 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-package difftest
+package app
 
 import chisel3._
+import difftest._
 import difftest.util.DifftestProfile
 
 import scala.annotation.tailrec

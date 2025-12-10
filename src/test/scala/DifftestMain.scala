@@ -18,6 +18,7 @@ package difftest
 
 import chisel3.stage.ChiselGeneratorAnnotation
 import circt.stage._
+import app.DifftestApp
 
 object DifftestMain extends DifftestApp {
   (new ChiselStage).execute(firrtlOpts, Seq(ChiselGeneratorAnnotation(gen)) ++ firtoolOptions)
