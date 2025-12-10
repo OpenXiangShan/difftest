@@ -729,8 +729,8 @@ void Difftest::do_load_check(int i) {
       auto vecCommitData = dut->vec_commit_data[i].data;
 #else
       uint64_t vecCommitData[16];
-      for (int i = 0; i < 16; i++) {
-        vecCommitData = dut->pregs_vrf.value[dut->commit[index].otherwpdest[i]];
+      for (int j = 0; j < 16; j++) {
+        vecCommitData[j] = dut->pregs_vrf.value[dut->commit[i].otherwpdest[j]];
       }
 #endif // CONFIG_DIFFTEST_VECCOMMITDATA
       do_vec_load_check(load_event, dut->commit[i].wdest, vecCommitData);

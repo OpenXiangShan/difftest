@@ -25,8 +25,6 @@ import scala.annotation.tailrec
 class DifftestInterfaces extends Module {
   val arch_event = DifftestModule(new DiffArchEvent, dontCare = true)
   val instr_commit = DifftestModule(new DiffInstrCommit(192), dontCare = true)
-  val commit_data = DifftestModule(new DiffCommitData, dontCare = true)
-  val vec_commit_data = DifftestModule(new DiffVecCommitData, dontCare = true)
   val trap_event = DifftestModule(new DiffTrapEvent, dontCare = true)
   val csr_state = DifftestModule(new DiffCSRState, dontCare = true)
   val hcsr_state = DifftestModule(new DiffHCSRState, dontCare = true)
