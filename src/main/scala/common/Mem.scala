@@ -240,7 +240,8 @@ private class MemRWHelper(size: BigInt, val nr: Int, val nw: Int)
 
   val cppExtModule =
     s"""
-       |static void $desiredName(
+       |void $desiredName(
+       |int ram_size,
        |${r_cpp_arg(nr)},
        |${w_cpp_arg(nw)}
        |) {
