@@ -133,4 +133,4 @@ echo ""
 
 echo "Release FpgaDiff to $RELEASE_HOME done."
 RELEASE_PKG="$RELEASE_DIR/$RELEASE_TAG.tar.gz"
-tar -zcf $RELEASE_PKG $RELEASE_HOME
+tar -zcf $RELEASE_PKG -C $(dirname $RELEASE_HOME) $(basename $RELEASE_HOME)
