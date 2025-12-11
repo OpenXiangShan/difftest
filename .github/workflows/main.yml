@@ -36,6 +36,13 @@ jobs:
       - name: Generate EMU using Profile-Generated RTL
         run: |
           make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
+          make clean
+
+      - name: Generate EMU with SoftArchUpdate
+        run: |
+          make PROFILE=./difftest_profile.json NUM_CORES=4 CONFIG=U
+          make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
+          make clean
 
       - name: Clean the Profile File
         run: |
