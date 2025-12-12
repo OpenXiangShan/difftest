@@ -1,0 +1,84 @@
+name: Evening Regression
+
+on:
+  schedule:
+    # 12:00 UTC == 20:00 UTC+8
+    - cron: '00 12 * * *'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  test-fpga-nutshell:
+    if: ${{ github.event_name == 'pull_request' }}
+    timeout-minutes: 1440
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare NutShell
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          rm -rf NutShell && rm -rf env-scripts
+          proxychains git clone -b dev-difftest --single-branch --depth 1 https://github.com/OSCPU/NutShell.git
+          cd NutShell && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
+          echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
+          echo "DUT_HOME=$(pwd)/build" >> $GITHUB_ENV
+          echo "DIFFTEST_LOG=/nfs/home/ci-runner/ci-runner-difftest/pr_log" >> "$GITHUB_ENV"
+          echo "/nfs/home/tools/Xilinx/Vivado/2020.2/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare FPGA scripts
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          proxychains git clone -b dev_difftest --single-branch --depth 1 https://github.com/OpenXiangShan/env-scripts.git
+          cd env-scripts
+          echo "ENV_SCRIPTS_HOME=$(pwd)" >> $GITHUB_ENV
+
+      - name: Build NutShell
+        run: |
+          cd $NOOP_HOME
+          make verilog BOARD=fpgadiff MILL_ARGS="--difftest-config ESBIFDU" -j2 
+          cp -i ./difftest/src/test/vsrc/fpga/fpga_clock_gate.v ./build/rtl/
+
+      - name: Create FPGA project
+        run: |
+          source /nfs/home/tools/Xilinx/Vivado/2020.2/settings64.sh
+          cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
+          make update_core_flist CORE_DIR=$DUT_HOME
+          make vivado CPU=nutshell
+
+      - name: Build FPGA synth
+        run: |
+          source /nfs/home/tools/Xilinx/Vivado/2020.2/settings64.sh
+          cd $ENV_SCRIPTS_HOME/fpga_diff
+          make synth PRJ=./fpga_nutshell/fpga_nutshell.xpr
+          bash ./tools/generate_reports.sh nutshell
+
+      - name: Extract Vivado Hierarchical utilization
+        run: |
+          set -euo pipefail
+          IN_PATH=$ENV_SCRIPTS_HOME/fpga_diff
+          MD_PATH="$RUNNER_TEMP/vivado_hier_filtered.md"
+          python3 $NOOP_HOME/difftest/scripts/fpga/ci.py --input "$IN_PATH" --cpu nutshell \
+            --filter-instance-root U_CPU_TOP --filter-modules HostEndpoint,GatewayEndpoint,nutcore \
+            --csv-md-output "$MD_PATH"
+          echo "VIVADO_HIER_MD=$MD_PATH" >> "$GITHUB_ENV"
+
+
+      - name: Comment utilization to PR
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        env:
+          VIVADO_HIER_MD: ${{ env.VIVADO_HIER_MD }}
+        with:
+          script: |
+            const fs = require('fs');
+            let body;
+            try {
+              body = fs.readFileSync(process.env.VIVADO_HIER_MD, 'utf8');
+              if (!body.trim()) throw new Error('empty');
+            } catch (e) {
+              body = 'Vivado Hierarchical utilization: section missing or extract failed. Please check the job logs for runme.log output.';
+            }
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
