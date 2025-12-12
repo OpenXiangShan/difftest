@@ -240,7 +240,7 @@ protected:
   StoreChecker *store_checker = nullptr;
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-  LoadChecker *load_checker[CONFIG_DIFF_LOADEVENT_WIDTH] = {nullptr};
+  LoadChecker *load_checker[CONFIG_DIFF_LOAD_WIDTH] = {nullptr};
 #ifdef CONFIG_DIFFTEST_SQUASH
   LoadSquashChecker *load_squash_checker = nullptr;
 #endif // CONFIG_DIFFTEST_SQUASH

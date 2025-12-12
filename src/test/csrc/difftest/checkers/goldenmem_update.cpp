@@ -64,15 +64,15 @@ int SbufferChecker::check(const DifftestSbufferEvent &probe) {
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
-bool UncacheMmStoreChecker::get_valid(const DifftestUncacheMmStoreEvent &probe) {
+bool UncacheMmStoreChecker::get_valid(const DifftestUncacheMMStoreEvent &probe) {
   return probe.valid;
 }
 
-void UncacheMmStoreChecker::clear_valid(DifftestUncacheMmStoreEvent &probe) {
+void UncacheMmStoreChecker::clear_valid(DifftestUncacheMMStoreEvent &probe) {
   probe.valid = 0;
 }
 
-int UncacheMmStoreChecker::check(const DifftestUncacheMmStoreEvent &probe) {
+int UncacheMmStoreChecker::check(const DifftestUncacheMMStoreEvent &probe) {
   probe.valid = 0;
   // the flag is set only in the case of multi-cores and uncache mm store
   uint8_t flag = NUM_CORES > 1 ? 1 : 0;

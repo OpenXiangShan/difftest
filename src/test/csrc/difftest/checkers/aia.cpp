@@ -17,14 +17,14 @@
 #include "checker.h"
 
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-bool AiaChecker::get_valid(const DifftestSyncAiaEvent &probe) {
+bool AiaChecker::get_valid(const DifftestSyncAIAEvent &probe) {
   return probe.valid;
 }
-void AiaChecker::clear_valid(DifftestSyncAiaEvent &probe) {
+void AiaChecker::clear_valid(DifftestSyncAIAEvent &probe) {
   probe.valid = 0;
 }
 
-int AiaChecker::check(const DifftestSyncAiaEvent &probe) {
+int AiaChecker::check(const DifftestSyncAIAEvent &probe) {
   struct FromAIA aia;
   aia.mtopei = probe.mtopei;
   aia.stopei = probe.stopei;

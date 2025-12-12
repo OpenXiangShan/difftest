@@ -226,7 +226,7 @@ void Difftest::init_checkers() {
   }
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
   cmo_inval_recorder =
-      new CmoInvalRecorder([this]() -> DifftestCmoInvalEvent & { return dut->cmo_inval; }, state, proxy);
+      new CmoInvalRecorder([this]() -> DifftestCMOInvalEvent & { return dut->cmo_inval; }, state, proxy);
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 #ifdef CONFIG_DIFFTEST_L1TLBEVENT
@@ -248,7 +248,7 @@ void Difftest::init_checkers() {
       [this]() -> DifftestMhpmeventOverflowEvent & { return dut->mhpmevent_overflow; }, state, proxy);
 #endif // CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  aia_checker = new AiaChecker([this]() -> DifftestSyncAiaEvent & { return dut->sync_aia; }, state, proxy);
+  aia_checker = new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy);
 #endif // CONFIG_DIFFTEST_SYNCAIAEVENT
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
   custom_mflushpwr_checker = new CustomMflushpwrChecker(
@@ -270,7 +270,7 @@ void Difftest::init_checkers() {
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
   for (int i = 0; i < CONFIG_DIFF_UNCACHE_MM_STORE_WIDTH; i++) {
     uncache_mm_store_checker = new UncacheMmStoreChecker(
-        [this, i]() -> DifftestUncacheMmStoreEvent & { return dut->uncache_mm_store[i]; }, state, proxy);
+        [this, i]() -> DifftestUncacheMMStoreEvent & { return dut->uncache_mm_store[i]; }, state, proxy);
   }
 #endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
 #ifdef CONFIG_DIFFTEST_ATOMICEVENT
@@ -283,7 +283,7 @@ void Difftest::init_checkers() {
   store_checker = new StoreChecker(state, proxy);
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-  for (int i = 0; i < CONFIG_DIFF_LOADEVENT_WIDTH; i++) {
+  for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
     load_checker[i] = new LoadChecker([this, i]() -> DifftestLoadEvent & { return dut->load[i]; }, state, proxy,
                                       [this]() -> const DiffTestState & { return *dut; });
   }
@@ -415,7 +415,7 @@ inline int Difftest::check_all() {
 
 #ifdef CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-  for (int i = 0; i < CONFIG_DIFF_LOADEVENT_WIDTH; i++) {
+  for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
     if (int ret = load_checker[i]->step()) {
       return ret;
     }

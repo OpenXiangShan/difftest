@@ -241,6 +241,5 @@ void Difftest::do_load_check(DifftestLoadEvent &probe, bool regWen, uint64_t *re
     }
   }
 }
-#endif // CONFIG_DIFFTEST_LOADEVENT
 
 #endif // CONFIG_DIFFTEST_LOADEVENT

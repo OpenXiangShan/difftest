@@ -193,15 +193,15 @@ private:
 };
 
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-class CmoInvalRecorder : public DiffTestChecker<DifftestCmoInvalEvent> {
+class CmoInvalRecorder : public DiffTestChecker<DifftestCMOInvalEvent> {
 public:
   CmoInvalRecorder(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestCmoInvalEvent>(get_probe, state, proxy) {}
+      : DiffTestChecker<DifftestCMOInvalEvent>(get_probe, state, proxy) {}
 
 private:
-  bool get_valid(const DifftestCmoInvalEvent &probe) override;
-  void clear_valid(DifftestCmoInvalEvent &probe) override;
-  int check(const DifftestCmoInvalEvent &probe) override;
+  bool get_valid(const DifftestCMOInvalEvent &probe) override;
+  void clear_valid(DifftestCMOInvalEvent &probe) override;
+  int check(const DifftestCMOInvalEvent &probe) override;
 };
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #endif // CONFIG_DIFFTEST_REFILLEVENT
@@ -233,15 +233,15 @@ private:
 #endif // CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
 
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-class AiaChecker : public DiffTestChecker<DifftestSyncAiaEvent> {
+class AiaChecker : public DiffTestChecker<DifftestSyncAIAEvent> {
 public:
   AiaChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestSyncAiaEvent>(get_probe, state, proxy) {}
+      : DiffTestChecker<DifftestSyncAIAEvent>(get_probe, state, proxy) {}
 
 private:
-  bool get_valid(const DifftestSyncAiaEvent &probe) override;
-  void clear_valid(DifftestSyncAiaEvent &probe) override;
-  int check(const DifftestSyncAiaEvent &probe) override;
+  bool get_valid(const DifftestSyncAIAEvent &probe) override;
+  void clear_valid(DifftestSyncAIAEvent &probe) override;
+  int check(const DifftestSyncAIAEvent &probe) override;
 };
 #endif // CONFIG_DIFFTEST_SYNCAIAEVENT
 
@@ -298,15 +298,15 @@ private:
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
-class UncacheMmStoreChecker : public DiffTestChecker<DifftestUncacheMmStoreEvent> {
+class UncacheMmStoreChecker : public DiffTestChecker<DifftestUncacheMMStoreEvent> {
 public:
   UncacheMmStoreChecker(GetProbeFn get_probe, DiffState *state, REF_PROXY *proxy)
-      : DiffTestChecker<DifftestUncacheMmStoreEvent>(get_probe, state, proxy) {}
+      : DiffTestChecker<DifftestUncacheMMStoreEvent>(get_probe, state, proxy) {}
 
 private:
-  bool get_valid(const DifftestUncacheMmStoreEvent &probe) override;
-  void clear_valid(DifftestUncacheMmStoreEvent &probe) override;
-  int check(const DifftestUncacheMmStoreEvent &probe) override;
+  bool get_valid(const DifftestUncacheMMStoreEvent &probe) override;
+  void clear_valid(DifftestUncacheMMStoreEvent &probe) override;
+  int check(const DifftestUncacheMMStoreEvent &probe) override;
 };
 #endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
 
