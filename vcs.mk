@@ -25,7 +25,7 @@ VCS_CSRC_DIR   = $(abspath ./src/test/csrc/vcs)
 VCS_CONFIG_DIR = $(abspath ./config)
 
 VCS_CXXFILES  = $(SIM_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
-VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR) -DNUM_CORES=$(NUM_CORES)
+VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR)
 VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
 VCS_VSRC_DIR 	= $(abspath ./src/test/vsrc/vcs)

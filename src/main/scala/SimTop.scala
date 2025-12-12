@@ -58,15 +58,22 @@ class UARTIO extends Bundle {
   }
 }
 
-trait HasDiffTestInterfaces {
+trait HasDiffTestInterfaces extends ImplicitClock with ImplicitReset { this: RawModule =>
   def cpuName: Option[String] = None
 
+  private[difftest] def dutClock = implicitClock
+  private[difftest] def dutReset = implicitReset
   def connectTopIOs(difftest: DifftestTopIO): Seq[Data] = Seq.empty
+  def connectTopIOsWithName(difftest: DifftestTopIO): Seq[(Data, String)] = connectTopIOs(difftest).map { gen =>
+    (gen, gen.instanceName)
+  }
 }
 
 // Top-level module for DiffTest simulation. Will be created by DifftestModule.top
 class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Module {
   val cpu = Module(cpuGen)
+  cpu.dutClock := clock
+  cpu.dutReset := reset.asTypeOf(cpu.dutReset)
 
   val cpuName = cpu.cpuName.getOrElse(cpu.getClass.getName.split("\\.").last)
   val gateway = DifftestModule.collect(cpuName)
@@ -102,9 +109,9 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Mo
     }
   }
 
-  val cpuIO = cpu.connectTopIOs(difftest)
-  cpuIO.foreach { gen =>
-    val io = IO(chiselTypeOf(gen)).suggestName(gen.instanceName)
+  val cpuIO = cpu.connectTopIOsWithName(difftest)
+  cpuIO.foreach { case (gen, name) =>
+    val io = IO(chiselTypeOf(gen)).suggestName(name)
     io <> gen
   }
 

@@ -214,7 +214,8 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
     }
     read_cnt += read_now;
   }
-  if (read_cnt != file_size) {
+  compress_file_buffer_size = read_cnt;
+  if (compress_file_buffer_size != file_size) {
     close(fd);
     free(compress_file_buffer);
     printf("Zstd compressed file read failed, file size: %zd, read size: %zd\n", file_size, compress_file_buffer_size);

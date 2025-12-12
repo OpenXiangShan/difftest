@@ -17,10 +17,6 @@
 #ifndef __CONFIG_H
 #define __CONFIG_H
 
-#ifndef NUM_CORES
-#define NUM_CORES 1
-#endif
-
 #include "difftest-state.h"
 
 #if defined(CPU_NUTSHELL)

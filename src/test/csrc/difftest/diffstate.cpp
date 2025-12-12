@@ -59,30 +59,26 @@ void DiffState::display() {
 DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {}
 
 static uint64_t get_int_data(const DiffTestState *state, int index) {
-#if defined(CONFIG_DIFFTEST_PHYINTREGSTATE)
-  return state->pregs_xrf.value[state->commit[index].wpdest];
-#elif defined(CONFIG_DIFFTEST_INTWRITEBACK)
-  return state->wb_xrf[state->commit[index].wpdest].data;
+#ifdef CONFIG_DIFFTEST_PHYINTREGSTATE
+    return state->pregs_xrf.value[state->commit[index].wpdest];
 #else
-  return state->regs.xrf.value[state->commit[index].wdest];
-#endif
+    return state->regs.xrf.value[state->commit[index].wdest];
+#endif // CONFIG_DIFFTEST_PHYINTREGSTATE
 }
 
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
 static uint64_t get_fp_data(const DiffTestState *state, int index) {
 #if defined(CONFIG_DIFFTEST_PHYFPREGSTATE)
-  return state->pregs_frf.value[state->commit[index].wpdest];
-#elif defined(CONFIG_DIFFTEST_FPWRITEBACK)
-  return state->wb_frf[state->commit[index].wpdest].data;
+    return state->pregs_frf.value[state->commit[index].wpdest];
 #else
-  return state->regs.frf.value[state->commit[index].wdest];
-#endif
+    return state->regs.frf.value[state->commit[index].wdest];
+#endif // CONFIG_DIFFTEST_PHYFPREGSTATE
 }
 #endif
 
 uint64_t get_commit_data(const DiffTestState *state, int index) {
 #if defined(CONFIG_DIFFTEST_COMMITDATA)
-  return state->commit_data[i].data;
+  return state->commit_data[index].data;
 #else
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
   if (state->commit[index].fpwen) {

@@ -37,7 +37,7 @@ object Preprocess {
           if (isHardware) {
             val needRat = pregs.head.numPhyRegs != gen.value.size
             val rats = bundles.filter(_.desiredCppName == "rat_" + suffix).asInstanceOf[Seq[DiffArchRenameTable]]
-            if (needRat) require(rats.length == pregs.length)
+            require((needRat && rats.length == pregs.length) || (!needRat && rats.isEmpty))
             pregs.zipWithIndex.map { case (preg, idx) =>
               val archReg = Wire(gen)
               archReg.coreid := preg.coreid

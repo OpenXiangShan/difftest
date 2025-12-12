@@ -28,10 +28,27 @@ int LoadChecker::check(const DifftestLoadEvent &probe) {
 #ifdef CONFIG_DIFFTEST_SQUASH
   load_event_queue.push(probe);
 #else
-  bool regWen = ((dut->commit[i].rfwen && dut->commit[i].wdest != 0) || dut->commit[i].fpwen) && !dut->commit[i].vecwen;
+  if (probe.isVLoad) {
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+#ifdef CONFIG_DIFFTEST_VECCOMMITDATA
+    auto vecCommitData = dut->vec_commit_data[i].data;
+#else
+    uint64_t vecCommitData[16];
+    for (int j = 0; j < 16; j++) {
+      vecCommitData[j] = dut->pregs_vrf.value[dut->commit[i].otherwpdest[j]];
+    }
+#endif // CONFIG_DIFFTEST_VECCOMMITDATA
+    do_vec_load_check(probe, dut->commit[i].wdest, vecCommitData);
+#else
+    Info("isVLoad should never be set if vector is not enabled\n");
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+    return;
+  }
+  bool regWen =
+      ((dut->commit[i].rfwen && dut->commit[i].wdest != 0) || dut->commit[i].fpwen) && !dut->commit[i].vecwen;
   auto refRegPtr = proxy->arch_reg(dut->commit[i].wdest, dut->commit[i].fpwen);
   auto commitData = get_commit_data(i);
-  do_load_check(load_event, regWen, refRegPtr, commitData);
+  do_load_check(probe, regWen, refRegPtr, commitData);
 #endif // CONFIG_DIFFTEST_SQUASH
 }
 
@@ -44,22 +61,85 @@ void LoadSquashChecker::clear_valid() {
 }
 
 int LoadSquashChecker::check() {
-  bool regWen = load_event.regWen;
-  auto refRegPtr = proxy->arch_reg(load_event.wdest, load_event.fpwen);
-  auto commitData = load_event.commitData;
-  do_load_check(load_event, regWen, refRegPtr, commitData);
+  auto &probe = load_event_queue.front();
+  bool regWen = probe.regWen;
+  auto refRegPtr = proxy->arch_reg(probe.wdest, probe.fpwen);
+  auto commitData = probe.commitData;
+  do_load_check(probe, regWen, refRegPtr, commitData);
 }
 
-static int do_load_check(const DifftestLoadEvent &probe, bool regWen, uint64_t *refRegPtr, uint64_t commitData) {
-  if (probe.isVLoad) {
+
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    do_vec_load_check(i, probe);
-#else
-    Info("isVLoad should never be set if vector is not enabled\n");
-#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+void Difftest::do_vec_load_check(DifftestLoadEvent &probe, uint8_t vecFirstLdest, uint64_t vecCommitData[]) {
+  if (!enable_vec_load_goldenmem_check) {
     return;
   }
 
+  // ===============================================================
+  //                      Comparison data
+  // ===============================================================
+  uint32_t vdNum = proxy->get_ref_vdNum();
+
+  proxy->sync();
+
+  bool reg_mismatch = false;
+
+  for (int vdidx = 0; vdidx < vdNum; vdidx++) {
+    auto vecNextLdest = vecFirstLdest + vdidx;
+    for (int i = 0; i < VLENE_64; i++) {
+      uint64_t dutRegData = vecCommitData[VLENE_64 * vdidx + i];
+      uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
+      reg_mismatch |= dutRegData != *refRegPtr;
+    }
+  }
+
+  // ===============================================================
+  //                      Regs Mismatch handle
+  // ===============================================================
+  bool goldenmem_mismatch = false;
+
+  if (reg_mismatch) {
+    // ===============================================================
+    //                      Check golden memory
+    // ===============================================================
+    uint64_t *vec_goldenmem_regPtr = (uint64_t *)proxy->get_vec_goldenmem_reg();
+
+    if (vec_goldenmem_regPtr == nullptr) {
+      Info("Vector Load comparison failed and no consistency check with golden mem was performed.\n");
+      return;
+    }
+
+    for (int vdidx = 0; vdidx < vdNum; vdidx++) {
+      for (int i = 0; i < VLENE_64; i++) {
+        uint64_t dutRegData = vecCommitData[VLENE_64 * vdidx + i];
+        goldenmem_mismatch |= dutRegData != vec_goldenmem_regPtr[VLENE_64 * vdidx + i];
+      }
+    }
+
+    if (!goldenmem_mismatch) {
+      // ===============================================================
+      //                      sync memory and regs
+      // ===============================================================
+      proxy->vec_update_goldenmem();
+
+      for (int vdidx = 0; vdidx < vdNum; vdidx++) {
+        auto vecNextLdest = vecFirstLdest + vdidx;
+        for (int i = 0; i < VLENE_64; i++) {
+          uint64_t dutRegData = vecCommitData[VLENE_64 * vdidx + i];
+          uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
+          *refRegPtr = dutRegData;
+        }
+      }
+
+      proxy->sync(true);
+    } else {
+      Info("Vector Load register and golden memory mismatch\n");
+    }
+  }
+}
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+
+void Difftest::do_load_check(DifftestLoadEvent &probe, bool regWen, uint64_t *refRegPtr, uint64_t commitData) {
   if (probe.isLoad || probe.isAtomic) {
     proxy->sync();
     if (regWen && *refRegPtr != commitData) {
@@ -161,126 +241,6 @@ static int do_load_check(const DifftestLoadEvent &probe, bool regWen, uint64_t *
     }
   }
 }
+#endif // CONFIG_DIFFTEST_LOADEVENT
 
-#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-static int do_vec_load_check(const DifftestLoadEvent &probe, int index) {
-  if (!enable_vec_load_goldenmem_check) {
-    return 0;
-  }
-
-  // ===============================================================
-  //                      Comparison data
-  // ===============================================================
-  uint32_t vdNum = proxy->get_ref_vdNum();
-
-  proxy->sync();
-
-#ifdef CONFIG_DIFFTEST_SQUASH
-  auto vecFirstLdest = load_event.wdest;
-#else
-  auto vecFirstLdest = dut->commit[index].wdest;
-#endif // CONFIG_DIFFTEST_SQUASH
-
-  bool reg_mismatch = false;
-
-  for (int vdidx = 0; vdidx < vdNum; vdidx++) {
-    auto vecNextLdest = vecFirstLdest + vdidx;
-    for (int i = 0; i < VLENE_64; i++) {
-      int dataIndex = VLENE_64 * vdidx + i;
-#ifdef CONFIG_DIFFTEST_VECCOMMITDATA
-#ifdef CONFIG_DIFFTEST_SQUASH
-      uint64_t dutRegData = load_event.vecCommitData[dataIndex];
-#else
-      uint64_t dutRegData = dut->vec_commit_data[index].data[dataIndex];
-#endif // CONFIG_DIFFTEST_SQUASH
-#else
-      // TODO: support Squash without vec_commit_data (i.e. update ArchReg in software)
-      auto vecNextPdest = dut->commit[index].otherwpdest[dataIndex];
-      uint64_t dutRegData = dut->pregs_vrf.value[vecPdest];
-#endif // CONFIG_DIFFTEST_VECCOMMITDATA
-
-      uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
-      reg_mismatch |= dutRegData != *refRegPtr;
-    }
-  }
-
-  // ===============================================================
-  //                      Regs Mismatch handle
-  // ===============================================================
-  bool goldenmem_mismatch = false;
-
-  if (reg_mismatch) {
-    // ===============================================================
-    //                      Check golden memory
-    // ===============================================================
-    uint64_t *vec_goldenmem_regPtr = (uint64_t *)proxy->get_vec_goldenmem_reg();
-
-    if (vec_goldenmem_regPtr == nullptr) {
-      Info("Vector Load comparison failed and no consistency check with golden mem was performed.\n");
-      return;
-    }
-
-    for (int vdidx = 0; vdidx < vdNum; vdidx++) {
-#ifndef CONFIG_DIFFTEST_COMMITDATA
-      bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
-      auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
-      uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vrf[vecNextPdest].data;
-#endif // !CONFIG_DIFFTEST_COMMITDATA
-
-      for (int i = 0; i < VLENE_64; i++) {
-#ifdef CONFIG_DIFFTEST_COMMITDATA
-#ifdef CONFIG_DIFFTEST_SQUASH
-        uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
-#else
-        uint64_t dutRegData = dut->vec_commit_data[index].data[VLENE_64 * vdidx + i];
-#endif // CONFIG_DIFFTEST_SQUASH
-#else
-        uint64_t dutRegData = dutRegPtr[i];
-#endif // CONFIG_DIFFTEST_COMMITDATA
-
-        goldenmem_mismatch |= dutRegData != vec_goldenmem_regPtr[VLENE_64 * vdidx + i];
-      }
-    }
-
-    if (!goldenmem_mismatch) {
-      // ===============================================================
-      //                      sync memory and regs
-      // ===============================================================
-      proxy->vec_update_goldenmem();
-
-      for (int vdidx = 0; vdidx < vdNum; vdidx++) {
-#ifndef CONFIG_DIFFTEST_COMMITDATA
-        bool v0Wen = dut->commit[index].v0wen && vdidx == 0;
-        auto vecNextPdest = dut->commit[index].otherwpdest[vdidx];
-        uint64_t *dutRegPtr = v0Wen ? dut->wb_v0[vecNextPdest].data : dut->wb_vrf[vecNextPdest].data;
-#endif // !CONFIG_DIFFTEST_COMMITDATA
-
-        auto vecNextLdest = vecFirstLdest + vdidx;
-
-        for (int i = 0; i < VLENE_64; i++) {
-#ifdef CONFIG_DIFFTEST_COMMITDATA
-#ifdef CONFIG_DIFFTEST_SQUASH
-          uint64_t dutRegData = load_event.vecCommitData[VLENE_64 * vdidx + i];
-#else
-          uint64_t dutRegData = dut->vec_commit_data[index].data[VLENE_64 * vdidx + i];
-#endif // CONFIG_DIFFTEST_SQUASH
-#else
-          uint64_t dutRegData = dutRegPtr[i];
-#endif // CONFIG_DIFFTEST_COMMITDATA
-
-          uint64_t *refRegPtr = proxy->arch_vecreg(VLENE_64 * vecNextLdest + i);
-          *refRegPtr = dutRegData;
-        }
-      }
-
-      proxy->sync(true);
-    } else {
-      Info("Vector Load register and golden memory mismatch\n");
-    }
-  }
-  return 0;
-}
-#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
-}
-;
 #endif // CONFIG_DIFFTEST_LOADEVENT

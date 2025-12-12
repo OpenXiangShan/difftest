@@ -460,7 +460,7 @@ void copy_ram(uint64_t copy_ram_offset) {
 
 uint64_t parse_ramsize(const char *ramsize_str) {
   unsigned long ram_size_value = 0;
-  char ram_size_unit[64];
+  char ram_size_unit[64] = {'\0'};
   sscanf(ramsize_str, "%ld%s", &ram_size_value, (char *)&ram_size_unit);
   assert(ram_size_value > 0);
 

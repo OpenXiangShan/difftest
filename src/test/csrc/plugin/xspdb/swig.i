@@ -1,5 +1,19 @@
 %module difftest
 
+/*
+ * Make SWIG ignore GCC-style attributes like __attribute__((packed))
+ * for parsing only. Do NOT redefine it in the generated wrapper code
+ * to avoid ABI/layout mismatches with the compiled library.
+ */
+%define __attribute__(x)
+%enddef
+
+/* Also ignore common attribute aliases used in headers */
+%define __packed
+%enddef
+%define __aligned(x)
+%enddef
+
 %{
 #include "difftest.h"
 #include "export.h"

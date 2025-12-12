@@ -42,6 +42,9 @@ object Query {
          |#include <cstdint>
          |#include "difftest-state.h"
          |#include "query.h"
+         |#ifdef CONFIG_DIFFTEST_DELTA
+         |#include "difftest-delta.h"
+         |#endif // CONFIG_DIFFTEST_DELTA
          |
          |#ifdef CONFIG_DIFFTEST_QUERY
          |
@@ -107,7 +110,7 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String) {
        |  }
        |""".stripMargin
   val initInvoke = s"${tableName}_init();"
-  val packetType = if (gen.isDeltaElem) s"uint${gen.deltaElemBytes * 8}_t" else gen.desiredModuleName
+  val packetType = if (gen.isDeltaElem) s"uint${gen.deltaElemWidth}_t" else gen.desiredModuleName
   val writeDecl =
     s"""
        |  void ${tableName}_write(${locArgs.map("uint8_t " + _._2).mkString(", ")}, ${packetType}* packet) {

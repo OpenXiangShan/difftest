@@ -96,16 +96,19 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   def elementsInSeqUInt: Seq[(String, Seq[UInt])] = seqUIntHelper(elements.toSeq.reverse)
 
-  // return (name, data_width_in_byte, data_seq) for all elements except coreid and index
-  def dataElements: Seq[(String, Int, Seq[UInt])] = {
-    val nonDataElements = Seq("coreid", "index")
-    elementsInSeqUInt.filterNot(e => nonDataElements.contains(e._1)).map { case (name, dataSeq) =>
+  // return (name, data_width_aligned, data_seq) for all elements, where width can be 8,16,32,64
+  def totalElements: Seq[(String, Int, Seq[UInt])] = {
+    elementsInSeqUInt.map { case (name, dataSeq) =>
       val width = dataSeq.map(_.getWidth).distinct
       require(width.length == 1, "should not have different width")
       require(width.head <= 64, s"do not support DifftestBundle element with width (${width.head}) >= 64")
-      (name, (width.head + 7) / 8, dataSeq)
+      (name, math.pow(2, math.max(3, log2Ceil(width.head))).toInt, dataSeq)
     }
   }
+
+  // return (name, data_width_aligned, data_seq) for all elements except coreid and index
+  def dataElements: Seq[(String, Int, Seq[UInt])] =
+    totalElements.filterNot(e => Seq("coreid", "index").contains(e._1))
 
   def toCppDeclMacro: String = {
     val macroName = s"CONFIG_DIFFTEST_${desiredModuleName.toUpperCase.replace("DIFFTEST", "")}"
@@ -119,8 +122,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
       val isRemoved = isFlatten && Seq("valid", "address").contains(name)
       if (!isRemoved) {
         // Align elem to 8 bytes for bundle enabled to split when Delta
-        val elemSize = if (this.supportsDelta && aligned) deltaElemBytes else size
-        val arrayType = s"uint${elemSize * 8}_t"
+        val elemWidth = if (this.supportsDelta && aligned) deltaElemWidth else size
+        val arrayType = s"uint${elemWidth}_t"
         val arrayWidth = if (elem.length == 1) "" else s"[${elem.length}]"
         cpp += f"  $arrayType%-8s $name$arrayWidth;"
       }
@@ -130,13 +133,12 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   }
 
   def toTraceDeclaration: String = {
-    def byteWidth(data: Data) = (data.getWidth + 7) / 8 * 8
     val cpp = ListBuffer.empty[String]
     cpp += "typedef struct __attribute__((packed)) {"
-    elements.toSeq.reverse.foreach { case (name, data) =>
+    totalElements.foreach { case (name, width, data) =>
       val (typeWidth, arrSuffix) = data match {
-        case v: Vec[_] => (byteWidth(v.head), s"[${v.length}]")
-        case _         => (byteWidth(data), "")
+        case v: Vec[_] => (width, s"[${v.length}]")
+        case _         => (width, "")
       }
       cpp += f"  ${s"uint${typeWidth}_t"}%-8s $name$arrSuffix;"
     }
@@ -174,34 +176,27 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   val supportsDelta: Boolean = false
   def isDeltaElem: Boolean = this.isInstanceOf[DiffDeltaElem]
-  def deltaElemBytes: Int = dataElements.map(_._2).max
+  def deltaElemWidth: Int = dataElements.map(_._2).max
 
   // Byte align all elements
   def getByteAlignElems(isTrace: Boolean): Seq[(String, Data)] = {
-    def byteAlign(data: Data): UInt = {
-      val width: Int = (data.getWidth + 7) / 8 * 8
-      data.asTypeOf(UInt(width.W))
-    }
     val gen = if (DataMirror.isWire(this) || DataMirror.isReg(this) || DataMirror.isIO(this)) {
       this
     } else {
       0.U.asTypeOf(this)
     }
     val elems = if (isTrace) {
-      gen.elements.toSeq.reverse
+      gen.totalElements
     } else {
       // Reorder to separate locating and transmitted data
-      def locFilter: ((String, Data)) => Boolean = { case (name, _) =>
+      def locFilter: ((String, Int, Seq[UInt])) => Boolean = { case (name, _, _) =>
         Seq("coreid", "index", "address").contains(name)
       }
-      val raw = gen.elements.toSeq.reverse.filterNot(this.isFlatten && _._1 == "valid")
+      val raw = gen.totalElements.filterNot(this.isFlatten && _._1 == "valid")
       raw.filterNot(locFilter) ++ raw.filter(locFilter)
     }
-    elems.flatMap { case (name, data) =>
-      data match {
-        case vec: Vec[_] => vec.zipWithIndex.map { case (v, i) => (s"{${name}_$i}", byteAlign(v)) }
-        case _           => Seq((s"$name", byteAlign(data)))
-      }
+    elems.flatMap { case (name, width, seq) =>
+      seq.map(d => (name, d.asTypeOf(UInt(width.W))))
     }
   }
   def getByteAlignElems: Seq[(String, Data)] = getByteAlignElems(false)
@@ -213,15 +208,11 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     require(aligned.getWidth == this.getByteAlignWidth(isTrace))
     val bundle = WireInit(0.U.asTypeOf(this))
     val byteSeq = aligned.asTypeOf(Vec(aligned.getWidth / 8, UInt(8.W)))
-    val elems = bundle.elements.toSeq.reverse
+    val elems = bundle.totalElements
       .filterNot(this.isFlatten && _._1 == "valid" && !isTrace)
-      .flatMap { case (_, data) =>
-        data match {
-          case vec: Vec[_] => vec.toSeq
-          case _           => Seq(data)
-        }
+      .flatMap { case (_, width, seq) =>
+        seq.map(d => (d, width / 8))
       }
-      .map { d => (d, (d.getWidth + 7) / 8) }
     elems.zipWithIndex.foreach { case ((data, size), idx) =>
       val offset = elems.map(_._2).take(idx).sum
       data := MixedVecInit(byteSeq.slice(offset, offset + size).toSeq).asUInt
@@ -230,8 +221,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   }
 }
 
-class DiffDeltaElem(gen: DifftestBundle)
-  extends DeltaElem(gen.deltaElemBytes)
+private[difftest] class DiffDeltaElem(gen: DifftestBundle)
+  extends DeltaElem(gen.deltaElemWidth)
   with DifftestBundle
   with DifftestWithIndex {
   override val desiredCppName: String = gen.desiredCppName + "_elem"
@@ -269,12 +260,12 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with Dif
   override def classArgs: Map[String, Any] = Map("nPhyRegs" -> nPhyRegs)
 }
 
-class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
+private[difftest] class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "commit_data"
   override def supportsSquashBase: Bool = true.B
 }
 
-class DiffVecCommitData extends VecCommitData with DifftestBundle with DifftestWithIndex {
+private[difftest] class DiffVecCommitData extends VecCommitData with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "vec_commit_data"
   override def supportsSquashBase: Bool = true.B
 }
@@ -313,30 +304,7 @@ class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
-class DiffIntWriteback(numRegs: Int = 32) extends DataWriteback(numRegs) with DifftestBundle {
-  override val desiredCppName: String = "wb_xrf"
-  override protected val needFlatten: Boolean = true
-  // It is required for MMIO/Load(only for multi-core) data synchronization, and commit instr trace record
-  override def supportsSquashBase: Bool = true.B
-  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
-}
-
-class DiffFpWriteback(numRegs: Int = 32) extends DiffIntWriteback(numRegs) {
-  override val desiredCppName: String = "wb_frf"
-}
-
-class DiffVecWriteback(numRegs: Int = 32) extends VecDataWriteback(numRegs) with DifftestBundle {
-  override val desiredCppName: String = "wb_vrf"
-  override protected val needFlatten: Boolean = true
-  override def supportsSquashBase: Bool = true.B
-  override def classArgs: Map[String, Any] = Map("numRegs" -> numRegs)
-}
-
-class DiffVecV0Writeback(numRegs: Int = 32) extends DiffVecWriteback(numRegs) {
-  override val desiredCppName: String = "wb_v0"
-}
-
-class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
+private[difftest] class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "xrf"
   override val desiredRegOffset: Option[Int] = Some(0)
   override val updateDependency: Seq[String] = Seq("commit", "event")
@@ -358,14 +326,14 @@ class DiffArchFpDelayedUpdate extends DiffArchDelayedUpdate(32) {
   override val desiredCppName: String = "regs_fp_delayed"
 }
 
-class DiffArchFpRegState extends DiffArchIntRegState {
+private[difftest] class DiffArchFpRegState extends DiffArchIntRegState {
   override val desiredCppName: String = "frf"
   override val desiredRegOffset: Option[Int] = Some(1)
   override val updateDependency: Seq[String] = Seq("commit", "event")
   override val supportsDelta: Boolean = true
 }
 
-class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
+private[difftest] class DiffArchVecRegState extends ArchVecRegState with DifftestBundle {
   override val desiredCppName: String = "vrf"
   override val desiredRegOffset: Option[Int] = Some(4)
   override val updateDependency: Seq[String] = Seq("commit", "event")
@@ -438,7 +406,7 @@ class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithInd
   override val desiredCppName: String = "store"
 }
 
-class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
+private[difftest] class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
   override val squashQueue: Boolean = true
 }
 
@@ -447,7 +415,7 @@ class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex
   override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
 }
 
-class DiffLoadEventQueue extends DiffLoadEvent with DifftestWithStamp with DiffTestIsInherited {
+private[difftest] class DiffLoadEventQueue extends DiffLoadEvent with DifftestWithStamp with DiffTestIsInherited {
   val commitData = UInt(64.W)
   val vecCommitData = Vec(16, UInt(64.W))
   val regWen = Bool()
@@ -527,7 +495,7 @@ class DiffSyncCustomMflushpwrEvent extends SyncCustomMflushpwrEvent with Difftes
   override val desiredCppName: String = "sync_custom_mflushpwr"
 }
 
-class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
+private[difftest] class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 
   override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
@@ -549,6 +517,10 @@ class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle
   }
 }
 
+private[difftest] class DiffDeltaInfo extends DeltaInfo with DifftestBundle {
+  override val desiredCppName: String = "delta_info"
+}
+
 trait DifftestModule[T <: DifftestBundle] {
   val io: T
 }
@@ -559,9 +531,11 @@ object DifftestModule {
   private val cppExtModules = ListBuffer.empty[(String, String)]
   private val cppExtHeaders = ListBuffer.empty[String]
   private val nameExcludes = ListBuffer.empty[String]
+  private val cmdConfigs = ListBuffer.empty[String]
 
   // Some FIRTOOL options are customized for DiffTest
   def parseArgs(args: Array[String]): (Array[String], Seq[FirtoolOption]) = {
+    cmdConfigs ++= args
     @tailrec
     def nextOption(args: Array[String], list: List[String]): Array[String] = {
       list match {
@@ -600,6 +574,8 @@ object DifftestModule {
 
   def get_current_interfaces(): Seq[(DifftestBundle, Int)] = interfaces.toSeq
 
+  def get_command_configs(): Seq[String] = cmdConfigs.toSeq
+
   def collect(cpu: String): GatewayResult = {
     val gateway = Gateway.collect()
     generateCppHeader(
@@ -613,7 +589,7 @@ object DifftestModule {
       generateCppExtModules()
     }
     generateVerilogHeader(cpu, gateway.vMacros)
-    Profile.generateJson(cpu, interfaces.toSeq)
+    Profile.generateJson(cpu, cmdConfigs.toSeq, interfaces.toSeq)
     gateway
   }
 

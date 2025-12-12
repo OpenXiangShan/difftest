@@ -11,7 +11,7 @@ on:
 jobs:
   test-difftest-main:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -24,9 +24,33 @@ jobs:
         run: |
           make
 
+      - name: Copy the Profile File
+        run: |
+          mv build/generated-src/difftest_profile.json .
+          make clean
+
+      - name: Generate Verilog using Profile
+        run: |
+          make PROFILE=./difftest_profile.json NUM_CORES=4
+
+      - name: Generate EMU using Profile-Generated RTL
+        run: |
+          make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
+          make clean
+
+      - name: Generate EMU with SoftArchUpdate
+        run: |
+          make PROFILE=./difftest_profile.json NUM_CORES=4 CONFIG=U
+          make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
+          make clean
+
+      - name: Clean the Profile File
+        run: |
+          rm -f ./difftest_profile.json
+
   test-verilator-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
     needs: test-difftest-main
 
@@ -71,10 +95,17 @@ jobs:
             ./build/emu --no-diff -C 10000
             make clean
 
-      - name: Basic Difftest with PGO build
+      - name: Basic Difftest with PGO build using compiler instrumentation
         run: |
             cd $NOOP_HOME
-            make emu PGO_WORKLOAD=$WORKLOAD LLVM_PROFDATA=llvm-profdata PGO_EMU_ARGS="--diff $REF_SO 2>/dev/null" -j2
+            make emu PGO_WORKLOAD=$WORKLOAD LLVM_PROFDATA=llvm-profdata PGO_EMU_ARGS="--diff $REF_SO 2>/dev/null" PGO_BOLT=0 -j2
+            ./build/emu -i $WORKLOAD --diff $REF_SO
+            make clean
+
+      - name: Basic Difftest with PGO build using BOLT
+        run: |
+            cd $NOOP_HOME
+            make emu PGO_WORKLOAD=$WORKLOAD PGO_EMU_ARGS="--diff $REF_SO 2>/dev/null" PGO_BOLT=1 -j2
             ./build/emu -i $WORKLOAD --diff $REF_SO
             make clean
 
@@ -332,7 +363,7 @@ jobs:
       - name: FPGA-difftest Build (no THREAD, no ASYNC_CLK)
         run: |
             cd $NOOP_HOME
-            make sim-verilog MILL_ARGS="--difftest-config ESBIDF" -j2
+            make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 DIFFTEST_PERFCNT=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1
             bash difftest/scripts/fpga_sim/ci.sh
@@ -341,8 +372,15 @@ jobs:
       - name: FPGA-difftest Build (with THREAD and ASYNC_CLK)
         run: |
             cd $NOOP_HOME
-            make sim-verilog MILL_ARGS="--difftest-config ESBIDF" -j2
+            make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 USE_THREAD_MEMPOOL=1 DIFFTEST_PERFCNT=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2N=1
             bash difftest/scripts/fpga_sim/ci.sh
             make -C difftest fpga-clean vcs-clean
+
+
+      - name: FPGA-difftest Release
+        run: |
+            cd $NOOP_HOME
+            make verilog BOARD=fpgadiff MILL_ARGS="--difftest-config ESBIDUF" -j2
+            make -C difftest fpga-release
