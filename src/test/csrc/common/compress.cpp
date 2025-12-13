@@ -141,7 +141,7 @@ long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t load_ty
     if (bytes_read == 0) {
       break;
     }
-    for (uint32_t x = 0; x < bytes_read / sizeof(long) + 1; x++) {
+    for (uint32_t x = 0; x < bytes_read / sizeof(long); x++) {
       if (*(temp_page + x) != 0) {
         long *pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
         *pmem_current = *(temp_page + x);
@@ -263,7 +263,7 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
       break;
     }
 
-    for (uint32_t x = 0; x < output_buffer.pos / sizeof(long) + 1; x++) {
+    for (uint32_t x = 0; x < output_buffer.pos / sizeof(long); x++) {
       if (*(temp_page + x) != 0) {
         long *pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
         *pmem_current = *(temp_page + x);
