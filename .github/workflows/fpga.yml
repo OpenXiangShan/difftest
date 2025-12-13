@@ -5,12 +5,8 @@ on:
     # 12:00 UTC == 20:00 UTC+8
     - cron: '00 12 * * *'
 
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-
 jobs:
   test-fpga-nutshell:
-    if: ${{ github.event_name == 'pull_request' }}
     timeout-minutes: 1440
     runs-on: self-hosted
 

@@ -1,0 +1,265 @@
+{
+  "cpu":"demo",
+  "numCores":1,
+  "cmdConfigs":[
+    "--target-dir",
+    "/nfs/home/youkunlin/workspace/xs-env/NutShell/difftest/build/rtl",
+    "--target",
+    "systemverilog",
+    "--split-verilog"
+  ],
+  "bundles":[
+    {
+      "className":"difftest.DiffArchEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffInstrCommit",
+      "classArgs":{
+        "nPhyRegs":192
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffCommitData",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffTrapEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffCSRState",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffHCSRState",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffDebugMode",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffTriggerCSRState",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffArchIntDelayedUpdate",
+      "classArgs":{
+        "numRegs":32
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffArchFpDelayedUpdate",
+      "classArgs":{
+        "numRegs":32
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffArchIntRenameTable",
+      "classArgs":{
+        "numPhyRegs":224
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffArchFpRenameTable",
+      "classArgs":{
+        "numPhyRegs":192
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffArchVecRenameTable",
+      "classArgs":{
+        "numPhyRegs":150
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffPhyIntRegState",
+      "classArgs":{
+        "numPhyRegs":224
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffPhyFpRegState",
+      "classArgs":{
+        "numPhyRegs":192
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffPhyVecRegState",
+      "classArgs":{
+        "numPhyRegs":150
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffVecCSRState",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffFpCSRState",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffSbufferEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffUncacheMMStoreEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffStoreEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffLoadEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffAtomicEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffCMOInvalEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffL1TLBEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffL2TLBEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffRefillEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffLrScEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffRunaheadEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffRunaheadCommitEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffRunaheadRedirectEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffNonRegInterruptPendingEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffMhpmeventOverflowEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffCriticalErrorEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffSyncAIAEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    },
+    {
+      "className":"difftest.DiffSyncCustomMflushpwrEvent",
+      "classArgs":{
+        
+      },
+      "delay":0
+    }
+  ]
+}
