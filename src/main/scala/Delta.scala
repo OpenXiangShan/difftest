@@ -101,9 +101,9 @@ class DeltaQueue(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) ext
   val inPending = IO(Input(Bool()))
   val out = IO(Output(MixedVec(bundles)))
   val mem = Mem(config.deltaQueueDepth, MixedVec(bundles))
-  val cnt = RegInit(0.U)
-  val head = RegInit(0.U)
-  val tail = RegInit(0.U)
+  val cnt = RegInit(0.U(8.W))
+  val head = RegInit(0.U(8.W))
+  val tail = RegInit(0.U(8.W))
   val enqueue = VecInit(in.map(_.valid)).asUInt.orR
   val dequeue = !RegNext(inPending) && cnt =/= 0.U
   when(enqueue && !dequeue) {
