@@ -5,12 +5,8 @@ on:
     # 12:00 UTC == 20:00 UTC+8
     - cron: '00 12 * * *'
 
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-
 jobs:
   test-fpga-nutshell:
-    if: ${{ github.event_name == 'pull_request' }}
     timeout-minutes: 1440
     runs-on: self-hosted
 
@@ -66,19 +62,61 @@ jobs:
           echo "VIVADO_HIER_MD=$MD_PATH" >> "$GITHUB_ENV"
 
 
-      - name: Comment utilization to PR
-        if: ${{ github.event_name == 'pull_request' }}
+      - name: Comment utilization to latest PR on master
         uses: actions/github-script@v7
         env:
           VIVADO_HIER_MD: ${{ env.VIVADO_HIER_MD }}
         with:
           script: |
             const fs = require('fs');
-            let body;
+            const MARKER = '<!-- VIVADO_HIER_UTILIZATION -->';
+            let content;
             try {
-              body = fs.readFileSync(process.env.VIVADO_HIER_MD, 'utf8');
-              if (!body.trim()) throw new Error('empty');
+              content = fs.readFileSync(process.env.VIVADO_HIER_MD, 'utf8');
+              if (!content.trim()) throw new Error('empty');
             } catch (e) {
-              body = 'Vivado Hierarchical utilization: section missing or extract failed. Please check the job logs for runme.log output.';
+              content = 'Vivado Hierarchical utilization: section missing or extract failed. Please check the job logs for runme.log output.';
             }
-            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
+            const body = `${MARKER}\n\n${content}`;
+
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+            const headSha = context.sha;
+
+            const pulls = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: headSha,
+            });
+            if (!pulls.data.length) {
+              core.warning(`No PR associated with commit ${headSha}, skip commenting.`);
+              return;
+            }
+
+            const pr = pulls.data
+              .filter(p => p.merged_at)
+              .sort((a, b) => new Date(b.merged_at) - new Date(a.merged_at))[0];
+            if (!pr) {
+              core.warning('No merged PR found for this commit.');
+              return;
+            }
+
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+            const existed = comments.data.find(c => c.body && c.body.includes(MARKER));
+            if (existed) {
+              core.info(`Utilization comment already exists on PR #${pr.number}, skip commenting.`);
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pr.number,
+              body,
+            });
+            core.info(`Commented utilization to PR #${pr.number}`);
