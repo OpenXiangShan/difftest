@@ -305,7 +305,6 @@ int simv_get_result(uint8_t step) {
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       if (trap->instrCnt >= args.warmup_instr) {
-        args.warmup_instr = -1; // maxium of uint64_t
         finish = true;
         break;
       }
