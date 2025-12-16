@@ -300,17 +300,16 @@ int simv_get_result(uint8_t step) {
     }
   }
   // Warmup Check
-  if (args.warmup_instr != -1) {
-    bool finish = false;
+  static bool warmup_finish = false;
+  if (args.warmup_instr != -1 && !warmup_finish) {
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       if (trap->instrCnt >= args.warmup_instr) {
-        args.warmup_instr = -1; // maxium of uint64_t
-        finish = true;
+        warmup_finish = true;
         break;
       }
     }
-    if (finish) {
+    if (warmup_finish) {
       Info("Warmup finished. The performance counters will be dumped and then reset.\n");
       // Record Instr/Cycle for soft warmup
       for (int i = 0; i < NUM_CORES; i++) {
