@@ -17,6 +17,20 @@
 #include "diffstate.h"
 #include "spikedasm.h"
 
+void CommitTrace::display(bool use_spike) {
+  Info("%s pc %016lx inst %08x", get_type(), pc, inst);
+  display_custom();
+  if (use_spike) {
+    Info(" %s", spike_dasm(inst));
+  }
+}
+
+void CommitTrace::display_line(int index, bool use_spike, bool is_retire) {
+  Info("[%02d] ", index);
+  display(use_spike);
+  Info("%s\n", is_retire ? " <--" : "");
+}
+
 void DiffState::display() {
   Info("\n============== Commit Group Trace (Core %d) ==============\n", coreid);
   int group_index = 0;
@@ -43,3 +57,34 @@ void DiffState::display() {
 }
 
 DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {}
+
+static uint64_t get_int_data(const DiffTestState *state, int index) {
+#ifdef CONFIG_DIFFTEST_PHYINTREGSTATE
+  return state->pregs_xrf.value[state->commit[index].wpdest];
+#else
+  return state->regs.xrf.value[state->commit[index].wdest];
+#endif // CONFIG_DIFFTEST_PHYINTREGSTATE
+}
+
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
+static uint64_t get_fp_data(const DiffTestState *state, int index) {
+#if defined(CONFIG_DIFFTEST_PHYFPREGSTATE)
+  return state->pregs_frf.value[state->commit[index].wpdest];
+#else
+  return state->regs.frf.value[state->commit[index].wdest];
+#endif // CONFIG_DIFFTEST_PHYFPREGSTATE
+}
+#endif
+
+uint64_t get_commit_data(const DiffTestState *state, int index) {
+#if defined(CONFIG_DIFFTEST_COMMITDATA)
+  return state->commit_data[index].data;
+#else
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
+  if (state->commit[index].fpwen) {
+    return get_fp_data(state, index);
+  } else
+#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
+    return get_int_data(state, index);
+#endif // CONFIG_DIFFTEST_COMMITDATA
+}

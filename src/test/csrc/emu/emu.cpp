@@ -186,7 +186,9 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #ifndef CONFIG_NO_DIFFTEST
 #ifdef DEBUG_REFILL
-  difftest[0]->save_track_instr(args.track_instr);
+  for (int i = 0; i < NUM_CORES; i++) {
+    difftest[i]->set_track_instr(args.track_instr);
+  }
 #endif
 #endif // CONFIG_NO_DIFFTEST
 
@@ -517,6 +519,8 @@ int Emulator::tick() {
     step = dut_ptr->get_difftest_step();
   }
 
+  // Check whether DiffTest has produced any progress (step)
+  // When batch is enabled, the stuck limit should be scaled accordingly
   static uint64_t stuck_timer = 0;
   if (step) {
     stuck_timer = 0;

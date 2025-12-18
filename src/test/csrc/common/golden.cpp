@@ -17,7 +17,7 @@
 #include "golden.h"
 #include "ram.h"
 #ifndef CONFIG_NO_DIFFTEST
-#include <goldenmem.h>
+#include "goldenmem.h"
 #endif // CONFIG_NO_DIFFTEST
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"

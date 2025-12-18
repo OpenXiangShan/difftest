@@ -147,27 +147,27 @@ RefProxy::~RefProxy() {
   }
 }
 
-void RefProxy::regcpy(DiffTestState *dut) {
-  memcpy(&state.xrf, dut->regs.xrf.value, sizeof(state.xrf));
+void RefProxy::regcpy(const DiffTestRegState *regs, uint64_t pc) {
+  memcpy(&state.xrf, regs->xrf.value, sizeof(state.xrf));
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  memcpy(&state.frf, dut->regs.frf.value, sizeof(state.frf));
+  memcpy(&state.frf, regs->frf.value, sizeof(state.frf));
 #endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-  memcpy(&state.csr, &dut->regs.csr, sizeof(state.csr));
-  state.pc = dut->commit[0].pc;
+  memcpy(&state.csr, &regs->csr, sizeof(state.csr));
+  state.pc = pc;
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
-  memcpy(&state.hcsr, &dut->regs.hcsr, sizeof(state.hcsr));
+  memcpy(&state.hcsr, &regs->hcsr, sizeof(state.hcsr));
 #endif // CONFIG_DIFFTEST_HCSRSTATE
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  memcpy(&state.vrf, &dut->regs.vrf.value, sizeof(state.vrf));
+  memcpy(&state.vrf, &regs->vrf.value, sizeof(state.vrf));
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #ifdef CONFIG_DIFFTEST_VECCSRSTATE
-  memcpy(&state.vcsr, &dut->regs.vcsr, sizeof(state.vcsr));
+  memcpy(&state.vcsr, &regs->vcsr, sizeof(state.vcsr));
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
 #ifdef CONFIG_DIFFTEST_FPCSRSTATE
-  memcpy(&state.fcsr, &dut->regs.fcsr, sizeof(state.fcsr));
+  memcpy(&state.fcsr, &regs->fcsr, sizeof(state.fcsr));
 #endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
-  memcpy(&state.triggercsr, &dut->regs.triggercsr, sizeof(state.triggercsr));
+  memcpy(&state.triggercsr, &regs->triggercsr, sizeof(state.triggercsr));
 #endif //CONFIG_DIFFTEST_TRIGGERCSRSTATE
   ref_regcpy(&state, DUT_TO_REF, false);
 };
