@@ -152,7 +152,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   /* clang-format on */
 
   int o;
-  while ((o = getopt_long(argc, const_cast<char *const *>(argv), "-s:C:X:I:T:R:W:hi:r:m:b:e:F:", long_options,
+  while ((o = getopt_long(argc, const_cast<char *const *>(argv), "-s:C:X:I:T:R:W:D:hi:r:m:b:e:F:", long_options,
                           &long_index)) != -1) {
     switch (o) {
       case 0:
