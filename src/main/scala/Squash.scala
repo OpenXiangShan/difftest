@@ -218,7 +218,7 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
   setInline(
     "SquashControl.v",
     s"""
-       |`include "DifftestMacros.v"
+       |`include "DifftestMacros.svh"
        |module SquashControl(
        |  input clock,
        |  input reset,

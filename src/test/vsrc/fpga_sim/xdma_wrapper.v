@@ -13,7 +13,7 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-`include "DifftestMacros.v"
+`include "DifftestMacros.svh"
 module xdma_wrapper(
   input clock,
   input reset,

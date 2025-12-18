@@ -1,4 +1,4 @@
-`include "DifftestMacros.v"
+`include "DifftestMacros.svh"
 `ifndef TB_NO_DPIC
 `ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 module DeferredControl(
