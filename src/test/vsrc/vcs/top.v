@@ -15,7 +15,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-`include "DifftestMacros.v"
+`include "DifftestMacros.svh"
 module tb_top();
 
 `ifdef PALLADIUM

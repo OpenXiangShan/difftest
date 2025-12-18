@@ -784,6 +784,6 @@ object DifftestModule {
     macros.foreach(m => difftestV += s"`define $m")
     val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
     difftestV += s"`define CPU_$cpu_s"
-    FileControl.write(difftestV, "DifftestMacros.v")
+    FileControl.write(difftestV, "DifftestMacros.svh")
   }
 }
