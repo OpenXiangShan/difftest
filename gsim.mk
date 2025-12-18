@@ -130,7 +130,7 @@ endif # ifdef LLVM_PROFDATA
 					   PGO_LDFLAGS="-fprofile-use=$(GSIM_EMU_PGO_DIR)"
 else # ifneq ($(PGO_BOLT),1)
 	@echo "Building emu..."
-	@$(MAKE) gsim-build-emu PGO_LDFLAGS="-Wl,--emit-relocs -fuse-ld=ld"
+	@$(MAKE) gsim-build-emu PGO_LDFLAGS="-Wl,--emit-relocs -fuse-ld=bfd"
 	@mv $(GSIM_EMU_TARGET) $(GSIM_EMU_TARGET).pre-bolt
 	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
 	@echo "Training emu with PGO Workload..."
