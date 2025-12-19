@@ -21,6 +21,55 @@ import re
 import sys
 import argparse
 import os
+import textwrap
+
+def generate_interface(filename, interface):
+  pattern = re.compile(
+      r"GatewayEndpoint\s+\w+\s*\("      # GatewayEndpoint endpoint (
+      r"[\s\S]*?"                        # other port
+      r"\.in\s*"                         # .in
+      r"\(\s*\{\s*"                      # ({
+      r"([\s\S]*?)"                      # Target Probe
+      r"\s*\}\s*\)",                     # })
+      re.MULTILINE,
+  )
+  text = open(filename, 'r').read()
+  content = pattern.search(text).group(1)
+
+  raw_probes = []
+  for line in content.split(","):
+    raw_probes.append(line.strip())
+
+  core_inst = ".".join(raw_probes[0].split(".", 2)[:2])
+  probes = [
+    p.replace(core_inst, "`CORE_INST(i)", 1)
+    for p in raw_probes
+  ]
+  probes_str = (",\n" + " " * 12).join(probes)
+
+  module = textwrap.dedent(f"""\
+    `include "DifftestMacros.svh"
+    module DifftestInterface #(parameter NCORES = 1)(
+      output [NCORES * `CONFIG_DIFFTEST_INTERFACE_WIDTH - 1 : 0] gateway_in
+    );
+    `ifndef CORE_INST(i)
+    `define CORE_INST(i) {core_inst}
+    `endif
+
+      wire [NCORES-1:0][`CONFIG_DIFFTEST_INTERFACE_WIDTH-1:0] core_out;
+      generate
+        genvar i;
+        for (i = 0; i < NCORES; i = i+1) begin: connect
+          assign core_out[i] = {{
+            {probes_str}
+          }};
+        end
+      endgenerate
+      assign gateway_in = core_out;
+    endmodule
+    """)
+  with open(interface, "w") as file:
+    file.write(module)
 
 def process_file(filename, use_core_mode):
     try:
@@ -114,18 +163,22 @@ def rmprocess_file(file_path, string_to_delete=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process Verilog files with different modes.")
     parser.add_argument("filename", help="The Verilog file to process")
+    parser.add_argument("--interface", type=str, help="Extract XMR signals to interface module")
     parser.add_argument("--filelist", type=str, help="The filelist file to process")
     parser.add_argument("--simtop", type=str, help="The Verilog file to process")
     parser.add_argument("--core", action="store_true", help="Use core_out mode (default is gateway_in mode)")
     parser.add_argument("--fpga", action="store_true", help="Use fpga mode need rm XSTOP. (default is not fpga mode)")
 
+
     args = parser.parse_args()
 
-    process_file(args.filename, args.core)
-
-    if args.simtop:
-        remove_file(args.simtop)
-    if args.filelist:
-        rmprocess_file(args.filelist, "SimTop.sv")
-    if args.fpga:
-        remove_xstop(args.filename)
+    if (args.interface):
+      generate_interface(args.filename, args.interface)
+    else:
+      process_file(args.filename, args.core)
+      if args.simtop:
+          remove_file(args.simtop)
+      if args.filelist:
+          rmprocess_file(args.filelist, "SimTop.sv")
+      if args.fpga:
+          remove_xstop(args.filename)
