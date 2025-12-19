@@ -199,17 +199,18 @@ object Gateway {
     val instances = instanceWithDelay.map(_._1).toSeq
     val sink = if (config.needEndpoint) {
       val gatewayIn = if (config.traceLoad) {
-        MixedVecInit(Trace.load(instances).toSeq.map(_.asUInt))
+        MixedVecInit(Trace.load(instances).toSeq.map(_.asUInt)).asUInt
       } else {
         val packed = WireInit(0.U.asTypeOf(MixedVec(instances.map(gen => UInt(gen.getWidth.W)))))
         for ((data, idx) <- packed.zipWithIndex) {
           DifftestWiring.addSink(data, s"gateway_$idx", config.hierarchicalWiring)
         }
-        packed
+        packed.asUInt
       }
       val endpoint = Module(new GatewayEndpoint(instanceWithDelay.toSeq, config))
       endpoint.in := gatewayIn
       GatewayResult(
+        vMacros = Seq(s"CONFIG_DIFFTEST_INTERFACE_WIDTH ${gatewayIn.getWidth}"),
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
         structAligned = Some(config.isDelta),
@@ -229,13 +230,13 @@ object Gateway {
 }
 
 class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(instanceWithDelay.map { case (gen, _) => UInt(gen.getWidth.W) })))
-
+  val in = IO(Input(UInt(instanceWithDelay.map(_._1.getWidth).sum.W)))
+  val in_bundle = in.asTypeOf(MixedVec(instanceWithDelay.map(_._1)))
   val bundle = if (config.traceLoad) {
-    MixedVecInit(in.zip(instanceWithDelay).map { case (i, (gen, _)) => i.asTypeOf(gen) }.toSeq)
+    in_bundle
   } else {
     val delayed = MixedVecInit(
-      in.zip(instanceWithDelay).map { case (i, (gen, d)) => Delayer(i.asTypeOf(gen), d) }.toSeq
+      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d) }.toSeq
     )
     if (config.traceDump) Trace(delayed)
     delayed
