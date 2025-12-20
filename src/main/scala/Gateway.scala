@@ -209,8 +209,9 @@ object Gateway {
       }
       val endpoint = Module(new GatewayEndpoint(instanceWithDelay.toSeq, config))
       endpoint.in := gatewayIn
+      val numCores = instances.count(_.isUniqueIdentifier)
       GatewayResult(
-        vMacros = Seq(s"CONFIG_DIFFTEST_INTERFACE_WIDTH ${gatewayIn.getWidth}"),
+        vMacros = Seq(s"CONFIG_DIFFTEST_INTERFACE_WIDTH ${gatewayIn.getWidth / numCores}"),
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
         structAligned = Some(config.isDelta),
