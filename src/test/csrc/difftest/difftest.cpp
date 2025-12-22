@@ -530,6 +530,7 @@ inline int Difftest::check_all() {
       }
     }
 #endif
+    // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
         num_commit += 1 + dut->commit[i].nFused;
