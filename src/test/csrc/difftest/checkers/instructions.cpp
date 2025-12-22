@@ -161,6 +161,7 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
   // Default: single step exec
   // when there's a fused instruction, let proxy execute more instructions.
   for (int j = 0; j < probe.nFused + 1; j++) {
+    // printf("Debug: before enter ref_exec(), j=%d\n",j);
     proxy->ref_exec(1);
 #ifdef CONFIG_DIFFTEST_SQUASH
     state->commit_stamp = (state->commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
