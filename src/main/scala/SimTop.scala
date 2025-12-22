@@ -132,6 +132,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Mo
   cpu.connectTopIOs(difftest)
   cpu.dutIOs.foreach { case (name, gen) =>
     val io = IO(chiselTypeOf(gen)).suggestName(name)
+    dontTouch(gen)
     io <> gen
   }
 
