@@ -23,7 +23,7 @@ import argparse
 import os
 import textwrap
 
-def generate_interface(filename, interface):
+def generate_interface(filename, interface, path_level):
   pattern = re.compile(
       r"GatewayEndpoint\s+\w+\s*\("      # GatewayEndpoint endpoint (
       r"[\s\S]*?"                        # other port
@@ -40,9 +40,9 @@ def generate_interface(filename, interface):
   for line in content.split(","):
     raw_probes.append(line.strip())
 
-  core_inst = ".".join(raw_probes[0].split(".", 2)[:2])
+  core_inst = ".".join(raw_probes[0].split(".", path_level)[:path_level])
   probes = [
-    p.replace(core_inst, "`CORE_INST(i)", 1)
+    p.replace(core_inst, "`DIFF_CORE_INST(i)", 1)
     for p in raw_probes
   ]
   probes_str = (",\n" + " " * 12).join(probes)
@@ -52,8 +52,8 @@ def generate_interface(filename, interface):
     module DifftestInterface #(parameter NCORES = 1)(
       output [NCORES * `CONFIG_DIFFTEST_INTERFACE_WIDTH - 1 : 0] gateway_in
     );
-    `ifndef CORE_INST(i)
-    `define CORE_INST(i) {core_inst}
+    `ifndef DIFF_CORE_INST
+    `define DIFF_CORE_INST(i) {core_inst}
     `endif
 
       wire [NCORES-1:0][`CONFIG_DIFFTEST_INTERFACE_WIDTH-1:0] core_out;
@@ -164,6 +164,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process Verilog files with different modes.")
     parser.add_argument("filename", help="The Verilog file to process")
     parser.add_argument("--interface", type=str, help="Extract XMR signals to interface module")
+    parser.add_argument("--path_level", type=int, default=2, help="XMR path level to be replaced")
     parser.add_argument("--filelist", type=str, help="The filelist file to process")
     parser.add_argument("--simtop", type=str, help="The Verilog file to process")
     parser.add_argument("--core", action="store_true", help="Use core_out mode (default is gateway_in mode)")
@@ -173,7 +174,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if (args.interface):
-      generate_interface(args.filename, args.interface)
+      generate_interface(args.filename, args.interface, args.path_level)
     else:
       process_file(args.filename, args.core)
       if args.simtop:
