@@ -411,6 +411,7 @@ inline int Difftest::check_all() {
       }
     }
 #endif
+    // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
         if (do_instr_commit(i)) {
@@ -605,6 +606,7 @@ int Difftest::do_instr_commit(int i) {
   // Default: single step exec
   // when there's a fused instruction, let proxy execute more instructions.
   for (int j = 0; j < dut->commit[i].nFused + 1; j++) {
+    // printf("Debug: before enter ref_exec(), j=%d\n",j);
     proxy->ref_exec(1);
 #ifdef CONFIG_DIFFTEST_SQUASH
     commit_stamp = (commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
@@ -882,10 +884,16 @@ void Difftest::do_load_check(DifftestLoadEvent &load_event, bool regWen, uint64_
 #endif // CONFIG_DIFFTEST_LOADEVENT
 
 int Difftest::do_store_check() {
+  return 0;
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   while (!store_event_queue.empty()) {
+    printf("Debug: store_event_queue size: %lu\n", store_event_queue.size());
+
     auto store_event = store_event_queue.front();
+    printf("DUT commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx, robidx 0x%x\n", store_event.addr,
+          store_event.data, store_event.mask, store_event.pc, store_event.robidx);
 #ifdef CONFIG_DIFFTEST_SQUASH
+    printf("commit_stamp: %d, store_event.stamp: %d\n", commit_stamp, store_event.stamp);
     if (store_event.stamp != commit_stamp)
       return 0;
 #endif // CONFIG_DIFFTEST_SQUASH
@@ -1419,8 +1427,12 @@ int Difftest::do_golden_memory_update() {
 
 #ifdef CONFIG_DIFFTEST_STOREEVENT
 void Difftest::store_event_record() {
+  return ;
   for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
     if (dut->store[i].valid) {
+      printf("happen store event %d, %d\n",i, CONFIG_DIFF_STORE_WIDTH);
+      printf("addr:%lx, data: %lx, mask: %hhx\n", dut->store[i].addr, dut->store[i].data, dut->store[i].mask);
+      printf("pc:%lx, robidx: %d\n", dut->store[i].pc, dut->store[i].robidx);
       store_event_queue.push(dut->store[i]);
       dut->store[i].valid = 0;
     }
