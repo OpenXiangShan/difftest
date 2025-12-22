@@ -39,6 +39,16 @@
 #ifdef ENABLE_IPC
 #include <sys/stat.h>
 #endif
+#include "uparam.h"
+#include <filesystem>
+
+#define CONDUCT_DSE
+#define SYNC_WITH_PYTHON
+// #define CONDUCT_ARCH_EXPLORER
+
+ uint64_t ram_size;
+ size_t ref_ramsize;
+
 
 extern remote_bitbang_t *jtag;
 
@@ -342,6 +352,135 @@ inline EmuArgs parse_args(int argc, const char *argv[]) {
   return args;
 }
 
+inline void Emulator::reset_dse_ncycles(size_t cycles) {
+  if (args.trace_name && args.trace_is_read) {
+    return;
+  }
+  for (int i = 0; i < cycles; i++) {
+#ifdef VERILATOR
+    dut_ptr->io_dse_rst = 1;
+    dut_ptr->reset = 1;
+#ifdef COVERAGE_PORT_RESET
+    dut_ptr->coverage_reset = dut_ptr->reset;
+#endif // COVERAGE_PORT_RESET
+    dut_ptr->clock = 1;
+#ifdef COVERAGE_PORT_CLOCK
+    dut_ptr->coverage_clock = dut_ptr->clock;
+#endif // COVERAGE_PORT_CLOCK
+    dut_ptr->eval();
+
+#if VM_TRACE == 1
+    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
+      tfp->dump(2 * i);
+    }
+#endif
+
+    dut_ptr->clock = 0;
+#ifdef COVERAGE_PORT_CLOCK
+    dut_ptr->coverage_clock = dut_ptr->clock;
+#endif // COVERAGE_PORT_CLOCK
+    dut_ptr->eval();
+
+#if VM_TRACE == 1
+    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
+      tfp->dump(2 * i + 1);
+    }
+#endif
+
+    dut_ptr->io_dse_rst = 0;
+    dut_ptr->reset = 0;
+#ifdef COVERAGE_PORT_RESET
+    dut_ptr->coverage_reset = dut_ptr->reset;
+#endif // COVERAGE_PORT_RESET
+#endif // VERILATOR
+
+#ifdef GSIM
+    dut_ptr->set_reset(1);
+    dut_ptr->step();
+    dut_ptr->set_reset(0);
+    dut_ptr->step();
+#endif // GSIM
+  }
+}
+
+std::string get_benchmark(const std::string& file_name) {
+  std::ifstream file(file_name);
+  if (!file.is_open()) {
+    std::cerr << "Error opening file: " << file_name << std::endl;
+    return "";
+  }
+
+  std::string line;
+  while (std::getline(file, line)) {
+      // 跳过空行和注释行
+        if (line.empty() || line[0] == '#') {
+          continue;
+      }
+
+      // 移除空白字符
+      line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
+      
+      // 查找分隔符
+      size_t pos = line.find(':');
+      if (pos == std::string::npos) {
+          continue;
+      }
+
+      // 提取参数名和值
+      std::string param = line.substr(0, pos);
+      std::string value_str = line.substr(pos + 1);
+
+      if (param == "Benchmark") {
+          std::string benchmark = value_str;
+          std::cout << "Benchmark: " << benchmark << std::endl;
+          return benchmark;
+      }
+  }
+
+}
+
+std::string get_idx(const std::string& file_name) {
+  std::ifstream file(file_name);
+  if (!file.is_open()) {
+    std::cerr << "Error opening file: " << file_name << std::endl;
+    return "";
+  }
+
+  std::string line, last_line;
+  while (std::getline(file, line)) {
+    // 跳过空行和注释行
+    if (line.empty() || line[0] == '#') {
+      continue;
+    }
+    last_line = line;
+  }
+
+  if (last_line.empty()) {
+    std::cerr << "Error: No valid lines in file: " << file_name << std::endl;
+    return "";
+  }
+
+  // 移除空白字符
+  last_line.erase(std::remove_if(last_line.begin(), last_line.end(), ::isspace), last_line.end());
+  // 查找分隔符
+  size_t pos = last_line.find(':');
+  if (pos == std::string::npos) {
+    std::cerr << "Error: Invalid format in last line: " << last_line << std::endl;
+    return "";
+  }
+
+  std::string param = last_line.substr(0, pos);
+  std::string value_str = last_line.substr(pos + 1);
+
+  if (param != "idx") {
+    std::cerr << "Warning: Last line parameter is not 'idx': " << param << std::endl;
+  }
+
+  std::cout << "idx: " << value_str << std::endl;
+  return value_str;
+}
+
+
 Emulator::Emulator(int argc, const char *argv[])
     : dut_ptr(new DUT_TOP), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
 
@@ -397,12 +536,19 @@ Emulator::Emulator(int argc, const char *argv[])
     }
   }
 #endif
-
-  // init core
+  perfprocess = new Perfprocess(dut_ptr, 4);
+  // init dse
+#ifdef CONDUCT_DSE
+  reset_dse_ncycles(args.reset_cycles);
+  printf("reset dse complete\n");
+  // reset_ncycles(args.reset_cycles);
+#else
   reset_ncycles(args.reset_cycles);
+  printf("core reset complete\n");
+#endif
 
   // init ram
-  uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
+  ram_size = DEFAULT_EMU_RAM_SIZE;
   if (args.ram_size) {
     ram_size = parse_and_update_ramsize(args.ram_size);
   }
@@ -477,7 +623,7 @@ Emulator::Emulator(int argc, const char *argv[])
 #ifndef CONFIG_NO_DIFFTEST
   if (args.enable_diff) {
     init_goldenmem();
-    size_t ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
+    ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
     init_nemuproxy(ref_ramsize);
   }
 #endif // CONFIG_NO_DIFFTEST
@@ -512,6 +658,42 @@ Emulator::Emulator(int argc, const char *argv[])
     coverage = Verilated::threadContextp()->coveragep();
   }
 #endif
+
+#ifdef SYNC_WITH_PYTHON
+  printf("wait for python\n");
+
+  while (!fs::exists(embedding_path)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::cout << "Waiting for embedding file..." << std::endl;
+  } 
+  embedding = engine->design_space.get_embedding_from_file("embedding.txt");
+  idx = get_idx("embedding.txt");
+  benchmark_name = get_benchmark("embedding.txt");
+  if (benchmark_name.empty()) {
+    std::cerr << "Error: Could not read Benchmark name from initial embedding.txt" << std::endl;
+    exit(1); // 如果初始 benchmark 名为空则退出
+  }
+  printf("Initial benchmark_name read: %s\n", benchmark_name.c_str());
+#else
+  if (args.init_params != NULL) {
+    embedding = engine->design_space.get_embedding_from_file(args.init_params);
+    benchmark_name = get_benchmark(args.init_params);
+    if (benchmark_name.empty()) { 
+        std::cerr << "Error: Could not read Benchmark name from init_params file: " << args.init_params << std::endl;
+        exit(1);
+    }
+    printf("Initial benchmark_name read from %s: %s\n", args.init_params, benchmark_name.c_str());
+  } else {
+    embedding = engine->design_space.get_init_embedding();
+    benchmark_name = "coremark"; // Default benchmark name if not specified
+  }
+#endif
+  init_uparam(embedding, engine->max_epoch);
+  engine->initial_embedding = embedding;
+  engine->visualize = args.enable_deg_visualize;
+  // engine->start_epoch(idx, benchmark_name);
+  engine->start_epoch(idx, benchmark_name);
+
 }
 
 Emulator::~Emulator() {
@@ -786,6 +968,173 @@ int Emulator::tick() {
     }
   }
 #endif // CONFIG_NO_DIFFTEST
+
+#ifdef CONDUCT_DSE
+    auto diff = difftest[0];
+    auto proxy = diff->proxy;
+    for (int i = 0; i < NUM_CORES; i++) {
+      if (dut_ptr->io_dse_reset_valid && !lastCycleDSEReset) {
+        printf("DSE reset start at pc: %lx\n", diff->get_dut()->commit[0].pc);
+        reset_vector = dut_ptr->io_dse_reset_vec;
+        lastCycleDSEReset = true;
+
+        // only calculate ipc for workloads
+        if (reset_vector == 0x10000000) {
+          printf("entering workload epoch\n");
+          deg_record = false;
+          auto trap = difftest[i]->get_trap_event();
+          uint64_t epoch = dut_ptr->io_dse_epoch;
+          uint64_t max_epoch = dut_ptr->io_dse_max_epoch;
+          printf("epoch: %ld\n", epoch);
+          printf("max epoch: %ld\n", max_epoch);
+
+          // calculate ppa
+          double ipc = perfprocess->get_ipc();
+          double cpi = perfprocess->get_cpi();
+
+          printf("IPC: %f\n", ipc);
+
+
+#ifdef SYNC_WITH_PYTHON
+          // if (epoch == 1) {
+          //     // 第一个epoch时创建新文件
+          //     ipc_file.open(filename, std::ios::out);
+          //     ipc_file << "Epoch,IPC,CPI" << std::endl;
+          // } else {
+          //     // 之后的epoch追加到文件末尾
+          //     ipc_file.open(filename, std::ios::app);
+          // }
+          
+          // if (ipc_file.is_open()) {
+          //     ipc_file << epoch << "," << ipc << "," << cpi << std::endl;
+          //     ipc_file.close();
+          // } else {
+          //     std::cerr << "无法打开文件: " << filename << std::endl;
+          // }
+
+          // std::ofstream ipc_file("ipc.rpt", std::ios::out | std::ios::app);
+          // if (ipc_file.is_open()) {
+          //   ipc_file << ipc << "," << cpi << std::endl;
+          //   ipc_file.close();
+          // } else {
+          //   std::cerr << "Failed to open IPC file." << std::endl;
+          // }
+        
+          // // perfprocess->get_simulation_stats(epoch);
+          // // engine->design_space.get_configs(embedding);
+          
+
+          // try {
+          //   if (fs::remove(embedding_path)) {
+          //       std::cout << "Embedding file deleted successfully." << std::endl;
+          //   }
+          // } catch (const fs::filesystem_error& err) {
+          //     std::cerr << "Error deleting embedding file: " << err.what() << std::endl;
+          // }
+
+          // std::cout << "[Simulation] Simulation finished, waiting for python..." << std::endl;
+          // std::cout << "Waiting for new embedding file..." << std::endl;
+          // while (!fs::exists(embedding_path)) {
+          //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          // }
+          // std::cout << "[Simulation] Python finished, start simulation..." << std::endl;
+  
+          benchmark_name = get_benchmark("embedding.txt");
+          printf("benchmark_name: %s\n", benchmark_name.c_str());
+
+          idx = get_idx("embedding.txt");
+
+          std::vector<int> embedding_new;
+          embedding_new = engine->design_space.get_embedding_from_file("embedding.txt");
+          engine->design_space.compare_embeddings(embedding, embedding_new);
+          embedding = embedding_new;
+          embedding_to_uparam(embedding);
+          deg_record_num = args.max_deg_instrs;
+          // engine->start_epoch(idx, benchmark_name);
+          // printf("Start epoch %s, %s\n", idx.c_str(), benchmark_name.c_str());
+#else
+          deg_record_num = args.max_deg_instrs;
+          engine->start_epoch(epoch + 1);
+          if (epoch == max_epoch) {
+            // compare initial and last embeddings
+            printf("Final embedding of microarch parameters after %d epochs:\n", max_epoch);
+            engine->design_space.compare_embeddings(engine->initial_embedding, embedding);
+            trapCode = STATE_GOODTRAP;
+            break;
+          }
+#endif
+
+
+        }
+      }
+      if (doDSEReset) {
+        doDSEReset = false;
+        printf("DSE reset finish at pc: %lx, reset vector: %lx\n", diff->get_dut()->commit[0].pc, reset_vector);
+        
+
+#ifndef CONFIG_NO_DIFFTEST
+        if (args.enable_diff) {
+          goldenmem_finish();
+        }
+#endif // CONFIG_NO_DIFFTEST
+        flash_finish();
+#ifndef CONFIG_NO_DIFFTEST
+        difftest_finish();
+#endif // CONFIG_NO_DIFFTEST
+
+        init_flash(args.flash_bin);
+        init_ram((benchmark_root_path + "/" + benchmark_name + ".bin").c_str(), ram_size);
+        difftest_init();
+        // if (args.trace_name) {
+        //   for (int i = 0; i < NUM_CORES; i++) {
+        //     difftest[i]->set_trace(args.trace_name, args.trace_is_read);
+        //   }
+        // }
+        init_device();
+        if (args.enable_diff) {
+          init_goldenmem();
+          init_nemuproxy(ref_ramsize);
+          proxy->ref_init(reset_vector);
+        }
+#ifdef CONDUCT_ARCH_EXPLORER
+        if (reset_vector == 0x80000000) {
+          printf("[Do DEG Record]\n");
+          if (deg_record_num > 0) {
+            deg_record = true;
+          }
+        }
+#endif
+        break;
+      }
+      if (lastCycleDSEReset && !dut_ptr->io_dse_reset_valid) {
+        lastCycleDSEReset = false;
+        doDSEReset = true;
+      }
+      if (deg_record) {
+        // perfprocess->update_deg();
+        int commit_count = perfprocess->update_deg_v2();
+        deg_record_num -= commit_count;
+        for (int i = 0; i < commit_count; i++) {
+          engine->step(perfprocess->get_trace(i).c_str());
+        }
+        if (deg_record_num <= 0) {
+          engine->finalize_deg();
+          deg_record = false;
+#ifndef SYNC_WITH_PYTHON
+          std::vector<int> embedding_new;
+          printf("[Do bottleneck_analysis]\n");
+          embedding_new = engine->bottleneck_analysis(embedding, "output_" + std::to_string(dut_ptr->io_dse_epoch));
+          printf("[Finish bottleneck_analysis]\n");
+          engine->design_space.compare_embeddings(embedding, embedding_new);
+          embedding = embedding_new;
+#endif
+        }
+      }
+    }
+#endif
+
+
+
   // assertions
   if (assert_count > 0) {
     Info("The simulation stopped. There might be some assertion failed.\n");
@@ -870,7 +1219,9 @@ int Emulator::tick() {
   }
 #endif // CONFIG_NO_DIFFTEST
 
+  // printf("[Emu] Cycle %lu\n", cycles);
   single_cycle();
+  // printf("[Emu] Cycle %lu finish\n", cycles);
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles--;
 #endif // CONFIG_NO_DIFFTEST
@@ -912,6 +1263,52 @@ int Emulator::tick() {
   }
 
   trapCode = difftest_nstep(step, args.enable_diff);
+
+  // workload finish before reaching dse_max_instr
+#ifdef CONDUCT_DSE
+    if (trapCode == STATE_GOODTRAP) {
+        auto trap = difftest[0]->get_trap_event();
+        uint64_t instrCnt = trap->instrCnt;
+        uint64_t cycleCnt = trap->cycleCnt;
+        uint64_t epoch = dut_ptr->io_dse_epoch;
+        uint64_t max_epoch = dut_ptr->io_dse_max_epoch; 
+        uint64_t dse_max_instr = dut_ptr->io_dse_max_instr;
+
+        if (instrCnt < dse_max_instr && epoch <= max_epoch) {
+          printf("Hit good trap at pc = 0x%lx, instrCnt = %ld, cycleCnt = %ld\n", trap->pc, instrCnt, cycleCnt);
+          double ipc = (double)instrCnt / (cycleCnt);
+          printf("epoch: %ld\n", epoch);
+          printf("ipc: %f\n", ipc);
+
+          printf("Core start to reset at pc = 0x%lx\n", trap->pc);
+          reset_vector = 0x10000000;
+          dut_ptr->io_dse_reset_vec = reset_vector;
+          reset_ncycles(10);
+          printf("Core reset complete\n");
+
+#ifndef CONFIG_NO_DIFFTEST
+          if (args.enable_diff) {
+            goldenmem_finish();
+          }
+#endif // CONFIG_NO_DIFFTEST
+          flash_finish();
+
+          init_flash(args.flash_bin);
+
+          init_ram((benchmark_root_path + "/" + benchmark_name + ".bin").c_str(), ram_size);
+          difftest_finish();
+          difftest_init();
+          init_device();
+          if (args.enable_diff) {
+            init_goldenmem();
+            init_nemuproxy(ref_ramsize);
+            proxy->ref_init(reset_vector);
+          }
+
+          trapCode = STATE_RUNNING;
+        }
+    }
+#endif
 
   if (trapCode != STATE_RUNNING) {
 #ifdef FUZZER_LIB

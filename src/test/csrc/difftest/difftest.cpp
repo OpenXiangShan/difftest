@@ -33,6 +33,8 @@
 
 Difftest **difftest = NULL;
 
+uint64_t reset_vector = FIRST_INST_ADDRESS;
+
 int difftest_init() {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_perfcnt_init();
@@ -617,13 +619,13 @@ int Difftest::do_instr_commit(int i) {
 void Difftest::do_first_instr_commit() {
   if (!has_commit && dut->commit[0].valid) {
 #ifndef BASIC_DIFFTEST_ONLY
-    if (dut->commit[0].pc != FIRST_INST_ADDRESS) {
+    if (dut->commit[0].pc != reset_vector) {
       return;
     }
 #endif
     Info("The first instruction of core %d has commited. Difftest enabled. \n", id);
     has_commit = 1;
-    nemu_this_pc = FIRST_INST_ADDRESS;
+    nemu_this_pc = reset_vector;
 
     proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
     simMemory->clone_on_demand(
@@ -635,7 +637,7 @@ void Difftest::do_first_instr_commit() {
     // Use a temp variable to store the current pc of dut
     uint64_t dut_this_pc = dut->commit[0].pc;
     // NEMU should always start at FIRST_INST_ADDRESS
-    dut->commit[0].pc = FIRST_INST_ADDRESS;
+    dut->commit[0].pc = reset_vector;
     proxy->regcpy(dut);
     dut->commit[0].pc = dut_this_pc;
     // Do not reconfig simulator 'proxy->update_config(&nemu_config)' here:
@@ -1509,7 +1511,7 @@ int Difftest::check_timeout() {
   uint64_t cycleCnt = get_trap_event()->cycleCnt;
   // check whether there're any commits since the simulation starts
   if (!has_commit && cycleCnt > last_commit + first_commit_limit) {
-    Info("The first instruction of core %d at 0x%lx does not commit after %lu cycles.\n", id, FIRST_INST_ADDRESS,
+    Info("The first instruction of core %d at 0x%lx does not commit after %lu cycles.\n", id, reset_vector,
          first_commit_limit);
     display();
     return 1;

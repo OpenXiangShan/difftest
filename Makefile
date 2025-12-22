@@ -118,7 +118,7 @@ FPGA_SIM_CSRC_DIR = $(abspath ./src/test/csrc/fpga_sim)
 FPGA_SIM_VSRC_DIR = $(abspath ./src/test/vsrc/fpga_sim)
 SIM_CXXFILES += $(shell find $(FPGA_SIM_CSRC_DIR) -name "*.cpp")
 SIM_CXXFLAGS += -I$(FPGA_SIM_CSRC_DIR) -DFPGA_SIM
-SIM_LDFLAGS  += -lrt
+SIM_LDFLAGS  += -lrt -lboost_filesystem -lboost_system
 SIM_VFLAGS   += +define+FPGA_SIM
 SIM_VSRC     += $(shell find $(FPGA_SIM_VSRC_DIR) -name "*.v" -or -name "*.sv")
 ifneq ($(ASYNC_CLK_2N), )
@@ -223,6 +223,19 @@ ifeq ($(WITH_RUNAHEAD),1)
 SIM_CXXFLAGS += -I$(abspath $(PLUGIN_CSRC_DIR)/runahead)
 SIM_CXXFILES += $(shell find $(PLUGIN_CSRC_DIR)/runahead -name "*.cpp")
 endif
+
+# DSE (Design Space Exploration) support
+SIM_CXXFLAGS += -I$(abspath $(PLUGIN_CSRC_DIR)/dse)
+SIM_CXXFLAGS += -I$(abspath $(PLUGIN_CSRC_DIR)/include)
+SIM_CXXFILES += $(shell find $(PLUGIN_CSRC_DIR)/dse -name "*.cpp")
+SIM_LDFLAGS  += -lboost_filesystem -lboost_system
+
+SIM_CXXFILES += $(BUILD_DIR)/HardenPerf.cpp
+SIM_CXXFLAGS += -I$(BUILD_DIR)
+
+# DEG (Dynamic Execution Graph) support
+SIM_CXXFLAGS += -I$(abspath $(PLUGIN_CSRC_DIR)/deg)
+SIM_CXXFILES += $(shell find $(PLUGIN_CSRC_DIR)/deg -name "*.cpp")
 
 # Check if XFUZZ is set
 ifeq ($(XFUZZ), 1)

@@ -40,6 +40,10 @@
 #include <verilated_vcd_c.h>
 #endif // ENABLE_FST
 #endif // VM_TRACE
+#include "perfprocess.h"
+#include "ArchExplorerEngine.h"
+
+namespace fs = boost::filesystem;
 
 struct EmuArgs {
   uint32_t reset_cycles = 50;
@@ -87,6 +91,9 @@ struct EmuArgs {
   bool dump_coverage = false;
   bool image_as_footprints = false;
   bool overwrite_nbytes_autoset = false;
+  const char *init_params = NULL;
+  uint64_t max_deg_instrs = 1000;
+  bool enable_deg_visualize = false;
 };
 
 class Emulator final : public DUT {
@@ -117,7 +124,22 @@ private:
   uint32_t lasttime_poll = 0;
   uint32_t elapsed_time;
 
+  // dse init
+  bool lastCycleDSEReset = false;
+  bool doDSEReset = false;
+  bool deg_record = false;
+  int deg_record_num = args.max_deg_instrs;
+  Perfprocess* perfprocess;
+  ArchExplorerEngine* engine = new ArchExplorerEngine();
+  std::vector<int> embedding;
+  std::string idx;
+  std::string benchmark_name;
+  std::string benchmark_root_path = "/nfs/home/wujiabin/work/arch-explorer-new/infras/benchmarks";
+  fs::path embedding_path = "embedding.txt";
+  fs::path ipc_path = "ipc.rpt";
+
   inline void reset_ncycles(size_t cycles);
+  inline void reset_dse_ncycles(size_t cycles);
   inline void single_cycle();
   void trigger_stat_dump();
   void display_trapinfo();
@@ -163,3 +185,7 @@ public:
 };
 
 #endif
+
+
+extern std::vector<uint64_t> getIOPerfCnts(VSimTop *dut_ptr);
+extern std::vector<std::string> getIOPerfNames();

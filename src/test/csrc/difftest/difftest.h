@@ -28,6 +28,8 @@
 #include "emu.h"
 #endif // FUZZING
 
+extern uint64_t reset_vector;
+
 enum {
   EX_IAM,       // instruction address misaligned
   EX_IAF,       // instruction address fault
