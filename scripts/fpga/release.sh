@@ -7,8 +7,9 @@ set -e
 
 CPU_DIR="$1"
 RELEASE_DIR="$2"
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 <CPU_PATH> <RELEASE_FOLDER>"
+RELEASE_SUFFIX="${3:-}"
+if [ $# -ne 2 ] && [ $# -ne 3]; then
+    echo "Usage: $0 <CPU_PATH> <RELEASE_FOLDER> [RELEASE_SUFFIX]"
     exit 1
 fi
 DIFF_HOME="$CPU_DIR/difftest"
@@ -64,6 +65,9 @@ fi
 
 DATE=$(date +"%Y%m%d")
 RELEASE_TAG="${DATE}_${CPU_NAME}_${CPU_CONFIG}_${DIFF_LEVEL}_${DIFF_CONFIG}"
+if [ -n "$RELEASE_SUFFIX" ]; then
+  RELEASE_TAG+="_${RELEASE_SUFFIX}"
+fi
 RELEASE_HOME="$CPU_DIR/$RELEASE_TAG"
 
 # ----------------------------------------------------------

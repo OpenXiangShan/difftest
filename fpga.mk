@@ -36,4 +36,4 @@ fpga-clean:
 
 RELEASE_DIR ?= $(NOOP_HOME)
 fpga-release:
-	bash ./scripts/fpga/release.sh $(NOOP_HOME) $(RELEASE_DIR)
+	bash ./scripts/fpga/release.sh $(NOOP_HOME) $(RELEASE_DIR) $(RELEASE_SUFFIX)
