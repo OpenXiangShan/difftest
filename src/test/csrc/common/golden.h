@@ -54,20 +54,6 @@ typedef union PageTableEntry {
   uint64_t val;
 } PTE;
 
-typedef union atpStruct {
-  struct {
-    uint64_t ppn : 44;
-    uint32_t asid : 16;
-    uint32_t mode : 4;
-  };
-  uint64_t val;
-} Satp, Hgatp;
-#define noS2xlate           0
-#define onlyStage1          1
-#define onlyStage2          2
-#define allStage            3
-#define VPNiSHFT(i)         (12 + 9 * (i))
-#define GVPNi(addr, i, max) (((addr) >> (9 * (i) + 12)) & ((i == 3 || (i == 2 && max == 2)) ? 0x7ff : 0x1ff))
-#define VPNi(vpn, i)        (((vpn) >> (9 * (i))) & 0x1ff)
-#define NAPOTSHFT           (12 + 4) // only support 64kb page
-#endif
+#define VPNi(vpn, i) (((vpn) >> (9 * (i))) & 0x1ff)
+
+#endif // __GOLDEN_H__

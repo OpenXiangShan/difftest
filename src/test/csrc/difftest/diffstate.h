@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include <queue>
+#include <unordered_set>
 
 class CommitTrace {
 public:
@@ -105,9 +106,39 @@ public:
 
 class DiffState {
 public:
+  int coreid;
+  uint64_t cycle_count = 0;
   bool has_progress = false;
   bool has_commit = false;
   uint64_t last_commit_cycle = 0;
+  bool has_trap = false;
+  uint64_t trap_code = 0;
+
+#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
+  int delayed_int[32] = {0};
+#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
+#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
+  int delayed_fp[32] = {0};
+#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
+
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  std::queue<DifftestStoreEvent> store_event_queue;
+#endif // CONFIG_DIFFTEST_STOREEVENT
+
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+  std::unordered_set<uint64_t> cmo_inval_event_set;
+#endif
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+  int commit_stamp = 0;
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+  std::queue<DifftestLoadEvent> load_event_queue;
+#endif // CONFIG_DIFFTEST_LOADEVENT
+#endif // CONFIG_DIFFTEST_SQUASH
+
+#ifdef DEBUG_REFILL
+  uint64_t track_instr = 0;
+#endif // DEBUG_REFILL
 
   bool dump_commit_trace = false;
 
@@ -130,8 +161,12 @@ public:
   };
   void display();
 
+  void raise_trap(int code) {
+    has_trap = 1;
+    trap_code = code;
+  }
+
 private:
-  int coreid;
   const bool use_spike;
 
   static const int DEBUG_GROUP_TRACE_SIZE = 16;
@@ -158,5 +193,7 @@ private:
     }
   }
 };
+
+extern uint64_t get_commit_data(const DiffTestState *state, int index);
 
 #endif // __DIFFSTATE_H__

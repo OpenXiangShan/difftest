@@ -17,6 +17,7 @@
 #ifndef __DIFFTEST_H__
 #define __DIFFTEST_H__
 
+#include "checkers.h"
 #include "common.h"
 #include "diffstate.h"
 #include "difftrace.h"
@@ -24,50 +25,10 @@
 #include "golden.h"
 #include "refproxy.h"
 #include <queue>
-#include <unordered_set>
+#include <vector>
 #ifdef FUZZING
 #include "emu.h"
 #endif // FUZZING
-
-enum {
-  EX_IAM,       // instruction address misaligned
-  EX_IAF,       // instruction address fault
-  EX_II,        // illegal instruction
-  EX_BP,        // breakpoint
-  EX_LAM,       // load address misaligned
-  EX_LAF,       // load address fault
-  EX_SAM,       // store/amo address misaligned
-  EX_SAF,       // store/amo address fault
-  EX_ECU,       // ecall from U-mode or VU-mode
-  EX_ECS,       // ecall from HS-mode
-  EX_ECVS,      // ecall from VS-mode, H-extention
-  EX_ECM,       // ecall from M-mode
-  EX_IPF,       // instruction page fault
-  EX_LPF,       // load page fault
-  EX_RS0,       // reserved
-  EX_SPF,       // store/amo page fault
-  EX_DT,        // double trap
-  EX_RS1,       // reserved
-  EX_SWC,       // software check
-  EX_HWE,       // hardware error
-  EX_IGPF = 20, // instruction guest-page fault, H-extention
-  EX_LGPF,      // load guest-page fault, H-extention
-  EX_VI,        // virtual instruction, H-extention
-  EX_SGPF       // store/amo guest-page fault, H-extention
-};
-
-#define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && f >= DEBUG_MEM_BASE && v)
-#define IS_LOAD_STORE(instr)   (((instr & 0x7f) == 0x03) || ((instr & 0x7f) == 0x23))
-#define IS_TRIGGERCSR(instr)   (((instr & 0x7f) == 0x73) && ((instr & (0xff0 << 20)) == (0x7a0 << 20)))
-#define IS_DEBUGCSR(instr)     (((instr & 0x7f) == 0x73) && ((instr & (0xffe << 20)) == (0x7b0 << 20))) // 7b0 and 7b1
-#ifdef DEBUG_MODE_DIFF
-#define DEBUG_MODE_SKIP(v, f, instr) DEBUG_MEM_REGION(v, f) && (IS_LOAD_STORE(instr) || IS_TRIGGERCSR(instr))
-#else
-#define DEBUG_MODE_SKIP(v, f, instr) false
-#endif
-#define PAGE_SHIFT 12
-#define PAGE_SIZE  (1ul << PAGE_SHIFT)
-#define PAGE_MASK  (PAGE_SIZE - 1)
 
 enum retire_inst_type {
   RET_NORMAL = 0,
@@ -95,24 +56,37 @@ typedef struct {
 
 class Difftest {
 public:
+  // Check whether DiffTest has produced any progress (step)
+  // When batch is enabled, the stuck limit should be scaled accordingly
+#ifdef CONFIG_DIFFTEST_BATCH
+  static const uint64_t stuck_limit = TimeoutChecker::stuck_commit_limit * CONFIG_DIFFTEST_BATCH_SIZE;
+#else
+  static const uint64_t stuck_limit = TimeoutChecker::stuck_commit_limit;
+#endif // CONFIG_DIFFTEST_BATCH
+
   DiffTestState *dut;
+  RefProxy *proxy = NULL;
+  WarmupInfo warmup_info;
 
   // Difftest public APIs for testbench
   // Its backend should be cross-platform (NEMU, Spike, ...)
   // Initialize difftest environments
   Difftest(int coreid);
+  void update_nemuproxy(int, size_t);
+  void init_checkers();
+
   ~Difftest();
-  REF_PROXY *proxy = NULL;
-  uint32_t num_commit = 0; // # of commits if made progress
-  WarmupInfo warmup_info;
+
   // Trigger a difftest checking procdure
   int step();
-  void update_nemuproxy(int, size_t);
+
   inline bool get_trap_valid() {
-    return dut->trap.hasTrap;
+    return dut->trap.hasTrap || state->has_trap;
   }
   inline int get_trap_code() {
-    if (dut->trap.code > STATE_FUZZ_COND && dut->trap.code < STATE_RUNNING) {
+    if (state->has_trap) {
+      return state->trap_code;
+    } else if (dut->trap.code > STATE_FUZZ_COND && dut->trap.code < STATE_RUNNING) {
       return STATE_BADTRAP;
     } else {
       return dut->trap.code;
@@ -134,7 +108,7 @@ public:
     if (difftrace) {
       int zone = 0;
       for (int i = 0; i < step; i++) {
-        difftrace->append(diffstate_buffer[id]->get(zone, i));
+        difftrace->append(diffstate_buffer[state->coreid]->get(zone, i));
       }
       zone = (zone + 1) % CONFIG_DIFFTEST_ZONESIZE;
     }
@@ -164,8 +138,8 @@ public:
   }
 
 #ifdef DEBUG_REFILL
-  void save_track_instr(uint64_t instr) {
-    track_instr = instr;
+  void set_track_instr(uint64_t instr) {
+    state->track_instr = instr;
   }
 #endif
 
@@ -195,120 +169,32 @@ public:
   }
 
 protected:
+  DiffState *state = NULL;
   DiffTrace<DiffTestState> *difftrace = nullptr;
 
-#ifdef CONFIG_DIFFTEST_BATCH
-  static const uint64_t commit_storage = CONFIG_DIFFTEST_BATCH_SIZE;
-#else
-  static const uint64_t commit_storage = 1;
-#endif // CONFIG_DIFFTEST_BATCH
-#ifdef CONFIG_DIFFTEST_SQUASH
-  static const uint64_t timeout_scale = 256;
-#else
-  static const uint64_t timeout_scale = 1;
-#endif // CONFIG_DIFFTEST_SQUASH
-#if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
-  static const uint64_t first_commit_limit = 1000;
-#elif defined(CPU_XIANGSHAN)
-  static const uint64_t first_commit_limit = 15000;
-#endif
-  static const uint64_t stuck_commit_limit = first_commit_limit * timeout_scale;
-
-public:
-  static const uint64_t stuck_limit = stuck_commit_limit * commit_storage;
-
-protected:
-  const uint64_t delay_wb_limit = 80;
-
-  int id;
+  static const uint64_t delay_wb_limit = 80;
+  uint32_t num_commit = 0; // # of commits if made progress
 
   // For compare the first instr pc of a commit group
   bool pc_mismatch = false;
-  uint64_t dut_commit_first_pc = 0;
-  uint64_t ref_commit_first_pc = 0;
+  uint64_t ref_commit_batch_pc = 0;
+  uint64_t dut_commit_batch_pc = 0;
 
-  uint64_t nemu_this_pc;
-  DiffState *state = NULL;
-#ifdef DEBUG_REFILL
-  uint64_t track_instr = 0;
-#endif
-
-#ifdef CONFIG_DIFFTEST_SQUASH
-  int commit_stamp = 0;
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-  std::queue<DifftestLoadEvent> load_event_queue;
-  void load_event_record();
-#endif // CONFIG_DIFFTEST_LOADEVENT
-#endif // CONFIG_DIFFTEST_SQUASH
-
+  std::vector<DiffTestChecker *> checkers;
+  ArchEventChecker *arch_event_checker = nullptr;
+  InstrCommitChecker *instr_commit_checker[CONFIG_DIFF_COMMIT_WIDTH] = {nullptr};
 #ifdef CONFIG_DIFFTEST_STOREEVENT
-  std::queue<DifftestStoreEvent> store_event_queue;
-  void store_event_record();
-#endif
-
-#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-  std::unordered_set<uint64_t> cmo_inval_event_set;
-  void cmo_inval_event_record();
-#endif
-
-  void update_last_commit() {
-    state->last_commit_cycle = get_trap_event()->cycleCnt;
-  }
-  int check_timeout();
-  int check_all();
-  void do_first_instr_commit();
-  void do_interrupt();
-  void do_exception();
-  int do_instr_commit(int index);
+  StoreChecker *store_checker = nullptr;
+#endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-  void do_load_check(int index);
-  void do_load_check(DifftestLoadEvent &load_event, bool regWen, uint64_t *refRegPtr, uint64_t commitData);
+  LoadChecker *load_checker[CONFIG_DIFF_LOAD_WIDTH] = {nullptr};
 #ifdef CONFIG_DIFFTEST_SQUASH
-  void do_load_check_squash();
+  LoadSquashChecker *load_squash_checker = nullptr;
 #endif // CONFIG_DIFFTEST_SQUASH
-#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  void do_vec_load_check(DifftestLoadEvent &load_event, uint8_t vecFirstLdest, uint64_t vecCommitData[]);
-#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 #endif // CONFIG_DIFFTEST_LOADEVENT
-  int do_store_check();
-  int do_refill_check(int cacheid);
-  int do_l1tlb_check();
-  int do_l2tlb_check();
-  int do_golden_memory_update();
 
-  inline uint64_t get_int_data(int i) {
-#if defined(CONFIG_DIFFTEST_PHYINTREGSTATE)
-    return dut->pregs_xrf.value[dut->commit[i].wpdest];
-#else
-    return dut->regs.xrf.value[dut->commit[i].wdest];
-#endif
-  }
+  int check_all();
 
-#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-  inline uint64_t get_fp_data(int i) {
-#if defined(CONFIG_DIFFTEST_PHYFPREGSTATE)
-    return dut->pregs_frf.value[dut->commit[i].wpdest];
-#else
-    return dut->regs.frf.value[dut->commit[i].wdest];
-#endif
-  }
-#endif
-
-  inline uint64_t get_commit_data(int i) {
-#if defined(CONFIG_DIFFTEST_COMMITDATA)
-    return dut->commit_data[i].data;
-#else
-#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
-    if (dut->commit[i].fpwen) {
-      return get_fp_data(i);
-    } else
-#endif // CONFIG_DIFFTEST_ARCHFPREGSTATE
-      return get_int_data(i);
-#endif // CONFIG_DIFFTEST_COMMITDATA
-  }
-  inline bool has_wfi() {
-    return dut->trap.hasWFI;
-  }
   inline bool in_disambiguation_state() {
     static bool was_found = false;
 #ifdef FUZZING
@@ -325,31 +211,9 @@ protected:
     return was_found;
   }
 
-#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  int delayed_int[32] = {0};
-#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  int delayed_fp[32] = {0};
-#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   int update_delayed_writeback();
   int apply_delayed_writeback();
 
-  void raise_trap(int trapCode);
-#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  void do_non_reg_interrupt_pending();
-#endif
-#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  void do_mhpmevent_overflow();
-#endif
-#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  void do_raise_critical_error();
-#endif
-#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  void do_sync_aia();
-#endif
-#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  void do_sync_custom_mflushpwr();
-#endif
 #ifdef CONFIG_DIFFTEST_REPLAY
   struct {
     bool in_replay = false;
