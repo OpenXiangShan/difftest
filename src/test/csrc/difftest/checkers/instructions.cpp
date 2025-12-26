@@ -40,7 +40,7 @@ int FirstInstrCommitChecker::check(const DifftestInstrCommit &probe) {
   // If this is main sim thread, simulator has its own initial config
   // If this process is checkpoint wakeuped, simulator's config has already been updated,
   // do not override it.
-  return 0;
+  return STATE_OK;
 }
 
 int TimeoutChecker::check(const DifftestTrapEvent &probe) {
@@ -49,8 +49,7 @@ int TimeoutChecker::check(const DifftestTrapEvent &probe) {
   if (!state->has_commit && cycleCnt > state->last_commit_cycle + first_commit_limit) {
     Info("The first instruction of core %d at 0x%lx does not commit after %lu cycles.\n", state->coreid,
          FIRST_INST_ADDRESS, first_commit_limit);
-    // display();
-    return 1;
+    return STATE_ERROR;
   }
 
   // NOTE: the WFI instruction may cause the CPU to halt for more than `stuck_limit` cycles.
@@ -68,11 +67,11 @@ int TimeoutChecker::check(const DifftestTrapEvent &probe) {
         state->coreid, stuck_commit_limit, stuck_commit_limit);
     Info("Let REF run one more instruction.\n");
     proxy->ref_exec(1);
-    // display();
-    return 1;
+    proxy->sync();
+    return STATE_DIFF;
   }
 
-  return 0;
+  return STATE_OK;
 }
 
 #define DEBUG_MEM_REGION(v, f) (f <= (DEBUG_MEM_BASE + 0x1000) && f >= DEBUG_MEM_BASE && v)
@@ -116,12 +115,11 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
 #ifdef FUZZING
   // isExit
   if (probe.special & 0x2) {
-    dut->trap.hasTrap = 1;
-    dut->trap.code = STATE_SIM_EXIT;
+    state->raise_trap(STATE_SIM_EXIT);
 #ifdef FUZZER_LIB
     stats.exit_code = SimExitCode::sim_exit;
 #endif // FUZZER_LIB
-    return 0;
+    return STATE_TRAP;
   }
 #endif // FUZZING
 
@@ -138,11 +136,9 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
                     nullptr;
     if (status) {
       if (status[probe.wdest]) {
-        // display();
         Info("The delayed register %s has already been delayed for %d cycles\n",
              (probe.rfwen ? regs_name_int : regs_name_fp)[probe.wdest], status[probe.wdest]);
-        // raise_trap(STATE_ABORT);
-        return 1;
+        return STATE_DIFF;
       }
       status[probe.wdest] = 1;
     }
@@ -150,7 +146,7 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
 
 #ifdef DEBUG_MODE_DIFF
   if (spike_valid() && (IS_DEBUGCSR(commit_instr) || IS_TRIGGERCSR(commit_instr))) {
-    Info("s0 is %016lx ", dut->regs.gpr[8]);
+    Info("s0 is %016lx ", dut.regs.xpr[8]);
     Info("pc is %lx %s\n", commit_pc, spike_dasm(commit_instr));
   }
 #endif
@@ -161,7 +157,7 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
     // We use the physical register file to get wdata
     proxy->skip_one(probe.isRVC, (probe.rfwen && probe.wdest != 0), probe.fpwen, probe.vecwen, probe.wdest,
                     commit_data);
-    return 0;
+    return STATE_OK;
   }
 
   // Default: single step exec
@@ -170,5 +166,5 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
     proxy->ref_exec(1);
   }
 
-  return 0;
+  return STATE_OK;
 }

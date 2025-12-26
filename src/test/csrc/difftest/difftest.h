@@ -56,11 +56,14 @@ typedef struct {
 
 class Difftest {
 public:
+  // Check whether DiffTest has produced any progress (step)
+  // When batch is enabled, the stuck limit should be scaled accordingly
 #ifdef CONFIG_DIFFTEST_BATCH
   static const uint64_t stuck_limit = TimeoutChecker::stuck_commit_limit * CONFIG_DIFFTEST_BATCH_SIZE;
 #else
   static const uint64_t stuck_limit = TimeoutChecker::stuck_commit_limit;
 #endif // CONFIG_DIFFTEST_BATCH
+
   DiffTestState *dut;
   RefProxy *proxy = NULL;
   WarmupInfo warmup_info;
@@ -78,10 +81,12 @@ public:
   int step();
 
   inline bool get_trap_valid() {
-    return dut->trap.hasTrap;
+    return dut->trap.hasTrap || state->has_trap;
   }
   inline int get_trap_code() {
-    if (dut->trap.code > STATE_FUZZ_COND && dut->trap.code < STATE_RUNNING) {
+    if (state->has_trap) {
+      return state->trap_code;
+    } else if (dut->trap.code > STATE_FUZZ_COND && dut->trap.code < STATE_RUNNING) {
       return STATE_BADTRAP;
     } else {
       return dut->trap.code;
@@ -172,8 +177,8 @@ protected:
 
   // For compare the first instr pc of a commit group
   bool pc_mismatch = false;
-  uint64_t dut_commit_first_pc = 0;
-  uint64_t ref_commit_first_pc = 0;
+  uint64_t ref_commit_batch_pc = 0;
+  uint64_t dut_commit_batch_pc = 0;
 
   std::vector<DiffTestChecker *> checkers;
   ArchEventChecker *arch_event_checker = nullptr;

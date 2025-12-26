@@ -30,9 +30,35 @@ int LrScChecker::check(const DifftestLrScEvent &probe) {
   struct SyncState sync;
   sync.sc_fail = !probe.success;
   proxy->uarchstatus_sync((uint64_t *)&sync);
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_LRSCEVENT
+
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+bool NonRegInterruptPendingChecker::get_valid(const DifftestNonRegInterruptPendingEvent &probe) {
+  return probe.valid;
+}
+
+void NonRegInterruptPendingChecker::clear_valid(DifftestNonRegInterruptPendingEvent &probe) {
+  probe.valid = 0;
+}
+
+int NonRegInterruptPendingChecker::check(const DifftestNonRegInterruptPendingEvent &probe) {
+  struct NonRegInterruptPending ip;
+  ip.platformIRPMeip = probe.platformIRPMeip;
+  ip.platformIRPMtip = probe.platformIRPMtip;
+  ip.platformIRPMsip = probe.platformIRPMsip;
+  ip.platformIRPSeip = probe.platformIRPSeip;
+  ip.platformIRPStip = probe.platformIRPStip;
+  ip.platformIRPVseip = probe.platformIRPVseip;
+  ip.platformIRPVstip = probe.platformIRPVstip;
+  ip.fromAIAMeip = probe.fromAIAMeip;
+  ip.fromAIASeip = probe.fromAIASeip;
+  ip.localCounterOverflowInterruptReq = probe.localCounterOverflowInterruptReq;
+  proxy->non_reg_interrupt_pending(ip);
+  return STATE_OK;
+}
+#endif // CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
 
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
 bool AiaChecker::get_valid(const DifftestSyncAIAEvent &probe) {
@@ -49,7 +75,7 @@ int AiaChecker::check(const DifftestSyncAIAEvent &probe) {
   aia.vstopei = probe.vstopei;
   aia.hgeip = probe.hgeip;
   proxy->sync_aia(aia);
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_SYNCAIAEVENT
 
@@ -64,7 +90,7 @@ void MhpmeventOverflowChecker::clear_valid(DifftestMhpmeventOverflowEvent &probe
 
 int MhpmeventOverflowChecker::check(const DifftestMhpmeventOverflowEvent &probe) {
   proxy->mhpmevent_overflow(probe.mhpmeventOverflow);
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
 
@@ -79,6 +105,6 @@ void CustomMflushpwrChecker::clear_valid(DifftestSyncCustomMflushpwrEvent &probe
 
 int CustomMflushpwrChecker::check(const DifftestSyncCustomMflushpwrEvent &probe) {
   proxy->sync_custom_mflushpwr(probe.l2FlushDone);
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT

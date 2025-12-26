@@ -30,7 +30,7 @@ int LoadChecker::check(const DifftestLoadEvent &probe) {
 
 #ifdef CONFIG_DIFFTEST_SQUASH
   state->load_event_queue.push(probe);
-  return 0;
+  return STATE_OK;
 #else
   if (probe.isVLoad) {
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
@@ -45,7 +45,7 @@ int LoadChecker::check(const DifftestLoadEvent &probe) {
     return do_vec_load_check(probe, dut.commit[index].wdest, commitData);
 #else
     Info("isVLoad should never be set if vector is not enabled\n");
-    return 1;
+    return STATE_ERROR;
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
   }
 
@@ -78,7 +78,7 @@ int LoadSquashChecker::check() {
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
 int LoadChecker::do_vec_load_check(const DifftestLoadEvent &probe, uint8_t firstLdest, const uint64_t *commitData) {
   if (!enable_vec_load_goldenmem_check) {
-    return 0;
+    return STATE_OK;
   }
 
   // ===============================================================
@@ -112,7 +112,7 @@ int LoadChecker::do_vec_load_check(const DifftestLoadEvent &probe, uint8_t first
 
     if (vec_goldenmem_regPtr == nullptr) {
       Info("Vector Load comparison failed and no consistency check with golden mem was performed.\n");
-      return 1;
+      return STATE_ERROR;
     }
 
     for (int vdidx = 0; vdidx < vdNum; vdidx++) {
@@ -140,11 +140,11 @@ int LoadChecker::do_vec_load_check(const DifftestLoadEvent &probe, uint8_t first
       proxy->sync(true);
     } else {
       Info("Vector Load register and golden memory mismatch\n");
-      return 1;
+      return STATE_ERROR;
     }
   }
 
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 
@@ -186,7 +186,7 @@ int LoadChecker::do_load_check(const DifftestLoadEvent &probe, bool regWen, uint
             len = 8;
             break;
 
-          default: Info("Unknown fuOpType: 0x%x\n", probe.opType); return 1;
+          default: Info("Unknown fuOpType: 0x%x\n", probe.opType); return STATE_ERROR;
         }
       } else if (probe.isAtomic) {
         if (probe.opType % 2 == 0) {
@@ -239,7 +239,7 @@ int LoadChecker::do_load_check(const DifftestLoadEvent &probe, bool regWen, uint
         uint64_t buf;
         difftest[(NUM_CORES - 1) - state->coreid]->proxy->memcpy(probe.paddr, &buf, len, DIFFTEST_TO_DUT);
         Info("---    content: %lx\n", buf);
-        return 1;
+        return STATE_ERROR;
 #else
         proxy->ref_memcpy(probe.paddr, &golden, len, DUT_TO_REF);
         if (regWen) {
@@ -251,7 +251,7 @@ int LoadChecker::do_load_check(const DifftestLoadEvent &probe, bool regWen, uint
     }
   }
 
-  return 0;
+  return STATE_OK;
 }
 
 #endif // CONFIG_DIFFTEST_LOADEVENT

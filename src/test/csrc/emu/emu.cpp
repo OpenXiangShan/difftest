@@ -519,8 +519,6 @@ int Emulator::tick() {
     step = dut_ptr->get_difftest_step();
   }
 
-  // Check whether DiffTest has produced any progress (step)
-  // When batch is enabled, the stuck limit should be scaled accordingly
   static uint64_t stuck_timer = 0;
   if (step) {
     stuck_timer = 0;

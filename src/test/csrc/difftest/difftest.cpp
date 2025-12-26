@@ -83,8 +83,8 @@ int difftest_nstep(int step, bool enable_diff) {
 #endif // CONFIG_DIFFTEST_ZONESIZE
   for (int i = 0; i < step; i++) {
     if (enable_diff) {
-      if (difftest_step())
-        return STATE_ABORT;
+      if (int ret = difftest_step())
+        return ret;
     } else {
       difftest_set_dut();
     }
@@ -105,18 +105,24 @@ void difftest_set_dut() {
     difftest[i]->dut = diffstate_buffer[i]->next();
   }
 }
+
+// difftest_step returns a trap code
 int difftest_step() {
   difftest_set_dut();
 #if defined(CONFIG_DIFFTEST_QUERY) && !defined(CONFIG_DIFFTEST_BATCH)
   difftest_query_step();
 #endif // CONFIG_DIFFTEST_QUERY
   for (int i = 0; i < NUM_CORES; i++) {
-    int ret = difftest[i]->step();
-    if (ret) {
-      return ret;
+    if (int ret = difftest[i]->step()) {
+      switch (ret) {
+        case DiffTestChecker::STATE_DIFF: difftest[i]->display();
+        case DiffTestChecker::STATE_ERROR: return STATE_ABORT;
+        default: // STATE_TRAP
+          return difftest[i]->get_trap_code();
+      }
     }
   }
-  return 0;
+  return DiffTestChecker::STATE_OK;
 }
 
 void difftest_trace_read() {
@@ -446,9 +452,9 @@ inline int Difftest::check_all() {
   } else {
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
     if (dut->commit[0].valid) {
-      dut_commit_first_pc = dut->commit[0].pc;
-      ref_commit_first_pc = proxy->state.pc;
-      if (dut_commit_first_pc != ref_commit_first_pc) {
+      dut_commit_batch_pc = dut->commit[0].pc;
+      ref_commit_batch_pc = proxy->state.pc;
+      if (dut_commit_batch_pc != ref_commit_batch_pc) {
         pc_mismatch = true;
       }
     }
@@ -456,8 +462,8 @@ inline int Difftest::check_all() {
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
         num_commit += 1 + dut->commit[i].nFused;
-        if (instr_commit_checker[i]->step()) {
-          return 1;
+        if (int ret = instr_commit_checker[i]->step()) {
+          return ret;
         }
 #ifdef CONFIG_DIFFTEST_LOADEVENT
 #ifdef CONFIG_DIFFTEST_SQUASH
@@ -468,20 +474,20 @@ inline int Difftest::check_all() {
 #endif // CONFIG_DIFFTEST_LOADEVENT
 #ifdef CONFIG_DIFFTEST_STOREEVENT
         // check is the same for all checkers
-        if (store_checker->step()) {
-          return 1;
+        if (int ret = store_checker->step()) {
+          return ret;
         }
 #endif // CONFIG_DIFFTEST_STOREEVENT
       }
     }
   }
 
-  if (update_delayed_writeback()) {
-    return 1;
+  if (int ret = update_delayed_writeback()) {
+    return ret;
   }
 
   if (!state->has_progress) {
-    return 0;
+    return DiffTestChecker::STATE_OK;
   }
 
   proxy->sync();
@@ -491,28 +497,23 @@ inline int Difftest::check_all() {
   }
 
   if (apply_delayed_writeback()) {
-    return 1;
+    return DiffTestChecker::STATE_DIFF;
   }
 
   if (proxy->compare(dut) || pc_mismatch) {
 #ifdef FUZZING
     if (in_disambiguation_state()) {
       Info("Mismatch detected with a disambiguation state at pc = 0x%lx.\n", dut->trap.pc);
-      return 0;
+      state->raise_trap(STATE_FUZZ_COND) return DiffTestChecker::STATE_TRAP;
     }
 #endif
-    display();
-    proxy->display(dut);
-    if (pc_mismatch) {
-      REPORT_DIFFERENCE("pc", ref_commit_first_pc, ref_commit_first_pc, dut_commit_first_pc);
-    }
 #ifdef FUZZER_LIB
     stats.exit_code = SimExitCode::difftest;
 #endif // FUZZER_LIB
-    return 1;
+    return DiffTestChecker::STATE_DIFF;
   }
 
-  return 0;
+  return DiffTestChecker::STATE_OK;
 }
 
 int Difftest::update_delayed_writeback() {
@@ -523,10 +524,8 @@ int Difftest::update_delayed_writeback() {
       if (delay->valid) {                                                                          \
         delay->valid = false;                                                                      \
         if (!delayed[delay->address]) {                                                            \
-          display();                                                                               \
           Info("Delayed writeback at %s has already been committed\n", regs_name[delay->address]); \
-          state->raise_trap(STATE_ABORT);                                                          \
-          return 1;                                                                                \
+          return DiffTestChecker::STATE_DIFF;                                                      \
         }                                                                                          \
         if (delay->nack) {                                                                         \
           if (delayed[delay->address] > delay_wb_limit) {                                          \
@@ -546,7 +545,7 @@ int Difftest::update_delayed_writeback() {
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   CHECK_DELAYED_WB(regs_fp_delayed, state->delayed_fp, CONFIG_DIFF_REGS_FP_DELAYED_WIDTH, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  return 0;
+  return DiffTestChecker::STATE_OK;
 }
 
 int Difftest::apply_delayed_writeback() {
@@ -556,10 +555,8 @@ int Difftest::apply_delayed_writeback() {
     for (int i = 0; i < 32; i++) {                                           \
       if (delayed[i]) {                                                      \
         if (delayed[i] > m) {                                                \
-          display();                                                         \
           Info("%s is delayed for more than %d cycles.\n", regs_name[i], m); \
-          state->raise_trap(STATE_ABORT);                                    \
-          return 1;                                                          \
+          return DiffTestChecker::STATE_DIFF;                                \
         }                                                                    \
         delayed[i]++;                                                        \
         dut->regs.reg_type.value[i] = proxy->state.reg_type.value[i];        \
@@ -573,7 +570,7 @@ int Difftest::apply_delayed_writeback() {
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   APPLY_DELAYED_WB(state->delayed_fp, frf, regs_name_fp)
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  return 0;
+  return DiffTestChecker::STATE_OK;
 }
 
 void Difftest::display() {
@@ -583,6 +580,12 @@ void Difftest::display() {
   fflush(stdout);
   proxy->ref_reg_display();
   Info("privilegeMode: %lu\n", dut->regs.csr.privilegeMode);
+
+  // show different register values
+  proxy->display(dut);
+  if (pc_mismatch) {
+    REPORT_DIFFERENCE("pc", ref_commit_batch_pc, ref_commit_batch_pc, dut_commit_batch_pc);
+  }
 }
 
 void Difftest::display_stats() {

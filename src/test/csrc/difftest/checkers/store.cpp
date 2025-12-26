@@ -26,7 +26,7 @@ void StoreRecorder::clear_valid(DifftestStoreEvent &probe) {
 
 int StoreRecorder::check(const DifftestStoreEvent &probe) {
   state->store_event_queue.push(probe);
-  return 0;
+  return STATE_OK;
 }
 
 int StoreChecker::check() {
@@ -34,7 +34,7 @@ int StoreChecker::check() {
     auto &probe = state->store_event_queue.front();
 #ifdef CONFIG_DIFFTEST_SQUASH
     if (probe.stamp != commit_stamp)
-      return 0;
+      return STATE_OK;
 #endif // CONFIG_DIFFTEST_SQUASH
     auto addr = probe.addr;
     auto data = probe.data;
@@ -44,12 +44,10 @@ int StoreChecker::check() {
 #ifdef FUZZING
       if (in_disambiguation_state()) {
         Info("Store mismatch detected with a disambiguation state at pc = 0x%lx.\n", dut->trap.pc);
-        return 0;
+        return STATE_OK;
       }
 #endif
       uint64_t pc = probe.pc;
-      // TODO: display();
-
       Info("\n==============  Store Commit Event (Core %d)  ==============\n", state->coreid);
       proxy->get_store_event_other_info(&pc);
       Info("Mismatch for store commits \n");
@@ -58,12 +56,12 @@ int StoreChecker::check() {
            probe.data, probe.mask, probe.pc, probe.robidx);
 
       state->store_event_queue.pop();
-      return 1;
+      return STATE_ERROR;
     }
 
     state->store_event_queue.pop();
   }
 
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_STOREEVENT

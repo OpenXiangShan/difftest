@@ -74,7 +74,7 @@ int ArchEventChecker::do_interrupt(const DifftestArchEvent &probe) {
   intrDeleg.irToVS = probe.irToVS;
   proxy->intr_delegate(intrDeleg);
   proxy->raise_intr(probe.interrupt | (1ULL << 63));
-  return 0;
+  return STATE_OK;
 }
 
 int ArchEventChecker::do_exception(const DifftestArchEvent &probe) {
@@ -110,12 +110,11 @@ int ArchEventChecker::do_exception(const DifftestArchEvent &probe) {
   if (probe.exceptionPC == lastExceptionPC) {
     if (sameExceptionPCCount >= 5) {
       Info("Found infinite loop at exception_pc %lx. Exiting.\n", probe.exceptionPC);
-      dut->trap.hasTrap = 1;
-      dut->trap.code = STATE_FUZZ_COND;
+      state->raise_trap(STATE_FUZZ_COND);
 #ifdef FUZZER_LIB
       stats.exit_code = SimExitCode::exception_loop;
 #endif // FUZZER_LIB
-      return;
+      return STATE_TRAP;
     }
     sameExceptionPCCount++;
   }
@@ -125,34 +124,8 @@ int ArchEventChecker::do_exception(const DifftestArchEvent &probe) {
   lastExceptionPC = probe.exceptionPC;
 #endif // FUZZING
 
-  return 0;
+  return STATE_OK;
 }
-
-#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-bool NonRegInterruptPendingChecker::get_valid(const DifftestNonRegInterruptPendingEvent &probe) {
-  return probe.valid;
-}
-
-void NonRegInterruptPendingChecker::clear_valid(DifftestNonRegInterruptPendingEvent &probe) {
-  probe.valid = 0;
-}
-
-int NonRegInterruptPendingChecker::check(const DifftestNonRegInterruptPendingEvent &probe) {
-  struct NonRegInterruptPending ip;
-  ip.platformIRPMeip = probe.platformIRPMeip;
-  ip.platformIRPMtip = probe.platformIRPMtip;
-  ip.platformIRPMsip = probe.platformIRPMsip;
-  ip.platformIRPSeip = probe.platformIRPSeip;
-  ip.platformIRPStip = probe.platformIRPStip;
-  ip.platformIRPVseip = probe.platformIRPVseip;
-  ip.platformIRPVstip = probe.platformIRPVstip;
-  ip.fromAIAMeip = probe.fromAIAMeip;
-  ip.fromAIASeip = probe.fromAIASeip;
-  ip.localCounterOverflowInterruptReq = probe.localCounterOverflowInterruptReq;
-  proxy->non_reg_interrupt_pending(ip);
-  return 0;
-}
-#endif // CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
 
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
 bool CriticalErrorChecker::get_valid(const DifftestCriticalErrorEvent &probe) {
@@ -171,10 +144,9 @@ int CriticalErrorChecker::check(const DifftestCriticalErrorEvent &probe) {
          state->coreid);
     state->raise_trap(STATE_GOODTRAP);
   } else {
-    // display();
     Info("Core %d dump: DUT critical_error diff REF \n", state->coreid);
     state->raise_trap(STATE_ABORT);
   }
-  return 1;
+  return STATE_TRAP;
 }
 #endif

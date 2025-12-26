@@ -28,6 +28,11 @@ public:
 
   virtual int step() = 0;
 
+  static const int STATE_OK = 0;
+  static const int STATE_DIFF = 1;
+  static const int STATE_ERROR = 2;
+  static const int STATE_TRAP = 3;
+
 protected:
   DiffState *state;
   RefProxy *proxy;

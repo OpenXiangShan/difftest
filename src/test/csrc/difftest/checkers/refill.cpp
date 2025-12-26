@@ -30,7 +30,7 @@ int RefillChecker::check(const DifftestRefillEvent &probe) {
   static int delay = 0;
   delay = delay * 2;
   if (delay > 16) {
-    return 1;
+    return STATE_ERROR;
   }
   static uint64_t last_valid_addr = 0;
   char buf[512];
@@ -41,7 +41,7 @@ int RefillChecker::check(const DifftestRefillEvent &probe) {
     last_valid_addr = paddr;
     if (!in_pmem(paddr)) {
       // speculated illegal mem access should be ignored
-      return 0;
+      return STATE_OK;
     }
     for (int i = 0; i < 8; i++) {
       read_goldenmem(paddr + i * 8, &buf, 8, &flag_buf);
@@ -64,7 +64,7 @@ int RefillChecker::check(const DifftestRefillEvent &probe) {
           update_goldenmem(paddr, (void *)probe.data, 0xffffffffffffffffUL, 64);
           proxy->ref_memcpy(paddr, (void *)probe.data, 64, DUT_TO_REF);
           state->cmo_inval_event_set.erase(paddr);
-          return 0;
+          return STATE_OK;
         } else {
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
@@ -84,7 +84,7 @@ int RefillChecker::check(const DifftestRefillEvent &probe) {
             Info("\n");
             update_goldenmem(paddr, (void *)probe.data, 0xffffffffffffffffUL, 64);
             proxy->ref_memcpy(paddr, (void *)probe.data, 64, DUT_TO_REF);
-            return 0;
+            return STATE_OK;
           }
 #endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
           Info("cacheid=%d,mask=%x,realpaddr=0x%lx: Refill test failed!\n", index, probe.mask, realpaddr);
@@ -102,7 +102,7 @@ int RefillChecker::check(const DifftestRefillEvent &probe) {
           if (delay == 0) {
             delay = 1;
           }
-          return 0;
+          return STATE_OK;
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
         }
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
@@ -110,7 +110,7 @@ int RefillChecker::check(const DifftestRefillEvent &probe) {
     }
   }
 
-  return 0;
+  return STATE_OK;
 }
 
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
@@ -124,7 +124,7 @@ void CmoInvalRecorder::clear_valid(DifftestCMOInvalEvent &probe) {
 
 int CmoInvalRecorder::check(const DifftestCMOInvalEvent &probe) {
   state->cmo_inval_event_set.insert(probe.addr);
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 

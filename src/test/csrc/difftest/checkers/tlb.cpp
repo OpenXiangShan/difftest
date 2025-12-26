@@ -149,7 +149,7 @@ int L1TLBChecker::check(const DifftestL1TLBEvent &probe) {
     Info("  REF commits perm 0x%02x, level %d, pf %d\n", pte.difftest_perm, difftest_level, !pte.difftest_v);
   }
 
-  return 0;
+  return STATE_OK;
 }
 
 #endif // CONFIG_DIFFTEST_L1TLBEVENT
@@ -227,11 +227,11 @@ int L2TLBChecker::check(const DifftestL2TLBEvent &probe) {
         if (hasS2xlate)
           Info("      s2_ppn 0x%lx, g_perm 0x%02x, g_level %d, gpf %d\n", probe.s2ppn, probe.g_perm, probe.g_level,
                probe.gpf);
-        return 1;
+        return STATE_ERROR;
       }
     }
   }
 
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_L2TLBEVENT

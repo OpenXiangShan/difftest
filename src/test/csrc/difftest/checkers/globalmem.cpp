@@ -41,7 +41,7 @@ void GoldenMemoryInit::clear_valid(DifftestTrapEvent &probe) {
 
 int GoldenMemoryInit::check(const DifftestTrapEvent &probe) {
   dumpGoldenMem("Init", state->track_instr, probe.cycleCnt);
-  return 0;
+  return STATE_OK;
 }
 
 #ifdef CONFIG_DIFFTEST_SBUFFEREVENT
@@ -58,7 +58,7 @@ int SbufferChecker::check(const DifftestSbufferEvent &probe) {
   if (probe.addr == state->track_instr) {
     dumpGoldenMem("Store", state->track_instr, state->cycle_count);
   }
-  return 0;
+  return STATE_OK;
 }
 
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
@@ -79,7 +79,7 @@ int UncacheMmStoreChecker::check(const DifftestUncacheMMStoreEvent &probe) {
   if (probe.addr == state->track_instr) {
     dumpGoldenMem("Uncache MM Store", state->track_instr, state->cycle_count);
   }
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
 
@@ -100,7 +100,7 @@ int AtomicChecker::check(const DifftestAtomicEvent &probe) {
   // We need to do atmoic operations here so as to update goldenMem
   if (!(probe.mask == 0xf || probe.mask == 0xf0 || probe.mask == 0xff || probe.mask == 0xffff)) {
     Info("Unrecognized probe.mask: %lx\n", probe.mask);
-    return 1;
+    return STATE_ERROR;
   }
 
   if (probe.mask == 0xff) {
@@ -114,7 +114,7 @@ int AtomicChecker::check(const DifftestAtomicEvent &probe) {
     if (mem != t && probe.fuop != 007 && probe.fuop != 003) { // ignore sc_d & lr_d
       Info("Core %d atomic instr mismatch goldenMem, mem: 0x%lx, t: 0x%lx, op: 0x%x, addr: 0x%lx\n", state->coreid, mem,
            t, probe.fuop, probe.addr);
-      return 1;
+      return STATE_ERROR;
     }
 
     switch (probe.fuop) {
@@ -124,7 +124,7 @@ int AtomicChecker::check(const DifftestAtomicEvent &probe) {
       case 006:
       case 007:
         if (t == 1)
-          return 0;
+          return STATE_OK;
         ret = rs;
         break;
       case 012:
@@ -170,7 +170,7 @@ int AtomicChecker::check(const DifftestAtomicEvent &probe) {
     if (mem != t && probe.fuop != 006 && probe.fuop != 002) { // ignore sc_w & lr_w
       Info("Core %d atomic instr mismatch goldenMem, rawmem: 0x%lx mem: 0x%x, t: 0x%x, op: 0x%x, addr: 0x%lx\n",
            state->coreid, mem_raw, mem, t, probe.fuop, probe.addr);
-      return 1;
+      return STATE_ERROR;
     }
     switch (probe.fuop) {
       case 002:
@@ -179,7 +179,7 @@ int AtomicChecker::check(const DifftestAtomicEvent &probe) {
       case 006:
       case 007:
         if (t == 1)
-          return 0;
+          return STATE_OK;
         ret = rs;
         break;
       case 012:
@@ -217,7 +217,7 @@ int AtomicChecker::check(const DifftestAtomicEvent &probe) {
     if (meml != probe.out[0] || memh != probe.out[1]) {
       Info("Core %d atomic instr mismatch goldenMem, mem: 0x%lx 0x%lx, t: 0x%lx 0x%lx, op: 0x%x, addr: 0x%lx\n",
            state->coreid, memh, meml, probe.out[1], probe.out[0], probe.fuop, probe.addr);
-      return 1;
+      return STATE_ERROR;
     }
     switch (probe.fuop) {
       case 054: {
@@ -231,9 +231,9 @@ int AtomicChecker::check(const DifftestAtomicEvent &probe) {
     update_goldenmem(probe.addr, &retl, 0xff, 8);
     update_goldenmem(probe.addr + 8, &reth, 0xff, 8);
   } else {
-    return 1;
+    return STATE_ERROR;
   }
 
-  return 0;
+  return STATE_OK;
 }
 #endif // CONFIG_DIFFTEST_ATOMICEVENT
