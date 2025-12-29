@@ -996,48 +996,32 @@ int Emulator::tick() {
 
 
 #ifdef SYNC_WITH_PYTHON
-          // if (epoch == 1) {
-          //     // 第一个epoch时创建新文件
-          //     ipc_file.open(filename, std::ios::out);
-          //     ipc_file << "Epoch,IPC,CPI" << std::endl;
-          // } else {
-          //     // 之后的epoch追加到文件末尾
-          //     ipc_file.open(filename, std::ios::app);
-          // }
-          
-          // if (ipc_file.is_open()) {
-          //     ipc_file << epoch << "," << ipc << "," << cpi << std::endl;
-          //     ipc_file.close();
-          // } else {
-          //     std::cerr << "无法打开文件: " << filename << std::endl;
-          // }
-
-          // std::ofstream ipc_file("ipc.rpt", std::ios::out | std::ios::app);
-          // if (ipc_file.is_open()) {
-          //   ipc_file << ipc << "," << cpi << std::endl;
-          //   ipc_file.close();
-          // } else {
-          //   std::cerr << "Failed to open IPC file." << std::endl;
-          // }
+          std::ofstream ipc_file("ipc.rpt", std::ios::out | std::ios::app);
+          if (ipc_file.is_open()) {
+            ipc_file << ipc << "," << cpi << std::endl;
+            ipc_file.close();
+          } else {
+            std::cerr << "Failed to open IPC file." << std::endl;
+          }
         
-          // // perfprocess->get_simulation_stats(epoch);
-          // // engine->design_space.get_configs(embedding);
+          perfprocess->get_simulation_stats(epoch);
+          engine->design_space.get_configs(embedding);
           
 
-          // try {
-          //   if (fs::remove(embedding_path)) {
-          //       std::cout << "Embedding file deleted successfully." << std::endl;
-          //   }
-          // } catch (const fs::filesystem_error& err) {
-          //     std::cerr << "Error deleting embedding file: " << err.what() << std::endl;
-          // }
+          try {
+            if (fs::remove(embedding_path)) {
+                std::cout << "Embedding file deleted successfully." << std::endl;
+            }
+          } catch (const fs::filesystem_error& err) {
+              std::cerr << "Error deleting embedding file: " << err.what() << std::endl;
+          }
 
-          // std::cout << "[Simulation] Simulation finished, waiting for python..." << std::endl;
-          // std::cout << "Waiting for new embedding file..." << std::endl;
-          // while (!fs::exists(embedding_path)) {
-          //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-          // }
-          // std::cout << "[Simulation] Python finished, start simulation..." << std::endl;
+          std::cout << "[Simulation] Simulation finished, waiting for python..." << std::endl;
+          std::cout << "Waiting for new embedding file..." << std::endl;
+          while (!fs::exists(embedding_path)) {
+              std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          }
+          std::cout << "[Simulation] Python finished, start simulation..." << std::endl;
   
           benchmark_name = get_benchmark("embedding.txt");
           printf("benchmark_name: %s\n", benchmark_name.c_str());
@@ -1097,12 +1081,12 @@ int Emulator::tick() {
           proxy->ref_init(reset_vector);
         }
 #ifdef CONDUCT_ARCH_EXPLORER
-        if (reset_vector == 0x80000000) {
-          printf("[Do DEG Record]\n");
-          if (deg_record_num > 0) {
-            deg_record = true;
-          }
-        }
+        // if (reset_vector == 0x80000000) {
+        //   printf("[Do DEG Record]\n");
+        //   if (deg_record_num > 0) {
+        //     deg_record = true;
+        //   }
+        // }
 #endif
         break;
       }

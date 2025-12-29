@@ -234,127 +234,127 @@ int Perfprocess::update_deg_v2() {
 bool Perfprocess::get_simulation_stats(long int dse_epoch) {
   // get perf counters
   uint64_t BPWrong = find_perfCnt("BPWrong");
-  uint64_t commitUop = find_perfCnt("commitUop");
-  uint64_t rob_reads = find_perfCnt("rob_reads");
-  uint64_t rob_writes = find_perfCnt("rob_writes");
-  uint64_t rename_reads = find_perfCnt("rename_reads");
-  uint64_t rename_writes = find_perfCnt("rename_writes");
-  uint64_t fp_rename_reads = find_perfCnt("fp_rename_reads");
-  uint64_t fp_rename_writes = find_perfCnt("fp_rename_writes");
-  uint64_t intdqreads = find_perfCnt("intdqreads");
-  uint64_t intdqwrites = find_perfCnt("intdqwrites");
-  uint64_t issue_num = find_perfCnt("issue_num");
+  // uint64_t commitUop = find_perfCnt("commitUop");
+  // uint64_t rob_reads = find_perfCnt("rob_reads");
+  // uint64_t rob_writes = find_perfCnt("rob_writes");
+  // uint64_t rename_reads = find_perfCnt("rename_reads");
+  // uint64_t rename_writes = find_perfCnt("rename_writes");
+  // uint64_t fp_rename_reads = find_perfCnt("fp_rename_reads");
+  // uint64_t fp_rename_writes = find_perfCnt("fp_rename_writes");
+  // uint64_t intdqreads = find_perfCnt("intdqreads");
+  // uint64_t intdqwrites = find_perfCnt("intdqwrites");
+  // uint64_t issue_num = find_perfCnt("issue_num");
   uint64_t clock_cycle = find_perfCnt("clock_cycle");
-  uint64_t commitInstr = find_perfCnt("commitInstr");
-  uint64_t commitInstrBranch = find_perfCnt("commitInstrBranch");
-  uint64_t jmp_instr_cnt = find_perfCnt("jmp_instr_cnt");
-  uint64_t div_instr_cnt = find_perfCnt("div_instr_cnt");
-  uint64_t fdiv_fsqrt_instr_cnt = find_perfCnt("fdiv/fsqrt_instr_cnt");
-  uint64_t int_to_float_instr_cnt = find_perfCnt("int_to_float_instr_cnt");
-  uint64_t alu_instr_cnt = find_perfCnt("alu_instr_cnt");
-  uint64_t store_instr_cnt = find_perfCnt("store_instr_cnt");
-  uint64_t csr_instr_cnt = find_perfCnt("csr_instr_cnt");
-  uint64_t load_instr_cnt = find_perfCnt("load_instr_cnt");
-  uint64_t bku_instr_cnt = find_perfCnt("bku_instr_cnt");
-  uint64_t fence_instr_cnt = find_perfCnt("fence_instr_cnt");
-  uint64_t fmisc_instr_cnt = find_perfCnt("fmisc_instr_cnt");
-  uint64_t fmac_instr_cnt = find_perfCnt("fmac_instr_cnt");
-  uint64_t fmac_instr_cnt_fma = find_perfCnt("fmac_instr_cnt_fma");
-  uint64_t mul_instr_cnt = find_perfCnt("mul_instr_cnt");
-  uint64_t mou_instr_cnt = find_perfCnt("mou_instr_cnt");
-  uint64_t intRegfileReads = find_perfCnt("intRegfileReads");
-  uint64_t intRegfileWrites = find_perfCnt("intRegfileWrites");
-  uint64_t fpRegfileReads = find_perfCnt("fpRegfileReads");
-  uint64_t fpRegfileWrites = find_perfCnt("fpRegfileWrites");
-  uint64_t intAluAccess = find_perfCnt("intAluAccess");
-  uint64_t fpuAccess = find_perfCnt("fpuAccess");
-  uint64_t mulAccess = find_perfCnt("mulAccess");
-  uint64_t access_itlb = find_perfCnt("access_itlb");
-  uint64_t miss_itlb = find_perfCnt("miss_itlb");
-  uint64_t access_ldtlb = find_perfCnt("access_ldtlb");
-  uint64_t miss_ldtlb = find_perfCnt("miss_ldtlb");
-  uint64_t access_sttlb = find_perfCnt("access_sttlb");
-  uint64_t miss_sttlb = find_perfCnt("miss_sttlb");
-  uint64_t replace_itlb = find_perfCnt("replace_itlb");
-  uint64_t replace_ldtlb = find_perfCnt("replace_ldtlb");
-  uint64_t replace_sttlb = find_perfCnt("replace_sttlb");
-  uint64_t icache_read_access = find_perfCnt("ICache_read_access");
-  uint64_t icache_read_miss = find_perfCnt("ICache_read_miss");
-  uint64_t icache_conflit = find_perfCnt("ICache_conflit");
-  uint64_t dcache_read_access = find_perfCnt("dcache_read_access");
-  uint64_t dcache_read_miss = find_perfCnt("dcache_read_miss");
-  uint64_t dcache_write_access = find_perfCnt("dcache_write_access");
-  uint64_t dcache_write_miss = find_perfCnt("dcache_write_miss");
-  uint64_t dcache_conflit = find_perfCnt("dcache_conflit");
-  uint64_t btb_read_access = find_perfCnt("btb_read_access");
-  uint64_t btb_write_access = find_perfCnt("btb_write_access");
-  uint64_t l2_read_access = find_perfCnt("l2_read_access");
-  uint64_t l2_read_miss = find_perfCnt("l2_read_miss");
-  uint64_t l2_write_access = find_perfCnt("l2_write_access");
-  uint64_t l2_write_miss = find_perfCnt("l2_write_miss");
-  uint64_t l2_conflit = find_perfCnt("l2_conflit");
+  // uint64_t commitInstr = find_perfCnt("commitInstr");
+  // uint64_t commitInstrBranch = find_perfCnt("commitInstrBranch");
+  // uint64_t jmp_instr_cnt = find_perfCnt("jmp_instr_cnt");
+  // uint64_t div_instr_cnt = find_perfCnt("div_instr_cnt");
+  // uint64_t fdiv_fsqrt_instr_cnt = find_perfCnt("fdiv/fsqrt_instr_cnt");
+  // uint64_t int_to_float_instr_cnt = find_perfCnt("int_to_float_instr_cnt");
+  // uint64_t alu_instr_cnt = find_perfCnt("alu_instr_cnt");
+  // uint64_t store_instr_cnt = find_perfCnt("store_instr_cnt");
+  // uint64_t csr_instr_cnt = find_perfCnt("csr_instr_cnt");
+  // uint64_t load_instr_cnt = find_perfCnt("load_instr_cnt");
+  // uint64_t bku_instr_cnt = find_perfCnt("bku_instr_cnt");
+  // uint64_t fence_instr_cnt = find_perfCnt("fence_instr_cnt");
+  // uint64_t fmisc_instr_cnt = find_perfCnt("fmisc_instr_cnt");
+  // uint64_t fmac_instr_cnt = find_perfCnt("fmac_instr_cnt");
+  // uint64_t fmac_instr_cnt_fma = find_perfCnt("fmac_instr_cnt_fma");
+  // uint64_t mul_instr_cnt = find_perfCnt("mul_instr_cnt");
+  // uint64_t mou_instr_cnt = find_perfCnt("mou_instr_cnt");
+  // uint64_t intRegfileReads = find_perfCnt("intRegfileReads");
+  // uint64_t intRegfileWrites = find_perfCnt("intRegfileWrites");
+  // uint64_t fpRegfileReads = find_perfCnt("fpRegfileReads");
+  // uint64_t fpRegfileWrites = find_perfCnt("fpRegfileWrites");
+  // uint64_t intAluAccess = find_perfCnt("intAluAccess");
+  // uint64_t fpuAccess = find_perfCnt("fpuAccess");
+  // uint64_t mulAccess = find_perfCnt("mulAccess");
+  // uint64_t access_itlb = find_perfCnt("access_itlb");
+  // uint64_t miss_itlb = find_perfCnt("miss_itlb");
+  // uint64_t access_ldtlb = find_perfCnt("access_ldtlb");
+  // uint64_t miss_ldtlb = find_perfCnt("miss_ldtlb");
+  // uint64_t access_sttlb = find_perfCnt("access_sttlb");
+  // uint64_t miss_sttlb = find_perfCnt("miss_sttlb");
+  // uint64_t replace_itlb = find_perfCnt("replace_itlb");
+  // uint64_t replace_ldtlb = find_perfCnt("replace_ldtlb");
+  // uint64_t replace_sttlb = find_perfCnt("replace_sttlb");
+  // uint64_t icache_read_access = find_perfCnt("ICache_read_access");
+  // uint64_t icache_read_miss = find_perfCnt("ICache_read_miss");
+  // uint64_t icache_conflit = find_perfCnt("ICache_conflit");
+  // uint64_t dcache_read_access = find_perfCnt("dcache_read_access");
+  // uint64_t dcache_read_miss = find_perfCnt("dcache_read_miss");
+  // uint64_t dcache_write_access = find_perfCnt("dcache_write_access");
+  // uint64_t dcache_write_miss = find_perfCnt("dcache_write_miss");
+  // uint64_t dcache_conflit = find_perfCnt("dcache_conflit");
+  // uint64_t btb_read_access = find_perfCnt("btb_read_access");
+  // uint64_t btb_write_access = find_perfCnt("btb_write_access");
+  // uint64_t l2_read_access = find_perfCnt("l2_read_access");
+  // uint64_t l2_read_miss = find_perfCnt("l2_read_miss");
+  // uint64_t l2_write_access = find_perfCnt("l2_write_access");
+  // uint64_t l2_write_miss = find_perfCnt("l2_write_miss");
+  // uint64_t l2_conflit = find_perfCnt("l2_conflit");
   // uint64_t memory_access = find_perfCnt("memory_access");
   // uint64_t memory_write = find_perfCnt("memory_write");
   
   // do some calculations
-  uint64_t int_instructions = alu_instr_cnt + div_instr_cnt + mul_instr_cnt + jmp_instr_cnt;
-  uint64_t fp_instructions = fdiv_fsqrt_instr_cnt + fmisc_instr_cnt + fmac_instr_cnt + fmac_instr_cnt_fma;
-  uint64_t access_dtlb = access_ldtlb + access_sttlb;
-  uint64_t miss_dtlb = miss_ldtlb + miss_sttlb;
-  uint64_t replace_dtlb = replace_ldtlb + replace_sttlb;
+  // uint64_t int_instructions = alu_instr_cnt + div_instr_cnt + mul_instr_cnt + jmp_instr_cnt;
+  // uint64_t fp_instructions = fdiv_fsqrt_instr_cnt + fmisc_instr_cnt + fmac_instr_cnt + fmac_instr_cnt_fma;
+  // uint64_t access_dtlb = access_ldtlb + access_sttlb;
+  // uint64_t miss_dtlb = miss_ldtlb + miss_sttlb;
+  // uint64_t replace_dtlb = replace_ldtlb + replace_sttlb;
 
   // output
   std::ostringstream stats;
   stats << "dse_epoch: " << dse_epoch << std::endl
         << "total_cycles: " << clock_cycle << std::endl
-        << "total_instructions: " << issue_num << std::endl
-        << "int_instructions: " << int_instructions << std::endl
-        << "fp_instructions: " << fp_instructions << std::endl
-        << "branch_instructions: " << commitInstrBranch << std::endl
-        << "load_instructions: " << load_instr_cnt << std::endl
-        << "store_instructions: " << store_instr_cnt << std::endl
-        << "committed_instructions: " << commitUop << std::endl
-        << "committed_int_instructions: " << int_instructions << std::endl
-        << "committed_fp_instructions: " << fp_instructions << std::endl
-        << "ROB_reads: " << rob_reads << std::endl
-        << "ROB_writes: " << rob_writes << std::endl
-        << "rename_reads: " << rename_reads << std::endl
-        << "rename_writes: " << rename_writes << std::endl
-        << "fp_rename_reads: " << fp_rename_reads << std::endl
-        << "fp_rename_writes: " << fp_rename_writes << std::endl
-        << "intRegfileReads: " << intRegfileReads << std::endl
-        << "intRegfileWrites: " << intRegfileWrites << std::endl
-        << "fpRegfileReads: " << fpRegfileReads << std::endl
-        << "fpRegfileWrites: " << fpRegfileWrites << std::endl
-        << "intAluAccess: " << intAluAccess << std::endl
-        << "fpuAccess: " << fpuAccess << std::endl
-        << "mulAccess: " << mulAccess << std::endl
-        << "access_itlb: " << access_itlb << std::endl
-        << "miss_itlb: " << miss_itlb << std::endl
-        << "access_dtlb: " << access_dtlb << std::endl
-        << "miss_dtlb: " << miss_dtlb << std::endl
-        << "replace_itlb: " << replace_itlb << std::endl
-        << "replace_dtlb: " << replace_dtlb << std::endl
-        << "icache_read_access: " << icache_read_access << std::endl
-        << "icache_read_miss: " << icache_read_miss << std::endl
-        << "icache_conflit: " << icache_conflit << std::endl
-        << "dcache_read_access: " << dcache_read_access << std::endl
-        << "dcache_read_miss: " << dcache_read_miss << std::endl
-        << "dcache_write_access: " << dcache_write_access << std::endl
-        << "dcache_write_miss: " << dcache_write_miss << std::endl
-        << "dcache_conflit: " << dcache_conflit << std::endl
-        << "btb_read_access: " << btb_read_access << std::endl
-        << "btb_write_access: " << btb_write_access << std::endl
-        << "l2_read_access: " << l2_read_access << std::endl
-        << "l2_read_misses: " << l2_read_miss << std::endl
-        << "l2_write_access: " << l2_write_access << std::endl
-        << "l2_write_misses: " << l2_write_miss << std::endl
-        << "l2_conflit: " << l2_conflit << std::endl
-        << "branch_mispredictions: " << BPWrong << std::endl
-        << "intdqreads: " << intdqreads << std::endl
-        << "intdqwrites: " << intdqwrites << std::endl
-        << "memory_access: " << 0 << std::endl
-        << "memory_write: " << 0 << std::endl;
+        // << "total_instructions: " << issue_num << std::endl
+        // << "int_instructions: " << int_instructions << std::endl
+        // << "fp_instructions: " << fp_instructions << std::endl
+        // << "branch_instructions: " << commitInstrBranch << std::endl
+        // << "load_instructions: " << load_instr_cnt << std::endl
+        // << "store_instructions: " << store_instr_cnt << std::endl
+        // << "committed_instructions: " << commitUop << std::endl
+        // << "committed_int_instructions: " << int_instructions << std::endl
+        // << "committed_fp_instructions: " << fp_instructions << std::endl
+        // << "ROB_reads: " << rob_reads << std::endl
+        // << "ROB_writes: " << rob_writes << std::endl
+        // << "rename_reads: " << rename_reads << std::endl
+        // << "rename_writes: " << rename_writes << std::endl
+        // << "fp_rename_reads: " << fp_rename_reads << std::endl
+        // << "fp_rename_writes: " << fp_rename_writes << std::endl
+        // << "intRegfileReads: " << intRegfileReads << std::endl
+        // << "intRegfileWrites: " << intRegfileWrites << std::endl
+        // << "fpRegfileReads: " << fpRegfileReads << std::endl
+        // << "fpRegfileWrites: " << fpRegfileWrites << std::endl
+        // << "intAluAccess: " << intAluAccess << std::endl
+        // << "fpuAccess: " << fpuAccess << std::endl
+        // << "mulAccess: " << mulAccess << std::endl
+        // << "access_itlb: " << access_itlb << std::endl
+        // << "miss_itlb: " << miss_itlb << std::endl
+        // << "access_dtlb: " << access_dtlb << std::endl
+        // << "miss_dtlb: " << miss_dtlb << std::endl
+        // << "replace_itlb: " << replace_itlb << std::endl
+        // << "replace_dtlb: " << replace_dtlb << std::endl
+        // << "icache_read_access: " << icache_read_access << std::endl
+        // << "icache_read_miss: " << icache_read_miss << std::endl
+        // << "icache_conflit: " << icache_conflit << std::endl
+        // << "dcache_read_access: " << dcache_read_access << std::endl
+        // << "dcache_read_miss: " << dcache_read_miss << std::endl
+        // << "dcache_write_access: " << dcache_write_access << std::endl
+        // << "dcache_write_miss: " << dcache_write_miss << std::endl
+        // << "dcache_conflit: " << dcache_conflit << std::endl
+        // << "btb_read_access: " << btb_read_access << std::endl
+        // << "btb_write_access: " << btb_write_access << std::endl
+        // << "l2_read_access: " << l2_read_access << std::endl
+        // << "l2_read_misses: " << l2_read_miss << std::endl
+        // << "l2_write_access: " << l2_write_access << std::endl
+        // << "l2_write_misses: " << l2_write_miss << std::endl
+        // << "l2_conflit: " << l2_conflit << std::endl
+        << "branch_mispredictions: " << BPWrong << std::endl;
+        // << "intdqreads: " << intdqreads << std::endl
+        // << "intdqwrites: " << intdqwrites << std::endl
+        // << "memory_access: " << 0 << std::endl
+        // << "memory_write: " << 0 << std::endl;
 
   std::ofstream stats_file("stats.txt", std::ios::trunc);
   if (stats_file.is_open()) {
