@@ -504,7 +504,8 @@ inline int Difftest::check_all() {
 #ifdef FUZZING
     if (in_disambiguation_state()) {
       Info("Mismatch detected with a disambiguation state at pc = 0x%lx.\n", dut->trap.pc);
-      state->raise_trap(STATE_FUZZ_COND) return DiffTestChecker::STATE_TRAP;
+      state->raise_trap(STATE_FUZZ_COND);
+      return DiffTestChecker::STATE_TRAP;
     }
 #endif
 #ifdef FUZZER_LIB
