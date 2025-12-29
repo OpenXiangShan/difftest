@@ -20,119 +20,130 @@ import chisel3._
 import chisel3.util._
 import difftest.gateway.FpgaDiffIO
 
-class PacketBuffer(val data_width: Int, val pkt_num: Int) extends Module {
-  val addr_width = log2Ceil(pkt_num)
-  val wr = IO(Input(new Bundle {
-    val en = Bool()
-    val addr = UInt(addr_width.W)
-    val data = UInt(data_width.W)
-  }))
-  val rd = IO(new Bundle {
-    val addr = Input(UInt(addr_width.W))
-    val data = Output(UInt(data_width.W))
-  })
-
-  def write(en: Bool, addr: UInt, data: UInt): Unit = {
-    wr.en := en
-    wr.addr := addr
-    wr.data := data
-  }
-  def read(addr: UInt): UInt = {
-    rd.addr := addr
-    rd.data
-  }
-  val block_width = 4000
-  val block_num = data_width / block_width
-  val rd_data_vec = Seq.tabulate(block_num) { idx =>
-    val (hi, lo) = ((idx + 1) * block_width - 1, idx * block_width)
-    val ram = SyncReadMem(pkt_num, UInt(block_width.W))
-    when(wr.en) {
-      ram.write(wr.addr, wr.data(hi, lo))
-    }
-    ram.read(rd.addr)
-  }
-  rd.data := Cat(rd_data_vec.reverse)
-}
-
 class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module {
   val io = IO(new Bundle {
-    val clock = Input(Clock())
+    val rd_clock = Input(Clock()) // Read clock
     val reset = Input(Bool())
     val difftest = Input(new FpgaDiffIO(difftest_width))
     val clock_enable = Output(Bool())
     val axis = new AXI4Stream(axis_width)
   })
-  val numRange = 2 // ping-pong
-  val numPacket = 8 // packet in each range
-  val totalPacket = numRange * numPacket
+
+  val numPacketPerRange = 8 // packet in each range
   val pkt_id_w = 8 // pkt = (difftest_data, pkt_id)
   val axis_send_len = (difftest_width + pkt_id_w + axis_width - 1) / axis_width
+  val fifo_depth = 16
+  val fifo_addr_width = log2Ceil(fifo_depth)
 
-  val inTransfer = RegInit(false.B)
+  // FIFO implementation using SyncReadMem
+  val fifo_ram = SyncReadMem(fifo_depth, UInt(difftest_width.W))
+
+  // Define counters that are accessible in both clock domains
+  val wr_cnt = RegInit(0.U(64.W))
+  val rd_cnt = withClock(io.rd_clock) { RegInit(0.U(64.W)) }
+
+  // Write clock domain (using default clock)
+  val wr_ptr = RegInit(0.U(fifo_addr_width.W))
+  val rd_cnt_sync1 = RegInit(0.U(64.W))
+  val rd_cnt_sync2 = RegInit(0.U(64.W))
+  val wr_occupancy = Reg(UInt(64.W)) // Occupancy in write clock domain
+
+  // Synchronize read counter to write clock domain
+  rd_cnt_sync1 := RegNext(rd_cnt, 0.U)
+  rd_cnt_sync2 := RegNext(rd_cnt_sync1, 0.U)
+
+  // Calculate occupancy (in write clock domain)
+  wr_occupancy := wr_cnt - rd_cnt_sync2
+
+  // Write side (difftest side)
   val pktID = RegInit(0.U(pkt_id_w.W))
+  val wrRangeCounter = RegInit(0.U(3.W)) // 0 to 7
+  val fifo_not_full = wr_occupancy < (fifo_depth - 1).U
+  val wr_en = io.difftest.enable && fifo_not_full
 
-  val wrPkt = RegInit(0.U(8.W))
-  val rdPkt = RegInit(0.U(8.W))
-  // Sync Read, addr for next read
-  val nextRdPkt = Mux(!inTransfer, rdPkt, Mux(rdPkt === (totalPacket - 1).U, 0.U, rdPkt + 1.U))
-  def isRangeLast(pkt: UInt): Bool = Seq.tabulate(numRange)(i => pkt === ((i + 1) * numPacket - 1).U).reduce(_ || _)
-  val wrRangeLast = isRangeLast(wrPkt)
-  val rdRangeLast = isRangeLast(rdPkt)
-
-  val buf_wen = io.difftest.enable & io.clock_enable
-  val buf = Module(new PacketBuffer(difftest_width, totalPacket))
-  buf.clock := clock
-  buf.reset := reset
-  buf.write(buf_wen, wrPkt, io.difftest.data)
-  val buf_rdata = buf.read(nextRdPkt)
-
-  // Ping-pong ctrl
-  val range_vnum = RegInit(0.U(8.W))
-  val range_inc = buf_wen && wrRangeLast
-  val range_clear = io.axis.fire && io.axis.bits.last
-  when(range_inc && !range_clear) {
-    range_vnum := range_vnum + 1.U
-  }.elsewhen(!range_inc && range_clear) {
-    range_vnum := range_vnum - 1.U
+  // Store incoming data
+  when(wr_en) {
+    fifo_ram.write(wr_ptr, io.difftest.data)
+    wrRangeCounter := Mux(wrRangeCounter === (numPacketPerRange - 1).U, 0.U, wrRangeCounter + 1.U)
+    wr_cnt := wr_cnt + 1.U // Increment write counter
   }
 
-  // Backpressure
-  io.clock_enable := range_vnum =/= numRange.U
-
-  // Write
-  when(buf_wen) {
-    wrPkt := Mux(wrPkt === (totalPacket - 1).U, 0.U, wrPkt + 1.U)
+  // Increment write pointer
+  when(wr_en) {
+    wr_ptr := wr_ptr + 1.U
   }
 
-  // Read
-  val mix_data = RegInit(0.U((difftest_width + pkt_id_w).W))
-  val sendCnt = RegInit(0.U(8.W))
-  val sendLast = sendCnt === (axis_send_len - 1).U
-  io.axis.valid := inTransfer
-  io.axis.bits.data := mix_data(axis_width - 1, 0)
-  io.axis.bits.last := rdRangeLast && sendLast
+  // Increment packet ID when starting a new range
+  when(wr_en && wrRangeCounter === (numPacketPerRange - 1).U) {
+    pktID := pktID + 1.U
+  }
 
-  when(inTransfer) {
-    when(io.axis.fire) {
-      when(sendLast) {
+  // Backpressure based on FIFO space - only consider FIFO occupancy
+  io.clock_enable := fifo_not_full
+
+  // Read clock domain
+  withClock(io.rd_clock) {
+    val rd_ptr = RegInit(0.U(fifo_addr_width.W))
+    val wr_cnt_sync1 = RegInit(0.U(64.W))
+    val wr_cnt_sync2 = RegInit(0.U(64.W))
+    val rd_occupancy = Reg(UInt(64.W)) // Occupancy in read clock domain
+
+    // Synchronize write counter to read clock domain
+    wr_cnt_sync1 := RegNext(wr_cnt, 0.U)
+    wr_cnt_sync2 := RegNext(wr_cnt_sync1, 0.U)
+
+    // Calculate occupancy (in read clock domain)
+    rd_occupancy := wr_cnt_sync2 - rd_cnt
+
+    val inTransfer = RegInit(false.B)
+    val mix_data = RegInit(0.U((difftest_width + pkt_id_w).W))
+    val sendCnt = RegInit(0.U(log2Ceil(axis_send_len).W))
+    val sendLast = sendCnt === (axis_send_len - 1).U
+    val counter = RegInit(0.U(3.W)) // 0 to 7
+    val currentPktID = RegInit(0.U(pkt_id_w.W))
+    val sendPacketEnd = counter === (numPacketPerRange - 1).U
+    // Read from FIFO
+    val fifo_out = fifo_ram.read(rd_ptr)
+
+    // Counter for throttling debug prints
+    // Start transfer when we have data available
+    when(!inTransfer) {
+      when(rd_occupancy >= numPacketPerRange.U) {
+        mix_data := Cat(fifo_out, currentPktID) // First data in range
+        rd_ptr := rd_ptr + 1.U
+        rd_cnt := rd_cnt + 1.U // Increment read counter
+        // counter := 0.U  // 0~7
+        inTransfer := true.B
         sendCnt := 0.U
-        rdPkt := nextRdPkt
-        when(rdRangeLast) {
-          inTransfer := false.B
+      }
+    }.elsewhen(inTransfer) {
+      when(io.axis.fire) {
+        when(sendLast) {
+          sendCnt := 0.U
+          when(sendPacketEnd) {
+            // Last data in range, finish transfer
+            inTransfer := false.B
+            counter := 0.U
+            currentPktID := currentPktID + 1.U // Increment ID for next range
+          }.otherwise {
+            // Read next data in range
+            mix_data := Cat(fifo_out, currentPktID)
+            rd_ptr := rd_ptr + 1.U
+            rd_cnt := rd_cnt + 1.U // Increment read counter
+            counter := counter + 1.U
+          }
         }.otherwise {
-          mix_data := Cat(buf_rdata, 0.U(pkt_id_w.W))
+          // Still sending beats of current data
+          sendCnt := sendCnt + 1.U
+          mix_data := mix_data >> axis_width
         }
-      }.otherwise {
-        sendCnt := sendCnt + 1.U
-        mix_data := mix_data >> axis_width
       }
     }
-  }.otherwise { // Idle
-    when(range_vnum =/= 0.U) {
-      mix_data := Cat(buf_rdata, pktID) // first pkt in buffer
-      pktID := pktID + 1.U
-      inTransfer := true.B
-    }
+
+    // AXI output
+    io.axis.valid := inTransfer
+    io.axis.bits.data := mix_data(axis_width - 1, 0)
+    io.axis.bits.last := inTransfer && sendLast && sendPacketEnd
   }
 }
 
@@ -144,11 +155,27 @@ class HostEndpoint(
     val difftest = Input(new FpgaDiffIO(diffWidth))
     val to_host_axis = new AXI4Stream(axisWidth)
     val clock_enable = Output(Bool())
+    val pcie_clock = Input(Clock())
   })
+
+  // Instantiate the converter module
   val diff2axis = Module(new Difftest2AXIs(diffWidth, axisWidth))
-  diff2axis.io.clock := clock
+
+  // Connect clock and reset signals
+  diff2axis.io.rd_clock := io.pcie_clock
   diff2axis.io.reset := reset
-  diff2axis.io.difftest := io.difftest
-  io.to_host_axis <> diff2axis.io.axis
+
+  // Handle cross-clock domain data transfer
+  // Difftest input domain (local clock)
+  withClock(clock) {
+    diff2axis.io.difftest := io.difftest
+  }
+
+  // AXI-Stream output domain (PCIe clock)
+  withClock(io.pcie_clock) {
+    io.to_host_axis <> diff2axis.io.axis
+  }
+
+  // Clock enable output (can be used in either domain, but connecting in current module's domain)
   io.clock_enable := diff2axis.io.clock_enable
 }
