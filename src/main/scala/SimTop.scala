@@ -90,7 +90,8 @@ trait HasDiffTestInterfaces extends ImplicitClock with ImplicitReset { this: Raw
 }
 
 // Top-level module for DiffTest simulation. Will be created by DifftestModule.top
-class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Module {
+class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix: Option[String]) extends Module {
+  override def desiredName: String = modPrefix.getOrElse("") + super.desiredName
   val cpu = Module(cpuGen)
   cpu.dutClock := clock
   cpu.dutReset := reset.asTypeOf(cpu.dutReset)
