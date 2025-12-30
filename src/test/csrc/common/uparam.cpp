@@ -67,13 +67,13 @@ void set_uparam(uint64_t addr, uint64_t data) {
 
 void embedding_to_uparam(std::vector<int> embedding) {
     printf("embedding_to_uparam\n");
-    // uparam.ftqsize = embedding[EMDIdx::FTQ];
-    // uparam.ibufsize = embedding[EMDIdx::IBUF]; 
+    uparam.ftqsize = embedding[EMDIdx::FTQ];
+    uparam.ibufsize = embedding[EMDIdx::IBUF]; 
     // uparam.intdqsize = embedding[EMDIdx::INTDQ];
     // uparam.fpdqsize = embedding[EMDIdx::FPDQ];
     // uparam.lsdqsize = embedding[EMDIdx::LSDQ];
-    // uparam.lqsize = embedding[EMDIdx::LQ];
-    // uparam.sqsize = embedding[EMDIdx::SQ];
+    uparam.lqsize = embedding[EMDIdx::LQ];
+    uparam.sqsize = embedding[EMDIdx::SQ];
     uparam.robsize = embedding[EMDIdx::ROB];
     printf("Set ROB size to %d\n", uparam.robsize);
     // uparam.l2mshrs = embedding[EMDIdx::L2MSHRS];
