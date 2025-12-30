@@ -167,6 +167,11 @@ SIM_CXXFILES += $(BUILD_DIR)/perfCCT.cpp
 endif
 endif
 
+# Xstatistics
+ifneq ($(wildcard $(BUILD_DIR)/xs_statistics.cpp),)
+SIM_CXXFILES += $(BUILD_DIR)/xs_statistics.cpp
+endif
+
 # ConstantIn
 WITH_CONSTANTIN ?= 1
 ifeq ($(WITH_CONSTANTIN), 1)
