@@ -593,7 +593,10 @@ object DifftestModule {
     gateway
   }
 
-  def top[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T): SimTop[T] = new SimTop(cpuGen)
+  def top[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix: Option[String]): SimTop[T] =
+    new SimTop(cpuGen, modPrefix)
+
+  def top[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T): SimTop[T] = top[T](cpuGen, None)
 
   def generateSvhInterface(instances: Seq[DifftestBundle], numCores: Int): Unit = {
     // generate interface by jsonProfile, single-core interface will be copied numCore times
