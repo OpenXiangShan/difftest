@@ -90,7 +90,10 @@ trait HasDiffTestInterfaces extends ImplicitClock with ImplicitReset { this: Raw
 }
 
 // Top-level module for DiffTest simulation. Will be created by DifftestModule.top
-class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Module {
+class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix: String, createTopIO: Boolean)
+  extends Module {
+  override def desiredName = modPrefix + super.desiredName
+
   val cpu = Module(cpuGen)
   cpu.dutClock := clock
   cpu.dutReset := reset.asTypeOf(cpu.dutReset)
@@ -99,20 +102,25 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Mo
   val gateway = DifftestModule.collect(cpuName)
 
   // IO: difftest_*
-  val difftest = IO(new DifftestTopIO)
-
-  difftest.exit := gateway.exit.getOrElse(0.U)
-  difftest.step := gateway.step.getOrElse(0.U)
-  difftest.uart := DontCare
+  val difftest = Option.when(createTopIO)(IO(new DifftestTopIO))
 
   prefix("difftest") {
-    // Required signals for LogPerfControl
-    val timer = RegInit(0.U(64.W))
-    timer := timer + 1.U
-    dontTouch(timer)
+    difftest.foreach { simIO =>
+      simIO.exit := gateway.exit.getOrElse(0.U)
+      simIO.step := gateway.step.getOrElse(0.U)
+      simIO.uart := DontCare
 
-    val log_enable = difftest.logCtrl.enable(timer)
-    dontTouch(log_enable)
+      // Required signals for LogPerfControl
+      val timer = RegInit(0.U(64.W))
+      timer := timer + 1.U
+      dontTouch(timer)
+
+      val log_enable = simIO.logCtrl.enable(timer)
+      dontTouch(log_enable)
+
+      // Other connection overrided by user
+      cpu.connectTopIOs(simIO)
+    }
 
     // IO: difftest_fpga_*
     gateway.fpgaIO.map { fpgaIO =>
@@ -129,7 +137,6 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T) extends Mo
     }
   }
 
-  cpu.connectTopIOs(difftest)
   cpu.dutIOs.foreach { case (name, gen) =>
     val io = IO(chiselTypeOf(gen)).suggestName(name)
     dontTouch(gen)
