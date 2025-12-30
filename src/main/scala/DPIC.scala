@@ -340,6 +340,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
 }
 
 private class DummyDPICWrapper(gen: Valid[DifftestBundle], config: GatewayConfig) extends Module {
+  override def desiredName: String = gen.bits.desiredModuleName.replace("Difftest", "DummyDPICWrapper_")
   val control = IO(Input(new GatewaySinkControl(config)))
   val io = IO(Input(gen))
   val dpic = Module(new DPIC(gen.bits, config))
@@ -371,7 +372,7 @@ object DPIC {
   def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
     val bundleType = chiselTypeOf(io)
     Query.register(bundleType.bits, "io_")
-    val module = Module(new DummyDPICWrapper(bundleType, config))
+    val module = Module(new DummyDPICWrapper(bundleType, config).suggestName(bundleType.bits.desiredCppName))
     module.control := control
     module.io := io
     val dpic = module.dpic
