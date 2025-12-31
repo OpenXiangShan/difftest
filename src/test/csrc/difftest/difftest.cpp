@@ -449,6 +449,7 @@ inline int Difftest::check_all() {
     if (int ret = arch_event_checker->step()) {
       return ret;
     }
+    dut->commit[0].valid = 0;
   } else {
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
     if (dut->commit[0].valid) {
