@@ -33,7 +33,7 @@ int StoreChecker::check() {
   while (!state->store_event_queue.empty()) {
     auto &probe = state->store_event_queue.front();
 #ifdef CONFIG_DIFFTEST_SQUASH
-    if (probe.stamp != commit_stamp)
+    if (probe.stamp != state->commit_stamp)
       return STATE_OK;
 #endif // CONFIG_DIFFTEST_SQUASH
     auto addr = probe.addr;
