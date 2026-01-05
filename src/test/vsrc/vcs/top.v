@@ -114,14 +114,16 @@ always #1 clock <= ~clock;
 wire core_clock;
 
 `ifdef FPGA_SIM
+  wire difftest_pcie_clock;
   wire c2h_axi_tlast;
   wire c2h_axi_tready;
   wire c2h_axi_tvalid;
   wire [511:0] c2h_axi_tdata;
   wire clock_enable;
 
+  assign difftest_pcie_clock = clock;
 xdma_wrapper xdma(
-  .clock(clock),
+  .clock(difftest_pcie_clock),
   .reset(reset),
   .axi_c2h_tlast(c2h_axi_tlast),
   .axi_c2h_tready(c2h_axi_tready),
@@ -130,7 +132,6 @@ xdma_wrapper xdma(
   .core_clock_enable(clock_enable),
   .core_clock(core_clock)
 );
-  // assign core_clock = clock;
 `else
   assign core_clock = clock;
 `endif // FPGA_SIM
@@ -139,6 +140,7 @@ SimTop sim(
   .clock(core_clock),
   .reset(reset),
 `ifdef FPGA_SIM
+  .difftest_pcie_clock(difftest_pcie_clock),
   .difftest_ref_clock(clock),
   .difftest_to_host_axis_valid(c2h_axi_tvalid),
   .difftest_to_host_axis_ready(c2h_axi_tready),
