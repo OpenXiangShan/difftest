@@ -125,7 +125,6 @@ class DeltaQueue(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) ext
 class DeltaSplitter(v_gen: Valid[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(v_gen))
   val out = IO(Output(Vec(config.deltaLimit, Valid(new DiffDeltaElem(v_gen.bits)))))
-  val out_enable = IO(Output(Bool())) // TODO: now output maybe invalid
   val inPending = IO(Output(Bool()))
   val first_elems = VecInit(in.bits.dataElements.flatMap(_._3))
   val r_elems = RegInit(0.U.asTypeOf(first_elems))
@@ -151,7 +150,6 @@ class DeltaSplitter(v_gen: Valid[DifftestBundle], config: GatewayConfig) extends
   r_group_updates := next_group_updates
 
   inPending := next_group_updates =/= 0.U
-  out_enable := needUpdate || group_idx =/= 0.U
   out.zipWithIndex.foreach { case (gen, idx) =>
     val sel_map = Seq.tabulate(group_size) { gid =>
       val seqID = gid * config.deltaLimit + idx
@@ -176,16 +174,14 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   val toDeltas = queued.filter(_.bits.supportsDelta)
   val inPending = Wire(Vec(toDeltas.length, Bool()))
   queue.inPending := inPending.asUInt.orR
-  val delta_enable = Wire(Vec(toDeltas.length, Bool()))
   val deltas = toDeltas.zipWithIndex.flatMap { case (v_gen, idx) =>
     val module = Module(new DeltaSplitter(chiselTypeOf(v_gen), config))
     module.in := v_gen
     inPending(idx) := module.inPending
-    delta_enable(idx) := module.out_enable
     module.out
   }
   val deltaInfo = Wire(Valid(new DiffDeltaInfo))
-  deltaInfo.valid := delta_enable.asUInt.orR
+  deltaInfo.valid := VecInit(deltas.map(_.valid)).asUInt.orR
   deltaInfo.bits.coreid := 0.U
   deltaInfo.bits.inPending := PopCount(inPending)
 
