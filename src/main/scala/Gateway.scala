@@ -171,7 +171,8 @@ object Gateway {
   }
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
-    val bundle = WireInit(0.U.asTypeOf(gen))
+    val bundle = WireInit(0.U.asTypeOf(gen)).suggestName(gen.desiredCppName)
+    dontTouch(bundle)
     if (!config.traceLoad) {
       if (config.needEndpoint) {
         val packed = WireInit(UInt(bundle.getWidth.W), bundle.asUInt)
