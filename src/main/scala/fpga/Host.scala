@@ -45,14 +45,8 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
   // Write clock domain (using default clock)
   val wr_ptr = RegInit(0.U(fifo_addr_width.W))
-  val rd_cnt_sync = RegInit(0.U(64.W))
-  val wr_occupancy = Reg(UInt(64.W)) // Occupancy in write clock domain
-
-  // Synchronize read counter to write clock domain
-  rd_cnt_sync := Delayer(rd_cnt, 2)
-
-  // Calculate occupancy (in write clock domain)
-  wr_occupancy := wr_cnt - rd_cnt_sync
+  val rd_cnt_sync = Delayer(rd_cnt, 2) // Synchronize read counter to write clock domain
+  val wr_occupancy = wr_cnt - rd_cnt_sync // Calculate occupancy in write clock domain
 
   // Write side (difftest side)
   val pktID = RegInit(0.U(pkt_id_w.W))
@@ -77,14 +71,8 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   // Read clock domain
   withClock(io.pcie_clock) {
     val rd_ptr = RegInit(0.U(fifo_addr_width.W))
-    val wr_cnt_sync = RegInit(0.U(64.W))
-    val rd_occupancy = Reg(UInt(64.W)) // Occupancy in read clock domain
-
-    // Synchronize write counter to read clock domain
-    wr_cnt_sync := Delayer(wr_cnt, 2)
-
-    // Calculate occupancy (in read clock domain)
-    rd_occupancy := wr_cnt_sync - rd_cnt
+    val wr_cnt_sync = Delayer(wr_cnt, 2) // Synchronize write counter to read clock domain
+    val rd_occupancy = wr_cnt_sync - rd_cnt // Calculate occupancy in read clock domain
 
     val inTransfer = RegInit(false.B)
     val mix_data = RegInit(0.U((difftest_width + pkt_id_w).W))
@@ -107,7 +95,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
         inTransfer := true.B
         sendCnt := 0.U
       }
-    }.elsewhen(inTransfer) {
+    }.otherwise {
       when(io.axis.fire) {
         when(sendLast) {
           sendCnt := 0.U
