@@ -62,6 +62,7 @@ case class GatewayConfig(
   def batchSplit: Boolean = !isFPGA // Disable split for FPGA to reduce gates
   def deltaLimit: Int = 8
   def deltaQueueDepth: Int = 3
+  def hasClockGate = isFPGA
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
@@ -98,6 +99,7 @@ case class GatewayConfig(
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
     if (isFPGA) macros += "CONFIG_DIFFTEST_FPGA"
+    if (hasClockGate) macros += "CONFIG_DIFFTEST_CLOCKGATE"
     macros.toSeq
   }
   def check(): Unit = {
@@ -125,6 +127,7 @@ case class GatewayResult(
   structPacked: Option[Boolean] = None,
   structAligned: Option[Boolean] = None, // Align struct Elem to 8 bytes for Delta Feature
   cppExtModule: Option[Boolean] = None,
+  refClock: Option[Clock] = None,
   exit: Option[UInt] = None,
   step: Option[UInt] = None,
   fpgaIO: Option[FpgaDiffIO] = None,
@@ -137,6 +140,7 @@ case class GatewayResult(
       structPacked = if (structPacked.isDefined) structPacked else that.structPacked,
       structAligned = if (structAligned.isDefined) structAligned else that.structAligned,
       cppExtModule = if (cppExtModule.isDefined) cppExtModule else that.cppExtModule,
+      refClock = if (refClock.isDefined) refClock else that.refClock,
       exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
       fpgaIO = if (fpgaIO.isDefined) fpgaIO else that.fpgaIO,
@@ -216,6 +220,7 @@ object Gateway {
         instances = endpoint.instances,
         structPacked = Some(config.isBatch),
         structAligned = Some(config.isDelta),
+        refClock = Option.when(config.hasClockGate)(endpoint.clock),
         step = Some(endpoint.step),
         fpgaIO = endpoint.fpgaIO,
       )

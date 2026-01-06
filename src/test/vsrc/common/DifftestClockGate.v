@@ -13,36 +13,20 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-`include "DifftestMacros.svh"
-module xdma_wrapper(
-  input clock,
-  input reset,
-  input core_clock_enable,
-  input axi_c2h_tlast,
-  output axi_c2h_tready,
-  input axi_c2h_tvalid,
-  input [511:0] axi_c2h_tdata,
-  output core_clock
+
+module DifftestClockGate(
+	input     CK,
+	input	    E,
+	output    Q
 );
 
-  wire [`CONFIG_DIFFTEST_BATCH_IO_WITDH - 1:0] axi_tdata;
-  wire [63:0] axi_tkeep;
-  wire axi_tlast;
-  wire axi_tready;
-  wire axi_tvalid;
-xdma_clock xclock(
-  .clock(clock),
-  .core_clock_enable(core_clock_enable),
-  .core_clock(core_clock)
-);
-
-xdma_axi xaxi(
-  .clock(clock),
-  .reset(reset),
-  .axi_tdata(axi_c2h_tdata),
-  .axi_tlast(axi_c2h_tlast),
-  .axi_tready(axi_c2h_tready),
-  .axi_tvalid(axi_c2h_tvalid)
-);
-
+`ifdef SYNTHESIS
+	BUFGCE bufgce_1 (
+		.O(Q),
+		.I(CK),
+		.CE(E)
+	);
+`else
+  assign Q = CK & E;
+`endif // SYNTHESIS
 endmodule

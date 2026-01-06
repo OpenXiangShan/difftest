@@ -127,14 +127,13 @@ endif # SYNTHESIS
 
 # FPGA DiffTest Simulate Support
 ifeq ($(FPGA_SIM), 1)
-FPGA_VSRC_DIR = $(abspath ./src/test/vsrc/fpga)
 FPGA_SIM_CSRC_DIR = $(abspath ./src/test/csrc/fpga_sim)
 FPGA_SIM_VSRC_DIR = $(abspath ./src/test/vsrc/fpga_sim)
 SIM_CXXFILES += $(shell find $(FPGA_SIM_CSRC_DIR) -name "*.cpp")
 SIM_CXXFLAGS += -I$(FPGA_SIM_CSRC_DIR) -DFPGA_SIM
 SIM_LDFLAGS  += -lrt
 SIM_VFLAGS   += +define+FPGA_SIM
-SIM_VSRC     += $(shell find $(FPGA_VSRC_DIR) -name "*.v" -or -name "*.sv") $(shell find $(FPGA_SIM_VSRC_DIR) -name "*.v" -or -name "*.sv")
+SIM_VSRC     += $(shell find $(FPGA_SIM_VSRC_DIR) -name "*.v" -or -name "*.sv")
 ifneq ($(ASYNC_CLK_2N), )
 SIM_VFLAGS   += +define+ASYNC_CLK_2N=$(ASYNC_CLK_2N)
 endif
