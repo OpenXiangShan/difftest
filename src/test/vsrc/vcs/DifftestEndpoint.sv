@@ -358,7 +358,9 @@ always @(posedge clock) begin
     else if (simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED) begin
       $display("DIFFTEST WORKLOAD DONE at cycle %d", n_cycles);
 `ifndef ENABLE_WORKLOAD_SWITCH
+`ifndef NO_FINISH_AFTER_WORKLOAD
       $finish();
+`endif // NO_FINISH_AFTER_WORKLOAD
 `endif // ENABLE_WORKLOAD_SWITCH
     end
   end
