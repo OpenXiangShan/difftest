@@ -198,6 +198,26 @@ Difftest::Difftest(int coreid) {
 }
 
 Difftest::~Difftest() {
+  for (auto checker: checkers) {
+    delete checker;
+  }
+
+  delete arch_event_checker;
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    delete instr_commit_checker[i];
+  }
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  delete store_checker;
+#endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+  for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
+    delete load_checker[i];
+  }
+#ifdef CONFIG_DIFFTEST_SQUASH
+  delete load_squash_checker;
+#endif // CONFIG_DIFFTEST_SQUASH
+#endif // CONFIG_DIFFTEST_LOADEVENT
+
   delete state;
   delete difftrace;
   if (proxy) {

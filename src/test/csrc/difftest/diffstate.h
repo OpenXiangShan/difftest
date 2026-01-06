@@ -143,6 +143,13 @@ public:
   bool dump_commit_trace = false;
 
   DiffState(int coreid);
+  ~DiffState() {
+    while (!commit_trace.empty()) {
+      delete commit_trace.front();
+      commit_trace.pop();
+    }
+  }
+
   void record_group(uint64_t pc, uint32_t count) {
     if (retire_group_queue.size() >= DEBUG_GROUP_TRACE_SIZE) {
       retire_group_queue.pop();
