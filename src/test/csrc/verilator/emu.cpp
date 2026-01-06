@@ -565,6 +565,7 @@ Emulator::Emulator(int argc, const char *argv[])
     if (args.footprints_name) {
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
     } else {
+      printf("DEBUG: Parsed ram_size = %lu (0x%lx)\n", ram_size, ram_size);
       init_ram(args.image, ram_size);
 #ifdef WITH_DRAMSIM3
       dramsim3_init(args.dramsim3_ini, args.dramsim3_outdir);
@@ -1008,20 +1009,20 @@ int Emulator::tick() {
           engine->design_space.get_configs(embedding);
           
 
-          // try {
-          //   if (fs::remove(embedding_path)) {
-          //       std::cout << "Embedding file deleted successfully." << std::endl;
-          //   }
-          // } catch (const fs::filesystem_error& err) {
-          //     std::cerr << "Error deleting embedding file: " << err.what() << std::endl;
-          // }
+          try {
+            if (fs::remove(embedding_path)) {
+                std::cout << "Embedding file deleted successfully." << std::endl;
+            }
+          } catch (const fs::filesystem_error& err) {
+              std::cerr << "Error deleting embedding file: " << err.what() << std::endl;
+          }
 
-          // std::cout << "[Simulation] Simulation finished, waiting for python..." << std::endl;
-          // std::cout << "Waiting for new embedding file..." << std::endl;
-          // while (!fs::exists(embedding_path)) {
-          //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-          // }
-          // std::cout << "[Simulation] Python finished, start simulation..." << std::endl;
+          std::cout << "[Simulation] Simulation finished, waiting for python..." << std::endl;
+          std::cout << "Waiting for new embedding file..." << std::endl;
+          while (!fs::exists(embedding_path)) {
+              std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          }
+          std::cout << "[Simulation] Python finished, start simulation..." << std::endl;
   
           benchmark_name = get_benchmark("embedding.txt");
           printf("benchmark_name: %s\n", benchmark_name.c_str());
@@ -1278,7 +1279,6 @@ int Emulator::tick() {
           flash_finish();
 
           init_flash(args.flash_bin);
-
           init_ram((benchmark_root_path + "/" + benchmark_name + ".bin").c_str(), ram_size);
           difftest_finish();
           difftest_init();
