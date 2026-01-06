@@ -111,7 +111,7 @@ end
 always #1 clock <= ~clock;
 `endif // WIRE_CLK
 
-wire core_clock;
+wire sim_clock;
 
 `ifdef FPGA_SIM
   wire difftest_pcie_clock;
@@ -119,35 +119,50 @@ wire core_clock;
   wire c2h_axi_tready;
   wire c2h_axi_tvalid;
   wire [511:0] c2h_axi_tdata;
-  wire clock_enable;
 
   assign difftest_pcie_clock = clock;
-xdma_wrapper xdma(
+xdma_axi xaxi(
   .clock(difftest_pcie_clock),
   .reset(reset),
-  .axi_c2h_tlast(c2h_axi_tlast),
-  .axi_c2h_tready(c2h_axi_tready),
-  .axi_c2h_tvalid(c2h_axi_tvalid),
-  .axi_c2h_tdata(c2h_axi_tdata),
-  .core_clock_enable(clock_enable),
-  .core_clock(core_clock)
+  .axi_tdata(c2h_axi_tdata),
+  .axi_tlast(c2h_axi_tlast),
+  .axi_tready(c2h_axi_tready),
+  .axi_tvalid(c2h_axi_tvalid)
+);
+xdma_clock xclk(
+  .clock(difftest_pcie_clock),
+  .clock_out(sim_clock)
 );
 `else
-  assign core_clock = clock;
+  assign sim_clock = clock;
 `endif // FPGA_SIM
+
+wire core_clock;
+`ifdef CONFIG_DIFFTEST_CLOCKGATE
+wire clock_enable;
+DifftestClockGate gate(
+  .CK(sim_clock),
+  .E(clock_enable),
+  .Q(core_clock)
+);
+`else
+  assign core_clock = sim_clock;
+`endif // CONFIG_DIFFTEST_CLOCKGATE
 
 SimTop sim(
   .clock(core_clock),
   .reset(reset),
 `ifdef FPGA_SIM
   .difftest_pcie_clock(difftest_pcie_clock),
-  .difftest_ref_clock(clock),
   .difftest_to_host_axis_valid(c2h_axi_tvalid),
   .difftest_to_host_axis_ready(c2h_axi_tready),
   .difftest_to_host_axis_bits_data(c2h_axi_tdata),
   .difftest_to_host_axis_bits_last(c2h_axi_tlast),
-  .difftest_clock_enable(clock_enable),
 `endif // FPGA_SIM
+`ifdef CONFIG_DIFFTEST_CLOCKGATE
+  .difftest_ref_clock(sim_clock),
+  .difftest_clock_enable(clock_enable),
+`endif // CONFIG_DIFFTEST_CLOCKGATE
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),
   .difftest_logCtrl_level(difftest_logCtrl_level),
