@@ -240,7 +240,7 @@ public:
       ref_skip_one(isRVC, wen, wdest, wdata);
     } else {
       sync();
-      printf("Skipping one instruction: pc = 0x%lx, isRVC=%d\n", state.pc, isRVC);
+      // printf("Skipping one instruction: pc = 0x%lx, isRVC=%d\n", state.pc, isRVC);
       state.pc += isRVC ? 2 : 4;
 
       if (rfwen)
