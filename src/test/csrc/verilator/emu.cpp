@@ -623,7 +623,7 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #ifndef CONFIG_NO_DIFFTEST
   if (args.enable_diff) {
-    init_goldenmem();
+    // init_goldenmem();
     ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
     init_nemuproxy(ref_ramsize);
   }
@@ -741,9 +741,9 @@ Emulator::~Emulator() {
   simMemory = nullptr;
 
 #ifndef CONFIG_NO_DIFFTEST
-  if (args.enable_diff) {
-    goldenmem_finish();
-  }
+  // if (args.enable_diff) {
+  //   goldenmem_finish();
+  // }
 #endif // CONFIG_NO_DIFFTEST
   flash_finish();
 #ifndef CONFIG_NO_DIFFTEST
@@ -1077,9 +1077,8 @@ int Emulator::tick() {
         // }
         init_device();
         if (args.enable_diff) {
-          init_goldenmem();
+          // init_goldenmem();
           init_nemuproxy(ref_ramsize);
-          proxy->ref_init(reset_vector);
         }
 #ifdef CONDUCT_ARCH_EXPLORER
         // if (reset_vector == 0x80000000) {
@@ -1272,9 +1271,9 @@ int Emulator::tick() {
           printf("Core reset complete\n");
 
 #ifndef CONFIG_NO_DIFFTEST
-          if (args.enable_diff) {
-            goldenmem_finish();
-          }
+          // if (args.enable_diff) {
+            // goldenmem_finish();
+          // }
 #endif // CONFIG_NO_DIFFTEST
           flash_finish();
 
@@ -1284,9 +1283,7 @@ int Emulator::tick() {
           difftest_init();
           init_device();
           if (args.enable_diff) {
-            init_goldenmem();
             init_nemuproxy(ref_ramsize);
-            proxy->ref_init(reset_vector);
           }
 
           trapCode = STATE_RUNNING;

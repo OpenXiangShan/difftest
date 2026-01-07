@@ -95,7 +95,7 @@ public:
 
 /* clang-format off */
 #define REF_BASE(f)                                                           \
-  f(ref_init, difftest_init, void, uint64_t)                                          \
+  f(ref_init, difftest_init, void)                                          \
   f(ref_regcpy, difftest_regcpy, void, void*, bool, bool)                     \
   f(ref_csrcpy, difftest_csrcpy, void, void*, bool)                           \
   f(ref_memcpy, difftest_memcpy, void, uint64_t, void*, size_t, bool)         \

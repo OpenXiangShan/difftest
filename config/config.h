@@ -105,7 +105,7 @@ extern unsigned long EMU_FLASH_SIZE;
 // #define DEBUG_SMP
 
 // whether to check memory coherence during refilling
-#define DEBUG_REFILL
+// #define DEBUG_REFILL
 
 // whether to check l1tlb response
 #define DEBUG_L1TLB

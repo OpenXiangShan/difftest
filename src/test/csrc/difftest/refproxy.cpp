@@ -85,7 +85,7 @@ AbstractRefProxy::AbstractRefProxy(int coreid, size_t ram_size, const char *env,
   check_and_assert(ref_store_log_restore);
 #endif // ENABLE_STORE_LOG
 
-  ref_init(0x10000000);
+  ref_init();
 }
 
 AbstractRefProxy::~AbstractRefProxy() {
