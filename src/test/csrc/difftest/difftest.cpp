@@ -588,6 +588,7 @@ int Difftest::do_amuctrl_check() {
     // TODO: What is squash? How to squash?
 #endif // CONFIG_DIFFTEST_SQUASH
     // Save the amu event info
+    auto rm = amu_event.rm;
     auto op = amu_event.op;
     auto md = amu_event.md;
     auto sat = amu_event.sat;
@@ -596,12 +597,13 @@ int Difftest::do_amuctrl_check() {
     auto mtilem = amu_event.mtilem;
     auto mtilen = amu_event.mtilen;
     auto mtilek = amu_event.mtilek;
-    auto types = amu_event.types;
+    auto types1 = amu_event.types1;
+    auto types2 = amu_event.types2;
     auto typed = amu_event.typed;
     auto transpose = amu_event.isfp;
-    auto isacc = amu_event.issigned;
     auto base = amu_event.base;
     auto stride = amu_event.stride;
+    auto isfp = amu_event.isfp;
     uint64_t pc = amu_event.pc;
 
     int check_res = proxy->get_amu_ctrl_event(&amu_event);
@@ -616,16 +618,16 @@ int Difftest::do_amuctrl_check() {
       printf("  REF AMU ctrl: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_str[amu_event.op]);
       switch (amu_event.op) {
         case 0: // MMA
-          printf("                md %d, sat %d, ms1 %d, ms2 %d,\n"
-                 "                mtilem %d, mtilen %d, mtilek %d, types %d, typed %d\n",
-                 amu_event.md, amu_event.sat, amu_event.ms1, amu_event.ms2,
-                 amu_event.mtilem, amu_event.mtilen, amu_event.mtilek, amu_event.types, amu_event.typed);
+          printf("                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
+                 "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+                 amu_event.md, amu_event.rm, amu_event.sat, amu_event.ms1, amu_event.ms2, amu_event.isfp,
+                 amu_event.mtilem, amu_event.mtilen, amu_event.mtilek, amu_event.types1, amu_event.types2, amu_event.typed);
           break;
         case 1: // MLS
           printf("                md %d, ls %d, transpose %d, isacc %d,\n"
                  "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                 amu_event.md, amu_event.sat, amu_event.isfp, amu_event.issigned,
-                 amu_event.base, amu_event.stride, amu_event.mtilem, amu_event.mtilen, amu_event.types);
+                 amu_event.md, amu_event.sat, amu_event.isfp, amu_event.types1,
+                 amu_event.base, amu_event.stride, amu_event.mtilem, amu_event.mtilen, amu_event.typed);
           break;
         case 2: // MRelease
           printf("                tokenRd %d\n", amu_event.mtilem);
@@ -640,14 +642,14 @@ int Difftest::do_amuctrl_check() {
       printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
       switch (op) {
         case 0: // MMA
-          printf("                md %d, sat %d, ms1 %d, ms2 %d,\n"
-                 "                mtilem %d, mtilen %d, mtilek %d, types %d, typed %d\n",
-                 md, sat, ms1, ms2, mtilem, mtilen, mtilek, types, typed);
+          printf("                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
+                 "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+                 md, rm, sat, ms1, ms2, isfp, mtilem, mtilen, mtilek, types1, types2, typed);
           break;
         case 1: // MLS
           printf("                md %d, ls %d, transpose %d, isacc %d,\n"
                  "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                 md, sat, transpose, isacc, base, stride, mtilem, mtilen, types);
+                 md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
           break;
         case 2: // MRelease
           printf("                tokenRd %d\n", mtilem);
@@ -668,14 +670,14 @@ int Difftest::do_amuctrl_check() {
       printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
       switch (op) {
         case 0: // MMA
-          printf("                md %d, sat %d, ms1 %d, ms2 %d,\n"
-                 "                mtilem %d, mtilen %d, mtilek %d, types %d, typed %d\n",
-                 md, sat, ms1, ms2, mtilem, mtilen, mtilek, types, typed);
+          printf("                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
+                 "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+                 md, rm, sat, ms1, ms2, isfp, mtilem, mtilen, mtilek, types1, types2, typed);
           break;
         case 1: // MLS
           printf("                md %d, ls %d, transpose %d, isacc %d,\n"
                  "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                 md, sat, transpose, isacc, base, stride, mtilem, mtilen, types);
+                 md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
           break;
         case 2: // MRelease
           printf("                tokenRd %d\n", mtilem);
