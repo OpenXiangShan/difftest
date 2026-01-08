@@ -14,14 +14,14 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-EMU_ELF_NAME = emu
+EMU_ELF_NAME ?= emu
 # the target is named as fuzzer for clarity in fuzzing
 ifneq ($(FUZZER_LIB), )
 EMU_ELF_NAME = fuzzer
 endif
 
 EMU          = $(BUILD_DIR)/$(EMU_ELF_NAME)
-EMU_TOP      = SimTop
+EMU_TOP      ?= SimTop
 
 EMU_CSRC_DIR   = $(abspath ./src/test/csrc/emu)
 EMU_CONFIG_DIR = $(abspath ./config)
@@ -60,6 +60,7 @@ EMU_OPTIMIZE ?= -O3
 
 include verilator.mk
 include gsim.mk
+include corvusitor.mk
 
 ########## Emu build recipes ##########
 

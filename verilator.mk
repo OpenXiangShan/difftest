@@ -15,15 +15,17 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-VERILATOR_BUILD_DIR = $(BUILD_DIR)/verilator-compile
+VERILATOR_BUILD_DIR ?= $(BUILD_DIR)/verilator-compile
 VERILATOR_TARGET = $(VERILATOR_BUILD_DIR)/$(EMU_ELF_NAME)
 
 ########## Verilator Configuration Options ##########
 VERILATOR_FLAGS = $(SIM_VFLAGS)
 
 VERILATOR_CSRC_DIR = $(abspath ./src/test/csrc/verilator)
+ifneq ($(VERILATOR_ARCHIVE),1)
 VERILATOR_CXXFILES = $(EMU_CXXFILES) $(shell find $(VERILATOR_CSRC_DIR) -name "*.cpp")
-VERILATOR_CXXFLAGS = $(EMU_CXXFLAGS) -I$(VERILATOR_CSRC_DIR) -DVERILATOR --std=c++17
+endif
+VERILATOR_CXXFLAGS = $(EMU_CXXFLAGS) -I$(VERILATOR_CSRC_DIR) -DVERILATOR --std=c++17 -g
 VERILATOR_LDFLAGS  = $(SIM_LDFLAGS) -ldl
 
 # Verilator binary
@@ -77,7 +79,7 @@ OPT_FAST ?= -O3
 
 ########## Verilator Build Recipes ##########
 VERILATOR_FLAGS_ALL =               \
-  --exe $(EMU_OPTIMIZE)             \
+  $(EMU_OPTIMIZE)                   \
   --cc --top-module $(EMU_TOP)      \
   +define+VERILATOR=1               \
   +define+PRINTF_COND=1             \
@@ -90,6 +92,7 @@ VERILATOR_FLAGS_ALL =               \
   --assert --x-assign unique        \
   --output-split 30000              \
   --output-split-cfuncs 30000       \
+  --comp-limit-syms 220             \
   -I$(RTL_DIR)                      \
   -I$(GEN_VSRC_DIR)                 \
   -CFLAGS "$(VERILATOR_CXXFLAGS)"   \
@@ -98,6 +101,13 @@ VERILATOR_FLAGS_ALL =               \
   -LDFLAGS "\$$(PGO_LDFLAGS)"       \
   -o $(VERILATOR_TARGET)            \
   $(VERILATOR_FLAGS)
+
+ifneq ($(VERILATOR_ARCHIVE),1)
+VERILATOR_FLAGS_ALL = --exe $(VERILATOR_FLAGS_ALL)
+else
+VERILATOR_FLAGS_ALL += +define+STOP_COND_=1
+VERILATOR_FLAGS_ALL += +define+ASSERT_VERBOSE_COND_=1
+endif
 
 VERILATOR_MK = $(VERILATOR_BUILD_DIR)/V$(EMU_TOP).mk
 VERILATOR_HEADERS := $(EMU_HEADERS) $(shell find $(VERILATOR_CSRC_DIR) -name "*.h")

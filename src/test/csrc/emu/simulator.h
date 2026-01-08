@@ -125,6 +125,11 @@ public:
 #include "gsim.h"
 #endif // GSIM
 
+#ifdef CORVUSITOR
+#define SIMULATOR CorvusitorSim
+#include "corvusitor.h"
+#endif // CORVUSITOR
+
 #ifndef SIMULATOR
 #error "SIMULATOR undetected, please define it."
 #endif // SIMULATOR

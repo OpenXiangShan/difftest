@@ -586,7 +586,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   for (int i = 0; i < cycles; i++) {
     dut_ptr->set_reset(1);
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(CORVUSITOR)
     dut_ptr->set_clock(1);
     dut_ptr->step();
 #endif // VERILATOR
@@ -595,7 +595,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
       dut_ptr->waveform_tick();
     }
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(CORVUSITOR)
     dut_ptr->set_clock(0);
     dut_ptr->step();
 #endif // VERILATOR
@@ -621,7 +621,7 @@ inline void Emulator::single_cycle() {
     goto end_single_cycle;
   }
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(CORVUSITOR)
   dut_ptr->set_clock(1);
   dut_ptr->step();
 #endif // VERILATOR
@@ -649,7 +649,7 @@ inline void Emulator::single_cycle() {
 
   dut_ptr->step_uart();
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(CORVUSITOR)
   dut_ptr->set_clock(0);
   dut_ptr->step();
 #endif // VERILATOR
@@ -893,7 +893,7 @@ int Emulator::tick() {
 
 int Emulator::is_finished() {
   return
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(CORVUSITOR)
       Verilated::gotFinish() ||
 #endif // VERILATOR
       trapCode != STATE_RUNNING;
