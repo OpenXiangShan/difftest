@@ -97,7 +97,7 @@ jobs:
 
       - name: Chisel Elaboration
         run: |
-          make -C $NOOP_HOME sim-verilog CHISEL_TARGET=chirrtl JVM_XMX=10G
+          make -C $NOOP_HOME sim-verilog CHISEL_TARGET=chirrtl JVM_XMX=20G
 
       - name: Build libdifftest.so
         run: |
