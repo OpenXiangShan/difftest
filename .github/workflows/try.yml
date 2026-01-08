@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  workflow_dispatch:
+
+jobs:
+  test-libso-xiangshan:
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/xs-env:${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare XiangShan
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          git clone --depth 1 https://github.com/klin02/XiangShan.git
+          cd XiangShan && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
+          echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
+
+      - name: Chisel Elaboration
+        run: |
+          make -C $NOOP_HOME sim-verilog CHISEL_TARGET=chirrtl JVM_XMX=10G
+
+      - name: Build libdifftest.so
+        run: |
+          make -C $NOOP_HOME/difftest difftest-so
+          mv $NOOP_HOME/build/libdifftest.so $GITHUB_WORKSPACE/libdifftest.so
+
+      - name: Release libdifftest.so to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libdifftest-${{ matrix.os }}-xiangshan.so
+          path: libdifftest.so
