@@ -450,7 +450,7 @@ void O3CPUDesignSpace::get_configs(const std::vector<int>& embedding) const {
           << "SQSize: " << embedding[EMDIdx::SQ] << "\n"
           << "LQSize: " << embedding[EMDIdx::LQ] << "\n"
         //   << "RASSize: " << embedding[EMDIdx::RASSIZE] << "\n"
-          << "RASSize: " << 8 << "\n"
+          << "RASSize: " << 24 << "\n"
           << "ITLBSize: " << ITLBSize << "\n"
           << "DTLBSize: " << DTLBSize << "\n"
           << "ICacheSize: " << ICacheSize << "\n"
