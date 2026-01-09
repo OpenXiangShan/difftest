@@ -340,33 +340,43 @@ private:
 #endif // CONFIG_DIFFTEST_ATOMICEVENT
 
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-class LoadChecker : public ProbeChecker<DifftestLoadEvent> {
+class LoadBaseChecker : virtual public DiffTestChecker {
+public:
+  LoadBaseChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
+
+protected:
+  int do_load_check(const DifftestLoadEvent &probe, bool regWen, uint64_t *refRegPtr, uint64_t commitData);
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+  int do_vec_load_check(const DifftestLoadEvent &probe, uint8_t firstLdest, const uint64_t *commitData);
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+
+private:
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+  bool enable_vec_load_goldenmem_check = proxy->check_ref_vec_load_goldenmem();
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
+};
+
+class LoadChecker : public ProbeChecker<DifftestLoadEvent>, protected LoadBaseChecker {
 public:
   LoadChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy, uint64_t index,
               std::function<const DiffTestState &()> get_dut_state)
-      : ProbeChecker<DifftestLoadEvent>(get_probe, state, proxy), index(index),
+      : ProbeChecker<DifftestLoadEvent>(get_probe, state, proxy), index(index), LoadBaseChecker(state, proxy),
         get_dut_state(std::move(get_dut_state)) {}
 
 private:
   uint64_t index;
   std::function<const DiffTestState &()> get_dut_state;
-#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  bool enable_vec_load_goldenmem_check = proxy->check_ref_vec_load_goldenmem();
-#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
 
   bool get_valid(const DifftestLoadEvent &probe) override;
   void clear_valid(DifftestLoadEvent &probe) override;
   int check(const DifftestLoadEvent &probe) override;
-
-  int do_vec_load_check(const DifftestLoadEvent &probe, uint8_t firstLdest, const uint64_t *commitData);
-  int do_load_check(const DifftestLoadEvent &probe, bool regWen, uint64_t *refRegPtr, uint64_t commitData);
 };
 
 #ifdef CONFIG_DIFFTEST_SQUASH
-class LoadSquashChecker : public SimpleChecker {
+class LoadSquashChecker : public SimpleChecker, protected LoadBaseChecker {
 public:
   LoadSquashChecker(DiffState *state, RefProxy *proxy, std::function<const DiffTestState &()> get_dut_state)
-      : SimpleChecker(state, proxy), get_dut_state(std::move(get_dut_state)) {}
+      : SimpleChecker(state, proxy), LoadBaseChecker(state, proxy), get_dut_state(std::move(get_dut_state)) {}
 
 private:
   std::function<const DiffTestState &()> get_dut_state;
