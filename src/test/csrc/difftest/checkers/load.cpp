@@ -222,7 +222,7 @@ int LoadChecker::check(const DifftestLoadEvent &probe) {
       commitData[j] = dut.pregs_vrf.value[dut.commit[index].otherwpdest[j]];
     }
 #endif // CONFIG_DIFFTEST_VECCOMMITDATA
-    return do_vec_load_check(proxy, proxy->check_ref_vec_load_goldenmem(), probe, dut.commit[index].wdest, commitData);
+    return do_vec_load_check(ProbeChecker::proxy, ProbeChecker::proxy->check_ref_vec_load_goldenmem(), probe, dut.commit[index].wdest, commitData);
 #else
     Info("isVLoad should never be set if vector is not enabled\n");
     return STATE_ERROR;
@@ -231,9 +231,9 @@ int LoadChecker::check(const DifftestLoadEvent &probe) {
 
   bool regWen = ((dut.commit[index].rfwen && dut.commit[index].wdest != 0) || dut.commit[index].fpwen) &&
                 !dut.commit[index].vecwen;
-  auto refRegPtr = proxy->arch_reg(dut.commit[index].wdest, dut.commit[index].fpwen);
+  auto refRegPtr = ProbeChecker::proxy->arch_reg(dut.commit[index].wdest, dut.commit[index].fpwen);
   auto commitData = get_commit_data(&dut, index);
-  return do_load_check(proxy, probe, regWen, refRegPtr, commitData);
+  return do_load_check(ProbeChecker::proxy, probe, regWen, refRegPtr, commitData);
 #endif // CONFIG_DIFFTEST_SQUASH
 }
 
@@ -250,16 +250,16 @@ int LoadSquashChecker::check() {
   auto &probe = state->load_event_queue.front();
   if (probe.isVLoad) {
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    return do_vec_load_check(proxy, proxy->check_ref_vec_load_goldenmem(), probe, probe.wdest, probe.vecCommitData);
+    return do_vec_load_check(SimpleChecker::proxy, SimpleChecker::proxy->check_ref_vec_load_goldenmem(), probe, probe.wdest, probe.vecCommitData);
 #else
     Info("isVLoad should never be set if vector is not enabled\n");
     return STATE_ERROR;
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
   }
   bool regWen = probe.regWen;
-  auto refRegPtr = proxy->arch_reg(probe.wdest, probe.fpwen);
+  auto refRegPtr = SimpleChecker::proxy->arch_reg(probe.wdest, probe.fpwen);
   auto commitData = probe.commitData;
-  return do_load_check(proxy, probe, regWen, refRegPtr, commitData);
+  return do_load_check(SimpleChecker::proxy, probe, regWen, refRegPtr, commitData);
 }
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_LOADEVENT
