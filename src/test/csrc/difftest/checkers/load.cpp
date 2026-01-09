@@ -18,7 +18,7 @@
 #include "goldenmem.h"
 
 #ifdef CONFIG_DIFFTEST_LOADEVENT
-int LoadBaseChecker::do_load_check(const DifftestLoadEvent &probe, bool regWen, uint64_t *refRegPtr,
+int LoadBaseChecker::do_load_check(RefProxy *proxy, const DifftestLoadEvent &probe, bool regWen, uint64_t *refRegPtr,
                                    uint64_t commitData) {
   if (probe.isLoad || probe.isAtomic) {
     proxy->sync();
@@ -126,7 +126,7 @@ int LoadBaseChecker::do_load_check(const DifftestLoadEvent &probe, bool regWen, 
 }
 
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-int LoadBaseChecker::do_vec_load_check(const DifftestLoadEvent &probe, uint8_t firstLdest, const uint64_t *commitData) {
+int LoadBaseChecker::do_vec_load_check(RefProxy *proxy, bool enable_vec_load_goldenmem_check, const DifftestLoadEvent &probe, uint8_t firstLdest, const uint64_t *commitData) {
   if (!enable_vec_load_goldenmem_check) {
     return STATE_OK;
   }
@@ -222,7 +222,7 @@ int LoadChecker::check(const DifftestLoadEvent &probe) {
       commitData[j] = dut.pregs_vrf.value[dut.commit[index].otherwpdest[j]];
     }
 #endif // CONFIG_DIFFTEST_VECCOMMITDATA
-    return do_vec_load_check(probe, dut.commit[index].wdest, commitData);
+    return do_vec_load_check(proxy, proxy->check_ref_vec_load_goldenmem(), probe, dut.commit[index].wdest, commitData);
 #else
     Info("isVLoad should never be set if vector is not enabled\n");
     return STATE_ERROR;
@@ -233,7 +233,7 @@ int LoadChecker::check(const DifftestLoadEvent &probe) {
                 !dut.commit[index].vecwen;
   auto refRegPtr = proxy->arch_reg(dut.commit[index].wdest, dut.commit[index].fpwen);
   auto commitData = get_commit_data(&dut, index);
-  return do_load_check(probe, regWen, refRegPtr, commitData);
+  return do_load_check(proxy, probe, regWen, refRegPtr, commitData);
 #endif // CONFIG_DIFFTEST_SQUASH
 }
 
@@ -250,7 +250,7 @@ int LoadSquashChecker::check() {
   auto &probe = state->load_event_queue.front();
   if (probe.isVLoad) {
 #ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-    return do_vec_load_check(probe, probe.wdest, probe.vecCommitData);
+    return do_vec_load_check(proxy, proxy->check_ref_vec_load_goldenmem(), probe, probe.wdest, probe.vecCommitData);
 #else
     Info("isVLoad should never be set if vector is not enabled\n");
     return STATE_ERROR;
@@ -259,7 +259,7 @@ int LoadSquashChecker::check() {
   bool regWen = probe.regWen;
   auto refRegPtr = proxy->arch_reg(probe.wdest, probe.fpwen);
   auto commitData = probe.commitData;
-  return do_load_check(probe, regWen, refRegPtr, commitData);
+  return do_load_check(proxy, probe, regWen, refRegPtr, commitData);
 }
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_LOADEVENT
