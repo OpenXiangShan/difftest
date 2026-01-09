@@ -350,16 +350,18 @@ public:
 private:
   uint64_t index;
   std::function<const DiffTestState &()> get_dut_state;
-#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
-  bool enable_vec_load_goldenmem_check = proxy->check_ref_vec_load_goldenmem();
-#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_ARCHVECREGSTATE
 
   bool get_valid(const DifftestLoadEvent &probe) override;
   void clear_valid(DifftestLoadEvent &probe) override;
   int check(const DifftestLoadEvent &probe) override;
 
-  int do_vec_load_check(const DifftestLoadEvent &probe, uint8_t firstLdest, const uint64_t *commitData);
+#ifndef CONFIG_DIFFTEST_SQUASH
   int do_load_check(const DifftestLoadEvent &probe, bool regWen, uint64_t *refRegPtr, uint64_t commitData);
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+  bool enable_vec_load_goldenmem_check = proxy->check_ref_vec_load_goldenmem();
+  int do_vec_load_check(const DifftestLoadEvent &probe, uint8_t firstLdest, const uint64_t *commitData);
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
+#endif // CONFIG_DIFFTEST_SQUASH
 };
 
 #ifdef CONFIG_DIFFTEST_SQUASH
@@ -374,6 +376,12 @@ private:
   bool get_valid() override;
   void clear_valid() override;
   int check() override;
+
+  int do_load_check(const DifftestLoadEvent &probe, bool regWen, uint64_t *refRegPtr, uint64_t commitData);
+#ifdef CONFIG_DIFFTEST_ARCHVECREGSTATE
+  bool enable_vec_load_goldenmem_check = proxy->check_ref_vec_load_goldenmem();
+  int do_vec_load_check(const DifftestLoadEvent &probe, uint8_t firstLdest, const uint64_t *commitData);
+#endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
 };
 
 #endif // CONFIG_DIFFTEST_SQUASH
