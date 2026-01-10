@@ -22,9 +22,12 @@ import difftest._
 import difftest.gateway.GatewayConfig
 
 object Preprocess {
-  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[DifftestBundle] = {
-    val module = Module(new PreprocessEndpoint(chiselTypeOf(bundles).toSeq, config))
-    module.in := bundles
+  def apply(
+    bundles: DecoupledIO[MixedVec[DifftestBundle]],
+    config: GatewayConfig,
+  ): DecoupledIO[MixedVec[DifftestBundle]] = {
+    val module = Module(new PreprocessEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
+    module.in <> bundles
     module.out
   }
 
@@ -100,23 +103,25 @@ object Preprocess {
 }
 
 class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
 
-  val replaceReg = if (!config.softArchUpdate && in.exists(_.desiredCppName == "pregs_xrf")) {
+  val replaceReg = if (!config.softArchUpdate && in.bits.exists(_.desiredCppName == "pregs_xrf")) {
     // extract ArchReg in Hardware
-    Preprocess.replaceRegs(in)
+    Preprocess.replaceRegs(in.bits)
   } else {
-    in
+    in.bits
   }
 
   // LoadEvent will not be checked when single-core
-  val skipLoad = if (in.count(_.isUniqueIdentifier) == 1) {
+  val skipLoad = if (replaceReg.count(_.isUniqueIdentifier) == 1) {
     replaceReg.filterNot(_.desiredCppName == "load")
   } else {
     replaceReg
   }
 
   val preprocessed = MixedVecInit(skipLoad.toSeq)
-  val out = IO(Output(chiselTypeOf(preprocessed)))
-  out := preprocessed
+  val out = IO(Decoupled(chiselTypeOf(preprocessed)))
+  in.ready := out.ready
+  out.valid := in.valid
+  out.bits := preprocessed
 }

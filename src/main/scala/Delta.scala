@@ -21,16 +21,19 @@ import chisel3.util._
 import difftest._
 import difftest.common.FileControl
 import difftest.gateway.GatewayConfig
-import difftest.util.LookupTree
+import difftest.util.{LookupTree, PipelineConnect}
 
 import scala.collection.mutable.ListBuffer
 
 object Delta {
   private val instances = ListBuffer.empty[DifftestBundle]
-  def apply(bundles: MixedVec[Valid[DifftestBundle]], config: GatewayConfig): MixedVec[Valid[DifftestBundle]] = {
-    instances ++= bundles.map(_.bits)
-    val module = Module(new DeltaEndpoint(chiselTypeOf(bundles).toSeq, config))
-    module.in := bundles
+  def apply(
+    bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]],
+    config: GatewayConfig,
+  ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
+    instances ++= bundles.bits.map(_.bits)
+    val module = Module(new DeltaEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
+    module.in <> bundles
     module.out
   }
   def collect(): Unit = {
@@ -96,32 +99,6 @@ object Delta {
   }
 }
 
-class DeltaQueue(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-  val inPending = IO(Input(Bool()))
-  val out = IO(Output(MixedVec(bundles)))
-  val mem = Mem(config.deltaQueueDepth, MixedVec(bundles))
-  val cnt = RegInit(0.U(8.W))
-  val head = RegInit(0.U(8.W))
-  val tail = RegInit(0.U(8.W))
-  val enqueue = VecInit(in.map(_.valid)).asUInt.orR
-  val dequeue = !RegNext(inPending) && cnt =/= 0.U
-  when(enqueue && !dequeue) {
-    cnt := cnt + 1.U
-  }.elsewhen(!enqueue && dequeue) {
-    cnt := cnt - 1.U
-  }
-  assert(cnt <= config.deltaQueueDepth.U)
-  when(enqueue) {
-    head := Mux(head === (config.deltaQueueDepth - 1).U, 0.U, head + 1.U)
-    mem(head) := in
-  }
-  when(dequeue) {
-    tail := Mux(tail === (config.deltaQueueDepth - 1).U, 0.U, tail + 1.U)
-  }
-  out := Mux(dequeue, mem(tail), 0.U.asTypeOf(out))
-}
-
 class DeltaSplitter(v_gen: Valid[DifftestBundle], config: GatewayConfig) extends Module {
   val in = IO(Input(v_gen))
   val out = IO(Output(Vec(config.deltaLimit, Valid(new DiffDeltaElem(v_gen.bits)))))
@@ -155,7 +132,7 @@ class DeltaSplitter(v_gen: Valid[DifftestBundle], config: GatewayConfig) extends
       val seqID = gid * config.deltaLimit + idx
       val delta = WireInit(0.U.asTypeOf(Valid(new DiffDeltaElem(v_gen.bits))))
       if (seqID < elems.length) {
-        delta.valid := updates(seqID)
+        delta.valid := updates(seqID) && group_updates =/= 0.U
         delta.bits.coreid := in.bits.coreid
         delta.bits.index := seqID.U
         delta.bits.data := elems(seqID)
@@ -167,13 +144,13 @@ class DeltaSplitter(v_gen: Valid[DifftestBundle], config: GatewayConfig) extends
 }
 
 class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-  val queue = Module(new DeltaQueue(bundles, config))
-  queue.in := in
-  val queued = queue.out
-  val toDeltas = queued.filter(_.bits.supportsDelta)
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
+  val pipelined = Wire(Decoupled(MixedVec(bundles)))
+  PipelineConnect(in, pipelined, pipelined.ready)
+  val toDeltas = pipelined.bits.filter(_.bits.supportsDelta)
   val inPending = Wire(Vec(toDeltas.length, Bool()))
-  queue.inPending := inPending.asUInt.orR
+  pipelined.ready := !RegNext(inPending.asUInt.orR)
+
   val deltas = toDeltas.zipWithIndex.flatMap { case (v_gen, idx) =>
     val module = Module(new DeltaSplitter(chiselTypeOf(v_gen), config))
     module.in := v_gen
@@ -185,7 +162,8 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   deltaInfo.bits.coreid := 0.U
   deltaInfo.bits.inPending := PopCount(inPending)
 
-  val withDeltas = MixedVecInit((queued.filterNot(_.bits.supportsDelta) ++ deltas ++ Seq(deltaInfo)).toSeq)
-  val out = IO(Output(chiselTypeOf(withDeltas)))
-  out := withDeltas
+  val withDeltas = MixedVecInit((pipelined.bits.filterNot(_.bits.supportsDelta) ++ deltas ++ Seq(deltaInfo)).toSeq)
+  val out = IO(Decoupled(chiselTypeOf(withDeltas)))
+  out.valid := VecInit(withDeltas.map(_.valid)).asUInt.orR
+  out.bits := withDeltas
 }
