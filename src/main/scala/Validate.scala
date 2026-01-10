@@ -22,9 +22,12 @@ import difftest._
 import difftest.gateway.GatewayConfig
 
 object Validate {
-  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[Valid[DifftestBundle]] = {
-    val module = Module(new Validator(chiselTypeOf(bundles).toSeq, config))
-    module.in := bundles
+  def apply(
+    bundles: DecoupledIO[MixedVec[DifftestBundle]],
+    config: GatewayConfig,
+  ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
+    val module = Module(new Validator(chiselTypeOf(bundles.bits).toSeq, config))
+    module.in <> bundles
     module.out
   }
 
@@ -50,17 +53,18 @@ object Validate {
 }
 
 class Validator(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-  val out = IO(Output(MixedVec(bundles.map(Valid(_)))))
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
+  val out = IO(Decoupled(MixedVec(bundles.map(Valid(_)))))
   val globalEnable = WireInit(true.B)
   if (config.hasGlobalEnable) {
-    globalEnable := VecInit(in.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
+    globalEnable := VecInit(in.bits.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
   }
-  in.zip(out).foreach { case (i, o) =>
-    val valid = i.bits.getValid && globalEnable && Option
+  in.bits.zip(out.bits).foreach { case (i, o) =>
+    val valid = i.bits.getValid && globalEnable && in.fire && Option
       .when(i.updateDependency.nonEmpty)(
         VecInit(
-          in.filter(b => i.updateDependency.contains(b.desiredCppName))
+          in.bits
+            .filter(b => i.updateDependency.contains(b.desiredCppName))
             .map(bundle => {
               // Only if the corresponding bundle is valid, we update this bundle
               bundle.coreid === i.coreid && bundle.bits.getValid
@@ -71,4 +75,6 @@ class Validator(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mod
       .getOrElse(true.B)
     o := i.genValidBundle(valid)
   }
+  in.ready := out.ready
+  out.valid := in.valid && globalEnable
 }
