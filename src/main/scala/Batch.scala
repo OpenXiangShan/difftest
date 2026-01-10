@@ -20,7 +20,7 @@ import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.common.DifftestPerf
-import difftest.util.LookupTree
+import difftest.util.{LookupTree, PipelineConnect}
 
 import scala.collection.mutable.ListBuffer
 
@@ -62,7 +62,6 @@ class BatchStats(param: BatchParam) extends Bundle {
 
 class BatchOutput(param: BatchParam, config: GatewayConfig) extends Bundle {
   val io = new BatchIO(param)
-  val enable = Bool()
   val step = UInt(config.stepWidth.W)
 }
 
@@ -71,13 +70,21 @@ class BatchInfo extends Bundle {
   val num = UInt(8.W)
 }
 
+class BatchStepResult(param: BatchParam, config: GatewayConfig) extends Bundle {
+  val data = UInt(param.StepDataBitLen.W)
+  val info = UInt(param.StepInfoBitLen.W)
+  // status of step_data_head split in different loc
+  val status = Vec(param.StepGroupSize, new BatchStats(param))
+  val trace_info = Option.when(config.hasReplay)(new DiffTraceInfo(config))
+}
+
 object Batch {
   private val template = ListBuffer.empty[DifftestBundle]
 
-  def apply(bundles: MixedVec[Valid[DifftestBundle]], config: GatewayConfig): BatchOutput = {
-    template ++= chiselTypeOf(bundles).map(_.bits).distinctBy(_.desiredCppName)
-    val module = Module(new BatchEndpoint(chiselTypeOf(bundles).toSeq, config))
-    module.in := bundles
+  def apply(bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]], config: GatewayConfig): DecoupledIO[BatchOutput] = {
+    template ++= chiselTypeOf(bundles.bits).map(_.bits).distinctBy(_.desiredCppName)
+    val module = Module(new BatchEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
+    module.in <> bundles
     module.out
   }
 
@@ -89,29 +96,18 @@ object Batch {
 }
 
 class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-  val param = BatchParam(config, in.map(_.bits).toSeq)
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
+  val param = BatchParam(config, in.bits.map(_.bits).toSeq)
 
   // Collect valid bundles of same cycle
-  val collector = Module(new BatchCollector(bundles, param))
-  collector.in := RegNext(in)
-  val step_data = collector.step_data
-  val step_info = collector.step_info
-  val step_enable = collector.step_enable
-  val step_status = collector.step_status
+  val collector = Module(new BatchCollector(bundles, param, config))
+  PipelineConnect(in, collector.in, collector.in.fire)
 
   // Assemble collected data from different cycles
   val assembler = Module(new BatchAssembler(param, config))
-  assembler.step_data := step_data
-  assembler.step_info := step_info
-  assembler.step_status := step_status
-  assembler.step_enable := step_enable
-  if (config.hasReplay) {
-    val trace_info = in.map(_.bits).filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
-    assembler.step_trace_info.get := trace_info
-  }
-  val out = IO(Output(new BatchOutput(param, config)))
-  out := assembler.out
+  assembler.in <> collector.out
+  val out = IO(chiselTypeOf(assembler.out))
+  out <> assembler.out
 }
 
 // Cluster Data from same group in same cycle
@@ -148,51 +144,60 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
 }
 
 // Collect Data from different group in same cycle
-class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-  val step_data = IO(Output(UInt(param.StepDataBitLen.W)))
-  val step_info = IO(Output(UInt(param.StepInfoBitLen.W)))
-  // status of step_data_head split in different loc
-  val step_status = IO(Output(Vec(param.StepGroupSize, new BatchStats(param))))
-  val step_enable = IO(Output(Bool()))
+class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, config: GatewayConfig) extends Module {
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
+  val out = IO(Decoupled(new BatchStepResult(param, config)))
 
   def getGroupDataWidth: Seq[Valid[DifftestBundle]] => Int = { group =>
     group.length * group.head.bits.getByteAlignWidth
   }
 
-  val in_group = in.groupBy(_.bits.desiredCppName).values
+  val in_group = in.bits.groupBy(_.bits.desiredCppName).values
   val in_group_single = in_group.filter(_.size == 1).toSeq
   val in_group_multi = in_group.filterNot(_.size == 1).flatMap(_.grouped(8)).toSeq
   val sorted = in_group_single.sortBy(getGroupDataWidth).reverse ++ in_group_multi.sortBy(getGroupDataWidth)
 
   // Stage 1: concat bundles with same desiredCppName
-  val group_info = Wire(Vec(param.StepGroupSize, UInt(param.infoWidth.W)))
-  val group_status = Wire(Vec(param.StepGroupSize, new BatchStats(param)))
-  val group_data = Wire(MixedVec(sorted.map(getGroupDataWidth).map(group_w => UInt(group_w.W))))
+  class GroupBundle extends Bundle {
+    val data = MixedVec(sorted.map(getGroupDataWidth).map(group_w => UInt(group_w.W)))
+    val info = Vec(param.StepGroupSize, UInt(param.infoWidth.W))
+    val status = Vec(param.StepGroupSize, new BatchStats(param))
+    val trace_info = Option.when(config.hasReplay)(new DiffTraceInfo(config))
+  }
+  val grouped = Wire(Decoupled(new GroupBundle))
+  grouped.valid := in.valid
+  in.ready := grouped.ready
 
+  grouped.bits.trace_info.foreach(
+    _ := in.bits.map(_.bits).filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
+  )
   sorted.zipWithIndex.foreach { case (v_gens, gid) =>
     val cluster = Module(new BatchCluster(chiselTypeOf(v_gens.head.bits), v_gens.length, param))
     cluster.in := v_gens
-    val status_base = if (gid == 0) 0.U.asTypeOf(new BatchStats(param)) else group_status(gid - 1)
+    val status_base = if (gid == 0) 0.U.asTypeOf(new BatchStats(param)) else grouped.bits.status(gid - 1)
     cluster.status_base := status_base
-    group_data(gid) := cluster.out_data
-    group_info(gid) := cluster.out_info
-    group_status(gid) := cluster.status_sum
+    grouped.bits.data(gid) := cluster.out_data
+    grouped.bits.info(gid) := cluster.out_info
+    grouped.bits.status(gid) := cluster.status_sum
   }
 
   // Stage 2: delay grouped data, concat different group
-  val delay_group_data = RegNext(group_data)
-  val delay_group_info = RegNext(group_info)
-  val delay_group_status = RegNext(group_status)
+  val delay_grouped = Wire(Decoupled(new GroupBundle))
+  PipelineConnect(grouped, delay_grouped, delay_grouped.fire)
+  delay_grouped.ready := out.ready
+
+  val delay_group_data = delay_grouped.bits.data
+  val delay_group_info = delay_grouped.bits.info
+  val delay_group_status = delay_grouped.bits.status
   val info_num = delay_group_status.last.info_size
   val BatchStep = Wire(new BatchInfo)
   BatchStep.id := Batch.getTemplate.length.U
   BatchStep.num := info_num // unused, only for debugging
 
-  step_enable := info_num =/= 0.U
+  out.valid := delay_grouped.valid && info_num =/= 0.U
   // append BatchStep to last step_status
-  step_status := delay_group_status
-  step_status.last.info_size := delay_group_status.last.info_size + 1.U
+  out.bits.status := delay_group_status
+  out.bits.status.last.info_size := delay_group_status.last.info_size + 1.U
 
   val toCat_data = delay_group_data.take(in_group_single.size).reverse
   val toCat_info = delay_group_info.take(in_group_single.size).reverse
@@ -226,7 +231,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
   } else {
     0.U
   }
-  step_data := res_single.last | res_multi
+  out.bits.data := res_single.last | res_multi
 
   // Collect info from tail, collect(i) include last 0~i
   val toCollect_info = delay_group_info.reverse
@@ -235,7 +240,8 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam) ext
     val info_base = if (idx == 0) BatchStep.asUInt else info_res(idx - 1)
     info_res(idx) := Mux(toCollect_info(idx) =/= 0.U, Cat(info_base, toCollect_info(idx)), info_base)
   }
-  step_info := info_res.last
+  out.bits.info := info_res.last
+  out.bits.trace_info.foreach(_ := delay_grouped.bits.trace_info.get)
 }
 
 // Assemble step_data from different cycles
@@ -243,12 +249,8 @@ class BatchAssembler(
   param: BatchParam,
   config: GatewayConfig,
 ) extends Module {
-  val step_data = IO(Input(UInt(param.StepDataBitLen.W)))
-  val step_info = IO(Input(UInt(param.StepInfoBitLen.W)))
-  val step_status = IO(Input(Vec(param.StepGroupSize, new BatchStats(param))))
-  val step_enable = IO(Input(Bool()))
-  val step_trace_info = Option.when(config.hasReplay)(IO(Input(new DiffTraceInfo(config))))
-  val out = IO(Output(new BatchOutput(param, config)))
+  val in = IO(Flipped(Decoupled(new BatchStepResult(param, config))))
+  val out = IO(Decoupled(new BatchOutput(param, config)))
 
   val state_data = RegInit(0.U(param.MaxDataBitLen.W))
   val state_info = RegInit(0.U(param.MaxInfoBitLen.W))
@@ -261,11 +263,14 @@ class BatchAssembler(
   //   1. RegNext signal from BatchCollector to cut of combination logic path
   //   1. data/info_exceed_vec: mark whether different length fragments of step data/info exceed available space
   //   2. concat/remain_stats: record statistic for data/info to be concatenated to output or remained to state
-  val delay_step_data = RegNext(step_data)
-  val delay_step_info = RegNext(step_info)
-  val delay_step_status = RegNext(step_status)
-  val delay_step_enable = RegNext(step_enable)
-  val delay_step_trace_info = Option.when(config.hasReplay)(RegNext(step_trace_info.get))
+  val delay_step = Wire(Decoupled(new BatchStepResult(param, config)))
+  PipelineConnect(in, delay_step, delay_step.fire)
+  delay_step.ready := out.ready
+  val delay_step_data = delay_step.bits.data
+  val delay_step_info = delay_step.bits.info
+  val delay_step_status = delay_step.bits.status
+  val delay_step_enable = delay_step.valid
+  val delay_step_trace_info = delay_step.bits.trace_info
   val data_bytes_avail = param.MaxDataByteLen.U -& state_status.data_bytes
   // Always leave space for BatchFinish, use MaxInfoSize - 1
   val info_size_avail = (param.MaxInfoSize - 1).U -& state_status.info_size
@@ -285,7 +290,7 @@ class BatchAssembler(
 
   val step_exceed = delay_step_enable && (state_step_cnt === config.batchSize.U)
   val cont_exceed = data_exceed || info_exceed
-  val state_flush = step_enable && step_status.last.data_bytes >= param.MaxDataByteLen.U // use Stage 1 bytes to flush ahead
+  val state_flush = in.valid && in.bits.status.last.data_bytes >= param.MaxDataByteLen.U // use Stage 1 bytes to flush ahead
 
   if (config.batchSplit) {
     val data_exceed_v = VecInit(delay_step_status.map(_.data_bytes > data_bytes_avail && delay_step_enable))
@@ -372,7 +377,7 @@ class BatchAssembler(
     DifftestPerf("BatchExceed_timeout", timeout.asUInt)
     if (config.hasReplay) DifftestPerf("BatchExceed_trace", trace_exceed.get.asUInt)
   }
-  val in_replay = Option.when(config.hasReplay)(step_trace_info.get.in_replay)
+  val in_replay = Option.when(config.hasReplay)(delay_step.bits.trace_info.get.in_replay)
 
   val should_tick = timeout || state_flush || cont_exceed || step_exceed ||
     trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
@@ -382,10 +387,10 @@ class BatchAssembler(
     timeout_count := 0.U
   }
 
-  out.io.data := state_data | (append_data << (state_status.data_bytes << 3).asUInt).asUInt
-  out.io.info := state_info | (append_info << (state_status.info_size * param.infoWidth.U)).asUInt
-  out.enable := should_tick
-  out.step := Mux(out.enable, finish_step, 0.U)
+  out.bits.io.data := state_data | (append_data << (state_status.data_bytes << 3).asUInt).asUInt
+  out.bits.io.info := state_info | (append_info << (state_status.info_size * param.infoWidth.U)).asUInt
+  out.bits.step := Mux(out.valid, finish_step, 0.U)
+  out.valid := should_tick
 
   val state_update = delay_step_enable || state_flush || timeout
 

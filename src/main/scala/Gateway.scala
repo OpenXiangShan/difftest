@@ -62,7 +62,7 @@ case class GatewayConfig(
   def batchSplit: Boolean = !isFPGA // Disable split for FPGA to reduce gates
   def deltaLimit: Int = 8
   def deltaQueueDepth: Int = 4
-  def hasClockGate = isFPGA
+  def hasClockGate = isFPGA || isDelta
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
@@ -115,10 +115,7 @@ case class GatewayConfig(
   }
 }
 
-class FpgaDiffIO(dataWidth: Int) extends Bundle {
-  val data = UInt(dataWidth.W)
-  val enable = Bool()
-}
+class FpgaDiffIO(dataWidth: Int) extends DecoupledIO(UInt(dataWidth.W))
 
 case class GatewayResult(
   cppMacros: Seq[String] = Seq(),
@@ -131,6 +128,7 @@ case class GatewayResult(
   exit: Option[UInt] = None,
   step: Option[UInt] = None,
   fpgaIO: Option[FpgaDiffIO] = None,
+  clockEnable: Option[Bool] = None,
 ) {
   def +(that: GatewayResult): GatewayResult = {
     GatewayResult(
@@ -144,6 +142,7 @@ case class GatewayResult(
       exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
       fpgaIO = if (fpgaIO.isDefined) fpgaIO else that.fpgaIO,
+      clockEnable = if (clockEnable.isDefined) clockEnable else that.clockEnable,
     )
   }
 }
@@ -223,6 +222,7 @@ object Gateway {
         refClock = Option.when(config.hasClockGate)(endpoint.clock),
         step = Some(endpoint.step),
         fpgaIO = endpoint.fpgaIO,
+        clockEnable = endpoint.clockEnable,
       )
     } else {
       GatewayResult(instances = getInstance(instances)) + GatewaySink.collect(config, getInstance(instances))
@@ -239,40 +239,53 @@ object Gateway {
 class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: GatewayConfig) extends Module {
   val in = IO(Input(UInt(instanceWithDelay.map(_._1.getWidth).sum.W)))
   val in_bundle = in.asTypeOf(MixedVec(instanceWithDelay.map(_._1)))
-  val bundle = if (config.traceLoad) {
-    in_bundle
+  val decoupledIn = Wire(Decoupled(chiselTypeOf(in_bundle)))
+  val clockEnable = Option.when(config.hasClockGate)(IO(Output(Bool())))
+  // clockEnable should hold one more cycle than ready to sample signals when fire
+  clockEnable.foreach { ce =>
+    val ready = decoupledIn.ready
+    ce := (ready && RegNext(ready)) || reset.asBool
+  }
+  decoupledIn.valid := !reset.asBool
+
+  if (config.traceLoad) {
+    decoupledIn.bits := in_bundle
   } else {
     val delayed = MixedVecInit(
-      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d) }.toSeq
+      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d, decoupledIn.ready) }.toSeq
     )
     if (config.traceDump) Trace(delayed)
-    delayed
+    decoupledIn.bits := delayed
+  }
+
+  if (!config.hasClockGate) {
+    assert(decoupledIn.ready)
   }
 
   val preprocessed = if (config.needPreprocess) {
-    WireInit(Preprocess(bundle, config))
+    Preprocess(decoupledIn, config)
   } else {
-    WireInit(bundle)
+    decoupledIn
   }
 
   val replayed = if (config.hasReplay) {
-    WireInit(Replay(preprocessed, config))
+    Replay(preprocessed, config)
   } else {
-    WireInit(preprocessed)
+    preprocessed
   }
 
   val validated = Validate(replayed, config)
 
   val squashed = if (config.isSquash) {
-    WireInit(Squash(validated, config))
+    Squash(validated, config)
   } else {
-    WireInit(validated)
+    validated
   }
-  val instances = Gateway.getInstance(chiselTypeOf(squashed).map(_.bits).toSeq)
+  val instances = Gateway.getInstance(chiselTypeOf(squashed.bits).map(_.bits).toSeq)
   val deltas = if (config.isDelta) {
-    WireInit(Delta(squashed, config))
+    Delta(squashed, config)
   } else {
-    WireInit(squashed)
+    squashed
   }
   val toSink = deltas
 
@@ -280,19 +293,23 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val step = IO(Output(UInt(config.stepWidth.W)))
   val control = Wire(new GatewaySinkControl(config))
 
-  val fpgaIO = Option.when(config.isBatch && config.isFPGA)(IO(Output(new FpgaDiffIO(config.batchBitWidth))))
+  val fpgaIO = Option.when(config.isBatch && config.isFPGA)(IO(new FpgaDiffIO(config.batchBitWidth)))
 
   if (config.isBatch) {
     val batch = Batch(toSink, config)
-    step := RegNext(batch.step, 0.U) // expose Batch step to check timeout
-    control.enable := batch.enable
-    GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
+    step := RegNext(batch.bits.step, 0.U) // expose Batch step to check timeout
+    control.enable := batch.valid
+    GatewaySink.batch(Batch.getTemplate, control, batch.bits.io, config)
     if (config.isFPGA) {
-      fpgaIO.get.data := batch.io.asUInt
-      fpgaIO.get.enable := batch.enable
+      fpgaIO.get.bits := batch.bits.io.asUInt
+      fpgaIO.get.valid := batch.valid
+      batch.ready := fpgaIO.get.ready
+    } else {
+      batch.ready := true.B
     }
   } else {
-    val sink_enable = VecInit(toSink.map(_.valid).toSeq).asUInt.orR
+    toSink.ready := true.B
+    val sink_enable = VecInit(toSink.bits.map(_.valid).toSeq).asUInt.orR
     step := RegNext(sink_enable, 0.U)
     control.enable := sink_enable
     if (config.hasDutZone) {
@@ -300,8 +317,8 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
       control.dut_zone.get := zoneControl.get.dut_zone
     }
 
-    for (id <- 0 until toSink.length) {
-      GatewaySink(control, toSink(id), config)
+    for (id <- 0 until toSink.bits.length) {
+      GatewaySink(control, toSink.bits(id), config)
     }
   }
 
