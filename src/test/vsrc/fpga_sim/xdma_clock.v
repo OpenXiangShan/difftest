@@ -15,36 +15,28 @@
 ***************************************************************************************/
 module xdma_clock(
   input clock,
-  input core_clock_enable,
-  output core_clock
+  output clock_out
 );
 
-wire clock_in;
 `ifdef ASYNC_CLK_2N
 // core_clock = clock / (2 * ASYNC_CLK_2N)
-reg core_clock_r;
+reg clock_r;
 reg [7:0] clk_cnt;
 initial begin
-  core_clock_r = 0;
+  clock_r = 0;
   clk_cnt = 0;
 end
 always @(posedge clock) begin
   if (clk_cnt == `ASYNC_CLK_2N - 1) begin
     clk_cnt <= 0;
-    core_clock_r <= ~core_clock_r;
+    clock_r <= ~clock_r;
   end
   else begin
     clk_cnt <= clk_cnt + 1;
   end
 end
-assign clock_in = core_clock_r;
+assign clock_out = clock_r;
 `else
-assign clock_in = clock;
+assign clock_out = clock;
 `endif // ASYNC_CLK_2N
-
-fpga_clock_gate clk_gate(
-  .CK(clock_in),
-  .E(core_clock_enable),
-  .Q(core_clock)
-);
 endmodule

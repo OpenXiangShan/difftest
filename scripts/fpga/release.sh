@@ -95,9 +95,6 @@ rsync -av \
     "$DIFF_HOME/" "$RELEASE_HOME/difftest/"
 
 RELEASE_RTL="$RELEASE_HOME/build/rtl"
-echo "Copying $DIFF_HOME/src/test/vsrc/fpga into $RELEASE_RTL ..."
-cp $DIFF_HOME/src/test/vsrc/fpga/* $RELEASE_RTL
-echo "Difftest Source copied."
 
 echo "Replacing RAM with depth > 4000 to URAM ..."
 for f in "$RELEASE_RTL"/array_*.v; do

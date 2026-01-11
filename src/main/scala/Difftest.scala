@@ -588,6 +588,9 @@ object DifftestModule {
     if (gateway.cppExtModule.getOrElse(false)) {
       generateCppExtModules()
     }
+    if (gateway.refClock.isDefined) {
+      generateClockGate()
+    }
     generateVerilogHeader(cpu, gateway.vMacros)
     Profile.generateJson(cpu, cmdConfigs.toSeq, interfaces.toSeq)
     gateway
@@ -788,5 +791,29 @@ object DifftestModule {
     val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
     difftestV += s"`define CPU_$cpu_s"
     FileControl.write(difftestV, "DifftestMacros.svh")
+  }
+
+  def generateClockGate(): Unit = {
+    val difftest = ListBuffer.empty[String]
+    difftest +=
+      s"""
+         |module DifftestClockGate(
+         |	input     CK,
+         |	input	    E,
+         |	output    Q
+         |);
+         |
+         |`ifdef SYNTHESIS
+         |	BUFGCE bufgce_1 (
+         |		.O(Q),
+         |		.I(CK),
+         |		.CE(E)
+         |	);
+         |`else
+         |  assign Q = CK & E;
+         |`endif // SYNTHESIS
+         |endmodule
+         |""".stripMargin
+    FileControl.write(difftest, "DifftestClockGate.sv")
   }
 }
