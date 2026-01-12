@@ -38,6 +38,12 @@ jobs:
           make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
           make clean
 
+      - name: Generate EMU with Squash
+        run: |
+          make PROFILE=./difftest_profile.json NUM_CORES=4 CONFIG=S
+          make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
+          make clean
+
       - name: Generate EMU with SoftArchUpdate
         run: |
           make PROFILE=./difftest_profile.json NUM_CORES=4 CONFIG=U
