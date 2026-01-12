@@ -99,6 +99,14 @@ echo "Copying $DIFF_HOME/src/test/vsrc/fpga into $RELEASE_RTL ..."
 cp $DIFF_HOME/src/test/vsrc/fpga/* $RELEASE_RTL
 echo "Difftest Source copied."
 
+echo "Replacing SimTop.soc with soc in SimTop.sv ..."
+SIMTOP_FILE="$RELEASE_RTL/SimTop.sv"
+if [ -f "$SIMTOP_FILE" ]; then
+    echo "$SIMTOP_FILE"
+    sed -i 's/SimTop\.//' "$SIMTOP_FILE"
+fi
+echo "SimTop.soc replacement done."
+
 echo "Replacing RAM with depth > 4000 to URAM ..."
 for f in "$RELEASE_RTL"/array_*.v; do
     [ -f "$f" ] || continue
