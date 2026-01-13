@@ -252,7 +252,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     decoupledIn.bits := in_bundle
   } else {
     val delayed = MixedVecInit(
-      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d, decoupledIn.ready) }.toSeq
+      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d, decoupledIn.ready, useMem = true) }.toSeq
     )
     if (config.traceDump) Trace(delayed)
     decoupledIn.bits := delayed
