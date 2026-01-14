@@ -116,11 +116,11 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
     dontTouch(log_enable)
 
     val ref_clock = Option.when(gateway.refClock.isDefined)(IO(Input(Clock())))
-    gateway.refClock.foreach(_ := ref_clock.get)
+    gateway.refClock.foreach(_ := clock)
 
     // IO: difftest_fpga_*
     gateway.fpgaIO.map { fpgaIO =>
-      val host = withClock(ref_clock.getOrElse(clock)) { Module(new HostEndpoint(fpgaIO.data.getWidth)) }
+      val host = withClock(ref_clock.get) { Module(new HostEndpoint(fpgaIO.data.getWidth)) }
       host.io.difftest := fpgaIO
       val pcie_clock = IO(Input(Clock()))
       host.io.pcie_clock := pcie_clock
