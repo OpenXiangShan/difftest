@@ -64,7 +64,7 @@ int main(int argc, const char *argv[]) {
   xdma_device->start(); // Trigger stop by fpga_nstep
   fpga_finish();
   printf("difftest releases the fpga device and exits\n");
-  return 0;
+  return !(fpga_result == FPGA_GOODTRAP);
 }
 
 void fpga_init() {
