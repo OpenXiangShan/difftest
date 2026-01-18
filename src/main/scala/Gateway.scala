@@ -178,7 +178,8 @@ object Gateway {
     dontTouch(bundle)
     if (!config.traceLoad) {
       if (config.needEndpoint) {
-        val packed = WireInit(UInt(bundle.getWidth.W), bundle.asUInt)
+//        val packed = WireInit(UInt(bundle.getWidth.W), bundle.asUInt)
+        val packed = RegNext(bundle.asUInt, 0.U)
         DifftestWiring.addSource(packed, s"gateway_${instanceWithDelay.length}", config.hierarchicalWiring)
       } else {
         val control = WireInit(0.U.asTypeOf(new GatewaySinkControl(config)))
@@ -252,7 +253,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     decoupledIn.bits := in_bundle
   } else {
     val delayed = MixedVecInit(
-      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d, decoupledIn.ready) }.toSeq
+      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d + 1, decoupledIn.ready) }.toSeq
     )
     if (config.traceDump) Trace(delayed)
     decoupledIn.bits := delayed
