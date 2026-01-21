@@ -21,12 +21,71 @@
 #include "diffstate.h"
 #include "refproxy.h"
 
+#include <chrono>
+#include <iostream>
+#include <vector>
+#include <iomanip>
+#include <typeinfo>
+#include <cxxabi.h>
+#include <algorithm>
+#include <map>
+
 class DiffTestChecker {
 public:
-  DiffTestChecker(DiffState *state, RefProxy *proxy) : state(state), proxy(proxy) {}
+  DiffTestChecker(DiffState *state, RefProxy *proxy) : state(state), proxy(proxy){
+    all_checkers.push_back(this);
+  }
   virtual ~DiffTestChecker() = default;
 
-  virtual int step() = 0;
+  int step() {
+    if (!name_init) {
+      int status;
+      char* realname = abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status);
+      name = (status == 0) ? std::string(realname) : std::string(typeid(*this).name());
+      free(realname);
+      name_init = true;
+    }
+
+    auto start = std::chrono::steady_clock::now();
+    int ret = do_step();
+    auto end = std::chrono::steady_clock::now();
+    total_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    return ret;
+  }
+
+  virtual int do_step() = 0;
+
+  static void print_stats() {
+      std::map<std::string, long long> stats;
+      long long total_sum = 0;
+
+      for (auto* c : all_checkers) {
+          if (c->total_time > 0) {
+              stats[c->name] += c->total_time;
+              total_sum += c->total_time;
+          }
+      }
+
+      using Pair = std::pair<std::string, long long>;
+      std::vector<Pair> sorted_stats(stats.begin(), stats.end());
+
+      // sort by time descending
+      std::sort(sorted_stats.begin(), sorted_stats.end(), [](const Pair& a, const Pair& b){
+          return a.second > b.second;
+      });
+
+      std::cout << "\n===== DiffTest Checker Performance Stats =====" << std::endl;
+      std::cout << std::left << std::setw(40) << "Checker Name" << "Time (us)" << std::endl;
+      std::cout << std::string(60, '-') << std::endl;
+
+      for (const auto& p : sorted_stats) {
+          std::cout << std::left << std::setw(40) << p.first
+                  << p.second << std::endl;
+      }
+      std::cout << std::string(60, '-') << std::endl;
+      std::cout << std::left << std::setw(40) << "TOTAL" << total_sum << std::endl;
+      std::cout << "==============================================\n" << std::endl;
+  }
 
   static const int STATE_OK = 0;
   static const int STATE_DIFF = 1;
@@ -36,6 +95,13 @@ public:
 protected:
   DiffState *state;
   RefProxy *proxy;
+
+  std::string name;
+  bool name_init = false;
+  long long total_time = 0;
+
+public:
+  static std::vector<DiffTestChecker*> all_checkers;
 };
 
 class SimpleChecker : public DiffTestChecker {
@@ -43,7 +109,7 @@ public:
   SimpleChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
   virtual ~SimpleChecker() = default;
 
-  virtual int step() override {
+  virtual int do_step() override {
     if (get_valid()) {
       int ret = check();
       clear_valid();
@@ -69,7 +135,7 @@ public:
       : DiffTestChecker(state, proxy), get_probe(std::move(get_probe)) {}
   virtual ~ProbeChecker() = default;
 
-  virtual int step() override {
+  virtual int do_step() override {
     Probe &probe = get_probe();
     if (get_valid(probe)) {
       int ret = check(probe);
@@ -310,6 +376,7 @@ private:
   bool get_valid(const DifftestSbufferEvent &probe) override;
   void clear_valid(DifftestSbufferEvent &probe) override;
   int check(const DifftestSbufferEvent &probe) override;
+  void display_sbuffer();
 };
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
