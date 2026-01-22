@@ -61,7 +61,7 @@ case class GatewayConfig(
   def batchBitWidth: Int = batchArgByteLen match { case (len1, len2) => (len1 + len2) * 8 }
   def batchSplit: Boolean = !isFPGA // Disable split for FPGA to reduce gates
   def deltaLimit: Int = 8
-  def deltaQueueDepth: Int = 3
+  def deltaQueueDepth: Int = 4
   def hasClockGate = isFPGA
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
