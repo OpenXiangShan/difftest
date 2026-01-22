@@ -152,7 +152,7 @@ class DeltaSplitter(v_gen: Valid[DifftestBundle], config: GatewayConfig) extends
       val seqID = gid * config.deltaLimit + idx
       val delta = WireInit(0.U.asTypeOf(Valid(new DiffDeltaElem(v_gen.bits))))
       if (seqID < elems.length) {
-        delta.valid := updates(seqID)
+        delta.valid := updates(seqID) && group_updates =/= 0.U
         delta.bits.coreid := in.bits.coreid
         delta.bits.index := seqID.U
         delta.bits.data := elems(seqID)
