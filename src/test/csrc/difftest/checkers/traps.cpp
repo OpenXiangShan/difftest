@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "checkers.h"
+#include "dut.h"
 
 enum {
   EX_IAM,       // instruction address misaligned

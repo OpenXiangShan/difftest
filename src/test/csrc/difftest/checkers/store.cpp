@@ -42,8 +42,8 @@ int StoreChecker::check() {
 
     if (proxy->store_commit(&addr, &data, &mask)) {
 #ifdef FUZZING
-      if (in_disambiguation_state()) {
-        Info("Store mismatch detected with a disambiguation state at pc = 0x%lx.\n", dut->trap.pc);
+      if (proxy->in_disambiguation_state()) {
+        Info("Store mismatch detected with a disambiguation state at pc = 0x%lx.\n", probe.pc);
         return STATE_OK;
       }
 #endif
