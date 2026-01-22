@@ -62,6 +62,7 @@ class DifftestInterfaces extends Module {
   val sync_aia_event = DifftestModule(new DiffSyncAIAEvent, dontCare = true)
   val sync_custom_mflushpwr_event = DifftestModule(new DiffSyncCustomMflushpwrEvent, dontCare = true)
   val amu_ctrl_event = DifftestModule(new DiffAmuCtrlEvent, dontCare = true)
+  val amu_finish_event = DifftestModule(new DiffAmuFinishEvent, dontCare = true)
 
   DifftestModule.collect("demo")
 }
