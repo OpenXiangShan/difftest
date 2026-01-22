@@ -233,13 +233,19 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
         unpack += s"$name = data[$offset];"
       }
     }
-    unpack += getPacketDecl(gen, "", config)
-    val size = if (config.isDelta && gen.isDeltaElem) {
-      s"sizeof(uint${gen.deltaElemWidth}_t)"
+
+    if (config.isDelta && gen.desiredCppName == "delta_info") {
+      unpack += "dStats->lastPending = true;"
     } else {
-      s"sizeof(${gen.desiredModuleName})"
+      unpack += getPacketDecl(gen, "", config)
+      if (config.isDelta && gen.isDeltaElem) {
+        unpack += s"memcpy(packet, data, sizeof(uint${gen.deltaElemWidth}_t));"
+        unpack += "dStats->hasProgress = true;"
+      } else {
+        unpack += s"memcpy(packet, data, sizeof(${gen.desiredModuleName}));"
+      }
     }
-    unpack += s"memcpy(packet, data, $size);"
+
     unpack += s"data += ${elem_bytes.sum};"
     unpack +=
       s"""

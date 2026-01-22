@@ -45,11 +45,9 @@ object Delta {
     deltaCpp += "#ifndef __DIFFTEST_DELTA_H__"
     deltaCpp += "#define __DIFFTEST_DELTA_H__"
     deltaCpp += "#include \"difftest-state.h\""
-    deltaCpp += (new DiffDeltaInfo).toCppDeclaration(true, true)
     deltaCpp +=
       s"""
          |typedef struct {
-         |  DifftestDeltaInfo delta_info;
          |  ${deltaDecl.mkString("\n  ")}
          |} DeltaState;
          |""".stripMargin
@@ -67,6 +65,9 @@ object Delta {
          |private:
          |  DeltaState buffer[NUM_CORES];
          |public:
+         |  bool hasProgress = false;
+         |  bool lastPending = false;
+         |
          |  DeltaStats() {
          |    memset(buffer, 0, sizeof(buffer));
          |  }
@@ -74,13 +75,7 @@ object Delta {
          |    return buffer + coreid;
          |  }
          |  bool need_pending() {
-         |    for (int i = 0; i < NUM_CORES; i++) {
-         |      auto info = get(i)->delta_info;
-         |      if (info.inPending != 0) {
-         |        return true;
-         |      }
-         |    }
-         |    return false;
+         |    return hasProgress && !lastPending;
          |  }
          |  void sync(int zone, int index) {
          |    for (int i = 0; i < NUM_CORES; i++) {
@@ -88,6 +83,8 @@ object Delta {
          |      DeltaState* delta = get(i);
          |      ${deltaSync("dut", "delta").mkString("\n      ")}
          |    }
+         |    hasProgress = false;
+         |    lastPending = false;
          |  }
          |};
          |""".stripMargin
@@ -181,9 +178,9 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
     module.out
   }
   val deltaInfo = Wire(Valid(new DiffDeltaInfo))
-  deltaInfo.valid := VecInit(deltas.map(_.valid)).asUInt.orR
+  // Only transfer deltaInfo when there is no pending deltas
+  deltaInfo.valid := VecInit(deltas.map(_.valid)).asUInt.orR && !inPending.asUInt.orR
   deltaInfo.bits.coreid := 0.U
-  deltaInfo.bits.inPending := PopCount(inPending)
 
   val withDeltas = MixedVecInit((queued.filterNot(_.bits.supportsDelta) ++ deltas ++ Seq(deltaInfo)).toSeq)
   val out = IO(Output(chiselTypeOf(withDeltas)))
