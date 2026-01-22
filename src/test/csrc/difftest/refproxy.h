@@ -168,7 +168,9 @@ public:
   f(ref_amu_ctrl, difftest_amu_ctrl, int, void*)                                                            \
   f(ref_get_amu_ctrl_event_other_info, difftest_get_amu_ctrl_event_other_info, void, void*)                 \
   f(ref_token_event, difftest_token_event, int, void*)                                                      \
-  f(ref_get_token_event_other_info, difftest_get_token_event_other_info, void, void*)
+  f(ref_get_token_event_other_info, difftest_get_token_event_other_info, void, void*)                       \
+  f(ref_amu_exec, difftest_amu_exec, int, void*, void*)                                                     \
+  f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -433,6 +435,27 @@ public:
     } else {
       printf("This version of 'REF' does not support the 'PC' value of Token event. Please use a newer version of "
              "'REF'.\n");
+    }
+  }
+
+  inline int get_amu_exec(void *amu_ctrl, void *matrix) {
+    if (ref_amu_exec) {
+      return ref_amu_exec(amu_ctrl, matrix);
+    } else {
+      printf("This version of 'REF' does not support AME. Please use a newer version of "
+             "'REF'.\n");
+      return 1;
+    }
+  }
+
+  inline int get_amu_lazy(void *amu_ctrl, void *res, void *src1, void *src2, void *src3) {
+    if (ref_amu_lazy) {
+      ref_amu_lazy(amu_ctrl, res, src1, src2, src3);
+      return 0;
+    } else {
+      printf("This version of 'REF' does not support AME. Please use a newer version of "
+             "'REF'.\n");
+      return 1;
     }
   }
 

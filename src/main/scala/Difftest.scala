@@ -520,6 +520,10 @@ class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWit
   override val desiredCppName: String = "amu_ctrl"
 }
 
+class DiffAmuFinishEvent extends AmuFinishEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "amu_finish"
+}
+
 class DiffTokenEvent extends TokenEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "token"
 }

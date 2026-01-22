@@ -420,6 +420,7 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
   def ls:        Bool = sat
   def transpose: Bool = isfp
   def isacc:     Bool = types1(0)
+  def isA:       Bool = types2(0)
   val base            = UInt(64.W)
   val stride          = UInt(64.W)
   def row:       UInt = mtilem
@@ -431,6 +432,14 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
   def tokenRd: UInt = mtilem
 
   def opType: UInt = base
+}
+
+class AmuFinishEvent extends DifftestBaseBundle with HasValid {
+  val pc        = UInt(64.W)
+  val bankValid = Vec(8, Bool())
+  val bankAddr  = Vec(8, UInt(8.W))
+  val data      = Vec(32, UInt(64.W))
+  val finish    = Bool()
 }
 
 class TokenEvent extends DifftestBaseBundle with HasValid {
