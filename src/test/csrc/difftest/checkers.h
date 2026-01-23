@@ -21,6 +21,7 @@
 #include "diffstate.h"
 #include "refproxy.h"
 
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
 #include <chrono>
 #include <iostream>
 #include <vector>
@@ -29,15 +30,19 @@
 #include <cxxabi.h>
 #include <algorithm>
 #include <map>
+#endif
 
 class DiffTestChecker {
 public:
   DiffTestChecker(DiffState *state, RefProxy *proxy) : state(state), proxy(proxy){
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
     all_checkers.push_back(this);
+#endif
   }
   virtual ~DiffTestChecker() = default;
 
   int step() {
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
     if (!name_init) {
       int status;
       char* realname = abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status);
@@ -46,16 +51,21 @@ public:
       name_init = true;
     }
 
+
     auto start = std::chrono::steady_clock::now();
     int ret = do_step();
     auto end = std::chrono::steady_clock::now();
     total_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     return ret;
+#else
+    return do_step();
+#endif
   }
 
   virtual int do_step() = 0;
 
   static void print_stats() {
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
       std::map<std::string, long long> stats;
       long long total_sum = 0;
 
@@ -85,6 +95,7 @@ public:
       std::cout << std::string(60, '-') << std::endl;
       std::cout << std::left << std::setw(40) << "TOTAL" << total_sum << std::endl;
       std::cout << "==============================================\n" << std::endl;
+#endif
   }
 
   static const int STATE_OK = 0;
@@ -101,7 +112,9 @@ protected:
   long long total_time = 0;
 
 public:
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
   static std::vector<DiffTestChecker*> all_checkers;
+#endif
 };
 
 class SimpleChecker : public DiffTestChecker {
@@ -376,7 +389,6 @@ private:
   bool get_valid(const DifftestSbufferEvent &probe) override;
   void clear_valid(DifftestSbufferEvent &probe) override;
   int check(const DifftestSbufferEvent &probe) override;
-  void display_sbuffer();
 };
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 

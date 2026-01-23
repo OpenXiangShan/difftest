@@ -31,7 +31,9 @@
 #include "query.h"
 #endif // CONFIG_DIFFTEST_QUERY
 
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
 std::vector<DiffTestChecker*> DiffTestChecker::all_checkers;
+#endif
 Difftest **difftest = NULL;
 
 int difftest_init(bool enabled, size_t ramsize) {
