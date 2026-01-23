@@ -241,6 +241,9 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     }
     unpack += s"memcpy(packet, data, $size);"
     unpack += s"data += ${elem_bytes.sum};"
+    if (config.isDelta && gen.isDeltaElem) {
+      unpack += "dStats->hasProgress = true;"
+    }
     unpack +=
       s"""
          |#ifdef CONFIG_DIFFTEST_QUERY

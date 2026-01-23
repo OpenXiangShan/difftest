@@ -67,6 +67,8 @@ object Delta {
          |private:
          |  DeltaState buffer[NUM_CORES];
          |public:
+         |  bool hasProgress = false;
+         |
          |  DeltaStats() {
          |    memset(buffer, 0, sizeof(buffer));
          |  }
@@ -74,13 +76,7 @@ object Delta {
          |    return buffer + coreid;
          |  }
          |  bool need_pending() {
-         |    for (int i = 0; i < NUM_CORES; i++) {
-         |      auto info = get(i)->delta_info;
-         |      if (info.inPending != 0) {
-         |        return true;
-         |      }
-         |    }
-         |    return false;
+         |    return hasProgress && !get(0)->delta_info.valid;
          |  }
          |  void sync(int zone, int index) {
          |    for (int i = 0; i < NUM_CORES; i++) {
@@ -88,6 +84,8 @@ object Delta {
          |      DeltaState* delta = get(i);
          |      ${deltaSync("dut", "delta").mkString("\n      ")}
          |    }
+         |    hasProgress = false;
+         |    get(0)->delta_info.valid = false;
          |  }
          |};
          |""".stripMargin
@@ -181,9 +179,11 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
     module.out
   }
   val deltaInfo = Wire(Valid(new DiffDeltaInfo))
-  deltaInfo.valid := VecInit(deltas.map(_.valid)).asUInt.orR
+  // Only transfer deltaInfo when there is no pending deltas
+  val lastPending = VecInit(deltas.map(_.valid)).asUInt.orR && !inPending.asUInt.orR
+  deltaInfo.valid := lastPending
+  deltaInfo.bits.valid := lastPending
   deltaInfo.bits.coreid := 0.U
-  deltaInfo.bits.inPending := PopCount(inPending)
 
   val withDeltas = MixedVecInit((queued.filterNot(_.bits.supportsDelta) ++ deltas ++ Seq(deltaInfo)).toSeq)
   val out = IO(Output(chiselTypeOf(withDeltas)))

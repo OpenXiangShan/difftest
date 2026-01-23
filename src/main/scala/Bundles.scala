@@ -368,6 +368,4 @@ class SyncCustomMflushpwrEvent extends DifftestBaseBundle with HasValid {
   val l2FlushDone = Bool()
 }
 
-private[difftest] class DeltaInfo extends DifftestBaseBundle {
-  val inPending = UInt(8.W)
-}
+private[difftest] class DeltaInfo extends DifftestBaseBundle with HasValid
