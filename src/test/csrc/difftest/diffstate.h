@@ -18,6 +18,7 @@
 #define __DIFFSTATE_H__
 
 #include "common.h"
+#include <cstdint>
 #include <queue>
 #include <unordered_set>
 
@@ -122,7 +123,19 @@ public:
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
 
 #ifdef CONFIG_DIFFTEST_STOREEVENT
-  std::queue<DifftestStoreEvent> store_event_queue;
+  typedef struct {
+    uint8_t valid;
+    uint64_t addr;
+    uint64_t data;
+    uint8_t mask;
+    uint64_t pc;
+    uint16_t robidx;
+#ifdef CONFIG_DIFFTEST_SQUASH
+    uint32_t stamp;
+#endif
+  } StoreCommit;
+
+  std::queue<StoreCommit> store_event_queue;
 #endif // CONFIG_DIFFTEST_STOREEVENT
 
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT

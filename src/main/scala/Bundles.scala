@@ -247,7 +247,12 @@ class UncacheMMStoreEvent extends DifftestBaseBundle with HasValid {
 class StoreEvent extends DifftestBaseBundle with HasValid {
   val addr = UInt(64.W)
   val data = UInt(64.W)
-  val mask = UInt(8.W)
+  val highData = UInt(64.W)
+  val mask = UInt(16.W)
+  val wLine = Bool()
+  val vecNeedSplit = Bool()
+  val eew = UInt(8.W)
+  val offset = UInt(16.W)
   val pc = UInt(64.W)
   val robidx = UInt(10.W)
 }
