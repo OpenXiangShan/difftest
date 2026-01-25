@@ -31,9 +31,6 @@
 #include "query.h"
 #endif // CONFIG_DIFFTEST_QUERY
 
-#ifdef CONFIG_DIFFTEST_CHECKER_PERF
-std::vector<DiffTestChecker*> DiffTestChecker::all_checkers;
-#endif
 Difftest **difftest = NULL;
 
 int difftest_init(bool enabled, size_t ramsize) {
@@ -141,7 +138,9 @@ void difftest_trace_write(int step) {
 }
 
 void difftest_finish() {
-  DiffTestChecker::print_stats();
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
+  Stopwatch::print_stats(CHECKERS);
+#endif
 #ifdef CONFIG_DIFFTEST_PERFCNT
   uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
   difftest_perfcnt_finish(cycleCnt);

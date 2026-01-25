@@ -22,81 +22,50 @@
 #include "refproxy.h"
 
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
-#include <chrono>
-#include <iostream>
-#include <vector>
-#include <iomanip>
-#include <typeinfo>
+#include "stopwatch.h"
 #include <cxxabi.h>
-#include <algorithm>
-#include <map>
 #endif
 
 class DiffTestChecker {
 public:
-  DiffTestChecker(DiffState *state, RefProxy *proxy) : state(state), proxy(proxy){
+  DiffTestChecker(DiffState *state, RefProxy *proxy) : state(state), proxy(proxy) {
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
-    all_checkers.push_back(this);
+    timer = nullptr;
 #endif
   }
-  virtual ~DiffTestChecker() = default;
+  virtual ~DiffTestChecker() {
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
+    delete timer;
+#endif
+  }
+
+  void before_step() {
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
+    if (!timer) {
+      int status;
+      char *realname = abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status);
+      std::string name = (status == 0) ? std::string(realname) : std::string(typeid(*this).name());
+      free(realname);
+      timer = new Stopwatch(name, StopwatchType::CHECKERS);
+    }
+    timer->start();
+#endif
+  }
+
+  void after_step() {
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
+    timer->stop();
+#endif
+  }
 
   int step() {
-#ifdef CONFIG_DIFFTEST_CHECKER_PERF
-    if (!name_init) {
-      int status;
-      char* realname = abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status);
-      name = (status == 0) ? std::string(realname) : std::string(typeid(*this).name());
-      free(realname);
-      name_init = true;
-    }
-
-
-    auto start = std::chrono::steady_clock::now();
+    before_step();
     int ret = do_step();
-    auto end = std::chrono::steady_clock::now();
-    total_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    after_step();
     return ret;
-#else
-    return do_step();
-#endif
   }
 
   virtual int do_step() = 0;
-
-  static void print_stats() {
-#ifdef CONFIG_DIFFTEST_CHECKER_PERF
-      std::map<std::string, long long> stats;
-      long long total_sum = 0;
-
-      for (auto* c : all_checkers) {
-          if (c->total_time > 0) {
-              stats[c->name] += c->total_time;
-              total_sum += c->total_time;
-          }
-      }
-
-      using Pair = std::pair<std::string, long long>;
-      std::vector<Pair> sorted_stats(stats.begin(), stats.end());
-
-      // sort by time descending
-      std::sort(sorted_stats.begin(), sorted_stats.end(), [](const Pair& a, const Pair& b){
-          return a.second > b.second;
-      });
-
-      std::cout << "\n===== DiffTest Checker Performance Stats =====" << std::endl;
-      std::cout << std::left << std::setw(40) << "Checker Name" << "Time (us)" << std::endl;
-      std::cout << std::string(60, '-') << std::endl;
-
-      for (const auto& p : sorted_stats) {
-          std::cout << std::left << std::setw(40) << p.first
-                  << p.second << std::endl;
-      }
-      std::cout << std::string(60, '-') << std::endl;
-      std::cout << std::left << std::setw(40) << "TOTAL" << total_sum << std::endl;
-      std::cout << "==============================================\n" << std::endl;
-#endif
-  }
 
   static const int STATE_OK = 0;
   static const int STATE_DIFF = 1;
@@ -106,14 +75,8 @@ public:
 protected:
   DiffState *state;
   RefProxy *proxy;
-
-  std::string name;
-  bool name_init = false;
-  long long total_time = 0;
-
-public:
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
-  static std::vector<DiffTestChecker*> all_checkers;
+  Stopwatch *timer;
 #endif
 };
 
