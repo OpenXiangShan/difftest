@@ -20,13 +20,49 @@
 #include "common.h"
 #include "diffstate.h"
 #include "refproxy.h"
+#include "stopwatch.h"
+
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
+#include <cxxabi.h>
+#endif
 
 class DiffTestChecker {
 public:
   DiffTestChecker(DiffState *state, RefProxy *proxy) : state(state), proxy(proxy) {}
-  virtual ~DiffTestChecker() = default;
+  virtual ~DiffTestChecker() {
+    if (timer) {
+      delete timer;
+    }
+    timer = nullptr;
+  }
 
-  virtual int step() = 0;
+  void before_step() {
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
+    if (!timer) {
+      int status;
+      char *realname = abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status);
+      std::string name = (status == 0) ? std::string(realname) : std::string(typeid(*this).name());
+      free(realname);
+      timer = new Stopwatch(name, StopwatchType::CHECKERS);
+    }
+    timer->start();
+#endif
+  }
+
+  void after_step() {
+#ifdef CONFIG_DIFFTEST_CHECKER_PERF
+    timer->stop();
+#endif
+  }
+
+  int step() {
+    before_step();
+    int ret = do_step();
+    after_step();
+    return ret;
+  }
+
+  virtual int do_step() = 0;
 
   static const int STATE_OK = 0;
   static const int STATE_DIFF = 1;
@@ -36,6 +72,7 @@ public:
 protected:
   DiffState *state;
   RefProxy *proxy;
+  Stopwatch *timer = nullptr;
 };
 
 class SimpleChecker : public DiffTestChecker {
@@ -43,7 +80,7 @@ public:
   SimpleChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
   virtual ~SimpleChecker() = default;
 
-  virtual int step() override {
+  virtual int do_step() override {
     if (get_valid()) {
       int ret = check();
       clear_valid();
@@ -69,7 +106,7 @@ public:
       : DiffTestChecker(state, proxy), get_probe(std::move(get_probe)) {}
   virtual ~ProbeChecker() = default;
 
-  virtual int step() override {
+  virtual int do_step() override {
     Probe &probe = get_probe();
     if (get_valid(probe)) {
       int ret = check(probe);
