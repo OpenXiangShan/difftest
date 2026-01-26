@@ -1,10 +1,26 @@
+/***************************************************************************************
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2026 Beijing Institute of Open Source Chip
+*
+* DiffTest is licensed under Mulan PSL v2.
+* You can use this software according to the terms and conditions of the Mulan PSL v2.
+* You may obtain a copy of Mulan PSL v2 at:
+*          http://license.coscl.org.cn/MulanPSL2
+*
+* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+*
+* See the Mulan PSL v2 for more details.
+***************************************************************************************/
+
 #include "stopwatch.h"
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
 #include <map>
 
-std::vector<Stopwatch *> all_stopwatches;
+static std::vector<Stopwatch *> all_stopwatches;
 std::vector<std::string> StopwatchTypeNames = {"Difftest Checkers", "Others"};
 
 Stopwatch::Stopwatch(std::string name, StopwatchType type) : name(std::move(name)), type(type) {
@@ -65,7 +81,7 @@ void Stopwatch::print_stats(StopwatchType type) {
 
   size_t type_index = static_cast<size_t>(type);
   std::string type_name = (type_index < StopwatchTypeNames.size()) ? StopwatchTypeNames[type_index] : "Unknown";
-  std::cout << "\n===== DiffTest " << type_name << " Performance Stats =====" << std::endl;
+  std::cout << "\n===== " << type_name << " Performance Stats =====" << std::endl;
   std::cout << std::left << std::setw(40) << "Name" << "Time (ms)" << std::endl;
   std::cout << std::string(60, '-') << std::endl;
 

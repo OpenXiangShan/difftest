@@ -20,23 +20,20 @@
 #include "common.h"
 #include "diffstate.h"
 #include "refproxy.h"
+#include "stopwatch.h"
 
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
-#include "stopwatch.h"
 #include <cxxabi.h>
 #endif
 
 class DiffTestChecker {
 public:
-  DiffTestChecker(DiffState *state, RefProxy *proxy) : state(state), proxy(proxy) {
-#ifdef CONFIG_DIFFTEST_CHECKER_PERF
-    timer = nullptr;
-#endif
-  }
+  DiffTestChecker(DiffState *state, RefProxy *proxy) : state(state), proxy(proxy) {}
   virtual ~DiffTestChecker() {
-#ifdef CONFIG_DIFFTEST_CHECKER_PERF
-    delete timer;
-#endif
+    if (timer) {
+      delete timer;
+    }
+    timer = nullptr;
   }
 
   void before_step() {
@@ -75,9 +72,7 @@ public:
 protected:
   DiffState *state;
   RefProxy *proxy;
-#ifdef CONFIG_DIFFTEST_CHECKER_PERF
-  Stopwatch *timer;
-#endif
+  Stopwatch *timer = nullptr;
 };
 
 class SimpleChecker : public DiffTestChecker {
