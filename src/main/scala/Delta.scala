@@ -120,14 +120,18 @@ class DeltaQueue(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) ext
   out := Mux(dequeue, mem(tail), 0.U.asTypeOf(out))
 }
 
-class DeltaSplitter(v_gen: Valid[DifftestBundle], config: GatewayConfig) extends Module {
+class DeltaSplitter(v_gen: Valid[DifftestBundle], filter: Option[UInt], config: GatewayConfig) extends Module {
   val in = IO(Input(v_gen))
+  val in_filter = Option.when(filter.isDefined)(IO(Input(chiselTypeOf(filter.get))))
   val out = IO(Output(Vec(config.deltaLimit, Valid(new DiffDeltaElem(v_gen.bits)))))
   val inPending = IO(Output(Bool()))
   val first_elems = VecInit(in.bits.dataElements.flatMap(_._3))
   val r_elems = RegInit(0.U.asTypeOf(first_elems))
 
-  val first_updates = VecInit(first_elems.zip(r_elems).map { case (e, s) => e =/= s && in.valid })
+  val update_mask = in_filter.getOrElse(Fill(first_elems.length, true.B)).asBools
+  val first_updates = VecInit(first_elems.zip(r_elems).zip(update_mask).map { case ((e, s), m) =>
+    e =/= s && in.valid && m
+  })
   r_elems.zip(first_elems).zip(first_updates).map { case ((r, e), u) =>
     when(u) {
       r := e
@@ -173,8 +177,35 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   val inPending = Wire(Vec(toDeltas.length, Bool()))
   queue.inPending := inPending.asUInt.orR
   val deltas = toDeltas.zipWithIndex.flatMap { case (v_gen, idx) =>
-    val module = Module(new DeltaSplitter(chiselTypeOf(v_gen), config))
+    val filter: Option[UInt] = v_gen.bits match {
+      case preg: DiffPhyRegState =>
+        Option.when(preg.needRat) {
+          val filterWidth = preg.numPhyRegs
+          queued.map { v_gen =>
+            val res = v_gen.bits match {
+              case rat: DiffArchRenameTable if rat.desiredCppName == preg.ratTarget.desiredCppName => {
+                rat.value.map { regIdx => UIntToOH(regIdx, filterWidth) }.reduce(_ | _)
+              }
+              case cmt: DiffInstrCommit => {
+                // Only check vecCommit when multi-core load
+                val wpdest = if (bundles.exists(_.bits.desiredCppName == "load")) {
+                  cmt.otherwpdest ++ Seq(cmt.wpdest)
+                } else {
+                  Seq(cmt.wpdest)
+                }
+                wpdest.map { dst => UIntToOH(dst, filterWidth) }.reduce(_ | _)
+              }
+              case _ => false.B
+            }
+            Mux(v_gen.valid, res, 0.U(filterWidth.W))
+          }.reduce(_ | _)
+        }
+      case _ => None
+    }
+
+    val module = Module(new DeltaSplitter(chiselTypeOf(v_gen), filter, config))
     module.in := v_gen
+    module.in_filter.foreach(_ := filter.get)
     inPending(idx) := module.inPending
     module.out
   }
