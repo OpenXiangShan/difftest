@@ -41,5 +41,8 @@ jobs:
           export PATH=/nfs/home/share/tools/yosys:$PATH
           cd $NOOP_HOME/difftest
           bash ./scripts/ieda/run_sta.sh $DIFF_RTL_HOME GatewayEndpoint
-          echo "===== STA Results ====="
+
+      - name: Print critical paths
+        run: |
+          cd $NOOP_HOME/difftest
           cat ./scripts/ieda/critical_paths.txt
