@@ -364,18 +364,27 @@ abstract class DiffPhyRegState(val numPhyRegs: Int) extends PhyRegState(numPhyRe
   override val supportsDelta: Boolean = true
   override def classArgs: Map[String, Any] = Map("numPhyRegs" -> numPhyRegs)
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  def archTarget: ArchRegState with DifftestBundle
+  def ratTarget: DiffArchRenameTable
+  def needRat: Boolean = numPhyRegs != archTarget.numRegs
 }
 
 class DiffPhyIntRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {
   override val desiredCppName: String = "pregs_xrf"
+  override def archTarget = new DiffArchIntRegState
+  override def ratTarget = new DiffArchIntRenameTable(numPhyRegs)
 }
 
 class DiffPhyFpRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {
   override val desiredCppName: String = "pregs_frf"
+  override def archTarget = new DiffArchFpRegState
+  override def ratTarget = new DiffArchFpRenameTable(numPhyRegs)
 }
 
 class DiffPhyVecRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {
   override val desiredCppName: String = "pregs_vrf"
+  override def archTarget = new DiffArchVecRegState
+  override def ratTarget = new DiffArchVecRenameTable(numPhyRegs)
 }
 
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
