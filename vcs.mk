@@ -61,6 +61,10 @@ VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH --max-num-widt
 VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5
 VCS_FLAGS += -Mdir $(VCS_BUILD_DIR)  --compiler gcc
 VCS_CXXFLAGS += -std=c++20
+THREADS ?= 0
+ifneq ($(THREADS),0)
+VCS_FLAGS += --threads $(THREADS) --threads-dpi all
+endif
 else
 VCS_FLAGS += -full64 +v2k -top $(VCS_TOP) -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR) -j200
