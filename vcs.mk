@@ -69,6 +69,10 @@ VCS_FLAGS += --main
 endif
 
 VCS_CXXFLAGS += -std=c++20
+EMU_THREADS ?= 0
+ifneq ($(EMU_THREADS),0)
+VCS_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
+endif
 else
 VCS_FLAGS += -full64 +v2k -top $(VCS_TOP) -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR) -j200
