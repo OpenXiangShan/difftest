@@ -356,6 +356,9 @@ always @(posedge clock) begin
   end
   else begin
     delayed_simv_result <= simv_result;
+    if (difftest_perfCtrl_dump) begin
+      $display("Difftest perf dump at cycle %d", n_cycles);
+    end
     if (delayed_simv_result == `SIMV_FAIL) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
       $fatal;
@@ -398,10 +401,24 @@ assign difftest_logCtrl_end = difftest_logCtrl_end_r;
 assign difftest_logCtrl_level = 0;
 
 `ifndef TB_NO_DPIC
-assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP;
+reg [63:0] perf_cycles;
+`define PERF_INTERVAL 64'd100000000
+always @(posedge clock) begin
+  if (reset) begin
+    perf_cycles <= 0;
+  end
+  else if (perf_cycles == `PERF_INTERVAL - 1) begin
+    perf_cycles <= 0;
+  end
+  else begin
+    perf_cycles <= perf_cycles + 1'b1;
+  end
+end
+assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP || (perf_cycles == `PERF_INTERVAL - 1);
 assign difftest_perfCtrl_dump =
   simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED || simv_result == `SIMV_FAIL ||
-    (max_cycles > 0 && n_cycles == max_cycles - 1);
+    (max_cycles > 0 && n_cycles == max_cycles - 1) ||
+    (perf_cycles == `PERF_INTERVAL - 1);
 `else
 assign difftest_perfCtrl_clean = 0;
 assign difftest_perfCtrl_dump = 0;
