@@ -57,9 +57,17 @@ endif
 endif
 
 ifeq ($(VCS),verilator)
-VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH --max-num-width 150000
+VCS_FLAGS += --exe --cc --top-module $(VCS_TOP) -Wno-WIDTH --max-num-width 150000
 VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5
 VCS_FLAGS += -Mdir $(VCS_BUILD_DIR)  --compiler gcc
+ifneq (,$(filter $(TRACE),1 vcd VCD))
+VCS_FLAGS += --trace
+else ifneq (,$(filter $(TRACE),fst FST))
+VCS_FLAGS += --trace-fst
+else
+VCS_FLAGS += --main
+endif
+
 VCS_CXXFLAGS += -std=c++20
 else
 VCS_FLAGS += -full64 +v2k -top $(VCS_TOP) -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L

@@ -249,6 +249,13 @@ jobs:
             ./build/simv +workload=$WORKLOAD +max-cycles=100000
             make clean
 
+      - name: Verilator Build with VCS Top (TraceFst)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator Trace=fst -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO +dump-wave
+            make clean
+
       - name: Verilator Build with VCS Top (SYNTHESIS)(with DutZone)
         run: |
             cd $NOOP_HOME
