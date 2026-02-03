@@ -17,6 +17,8 @@
 #include "difftest.h"
 #include "difftrace.h"
 #include "dut.h"
+#include <chrono>
+#include <thread>
 #include "flash.h"
 #include "goldenmem.h"
 #include "ram.h"
@@ -511,7 +513,40 @@ int Difftest::step() {
     return ret;
   }
 #else
-  return check_all();
+  int ret = check_all();
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  if (mma_verifier) {
+    if (ret) { // find error, wait for mma verification to complete
+      while (mma_verifier->has_pending_mma_verifications() &&
+             !mma_verifier->has_mma_verification_error()) {
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+      }
+    }
+    if (mma_verifier->has_mma_verification_error()) {
+      auto buffer = mma_verifier->get_error_buffer();
+      Info("MMA verification error detected at pc = 0x%lx.\n", buffer->amu_event.pc);
+      Info("------ DUT Result ------\n");
+      for (int i = 0; i < buffer->amu_event.mtilem; i++) {
+        for (int j = 0; j < buffer->amu_event.mtilen; j++) {
+          Info("%08x ", ((uint32_t *)(buffer->dut_result))[i * buffer->amu_event.mtilen + j]);
+        }
+        Info("\n");
+      }
+      Info("------ REF Result ------\n");
+      for (int i = 0; i < buffer->amu_event.mtilem; i++) {
+        for (int j = 0; j < buffer->amu_event.mtilen; j++) {
+          Info("%08x ", ((uint32_t *)(buffer->src3))[i * buffer->amu_event.mtilen + j]);
+        }
+        Info("\n");
+      }
+      display();
+      dut->trap.pc = buffer->amu_event.pc;
+      ret = STATE_BADTRAP;
+      mma_verifier->stop();
+    }
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+  return ret;
 #endif // CONFIG_DIFFTEST_REPLAY
 }
 

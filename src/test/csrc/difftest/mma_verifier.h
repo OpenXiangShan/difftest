@@ -17,13 +17,11 @@
 #ifndef __MMA_VERIFIER_H__
 #define __MMA_VERIFIER_H__
 
-#include "common.h"
 #include <queue>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
-#include <vector>
 #include "refproxy.h"
 
 // MMA verification buffer structure
@@ -33,7 +31,6 @@ typedef struct {
   uint8_t *src2;                   // Pointer to source matrix 2 data
   uint8_t *src3;                   // Pointer to source matrix 3 data (accumulator)
   uint8_t *dut_result;             // Pointer to DUT result data
-  bool in_use;                     // Whether this buffer is currently in use
 } MmaVerificationBuffer;
 
 // Calculate element size based on typed field
@@ -90,28 +87,50 @@ public:
   // Add buffer to verification queue
   void add_to_verification_queue(MmaVerificationBuffer *buffer);
   
+  // Interface for DiffTest main flow:
+  // 1. Returns true if there are MMA instructions that haven't completed verification yet
+  bool has_pending_mma_verifications() const;
+  // 2. Returns true if any MMA verification has failed
+  bool has_mma_verification_error() const;
+  // 3. Returns the first failed MMA instruction's buffer (nullptr if no error)
+  const MmaVerificationBuffer* get_error_buffer() const;
+  
 private:
   // Reference proxy for getting reference results
   REF_PROXY *proxy;
   
-  // MMA verification thread related
+  // MMA verification thread state: NotStarted | Running | StoppedNotJoined
+  enum class ThreadState : int { NotStarted = 0, Running = 1, StoppedNotJoined = 2 };
   std::thread mma_verification_thread;      // Verification thread
-  std::atomic<bool> mma_thread_running;      // Thread running flag
-  std::queue<MmaVerificationBuffer*> mma_verification_queue; // Buffer queue
+  std::atomic<bool> mma_thread_running;     // Signal for thread to keep running (used in wait)
+  std::atomic<ThreadState> mma_thread_state{ThreadState::NotStarted};
+  std::queue<MmaVerificationBuffer*> mma_verification_queue; // Pending verification queue
   std::mutex mma_queue_mutex;                // Mutex for queue access
   std::condition_variable mma_queue_cv;      // Condition variable for queue
   
-  // MMA verification buffer management
-  std::vector<MmaVerificationBuffer*> mma_buffers;
+  // Count of MMA instructions pending verification (in queue or being processed)
+  std::atomic<int> mma_pending_count{0};
+  // Set to true when any MMA verification fails
+  std::atomic<bool> mma_has_error{false};
+  // Buffer of the first failed MMA instruction (retained for error reporting)
+  std::atomic<MmaVerificationBuffer*> mma_error_buffer{nullptr};
   
   // Thread function
   void mma_verification_thread_func();
-
-  bool mmacc(MmaVerificationBuffer *buffer);
-  bool mmaccu(MmaVerificationBuffer *buffer);
-  bool mmaccus(MmaVerificationBuffer *buffer);
-  bool mmaccsu(MmaVerificationBuffer *buffer);
-  bool mfmacc(MmaVerificationBuffer *buffer);
+  
+  // Template function for integer matrix multiplication
+  // src1_t: int8_t for signed, uint8_t for unsigned
+  // src2_t: int8_t for signed, uint8_t for unsigned
+  template<class src1_t, class src2_t>
+  bool mmacc_template(MmaVerificationBuffer *buffer);
+  
+  // Template function for floating-point matrix multiplication
+  // src_exp_bits: exponent bit width of source operands (src1 and src2 have the same format)
+  // src_mantissa_bits: mantissa bit width of source operands
+  // result_exp_bits: exponent bit width of result (accumulator)
+  // result_mantissa_bits: mantissa bit width of result (accumulator)
+  template<int src_exp_bits, int src_mantissa_bits, int result_exp_bits, int result_mantissa_bits>
+  bool mfmacc_template(MmaVerificationBuffer *buffer);
 };
 
 #endif // __MMA_VERIFIER_H__
