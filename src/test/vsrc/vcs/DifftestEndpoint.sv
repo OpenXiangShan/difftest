@@ -349,13 +349,18 @@ end
 /*
  * difftest result check
  */
+reg [7:0] delay_res;
 always @(posedge clock) begin
-  if (!reset) begin
-    if (simv_result == `SIMV_FAIL) begin
+  if (reset) begin
+    delay_res <= 0;
+  end
+  else begin
+    delay_res <= simv_result;
+    if (delay_res == `SIMV_FAIL) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
       $fatal;
     end
-    else if (simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED) begin
+    else if (delay_res == `SIMV_GOODTRAP || delay_res == `SIMV_EXCEED) begin
       $display("DIFFTEST WORKLOAD DONE at cycle %d", n_cycles);
 `ifndef ENABLE_WORKLOAD_SWITCH
 `ifndef NO_FINISH_AFTER_WORKLOAD
@@ -394,7 +399,9 @@ assign difftest_logCtrl_level = 0;
 
 `ifndef TB_NO_DPIC
 assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP;
-assign difftest_perfCtrl_dump = simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED || simv_result == `SIMV_FAIL;
+assign difftest_perfCtrl_dump =
+  simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED || simv_result == `SIMV_FAIL ||
+    (max_cycles > 0 && n_cycles == max_cycles - 1);
 `else
 assign difftest_perfCtrl_clean = 0;
 assign difftest_perfCtrl_dump = 0;
