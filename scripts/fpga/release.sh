@@ -117,6 +117,21 @@ for f in "$RELEASE_RTL"/array_*.v; do
 done
 echo "Replacing done."
 
+if [ -f "$RELEASE_RTL/ClockGate.sv" ]; then
+    echo "Replacing ClockGate.sv ..."
+    cat > "$RELEASE_RTL/ClockGate.sv" <<'CLOCKGATE_EOF'
+module ClockGate (
+    input  wire TE,
+    input  wire E,
+    input  wire CK,
+    output wire Q
+);
+    assign Q = CK;
+endmodule
+CLOCKGATE_EOF
+    echo "Replaceing done."
+fi
+
 # -----------------------------
 # 4. Print Git Version
 # -----------------------------
