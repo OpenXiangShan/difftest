@@ -256,6 +256,13 @@ jobs:
             ./build/simv +workload=$WORKLOAD +diff=$REF_SO +dump-wave
             make clean
 
+      - name: Verilator Build with VCS Top (2 THREADS)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator THREADS=2 -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO
+            make clean
+
       - name: Verilator Build with VCS Top (SYNTHESIS)(with DutZone)
         run: |
             cd $NOOP_HOME
