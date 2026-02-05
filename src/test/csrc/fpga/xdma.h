@@ -17,21 +17,26 @@
 #define __XDMA_H__
 
 #include "common.h"
+#include "diffstate.h"
 #include "mpool.h"
 #include <atomic>
 #include <queue>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/shm.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
 #endif // FPGA_SIM
 
-#define DMA_PACKGE_NUM 8
+#define HOST_IO_RESET           0x0
+#define HOST_IO_DIFFTEST_ENABLE 0x4
 
+#define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
 #define DMA_PACKGE_LEN     (CONFIG_DIFFTEST_BATCH_BYTELEN + 1)
 #define DMA_PACKGE_ALIGNED ((DMA_PACKGE_LEN + 63) / 64 * 64)
@@ -53,36 +58,58 @@ class FpgaXdma {
 public:
   FpgaXdma();
 
-  void start() {
+  void start(bool enable_diff) {
     running = true;
+#ifndef FPGA_SIM
+    fpga_io(HOST_IO_DIFFTEST_ENABLE, enable_diff);
+#endif // FPGA_SIM
+    if (enable_diff == false) {
+      static volatile sig_atomic_t signal_received = 0;
+
+      auto handler = [](int sig) {
+        signal_received = sig;
+        printf("\nReceived signal %d, terminating...\n", sig);
+        exit(0);
+      };
+
+      signal(SIGINT, handler);
+      signal(SIGTERM, handler);
+
+      while (signal_received == 0) {
+        usleep(10000);
+      }
+    } else {
 #ifdef USE_THREAD_MEMPOOL
-    std::unique_lock<std::mutex> lock(thread_mtx);
-    start_transmit_thread();
-    while (running) {
-      thread_cv.wait(lock); // wait notify from stop
-    }
-    stop_thansmit_thread();
+      std::unique_lock<std::mutex> lock(thread_mtx);
+      start_transmit_thread();
+      while (running) {
+        thread_cv.wait(lock); // wait notify from stop
+      }
+      stop_thansmit_thread();
 #else
-    read_and_process();
+      read_and_process();
 #endif // USE_THREAD_MEMPOOL
+    }
   }
+
   void stop() {
     running = false;
 #ifdef USE_THREAD_MEMPOOL
     thread_cv.notify_one();
 #endif // USE_THREAD_MEMPOOL
   }
-  void ddr_load_workload(const char *workload) {
-    core_reset();
-    device_write(true, workload, 0, 0);
-    core_restart();
+
+  void fpga_io(uint64_t address, bool enable) {
+    if (enable)
+      device_write(false, nullptr, address, 0x1);
+    else
+      device_write(false, nullptr, address, 0x0);
   }
 
-  void fpga_reset_io(bool enable) {
-    if (enable)
-      device_write(false, nullptr, 0x0, 0x1);
-    else
-      device_write(false, nullptr, 0x0, 0x0);
+  void ddr_load_workload(const char *workload) {
+    fpga_io(HOST_IO_RESET, true);
+    device_write(true, workload, 0, 0);
+    fpga_io(HOST_IO_RESET, false);
   }
 
 private:
@@ -93,16 +120,6 @@ private:
 #endif
 
   void device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);
-  void core_reset() {
-    device_write(false, nullptr, 0x20000, 0x1);
-    device_write(false, nullptr, 0x100000, 0x1);
-    device_write(false, nullptr, 0x10000, 0x8);
-  }
-
-  void core_restart() {
-    device_write(false, nullptr, 0x20000, 0);
-    device_write(false, nullptr, 0x100000, 0);
-  }
 
 #ifdef USE_THREAD_MEMPOOL
   std::mutex thread_mtx;
