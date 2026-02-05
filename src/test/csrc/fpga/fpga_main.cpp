@@ -16,6 +16,7 @@
 
 #include "args.h"
 #include "device.h"
+#include "diffstate.h"
 #include "difftest.h"
 #include "flash.h"
 #include "goldenmem.h"
@@ -44,6 +45,7 @@ enum {
 } fpga_state;
 
 static uint8_t fpga_result = FPGA_RUN;
+static bool enable_difftest = true;
 static CommonArgs args;
 
 void fpga_init();
@@ -68,9 +70,9 @@ int main(int argc, const char *argv[]) {
 }
 
 void fpga_init() {
-  xdma_device = new FpgaXdma();
+  xdma_device = new FpgaXdma(args.enable_diff);
 #ifndef FPGA_SIM
-  xdma_device->fpga_reset_io(true);
+  xdma_device->fpga_io(HOST_IO_RESET, true);
   usleep(1000);
 #endif // FPGA_SIM
 
@@ -90,7 +92,7 @@ void fpga_init() {
 #ifdef USE_XDMA_DDR_LOAD
   xdma_device->ddr_load_workload(args.image);
 #endif // USE_XDMA_DDR_LOAD
-  xdma_device->fpga_reset_io(false);
+  xdma_device->fpga_io(HOST_IO_RESET, false);
 #endif // FPGA_SIM
 }
 
