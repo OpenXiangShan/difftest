@@ -24,6 +24,8 @@
 #include <atomic>
 #include "refproxy.h"
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+
 // MMA verification buffer structure
 typedef struct {
   DifftestAmuCtrlEvent amu_event;  // AMU control event for this MMA instruction
@@ -132,5 +134,7 @@ private:
   template<int src_exp_bits, int src_mantissa_bits, int result_exp_bits, int result_mantissa_bits>
   bool mfmacc_template(MmaVerificationBuffer *buffer);
 };
+
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #endif // __MMA_VERIFIER_H__
