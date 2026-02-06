@@ -230,9 +230,11 @@ protected:
 #endif // CONFIG_DIFFTEST_TOKENEVENT
 
   int check_all();
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   int do_amuctrl_check();
   int do_token_check();
   int do_amuexec_check();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   
   inline bool in_disambiguation_state() {
     static bool was_found = false;

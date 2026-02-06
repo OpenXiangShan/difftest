@@ -15,6 +15,8 @@
 ***************************************************************************************/
 
 #include "mma_verifier.h"
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 #include <cstring>
 #include <type_traits>
 #include <climits>
@@ -445,3 +447,5 @@ bool MmaVerifier::mmacc_template(MmaVerificationBuffer *buffer) {
   
   return memcmp(buffer->dut_result, buffer->src3, tile_m * tile_n * sizeof(result_type)) == 0;
 }
+
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
