@@ -515,29 +515,29 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
+
+#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
+  if (dut->commit[0].valid) {
+    dut_commit_batch_pc = dut->commit[0].pc;
+    ref_commit_batch_pc = proxy->state.pc;
+    if (dut_commit_batch_pc != ref_commit_batch_pc) {
+      pc_mismatch = true;
+    }
+  }
+#endif
+  // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    if (dut->commit[i].valid) {
+      num_commit += 1 + dut->commit[i].nFused;
+      if (int ret = instr_commit_checker[i]->step()) {
+        return ret;
+      }
+    }
+  }
+
   if (dut->event.valid) {
     if (int ret = arch_event_checker->step()) {
       return ret;
-    }
-    dut->commit[0].valid = 0;
-  } else {
-#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-    if (dut->commit[0].valid) {
-      dut_commit_batch_pc = dut->commit[0].pc;
-      ref_commit_batch_pc = proxy->state.pc;
-      if (dut_commit_batch_pc != ref_commit_batch_pc) {
-        pc_mismatch = true;
-      }
-    }
-#endif
-    // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-      if (dut->commit[i].valid) {
-        num_commit += 1 + dut->commit[i].nFused;
-        if (int ret = instr_commit_checker[i]->step()) {
-          return ret;
-        }
-      }
     }
   }
 
