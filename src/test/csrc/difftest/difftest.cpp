@@ -396,39 +396,40 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
+
+#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
+  if (dut->commit[0].valid) {
+    dut_commit_first_pc = dut->commit[0].pc;
+    ref_commit_first_pc = proxy->state.pc;
+    if (dut_commit_first_pc != ref_commit_first_pc) {
+      pc_mismatch = true;
+    }
+  }
+#endif
+  // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    if (dut->commit[i].valid) {
+      if (do_instr_commit(i)) {
+        return 1;
+      }
+#ifndef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+      do_load_check(i);
+#endif // CONFIG_DIFFTEST_LOADEVENT
+      if (do_store_check()) {
+        return 1;
+      }
+#endif // CONFIG_DIFFTEST_SQUASH
+      dut->commit[i].valid = 0;
+      num_commit += 1 + dut->commit[i].nFused;
+    }
+  }
+
+
   if (dut->event.valid) {
     // interrupt has a higher priority than exception
     dut->event.interrupt ? do_interrupt() : do_exception();
     dut->event.valid = 0;
-    dut->commit[0].valid = 0;
-  } else {
-#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-    if (dut->commit[0].valid) {
-      dut_commit_first_pc = dut->commit[0].pc;
-      ref_commit_first_pc = proxy->state.pc;
-      if (dut_commit_first_pc != ref_commit_first_pc) {
-        pc_mismatch = true;
-      }
-    }
-#endif
-    // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-      if (dut->commit[i].valid) {
-        if (do_instr_commit(i)) {
-          return 1;
-        }
-#ifndef CONFIG_DIFFTEST_SQUASH
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-        do_load_check(i);
-#endif // CONFIG_DIFFTEST_LOADEVENT
-        if (do_store_check()) {
-          return 1;
-        }
-#endif // CONFIG_DIFFTEST_SQUASH
-        dut->commit[i].valid = 0;
-        num_commit += 1 + dut->commit[i].nFused;
-      }
-    }
   }
 
   if (update_delayed_writeback()) {
