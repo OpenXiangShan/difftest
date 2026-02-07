@@ -203,18 +203,20 @@ else # ifneq ($(PGO_BOLT),1)
 		$(VERILATOR_TARGET).pre-bolt -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
 			1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
 			2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
-			$(PGO_EMU_ARGS)") && \
-		perf2bolt -p=$(VERILATOR_PGO_DIR)/perf.data -o=$(VERILATOR_PGO_DIR)/perf.fdata $(VERILATOR_TARGET).pre-bolt) || \
+			$(PGO_EMU_ARGS) || true") && \
+		(perf2bolt -p=$(VERILATOR_PGO_DIR)/perf.data -o=$(VERILATOR_PGO_DIR)/perf.fdata $(VERILATOR_TARGET).pre-bolt || true)) || \
 		(echo -e "\033[31mlinux-perf is not available, fallback to instrumentation-based PGO\033[0m" && \
 		$(LLVM_BOLT) $(VERILATOR_TARGET).pre-bolt \
 			-instrument --instrumentation-file=$(VERILATOR_PGO_DIR)/perf.fdata \
 			-o $(VERILATOR_PGO_DIR)/emu.instrumented && \
-		$(VERILATOR_PGO_DIR)/emu.instrumented -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+		($(VERILATOR_PGO_DIR)/emu.instrumented -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
 			1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
 			2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
-			$(PGO_EMU_ARGS))
+			$(PGO_EMU_ARGS) || true))
 	@echo "Processing BOLT profile data..."
-	@$(LLVM_BOLT) $(VERILATOR_TARGET).pre-bolt -o $(VERILATOR_TARGET) -data=$(VERILATOR_PGO_DIR)/perf.fdata -reorder-blocks=ext-tsp
+	@$(LLVM_BOLT) $(VERILATOR_TARGET).pre-bolt -o $(VERILATOR_TARGET) -data=$(VERILATOR_PGO_DIR)/perf.fdata -reorder-blocks=ext-tsp || \
+		(echo -e "\033[31mBOLT optimization failed, fallback to non-PGO build\033[0m" && \
+		mv $(VERILATOR_TARGET).pre-bolt $(VERILATOR_TARGET))
 endif # ifneq ($(PGO_BOLT),1)
 else # ifdef PGO_WORKLOAD
 	@echo "Building emu..."

@@ -140,16 +140,16 @@ else # ifneq ($(PGO_BOLT),1)
 		$(GSIM_EMU_TARGET).pre-bolt -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
 			1>$(GSIM_EMU_PGO_DIR)/`date +%s`.log \
 			2>$(GSIM_EMU_PGO_DIR)/`date +%s`.err \
-			$(PGO_EMU_ARGS)") && \
+			$(PGO_EMU_ARGS) || true") && \
 		perf2bolt -p=$(GSIM_EMU_PGO_DIR)/perf.data -o=$(GSIM_EMU_PGO_DIR)/perf.fdata $(GSIM_EMU_TARGET).pre-bolt) || \
 		(echo -e "\033[31mlinux-perf is not available, fallback to instrumentation-based PGO\033[0m" && \
 		$(LLVM_BOLT) $(GSIM_EMU_TARGET).pre-bolt \
 			-instrument --instrumentation-file=$(GSIM_EMU_PGO_DIR)/perf.fdata \
 			-o $(GSIM_EMU_PGO_DIR)/emu.instrumented && \
-		$(GSIM_EMU_PGO_DIR)/emu.instrumented -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
+		($(GSIM_EMU_PGO_DIR)/emu.instrumented -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
 			1>$(GSIM_EMU_PGO_DIR)/`date +%s`.log \
 			2>$(GSIM_EMU_PGO_DIR)/`date +%s`.err \
-			$(PGO_EMU_ARGS))
+			$(PGO_EMU_ARGS) || true))
 	@echo "Processing BOLT profile data..."
 	@$(LLVM_BOLT) $(GSIM_EMU_TARGET).pre-bolt -o $(GSIM_EMU_TARGET) -data=$(GSIM_EMU_PGO_DIR)/perf.fdata -reorder-blocks=ext-tsp
 endif # ifneq ($(PGO_BOLT),1)
