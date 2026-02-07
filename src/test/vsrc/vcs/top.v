@@ -73,6 +73,18 @@ initial begin
     end
   end
 `endif
+
+`ifdef EMU_TRACE
+  // enable waveform for verilator
+  if ($test$plusargs("dump-wave")) begin
+`ifdef ENABLE_FST
+    $dumpfile("simv.fst");
+`else
+    $dumpfile("simv.vcd");
+`endif // ENABLE_FST
+    $dumpvars;
+  end
+`endif // EMU_TRACE
 end
 
 // Note: reset delay #100 should be larger than RANDOMIZE_DELAY

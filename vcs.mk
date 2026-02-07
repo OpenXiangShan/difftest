@@ -57,15 +57,13 @@ endif
 endif
 
 ifeq ($(VCS),verilator)
-VCS_FLAGS += --exe --cc --top-module $(VCS_TOP) -Wno-WIDTH --max-num-width 150000
+VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH --max-num-width 150000
 VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5
 VCS_FLAGS += -Mdir $(VCS_BUILD_DIR)  --compiler gcc
 ifneq (,$(filter $(EMU_TRACE),1 vcd VCD))
-VCS_FLAGS += --trace
+VCS_FLAGS += --trace +define+EMU_TRACE
 else ifneq (,$(filter $(EMU_TRACE),fst FST))
-VCS_FLAGS += --trace-fst
-else
-VCS_FLAGS += --main
+VCS_FLAGS += --trace-fst +define+EMU_TRACE +define+ENABLE_FST
 endif
 
 VCS_CXXFLAGS += -std=c++20
