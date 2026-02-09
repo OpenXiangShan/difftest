@@ -53,11 +53,12 @@ void handle_sigint(int sig) {
   exit(1);
 }
 
-FpgaXdma::FpgaXdma()
+FpgaXdma::FpgaXdma(bool args_enable_diff)
 #ifdef USE_THREAD_MEMPOOL
     : xdma_mempool(sizeof(FpgaPackgeHead))
 #endif // USE_THREAD_MEMPOOL
 {
+  enable_diff = enable_diff;
   signal(SIGINT, handle_sigint);
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     char c2h_device[64];
