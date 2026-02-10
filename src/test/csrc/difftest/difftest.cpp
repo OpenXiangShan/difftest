@@ -428,8 +428,22 @@ inline int Difftest::check_all() {
 
   if (dut->event.valid) {
     // interrupt has a higher priority than exception
-    dut->event.interrupt ? do_interrupt() : do_exception();
+    if (dut->event.interrupt) {
+      do_interrupt();
+    } else if (dut->event.isFormer) {
+      do_exception();
+    } else if (!dut->event.isFormer) {
+      waitInstrCommitBeforeException = true;
+      event = dut->event;
+    }
     dut->event.valid = 0;
+  } else {
+    if (num_commit > 0 && waitInstrCommitBeforeException) {
+      waitInstrCommitBeforeException = false;
+      dut->event = event;
+      do_exception();
+      dut->event.valid = 0;
+    }
   }
 
   if (update_delayed_writeback()) {
@@ -449,6 +463,8 @@ inline int Difftest::check_all() {
   if (apply_delayed_writeback()) {
     return 1;
   }
+
+  if (waitInstrCommitBeforeException) return 0;
 
   if (proxy->compare(dut) || pc_mismatch) {
 #ifdef FUZZING

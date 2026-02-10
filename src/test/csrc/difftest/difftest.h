@@ -105,6 +105,8 @@ public:
   REF_PROXY *proxy = NULL;
   uint32_t num_commit = 0; // # of commits if made progress
   WarmupInfo warmup_info;
+  bool waitInstrCommitBeforeException = false;
+  DifftestArchEvent event;
   // Trigger a difftest checking procdure
   int step();
   void update_nemuproxy(int, size_t);
