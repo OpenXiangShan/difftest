@@ -174,6 +174,8 @@ protected:
 
   static const uint64_t delay_wb_limit = 80;
   uint32_t num_commit = 0; // # of commits if made progress
+  bool waitInstrCommitBeforeException = false;
+  DifftestArchEvent event{};
 
   // For compare the first instr pc of a commit group
   bool pc_mismatch = false;

@@ -61,6 +61,7 @@ class ArchEvent extends DifftestBaseBundle with HasValid {
   val virtualInterruptIsHvictlInject = Bool()
   val irToHS = Bool()
   val irToVS = Bool()
+  val isFormer = Bool()
 }
 
 class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasValid {

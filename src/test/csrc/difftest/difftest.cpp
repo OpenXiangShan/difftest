@@ -536,8 +536,22 @@ inline int Difftest::check_all() {
   }
 
   if (dut->event.valid) {
-    if (int ret = arch_event_checker->step()) {
-      return ret;
+    if (dut->event.interrupt || dut->event.isFormer) {
+      if (int ret = arch_event_checker->step()) {
+        return ret;
+      }
+    } else {
+      waitInstrCommitBeforeException = true;
+      event = dut->event;
+      dut->event.valid = 0;
+    }
+  } else {
+    if (num_commit > 0 && waitInstrCommitBeforeException) {
+      waitInstrCommitBeforeException = false;
+      dut->event = event;
+      if (int ret = arch_event_checker->step()) {
+        return ret;
+      }
     }
   }
 
@@ -558,6 +572,8 @@ inline int Difftest::check_all() {
   if (apply_delayed_writeback()) {
     return DiffTestChecker::STATE_DIFF;
   }
+
+  if (waitInstrCommitBeforeException) return DiffTestChecker::STATE_OK;
 
   if (proxy->compare(dut) || pc_mismatch) {
 #ifdef FUZZING
