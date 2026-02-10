@@ -109,7 +109,7 @@ void difftest_set_dut() {
 // difftest_step returns a trap code
 int difftest_step() {
   difftest_set_dut();
-#if defined(CONFIG_DIFFTEST_QUERY) && !defined(CONFIG_DIFFTEST_BATCH)
+#ifdef CONFIG_DIFFTEST_QUERY
   difftest_query_step();
 #endif // CONFIG_DIFFTEST_QUERY
   for (int i = 0; i < NUM_CORES; i++) {
