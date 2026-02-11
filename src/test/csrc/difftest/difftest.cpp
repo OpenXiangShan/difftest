@@ -536,7 +536,7 @@ inline int Difftest::check_all() {
   }
 
   if (dut->event.valid) {
-    if (dut->event.interrupt || dut->event.isFormer) {
+    if (dut->event.interrupt || dut->event.isFormer || num_commit > 0) {
       if (int ret = arch_event_checker->step()) {
         return ret;
       }
