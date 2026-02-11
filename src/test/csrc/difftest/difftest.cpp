@@ -432,6 +432,8 @@ inline int Difftest::check_all() {
       do_interrupt();
     } else if (dut->event.isFormer) {
       do_exception();
+    } else if (!dut->event.isFormer && num_commit > 0) {
+      do_exception();
     } else if (!dut->event.isFormer) {
       waitInstrCommitBeforeException = true;
       event = dut->event;
