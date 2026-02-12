@@ -339,17 +339,26 @@ void Difftest::init_checkers() {
 
   arch_event_checker = new ArchEventChecker([this]() -> DifftestArchEvent & { return dut->event; }, state, proxy,
                                             [this]() -> const DiffTestRegState & { return dut->regs; });
-  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-    instr_commit_checker[i] =
-        new InstrCommitChecker([this, i]() -> DifftestInstrCommit & { return dut->commit[i]; }, state, proxy, i,
-                               [this]() -> const DiffTestState & { return *dut; });
-  }
+
+  std::vector<DiffTestChecker *> inst_op_checkers;
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
   load_squash_checker = new LoadSquashChecker(state, proxy, [this]() -> const DiffTestState & { return *dut; });
+  inst_op_checkers.push_back(load_squash_checker);
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_checker = new StoreChecker(state, proxy);
+  inst_op_checkers.push_back(store_checker);
 #endif // CONFIG_DIFFTEST_STOREEVENT
+
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    std::vector<DiffTestChecker *> tmp_checkers = inst_op_checkers;
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+    inst_op_checkers.push_back(load_checker[i]);
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
+    instr_commit_checker[i] =
+        new InstrCommitChecker([this, i]() -> DifftestInstrCommit & { return dut->commit[i]; }, state, proxy, i,
+                               [this]() -> const DiffTestState & { return *dut; }, tmp_checkers);
+  }
 }
 
 void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
@@ -489,19 +498,6 @@ inline int Difftest::check_all() {
         if (int ret = instr_commit_checker[i]->step()) {
           return ret;
         }
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-#ifdef CONFIG_DIFFTEST_SQUASH
-        load_squash_checker->step();
-#else
-        load_checker[i]->step();
-#endif // CONFIG_DIFFTEST_SQUASH
-#endif // CONFIG_DIFFTEST_LOADEVENT
-#ifdef CONFIG_DIFFTEST_STOREEVENT
-        // check is the same for all checkers
-        if (int ret = store_checker->step()) {
-          return ret;
-        }
-#endif // CONFIG_DIFFTEST_STOREEVENT
       }
     }
   }

@@ -158,13 +158,14 @@ private:
 class InstrCommitChecker : public ProbeChecker<DifftestInstrCommit> {
 public:
   InstrCommitChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy, uint64_t index,
-                     std::function<const DiffTestState &()> get_dut_state)
+                     std::function<const DiffTestState &()> get_dut_state, std::vector<DiffTestChecker *> op_checkers)
       : ProbeChecker<DifftestInstrCommit>(get_probe, state, proxy), index(index),
-        get_dut_state(std::move(get_dut_state)) {}
+        get_dut_state(std::move(get_dut_state)), op_checkers(std::move(op_checkers)) {}
 
 private:
   uint64_t index;
   std::function<const DiffTestState &()> get_dut_state;
+  std::vector<DiffTestChecker *> op_checkers;
 
   bool get_valid(const DifftestInstrCommit &probe) override;
   void clear_valid(DifftestInstrCommit &probe) override;

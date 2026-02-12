@@ -93,9 +93,6 @@ void InstrCommitChecker::clear_valid(DifftestInstrCommit &probe) {
   probe.valid = 0;
   state->has_progress = true;
   state->last_commit_cycle = state->cycle_count;
-#ifdef CONFIG_DIFFTEST_SQUASH
-  state->commit_stamp = (state->commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
-#endif // CONFIG_DIFFTEST_SQUASH
 }
 
 int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
@@ -165,7 +162,23 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
   // when there's a fused instruction, let proxy execute more instructions.
   for (int j = 0; j < probe.nFused + 1; j++) {
     proxy->ref_exec(1);
+#ifdef CONFIG_DIFFTEST_SQUASH
+    state->commit_stamp = (state->commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+    for (auto checker: op_checkers) { // checker squashed ld/st after each instr
+      if (int ret = checker->step()) {
+        return ret;
+      }
+    }
+#endif // CONFIG_DIFFTEST_SQUASH
   }
+
+#ifndef CONFIG_DIFFTEST_SQUASH
+  for (auto checker: op_checkers) {
+    if (int ret = checker->step()) {
+      return ret;
+    }
+  }
+#endif // CONFIG_DIFFTEST_SQUASH
 
   return STATE_OK;
 }
