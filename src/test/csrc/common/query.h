@@ -61,6 +61,7 @@ public:
 class QueryStatsBase {
 public:
   char path[128];
+  int query_zone = 0;
   long long query_step = 0;
   sqlite3 *mem_db = nullptr;
   QueryStatsBase(char *_path) {
@@ -86,6 +87,7 @@ public:
     sqlite3_close(mem_db);
   }
   virtual void step() {
+    query_zone = (query_zone + 1) % CONFIG_DIFFTEST_ZONESIZE;
     query_step++;
     if (query_step % 10000 == 0) {
       sqlite3_exec(mem_db, "COMMIT;", 0, 0, 0);

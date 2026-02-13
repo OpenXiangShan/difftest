@@ -319,9 +319,6 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |    else if (id == BatchStep) {
            |      $stepPending
            |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
-           |#ifdef CONFIG_DIFFTEST_QUERY
-           |      difftest_query_step();
-           |#endif // CONFIG_DIFFTEST_QUERY
            |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
            |#ifdef FPGA_HOST
            |      extern void fpga_nstep(uint8_t step);
@@ -374,12 +371,12 @@ object DPIC {
 
   def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
     val bundleType = chiselTypeOf(io)
-    Query.register(bundleType.bits, "io_")
     val module = Module(new DummyDPICWrapper(bundleType, config).suggestName(bundleType.bits.desiredCppName))
     module.control := control
     module.io := io
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
+      Query.register(bundleType.bits, "io_", "dut_zone")
       perfs += dpic.dpicFuncName
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
@@ -390,7 +387,7 @@ object DPIC {
   }
 
   def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
-    Query.register(template, "")
+    Query.register(template, "", "0")
     val module = Module(new DummyDPICBatchWrapper(template, chiselTypeOf(io), config))
     module.control := control
     module.io := io

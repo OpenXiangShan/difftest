@@ -23,11 +23,11 @@ import scala.collection.mutable.ListBuffer
 
 object Query {
   private val tables = ListBuffer.empty[QueryTable]
-  def register(gen: DifftestBundle, locPrefix: String) = {
-    tables += new QueryTable(gen, locPrefix)
+  def register(gen: DifftestBundle, locPrefix: String, dutZone: String) = {
+    tables += new QueryTable(gen, locPrefix, dutZone)
   }
-  def register(gens: Seq[DifftestBundle], locPrefix: String) = {
-    gens.foreach { gen => tables += new QueryTable(gen, locPrefix) }
+  def register(gens: Seq[DifftestBundle], locPrefix: String, dutZone: String) = {
+    gens.foreach { gen => tables += new QueryTable(gen, locPrefix, dutZone) }
   }
   def writeInvoke(gen: DifftestBundle): String = {
     tables.find(_.gen == gen).get.writeInvoke
@@ -64,10 +64,10 @@ object Query {
   }
 }
 
-class QueryTable(val gen: DifftestBundle, locPrefix: String) {
+class QueryTable(val gen: DifftestBundle, locPrefix: String, dutZone: String) {
   val tableName: String = gen.desiredModuleName.replace("Difftest", "")
   // Args: (key, value)
-  private val stepArgs: Seq[(String, String)] = Seq(("STEP", "query_step"))
+  private val stepArgs: Seq[(String, String)] = Seq(("STEP", s"query_step + (query_zone != $dutZone)"))
   private val locArgs: Seq[(String, String)] = {
     val argList = ListBuffer.empty[(String, String)]
     argList += (("COREID", "coreid"))
@@ -111,11 +111,13 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String) {
        |""".stripMargin
   val initInvoke = s"${tableName}_init();"
   val packetType = if (gen.isDeltaElem) s"uint${gen.deltaElemWidth}_t" else gen.desiredModuleName
-  val writeDecl =
+  val writeDecl = {
+    val locParam = locArgs.map("uint8_t " + _._2).mkString(", ")
     s"""
-       |  void ${tableName}_write(${locArgs.map("uint8_t " + _._2).mkString(", ")}, ${packetType}* packet) {
+       |  void ${tableName}_write(int dut_zone, $locParam, ${packetType}* packet) {
        |    query_${tableName}->write(${sqlArgs.length}, ${sqlArgs.map(_._2).mkString(", ")});
        |  }
        |""".stripMargin
-  val writeInvoke = s"qStats->${tableName}_write(${locArgs.map(locPrefix + _._2).mkString(", ")}, packet);"
+  }
+  val writeInvoke = s"qStats->${tableName}_write($dutZone, ${locArgs.map(locPrefix + _._2).mkString(", ")}, packet);"
 }
