@@ -64,6 +64,14 @@ ifneq ($(EMU_THREADS),0)
 VERILATOR_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
 endif
 
+# Verilator build parallelization (controls split .cpp compilation)
+VM_PARALLEL_BUILDS ?= 1
+ifneq ($(VM_PARALLEL_BUILDS),0)
+VM_PARALLEL_BUILDS := 1
+endif
+VM_BUILD_JOBS ?=
+VM_MAKE_J := $(if $(strip $(VM_BUILD_JOBS)),-j $(VM_BUILD_JOBS),)
+
 ifeq ($(EMU_SNAPSHOT),1)
 VERILATOR_FLAGS += --savable
 endif
@@ -128,7 +136,7 @@ EMU_COMPILE_FILTER =
 verilator-build-emu:
 ifeq ($(REMOTE),localhost)
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
-	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
+	$(TIME_CMD) $(MAKE) -s $(VM_MAKE_J) VM_PARALLEL_BUILDS=$(VM_PARALLEL_BUILDS) OPT_SLOW="-O0" \
 						OPT_FAST=$(OPT_FAST) \
 						PGO_CFLAGS="$(PGO_CFLAGS)" \
 						PGO_LDFLAGS="$(PGO_LDFLAGS)" \
@@ -137,7 +145,8 @@ ifeq ($(REMOTE),localhost)
 else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); \
 					   $(MAKE) -C $(NOOP_HOME)/difftest verilator-build-emu \
-					   -j `nproc` \
+					   -j $(if $(strip $(VM_BUILD_JOBS)),$(VM_BUILD_JOBS),`nproc`) \
+					   VM_PARALLEL_BUILDS="$(VM_PARALLEL_BUILDS)" \
 					   OPT_FAST="'"$(OPT_FAST)"'" \
 					   PGO_CFLAGS="'"$(PGO_CFLAGS)"'" \
 					   PGO_LDFLAGS="'"$(PGO_LDFLAGS)"'"'
