@@ -124,7 +124,7 @@ void fpga_display_result(int ret) {
       default: eprintf(ANSI_COLOR_RED "Unknown trap code: %d\n", ret);
     }
     difftest[i]->display_stats();
-    if (args.warmup_instr != 0) {
+    if (args.warmup_instr != -1) {
       difftest[i]->warmup_display_stats();
     }
   }
