@@ -136,10 +136,6 @@ int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size) {
   return xsim[channel]->write(buf, tlast, size);
 }
 
-extern "C" unsigned char v_xdma_tready() {
-  return 1;
-}
-
 extern "C" void v_xdma_write(uint8_t channel, const char *axi_tdata, uint8_t axi_tlast) {
   xdma_sim_write(channel, axi_tdata, axi_tlast, 64);
 }

@@ -23,25 +23,37 @@ module xdma_axi(
   input axi_tvalid
 );
 
-import "DPI-C" function bit v_xdma_tready();
 import "DPI-C" function void v_xdma_write(
   input byte channel,
   input bit [511:0] axi_tdata,
   input bit axi_tlast
 );
 
-reg axi_tready_r;
-assign axi_tready = axi_tready_r;
+// Simulate random ready of tready
+reg [63:0] ready_timer;
+assign axi_tready = !reset && ready_timer == 64'b0;
 always @(posedge clock) begin
   if (reset) begin
-    axi_tready_r <= 1'b0;
+    ready_timer <= 64'h0;
   end
   else begin
-    axi_tready_r <= v_xdma_tready();
+    if (ready_timer != 64'b0) begin
+      ready_timer <= ready_timer - 1;
+    end
     if (axi_tvalid & axi_tready) begin
-      v_xdma_write(0, axi_tdata, axi_tlast);
+      if (axi_tlast) begin
+        ready_timer <= $urandom_range(50, 100);
+      end
+      else begin
+        ready_timer <= $urandom_range(0, 2);
+      end
     end
   end
 end
 
+always @(posedge clock) begin
+  if (!reset & axi_tvalid & axi_tready) begin
+    v_xdma_write(0, axi_tdata, axi_tlast);
+  end
+end
 endmodule
