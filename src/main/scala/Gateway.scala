@@ -241,18 +241,22 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val in_bundle = in.asTypeOf(MixedVec(instanceWithDelay.map(_._1)))
   val decoupledIn = Wire(Decoupled(chiselTypeOf(in_bundle)))
   val clockEnable = Option.when(config.hasClockGate)(IO(Output(Bool())))
-  // clockEnable should hold one more cycle than ready to sample signals when fire
+  // clockEnable should hold with one cycle fire to sample signals
+  decoupledIn.valid := !reset.asBool
   clockEnable.foreach { ce =>
     val ready = decoupledIn.ready
-    ce := (ready && RegNext(ready)) || reset.asBool
+    val valid = RegInit(true.B)
+    decoupledIn.valid := !reset.asBool && valid
+    when(ready) { valid := false.B } // fire to clear valid
+    when(ce) { valid := true.B } // setup valid for next cycle
+    ce := (ready && valid) || reset.asBool
   }
-  decoupledIn.valid := !reset.asBool
 
   if (config.traceLoad) {
     decoupledIn.bits := in_bundle
   } else {
     val delayed = MixedVecInit(
-      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d, decoupledIn.ready) }.toSeq
+      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d, decoupledIn.fire) }.toSeq
     )
     if (config.traceDump) Trace(delayed)
     decoupledIn.bits := delayed
