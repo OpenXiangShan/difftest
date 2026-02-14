@@ -56,16 +56,19 @@ static const char *debug_regs_name[] = {
   "debug mode", "dcsr", "dpc", "dscratch0", "dscratch1",
 };
 
+#define VREG_NAMES(idx) "v" #idx "_0", "v" #idx "_1", "v" #idx "_2", "v" #idx "_3"
 static const char *regs_name_vec[] = {
-  "v0_low",  "v0_high",  "v1_low",  "v1_high",  "v2_low",  "v2_high",  "v3_low",  "v3_high",
-  "v4_low",  "v4_high",  "v5_low",  "v5_high",  "v6_low",  "v6_high",  "v7_low",  "v7_high",
-  "v8_low",  "v8_high",  "v9_low",  "v9_high",  "v10_low", "v10_high", "v11_low", "v11_high",
-  "v12_low", "v12_high", "v13_low", "v13_high", "v14_low", "v14_high", "v15_low", "v15_high",
-  "v16_low", "v16_high", "v17_low", "v17_high", "v18_low", "v18_high", "v19_low", "v19_high",
-  "v20_low", "v20_high", "v21_low", "v21_high", "v22_low", "v22_high", "v23_low", "v23_high",
-  "v24_low", "v24_high", "v25_low", "v25_high", "v26_low", "v26_high", "v27_low", "v27_high",
-  "v28_low", "v28_high", "v29_low", "v29_high", "v30_low", "v30_high", "v31_low", "v31_high"
+  VREG_NAMES(0),  VREG_NAMES(1),  VREG_NAMES(2),  VREG_NAMES(3),
+  VREG_NAMES(4),  VREG_NAMES(5),  VREG_NAMES(6),  VREG_NAMES(7),
+  VREG_NAMES(8),  VREG_NAMES(9),  VREG_NAMES(10), VREG_NAMES(11),
+  VREG_NAMES(12), VREG_NAMES(13), VREG_NAMES(14), VREG_NAMES(15),
+  VREG_NAMES(16), VREG_NAMES(17), VREG_NAMES(18), VREG_NAMES(19),
+  VREG_NAMES(20), VREG_NAMES(21), VREG_NAMES(22), VREG_NAMES(23),
+  VREG_NAMES(24), VREG_NAMES(25), VREG_NAMES(26), VREG_NAMES(27),
+  VREG_NAMES(28), VREG_NAMES(29), VREG_NAMES(30), VREG_NAMES(31)
 };
+#undef VREG_NAMES
+
 
 static const char *regs_name_vec_csr[] = {
   "vstart", "vxsat", "vxrm", "vcsr", "vl", "vtype", "vlenb"
@@ -470,7 +473,10 @@ struct InterruptDelegate {
 extern const char *difftest_ref_so;
 extern uint8_t *ref_golden_mem;
 
-#define REPORT_DIFFERENCE(name, pc_val, right_val, wrong_val) \
-  Info("%7s different at pc = 0x%010lx, right = 0x%016lx, wrong = 0x%016lx\n", name, pc_val, right_val, wrong_val);
+#define HEX128_HI(v) ((uint64_t)(((__uint128_t)(v)) >> 64))
+#define HEX128_LO(v) ((uint64_t)(v))
+#define REPORT_DIFFERENCE(name, pc_val, right_val, wrong_val)                                                        \
+  Info("%7s different at pc = 0x%010lx, right = 0x%016lx_%016lx, wrong = 0x%016lx_%016lx\n", name, pc_val,           \
+       HEX128_HI(right_val), HEX128_LO(right_val), HEX128_HI(wrong_val), HEX128_LO(wrong_val));
 
 #endif
