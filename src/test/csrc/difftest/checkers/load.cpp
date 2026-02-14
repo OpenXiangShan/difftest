@@ -76,6 +76,7 @@ int LoadSquashChecker::check() {
     return STATE_ERROR;
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
   }
+  // proxy->sync();
   bool regWen = probe.regWen;
   auto refRegPtr = proxy->arch_reg(probe.wdest, probe.fpwen);
   auto commitData = probe.commitData;
