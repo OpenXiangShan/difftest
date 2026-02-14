@@ -80,84 +80,17 @@ gsim-clean-obj:
 	-@rm -f $(GSIM_EMU_OBJS) $(GSIM_EMU_TARGET)
 
 # Profile Guided Optimization
-GSIM_EMU_PGO_DIR  = $(GSIM_EMU_BUILD_DIR)/pgo
-
 gsim-gen-emu:
 ifdef PGO_WORKLOAD
-ifneq ($(PGO_BOLT),1)
-	@echo "If available, please use install llvm-bolt for much reduced PGO build time."
-	@echo "Building PGO profile..."
-	@stat $(PGO_WORKLOAD) > /dev/null
-	@$(MAKE) gsim-clean-obj
-	@mkdir -p $(GSIM_EMU_PGO_DIR)
-	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
-	@$(MAKE) gsim-build-emu \
-					   PGO_CFLAGS="-fprofile-generate=$(GSIM_EMU_PGO_DIR)" \
-					   PGO_LDFLAGS="-fprofile-generate=$(GSIM_EMU_PGO_DIR)"
-	@echo "Training emu with PGO Workload..."
-	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
-	$(GSIM_EMU_TARGET) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
-		   1>$(GSIM_EMU_PGO_DIR)/`date +%s`.log \
-		   2>$(GSIM_EMU_PGO_DIR)/`date +%s`.err \
-		   $(PGO_EMU_ARGS)
-	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
-ifdef LLVM_PROFDATA
-# When using LLVM's profile-guided optimization, the raw data can not
-# directly be used in -fprofile-use. We need to use a specific version of
-# llvm-profdata. This happens when verilator compiled with CC=clang
-# CXX=clang++. In this case, we should add LLVM_PROFDATA=llvm-profdata
-# when calling make. For GCC, this step should be skipped. Also, some
-# machines may have multiple versions of llvm-profdata. So please never
-# add default value for LLVM_PROFDATA unless we have a proper way to probe
-# the compiler and the corresponding llvm-profdata value.
-	$(LLVM_PROFDATA) merge $(GSIM_EMU_PGO_DIR)/*.profraw -o $(GSIM_EMU_PGO_DIR)/default.profdata
-else # ifdef LLVM_PROFDATA
-	@echo ""
-	@echo "----------------------- NOTICE BEGIN -----------------------"
-	@echo "If your verilator is compiled with LLVM, please don't forget"
-	@echo "to add LLVM_PROFDATA=llvm-profdata when calling make."
-	@echo ""
-	@echo "If your verilator is compiled with GCC, please ignore this"
-	@echo "message and NEVER adding LLVM_PROFDATA when calling make."
-	@echo "----------------------- NOTICE  END  -----------------------"
-	@echo ""
-endif # ifdef LLVM_PROFDATA
-	@echo "Building emu with PGO profile..."
-	@$(MAKE) gsim-clean-obj
-	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
-	@$(MAKE) gsim-build-emu \
-					   PGO_CFLAGS="-fprofile-use=$(GSIM_EMU_PGO_DIR)" \
-					   PGO_LDFLAGS="-fprofile-use=$(GSIM_EMU_PGO_DIR)"
-else # ifneq ($(PGO_BOLT),1)
+	$(MAKE) pgo-build \
+		PGO_CLEAN_OBJ=gsim-clean-obj \
+		PGO_BUILD_TARGET=gsim-build-emu \
+		PGO_TARGET=$(GSIM_EMU_TARGET) \
+		PGO_EMU_DIR=$(GSIM_EMU_BUILD_DIR)
+else
 	@echo "Building emu..."
-	@$(MAKE) gsim-build-emu PGO_LDFLAGS="-Wl,--emit-relocs -fuse-ld=bfd"
-	@mv $(GSIM_EMU_TARGET) $(GSIM_EMU_TARGET).pre-bolt
-	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
-	@echo "Training emu with PGO Workload..."
-	@mkdir -p $(GSIM_EMU_PGO_DIR)
-	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
-	@((perf record -j any,u -o $(GSIM_EMU_PGO_DIR)/perf.data -- sh -c "\
-		$(GSIM_EMU_TARGET).pre-bolt -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
-			1>$(GSIM_EMU_PGO_DIR)/`date +%s`.log \
-			2>$(GSIM_EMU_PGO_DIR)/`date +%s`.err \
-			$(PGO_EMU_ARGS) || true") && \
-		perf2bolt -p=$(GSIM_EMU_PGO_DIR)/perf.data -o=$(GSIM_EMU_PGO_DIR)/perf.fdata $(GSIM_EMU_TARGET).pre-bolt) || \
-		(echo -e "\033[31mlinux-perf is not available, fallback to instrumentation-based PGO\033[0m" && \
-		$(LLVM_BOLT) $(GSIM_EMU_TARGET).pre-bolt \
-			-instrument --instrumentation-file=$(GSIM_EMU_PGO_DIR)/perf.fdata \
-			-o $(GSIM_EMU_PGO_DIR)/emu.instrumented && \
-		($(GSIM_EMU_PGO_DIR)/emu.instrumented -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
-			1>$(GSIM_EMU_PGO_DIR)/`date +%s`.log \
-			2>$(GSIM_EMU_PGO_DIR)/`date +%s`.err \
-			$(PGO_EMU_ARGS) || true))
-	@echo "Processing BOLT profile data..."
-	@$(LLVM_BOLT) $(GSIM_EMU_TARGET).pre-bolt -o $(GSIM_EMU_TARGET) -data=$(GSIM_EMU_PGO_DIR)/perf.fdata -reorder-blocks=ext-tsp
-endif # ifneq ($(PGO_BOLT),1)
-else # ifdef PGO_WORKLOAD
-	@echo "Building emu..."
-	$(MAKE) gsim-build-emu
+	@$(MAKE) gsim-build-emu
 endif # ifdef PGO_WORKLOAD
-	@sync -d $(BUILD_DIR) -d $(GSIM_EMU_BUILD_DIR)
 
 gsim-emu:
 	$(MAKE) gsim-gen-cpp
