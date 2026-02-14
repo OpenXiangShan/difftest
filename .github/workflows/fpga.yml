@@ -4,6 +4,7 @@ on:
   schedule:
     # 12:00 UTC == 20:00 UTC+8
     - cron: '00 12 * * *'
+  workflow_dispatch:
 
 jobs:
   test-fpga-nutshell:
@@ -17,16 +18,15 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/..
           rm -rf NutShell && rm -rf env-scripts
-          proxychains git clone --single-branch --depth 1 https://github.com/OSCPU/NutShell.git
+          git clone --single-branch --depth 1 https://github.com/OSCPU/NutShell.git
           cd NutShell && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
           echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
           echo "DIFFTEST_LOG=/nfs/home/ci-runner/ci-runner-difftest/pr_log" >> "$GITHUB_ENV"
-          echo "/nfs/home/tools/Xilinx/Vivado/2020.2/bin" >> "$GITHUB_PATH"
 
       - name: Prepare FPGA scripts
         run: |
           cd $GITHUB_WORKSPACE/..
-          proxychains git clone --single-branch --depth 1 https://github.com/OpenXiangShan/env-scripts.git
+          git clone --single-branch --depth 1 https://github.com/OpenXiangShan/env-scripts.git
           cd env-scripts
           echo "ENV_SCRIPTS_HOME=$(pwd)" >> $GITHUB_ENV
 
@@ -39,14 +39,15 @@ jobs:
 
       - name: Create FPGA project
         run: |
-          source /nfs/home/tools/Xilinx/Vivado/2020.2/settings64.sh
+          echo "/nfs/tools/xilinx/Vivado/2024.2/bin" >> "$GITHUB_PATH"
+          source /nfs/tools/xilinx/Vivado/2024.2/settings64.sh
           cd $GITHUB_WORKSPACE/../env-scripts/fpga_diff
           make update_core_flist CORE_DIR=$RELEASE_HOME/build
           make vivado CPU=nutshell
 
       - name: Build FPGA synth
         run: |
-          source /nfs/home/tools/Xilinx/Vivado/2020.2/settings64.sh
+          source /nfs/tools/xilinx/Vivado/2024.2/settings64.sh
           cd $ENV_SCRIPTS_HOME/fpga_diff
           make synth PRJ=./fpga_nutshell/fpga_nutshell.xpr
           bash ./tools/generate_reports.sh nutshell
