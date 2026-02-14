@@ -83,16 +83,25 @@ endif
 # C optimization
 OPT_FAST ?= -O3
 
+# Randomization control (enable with EMU_RANDOMIZE=1)
+EMU_RANDOMIZE ?= 0
+ifeq ($(EMU_RANDOMIZE),1)
+VERILATOR_RANDOMIZE_FLAGS =         \
+  +define+RANDOMIZE_REG_INIT        \
+  +define+RANDOMIZE_MEM_INIT        \
+  +define+RANDOMIZE_GARBAGE_ASSIGN  \
+  +define+RANDOMIZE_DELAY=0
+else
+VERILATOR_RANDOMIZE_FLAGS =
+endif
+
 ########## Verilator Build Recipes ##########
 VERILATOR_FLAGS_ALL =               \
   --exe $(EMU_OPTIMIZE)             \
   --cc --top-module $(EMU_TOP)      \
   +define+VERILATOR=1               \
   +define+PRINTF_COND=1             \
-  +define+RANDOMIZE_REG_INIT        \
-  +define+RANDOMIZE_MEM_INIT        \
-  +define+RANDOMIZE_GARBAGE_ASSIGN  \
-  +define+RANDOMIZE_DELAY=0         \
+  $(VERILATOR_RANDOMIZE_FLAGS)      \
   -Wno-STMTDLY -Wno-WIDTH           \
   --max-num-width 150000            \
   --assert --x-assign unique        \
