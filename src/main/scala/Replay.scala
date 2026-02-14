@@ -20,22 +20,26 @@ import chisel3.experimental.ExtModule
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
+import difftest.util.PipelineConnect
 
 object Replay {
-  def apply(bundles: MixedVec[DifftestBundle], config: GatewayConfig): MixedVec[DifftestBundle] = {
-    val module = Module(new ReplayEndpoint(chiselTypeOf(bundles).toSeq, config))
-    module.in := bundles
+  def apply(
+    bundles: DecoupledIO[MixedVec[DifftestBundle]],
+    config: GatewayConfig,
+  ): DecoupledIO[MixedVec[DifftestBundle]] = {
+    val module = Module(new ReplayEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
+    PipelineConnect(bundles, module.in, module.in.fire)
     module.out
   }
 }
 
 class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
   val info = WireInit(0.U.asTypeOf(new DiffTraceInfo(config)))
   val appendIn = WireInit(0.U.asTypeOf(MixedVec(bundles ++ Seq(chiselTypeOf(info)))))
-  in.zipWithIndex.foreach { case (gen, idx) => appendIn(idx) := gen }
+  in.bits.zipWithIndex.foreach { case (gen, idx) => appendIn(idx) := gen }
   appendIn.last := info
-  val out = IO(Output(chiselTypeOf(appendIn)))
+  val out = IO(Decoupled(chiselTypeOf(appendIn)))
 
   val control = Module(new ReplayControl(config))
   control.clock := clock
@@ -48,7 +52,7 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   // ignore useless data when hasGlobalEnable
   val needStore = WireInit(true.B)
   if (config.hasGlobalEnable) {
-    needStore := VecInit(in.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
+    needStore := VecInit(in.bits.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
   }
   info.valid := needStore
   info.trace_head := ptr
@@ -74,8 +78,10 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
       }
     }
   }
-  out := Mux(in_replay, buffer(ptr), appendIn)
-  out.filter(_.desiredCppName == "trace_info").foreach { gen =>
+  in.ready := out.ready
+  out.valid := in.valid
+  out.bits := Mux(in_replay, buffer(ptr), appendIn)
+  out.bits.filter(_.desiredCppName == "trace_info").foreach { gen =>
     val info = gen.asInstanceOf[DiffTraceInfo]
     info.in_replay := in_replay
   }
