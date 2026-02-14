@@ -65,7 +65,7 @@ extern uint64_t FIRST_INST_ADDRESS;
 #endif
 extern unsigned long EMU_FLASH_SIZE;
 
-#define DIFFTEST_VLEN 128
+#define DIFFTEST_VLEN 256
 #define VLENE_64 DIFFTEST_VLEN/64
 
 // Use sdl to show screen

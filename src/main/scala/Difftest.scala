@@ -356,7 +356,7 @@ class DiffArchFpRenameTable(numPhyRegs: Int) extends DiffArchRenameTable(32, num
   override val desiredCppName: String = "rat_frf"
 }
 
-class DiffArchVecRenameTable(numPhyRegs: Int) extends DiffArchRenameTable(64, numPhyRegs) {
+class DiffArchVecRenameTable(numPhyRegs: Int) extends DiffArchRenameTable(VecConfig.ArchVecRegs, numPhyRegs) {
   override val desiredCppName: String = "rat_vrf"
 }
 
@@ -417,7 +417,7 @@ class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex
 
 private[difftest] class DiffLoadEventQueue extends DiffLoadEvent with DifftestWithStamp with DiffTestIsInherited {
   val commitData = UInt(64.W)
-  val vecCommitData = Vec(16, UInt(64.W))
+  val vecCommitData = Vec(VecConfig.VecCommitWords, UInt(64.W))
   val regWen = Bool()
   val wdest = UInt(8.W)
   val fpwen = Bool()

@@ -18,6 +18,13 @@ package difftest
 import chisel3._
 import chisel3.util._
 
+private[difftest] object VecConfig {
+  val VLEN = 256
+  val VRegWords = VLEN / 64
+  val ArchVecRegs = 32 * VRegWords
+  val VecCommitWords = 8 * VRegWords
+}
+
 sealed trait HasValid {
   val valid = Bool()
 }
@@ -72,7 +79,7 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
   val v0wen = Bool()
   val wpdest = UInt(log2Ceil(numPhyRegs).W)
   val wdest = UInt(8.W)
-  val otherwpdest = Vec(16, UInt(log2Ceil(numPhyRegs).W))
+  val otherwpdest = Vec(VecConfig.VecCommitWords, UInt(log2Ceil(numPhyRegs).W))
 
   val pc = UInt(64.W)
   val instr = UInt(32.W)
@@ -98,7 +105,7 @@ private[difftest] class CommitData extends DifftestBaseBundle with HasValid {
 }
 
 private[difftest] class VecCommitData extends DifftestBaseBundle with HasValid {
-  val data = Vec(16, UInt(64.W))
+  val data = Vec(VecConfig.VecCommitWords, UInt(64.W))
 }
 
 class TrapEvent extends DifftestBaseBundle {
@@ -211,7 +218,7 @@ class ArchFpRegState extends ArchIntRegState {
   )
 }
 
-class ArchVecRegState extends ArchRegState(64)
+class ArchVecRegState extends ArchRegState(VecConfig.ArchVecRegs)
 
 class ArchDelayedUpdate(val numElements: Int) extends DifftestBaseBundle with HasValid with HasAddress {
   val data = UInt(64.W)
