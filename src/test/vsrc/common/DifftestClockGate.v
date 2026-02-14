@@ -27,6 +27,10 @@ module DifftestClockGate(
 		.CE(E)
 	);
 `else
-  assign Q = CK & E;
+	reg EN;
+	always_latch begin
+		if (!CK) EN = E;
+	end
+	assign Q = CK & EN;
 `endif // SYNTHESIS
 endmodule
