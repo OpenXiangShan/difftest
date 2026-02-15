@@ -308,6 +308,7 @@ ifeq ($(CXX_NO_WARNING),1)
 SIM_CXXFLAGS += -Werror
 endif
 
+include pgo.mk
 include emu.mk
 include vcs.mk
 include galaxsim.mk
