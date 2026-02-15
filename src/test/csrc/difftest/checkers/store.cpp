@@ -45,16 +45,15 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
   auto robIdx = probe.robidx;
 
   uint64_t rawVecAddr = addr + offset;
+  uint16_t flow = COMMITBYTES / eew;
+  uint64_t flowMask = (eew == 1) ? 0x1ULL : (eew == 2) ? 0x3ULL : (eew == 4) ? 0xfULL : (eew == 8) ? 0xffULL : 0x0ULL;
+  uint64_t flowMaskBit = (eew == 1)   ? 0xffULL
+                         : (eew == 2) ? 0xffffULL
+                         : (eew == 4) ? 0xffffffffULL
+                         : (eew == 8) ? 0xffffffffffffffffULL
+                                      : 0x0ULL;
 
   if (probe.vecNeedSplit) {
-    uint16_t flow = COMMITBYTES / eew;
-    uint64_t flowMask = (eew == 1) ? 0x1ULL : (eew == 2) ? 0x3ULL : (eew == 4) ? 0xfULL : (eew == 8) ? 0xffULL : 0x0ULL;
-    uint64_t flowMaskBit = (eew == 1)   ? 0xffULL
-                           : (eew == 2) ? 0xffffULL
-                           : (eew == 4) ? 0xffffffffULL
-                           : (eew == 8) ? 0xffffffffffffffffULL
-                                        : 0x0ULL;
-
     // cross 128bits.
     bool handleMisalign = ((mask << (16 - offset)) & 0xFFFF) != 0;
     // For requests exceeding 128 bits, we perform fragmentation.
