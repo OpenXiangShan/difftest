@@ -222,7 +222,7 @@ jobs:
 
   test-vcs-top-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
     needs: test-difftest-main
 
@@ -247,6 +247,20 @@ jobs:
             cd $NOOP_HOME
             make simv NO_DIFF=1 VCS=verilator -j2
             ./build/simv +workload=$WORKLOAD +max-cycles=100000
+            make clean
+
+      - name: Verilator Build with VCS Top (PGO using compiler instrumentation)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator PGO_WORKLOAD=$WORKLOAD LLVM_PROFDATA=llvm-profdata VCS_PGO_ARGS="+diff=$REF_SO 2>/dev/null" PGO_BOLT=0 -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO
+            make clean
+
+      - name: Verilator Build with VCS Top (PGO using BOLT)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator PGO_WORKLOAD=$WORKLOAD VCS_PGO_ARGS="+diff=$REF_SO 2>/dev/null" PGO_BOLT=1 -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO
             make clean
 
       - name: Verilator Build with VCS Top (TraceFst)
@@ -366,7 +380,7 @@ jobs:
 
   test-fpga-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
     needs: test-difftest-main
 
