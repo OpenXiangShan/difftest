@@ -55,10 +55,7 @@ VERILATOR_FLAGS += --trace-fst
 VERILATOR_CXXFLAGS += -DENABLE_FST
 endif
 
-# Verilator trace underscore support
-ifeq ($(EMU_TRACE_ALL),1)
-VERILATOR_FLAGS += --trace-underscore
-endif
+
 
 ifneq ($(EMU_THREADS),0)
 VERILATOR_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
