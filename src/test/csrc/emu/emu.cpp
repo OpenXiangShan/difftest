@@ -64,6 +64,11 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif // VERILATOR
 
   args = parse_args(argc, argv);
+  if (args.max_cycles == static_cast<uint64_t>(-1)) {
+    Info("max cycles: unlimited\n");
+  } else {
+    Info("max cycles: %" PRIu64 "\n", args.max_cycles);
+  }
 #ifdef VERILATOR
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
 #endif
@@ -402,13 +407,48 @@ int Emulator::tick() {
   // cycle limitation
   bool exceed_cycle_limit = false;
 #ifdef CONFIG_NO_DIFFTEST
+  static uint64_t max_cycles_initial = 0;
+  static bool max_cycles_initialized = false;
+  if (!max_cycles_initialized) {
+    max_cycles_initial = args.max_cycles;
+    max_cycles_initialized = true;
+  }
+  static uint64_t next_cycle_report = 2000;
+  if (cycles >= next_cycle_report) {
+    // if (max_cycles_initial == static_cast<uint64_t>(-1)) {
+    //   Info("[CYCLE_LIMIT] cycles=%" PRIu64 " max_cycles=unlimited\n", cycles);
+    // } else {
+    //   Info("[CYCLE_LIMIT] cycles=%" PRIu64 " max_cycles=%" PRIu64 "\n", cycles,
+    //        max_cycles_initial);
+    // }
+    next_cycle_report += 2000;
+  }
   exceed_cycle_limit = !args.max_cycles;
 #else
+  uint64_t max_cycle_cnt = cycles;
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
+    if (trap->cycleCnt > max_cycle_cnt) {
+      max_cycle_cnt = trap->cycleCnt;
+    }
     if (trap->cycleCnt >= args.max_cycles) {
       exceed_cycle_limit = true;
     }
+  }
+  if (!exceed_cycle_limit && args.max_cycles != static_cast<uint64_t>(-1) &&
+      cycles >= args.max_cycles) {
+    exceed_cycle_limit = true;
+  }
+  static uint64_t next_cycle_report = 10000;
+  if (max_cycle_cnt >= next_cycle_report && max_cycle_cnt <= 250000) {
+    if (args.max_cycles == static_cast<uint64_t>(-1)) {
+      Info("[CYCLE_LIMIT] cycles=%" PRIu64 " max_cycles=unlimited\n", max_cycle_cnt);
+    } else {
+      Info("[CYCLE_LIMIT] cycles=%" PRIu64 " max_cycles=%" PRIu64 "\n", max_cycle_cnt,
+           args.max_cycles);
+    }
+    fflush(stdout);
+    next_cycle_report += 10000;
   }
 #endif // CONFIG_NO_DIFFTEST
 
