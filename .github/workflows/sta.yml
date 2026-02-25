@@ -1,0 +1,64 @@
+name: STA Nightly Regression
+
+on:
+  schedule:
+    # 12:00 UTC == 20:00 UTC+8
+    - cron: '00 12 * * *'
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  run-sta-xiangshan:
+    timeout-minutes: 1440
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare XiangShan
+        run: |
+          cd $GITHUB_WORKSPACE/..
+          rm -rf XiangShan
+          proxychains git clone --single-branch --branch master --depth 1 https://github.com/OpenXiangShan/XiangShan.git
+          cd XiangShan && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
+          echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
+          echo "DIFF_RTL_HOME=$(pwd)/difftest/build" >> $GITHUB_ENV
+
+      - name: Build XiangShan
+        run: |
+          cd $NOOP_HOME
+          make verilog DEBUG_ARGS="--difftest-config ESBIFDU --difftest-exclude Vec" FPGA=1 WITH_CHISELDB=0 WITH_CONSTANTIN=0 CONFIG=XSNoCDiffTopConfig -j10
+
+      - name: Build DiffTest
+        run: |
+          cd $NOOP_HOME/difftest
+          export NOOP_HOME=$(pwd)
+          make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=ESBIFDU  
+    
+      - name: Run STA
+        run: |
+          export PATH=/nfs/home/share/tools/yosys:$PATH
+          export YOSYS_STA_DIR=/nfs/home/share/tools/yosys-sta
+          export ABC_THREADS=16
+          cd $NOOP_HOME/difftest
+          # Run STA and filter output in real-time to avoid log size limit
+          bash ./scripts/ieda/run_sta.sh $DIFF_RTL_HOME GatewayEndpoint 2>&1 | \
+            grep -E '(^Step|^===|^---|Error|completed|saved|Results|ABC threads|yosys-sta|RTL directory|Clock|PDK|Netlist|Timing analysis|Critical path|Summary)' || true
+          EXIT_CODE=${PIPESTATUS[0]}
+          # Check if critical_paths.txt was generated
+          if [ ! -f "./scripts/ieda/sta_results/critical_paths.txt" ]; then
+            echo "ERROR: STA did not complete successfully - critical_paths.txt not found"
+            exit 1
+          fi
+          # Exit with original exit code
+          exit $EXIT_CODE
+
+      - name: Print critical results
+        run: |
+          cd $NOOP_HOME/difftest
+          if [ -f "./scripts/ieda/sta_results/critical_paths.txt" ]; then
+            cat ./scripts/ieda/sta_results/critical_paths.txt
+          else
+            echo "ERROR: critical_paths.txt not found!"
+            exit 1
+          fi
