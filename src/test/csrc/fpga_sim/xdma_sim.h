@@ -18,9 +18,34 @@
 #include <stddef.h>
 #include <stdint.h>
 
-void xdma_sim_open(int channel, bool is_host);
-void xdma_sim_close(int channel);
-int xdma_sim_read(int channel, char *buf, size_t size);
-int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size);
+// C2H APIs
+void xdma_c2h_sim_open(int channel, bool is_host);
+void xdma_c2h_sim_close(int channel);
+int xdma_c2h_sim_read(int channel, char *buf, size_t size);
+int xdma_c2h_sim_write(int channel, const char *buf, uint8_t tlast, size_t size);
+
+// H2C APIs
+void xdma_h2c_sim_open(bool is_host);
+void xdma_h2c_sim_close();
+int xdma_h2c_write_ddr(const char *workload, size_t size);
+
+// Config BAR APIs (for FPGA_SIM)
+void xdma_config_bar_open(bool is_host);
+void xdma_config_bar_close();
+void xdma_config_bar_init();
+void xdma_config_bar_write(uint32_t offset, uint32_t data, uint8_t strb);
+uint32_t xdma_config_bar_read(uint32_t offset);
+
+// Backward-compatible aliases
+static inline void xdma_config_bar_sim_open(bool is_host) {
+  xdma_config_bar_open(is_host);
+}
+static inline void xdma_config_bar_sim_close() {
+  xdma_config_bar_close();
+}
+
+// Helper functions for H2C initialization
+void xdma_h2c_init_sequence(uint32_t transfer_len);
+void xdma_h2c_complete_sequence();
 
 #endif // __XDMA_SIM_H__

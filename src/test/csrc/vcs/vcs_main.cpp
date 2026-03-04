@@ -186,7 +186,14 @@ extern "C" uint8_t simv_init() {
   if (args.ram_size) {
     ram_size = parse_ramsize(args.ram_size);
   }
+#if defined(FPGA_SIM) && defined(USE_XDMA_DDR_LOAD)
+  // In H2C DDR load mode, keep DUT RAM zero-initialized in simv.
+  // The workload should come from host H2C writes instead of local image preload.
+  init_ram(NULL, ram_size);
+  printf("[FPGA_SIM] USE_XDMA_DDR_LOAD enabled: skip simv RAM image preload\n");
+#else
   init_ram(args.image, ram_size);
+#endif
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);
 #endif
@@ -206,7 +213,9 @@ extern "C" uint8_t simv_init() {
   init_device();
 
 #ifdef FPGA_SIM
-  xdma_sim_open(0, false);
+  xdma_h2c_sim_open(false);
+  xdma_config_bar_open(false);
+  xdma_c2h_sim_open(0, false);
 #endif // FPGA_SIM
 
   return 0;
@@ -272,7 +281,9 @@ void simv_finish() {
   simMemory = nullptr;
 
 #ifdef FPGA_SIM
-  xdma_sim_close(0);
+  xdma_c2h_sim_close(0);
+  xdma_config_bar_close();
+  xdma_h2c_sim_close();
 #endif //FPGA_SIM
 }
 

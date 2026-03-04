@@ -130,14 +130,17 @@ char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
 }
 
 void MemoryIdxPool::wait_mempool_start() {
-  while (check_group() == false) {}
+  // Start consuming as soon as the first expected index arrives.
+  size_t page_r_idx = read_count.load(std::memory_order_relaxed) + group_r_offset;
+  while (memory_order_ptr[page_r_idx].is_free.load(std::memory_order_acquire)) {
+    std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+  }
 }
 
 char *MemoryIdxPool::read_busy_chunk() {
   size_t page_r_idx = read_count + group_r_offset;
-  if (memory_order_ptr[page_r_idx].is_free.load() == true) {
-    printf("An attempt was made to read the block of free %zu\n", page_r_idx);
-    return nullptr;
+  while (memory_order_ptr[page_r_idx].is_free.load(std::memory_order_acquire)) {
+    std::this_thread::sleep_for(std::chrono::nanoseconds(10));
   }
   size_t memory_pool_idx = memory_order_ptr[page_r_idx].memblock_idx.load();
   char *data = memory_pool[memory_pool_idx];

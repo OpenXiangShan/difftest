@@ -131,9 +131,34 @@ wire sim_clock;
   wire c2h_axi_tready;
   wire c2h_axi_tvalid;
   wire [511:0] c2h_axi_tdata;
+  wire h2c_axis_tvalid;
+  wire [511:0] h2c_axis_tdata;
+  wire h2c_axis_tlast;
+  wire h2c_axis_tready;
+  // AXI4-Lite Config BAR signals
+  wire [31:0]  cfg_awaddr;
+  wire [2:0]   cfg_awprot;
+  wire         cfg_awvalid;
+  wire         cfg_awready;
+  wire [31:0]  cfg_wdata;
+  wire [3:0]   cfg_wstrb;
+  wire         cfg_wvalid;
+  wire         cfg_wready;
+  wire [1:0]   cfg_bresp;
+  wire         cfg_bvalid;
+  wire         cfg_bready;
+  wire [31:0]  cfg_araddr;
+  wire [2:0]   cfg_arprot;
+  wire         cfg_arvalid;
+  wire         cfg_arready;
+  wire [31:0]  cfg_rdata;
+  wire [1:0]   cfg_rresp;
+  wire         cfg_rvalid;
+  wire         cfg_rready;
 
   assign difftest_pcie_clock = clock;
-xdma_axi xaxi(
+
+xdma_axi_c2h xaxi(
   .clock(difftest_pcie_clock),
   .reset(reset),
   .axi_tdata(c2h_axi_tdata),
@@ -141,9 +166,43 @@ xdma_axi xaxi(
   .axi_tready(c2h_axi_tready),
   .axi_tvalid(c2h_axi_tvalid)
 );
+
+xdma_axi_h2c xh2c(
+  .clock(sim_clock),
+  .reset(reset),
+  .axi_tvalid(h2c_axis_tvalid),
+  .axi_tdata(h2c_axis_tdata),
+  .axi_tlast(h2c_axis_tlast),
+  .axi_tready(h2c_axis_tready)
+);
+
 xdma_clock xclk(
   .clock(difftest_pcie_clock),
   .clock_out(sim_clock)
+);
+
+xdma_axilite xaxilite(
+  .clock(sim_clock),
+  .reset(reset),
+  .awaddr(cfg_awaddr),
+  .awprot(cfg_awprot),
+  .awvalid(cfg_awvalid),
+  .awready(cfg_awready),
+  .wdata(cfg_wdata),
+  .wstrb(cfg_wstrb),
+  .wvalid(cfg_wvalid),
+  .wready(cfg_wready),
+  .bresp(cfg_bresp),
+  .bvalid(cfg_bvalid),
+  .bready(cfg_bready),
+  .araddr(cfg_araddr),
+  .arprot(cfg_arprot),
+  .arvalid(cfg_arvalid),
+  .arready(cfg_arready),
+  .rdata(cfg_rdata),
+  .rresp(cfg_rresp),
+  .rvalid(cfg_rvalid),
+  .rready(cfg_rready)
 );
 `else
   assign sim_clock = clock;
@@ -170,6 +229,123 @@ SimTop sim(
   .difftest_to_host_axis_ready(c2h_axi_tready),
   .difftest_to_host_axis_bits_data(c2h_axi_tdata),
   .difftest_to_host_axis_bits_last(c2h_axi_tlast),
+  // H2C Config BAR AXI4-Lite (corrected port names)
+  .difftest_cfg_aw_valid(cfg_awvalid),
+  .difftest_cfg_aw_bits_addr(cfg_awaddr),
+  .difftest_cfg_aw_bits_prot(cfg_awprot),
+  .difftest_cfg_aw_ready(cfg_awready),
+  .difftest_cfg_w_valid(cfg_wvalid),
+  .difftest_cfg_w_bits_data(cfg_wdata),
+  .difftest_cfg_w_bits_strb(cfg_wstrb),
+  .difftest_cfg_w_ready(cfg_wready),
+  .difftest_cfg_b_valid(cfg_bvalid),
+  .difftest_cfg_b_bits_resp(cfg_bresp),
+  .difftest_cfg_b_ready(cfg_bready),
+  .difftest_cfg_ar_valid(cfg_arvalid),
+  .difftest_cfg_ar_bits_addr(cfg_araddr),
+  .difftest_cfg_ar_bits_prot(cfg_arprot),
+  .difftest_cfg_ar_ready(cfg_arready),
+  .difftest_cfg_r_valid(cfg_rvalid),
+  .difftest_cfg_r_bits_data(cfg_rdata),
+  .difftest_cfg_r_bits_resp(cfg_rresp),
+  .difftest_cfg_r_ready(cfg_rready),
+  // H2C Stream (corrected port names)
+  .difftest_h2c_axis_valid(h2c_axis_tvalid),
+  .difftest_h2c_axis_bits_data(h2c_axis_tdata),
+  .difftest_h2c_axis_bits_last(h2c_axis_tlast),
+  .difftest_h2c_axis_ready(h2c_axis_tready),
+  // CPU memory interface (unused in simulation, tie off)
+  .difftest_cpu_mem_aw_ready(),
+  .difftest_cpu_mem_aw_valid(1'b0),
+  .difftest_cpu_mem_aw_bits_addr(64'b0),
+  .difftest_cpu_mem_aw_bits_prot(3'b0),
+  .difftest_cpu_mem_aw_bits_id(1'b0),
+  .difftest_cpu_mem_aw_bits_len(8'b0),
+  .difftest_cpu_mem_aw_bits_size(3'b0),
+  .difftest_cpu_mem_aw_bits_burst(2'b0),
+  .difftest_cpu_mem_aw_bits_lock(1'b0),
+  .difftest_cpu_mem_aw_bits_cache(4'b0),
+  .difftest_cpu_mem_aw_bits_qos(4'b0),
+  .difftest_cpu_mem_aw_bits_user(1'b0),
+  .difftest_cpu_mem_w_ready(),
+  .difftest_cpu_mem_w_valid(1'b0),
+  .difftest_cpu_mem_w_bits_data(16000'b0),
+  .difftest_cpu_mem_w_bits_strb(2000'b0),
+  .difftest_cpu_mem_w_bits_last(1'b0),
+  .difftest_cpu_mem_b_ready(1'b0),
+  .difftest_cpu_mem_b_valid(),
+  .difftest_cpu_mem_b_bits_id(),
+  .difftest_cpu_mem_b_bits_resp(),
+  .difftest_cpu_mem_b_bits_user(),
+  .difftest_cpu_mem_ar_ready(),
+  .difftest_cpu_mem_ar_valid(1'b0),
+  .difftest_cpu_mem_ar_bits_addr(64'b0),
+  .difftest_cpu_mem_ar_bits_prot(3'b0),
+  .difftest_cpu_mem_ar_bits_id(1'b0),
+  .difftest_cpu_mem_ar_bits_len(8'b0),
+  .difftest_cpu_mem_ar_bits_size(3'b0),
+  .difftest_cpu_mem_ar_bits_burst(2'b0),
+  .difftest_cpu_mem_ar_bits_lock(1'b0),
+  .difftest_cpu_mem_ar_bits_cache(4'b0),
+  .difftest_cpu_mem_ar_bits_qos(4'b0),
+  .difftest_cpu_mem_ar_bits_user(1'b0),
+  .difftest_cpu_mem_r_ready(1'b0),
+  .difftest_cpu_mem_r_valid(),
+  .difftest_cpu_mem_r_bits_id(),
+  .difftest_cpu_mem_r_bits_data(),
+  .difftest_cpu_mem_r_bits_resp(),
+  .difftest_cpu_mem_r_bits_last(),
+  .difftest_cpu_mem_r_bits_user(),
+  // DDR memory interface (simulation stub):
+  // keep write channel always ready and return OKAY B responses so H2C stream can drain.
+  .difftest_ddr_mem_aw_ready(1'b1),
+  .difftest_ddr_mem_aw_valid(),
+  .difftest_ddr_mem_aw_bits_addr(),
+  .difftest_ddr_mem_aw_bits_prot(),
+  .difftest_ddr_mem_aw_bits_id(),
+  .difftest_ddr_mem_aw_bits_len(),
+  .difftest_ddr_mem_aw_bits_size(),
+  .difftest_ddr_mem_aw_bits_burst(),
+  .difftest_ddr_mem_aw_bits_lock(),
+  .difftest_ddr_mem_aw_bits_cache(),
+  .difftest_ddr_mem_aw_bits_qos(),
+  .difftest_ddr_mem_aw_bits_user(),
+  .difftest_ddr_mem_w_ready(1'b1),
+  .difftest_ddr_mem_w_valid(),
+  .difftest_ddr_mem_w_bits_data(),
+  .difftest_ddr_mem_w_bits_strb(),
+  .difftest_ddr_mem_w_bits_last(),
+  .difftest_ddr_mem_b_ready(),
+  .difftest_ddr_mem_b_valid(1'b1),
+  .difftest_ddr_mem_b_bits_id(1'b0),
+  .difftest_ddr_mem_b_bits_resp(2'b0),
+  .difftest_ddr_mem_b_bits_user(1'b0),
+  .difftest_ddr_mem_ar_ready(1'b1),
+  .difftest_ddr_mem_ar_valid(),
+  .difftest_ddr_mem_ar_bits_addr(),
+  .difftest_ddr_mem_ar_bits_prot(),
+  .difftest_ddr_mem_ar_bits_id(),
+  .difftest_ddr_mem_ar_bits_len(),
+  .difftest_ddr_mem_ar_bits_size(),
+  .difftest_ddr_mem_ar_bits_burst(),
+  .difftest_ddr_mem_ar_bits_lock(),
+  .difftest_ddr_mem_ar_bits_cache(),
+  .difftest_ddr_mem_ar_bits_qos(),
+  .difftest_ddr_mem_ar_bits_user(),
+  .difftest_ddr_mem_r_ready(),
+  .difftest_ddr_mem_r_valid(1'b0),
+  .difftest_ddr_mem_r_bits_id(1'b0),
+  .difftest_ddr_mem_r_bits_data(16000'b0),
+  .difftest_ddr_mem_r_bits_resp(2'b0),
+  .difftest_ddr_mem_r_bits_last(1'b0),
+  .difftest_ddr_mem_r_bits_user(1'b0),
+  // H2C status outputs (unused in simulation)
+  .difftest_HOST_IO_RESET(),
+  .difftest_HOST_IO_DIFFTEST_ENABLE(),
+  .difftest_ddr_arb_sel(),
+  .difftest_h2c_active(),
+  .difftest_h2c_done(),
+  .difftest_h2c_beat_count(),
 `endif // FPGA_SIM
 `ifdef CONFIG_DIFFTEST_CLOCKGATE
   .difftest_ref_clock(sim_clock),
