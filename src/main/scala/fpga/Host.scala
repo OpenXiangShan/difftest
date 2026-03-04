@@ -135,9 +135,33 @@ class HostEndpoint(
     val to_host_axis = new AXI4Stream(axisWidth)
     val clock_enable = Output(Bool())
     val pcie_clock = Input(Clock())
+
+    // ===== H2C AXI4-Stream input (from XDMA) =====
+    val h2c_axis = Flipped(new AXI4Stream(axisWidth))
+
+    // ===== AXI4-Lite Config BAR interface =====
+    val cfg_aw = Flipped(Decoupled(new AXI4LiteBundleA(32)))
+    val cfg_w = Flipped(Decoupled(new AXI4LiteBundleW(32)))
+    val cfg_b = Decoupled(new AXI4LiteBundleB)
+    val cfg_ar = Flipped(Decoupled(new AXI4LiteBundleA(32)))
+    val cfg_r = Decoupled(new AXI4LiteBundleR(32))
+
+    // ===== CPU AXI4 memory interface (passthrough when H2C inactive) =====
+    val cpu_mem = Flipped(new BusMemAXI4(dataBits = axisWidth, idBits = 1))
+
+    // ===== DDR AXI4 memory interface (to external DDR) =====
+    val ddr_mem = new BusMemAXI4(dataBits = axisWidth, idBits = 1)
+
+    // ===== H2C Status outputs =====
+    val HOST_IO_RESET = Output(Bool())
+    val HOST_IO_DIFFTEST_ENABLE = Output(Bool())
+    val ddr_arb_sel = Output(Bool()) // 0=CPU owns DDR, 1=H2C owns DDR
+    val h2c_active = Output(Bool())
+    val h2c_done = Output(Bool())
+    val h2c_beat_count = Output(UInt(32.W))
   })
 
-  // Instantiate the converter module
+  // ===== Difftest to AXI4-Stream (C2H path) =====
   val diff2axis = Module(new Difftest2AXIs(diffWidth, axisWidth))
 
   // Connect clock and reset signals
@@ -148,6 +172,35 @@ class HostEndpoint(
   // AXI-Stream output domain (PCIe clock)
   io.to_host_axis <> diff2axis.io.axis
 
-  // Clock enable output (can be used in either domain, but connecting in current module's domain)
-  io.clock_enable := diff2axis.io.clock_enable
+  // ===== H2C Integration Module =====
+  val h2cIntegration = Module(new H2CIntegration(axisWidth))
+
+  // Connect AXI4-Lite Config BAR interface
+  h2cIntegration.io.cfg_aw <> io.cfg_aw
+  h2cIntegration.io.cfg_w <> io.cfg_w
+  h2cIntegration.io.cfg_b <> io.cfg_b
+  h2cIntegration.io.cfg_ar <> io.cfg_ar
+  h2cIntegration.io.cfg_r <> io.cfg_r
+
+  // Connect H2C AXI4-Stream input
+  h2cIntegration.io.h2c_axis <> io.h2c_axis
+
+  // Connect CPU memory interface
+  h2cIntegration.io.cpu_mem <> io.cpu_mem
+
+  // Connect DDR memory interface
+  h2cIntegration.io.ddr_mem <> io.ddr_mem
+
+  // Export H2C status signals
+  io.HOST_IO_RESET := h2cIntegration.io.HOST_IO_RESET
+  io.HOST_IO_DIFFTEST_ENABLE := h2cIntegration.io.HOST_IO_DIFFTEST_ENABLE
+  io.ddr_arb_sel := h2cIntegration.io.ddr_arb_sel
+  io.h2c_active := h2cIntegration.io.h2c_active
+  io.h2c_done := h2cIntegration.io.h2c_done
+  io.h2c_beat_count := h2cIntegration.io.h2c_beat_count
+
+  // ===== Clock Enable Control =====
+  // C2H clock enable (from Difftest2AXIs) AND CPU clock enable (from H2C)
+  // CPU clock is disabled when H2C owns DDR
+  io.clock_enable := diff2axis.io.clock_enable && h2cIntegration.io.cpu_clock_enable
 }

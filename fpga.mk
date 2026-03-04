@@ -18,6 +18,11 @@ FPGA_CXXFLAGS += -DUSE_SERIAL_PORT
 endif
 endif
 
+# Enable XDMA DDR load by default for FPGA_SIM mode
+ifeq ($(FPGA_SIM), 1)
+USE_XDMA_DDR_LOAD ?= 1
+endif
+
 ifeq ($(USE_XDMA_DDR_LOAD), 1)
 FPGA_CXXFLAGS += -DUSE_XDMA_DDR_LOAD
 endif

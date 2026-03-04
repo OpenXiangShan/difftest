@@ -28,6 +28,10 @@ VCS_CXXFILES  = $(SIM_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
 VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR)
 VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
+ifeq ($(USE_XDMA_DDR_LOAD), 1)
+VCS_CXXFLAGS += -DUSE_XDMA_DDR_LOAD
+endif
+
 VCS_VSRC_DIR 	= $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES    = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v" -or -name "*.sv")
 

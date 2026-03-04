@@ -45,6 +45,7 @@ enum {
 } fpga_state;
 
 static uint8_t fpga_result = FPGA_RUN;
+static bool fpga_init_ok = true;
 static CommonArgs args;
 
 void fpga_init();
@@ -60,6 +61,9 @@ int main(int argc, const char *argv[]) {
   args = parse_args(argc, argv);
 
   fpga_init();
+  if (!fpga_init_ok) {
+    return 1;
+  }
 
   printf("fpga init\n");
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
@@ -70,7 +74,11 @@ int main(int argc, const char *argv[]) {
 
 void fpga_init() {
   xdma_device = new FpgaXdma();
-#ifndef FPGA_SIM
+#ifdef FPGA_SIM
+  // Open H2C simulator for FPGA simulation
+  xdma_h2c_sim_open(true);
+  xdma_config_bar_open(true);
+#else
   xdma_device->fpga_io(HOST_IO_RESET, true);
   usleep(1000);
 #endif // FPGA_SIM
@@ -82,20 +90,58 @@ void fpga_init() {
 
   init_ram(args.image, DEFAULT_EMU_RAM_SIZE);
   init_flash(args.flash_bin);
-
-  difftest_init(true, DEFAULT_EMU_RAM_SIZE);
-
   init_device();
 
-#ifndef FPGA_SIM
 #ifdef USE_XDMA_DDR_LOAD
-  xdma_device->ddr_load_workload(args.image);
+#ifdef FPGA_SIM
+  // Use H2C stream to load workload to DDR in simulation
+  printf("Loading workload via H2C stream...\n");
+  size_t img_size = simMemory->get_img_size();
+
+  // Calculate transfer length in beats (512 bits = 64 bytes per beat)
+  uint32_t transfer_len = (img_size + 63) / 64;
+
+  // Step 1: Initialize H2C sequence (configure Config BAR, disable CPU)
+  xdma_h2c_init_sequence(transfer_len);
+
+  // Step 2: Write workload data via H2C stream
+  int wrote = xdma_h2c_write_ddr((const char *)simMemory->as_ptr(), img_size);
+  if (wrote != (int)img_size) {
+    fprintf(stderr, "H2C write failed: expect %zu bytes, got %d bytes\n", img_size, wrote);
+    fpga_init_ok = false;
+    return;
+  }
+
+  // Step 3: Complete H2C sequence (wait for completion, re-enable CPU)
+  xdma_h2c_complete_sequence();
+
+  printf("Workload loaded: %zu bytes (%u beats)\n", img_size, transfer_len);
+#else
+  if (!xdma_device->h2c_load_workload()) {
+    fprintf(stderr, "H2C workload load failed on real FPGA path\n");
+    fpga_init_ok = false;
+    return;
+  }
+#endif // FPGA_SIM
+#else
+#ifndef FPGA_SIM
+  // DDR may be initialized by external flow when USE_XDMA_DDR_LOAD is disabled.
+  // Skip workload load in fpga-host and continue boot.
+#endif // FPGA_SIM
 #endif // USE_XDMA_DDR_LOAD
+#ifndef FPGA_SIM
   xdma_device->fpga_io(HOST_IO_RESET, false);
 #endif // FPGA_SIM
+
+  // Delay REF/NEMU memory setup until workload is placed into DUT DDR.
+  difftest_init(true, DEFAULT_EMU_RAM_SIZE);
 }
 
 void fpga_finish() {
+#ifdef FPGA_SIM
+  xdma_config_bar_close();
+  xdma_h2c_sim_close();
+#endif // FPGA_SIM
   delete xdma_device;
 #ifdef USE_SERIAL_PORT
   serial_port->stop();
@@ -103,7 +149,6 @@ void fpga_finish() {
 #endif // USE_SERIAL_PORT
 
   common_finish();
-
   difftest_finish();
   goldenmem_finish();
   finish_device();

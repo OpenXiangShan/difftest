@@ -14,7 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 `include "DifftestMacros.svh"
-module xdma_axi(
+module xdma_axi_c2h(
   input clock,
   input reset,
   input [511:0] axi_tdata,
@@ -23,7 +23,7 @@ module xdma_axi(
   input axi_tvalid
 );
 
-import "DPI-C" function void v_xdma_write(
+import "DPI-C" function void v_xdma_c2h_write(
   input byte channel,
   input bit [511:0] axi_tdata,
   input bit axi_tlast
@@ -53,7 +53,7 @@ end
 
 always @(posedge clock) begin
   if (!reset & axi_tvalid & axi_tready) begin
-    v_xdma_write(0, axi_tdata, axi_tlast);
+    v_xdma_c2h_write(0, axi_tdata, axi_tlast);
   end
 end
 endmodule

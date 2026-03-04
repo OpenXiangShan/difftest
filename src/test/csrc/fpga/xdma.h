@@ -33,8 +33,17 @@
 #include "xdma_sim.h"
 #endif // FPGA_SIM
 
-#define HOST_IO_RESET           0x0
-#define HOST_IO_DIFFTEST_ENABLE 0x4
+// Config BAR register map
+#define HOST_IO_RESET           0x00
+#define HOST_IO_DIFFTEST_ENABLE 0x04
+#define HOST_IO_DDR_ARB_SEL     0x08
+#define HOST_IO_H2C_LENGTH      0x0C
+#define HOST_IO_H2C_STATUS      0x10
+#define HOST_IO_H2C_BEAT_CNT    0x14
+
+#ifndef CONFIG_DMA_CHANNELS
+#define CONFIG_DMA_CHANNELS 1
+#endif
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
@@ -57,6 +66,7 @@ typedef struct __attribute__((packed)) {
 class FpgaXdma {
 public:
   FpgaXdma();
+  ~FpgaXdma();
 
   void start(bool enable_diff) {
     running = true;
@@ -98,29 +108,31 @@ public:
     thread_cv.notify_one();
 #endif // USE_THREAD_MEMPOOL
   }
+#ifndef FPGA_SIM
+  bool h2c_load_workload();
+#endif // FPGA_SIM
 
-  void fpga_io(uint64_t address, bool enable) {
-    if (enable)
-      device_write(false, nullptr, address, 0x1);
-    else
-      device_write(false, nullptr, address, 0x0);
-  }
-
-  void ddr_load_workload(const char *workload) {
-    fpga_io(HOST_IO_RESET, true);
-    device_write(true, workload, 0, 0);
-    fpga_io(HOST_IO_RESET, false);
-  }
+  void fpga_io(uint64_t address, bool enable);
 
 private:
   bool running = false;
   int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
-#ifdef CONFIG_USE_XDMA_H2C
+  int xdma_user_fd;
   int xdma_h2c_fd;
-#endif
 
-  void device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);
-
+  void device_write(uint64_t addr, uint64_t value);
+  void close_device_fds();
+#ifndef FPGA_SIM
+  bool ensure_user_fd_open();
+  bool ensure_h2c_fd_open();
+  bool config_bar_access32(uint32_t offset, uint32_t *value, bool is_write);
+  bool config_bar_wait_mask(uint32_t offset, uint32_t mask, uint32_t expect, int timeout_ms, uint32_t *readback);
+  bool config_bar_write32(uint32_t offset, uint32_t value);
+  bool config_bar_read32(uint32_t offset, uint32_t *value);
+  bool h2c_stream_write_all(const uint8_t *buf, size_t len, size_t *written_out = nullptr);
+  bool h2c_init_sequence(uint32_t beats);
+  bool h2c_complete_sequence(uint32_t expect_beats);
+#endif // FPGA_SIM
 #ifdef USE_THREAD_MEMPOOL
   std::mutex thread_mtx;
   std::condition_variable thread_cv;

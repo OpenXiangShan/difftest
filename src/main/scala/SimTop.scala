@@ -19,8 +19,18 @@ package difftest
 import chisel3._
 import chisel3.experimental.prefix
 import chisel3.reflect.DataMirror
+import chisel3.util._
 import difftest.common.DifftestWiring
-import difftest.fpga.HostEndpoint
+import difftest.fpga.{
+  AXI4LiteBundleA,
+  AXI4LiteBundleB,
+  AXI4LiteBundleR,
+  AXI4LiteBundleW,
+  AXI4Stream,
+  BusMemAXI4,
+  H2CIntegration,
+  HostEndpoint,
+}
 
 class DifftestTopIO extends Bundle {
   val exit = Output(UInt(64.W))
@@ -125,13 +135,54 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
       val pcie_clock = IO(Input(Clock()))
       host.io.pcie_clock := pcie_clock
 
+      // C2H (CPU to Host) AXI4-Stream output
       val toHost = host.io.to_host_axis
       val to_host_axis = IO(chiselTypeOf(toHost))
       to_host_axis <> toHost
 
+      // Clock enable output
       val clock_enable = IO(Output(Bool()))
       clock_enable := host.io.clock_enable
+
+      // H2C (Host to CPU) AXI4-Stream input
+      val h2c_axis = IO(Flipped(new AXI4Stream(host.io.h2c_axis.dataWidth)))
+      host.io.h2c_axis <> h2c_axis
+
+      // AXI4-Lite Config BAR interface
+      val cfg_aw = IO(Flipped(Decoupled(new AXI4LiteBundleA(32))))
+      val cfg_w = IO(Flipped(Decoupled(new AXI4LiteBundleW(32))))
+      val cfg_b = IO(Decoupled(new AXI4LiteBundleB))
+      val cfg_ar = IO(Flipped(Decoupled(new AXI4LiteBundleA(32))))
+      val cfg_r = IO(Decoupled(new AXI4LiteBundleR(32)))
+      host.io.cfg_aw <> cfg_aw
+      host.io.cfg_w <> cfg_w
+      host.io.cfg_b <> cfg_b
+      host.io.cfg_ar <> cfg_ar
+      host.io.cfg_r <> cfg_r
+
+      // CPU AXI4 memory interface (passthrough)
+      val cpu_mem = IO(Flipped(new BusMemAXI4(dataBits = fpgaIO.data.getWidth, idBits = 1)))
+      host.io.cpu_mem <> cpu_mem
+
+      // DDR AXI4 memory interface (to external DDR)
+      val ddr_mem = IO(new BusMemAXI4(dataBits = fpgaIO.data.getWidth, idBits = 1))
+      host.io.ddr_mem <> ddr_mem
+
+      // H2C Status outputs
+      val HOST_IO_RESET = IO(Output(Bool()))
+      val HOST_IO_DIFFTEST_ENABLE = IO(Output(Bool()))
+      val ddr_arb_sel = IO(Output(Bool()))
+      val h2c_active = IO(Output(Bool()))
+      val h2c_done = IO(Output(Bool()))
+      val h2c_beat_count = IO(Output(UInt(32.W)))
+      HOST_IO_RESET := host.io.HOST_IO_RESET
+      HOST_IO_DIFFTEST_ENABLE := host.io.HOST_IO_DIFFTEST_ENABLE
+      ddr_arb_sel := host.io.ddr_arb_sel
+      h2c_active := host.io.h2c_active
+      h2c_done := host.io.h2c_done
+      h2c_beat_count := host.io.h2c_beat_count
     }
+
   }
 
   cpu.connectTopIOs(difftest)
