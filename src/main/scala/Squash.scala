@@ -219,7 +219,7 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
     "SquashControl.v",
     s"""
        |`ifndef SYNTHESIS
-       |`ifndef DIFFTEST
+       |`ifdef DIFFTEST
        |`include "DifftestMacros.svh"
        |`endif // DIFFTEST
        |`endif // SYNTHESIS
