@@ -430,7 +430,7 @@ void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   proxy = new REF_PROXY(coreid, ram_size);
 
   #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  mma_verifier = new MmaVerifier(proxy);
+  mma_verifier = new MmaVerifier();
   mma_verifier->start();
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 

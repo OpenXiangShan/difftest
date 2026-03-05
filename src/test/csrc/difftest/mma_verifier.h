@@ -75,7 +75,7 @@ static inline size_t calculate_mma_buffer_size(const DifftestAmuCtrlEvent *amu_e
 
 class MmaVerifier {
 public:
-  MmaVerifier(REF_PROXY *proxy);
+  MmaVerifier();
   ~MmaVerifier();
   
   // Thread management methods
@@ -98,8 +98,6 @@ public:
   const MmaVerificationBuffer* get_error_buffer() const;
   
 private:
-  // Reference proxy for getting reference results
-  REF_PROXY *proxy;
   
   // MMA verification thread state: NotStarted | Running | StoppedNotJoined
   enum class ThreadState : int { NotStarted = 0, Running = 1, StoppedNotJoined = 2 };
