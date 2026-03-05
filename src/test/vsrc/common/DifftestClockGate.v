@@ -14,6 +14,8 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+`include "DifftestMacros.svh"
+`ifdef CONFIG_DIFFTEST_CLOCKGATE
 module DifftestClockGate(
 	input     CK,
 	input	    E,
@@ -34,3 +36,4 @@ module DifftestClockGate(
 	assign Q = CK & EN;
 `endif // SYNTHESIS
 endmodule
+`endif // CONFIG_DIFFTEST_CLOCKGATE
