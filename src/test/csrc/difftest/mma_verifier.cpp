@@ -24,7 +24,7 @@
 #include <cmath>
 #include <cfloat>
 
-MmaVerifier::MmaVerifier(REF_PROXY *proxy) : proxy(proxy), mma_thread_running(false) {
+MmaVerifier::MmaVerifier() : mma_thread_running(false) {
 }
 
 MmaVerifier::~MmaVerifier() {
