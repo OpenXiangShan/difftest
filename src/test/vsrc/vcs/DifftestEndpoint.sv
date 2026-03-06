@@ -397,14 +397,34 @@ assign difftest_logCtrl_begin = difftest_logCtrl_begin_r;
 assign difftest_logCtrl_end = difftest_logCtrl_end_r;
 assign difftest_logCtrl_level = 0;
 
+// Tick perfCounter at an interval if `PERF_TICK_CYCLE is defined
+wire perfCtrl_tick;
+`ifdef PERF_TICK_CYCLE
+initial begin
+  $display("Enable perfCtrl_tick with interval %d cycles", `PERF_TICK_CYCLE);
+end
+reg [63:0] perf_cycles;
+assign perfCtrl_tick = perf_cycles == `PERF_TICK_CYCLE - 1;
+always @(posedge clock) begin
+  if (reset || perfCtrl_tick) begin
+    perf_cycles <= 0;
+  end
+  else begin
+    perf_cycles <= perf_cycles + 1'b1;
+  end
+end
+`else
+assign perfCtrl_tick = 0;
+`endif // PERF_TICK_CYCLE
+
 `ifndef TB_NO_DPIC
-assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP;
+assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP || perfCtrl_tick;
 assign difftest_perfCtrl_dump =
   simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED || simv_result == `SIMV_FAIL ||
-    (max_cycles > 0 && n_cycles == max_cycles - 1);
+    (max_cycles > 0 && n_cycles == max_cycles - 1) || perfCtrl_tick;
 `else
-assign difftest_perfCtrl_clean = 0;
-assign difftest_perfCtrl_dump = 0;
+assign difftest_perfCtrl_clean = perfCtrl_tick;
+assign difftest_perfCtrl_dump = perfCtrl_tick;
 `endif // TB_NO_DPIC
 
 endmodule

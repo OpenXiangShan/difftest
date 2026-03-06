@@ -96,7 +96,7 @@ SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
 endif
 ifeq ($(DIFFTEST_CHECKER_PERF), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_CHECKER_PERF
-endif 
+endif
 ifeq ($(DIFFTEST_QUERY), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_QUERY
 SIM_LDFLAGS  += -lsqlite3
@@ -127,6 +127,11 @@ ifneq ($(STOP_COND),)
 SIM_VFLAGS   += +define+STOP_COND=$(STOP_COND)
 endif
 endif # SYNTHESIS
+
+# PerfCounter support
+ifneq ($(PERF_TICK_CYCLE),)
+SIM_VFLAGS   += +define+PERF_TICK_CYCLE=$(PERF_TICK_CYCLE)
+endif
 
 # FPGA DiffTest Simulate Support
 ifeq ($(FPGA_SIM), 1)
