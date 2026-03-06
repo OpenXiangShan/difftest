@@ -22,12 +22,20 @@ import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.common.DifftestPerf
 import difftest.validate.Validate._
+import difftest.util.PipelineConnect
 
 object Squash {
-  def apply(bundles: MixedVec[Valid[DifftestBundle]], config: GatewayConfig): MixedVec[Valid[DifftestBundle]] = {
-    val squashIn = Stamp(bundles)
-    val module = Module(new SquashEndpoint(chiselTypeOf(squashIn).toSeq, config))
-    module.in := squashIn
+  def apply(
+    bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]],
+    config: GatewayConfig,
+  ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
+    val squashInBits = Stamp(bundles.bits)
+    val squashIn = Wire(Decoupled(chiselTypeOf(squashInBits)))
+    squashIn.bits := squashInBits
+    squashIn.valid := bundles.valid
+    bundles.ready := squashIn.ready
+    val module = Module(new SquashEndpoint(chiselTypeOf(squashInBits).toSeq, config))
+    module.in <> squashIn
     module.out
   }
 }
@@ -101,14 +109,17 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
 }
 
 class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-  val numCores = in.count(_.bits.isUniqueIdentifier)
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
+  val numCores = in.bits.count(_.bits.isUniqueIdentifier)
 
+  val pipelined = Wire(Decoupled(MixedVec(bundles)))
+  PipelineConnect(in, pipelined, pipelined.fire)
   val control = Module(new SquashControl(config))
   control.clock := clock
   control.reset := reset
   val in_replay =
-    in.map(_.bits)
+    pipelined.bits
+      .map(_.bits)
       .filter(_.desiredCppName == "trace_info")
       .map(_.asInstanceOf[DiffTraceInfo].in_replay)
       .foldLeft(false.B)(_ || _)
@@ -142,7 +153,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   })
 
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
-    val s_in = in.filter(_.bits.desiredCppName == u.desiredCppName)
+    val s_in = pipelined.bits.filter(_.bits.desiredCppName == u.desiredCppName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
     squasher.in.zip(s_in).foreach { case (i, s_i) => i := s_i }
     wt := squasher.want_tick
@@ -151,19 +162,22 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
         .zip(group_tick_vec)
         .collect { case (n, gt) if u.squashGroup.contains(n) => gt }
         .foldLeft(false.B)(_ || _)
-    squasher.should_tick := wt || group_tick || global_tick
+    // Only tick when out.ready to avoid output missing
+    squasher.should_tick := (wt || group_tick || global_tick) && pipelined.ready
     squasher.out
   }
   // Flatten Seq[MixedVec[DifftestBundle]] to MixedVec[DifftestBundle]
-  val out = IO(Output(MixedVec(s_out_vec.flatMap(chiselTypeOf(_)))))
+  val out = IO(Decoupled(MixedVec(s_out_vec.flatMap(chiselTypeOf(_)))))
   s_out_vec.zipWithIndex.foreach { case (vec, i) =>
     val base = if (i != 0) {
       s_out_vec.take(i).map(_.length).sum
     } else 0
     vec.zipWithIndex.foreach { case (gen, idx) =>
-      out(base + idx) := gen
+      out.bits(base + idx) := gen
     }
   }
+  pipelined.ready := out.ready
+  out.valid := VecInit(out.bits.map(_.valid)).asUInt.orR
 }
 
 // It will help do squash for bundles with same Class, return tick and state
