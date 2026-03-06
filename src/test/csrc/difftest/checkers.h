@@ -351,6 +351,19 @@ private:
 };
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+class MatrixStoreChecker : public ProbeChecker<DifftestMatrixStoreEvent> {
+public:
+  MatrixStoreChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestMatrixStoreEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestMatrixStoreEvent &probe) override;
+  void clear_valid(DifftestMatrixStoreEvent &probe) override;
+  int check(const DifftestMatrixStoreEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
+
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
 class UncacheMmStoreChecker : public ProbeChecker<DifftestUncacheMMStoreEvent> {
 public:
