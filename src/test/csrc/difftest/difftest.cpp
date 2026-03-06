@@ -328,6 +328,12 @@ void Difftest::init_checkers() {
   }
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  for (int i = 0; i < CONFIG_DIFF_MATRIX_STORE_WIDTH; i++) {
+    checkers.push_back(new MatrixStoreChecker([this, i]() -> DifftestMatrixStoreEvent & { return dut->matrix_store[i]; }, state, proxy));
+  }
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
+
 #ifdef CONFIG_DIFFTEST_ATOMICEVENT
   checkers.push_back(new AtomicChecker([this]() -> DifftestAtomicEvent & { return dut->atomic; }, state, proxy));
 #endif // CONFIG_DIFFTEST_ATOMICEVENT
