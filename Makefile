@@ -128,11 +128,6 @@ SIM_VFLAGS   += +define+STOP_COND=$(STOP_COND)
 endif
 endif # SYNTHESIS
 
-# PerfCounter support
-ifneq ($(PERF_TICK_CYCLE),)
-SIM_VFLAGS   += +define+PERF_TICK_CYCLE=$(PERF_TICK_CYCLE)
-endif
-
 # FPGA DiffTest Simulate Support
 ifeq ($(FPGA_SIM), 1)
 FPGA_SIM_CSRC_DIR = $(abspath ./src/test/csrc/fpga_sim)
