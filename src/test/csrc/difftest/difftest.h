@@ -55,19 +55,6 @@ typedef struct {
 } WarmupInfo;
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-enum AmeInstState {
-  INVALID = 0,
-  WAIT_REF_COMMIT,
-  WAIT_DUT_EXEC,
-  WAIT_SWROB_COMMIT
-};
-
-typedef struct {
-  DifftestAmuCtrlEvent amu_event;
-  AmeInstState state;
-  uint64_t *res;
-} AmeInstRobEntry;
-
 #include "mma_verifier.h"
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
@@ -154,6 +141,12 @@ public:
     return dut;
   }
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  inline MmaVerifier *get_mma_verifier() {
+    return mma_verifier;
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
 #ifdef DEBUG_REFILL
   void set_track_instr(uint64_t instr) {
     state->track_instr = instr;
@@ -211,31 +204,16 @@ protected:
 #endif // CONFIG_DIFFTEST_LOADEVENT
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  std::deque<AmeInstRobEntry> matrix_sw_rob;
-  void amu_ctrl_event_record();
-  void amu_inst_finish_record();
-  std::deque<AmeInstRobEntry>::iterator have_check_ctrl;
-  
   // MMA verifier instance
   MmaVerifier *mma_verifier;
-  
+
   // AMU finish event buffers
   // Each buffer is a 128x128 matrix of 32-bit elements (4 bytes each)
   uint8_t *amu_finish_buffers[CONFIG_DIFF_AMU_FINISH_WIDTH];
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
-#ifdef CONFIG_DIFFTEST_TOKENEVENT
-  std::queue<DifftestTokenEvent> token_event_queue;
-  void token_event_record();
-#endif // CONFIG_DIFFTEST_TOKENEVENT
-
   int check_all();
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  int do_amuctrl_check();
-  int do_token_check();
-  int do_amuexec_check();
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
-  
+
   inline bool in_disambiguation_state() {
     static bool was_found = false;
 #ifdef FUZZING
