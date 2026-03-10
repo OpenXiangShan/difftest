@@ -176,6 +176,8 @@ class TimeoutChecker : public ProbeChecker<DifftestTrapEvent> {
 public:
 #ifdef CONFIG_DIFFTEST_SQUASH
   static const uint64_t timeout_scale = 256;
+#elif defined(CONFIG_DIFFTEST_MATRIXCSRSTATE)
+  static const uint64_t timeout_scale = 8;
 #else
   static const uint64_t timeout_scale = 1;
 #endif // CONFIG_DIFFTEST_SQUASH
@@ -458,5 +460,60 @@ private:
   int check() override;
 };
 #endif // CONFIG_DIFFTEST_STOREEVENT
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+class AmuCtrlRecorder : public ProbeChecker<DifftestAmuCtrlEvent> {
+public:
+  AmuCtrlRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuCtrlEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestAmuCtrlEvent &probe) override;
+  void clear_valid(DifftestAmuCtrlEvent &probe) override;
+  int check(const DifftestAmuCtrlEvent &probe) override;
+};
+
+class AmuCtrlChecker : public DiffTestChecker {
+public:
+  AmuCtrlChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
+
+  int do_step() override;
+};
+
+class AmuExecRecorder : public ProbeChecker<DifftestAmuFinishEvent> {
+public:
+  AmuExecRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuFinishEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestAmuFinishEvent &probe) override;
+  void clear_valid(DifftestAmuFinishEvent &probe) override;
+  int check(const DifftestAmuFinishEvent &probe) override;
+};
+
+class AmuExecChecker : public DiffTestChecker {
+public:
+  AmuExecChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
+
+  int do_step() override;
+};
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#ifdef CONFIG_DIFFTEST_TOKENEVENT
+class TokenRecorder : public ProbeChecker<DifftestTokenEvent> {
+public:
+  TokenRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestTokenEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestTokenEvent &probe) override;
+  void clear_valid(DifftestTokenEvent &probe) override;
+  int check(const DifftestTokenEvent &probe) override;
+};
+
+class TokenChecker : public DiffTestChecker {
+public:
+  TokenChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
+
+  int do_step() override;
+};
+#endif // CONFIG_DIFFTEST_TOKENEVENT
 
 #endif // __DIFFTEST_CHECKER_H__
