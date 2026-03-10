@@ -400,7 +400,7 @@ jobs:
             make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 DIFFTEST_PERFCNT=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1
-            bash difftest/scripts/fpga_sim/ci.sh
+            bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=./ready-to-run/microbench.bin DIFF=./ready-to-run/riscv64-nemu-interpreter-so
             make -C difftest fpga-clean vcs-clean
 
       - name: FPGA-difftest Build (with THREAD and ASYNC_CLK)
@@ -409,7 +409,7 @@ jobs:
             make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 USE_THREAD_MEMPOOL=1 DIFFTEST_PERFCNT=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2N=1
-            bash difftest/scripts/fpga_sim/ci.sh
+            bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=./ready-to-run/microbench.bin DIFF=./ready-to-run/riscv64-nemu-interpreter-so
             make -C difftest fpga-clean vcs-clean
 
 
