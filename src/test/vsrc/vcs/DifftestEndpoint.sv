@@ -91,6 +91,7 @@ string ram_size;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
+reg [63:0] perf_tick_cycles;
 reg [63:0] warmup_instr;
 reg [63:0] stuck_limit;
 
@@ -201,6 +202,12 @@ initial begin
   if ($test$plusargs("max-cycles")) begin
     $value$plusargs("max-cycles=%d", max_cycles);
     $display("set max cycles: %d", max_cycles);
+  end
+  // perf counter tick interval, disabled by default
+  perf_tick_cycles = 0;
+  if ($test$plusargs("perf-tick-cycles")) begin
+    $value$plusargs("perf-tick-cycles=%d", perf_tick_cycles);
+    $display("set perf tick cycles: %d", perf_tick_cycles);
   end
 end
 
@@ -397,14 +404,10 @@ assign difftest_logCtrl_begin = difftest_logCtrl_begin_r;
 assign difftest_logCtrl_end = difftest_logCtrl_end_r;
 assign difftest_logCtrl_level = 0;
 
-// Tick perfCounter at an interval if `PERF_TICK_CYCLE is defined
+// Tick perfCounter at an interval if perf_tick_cycles is set
 wire perfCtrl_tick;
-`ifdef PERF_TICK_CYCLE
-initial begin
-  $display("Enable perfCtrl_tick with interval %d cycles", `PERF_TICK_CYCLE);
-end
 reg [63:0] perf_cycles;
-assign perfCtrl_tick = perf_cycles == `PERF_TICK_CYCLE - 1;
+assign perfCtrl_tick = perf_tick_cycles > 0 && perf_cycles == perf_tick_cycles - 1;
 always @(posedge clock) begin
   if (reset || perfCtrl_tick) begin
     perf_cycles <= 0;
@@ -413,9 +416,6 @@ always @(posedge clock) begin
     perf_cycles <= perf_cycles + 1'b1;
   end
 end
-`else
-assign perfCtrl_tick = 0;
-`endif // PERF_TICK_CYCLE
 
 `ifndef TB_NO_DPIC
 assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP || perfCtrl_tick;
