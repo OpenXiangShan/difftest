@@ -32,6 +32,9 @@ import "DPI-C" function void v_xdma_write(
 // Simulate random ready of tready
 reg [63:0] ready_timer;
 assign axi_tready = !reset && ready_timer == 64'b0;
+// Count cycles from an accepted tlast to the next tvalid and print (simulation only)
+reg counting_enable;
+reg [31:0] cycle_cnt;
 always @(posedge clock) begin
   if (reset) begin
     ready_timer <= 64'h0;
@@ -42,7 +45,7 @@ always @(posedge clock) begin
     end
     if (axi_tvalid & axi_tready) begin
       if (axi_tlast) begin
-        ready_timer <= $urandom_range(50, 100);
+        ready_timer <= $urandom_range(20000, 30000);
       end
       else begin
         ready_timer <= $urandom_range(0, 2);
@@ -54,6 +57,33 @@ end
 always @(posedge clock) begin
   if (!reset & axi_tvalid & axi_tready) begin
     v_xdma_write(0, axi_tdata, axi_tlast);
+  end
+end
+
+// Track cycles between an accepted tlast and the next tvalid, print in simulation
+always @(posedge clock) begin
+  if (reset) begin
+    counting_enable <= 1'b0;
+    cycle_cnt <= 32'b0;
+  end
+  else begin
+    // start counting when a tlast beat is accepted
+    if (axi_tvalid & axi_tready & axi_tlast) begin
+      counting_enable <= 1'b1;
+      cycle_cnt <= 32'b0;
+    end
+    else if (counting_enable) begin
+      // when next tvalid appears, report and stop counting
+      if (axi_tvalid) begin
+        `ifndef SYNTHESIS
+          $display("[%0t] xdma_axi: cycles between last and next tvalid = %0d", $time, cycle_cnt);
+        `endif
+        counting_enable <= 1'b0;
+      end
+      else begin
+        cycle_cnt <= cycle_cnt + 1;
+      end
+    end
   end
 end
 endmodule
