@@ -102,6 +102,7 @@ class DeltaSplitter(v_gen: Valid[DifftestBundle], filter: Option[UInt], config: 
   val in_filter = Option.when(filter.isDefined)(IO(Input(chiselTypeOf(filter.get))))
   val out = IO(Output(Vec(config.deltaLimit, Valid(new DiffDeltaElem(v_gen.bits)))))
   val inPending = IO(Output(Bool()))
+  val out_fire = IO(Input(Bool()))
   val first_elems = VecInit(in.bits.dataElements.flatMap(_._3))
   val r_elems = RegInit(0.U.asTypeOf(first_elems))
 
@@ -126,7 +127,11 @@ class DeltaSplitter(v_gen: Valid[DifftestBundle], filter: Option[UInt], config: 
   val group_idx = PriorityEncoder(group_updates)
   val mask = (~0.U(group_size.W) << (group_idx +& 1.U)).asUInt(group_size - 1, 0)
   val next_group_updates = group_updates.asUInt & mask
-  r_group_updates := next_group_updates
+  when(needUpdate) {
+    r_group_updates := Mux(out_fire, next_group_updates, first_group_updates.asUInt)
+  }.elsewhen(out_fire) {
+    r_group_updates := next_group_updates
+  }
 
   inPending := next_group_updates =/= 0.U
   out.zipWithIndex.foreach { case (gen, idx) =>
@@ -151,7 +156,7 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   PipelineConnect(in, pipelined, pipelined.fire)
   val toDeltas = pipelined.bits.filter(_.bits.supportsDelta)
   val inPending = Wire(Vec(toDeltas.length, Bool()))
-  pipelined.ready := !RegNext(inPending.asUInt.orR)
+  val delta_out_fire = Wire(Bool())
 
   val deltas = toDeltas.zipWithIndex.flatMap { case (v_gen, idx) =>
     val filter: Option[UInt] = v_gen.bits match {
@@ -183,6 +188,7 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
     val module = Module(new DeltaSplitter(chiselTypeOf(v_gen), filter, config))
     module.in := v_gen
     module.in_filter.foreach(_ := filter.get)
+    module.out_fire := delta_out_fire
     inPending(idx) := module.inPending
     module.out
   }
@@ -195,6 +201,8 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 
   val withDeltas = MixedVecInit((pipelined.bits.filterNot(_.bits.supportsDelta) ++ deltas ++ Seq(deltaInfo)).toSeq)
   val out = IO(Decoupled(chiselTypeOf(withDeltas)))
+  delta_out_fire := out.fire
+  pipelined.ready := !RegNext(inPending.asUInt.orR) && out.ready
   out.valid := VecInit(withDeltas.map(_.valid)).asUInt.orR
   out.bits := withDeltas
 }

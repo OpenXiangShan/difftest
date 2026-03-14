@@ -379,8 +379,8 @@ class BatchAssembler(
   }
   val in_replay = Option.when(config.hasReplay)(delay_step.bits.trace_info.get.in_replay)
 
-  val should_tick = timeout || state_flush || cont_exceed || step_exceed ||
-    trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
+  val should_tick = (timeout || state_flush || cont_exceed || step_exceed ||
+    trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)) && out.ready
   when(!should_tick) {
     timeout_count := timeout_count + 1.U
   }.otherwise {
@@ -392,10 +392,11 @@ class BatchAssembler(
   out.bits.step := Mux(out.valid, finish_step, 0.U)
   out.valid := should_tick
 
-  val state_update = delay_step_enable || state_flush || timeout
+  val delay_step_fire = delay_step.fire
+  val state_update = delay_step_fire || (should_tick && !delay_step_enable)
 
   when(state_update) {
-    when(delay_step_enable) {
+    when(delay_step_fire) {
       when(should_tick) {
         state_step_cnt := next_state_step_cnt
         state_data := next_state_data
