@@ -18,12 +18,12 @@ cleanup() {
 
 trap cleanup INT TERM EXIT
 
-./build/fpga-host --diff ready-to-run/riscv64-nemu-interpreter-so -i ready-to-run/microbench.bin &
+./build/fpga-host --diff ready-to-run/riscv64-nemu-interpreter-so -i ready-to-run/linux.bin &
 HOST_PID=$!
 
 sleep 2
 
-./build/simv +workload=./ready-to-run/microbench.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so & #> build/try.txt 2>&1 &
+./build/simv +workload=./ready-to-run/linux.bin +e=0 +diff=./ready-to-run/riscv64-nemu-interpreter-so & #> build/try.txt 2>&1 &
 SIMV_PID=$!
 
 set +e # disable exit to get exitCode
