@@ -38,29 +38,34 @@ object Preprocess {
       .flatMap { case (name, pregs) =>
         val archTarget = pregs.head.archTarget
         val ratTarget = pregs.head.ratTarget
-        require(!bundles.exists(_.isInstanceOf[archTarget.type]))
-        if (isHardware) {
-          val needRat = pregs.head.needRat
-          val rats = bundles.collect {
-            case rat: DiffArchRenameTable if rat.desiredCppName == ratTarget.desiredCppName => rat
-          }
-          require((needRat && rats.length == pregs.length) || (!needRat && rats.isEmpty))
-          pregs.zipWithIndex.map { case (preg, idx) =>
-            val archReg = Wire(archTarget)
-            archReg.coreid := preg.coreid
-            if (needRat) {
-              val rat = rats(idx)
-              require(rat.numPhyRegs == preg.numPhyRegs)
-              archReg.value.zipWithIndex.foreach { case (data, vid) =>
-                data := preg.value(rat.value(vid))
-              }
-            } else {
-              archReg.value := preg.value
-            }
-            archReg
-          }
+        // Skip generation if arch reg is already directly provided (e.g., via diffRegFile)
+        if (bundles.exists(_.desiredCppName == archTarget.desiredCppName)) {
+          Seq()
         } else {
-          Seq.fill(pregs.length)(archTarget)
+          require(!bundles.exists(_.isInstanceOf[archTarget.type]))
+          if (isHardware) {
+            val needRat = pregs.head.needRat
+            val rats = bundles.collect {
+              case rat: DiffArchRenameTable if rat.desiredCppName == ratTarget.desiredCppName => rat
+            }
+            require((needRat && rats.length == pregs.length) || (!needRat && rats.isEmpty))
+            pregs.zipWithIndex.map { case (preg, idx) =>
+              val archReg = Wire(archTarget)
+              archReg.coreid := preg.coreid
+              if (needRat) {
+                val rat = rats(idx)
+                require(rat.numPhyRegs == preg.numPhyRegs)
+                archReg.value.zipWithIndex.foreach { case (data, vid) =>
+                  data := preg.value(rat.value(vid))
+                }
+              } else {
+                archReg.value := preg.value
+              }
+              archReg
+            }
+          } else {
+            Seq.fill(pregs.length)(archTarget)
+          }
         }
       }
       .toSeq
@@ -77,9 +82,13 @@ object Preprocess {
     val phyInts = getBundle[DiffPhyIntRegState]("pregs_xrf")
     val phyFps = getBundle[DiffPhyFpRegState]("pregs_frf")
     val phyVecs = getBundle[DiffPhyVecRegState]("pregs_vrf")
+    val archInts = getBundle[DiffArchIntRegState]("xrf")
     val commitDatas = commits.zipWithIndex.flatMap { case (c, idx) =>
       val coreID = idx / (commits.length / numCores)
-      val intData = phyInts(coreID).value(c.wpdest)
+      // Use physical reg when available; fall back to arch reg (e.g., diffRegFile) indexed by logical dest
+      val intData = if (phyInts.nonEmpty) phyInts(coreID).value(c.wpdest)
+                    else if (archInts.nonEmpty) archInts(coreID).value(c.wdest)
+                    else 0.U
       val fpData = if (phyFps.nonEmpty) phyFps(coreID).value(c.wpdest) else 0.U
       val cd = Wire(new DiffCommitData)
       cd.coreid := c.coreid
@@ -109,8 +118,8 @@ class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) ex
   val pipelined = Wire(Decoupled(MixedVec(bundles)))
   PipelineConnect(in, pipelined, pipelined.fire)
 
-  val replaceReg = if (!config.softArchUpdate && pipelined.bits.exists(_.desiredCppName == "pregs_xrf")) {
-    // extract ArchReg in Hardware
+  val replaceReg = if (!config.softArchUpdate && pipelined.bits.exists(_.desiredCppName.contains("pregs_"))) {
+    // extract ArchReg in Hardware (triggered by any physical reg state, not just integer)
     Preprocess.replaceRegs(pipelined.bits)
   } else {
     pipelined.bits
