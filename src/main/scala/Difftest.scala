@@ -304,7 +304,7 @@ class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
-private[difftest] class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
+class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "xrf"
   override val desiredRegOffset: Option[Int] = Some(0)
   override val updateDependency: Seq[String] = Seq("commit", "event")
