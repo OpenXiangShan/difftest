@@ -19,7 +19,7 @@ package difftest.fpga
 import chisel3._
 import chisel3.util._
 import difftest.gateway.FpgaDiffIO
-import difftest.util.{Delayer, PipelineConnect}
+import difftest.util.Delayer
 
 class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module {
   val io = IO(new Bundle {
@@ -139,7 +139,11 @@ class HostEndpoint(
   // Connect clock and reset signals
   diff2axis.io.pcie_clock := io.pcie_clock
   diff2axis.io.reset := reset
-  PipelineConnect(io.difftest, diff2axis.io.difftest, diff2axis.io.difftest.fire)
+
+  // Direct pass-through: HostEndpoint is on ref_clock, DUT pipeline is on
+  // gated core_clock. fpgaIO.valid is only high for 1 core_clock cycle per batch
+  // output. When FIFO is full, should_tick=false so valid=false, preventing stale writes.
+  diff2axis.io.difftest <> io.difftest
 
   // AXI-Stream output domain (PCIe clock)
   io.to_host_axis <> diff2axis.io.axis

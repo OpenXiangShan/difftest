@@ -75,9 +75,9 @@ always @(posedge clock) begin
     else if (counting_enable) begin
       // when next tvalid appears, report and stop counting
       if (axi_tvalid) begin
-        // `ifndef SYNTHESIS
-        //   $display("[%0t] xdma_axi: cycles between last and next tvalid = %0d", $time, cycle_cnt);
-        // `endif
+        `ifndef SYNTHESIS
+          $display("[%0t] xdma_axi: cycles between last and next tvalid = %0d", $time, cycle_cnt);
+        `endif
         counting_enable <= 1'b0;
       end
       else begin
