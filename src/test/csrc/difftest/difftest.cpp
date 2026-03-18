@@ -21,6 +21,8 @@
 #include "goldenmem.h"
 #include "ram.h"
 #include "spikedasm.h"
+#include <csignal>
+#include <cstdlib>
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
@@ -32,6 +34,27 @@
 #endif // CONFIG_DIFFTEST_QUERY
 
 Difftest **difftest = NULL;
+static volatile sig_atomic_t difftest_signal_handling = 0;
+
+static void difftest_signal_handler(int signo) {
+  if (difftest_signal_handling) {
+    _Exit(128 + signo);
+  }
+  difftest_signal_handling = 1;
+  if (difftest != NULL) {
+    difftest_finish();
+  }
+  std::signal(signo, SIG_DFL);
+  raise(signo);
+}
+
+static void difftest_register_exit_handlers() {
+  std::signal(SIGINT, difftest_signal_handler);
+  std::signal(SIGTERM, difftest_signal_handler);
+  std::signal(SIGABRT, difftest_signal_handler);
+  std::signal(SIGSEGV, difftest_signal_handler);
+  std::signal(SIGBUS, difftest_signal_handler);
+}
 
 int difftest_init(bool enabled, size_t ramsize) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
@@ -57,6 +80,7 @@ int difftest_init(bool enabled, size_t ramsize) {
       difftest[i]->init_checkers();
     }
   }
+  difftest_register_exit_handlers();
   return 0;
 }
 

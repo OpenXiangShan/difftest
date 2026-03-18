@@ -18,6 +18,7 @@
 #include <locale.h>
 #include <signal.h>
 #include <time.h>
+#include <unistd.h>
 
 int assert_count = 0;
 int signal_num = 0;
@@ -40,6 +41,8 @@ void xs_assert_v2(const char *filename, long long line) {
 }
 
 void sig_handler(int signo) {
+  static const char msg[] = "[common] SIGINT captured\n";
+  write(STDERR_FILENO, msg, sizeof(msg) - 1);
   if (signal_num != 0)
     exit(0);
   signal_num = signo;
