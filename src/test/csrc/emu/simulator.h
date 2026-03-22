@@ -116,8 +116,13 @@ public:
 };
 
 #ifdef VERILATOR
+#ifdef WOLVRIX_PARTITIONED_VERILATOR
+#define SIMULATOR WolviRepCutVerilatorDiffTestSim
+#include "partitioned_verilator.h"
+#else
 #define SIMULATOR VerilatorSim
 #include "verilator.h"
+#endif
 #endif // VERILATOR
 
 #ifdef GSIM

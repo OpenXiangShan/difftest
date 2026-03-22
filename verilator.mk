@@ -92,6 +92,74 @@ else
 VERILATOR_RANDOMIZE_FLAGS =
 endif
 
+WOLVRIX_PARTITIONED_PACKAGE_DIR ?=
+ifneq ($(strip $(WOLVRIX_PARTITIONED_PACKAGE_DIR)),)
+WOLVRIX_PARTITIONED_PACKAGE_ROOT := $(abspath $(WOLVRIX_PARTITIONED_PACKAGE_DIR))
+WOLVRIX_PARTITIONED_BUILD_DIR := $(WOLVRIX_PARTITIONED_PACKAGE_ROOT)/build
+PACKAGE_ROOT := $(WOLVRIX_PARTITIONED_PACKAGE_ROOT)
+VERILATED_DIR := $(WOLVRIX_PARTITIONED_BUILD_DIR)/verilated
+SV_SOURCES := $(wildcard $(PACKAGE_ROOT)/sv/*.sv)
+WOLVRIX_PARTITIONED_WRAPPER_SRC := $(WOLVRIX_PARTITIONED_PACKAGE_ROOT)/wolvi_repcut_verilator_sim.cpp
+PARTITIONED_VERILATOR_FLAGS := $(VERILATOR_FLAGS) -Wno-STMTDLY -Wno-WIDTH -Wno-WIDTHTRUNC --output-split 30000 --output-split-cfuncs 30000
+include $(WOLVRIX_PARTITIONED_PACKAGE_ROOT)/units.mk
+
+WOLVRIX_PARTITIONED_UNIT_INCLUDE_FLAGS := $(foreach unit,$(PARTITIONED_UNITS),-I$(UNIT_$(unit)_MDIR))
+WOLVRIX_PARTITIONED_SIM_CXXFILES := \
+	$(EMU_CXXFILES) \
+	$(VERILATOR_CSRC_DIR)/partitioned_verilator.cpp \
+	$(WOLVRIX_PARTITIONED_WRAPPER_SRC)
+WOLVRIX_PARTITIONED_CPPFLAGS := \
+	-I$(WOLVRIX_PARTITIONED_PACKAGE_ROOT) \
+	-I$(VERILATOR_ROOT)/include \
+	-I$(VERILATOR_ROOT)/include/vltstd \
+	$(WOLVRIX_PARTITIONED_UNIT_INCLUDE_FLAGS)
+WOLVRIX_PARTITIONED_CXXFLAGS := \
+	$(subst \\\",\", $(EMU_CXXFLAGS)) \
+	-I$(VERILATOR_CSRC_DIR) \
+	-DVERILATOR \
+	-DWOLVRIX_PARTITIONED_VERILATOR \
+	--std=c++17
+
+partitioned-obj = $(VERILATOR_BUILD_DIR)/obj$(1).o
+
+WOLVRIX_PARTITIONED_RUNTIME_SRCS := \
+	$(WOLVRIX_PARTITIONED_SIM_CXXFILES) \
+	$(VERILATOR_ROOT)/include/verilated.cpp \
+	$(VERILATOR_ROOT)/include/verilated_dpi.cpp \
+	$(VERILATOR_ROOT)/include/verilated_threads.cpp
+WOLVRIX_PARTITIONED_RUNTIME_OBJS := \
+	$(foreach src,$(WOLVRIX_PARTITIONED_RUNTIME_SRCS),$(call partitioned-obj,$(src)))
+
+define make-partitioned-object-rule
+$(call partitioned-obj,$(1)): $(1) $(UNIT_ARCHIVES)
+	@mkdir -p $$(@D)
+	$(CXX) $(WOLVRIX_PARTITIONED_CPPFLAGS) $(WOLVRIX_PARTITIONED_CXXFLAGS) -c -o $$@ $$<
+endef
+
+$(foreach src,$(WOLVRIX_PARTITIONED_RUNTIME_SRCS),$(eval $(call make-partitioned-object-rule,$(src))))
+
+verilator-build-emu: $(VERILATOR_TARGET)
+
+$(VERILATOR_TARGET): $(UNIT_ARCHIVES) $(WOLVRIX_PARTITIONED_RUNTIME_OBJS)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -o $@ $(WOLVRIX_PARTITIONED_RUNTIME_OBJS) $(UNIT_ARCHIVES) $(VERILATOR_LDFLAGS) -pthread
+
+verilator-emu: $(VERILATOR_TARGET)
+verilator-emu-mk: $(UNIT_MKS)
+
+COVERAGE_DATA ?= $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.dat")
+COVERAGE_DIR  ?= $(DESIGN_DIR)/$(basename $(notdir $(COVERAGE_DATA)))
+coverage:
+	@echo "Coverage is unsupported in wolvrix partitioned verilator mode."
+	@false
+
+verilator-clean-obj:
+	rm -rf $(VERILATOR_BUILD_DIR)/obj
+	rm -f $(VERILATOR_TARGET)
+
+.PHONY: verilator-build-emu verilator-clean-obj
+else
+
 ########## Verilator Build Recipes ##########
 VERILATOR_FLAGS_ALL =               \
   --exe $(EMU_OPTIMIZE)             \
@@ -252,3 +320,4 @@ verilator-clean-obj:
 	rm -f $(VERILATOR_BUILD_DIR)/*.o $(VERILATOR_BUILD_DIR)/*.gch $(VERILATOR_BUILD_DIR)/*.a $(VERILATOR_TARGET)
 
 .PHONY: verilator-build-emu verilator-clean-obj
+endif

@@ -18,6 +18,16 @@
 NOOP_HOME  ?= $(abspath .)
 export NOOP_HOME
 
+HOST_CC_FALLBACK := $(shell if command -v clang >/dev/null 2>&1; then echo clang; elif command -v gcc >/dev/null 2>&1; then echo gcc; else echo cc; fi)
+HOST_CXX_FALLBACK := $(shell if command -v clang++ >/dev/null 2>&1; then echo clang++; elif command -v g++ >/dev/null 2>&1; then echo g++; else echo c++; fi)
+
+ifeq ($(origin CC), default)
+CC := $(HOST_CC_FALLBACK)
+endif
+ifeq ($(origin CXX), default)
+CXX := $(HOST_CXX_FALLBACK)
+endif
+
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 
