@@ -55,10 +55,9 @@ VERILATOR_FLAGS += --trace-fst
 VERILATOR_CXXFLAGS += -DENABLE_FST
 endif
 
-
-
+VERILATOR_THREAD_FLAGS =
 ifneq ($(EMU_THREADS),0)
-VERILATOR_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
+VERILATOR_THREAD_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
 endif
 
 # Verilator build parallelization (controls split .cpp compilation)
@@ -114,7 +113,7 @@ WOLVRIX_PARTITIONED_CPPFLAGS := \
 	-I$(VERILATOR_ROOT)/include/vltstd \
 	$(WOLVRIX_PARTITIONED_UNIT_INCLUDE_FLAGS)
 WOLVRIX_PARTITIONED_CXXFLAGS := \
-	$(subst \\\",\", $(EMU_CXXFLAGS)) \
+	$(subst \\\",\", $(filter-out -DEMU_THREAD=%,$(EMU_CXXFLAGS))) \
 	-I$(VERILATOR_CSRC_DIR) \
 	-DVERILATOR \
 	-DWOLVRIX_PARTITIONED_VERILATOR \
@@ -179,7 +178,8 @@ VERILATOR_FLAGS_ALL =               \
   -CFLAGS "\$$(PGO_CFLAGS)"         \
   -LDFLAGS "\$$(PGO_LDFLAGS)"       \
   -o $(VERILATOR_TARGET)            \
-  $(VERILATOR_FLAGS)
+  $(VERILATOR_FLAGS)                \
+  $(VERILATOR_THREAD_FLAGS)
 
 VERILATOR_MK = $(VERILATOR_BUILD_DIR)/V$(EMU_TOP).mk
 VERILATOR_HEADERS := $(EMU_HEADERS) $(shell find $(VERILATOR_CSRC_DIR) -name "*.h")
