@@ -40,6 +40,7 @@
 #define HOST_IO_H2C_LENGTH      0x0C
 #define HOST_IO_H2C_STATUS      0x10
 #define HOST_IO_H2C_BEAT_CNT    0x14
+#define HOST_IO_H2C_BEAT_BYTES  0x18
 
 #ifndef CONFIG_DMA_CHANNELS
 #define CONFIG_DMA_CHANNELS 1
@@ -129,6 +130,7 @@ private:
   bool config_bar_wait_mask(uint32_t offset, uint32_t mask, uint32_t expect, int timeout_ms, uint32_t *readback);
   bool config_bar_write32(uint32_t offset, uint32_t value);
   bool config_bar_read32(uint32_t offset, uint32_t *value);
+  void dump_h2c_debug_regs(const char *tag);
   bool h2c_stream_write_all(const uint8_t *buf, size_t len, size_t *written_out = nullptr);
   bool h2c_init_sequence(uint32_t beats);
   bool h2c_complete_sequence(uint32_t expect_beats);

@@ -29,9 +29,12 @@ import chisel3.util._
  * 0x0C: H2C_LENGTH (RW)  - Transfer length in beats (0=unlimited/tlast-based)
  * 0x10: H2C_STATUS (RO)  - Bit 1: H2C active, Bit 2: H2C done
  * 0x14: H2C_BEAT_CNT (RO) - Current beat counter
- * 0x18-0x1C: Reserved for future expansion
+ * 0x18: H2C_BEAT_BYTES (RO) - Bytes per H2C beat
+ * 0x1C: Reserved for future expansion
  */
-class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
+class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32, val h2cBeatBytes: Int = 8) extends Module {
+  require(h2cBeatBytes > 0 && h2cBeatBytes <= 255, s"h2cBeatBytes($h2cBeatBytes) out of range")
+
   val io = IO(new Bundle {
     val axilite = new AXI4LiteSlaveIO(addrWidth, dataWidth)
 
@@ -61,6 +64,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   val regH2cLength = 3
   val regH2cStatus = 4
   val regH2cBeatCnt = 5
+  val regH2cBeatBytes = 6
 
   // Register outputs
   io.HOST_IO_RESET := regfile(regHostReset)(0)
@@ -80,8 +84,10 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   // Beat counter register (read-only)
   regfile(regH2cBeatCnt) := io.h2c_beat_count
 
-  // Reserved registers (read-only, return 0)
-  regfile(6) := 0.U
+  // Beat bytes register (read-only)
+  regfile(regH2cBeatBytes) := h2cBeatBytes.U(dataWidth.W)
+
+  // Reserved register (read-only, return 0)
   regfile(7) := 0.U
 
   // ===== AXI4-Lite Write Channel FSM =====

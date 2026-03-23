@@ -25,7 +25,7 @@ module xdma_wrapper(
   output core_clock,
   // H2C signals
   output h2c_axis_tvalid,
-  output [511:0] h2c_axis_tdata,
+  output [63:0] h2c_axis_tdata,
   output h2c_axis_tlast,
   input h2c_axis_tready,
   // AXI4-Lite Config BAR interface (master side)

@@ -25,6 +25,7 @@
 #include "refproxy.h"
 #include "xdma.h"
 #include <condition_variable>
+#include <cstring>
 #include <getopt.h>
 #include <mutex>
 #include <unistd.h>
@@ -98,8 +99,8 @@ void fpga_init() {
   printf("Loading workload via H2C stream...\n");
   size_t img_size = simMemory->get_img_size();
 
-  // Calculate transfer length in beats (512 bits = 64 bytes per beat)
-  uint32_t transfer_len = (img_size + 63) / 64;
+  uint32_t h2c_beat_bytes = xdma_h2c_get_beat_bytes();
+  uint32_t transfer_len = (img_size + h2c_beat_bytes - 1) / h2c_beat_bytes;
 
   // Step 1: Initialize H2C sequence (configure Config BAR, disable CPU)
   xdma_h2c_init_sequence(transfer_len);

@@ -71,6 +71,9 @@ class UARTIO extends Bundle {
 
 trait HasDiffTestInterfaces extends ImplicitClock with ImplicitReset { this: RawModule =>
   def cpuName: Option[String] = None
+  // Width of CPU memory data path used by difftest H2C/DDR bridge.
+  // Override in CPU top when memory data width is not 64.
+  def difftestMemDataWidth: Int = 64
 
   private[difftest] def dutClock = implicitClock
   private[difftest] def dutReset = implicitReset
@@ -130,7 +133,9 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
 
     // IO: difftest_fpga_*
     gateway.fpgaIO.map { fpgaIO =>
-      val host = withClock(ref_clock.get) { Module(new HostEndpoint(fpgaIO.data.getWidth)) }
+      val host = withClock(ref_clock.get) {
+        Module(new HostEndpoint(diffWidth = fpgaIO.data.getWidth, memDataWidth = cpu.difftestMemDataWidth))
+      }
       host.io.difftest := fpgaIO
       val pcie_clock = IO(Input(Clock()))
       host.io.pcie_clock := pcie_clock
@@ -161,11 +166,13 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
       host.io.cfg_r <> cfg_r
 
       // CPU AXI4 memory interface (passthrough)
-      val cpu_mem = IO(Flipped(new BusMemAXI4(dataBits = fpgaIO.data.getWidth, idBits = 1)))
+      val cpuMemDataBits = host.io.cpu_mem.w.bits.data.getWidth
+      val cpu_mem = IO(Flipped(new BusMemAXI4(dataBits = cpuMemDataBits, idBits = 1)))
       host.io.cpu_mem <> cpu_mem
 
       // DDR AXI4 memory interface (to external DDR)
-      val ddr_mem = IO(new BusMemAXI4(dataBits = fpgaIO.data.getWidth, idBits = 1))
+      val ddrMemDataBits = host.io.ddr_mem.w.bits.data.getWidth
+      val ddr_mem = IO(new BusMemAXI4(dataBits = ddrMemDataBits, idBits = 1))
       host.io.ddr_mem <> ddr_mem
 
       // H2C Status outputs

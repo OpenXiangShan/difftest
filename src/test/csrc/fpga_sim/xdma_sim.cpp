@@ -452,15 +452,16 @@ extern "C" unsigned char v_xdma_h2c_tvalid() {
 extern "C" unsigned char v_xdma_h2c_tlast() {
   if (!xsim_h2c)
     return 1;
-  return xsim_h2c->is_last_beat(64) ? 1 : 0;
+  return xsim_h2c->is_last_beat(8) ? 1 : 0;
 }
 
 extern "C" void v_xdma_h2c_read(uint8_t channel, char *axi_tdata) {
+  (void)channel;
+  memset(axi_tdata, 0, 8);
   if (!xsim_h2c) {
-    memset(axi_tdata, 0, 64);
     return;
   }
-  xsim_h2c->read(axi_tdata, 64);
+  xsim_h2c->read(axi_tdata, 8);
 }
 
 extern "C" void v_xdma_h2c_commit(int beat_idx, const uint32_t *axi_tdata) {
@@ -468,14 +469,10 @@ extern "C" void v_xdma_h2c_commit(int beat_idx, const uint32_t *axi_tdata) {
   if (!axi_tdata || beat_idx < 0) {
     return;
   }
-  // 512-bit beat = 8 x 64-bit words, write into DPIC RAM by word index.
-  uint64_t base_widx = (uint64_t)beat_idx * 8;
-  for (int i = 0; i < 8; i++) {
-    uint64_t lo = (uint64_t)axi_tdata[i * 2];
-    uint64_t hi = (uint64_t)axi_tdata[i * 2 + 1];
-    uint64_t wdata = (hi << 32) | lo;
-    difftest_ram_write(base_widx + (uint64_t)i, wdata, ~0ULL);
-  }
+  uint64_t lo = (uint64_t)axi_tdata[0];
+  uint64_t hi = (uint64_t)axi_tdata[1];
+  uint64_t wdata = (hi << 32) | lo;
+  difftest_ram_write((uint64_t)beat_idx, wdata, ~0ULL);
 #else
   (void)beat_idx;
   (void)axi_tdata;
@@ -490,6 +487,7 @@ extern "C" void v_xdma_h2c_commit(int beat_idx, const uint32_t *axi_tdata) {
 // 0x0C: HOST_IO_H2C_LENGTH (RW)  - Transfer length in beats (0=unlimited/tlast-based)
 // 0x10: HOST_IO_H2C_STATUS (RO)  - Bit 1: H2C active, Bit 2: H2C done
 // 0x14: HOST_IO_H2C_BEAT_CNT (RO) - Current beat counter
+// 0x18: HOST_IO_H2C_BEAT_BYTES (RO) - Bytes per H2C beat
 
 enum wait_result {
   WAIT_OK = 0,
@@ -857,4 +855,12 @@ void xdma_h2c_complete_sequence() {
   printf("CPU arbitration restored, CPU clock enabled\n");
   printf("=== H2C Initialization Complete ===\n");
   h2c_seq_ready = false;
+}
+
+uint32_t xdma_h2c_get_beat_bytes() {
+  uint32_t beat_bytes = xdma_config_bar_read(HOST_IO_H2C_BEAT_BYTES);
+  if (beat_bytes == 0) {
+    beat_bytes = 8;
+  }
+  return beat_bytes;
 }

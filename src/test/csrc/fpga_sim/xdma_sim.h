@@ -47,5 +47,6 @@ static inline void xdma_config_bar_sim_close() {
 // Helper functions for H2C initialization
 void xdma_h2c_init_sequence(uint32_t transfer_len);
 void xdma_h2c_complete_sequence();
+uint32_t xdma_h2c_get_beat_bytes();
 
 #endif // __XDMA_SIM_H__

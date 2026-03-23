@@ -32,7 +32,11 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
   val numPacketPerRange = 8 // packet in each range
   val pkt_id_w = 8 // pkt = (difftest_data, pkt_id)
-  val axis_send_len = (difftest_width + pkt_id_w + axis_width - 1) / axis_width
+  val packetAlignBits = 512 // Keep 64B packet alignment for host-side fixed-size reads
+  require(packetAlignBits % axis_width == 0, s"axis_width($axis_width) must divide $packetAlignBits")
+  val payloadBits = difftest_width + pkt_id_w
+  val alignedPayloadBits = ((payloadBits + packetAlignBits - 1) / packetAlignBits) * packetAlignBits
+  val axis_send_len = alignedPayloadBits / axis_width
   val fifo_depth = 16
   val fifo_addr_width = log2Ceil(fifo_depth)
 
@@ -128,16 +132,21 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
 class HostEndpoint(
   val diffWidth: Int,
-  val axisWidth: Int = 512,
+  val memDataWidth: Int = 64,
+  val c2hAxisWidth: Int = 512,
+  val h2cAxisWidth: Int = 0,
 ) extends Module {
+  private val c2hDataWidth = c2hAxisWidth
+  private val h2cDataWidth = if (h2cAxisWidth == 0) memDataWidth else h2cAxisWidth
+
   val io = IO(new Bundle {
     val difftest = Input(new FpgaDiffIO(diffWidth))
-    val to_host_axis = new AXI4Stream(axisWidth)
+    val to_host_axis = new AXI4Stream(c2hDataWidth)
     val clock_enable = Output(Bool())
     val pcie_clock = Input(Clock())
 
     // ===== H2C AXI4-Stream input (from XDMA) =====
-    val h2c_axis = Flipped(new AXI4Stream(axisWidth))
+    val h2c_axis = Flipped(new AXI4Stream(h2cDataWidth))
 
     // ===== AXI4-Lite Config BAR interface =====
     val cfg_aw = Flipped(Decoupled(new AXI4LiteBundleA(32)))
@@ -147,10 +156,10 @@ class HostEndpoint(
     val cfg_r = Decoupled(new AXI4LiteBundleR(32))
 
     // ===== CPU AXI4 memory interface (passthrough when H2C inactive) =====
-    val cpu_mem = Flipped(new BusMemAXI4(dataBits = axisWidth, idBits = 1))
+    val cpu_mem = Flipped(new BusMemAXI4(dataBits = memDataWidth, idBits = 1))
 
     // ===== DDR AXI4 memory interface (to external DDR) =====
-    val ddr_mem = new BusMemAXI4(dataBits = axisWidth, idBits = 1)
+    val ddr_mem = new BusMemAXI4(dataBits = memDataWidth, idBits = 1)
 
     // ===== H2C Status outputs =====
     val HOST_IO_RESET = Output(Bool())
@@ -162,7 +171,7 @@ class HostEndpoint(
   })
 
   // ===== Difftest to AXI4-Stream (C2H path) =====
-  val diff2axis = Module(new Difftest2AXIs(diffWidth, axisWidth))
+  val diff2axis = Module(new Difftest2AXIs(diffWidth, c2hDataWidth))
 
   // Connect clock and reset signals
   diff2axis.io.pcie_clock := io.pcie_clock
@@ -173,7 +182,7 @@ class HostEndpoint(
   io.to_host_axis <> diff2axis.io.axis
 
   // ===== H2C Integration Module =====
-  val h2cIntegration = Module(new H2CIntegration(axisWidth))
+  val h2cIntegration = Module(new H2CIntegration(axisDataWidth = h2cDataWidth, memDataWidth = memDataWidth))
 
   // Connect AXI4-Lite Config BAR interface
   h2cIntegration.io.cfg_aw <> io.cfg_aw
