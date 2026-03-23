@@ -28,9 +28,15 @@ import chisel3.util._
  *
  * Uses BusMemAXI4 interface which is compatible with bus.axi4.AXI4.
  *
- * @param dataWidth AXI4 data width (default 512 bits for XDMA)
+ * @param memDataWidth AXI4 DDR width (aligned with CPU path)
+ * @param axisDataWidth AXI4-Stream width from XDMA (default follows memDataWidth)
  */
-class H2CIntegration(val dataWidth: Int = 512) extends Module {
+class H2CIntegration(
+  val memDataWidth: Int = 64,
+  val axisDataWidth: Int = 0,
+) extends Module {
+  private val h2cDataWidth = if (axisDataWidth == 0) memDataWidth else axisDataWidth
+
   val io = IO(new Bundle {
     // ===== AXI4-Lite Config BAR interface =====
     val cfg_aw = Flipped(Decoupled(new AXI4LiteBundleA(32)))
@@ -40,13 +46,13 @@ class H2CIntegration(val dataWidth: Int = 512) extends Module {
     val cfg_r = Decoupled(new AXI4LiteBundleR(32))
 
     // ===== H2C Stream input (from xdma_axi_h2c) =====
-    val h2c_axis = Flipped(new AXI4Stream(dataWidth))
+    val h2c_axis = Flipped(new AXI4Stream(h2cDataWidth))
 
     // ===== CPU AXI4 memory interface (BusMemAXI4, compatible with bus.axi4.AXI4) =====
-    val cpu_mem = Flipped(new BusMemAXI4(dataBits = dataWidth, idBits = 1))
+    val cpu_mem = Flipped(new BusMemAXI4(dataBits = memDataWidth, idBits = 1))
 
     // ===== DDR AXI4 memory interface (to external DDR) =====
-    val ddr_mem = new BusMemAXI4(dataBits = dataWidth, idBits = 1)
+    val ddr_mem = new BusMemAXI4(dataBits = memDataWidth, idBits = 1)
 
     // ===== Control/Status outputs =====
     val HOST_IO_RESET = Output(Bool())
@@ -62,7 +68,7 @@ class H2CIntegration(val dataWidth: Int = 512) extends Module {
   })
 
   // ===== Instantiate Config BAR =====
-  val configBar = Module(new XDMAConfigBar(addrWidth = 32, dataWidth = 32))
+  val configBar = Module(new XDMAConfigBar(addrWidth = 32, dataWidth = 32, h2cBeatBytes = memDataWidth / 8))
   configBar.io.axilite.aw <> io.cfg_aw
   configBar.io.axilite.w <> io.cfg_w
   configBar.io.axilite.b <> io.cfg_b
@@ -70,7 +76,7 @@ class H2CIntegration(val dataWidth: Int = 512) extends Module {
   configBar.io.axilite.r <> io.cfg_r
 
   // ===== Instantiate H2C Stream-to-AXI4 Converter =====
-  val h2cConverter = Module(new H2CAxisToAxi4(addrWidth = 64, dataWidth = dataWidth))
+  val h2cConverter = Module(new H2CAxisToAxi4(addrWidth = 64, axisDataWidth = h2cDataWidth, memDataWidth = memDataWidth))
 
   // Connect control signals from Config BAR
   h2cConverter.io.enable := configBar.io.ddr_arb_sel
@@ -157,7 +163,7 @@ class H2CIntegration(val dataWidth: Int = 512) extends Module {
   }
 
   def convertAXI4W(in: AXI4WBundle): BusMemAXI4BundleW = {
-    val out = Wire(new BusMemAXI4BundleW(dataBits = dataWidth))
+    val out = Wire(new BusMemAXI4BundleW(dataBits = memDataWidth))
     out.data := in.data
     out.strb := in.strb
     out.last := in.last
@@ -188,7 +194,7 @@ class H2CIntegration(val dataWidth: Int = 512) extends Module {
   }
 
   def convertAXI4RToInternal(in: BusMemAXI4BundleR): AXI4RBundle = {
-    val out = Wire(new AXI4RBundle(dataWidth = dataWidth, idWidth = 1))
+    val out = Wire(new AXI4RBundle(dataWidth = memDataWidth, idWidth = 1))
     out.id := in.id
     out.data := in.data
     out.resp := in.resp

@@ -132,7 +132,7 @@ wire sim_clock;
   wire c2h_axi_tvalid;
   wire [511:0] c2h_axi_tdata;
   wire h2c_axis_tvalid;
-  wire [511:0] h2c_axis_tdata;
+  wire [63:0] h2c_axis_tdata;
   wire h2c_axis_tlast;
   wire h2c_axis_tready;
   // AXI4-Lite Config BAR signals
@@ -269,8 +269,8 @@ SimTop sim(
   .difftest_cpu_mem_aw_bits_user(1'b0),
   .difftest_cpu_mem_w_ready(),
   .difftest_cpu_mem_w_valid(1'b0),
-  .difftest_cpu_mem_w_bits_data(16000'b0),
-  .difftest_cpu_mem_w_bits_strb(2000'b0),
+  .difftest_cpu_mem_w_bits_data(64'b0),
+  .difftest_cpu_mem_w_bits_strb(8'b0),
   .difftest_cpu_mem_w_bits_last(1'b0),
   .difftest_cpu_mem_b_ready(1'b0),
   .difftest_cpu_mem_b_valid(),
@@ -335,7 +335,7 @@ SimTop sim(
   .difftest_ddr_mem_r_ready(),
   .difftest_ddr_mem_r_valid(1'b0),
   .difftest_ddr_mem_r_bits_id(1'b0),
-  .difftest_ddr_mem_r_bits_data(16000'b0),
+  .difftest_ddr_mem_r_bits_data(64'b0),
   .difftest_ddr_mem_r_bits_resp(2'b0),
   .difftest_ddr_mem_r_bits_last(1'b0),
   .difftest_ddr_mem_r_bits_user(1'b0),

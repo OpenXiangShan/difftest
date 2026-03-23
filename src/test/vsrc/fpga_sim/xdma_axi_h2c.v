@@ -17,7 +17,7 @@
 module xdma_axi_h2c(
   input clock,
   input reset,
-  output [511:0] axi_tdata,
+  output [63:0] axi_tdata,
   input axi_tready,
   output axi_tvalid,
   output axi_tlast
@@ -27,15 +27,15 @@ import "DPI-C" function bit v_xdma_h2c_tvalid();
 import "DPI-C" function bit v_xdma_h2c_tlast();
 import "DPI-C" function void v_xdma_h2c_read(
   input byte channel,
-  output bit [511:0] axi_tdata
+  output bit [63:0] axi_tdata
 );
 import "DPI-C" function void v_xdma_h2c_commit(
   input int beat_idx,
-  input bit [511:0] axi_tdata
+  input bit [63:0] axi_tdata
 );
 
 reg axi_tvalid_r;
-reg [511:0] axi_tdata_r;
+reg [63:0] axi_tdata_r;
 reg axi_tlast_r;
 reg [31:0] h2c_beat_idx_r;
 
@@ -46,7 +46,7 @@ assign axi_tlast = axi_tlast_r;
 always @(posedge clock) begin
   if (reset) begin
     axi_tvalid_r <= 1'b0;
-    axi_tdata_r <= 512'h0;
+    axi_tdata_r <= 64'h0;
     axi_tlast_r <= 1'b0;
     h2c_beat_idx_r <= 32'h0;
   end
