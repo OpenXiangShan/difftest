@@ -17,9 +17,15 @@
 `ifndef TB_NO_DPIC
 import "DPI-C" function byte pte_helper (
   input  longint satp,
+  input  longint vsatp,
+  input  longint hgatp,
   input  longint vpn,
+  input  byte    s2xlate,
   output longint pte,
-  output byte    level
+  output byte    level,
+  output longint s1_pte,
+  output longint s2_pte,
+  output byte    s1_level
 );
 `endif // TB_NO_DPIC
 
@@ -27,18 +33,58 @@ module PTEHelper(
   input             clock,
   input             enable,
   input      [63:0] satp,
+  input      [63:0] vsatp,
+  input      [63:0] hgatp,
   input      [63:0] vpn,
-  output reg [63:0] pte,
-  output reg [ 7:0] level,
-  output reg [ 7:0] pf
+  input      [ 7:0] s2xlate,
+  output     [63:0] pte,
+  output     [ 7:0] level,
+  output     [ 7:0] pf,
+  output     [63:0] s1_pte,
+  output     [63:0] s2_pte,
+  output     [ 7:0] s1_level
 );
-  always @(posedge clock) begin
-    if (enable) begin
+
+  reg [63:0] pte_comb;
+  reg [ 7:0] level_comb;
+  reg [63:0] s1_pte_comb;
+  reg [63:0] s2_pte_comb;
+  reg [ 7:0] s1_level_comb;
+  reg [ 7:0] pf_comb;
+
 `ifndef TB_NO_DPIC
-      pf <= pte_helper(satp, vpn, pte, level);
-`endif // TB_NO_DPIC
+  always @(*) begin
+    if (enable) begin
+      pf_comb = pte_helper(satp, vsatp, hgatp, vpn, s2xlate,
+                           pte_comb, level_comb,
+                           s1_pte_comb, s2_pte_comb, s1_level_comb);
+    end else begin
+      pf_comb       = 8'h0;
+      pte_comb      = 64'h0;
+      level_comb    = 8'h0;
+      s1_pte_comb   = 64'h0;
+      s2_pte_comb   = 64'h0;
+      s1_level_comb = 8'h0;
     end
   end
+`else
+  always @(*) begin
+    pf_comb       = 8'b0;
+    pte_comb      = 64'b0;
+    level_comb    = 8'b0;
+    s1_pte_comb   = 64'b0;
+    s2_pte_comb   = 64'b0;
+    s1_level_comb = 8'b0;
+  end
+`endif // TB_NO_DPIC
+
+  assign pte      = pte_comb;
+  assign level    = level_comb;
+  assign pf       = pf_comb;
+  assign s1_pte   = s1_pte_comb;
+  assign s2_pte   = s2_pte_comb;
+  assign s1_level = s1_level_comb;
+
 endmodule
 
 `ifndef TB_NO_DPIC
