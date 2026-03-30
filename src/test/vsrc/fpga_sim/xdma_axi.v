@@ -43,13 +43,8 @@ always @(posedge clock) begin
     if (ready_timer != 64'b0) begin
       ready_timer <= ready_timer - 1;
     end
-    if (axi_tvalid & axi_tready) begin
-      if (axi_tlast) begin
-        ready_timer <= $urandom_range(20000, 30000);
-      end
-      else begin
-        ready_timer <= $urandom_range(0, 2);
-      end
+    if (axi_tvalid & axi_tready & axi_tlast) begin
+      ready_timer <= $urandom_range(20000, 30000);
     end
   end
 end
