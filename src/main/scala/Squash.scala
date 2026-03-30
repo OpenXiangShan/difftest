@@ -113,7 +113,13 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   val numCores = in.bits.count(_.bits.isUniqueIdentifier)
 
   val pipelined = Wire(Decoupled(MixedVec(bundles)))
-  PipelineConnect(in, pipelined, pipelined.fire)
+  val rawData = PipelineConnect(in, pipelined, pipelined.fire)
+  // Override PipelineConnect's fire-gated valid with valid-gated valid (registered)
+  // This breaks the combinational cycle: pipelined.ready -> fire -> bits.valid -> want_tick -> pipelined.ready
+  pipelined.bits.zip(rawData).foreach { case (pb, raw) =>
+    pb.valid := raw.valid && pipelined.valid
+    pb.bits.bits.getValidOption.foreach(_ := raw.valid && pipelined.valid)
+  }
   val control = Module(new SquashControl(config))
   control.clock := clock
   control.reset := reset
@@ -152,18 +158,21 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .reduce(_ || _)
   })
 
+  val out_ready = Wire(Bool())
+  val out_hold = Wire(Bool())
   val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
     val s_in = pipelined.bits.filter(_.bits.desiredCppName == u.desiredCppName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
     squasher.in.zip(s_in).foreach { case (i, s_i) => i := s_i }
     wt := squasher.want_tick
+    squasher.hold := out_hold
     val group_tick =
       group_name_vec
         .zip(group_tick_vec)
         .collect { case (n, gt) if u.squashGroup.contains(n) => gt }
         .foldLeft(false.B)(_ || _)
     // Only tick when out.ready to avoid output missing
-    squasher.should_tick := (wt || group_tick || global_tick) && pipelined.ready
+    squasher.should_tick := (wt || group_tick || global_tick) && out_ready
     squasher.out
   }
   // Flatten Seq[MixedVec[DifftestBundle]] to MixedVec[DifftestBundle]
@@ -176,7 +185,10 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       out.bits(base + idx) := gen
     }
   }
-  pipelined.ready := out.ready
+  out_ready := out.ready
+  val any_want_tick = want_tick_vec.asUInt.orR || global_tick
+  out_hold := any_want_tick && !out.ready
+  pipelined.ready := Mux(any_want_tick, out.ready, true.B)
   out.valid := VecInit(out.bits.map(_.valid)).asUInt.orR
 }
 
@@ -185,6 +197,7 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
   val in = IO(Input(Vec(length, bundleType)))
   val want_tick = IO(Output(Bool()))
   val should_tick = IO(Input(Bool()))
+  val hold = IO(Input(Bool()))
 
   val state = RegInit(0.U.asTypeOf(Vec(length, bundleType)))
   val out = IO(Output(Vec(length, bundleType)))
@@ -217,7 +230,7 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
   for ((i, s) <- in.zip(state)) {
     when(should_tick) {
       s := i
-    }.otherwise {
+    }.elsewhen(!hold) {
       s := i.squash(s)
     }
   }

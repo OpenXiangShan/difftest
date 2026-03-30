@@ -265,6 +265,7 @@ class BatchAssembler(
   //   2. concat/remain_stats: record statistic for data/info to be concatenated to output or remained to state
   val delay_step = Wire(Decoupled(new BatchStepResult(param, config)))
   PipelineConnect(in, delay_step, delay_step.fire)
+  val want_tick = Wire(Bool())
   delay_step.ready := out.ready
   val delay_step_data = delay_step.bits.data
   val delay_step_info = delay_step.bits.info
@@ -379,8 +380,9 @@ class BatchAssembler(
   }
   val in_replay = Option.when(config.hasReplay)(delay_step.bits.trace_info.get.in_replay)
 
-  val should_tick = (timeout || state_flush || cont_exceed || step_exceed ||
-    trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)) && out.ready
+  want_tick := timeout || state_flush || cont_exceed || step_exceed ||
+    trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
+  val should_tick = want_tick && out.ready
   when(!should_tick) {
     timeout_count := timeout_count + 1.U
   }.otherwise {
@@ -390,7 +392,7 @@ class BatchAssembler(
   out.bits.io.data := state_data | (append_data << (state_status.data_bytes << 3).asUInt).asUInt
   out.bits.io.info := state_info | (append_info << (state_status.info_size * param.infoWidth.U)).asUInt
   out.bits.step := Mux(out.valid, finish_step, 0.U)
-  out.valid := should_tick
+  out.valid := want_tick
 
   val delay_step_fire = delay_step.fire
   val state_update = delay_step_fire || (should_tick && !delay_step_enable)
