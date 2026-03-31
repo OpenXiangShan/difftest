@@ -180,6 +180,18 @@ bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO WAVE=1  
 | `DIFF=PATH` | Reference SO (required) |
 | `WAVE=1` | Enable waveform dump |
 
+#### Precautions
+
+- **Residual process check**: before every FPGA Sim run, check for leftover shared memory and processes:
+  ```bash
+  lsof /dev/shm/xdma_sim* 2>/dev/null
+  ```
+  If there is output, kill the listed PIDs and remove stale files (`rm -f /dev/shm/xdma_sim*`) before proceeding. Stale processes cause the next run to hang or produce incorrect results silently.
+
+- **Wait for full completion**: always use `bash cosim.sh ... 2>&1 | tee <logfile>` and wait for the script to exit completely before inspecting results. Do not interrupt, background, or `Ctrl-C` mid-run — doing so may leave orphan processes.
+
+- **Log preservation**: use `tee` to save each run's output to a distinct log file. Name logs after the change being tested (e.g. `build/cosim-phaseN-microbench.log`) so they can be compared across runs.
+
 #### Cleanup
 
 ```bash
@@ -246,6 +258,46 @@ Relevant code: [`src/test/csrc/common/query.cpp`](../src/test/csrc/common/query.
 | simv | `make clean && make simv DIFFTEST_QUERY=1 VCS=verilator -j2` | `./build/simv +workload=$WORKLOAD +diff=$REF_SO` |
 | FPGA Sim | Add `DIFFTEST_QUERY=1` to Step 2 (fpga-build) in §2.3 | `bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO` |
 
+#### Reference DB Comparison
+
+When debugging transport-stage issues (squash/batch/delta), comparing a suspect Query DB against a known-good **reference DB** is the most effective approach.
+
+**Creating a reference DB:**
+
+Run the same workload with difftest on a known-good code revision (or with a simpler `--difftest-config` that bypasses the suspect stage). Save the resulting `build/difftest_query.db` as your reference:
+
+```bash
+cp build/difftest_query.db ref-microbench.db   # or ref-linux.db
+```
+
+**Hex conversion (required before comparison):**
+
+Query DB stores values in raw format. Convert both the suspect DB and the reference DB to hex for readable comparison:
+
+```bash
+python3 difftest/scripts/query/convert_hex.py build/difftest_query.db
+# Produces: build/difftest_query_hex.db
+
+python3 difftest/scripts/query/convert_hex.py ref-microbench.db
+# Produces: ref-microbench-hex.db
+```
+
+**Cross-DB comparison with ATTACH:**
+
+Use SQLite's `ATTACH` to join tables across the suspect and reference DBs in a single query:
+
+```bash
+sqlite3 build/difftest_query_hex.db \
+  "ATTACH 'ref-microbench-hex.db' AS ref;
+   SELECT a.STEP, a.NFUSED AS dut, b.NFUSED AS ref
+   FROM main.InstrCommit a
+   JOIN ref.InstrCommit b ON a.STEP=b.STEP AND a.MY_INDEX=b.MY_INDEX
+   WHERE a.NFUSED != b.NFUSED
+   ORDER BY a.STEP LIMIT 20;"
+```
+
+Replace the table name (`InstrCommit`) and column (`NFUSED`) with the checker and field that diverged. The first divergent STEP typically points to the root cause.
+
 ### 3.3 Waveforms
 
 Waveforms capture hardware signal transitions and are used to inspect timing and event ordering at the RTL level. Build with waveform support enabled, then dump at runtime.
@@ -288,3 +340,37 @@ EMU runtime waveform options:
 2. **Locate** the checker source in [`src/test/csrc/difftest/checkers/`](../src/test/csrc/difftest/checkers). Read its comparison logic and understand which fields diverged from the printed DUT/REF state.
 3. **Query DB** (if transport stages are suspected): rebuild with `DIFFTEST_QUERY=1`, collect `build/difftest_query.db` from at least two runs (e.g. different `--difftest-config` settings or code revisions). Compare the DBs to narrow which transport stage is implicated.
 4. **Waveform** (for RTL-level verification): after forming a hypothesis, rebuild with `EMU_TRACE=1` (or `EMU_TRACE=fst` for simv). Dump focused waveforms for the suspect time range to validate timing and signal ordering.
+
+---
+
+## 5. Phased Verification Strategy
+
+When making multi-step changes to the hardware transport pipeline (e.g. modifying Squash, Batch, and Delta together), use a phased approach to isolate regressions early.
+
+### Principles
+
+- **One logical change per phase.** Each phase should modify one module or one aspect of the pipeline. Do not combine unrelated changes in the same phase.
+- **Gate on tests before proceeding.** A phase is complete only when all required tests pass. Never start the next phase on a failing baseline.
+- **Use a progress log.** Record each phase's changes, test results, and any debugging notes in a dedicated progress file (e.g. `.github/difftest-progress.md`). This provides a clear audit trail and makes it easier to bisect regressions.
+
+### Test Ladder
+
+Run tests in order of increasing cost. Stop at the first failure.
+
+| Step | Test | Pass Criteria | Approx. Time |
+|------|------|---------------|---------------|
+| 1 | microbench | `HIT GOOD TRAP`, no `ABORT`/`mismatch` | ~1–2 min |
+| 2 | linux (short) | No `ABORT`/`mismatch` within a `timeout 300` window | 5 min |
+| 3 | linux (long) | No `ABORT`/`mismatch` within a `timeout 600` window | 10 min |
+
+- Step 1 catches most functional regressions quickly.
+- Step 2 exercises more complex boot code paths and interrupt handling.
+- Step 3 is a final confidence check for timing-sensitive or rare-event issues. Only run after all phases pass Steps 1–2.
+
+### Typical Workflow
+
+1. **Compile** (full three-step build for FPGA Sim, or `make emu` for EMU).
+2. **Run microbench.** If it fails, debug and fix before running linux.
+3. **Run linux (5 min).** If it fails, the issue is likely related to more complex instruction sequences or interrupt timing.
+4. After **all phases pass** Steps 1–2, run the **final 10-min linux test** once as the acceptance gate.
+5. Record results in the progress log after each step.
