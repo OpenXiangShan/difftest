@@ -101,7 +101,14 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 
   // Collect valid bundles of same cycle
   val collector = Module(new BatchCollector(bundles, param, config))
-  PipelineConnect(in, collector.in, collector.in.fire)
+  val rawData = PipelineConnect(in, collector.in, collector.in.fire)
+  // Override right.valid gating with fire-gating to replicate v1 behavior.
+  val collectorInFire = collector.in.valid && collector.in.ready
+  collector.in.bits.zip(rawData).foreach { case (b, raw) =>
+    val v = raw.valid && collectorInFire
+    b.valid := v
+    b.bits.bits.getValidOption.foreach(_ := v)
+  }
 
   // Assemble collected data from different cycles
   val assembler = Module(new BatchAssembler(param, config))

@@ -42,7 +42,7 @@ object PipelineConnect {
   ): MixedVec[Valid[DifftestBundle]] = {
     val data = connect(left, right, rightOutFire)
     right.bits.zip(data).foreach { case (r, d) =>
-      val valid = d.valid && right.fire
+      val valid = d.valid && right.valid
       r.valid := valid
       r.bits.bits.getValidOption.foreach(_ := valid)
     }

@@ -153,7 +153,14 @@ class DeltaSplitter(v_gen: Valid[DifftestBundle], filter: Option[UInt], config: 
 class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
   val in = IO(Flipped(Decoupled(MixedVec(bundles))))
   val pipelined = Wire(Decoupled(MixedVec(bundles)))
-  PipelineConnect(in, pipelined, pipelined.fire)
+  val rawData = PipelineConnect(in, pipelined, pipelined.fire)
+  // Override right.valid gating with fire-gating to replicate v1 behavior.
+  val pipelinedFire = pipelined.valid && pipelined.ready
+  pipelined.bits.zip(rawData).foreach { case (pb, raw) =>
+    val v = raw.valid && pipelinedFire
+    pb.valid := v
+    pb.bits.bits.getValidOption.foreach(_ := v)
+  }
   val toDeltas = pipelined.bits.filter(_.bits.supportsDelta)
   val inPending = Wire(Vec(toDeltas.length, Bool()))
   val delta_out_fire = Wire(Bool())
