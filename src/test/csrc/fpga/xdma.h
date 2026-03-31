@@ -60,9 +60,6 @@ public:
 
   void start(bool enable_diff) {
     running = true;
-#ifndef FPGA_SIM
-    fpga_io(HOST_IO_DIFFTEST_ENABLE, enable_diff);
-#endif // FPGA_SIM
     if (enable_diff == false) {
       static volatile sig_atomic_t signal_received = 0;
 
