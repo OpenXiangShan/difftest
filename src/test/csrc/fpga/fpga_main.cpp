@@ -72,6 +72,7 @@ void fpga_init() {
   xdma_device = new FpgaXdma();
 #ifndef FPGA_SIM
   xdma_device->fpga_io(HOST_IO_RESET, true);
+  xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
   usleep(1000);
 #endif // FPGA_SIM
 
