@@ -311,16 +311,29 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |  ${bundleEnum.mkString(",\n  ")}
            |  };
            |  static int dut_index = 0;
+           |#ifdef CONFIG_DIFFTEST_QUERY
+           |  static int batch_query_nums[${bundleEnum.length}] = {0};
+           |#endif // CONFIG_DIFFTEST_QUERY
            |  $batchDecl
            |  for (int i = 0; i < $infoLen; i++) {
            |    if (!diffstate_buffer) return;
            |    uint8_t id = info[i].id;
            |    uint8_t num = info[i].num;
            |    uint32_t coreid, index, address;
+           |#ifdef CONFIG_DIFFTEST_QUERY
+           |    if (qStats) {
+           |      qStats->BatchInfo_write(id, num);
+           |      batch_query_nums[id] = num;
+           |    }
+           |#endif // CONFIG_DIFFTEST_QUERY
            |    if (id == BatchFinish) {
            |      break;
            |    }
            |    else if (id == BatchStep) {
+           |#ifdef CONFIG_DIFFTEST_QUERY
+           |      if (qStats) qStats->BatchStep_write(batch_query_nums);
+           |      memset(batch_query_nums, 0, sizeof(batch_query_nums));
+           |#endif // CONFIG_DIFFTEST_QUERY
            |      $stepPending
            |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
            |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
@@ -391,7 +404,7 @@ object DPIC {
   }
 
   def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
-    Query.register(template, "", "0")
+    Query.registerBatch(template, "", "0")
     val module = Module(new DummyDPICBatchWrapper(template, chiselTypeOf(io), config))
     module.control := control
     module.io := io
