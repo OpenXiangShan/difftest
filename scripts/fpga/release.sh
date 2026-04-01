@@ -87,11 +87,8 @@ echo "CPU Build copied."
 
 echo "Copying $DIFF_HOME into $RELEASE_HOME ..."
 rsync -av \
-    --include='config/***' \
-    --include='src/***' \
-    --include='*.mk' \
-    --include='Makefile' \
-    --exclude='*' \
+    --exclude='build/***' \
+    --exclude='build/' \
     "$DIFF_HOME/" "$RELEASE_HOME/difftest/"
 
 RELEASE_RTL="$RELEASE_HOME/build/rtl"
