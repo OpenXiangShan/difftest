@@ -214,10 +214,26 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 
   val withDeltas = MixedVecInit((nonDeltaBits ++ deltas ++ Seq(deltaInfo)).toSeq)
   val out = IO(Decoupled(chiselTypeOf(withDeltas)))
-  splitters.foreach(_.out.ready := out.ready)
-  pipelined.ready := VecInit(splitters.map(_.in.ready)).asUInt.andR && out.ready
+
+  // Hold output when valid but not consumed, to prevent data loss during backpressure.
+  // Without this, when out.ready=false the combinational output is not captured, and when
+  // out.ready returns to true, pipelined.fire can change the output before it's consumed.
+  val outPending = RegInit(false.B)
+  val outPendingBits = Reg(chiselTypeOf(withDeltas))
+  val rawValid = VecInit(withDeltas.map(_.valid)).asUInt.orR
+  when(out.fire) {
+    outPending := false.B
+  }
+  when(rawValid && !out.ready && !outPending) {
+    outPending := true.B
+    outPendingBits := withDeltas
+  }
+  out.valid := outPending || rawValid
+  out.bits := Mux(outPending, outPendingBits, withDeltas)
+
+  // Freeze splitters and pipeline when output is held
+  splitters.foreach(_.out.ready := out.ready && !outPending)
+  pipelined.ready := VecInit(splitters.map(_.in.ready)).asUInt.andR && out.ready && !outPending
   // All splitters must fire synchronously to avoid mixing data from different pipeline stages
   splitters.foreach(_.in.valid := pipelined.fire)
-  out.valid := VecInit(withDeltas.map(_.valid)).asUInt.orR
-  out.bits := withDeltas
 }
