@@ -187,7 +187,8 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
       case _ => None
     }
 
-    val module = Module(new DeltaSplitter(chiselTypeOf(v_gen), filter, config))
+    // val module = Module(new DeltaSplitter(chiselTypeOf(v_gen), filter, config))
+    val module = Module(new DeltaSplitter(chiselTypeOf(v_gen), None, config))
     module.in.valid := pipelined.valid
     module.in.bits := v_gen
     module.in_filter.foreach(_ := filter.get)
