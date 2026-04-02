@@ -32,6 +32,8 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   val numPacketPerRange = 8 // packet in each range
   val pkt_id_w = 8 // pkt = (difftest_data, pkt_id)
   val axis_send_len = (difftest_width + pkt_id_w + axis_width - 1) / axis_width
+  val payload_width = axis_send_len * axis_width
+  val payload_pad_width = payload_width - difftest_width - pkt_id_w
   val fifo_depth = 16
   val fifo_addr_width = log2Ceil(fifo_depth)
 
@@ -48,8 +50,6 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   val wr_occupancy = wr_cnt - rd_cnt_sync // Calculate occupancy in write clock domain
 
   // Write side (difftest side)
-  val pktID = RegInit(0.U(pkt_id_w.W))
-  val wrRangeCounter = RegInit(0.U(3.W)) // 0 to 7
   val fifo_not_full = wr_occupancy < (fifo_depth - 1).U
   io.difftest.ready := fifo_not_full // Backpressure based on FIFO space - only consider FIFO occupancy
   val wr_en = io.difftest.fire
@@ -57,11 +57,6 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   when(wr_en) {
     fifo_ram.write(wr_ptr, io.difftest.bits)
     wr_ptr := wr_ptr + 1.U
-    wrRangeCounter := Mux(wrRangeCounter === (numPacketPerRange - 1).U, 0.U, wrRangeCounter + 1.U)
-    // Increment packet ID when starting a new range
-    when(wrRangeCounter === (numPacketPerRange - 1).U) {
-      pktID := pktID + 1.U
-    }
     wr_cnt := wr_cnt + 1.U // Increment write counter
   }
 
@@ -72,7 +67,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     val rd_occupancy = wr_cnt_sync - rd_cnt // Calculate occupancy in read clock domain
 
     val inTransfer = RegInit(false.B)
-    val mix_data = RegInit(0.U((difftest_width + pkt_id_w).W))
+    val packetBeats = RegInit(VecInit(Seq.fill(axis_send_len)(0.U(axis_width.W))))
     val sendCnt = RegInit(0.U(log2Ceil(axis_send_len).W))
     val sendLast = sendCnt === (axis_send_len - 1).U
     val counter = RegInit(0.U(3.W)) // 0 to 7
@@ -80,19 +75,27 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     val sendPacketEnd = counter === (numPacketPerRange - 1).U
     // Read from FIFO
     val fifo_out = fifo_ram.read(rd_ptr)
-
-    // Counter for throttling debug prints
-    // Start transfer when we have data available
-    when(!inTransfer) {
-      when(rd_occupancy >= numPacketPerRange.U) {
-        mix_data := Cat(fifo_out, currentPktID) // First data in range
-        rd_ptr := rd_ptr + 1.U
-        rd_cnt := rd_cnt + 1.U // Increment read counter
-        // counter := 0.U  // 0~7
-        inTransfer := true.B
-        sendCnt := 0.U
+    val packetPayload =
+      if (payload_pad_width > 0) {
+        Cat(0.U(payload_pad_width.W), fifo_out, currentPktID)
+      } else {
+        Cat(fifo_out, currentPktID)
       }
-    }.otherwise {
+    val packetPayloadBeats = packetPayload.asTypeOf(Vec(axis_send_len, UInt(axis_width.W)))
+    val startTransfer = !inTransfer && rd_occupancy >= numPacketPerRange.U
+    val loadNextPacket = startTransfer || (io.axis.fire && sendLast && !sendPacketEnd)
+
+    // Start transfer when we have data available
+    when(loadNextPacket) {
+      packetBeats := packetPayloadBeats
+      rd_ptr := rd_ptr + 1.U
+      rd_cnt := rd_cnt + 1.U // Increment read counter
+    }
+
+    when(startTransfer) {
+      inTransfer := true.B
+      sendCnt := 0.U
+    }.elsewhen(inTransfer) {
       when(io.axis.fire) {
         when(sendLast) {
           sendCnt := 0.U
@@ -102,23 +105,17 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
             counter := 0.U
             currentPktID := currentPktID + 1.U // Increment ID for next range
           }.otherwise {
-            // Read next data in range
-            mix_data := Cat(fifo_out, currentPktID)
-            rd_ptr := rd_ptr + 1.U
-            rd_cnt := rd_cnt + 1.U // Increment read counter
             counter := counter + 1.U
           }
         }.otherwise {
-          // Still sending beats of current data
           sendCnt := sendCnt + 1.U
-          mix_data := mix_data >> axis_width
         }
       }
     }
 
     // AXI output
     io.axis.valid := inTransfer
-    io.axis.bits.data := mix_data(axis_width - 1, 0)
+    io.axis.bits.data := packetBeats(sendCnt)
     io.axis.bits.last := inTransfer && sendLast && sendPacketEnd
   }
 }
