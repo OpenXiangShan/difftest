@@ -19,14 +19,13 @@ package difftest.fpga
 import chisel3._
 import chisel3.util._
 import difftest.gateway.FpgaDiffIO
-import difftest.util.Delayer
+import difftest.util.{Delayer, PipelineConnect}
 
 class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module {
   val io = IO(new Bundle {
     val pcie_clock = Input(Clock()) // Read clock
     val reset = Input(Bool())
-    val difftest = Input(new FpgaDiffIO(difftest_width))
-    val clock_enable = Output(Bool())
+    val difftest = Flipped(new FpgaDiffIO(difftest_width))
     val axis = new AXI4Stream(axis_width)
   })
 
@@ -52,10 +51,11 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   val pktID = RegInit(0.U(pkt_id_w.W))
   val wrRangeCounter = RegInit(0.U(3.W)) // 0 to 7
   val fifo_not_full = wr_occupancy < (fifo_depth - 1).U
-  val wr_en = io.difftest.enable && fifo_not_full
+  io.difftest.ready := fifo_not_full // Backpressure based on FIFO space - only consider FIFO occupancy
+  val wr_en = io.difftest.fire
 
   when(wr_en) {
-    fifo_ram.write(wr_ptr, io.difftest.data)
+    fifo_ram.write(wr_ptr, io.difftest.bits)
     wr_ptr := wr_ptr + 1.U
     wrRangeCounter := Mux(wrRangeCounter === (numPacketPerRange - 1).U, 0.U, wrRangeCounter + 1.U)
     // Increment packet ID when starting a new range
@@ -64,9 +64,6 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     }
     wr_cnt := wr_cnt + 1.U // Increment write counter
   }
-
-  // Backpressure based on FIFO space - only consider FIFO occupancy
-  io.clock_enable := fifo_not_full
 
   // Read clock domain
   withClock(io.pcie_clock) {
@@ -131,9 +128,8 @@ class HostEndpoint(
   val axisWidth: Int = 512,
 ) extends Module {
   val io = IO(new Bundle {
-    val difftest = Input(new FpgaDiffIO(diffWidth))
+    val difftest = Flipped(new FpgaDiffIO(diffWidth))
     val to_host_axis = new AXI4Stream(axisWidth)
-    val clock_enable = Output(Bool())
     val pcie_clock = Input(Clock())
   })
 
@@ -143,11 +139,8 @@ class HostEndpoint(
   // Connect clock and reset signals
   diff2axis.io.pcie_clock := io.pcie_clock
   diff2axis.io.reset := reset
-  diff2axis.io.difftest := io.difftest
+  PipelineConnect(io.difftest, diff2axis.io.difftest, diff2axis.io.difftest.fire)
 
   // AXI-Stream output domain (PCIe clock)
   io.to_host_axis <> diff2axis.io.axis
-
-  // Clock enable output (can be used in either domain, but connecting in current module's domain)
-  io.clock_enable := diff2axis.io.clock_enable
 }
