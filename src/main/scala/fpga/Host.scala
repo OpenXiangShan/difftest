@@ -70,7 +70,6 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     val rd_occupancy = wr_cnt_sync - rd_cnt // Calculate occupancy in read clock domain
 
     val inTransfer = RegInit(false.B)
-    val packetBeats = RegInit(VecInit(Seq.fill(axis_send_len)(0.U(axis_width.W))))
     val sendCnt = RegInit(0.U(log2Ceil(axis_send_len).W))
     val sendLast = sendCnt === (axis_send_len - 1).U
     val counter = RegInit(0.U(3.W)) // 0 to 7
@@ -90,7 +89,6 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
     // Start transfer when we have data available
     when(loadNextPacket) {
-      packetBeats := packetPayloadBeats
       rd_ptr := rd_ptr + 1.U
       rd_cnt := rd_cnt + 1.U // Increment read counter
     }
@@ -118,7 +116,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
     // AXI output
     io.axis.valid := inTransfer
-    io.axis.bits.data := packetBeats(sendCnt)
+    io.axis.bits.data := packetPayloadBeats(sendCnt)
     io.axis.bits.last := inTransfer && sendLast && sendPacketEnd
   }
 }
