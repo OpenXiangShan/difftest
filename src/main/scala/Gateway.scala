@@ -288,8 +288,11 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     control.enable := batch.enable
     GatewaySink.batch(Batch.getTemplate, control, batch.io, config)
     if (config.isFPGA) {
-      fpgaIO.get.data := batch.io.asUInt
-      fpgaIO.get.enable := batch.enable
+      val fpgaData = RegEnable(batch.io.data, 0.U((config.batchArgByteLen._1 * 8).W), batch.enable)
+      val fpgaInfo = RegEnable(batch.io.info, 0.U((config.batchArgByteLen._2 * 8).W), batch.enable)
+      val fpgaEnable = RegNext(batch.enable, false.B)
+      fpgaIO.get.data := Cat(fpgaData, fpgaInfo)
+      fpgaIO.get.enable := fpgaEnable
     }
   } else {
     val sink_enable = VecInit(toSink.map(_.valid).toSeq).asUInt.orR
