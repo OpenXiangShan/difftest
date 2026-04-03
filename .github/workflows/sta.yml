@@ -10,7 +10,7 @@ on:
 jobs:
   run-sta-xiangshan:
     timeout-minutes: 2880
-    runs-on: self-hosted
+    runs-on: [self-hosted, node]
 
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +19,7 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/..
           rm -rf XiangShan
-          proxychains git clone --single-branch --branch main --depth 1 https://github.com/OpenXiangShan/XiangShan.git
+          proxychains git clone --single-branch --branch kunminghu-v2 --depth 1 https://github.com/OpenXiangShan/XiangShan.git
           cd XiangShan && make init && rm -rf difftest && cp -r $GITHUB_WORKSPACE .
           echo "NOOP_HOME=$(pwd)" >> $GITHUB_ENV
           echo "DIFF_RTL_HOME=$(pwd)/difftest/build" >> $GITHUB_ENV
