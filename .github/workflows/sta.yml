@@ -10,7 +10,7 @@ on:
 jobs:
   run-sta-xiangshan:
     timeout-minutes: 2880
-    runs-on: self-hosted
+    runs-on: [self-hosted, node]
 
     steps:
       - uses: actions/checkout@v4
