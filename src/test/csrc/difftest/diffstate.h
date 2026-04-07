@@ -152,24 +152,25 @@ public:
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   // AME instruction lifecycle in software ROB
-  // - An AME instruction is first committed in the DUT's hardware ROB. At that
-  // moment, it is captured by AmuCtrlRecorder and from then on it is no
-  // longer managed by the DUT hardware ROB, but instead by the DiffTest
-  // framework's software ROB. In this phase, the instruction waits for the REF
-  // side to commit it as well; this corresponds to the WAIT_REF_COMMIT state.
+  // - An AME instruction is first committed in the DUT's hardware ROB, then
+  // sent to CUTE. When it's sent to CUTE, it is captured by AmuCtrlRecorder
+  // and from then on it is no longer managed by the DUT hardware ROB, but
+  // instead by the DiffTest framework's software ROB. In this phase, the
+  // instruction waits for the REF side to commit it as well; this corresponds
+  // to the WAIT_REF_COMMIT state.
   // - Once REF has also committed this instruction, AmuCtrlChecker compares
   // the amu_ctrl signals from DUT and REF. If the signals match, the state
   // transitions to WAIT_DUT_EXEC, meaning we are now waiting for the DUT's
   // execution result.
   // - Next, the DUT's matrix unit executes the instruction and gradually
-  // writes the result into the matrix registers. amu_inst_finish_record
-  // captures this writeback process and updates the mirrored registers in
-  // DiffTest. When the instruction has fully finished and all matrix register
-  // writes are complete, the state becomes WAIT_SWROB_COMMIT, waiting for the
-  // software ROB to commit the instruction.
+  // writes the result into the matrix registers. AmuExecRecorder captures this
+  // writeback process and updates the mirrored registers in DiffTest. When the
+  // instruction has fully finished and all matrix register writes are
+  // complete, the state becomes WAIT_SWROB_COMMIT, waiting for the software
+  // ROB to commit the instruction.
   // - An instruction in the software ROB can be committed if and only if it
   // has completed and all preceding instructions have also completed.
-  // do_amuexec_check commits such ready instructions: the REF side re-executes
+  // AmuExecChecker commits such ready instructions: the REF side re-executes
   // the instruction and compares its result against the DUT result. If they
   // match, the lifecycle of this instruction ends and its resources can be
   // released.

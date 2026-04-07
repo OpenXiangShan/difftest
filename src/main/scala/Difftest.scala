@@ -415,7 +415,7 @@ class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWit
 
 class DiffMatrixStoreEvent extends MatrixStoreEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "matrix_store"
-  override val squashGroup: Seq[String] = Seq("GOLDENMEM") // TODO: check if this is correct
+  override val squashGroup: Seq[String] = Seq("GOLDENMEM")
 }
 
 class DiffUncacheMMStoreEvent extends UncacheMMStoreEvent with DifftestBundle with DifftestWithIndex {
@@ -527,11 +527,6 @@ class DiffAmuFinishEvent extends AmuFinishEvent with DifftestBundle with Difftes
 class DiffTokenEvent extends TokenEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "token"
 }
-
-// TODO: Matrix Store Event in AME
-// class DiffMatrixStoreEvent extends MatrixStoreEvent with DifftestBundle with DifftestWithIndex {
-//   override val desiredCppName: String = "matrix_store"
-// }
 
 private[difftest] class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
