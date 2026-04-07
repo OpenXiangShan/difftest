@@ -23,11 +23,13 @@ import scala.collection.mutable.ListBuffer
 
 object Query {
   private val tables = ListBuffer.empty[QueryTable]
+  private var batchTable: Option[BatchQueryTable] = None
   def register(gen: DifftestBundle, locPrefix: String, dutZone: String) = {
     tables += new QueryTable(gen, locPrefix, dutZone)
   }
-  def register(gens: Seq[DifftestBundle], locPrefix: String, dutZone: String) = {
+  def registerBatch(gens: Seq[DifftestBundle], locPrefix: String, dutZone: String) = {
     gens.foreach { gen => tables += new QueryTable(gen, locPrefix, dutZone) }
+    batchTable = Some(new BatchQueryTable(gens))
   }
   def writeInvoke(gen: DifftestBundle): String = {
     tables.find(_.gen == gen).get.writeInvoke
@@ -51,11 +53,15 @@ object Query {
          |class QueryStats: public QueryStatsBase {
          |public:
          |  ${tables.map { t => s"Query* ${t.instName};" }.mkString("\n  ")}
+         |  ${batchTable.map(_.members).getOrElse("")}
          |  QueryStats(char *path): QueryStatsBase(path) {
          |    ${tables.map(_.initInvoke).mkString("\n    ")}
+         |    ${batchTable.map(_.initInvoke).getOrElse("")}
          |  }
          |  ${tables.map(_.initDecl).mkString("")}
          |  ${tables.map(_.writeDecl).mkString("")}
+         |  ${batchTable.map(_.initDecl).getOrElse("")}
+         |  ${batchTable.map(_.writeDecl).getOrElse("")}
          |};
          |#endif // CONFIG_DIFFTEST_QUERY
          |#endif // __DIFFTEST_QUERY_H__
@@ -120,4 +126,62 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String, dutZone: String) {
        |""".stripMargin
   }
   val writeInvoke = s"qStats->${tableName}_write($dutZone, ${locArgs.map(locPrefix + _._2).mkString(", ")}, packet);"
+}
+
+class BatchQueryTable(template: Seq[DifftestBundle]) {
+  private val bundleNames: Seq[String] =
+    template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchStep", "BatchFinish")
+
+  val members: String =
+    s"""Query* query_BatchInfo;
+       |  Query* query_BatchStep;""".stripMargin
+
+  val initInvoke: String = "BatchTable_init();"
+
+  val initDecl: String = {
+    val bundleNameInserts = bundleNames.zipWithIndex.map { case (name, id) =>
+      s"INSERT INTO BundleNames VALUES($id, '$name');"
+    }.mkString("")
+
+    s"""
+       |  void BatchTable_init() {
+       |    const char* createBatchInfoSql = "CREATE TABLE BatchInfo("
+       |      "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
+       |      "STEP INTEGER NOT NULL,"
+       |      "BUNDLE_ID INTEGER NOT NULL,"
+       |      "NUM INTEGER NOT NULL);";
+       |    const char* insertBatchInfoSql = "INSERT INTO BatchInfo (STEP,BUNDLE_ID,NUM)"
+       |      " VALUES (?,?,?);";
+       |    query_BatchInfo = new Query(mem_db, createBatchInfoSql, insertBatchInfoSql);
+       |
+       |    const char* createBundleNamesSql = "CREATE TABLE BundleNames("
+       |      "BUNDLE_ID INTEGER PRIMARY KEY,"
+       |      "NAME TEXT NOT NULL);";
+       |    char* errMsg;
+       |    sqlite3_exec(mem_db, createBundleNamesSql, 0, 0, &errMsg);
+       |    sqlite3_exec(mem_db, "$bundleNameInserts", 0, 0, &errMsg);
+       |
+       |    const char* createBatchStepSql = "CREATE TABLE BatchStep("
+       |      "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
+       |      "STEP INTEGER NOT NULL,"
+       |      "${bundleNames.map(n => s"$n INTEGER NOT NULL").mkString(",")});";
+       |    const char* insertBatchStepSql = "INSERT INTO BatchStep (STEP,${bundleNames.mkString(",")}) "
+       |      "VALUES (${Seq.fill(bundleNames.length + 1)("?").mkString(",")});";
+       |    query_BatchStep = new Query(mem_db, createBatchStepSql, insertBatchStepSql);
+       |  }
+       |""".stripMargin
+  }
+
+  val writeDecl: String = {
+    val numArgs = bundleNames.indices.map(i => s"nums[$i]").mkString(", ")
+    val writeArgCount = bundleNames.length + 1 // STEP + bundleNames
+    s"""
+       |  void BatchInfo_write(int bundle_id, int num) {
+       |    query_BatchInfo->write(3, (int)query_step, bundle_id, num);
+       |  }
+       |  void BatchStep_write(int* nums) {
+       |    query_BatchStep->write($writeArgCount, (int)query_step, $numArgs);
+       |  }
+       |""".stripMargin
+  }
 }
