@@ -42,9 +42,10 @@ int AmuCtrlChecker::do_step() {
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
     if (iter->state == DiffState::WAIT_REF_COMMIT) {
       DifftestAmuCtrlEvent amu_event = iter->amu_event;
-#ifdef CONFIG_DIFFTEST_SQUASH
-      // TODO: What is squash? How to squash?
-#endif // CONFIG_DIFFTEST_SQUASH
+      // NOTE:
+      // AMU ctrl is treated as a non-squashable, ordering-sensitive event.
+      // Under squash mode, it still requires one-to-one synchronization with REF.
+      // Therefore "no available REF event" (-1) is an error instead of a retriable case.
       auto rm = amu_event.rm;
       auto op = amu_event.op;
       auto md = amu_event.md;
@@ -317,4 +318,3 @@ int TokenRecorder::check(const DifftestTokenEvent &probe) {
 }
 
 #endif // CONFIG_DIFFTEST_TOKENEVENT
-
