@@ -84,7 +84,7 @@ void fpga_init() {
   init_ram(args.image, DEFAULT_EMU_RAM_SIZE);
   init_flash(args.flash_bin);
 
-  difftest_init(true, DEFAULT_EMU_RAM_SIZE);
+  difftest_init(args.enable_diff, DEFAULT_EMU_RAM_SIZE);
 
   init_device();
 
