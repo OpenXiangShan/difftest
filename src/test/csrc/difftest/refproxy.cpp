@@ -189,9 +189,7 @@ int RefProxy::compare(DiffTestState *dut) {
                          PROXY_COMPARE(vcsr),
 #endif // CONFIG_DIFFTEST_VECCSRSTATE
 #ifdef CONFIG_DIFFTEST_FPCSRSTATE
-// TODO: mma will affect fcsr, so we ignore it for now.
-                        //  PROXY_COMPARE(fcsr),
-                        0,
+                         PROXY_COMPARE(fcsr),
 #endif // CONFIG_DIFFTEST_FPCSRSTATE
 #ifdef CONFIG_DIFFTEST_HCSRSTATE
                          PROXY_COMPARE(hcsr),
