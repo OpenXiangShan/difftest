@@ -380,7 +380,6 @@ end_single_cycle:
 }
 
 int Emulator::tick() {
-
 #ifdef SHOW_SCREEN
   uint32_t t = uptime();
   if (t - lasttime_poll > 100) {

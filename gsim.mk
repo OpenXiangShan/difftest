@@ -39,6 +39,7 @@ gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 
 GSIM_OTHER_CSRC_DIR = $(abspath ./src/test/csrc/gsim)
 GSIM_CXXFILES = $(EMU_CXXFILES) $(shell find $(GSIM_OTHER_CSRC_DIR) -name "*.cpp")
+GSIM_GEN_HEADERS = $(shell find $(GSIM_GEN_CSRC_DIR) -maxdepth 1 -name "*.h" 2> /dev/null)
 # We need to replace extra '\' as this is native in Makefile for GSIM
 GSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GSIM_CXXFLAGS += -I$(GSIM_OTHER_CSRC_DIR) -I$(GSIM_GEN_CSRC_DIR)/ -DGSIM
@@ -67,10 +68,10 @@ $(1): $(2)
 endef
 
 $(foreach x, $(GSIM_CXXFILES), $(eval \
-	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_HEADERS))))
 
 $(foreach x, $(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null), $(eval \
-	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_HEADERS))))
 
 $(eval $(call GSIM_LD_TEMPLATE, $(GSIM_EMU_TARGET), $(GSIM_EMU_OBJS), $(GSIM_LDFLAGS)))
 
