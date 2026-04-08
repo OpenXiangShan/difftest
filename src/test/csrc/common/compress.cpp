@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "compress.h"
+#include <sys/time.h>
 
 double calcTime(timeval s, timeval e) {
   double sec, usec;
@@ -171,6 +172,10 @@ long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t load_ty
 long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_type) {
 #ifndef NO_ZSTD_COMPRESSION
   assert(buf_size > 0);
+  struct timeval t_start = {};
+  struct timeval t_after_read = {};
+  struct timeval t_end = {};
+  gettimeofday(&t_start, NULL);
 
   int fd = -1;
   ssize_t file_size = 0;
@@ -223,6 +228,8 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
   }
 
   close(fd);
+  gettimeofday(&t_after_read, NULL);
+  printf("[ZSTD_LOAD] file=%s compressed_size=%zd read_ms=%.2f\n", file_name, file_size, calcTime(t_start, t_after_read));
 
   ZSTD_inBuffer input_buffer = {compress_file_buffer, compress_file_buffer_size, 0};
 
@@ -286,6 +293,8 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
   ZSTD_freeDStream(dstream);
   delete[] compress_file_buffer;
   delete[] temp_page;
+  gettimeofday(&t_end, NULL);
+  printf("[ZSTD_LOAD] file=%s decompressed_size=%lu total_ms=%.2f\n", file_name, curr_size, calcTime(t_start, t_end));
 
   return curr_size;
 #else

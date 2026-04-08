@@ -65,6 +65,37 @@ public:
   // Set the log end signal.
   virtual void set_log_end(uint64_t end) = 0;
 
+  // Optional debug accessors to inspect difftest progress when the simulator
+  // does not produce any difftest step for a long time.
+  virtual bool supports_difftest_debug_snapshot() const {
+    return false;
+  }
+  virtual uint64_t debug_reset() const {
+    return 0;
+  }
+  virtual uint64_t debug_endpoint_step() const {
+    return 0;
+  }
+  virtual uint64_t debug_trap_cycle_cnt() const {
+    return 0;
+  }
+  virtual uint64_t debug_trap_instr_cnt() const {
+    return 0;
+  }
+  virtual uint64_t debug_event_valid() const {
+    return 0;
+  }
+  virtual uint64_t debug_commit0_valid() const {
+    return 0;
+  }
+  virtual uint64_t debug_commit0_pc() const {
+    return 0;
+  }
+
+  virtual bool supports_waveform() const {
+    return false;
+  }
+
   /******* optional methods for child classes *******/
   // To re-initialize the simulator upon a `fork()` call.
   virtual void atClone() {};

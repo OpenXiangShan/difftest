@@ -87,6 +87,13 @@ Emulator::Emulator(int argc, const char *argv[])
   // init flash
   init_flash(args.flash_bin);
 
+  if (args.enable_waveform && !dut_ptr->supports_waveform()) {
+    Info("[warn] waveform requested, but this simulator does not support waveform dumping. Ignore waveform options.\n");
+    args.enable_waveform = false;
+    args.enable_waveform_full = false;
+    args.wave_path = nullptr;
+  }
+
   if (args.enable_waveform) {
     uint64_t waveform_clock = args.enable_waveform_full ? 2 * args.log_begin : args.log_begin;
     if (args.wave_path != NULL) {
@@ -122,8 +129,10 @@ Emulator::Emulator(int argc, const char *argv[])
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
     } else {
       init_ram(args.image, ram_size);
+      Info("[EMU_STAGE] init_ram finished\n");
 #ifdef WITH_DRAMSIM3
       dramsim3_init(args.dramsim3_ini, args.dramsim3_outdir);
+      Info("[EMU_STAGE] dramsim3_init finished\n");
 #endif
     }
   }
@@ -166,7 +175,9 @@ Emulator::Emulator(int argc, const char *argv[])
 #ifndef CONFIG_NO_DIFFTEST
   // init difftest
   auto ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
+  Info("[EMU_STAGE] before difftest_init enable_diff=%d ref_ramsize=%zu\n", args.enable_diff, ref_ramsize);
   difftest_init(args.enable_diff, ref_ramsize);
+  Info("[EMU_STAGE] after difftest_init\n");
 
   // init difftest traces
   if (args.trace_name) {
@@ -287,6 +298,37 @@ Emulator::~Emulator() {
   delete dut_ptr;
 }
 
+void Emulator::log_difftest_debug_snapshot(const char *reason, uint64_t no_step_cycles) {
+  if (!dut_ptr->supports_difftest_debug_snapshot()) {
+    return;
+  }
+
+  uint64_t dut_cycle_cnt = 0;
+  uint64_t dut_instr_cnt = 0;
+  uint64_t dut_has_trap = 0;
+#ifndef CONFIG_NO_DIFFTEST
+  if (difftest != NULL && difftest[0] != NULL) {
+    auto trap = difftest[0]->get_trap_event();
+    dut_cycle_cnt = trap->cycleCnt;
+    dut_instr_cnt = trap->instrCnt;
+    dut_has_trap = trap->hasTrap;
+  }
+#endif
+
+  Info("[DIFFTEST_DEBUG] %s host_cycle=%" PRIu64 " no_step_cycles=%" PRIu64
+       " reset=%" PRIu64 " endpoint_step=%" PRIu64 " difftest_step=%" PRIu64
+       " difftest_exit=0x%016" PRIx64
+       " endpoint_trap.cycle=%" PRIu64 " endpoint_trap.instr=%" PRIu64
+       " dut_trap.cycle=%" PRIu64 " dut_trap.instr=%" PRIu64 " dut_trap.hasTrap=%" PRIu64
+       " event.valid=%" PRIu64 " commit0.valid=%" PRIu64 " commit0.pc=0x%016" PRIx64 "\n",
+       reason, cycles, no_step_cycles,
+       dut_ptr->debug_reset(), dut_ptr->debug_endpoint_step(), dut_ptr->get_difftest_step(),
+       dut_ptr->get_difftest_exit(),
+       dut_ptr->debug_trap_cycle_cnt(), dut_ptr->debug_trap_instr_cnt(),
+       dut_cycle_cnt, dut_instr_cnt, dut_has_trap,
+       dut_ptr->debug_event_valid(), dut_ptr->debug_commit0_valid(), dut_ptr->debug_commit0_pc());
+}
+
 inline void Emulator::reset_ncycles(size_t cycles) {
   if (args.trace_name && args.trace_is_read) {
     return;
@@ -322,6 +364,8 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     dut_ptr->step();
 #endif // GSIM
   }
+
+  log_difftest_debug_snapshot("post-reset");
 }
 
 inline void Emulator::single_cycle() {
@@ -521,10 +565,24 @@ int Emulator::tick() {
 
   static uint64_t stuck_timer = 0;
   if (step) {
+    if (stuck_timer) {
+      log_difftest_debug_snapshot("difftest-step-resumed", stuck_timer);
+    }
     stuck_timer = 0;
   } else {
     stuck_timer++;
+    bool should_report = false;
+    if (stuck_timer && ((stuck_timer & (stuck_timer - 1)) == 0) && stuck_timer <= 1024) {
+      should_report = true;
+    }
+    if (stuck_timer % 1024 == 0) {
+      should_report = true;
+    }
+    if (should_report) {
+      log_difftest_debug_snapshot("no-difftest-step", stuck_timer);
+    }
     if (stuck_timer >= Difftest::stuck_limit) {
+      log_difftest_debug_snapshot("no-difftest-step-timeout", stuck_timer);
       Info("No difftest check for more than %lu cycles, maybe get stuck.", Difftest::stuck_limit);
       return STATE_ABORT;
     }

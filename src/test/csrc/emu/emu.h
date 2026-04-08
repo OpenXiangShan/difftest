@@ -45,6 +45,7 @@ private:
 
   inline void reset_ncycles(size_t cycles);
   inline void single_cycle();
+  void log_difftest_debug_snapshot(const char *reason, uint64_t no_step_cycles = 0);
   void trigger_stat_dump();
   void display_stats();
 

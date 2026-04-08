@@ -87,6 +87,14 @@ public:
 
   void atClone() override;
 
+  bool supports_waveform() const override {
+#if VM_TRACE == 1
+    return true;
+#else
+    return false;
+#endif
+  }
+
 #if VM_TRACE == 1
   void waveform_init(uint64_t cycles) override;
   void waveform_init(uint64_t cycles, const char *filename) override;

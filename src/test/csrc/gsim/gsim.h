@@ -57,6 +57,42 @@ public:
     return dut->get_difftest__DOT__step();
   }
 
+  inline bool supports_difftest_debug_snapshot() const override {
+    return true;
+  }
+  inline uint64_t debug_reset() const override {
+    return dut->reset;
+  }
+  inline uint64_t debug_endpoint_step() const override {
+    return dut->endpoint__DOT__step_REG;
+  }
+  inline uint64_t debug_trap_cycle_cnt() const override {
+    return dut->endpoint__DOT__trap__DOT__dpic__DOT__io__DOT__cycleCnt;
+  }
+  inline uint64_t debug_trap_instr_cnt() const override {
+    return dut->endpoint__DOT__trap__DOT__dpic__DOT__io__DOT__instrCnt;
+  }
+  inline uint64_t debug_event_valid() const override {
+    return dut->endpoint__DOT__event__DOT__dpic__DOT__io__DOT__valid;
+  }
+  inline uint64_t debug_commit0_valid() const override {
+    return dut->endpoint__DOT__commit__DOT__dpic__DOT__io__DOT__valid;
+  }
+  inline uint64_t debug_commit0_pc() const override {
+    return dut->endpoint__DOT__commit__DOT__dpic__DOT__io__DOT__pc;
+  }
+  inline bool supports_waveform() const override {
+    return false;
+  }
+  inline void waveform_init(uint64_t cycles) override {
+    (void)cycles;
+  }
+  inline void waveform_init(uint64_t cycles, const char *filename) override {
+    (void)cycles;
+    (void)filename;
+  }
+  inline void waveform_tick() override {}
+
   inline void set_perf_clean(unsigned clean) override {
     dut->set_difftest__DOT__perfCtrl__DOT__clean(clean);
   }
