@@ -31,6 +31,7 @@ typedef struct {
   pthread_mutex_t lock;
   pthread_cond_t read_cond;
   bool read_waiting;
+  bool closed;
   int read_size;
   int write_size;
   char buffer[BUFFER_SIZE];
@@ -66,24 +67,44 @@ public:
       pthread_condattr_init(&cattr);
       pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
       pthread_cond_init(&shm_ptr->read_cond, &cattr);
+      shm_ptr->closed = false;
     }
   }
   ~xdma_sim() {
+    interrupt();
     if (is_host) {
       shm_unlink(path);
     }
     munmap(shm_ptr, sizeof(xdma_shm));
     close(shm_fd);
   }
+  void interrupt() {
+    if (shm_ptr == nullptr) {
+      return;
+    }
+    pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->closed = true;
+    shm_ptr->read_waiting = false;
+    pthread_cond_broadcast(&shm_ptr->read_cond);
+    pthread_mutex_unlock(&shm_ptr->lock);
+  }
   int read(char *buf, size_t size) {
     assert(size <= BUFFER_SIZE);
     pthread_mutex_lock(&shm_ptr->lock);
 
+    if (shm_ptr->closed) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return 0;
+    }
     shm_ptr->read_waiting = true;
     shm_ptr->write_size = 0;
     shm_ptr->read_size = size;
-    while (shm_ptr->write_size < size) {
+    while (shm_ptr->write_size < size && !shm_ptr->closed) {
       pthread_cond_wait(&shm_ptr->read_cond, &shm_ptr->lock);
+    }
+    if (shm_ptr->closed) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return 0;
     }
     size_t to_copy = size < shm_ptr->write_size ? size : shm_ptr->write_size;
     memcpy(buf, shm_ptr->buffer, to_copy);
@@ -94,9 +115,13 @@ public:
   }
   int write(const char *buf, unsigned char tlast, size_t size) {
     pthread_mutex_lock(&shm_ptr->lock);
-    while (!shm_ptr->read_waiting) {
+    while (!shm_ptr->read_waiting && !shm_ptr->closed) {
       pthread_mutex_unlock(&shm_ptr->lock);
       pthread_mutex_lock(&shm_ptr->lock);
+    }
+    if (shm_ptr->closed) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return 0;
     }
     size_t space = shm_ptr->read_size - shm_ptr->write_size;
     size_t to_write = size < space ? size : space;
@@ -126,6 +151,12 @@ void xdma_sim_open(int channel, bool is_host) {
 void xdma_sim_close(int channel) {
   delete xsim[channel];
   xsim[channel] = nullptr;
+}
+
+void xdma_sim_interrupt(int channel) {
+  if (xsim[channel] != nullptr) {
+    xsim[channel]->interrupt();
+  }
 }
 
 int xdma_sim_read(int channel, char *buf, size_t size) {

@@ -77,12 +77,16 @@ public:
       }
     } else {
 #ifdef USE_THREAD_MEMPOOL
+#if defined(FPGA_SIM) && (CONFIG_DMA_CHANNELS == 1)
+      read_and_process_fallback();
+#else
       std::unique_lock<std::mutex> lock(thread_mtx);
       start_transmit_thread();
       while (running) {
         thread_cv.wait(lock); // wait notify from stop
       }
       stop_thansmit_thread();
+#endif
 #else
       read_and_process();
 #endif // USE_THREAD_MEMPOOL
@@ -128,6 +132,7 @@ private:
   void start_transmit_thread();
   void stop_thansmit_thread();
   void read_xdma_thread(int channel);
+  void read_and_process_fallback();
   void write_difftest_thread();
 #else
   void read_and_process();

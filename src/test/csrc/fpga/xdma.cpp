@@ -142,6 +142,11 @@ void FpgaXdma::start_transmit_thread() {
 }
 
 void FpgaXdma::stop_thansmit_thread() {
+#ifdef FPGA_SIM
+  for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
+    xdma_sim_interrupt(i);
+  }
+#endif
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     if (receive_thread[i].joinable())
       receive_thread[i].join();
@@ -163,16 +168,48 @@ void FpgaXdma::read_xdma_thread(int channel) {
   size_t mem_get_idx = 0;
   while (running) {
     char *mem = xdma_mempool.get_free_chunk(&mem_get_idx);
+    if (mem == nullptr) {
+      continue;
+    }
 #ifdef FPGA_SIM
     size_t size = xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead));
 #else
     size_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
+    if (!running || size == 0) {
+      break;
+    }
     if (xdma_mempool.write_free_chunk(mem[0], mem_get_idx) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
     }
   }
+}
+
+void FpgaXdma::read_and_process_fallback() {
+  printf("start channel 0\n");
+  void *ptr = nullptr;
+  int ret = posix_memalign(&ptr, 4096, sizeof(FpgaPackgeHead));
+  if (ret != 0) {
+    perror("posix_memalign failed");
+    return;
+  }
+  FpgaPackgeHead *packge = (FpgaPackgeHead *)ptr;
+  memset(packge, 0, sizeof(FpgaPackgeHead));
+  while (running) {
+#ifdef FPGA_SIM
+    size_t size = xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead));
+#else
+    size_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
+#endif // FPGA_SIM
+    if (!running || size == 0) {
+      break;
+    }
+    for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
+      v_difftest_Batch(packge->diff_packge[i].diff_packge);
+    }
+  }
+  free(packge);
 }
 
 void FpgaXdma::write_difftest_thread() {
