@@ -299,19 +299,19 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   for (int i = 0; i < cycles; i++) {
     dut_ptr->set_reset(1);
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(GRHSIM)
     dut_ptr->set_clock(1);
     dut_ptr->step();
-#endif // VERILATOR
+#endif // defined(VERILATOR) || defined(GRHSIM)
 
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
       dut_ptr->waveform_tick();
     }
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(GRHSIM)
     dut_ptr->set_clock(0);
     dut_ptr->step();
-#endif // VERILATOR
+#endif // defined(VERILATOR) || defined(GRHSIM)
 
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
       dut_ptr->waveform_tick();
@@ -334,10 +334,10 @@ inline void Emulator::single_cycle() {
     goto end_single_cycle;
   }
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(GRHSIM)
   dut_ptr->set_clock(1);
   dut_ptr->step();
-#endif // VERILATOR
+#endif // defined(VERILATOR) || defined(GRHSIM)
 
   if (args.enable_waveform) {
 #if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_SQUASH)
@@ -362,10 +362,10 @@ inline void Emulator::single_cycle() {
 
   dut_ptr->step_uart();
 
-#ifdef VERILATOR
+#if defined(VERILATOR) || defined(GRHSIM)
   dut_ptr->set_clock(0);
   dut_ptr->step();
-#endif // VERILATOR
+#endif // defined(VERILATOR) || defined(GRHSIM)
 
   if (args.enable_waveform && args.enable_waveform_full) {
 #if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)

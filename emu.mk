@@ -72,6 +72,7 @@ PGO_BOLT ?= $(shell if [ -x "$(LLVM_BOLT)" ]; then echo 1; else echo 0; fi)
 
 include verilator.mk
 include gsim.mk
+include grhsim.mk
 
 ########## Emu build recipes ##########
 
@@ -81,14 +82,21 @@ emu-verilator: verilator-emu
 emu-gsim: gsim-emu
 	@ln -sf $(GSIM_EMU_TARGET) $(EMU)
 
+emu-grhsim: grhsim-emu
+	@ln -sf $(GRHSIM_EMU_TARGET) $(EMU)
+
 # By default, when no simulator is specified, emu refers to verilator-emu
 emu:
+ifeq ($(GRHSIM),1)
+	@$(MAKE) emu-grhsim
+else
 ifeq ($(GSIM),1)
 	@$(MAKE) emu-gsim
 else
 	@$(MAKE) emu-verilator
 endif
+endif
 
 emu-mk: verilator-emu-mk
 
-clean-obj: verilator-clean-obj gsim-clean-obj
+clean-obj: verilator-clean-obj gsim-clean-obj grhsim-clean-obj

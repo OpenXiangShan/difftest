@@ -130,6 +130,11 @@ public:
 #include "gsim.h"
 #endif // GSIM
 
+#ifdef GRHSIM
+#define SIMULATOR GrhSIMDiffTestSim
+#include "grhsim.h"
+#endif // GRHSIM
+
 #ifndef SIMULATOR
 #error "SIMULATOR undetected, please define it."
 #endif // SIMULATOR
