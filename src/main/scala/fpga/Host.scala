@@ -51,7 +51,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
   // Write side (difftest side)
   val fifo_not_full = wr_occupancy < (fifo_depth - 1).U
-  io.difftest.ready := fifo_not_full // Backpressure based on FIFO space - only consider FIFO occupancy
+  io.difftest.ready := fifo_not_full // Backpressure: stall difftest when FIFO is nearly full
   val wr_en = io.difftest.fire
 
   when(wr_en) {
