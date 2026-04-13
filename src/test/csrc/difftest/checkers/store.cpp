@@ -15,11 +15,26 @@
 ***************************************************************************************/
 
 #include "checkers.h"
+#include "common.h"
 #include "diffstate.h"
 #include <cstdint>
 #include <sys/types.h>
 
 #ifdef CONFIG_DIFFTEST_STOREEVENT
+
+// Expand an 8-bit mask to a 64-bit wide data mask, like from 0x99 to 0xFF0000FF'FF0000FF
+static uint64_t MaskExpand(uint8_t mask) {
+  uint64_t expander = 0x0101010101010101ULL;
+  uint64_t selector = 0x8040201008040201ULL;
+  return (((((mask * expander) & selector) * 0xFFULL) >> 7) & expander) * 0xFFULL;
+}
+
+// safe bitmask function to avoid overflow or underflow
+#define SAFE_BITMASK(bits)        (((bits) >= 64ULL) ? (~0ULL) : ((1ULL << (bits)) - 1ULL))
+#define SAFE_BITMASKRANGE(hi, lo) (SAFE_BITMASK(hi) & (~SAFE_BITMASK(lo)))
+#define MAX_OF(a, b)              ((a) > (b) ? (a) : (b))
+#define MIN_OF(a, b)              ((a) < (b) ? (a) : (b))
+
 bool StoreRecorder::get_valid(const DifftestStoreEvent &probe) {
   return probe.valid;
 }
@@ -28,6 +43,7 @@ void StoreRecorder::clear_valid(DifftestStoreEvent &probe) {
 }
 
 int StoreRecorder::check(const DifftestStoreEvent &probe) {
+
   if (!probe.valid)
     return STATE_OK;
 
@@ -43,87 +59,61 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
   auto eew = probe.eew;
   auto pc = probe.pc;
   auto robIdx = probe.robidx;
+  auto vecNeedSplit = probe.vecNeedSplit;
+  auto wLine = probe.wLine;
 
-  uint64_t rawVecAddr = addr + offset;
-
-  if (probe.vecNeedSplit) {
+  if (vecNeedSplit) {
+    // 1. separate a store event into multiple eew-width elements.
+    // 2. for each element, check whether it crosses a 8B boundary.
+    // 3. if it crosses a 8B boundary, split it into two sub commits,
+    //    if not, commit it as a whole.
     uint16_t flow = COMMITBYTES / eew;
-    uint64_t flowMask = (eew == 1) ? 0x1ULL : (eew == 2) ? 0x3ULL : (eew == 4) ? 0xfULL : (eew == 8) ? 0xffULL : 0x0ULL;
-    uint64_t flowMaskBit = (eew == 1)   ? 0xffULL
-                           : (eew == 2) ? 0xffffULL
-                           : (eew == 4) ? 0xffffffffULL
-                           : (eew == 8) ? 0xffffffffffffffffULL
-                                        : 0x0ULL;
+    uint16_t eew_off = offset % eew;
 
-    // cross 128bits.
-    bool handleMisalign = ((mask << (16 - offset)) & 0xFFFF) != 0;
-    // For requests exceeding 128 bits, we perform fragmentation.
-    // Processing the high-order bits of data exceeding 128 bits.
-    if (handleMisalign) {
-      uint64_t selVecData = offset >= 8 ? highData : lowData;
-      uint16_t rawOffset = offset % 8;
-      uint64_t refStoreCommitData = selVecData << (64 - (rawOffset * 8)) >> (64 - (rawOffset * 8));
-      uint8_t refStoreCommitMask = mask << rawOffset >> rawOffset;
-      DiffState::StoreCommit storeCommit = {probe.valid,
-                                            addr,
-                                            refStoreCommitData,
-                                            refStoreCommitMask,
-                                            pc,
-                                            robIdx
+    for (int i = -1; i < flow; i++) {
+      uint16_t flowMask =
+          mask & SAFE_BITMASKRANGE(MIN_OF(i * eew + eew_off + eew, COMMITBYTES), MAX_OF(i * eew + eew_off, 0LL));
+      uint8_t commitLowMask = flowMask & 0XFF;
+      bool commitLowValid = probe.valid && commitLowMask;
+      uint64_t commitLowAddr = addr;
+      uint64_t commitLowData = lowData & MaskExpand(commitLowMask);
+
+      if (commitLowValid) {
+        DiffState::StoreCommit storeCommitLow = {commitLowValid,
+                                                 commitLowAddr,
+                                                 commitLowData,
+                                                 commitLowMask,
+                                                 pc,
+                                                 robIdx
 #ifdef CONFIG_DIFFTEST_SQUASH
-                                            ,
-                                            probe.stamp
+                                                 ,
+                                                 probe.stamp
 #endif // CONFIG_DIFFTEST_SQUASH
-      };
-
-      state->store_event_queue.push(storeCommit);
-    }
-    for (int i = 0; i < flow; i++) {
-      uint32_t rawOffset = eew * i + offset;
-      uint32_t nextOffset = rawOffset + eew;
-
-      // to next sbuffer write event.
-      if (rawOffset >= 16)
-        break;
-
-      uint64_t selVecData = rawOffset >= 8 ? highData : lowData;
-      auto dataOffset = (rawOffset * 8) % 64;
-      auto refStoreCommitAddr = rawVecAddr + eew * i;
-      uint8_t refStoreCommitMask = (mask >> rawOffset) & flowMask;
-
-      if (refStoreCommitMask == 0)
-        continue;
-
-      uint64_t refStoreCommitData;
-      bool needNextData = (rawOffset < 8) && (nextOffset > 8);
-
-      if (needNextData) {
-        auto presentDataOffset = dataOffset;
-        auto presentData = lowData >> presentDataOffset;
-
-        nextOffset = 8 - rawOffset;
-        auto nextDataOffset = nextOffset * 8;
-        auto nextData = probe.highData << nextDataOffset;
-
-        refStoreCommitData = (nextData + presentData) & flowMaskBit;
-      } else {
-        refStoreCommitData = (selVecData >> dataOffset) & flowMaskBit;
+        };
+        state->store_event_queue.push(storeCommitLow);
       }
 
-      DiffState::StoreCommit storeCommit = {probe.valid,
-                                            refStoreCommitAddr,
-                                            refStoreCommitData,
-                                            refStoreCommitMask,
-                                            pc,
-                                            robIdx
+      uint8_t commitHighMask = (flowMask >> 8) & 0xFF;
+      bool commitHighValid = probe.valid && commitHighMask;
+      uint64_t commitHighAddr = addr + 8;
+      uint64_t commitHighData = highData & MaskExpand(commitHighMask);
+
+      if (commitHighValid) {
+        DiffState::StoreCommit storeCommitHigh = {commitHighValid,
+                                                  commitHighAddr,
+                                                  commitHighData,
+                                                  commitHighMask,
+                                                  pc,
+                                                  robIdx
 #ifdef CONFIG_DIFFTEST_SQUASH
-                                            ,
-                                            probe.stamp
+                                                  ,
+                                                  probe.stamp
 #endif // CONFIG_DIFFTEST_SQUASH
-      };
-      state->store_event_queue.push(storeCommit);
+        };
+        state->store_event_queue.push(storeCommitHigh);
+      }
     }
-  } else if (probe.wLine) {
+  } else if (wLine) {
     uint64_t blockAddr = addr >> BLOCKOFFSETBITS << BLOCKOFFSETBITS;
     for (int i = 0; i < 8; i++) {
       uint64_t refStoreCommitAddr = blockAddr + i * WORDBYTES;
@@ -144,18 +134,43 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
       state->store_event_queue.push(storeCommit);
     }
   } else {
-    DiffState::StoreCommit storeCommit = {probe.valid,
-                                          probe.addr,
-                                          lowData,
-                                          static_cast<uint8_t>(probe.mask & 0xFF),
-                                          pc,
-                                          robIdx
+    uint8_t commitLowMask = mask & 0XFF;
+    bool commitLowValid = probe.valid && commitLowMask;
+    uint64_t commitLowAddr = addr;
+    uint64_t commitLowData = lowData & MaskExpand(commitLowMask);
+    if (commitLowValid) {
+      DiffState::StoreCommit storeCommitLow = {commitLowValid,
+                                               commitLowAddr,
+                                               commitLowData,
+                                               commitLowMask,
+                                               pc,
+                                               robIdx
 #ifdef CONFIG_DIFFTEST_SQUASH
-                                          ,
-                                          probe.stamp
+                                               ,
+                                               probe.stamp
 #endif // CONFIG_DIFFTEST_SQUASH
-    };
-    state->store_event_queue.push(storeCommit);
+      };
+      state->store_event_queue.push(storeCommitLow);
+    }
+
+    uint8_t commitHighMask = (mask >> 8) & 0XFF;
+    bool commitHighValid = probe.valid && commitHighMask;
+    uint64_t commitHighAddr = addr + 8;
+    uint64_t commitHighData = highData & MaskExpand(commitHighMask);
+    if (commitHighValid) {
+      DiffState::StoreCommit storeCommitHigh = {commitHighValid,
+                                                commitHighAddr,
+                                                commitHighData,
+                                                commitHighMask,
+                                                pc,
+                                                robIdx
+#ifdef CONFIG_DIFFTEST_SQUASH
+                                                ,
+                                                probe.stamp
+#endif // CONFIG_DIFFTEST_SQUASH
+      };
+      state->store_event_queue.push(storeCommitHigh);
+    }
   }
 
   return STATE_OK;
