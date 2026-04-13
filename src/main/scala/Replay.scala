@@ -121,7 +121,7 @@ class ReplayControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |endfunction
        |`endif // DIFFTEST
        |`endif // SYNTHESIS
-       |endmodule;
+       |endmodule
        |""".stripMargin,
   )
 }
