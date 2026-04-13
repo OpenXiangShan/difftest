@@ -86,6 +86,7 @@ VERILATOR_FLAGS_ALL =               \
   +define+RANDOMIZE_GARBAGE_ASSIGN  \
   +define+RANDOMIZE_DELAY=0         \
   -Wno-STMTDLY -Wno-WIDTH           \
+  -Wno-UNSIGNED 										\
   --max-num-width 150000            \
   --assert --x-assign unique        \
   --output-split 30000              \
