@@ -95,6 +95,10 @@ public:
   GrhSIMDiffTestSim();
   ~GrhSIMDiffTestSim();
 
+  void waveform_init(uint64_t cycles) override;
+  void waveform_init(uint64_t cycles, const char *filename) override;
+  void waveform_tick() override;
+
   inline void set_clock(unsigned clock) override {
     grhsim_detail::port_write(dut->clock, clock);
   }

@@ -42,6 +42,9 @@ private:
   uint64_t core_max_instr[NUM_CORES];
   uint32_t lasttime_poll = 0;
   uint32_t elapsed_time;
+  bool progress_trace_enabled = false;
+  uint64_t progress_trace_interval_cycles = 0;
+  uint64_t next_progress_trace_cycle = 0;
 
   inline void reset_ncycles(size_t cycles);
   inline void single_cycle();

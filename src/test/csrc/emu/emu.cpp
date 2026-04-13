@@ -22,6 +22,7 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "sdcard.h"
+#include <cstdlib>
 #include <getopt.h>
 #include <signal.h>
 #include <sys/resource.h>
@@ -45,6 +46,23 @@
 
 extern remote_bitbang_t *jtag;
 
+namespace {
+
+uint64_t parse_env_u64(const char *name, uint64_t default_value = 0) {
+  const char *value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') {
+    return default_value;
+  }
+  char *end = nullptr;
+  const unsigned long long parsed = std::strtoull(value, &end, 10);
+  if (end == value) {
+    return default_value;
+  }
+  return static_cast<uint64_t>(parsed);
+}
+
+} // namespace
+
 Emulator::Emulator(int argc, const char *argv[])
     : dut_ptr(new SIMULATOR), cycles(0), trapCode(STATE_RUNNING), elapsed_time(uptime()) {
 
@@ -64,10 +82,16 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif // VERILATOR
 
   args = parse_args(argc, argv);
+  progress_trace_interval_cycles = parse_env_u64("EMU_PROGRESS_EVERY_CYCLES", 0);
+  progress_trace_enabled = progress_trace_interval_cycles != 0;
+  next_progress_trace_cycle = progress_trace_interval_cycles;
   if (args.max_cycles == static_cast<uint64_t>(-1)) {
     Info("max cycles: unlimited\n");
   } else {
     Info("max cycles: %" PRIu64 "\n", args.max_cycles);
+  }
+  if (progress_trace_enabled) {
+    Info("[EMU_PROGRESS] enabled interval=%" PRIu64 " cycles\n", progress_trace_interval_cycles);
   }
 #ifdef VERILATOR
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
@@ -638,6 +662,32 @@ int Emulator::tick() {
       }
     }
   }
+
+  if (progress_trace_enabled && cycles >= next_progress_trace_cycle) {
+#ifndef CONFIG_NO_DIFFTEST
+    uint64_t max_cycle_cnt = cycles;
+    uint64_t max_instr_cnt = 0;
+    uint64_t progress_pc = difftest[0]->get_trap_event()->pc;
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      if (trap->cycleCnt > max_cycle_cnt) {
+        max_cycle_cnt = trap->cycleCnt;
+        progress_pc = trap->pc;
+      }
+      if (trap->instrCnt > max_instr_cnt) {
+        max_instr_cnt = trap->instrCnt;
+      }
+    }
+    Info("[EMU_PROGRESS] host_cycles=%" PRIu64 " model_cycles=%" PRIu64
+         " instr=%" PRIu64 " pc=0x%" PRIx64 " host_ms=%u\n",
+         cycles, max_cycle_cnt, max_instr_cnt, progress_pc, uptime() - elapsed_time);
+#else
+    Info("[EMU_PROGRESS] host_cycles=%" PRIu64 " host_ms=%u\n", cycles, uptime() - elapsed_time);
+#endif
+    fflush(stdout);
+    next_progress_trace_cycle += progress_trace_interval_cycles;
+  }
+
   return 0;
 }
 
