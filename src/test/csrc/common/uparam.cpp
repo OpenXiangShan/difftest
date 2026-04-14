@@ -80,8 +80,8 @@ void embedding_to_uparam(std::vector<int> embedding) {
     // uparam.l2sets = embedding[EMDIdx::L2SETS];
     // uparam.l3mshrs = embedding[EMDIdx::L3MSHRS];
     // uparam.l3sets = embedding[EMDIdx::L3SETS];
-    // uparam.intphyregs = embedding[EMDIdx::INTPHYREGS];
-    // uparam.fpphyregs = embedding[EMDIdx::FPPHYREGS];
+    uparam.intphyregs = embedding[EMDIdx::INTPHYREGS];
+    uparam.fpphyregs = embedding[EMDIdx::FPPHYREGS];
     // uparam.rasssize = embedding[EMDIdx::RASSIZE];
     // uparam.dcacheways = embedding[EMDIdx::DCACHEWAYS];
     // uparam.dcachemshrs = embedding[EMDIdx::DCACHEMSHRS];

@@ -251,19 +251,19 @@ std::vector<int> O3CPUDesignSpace::get_component_params(
 std::vector<int> O3CPUDesignSpace::get_init_embedding() const {
     // 初始化向量大小为12(EMDIdx的大小)
     std::vector<int> embedding(EMDIdx::EMD_SIZE, 0);  
-    embedding[static_cast<size_t>(EMDIdx::FTQ)] = 16;
+    embedding[static_cast<size_t>(EMDIdx::FTQ)] = 8;
     embedding[static_cast<size_t>(EMDIdx::IBUF)] = 20;
     embedding[static_cast<size_t>(EMDIdx::INTDQ)] = 12;
     embedding[static_cast<size_t>(EMDIdx::FPDQ)] = 12;
     embedding[static_cast<size_t>(EMDIdx::LSDQ)] = 12;
-    embedding[static_cast<size_t>(EMDIdx::LQ)] = 32;
-    embedding[static_cast<size_t>(EMDIdx::SQ)] = 24;
-    embedding[static_cast<size_t>(EMDIdx::ROB)] = 64;
+    embedding[static_cast<size_t>(EMDIdx::LQ)] = 24;
+    embedding[static_cast<size_t>(EMDIdx::SQ)] = 20;
+    embedding[static_cast<size_t>(EMDIdx::ROB)] = 48;
     embedding[static_cast<size_t>(EMDIdx::L2MSHRS)] = 14;
     embedding[static_cast<size_t>(EMDIdx::L2SETS)] = 64;
     embedding[static_cast<size_t>(EMDIdx::L3MSHRS)] = 14;
     embedding[static_cast<size_t>(EMDIdx::L3SETS)] = 512;
-    embedding[static_cast<size_t>(EMDIdx::INTPHYREGS)] = 128;
+    embedding[static_cast<size_t>(EMDIdx::INTPHYREGS)] = 64;
     embedding[static_cast<size_t>(EMDIdx::FPPHYREGS)] = 96;
     embedding[static_cast<size_t>(EMDIdx::RASSIZE)] = 32;
     // check_embedding(embedding);
@@ -648,4 +648,3 @@ void O3CPUDesignSpace::get_configs(const std::vector<int>& embedding) const {
 //     io::CSVReader<3> in(design_space_csv);
 
 // }
-

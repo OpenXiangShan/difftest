@@ -1,6 +1,8 @@
 /* Author: baichen.bai@alibaba-inc.com */
 
 
+#include <filesystem>
+
 #include "deg/utils.h"
 
 
@@ -122,8 +124,7 @@ std::string add_string_to_file_name(
     const std::string& file_name,
     const std::string& pattern
 ) {
-    // std::filesystem::path name(file_name);
-    boost::filesystem::path name(file_name);
+    std::filesystem::path name(file_name);
     std::string extension = name.extension().string(), \
         s_name = name.string();
     auto s = remove_suffix(s_name, extension);
@@ -132,21 +133,21 @@ std::string add_string_to_file_name(
 
 
 std::string get_dir_path(const std::string& path) {
-    boost::filesystem::path p(path);
+    std::filesystem::path p(path);
     return p.parent_path().string();
 }
 
 
 std::string get_file_name(const std::string& path) {
     // return file.extension
-    boost::filesystem::path p(path);
+    std::filesystem::path p(path);
     return p.filename().string();
 }
 
 
 std::string get_plain_file_name(const std::string& path) {
     // return file.extension
-    boost::filesystem::path p(path);
+    std::filesystem::path p(path);
     return p.stem().string();
 }
 
