@@ -16,7 +16,6 @@
 package difftest.common
 
 import chisel3._
-import chisel3.experimental.ExtModule
 import chisel3.util._
 
 class DifftestSDCardRead extends Bundle {
@@ -26,7 +25,7 @@ class DifftestSDCardRead extends Bundle {
   val data = Output(UInt(32.W))
 }
 
-class SDCardHelper extends ExtModule with HasExtModuleInline {
+class SDCardHelper extends ExtModule {
   val clock = IO(Input(Clock()))
   val io = IO(new DifftestSDCardRead)
 

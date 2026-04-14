@@ -16,7 +16,6 @@
 package difftest.squash
 
 import chisel3._
-import chisel3.experimental.ExtModule
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
@@ -210,7 +209,7 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
   out := Mux(should_tick, state, 0.U.asTypeOf(out))
 }
 
-class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleInline {
+class SquashControl(config: GatewayConfig) extends ExtModule {
   val clock = IO(Input(Clock()))
   val reset = IO(Input(Reset()))
   val enable = IO(Output(Bool()))

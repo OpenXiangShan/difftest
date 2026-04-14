@@ -23,6 +23,6 @@ object Coverage {
     val supportedCoverTypes = Seq("branch")
     val firtoolOptions = supportedCoverTypes.map(c => s"--extract-$c-cover")
     val partitioned = args.partition(firtoolOptions.contains)
-    (partitioned._2, partitioned._1.map(FirtoolOption))
+    (partitioned._2, partitioned._1.toSeq.map(FirtoolOption.apply))
   }
 }

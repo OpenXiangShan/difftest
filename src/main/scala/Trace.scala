@@ -17,7 +17,6 @@
 package difftest.trace
 
 import chisel3._
-import chisel3.experimental.ExtModule
 import chisel3.util._
 import difftest._
 import difftest.common.FileControl
@@ -146,7 +145,7 @@ class TraceLoader(bundles: Seq[DifftestBundle]) extends Module {
   io_sort.zip(aligned).foreach { case (o, a) => o := o.reverseByteAlign(a, true) }
 }
 
-class DifftestTrace(width: Int, isDump: Boolean) extends ExtModule with HasExtModuleInline {
+class DifftestTrace(width: Int, isDump: Boolean) extends ExtModule {
   def do_flip[T <: Data](dt: T): T = if (isDump) dt else Flipped(dt)
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))

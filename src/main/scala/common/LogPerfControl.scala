@@ -26,8 +26,8 @@ class LogPerfControl extends Bundle {
   val dump = Bool()
 }
 
-private class LogPerfHelper extends BlackBox with HasBlackBoxInline {
-  val io = IO(Output(new LogPerfControl))
+private class LogPerfHelper extends ExtModule {
+  val io = FlatIO(Output(new LogPerfControl))
 
   val cppExtModule =
     """

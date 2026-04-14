@@ -16,7 +16,6 @@
 package difftest.common
 
 import chisel3._
-import chisel3.experimental.ExtModule
 import chisel3.util._
 
 class DifftestFlashRead extends Bundle {
@@ -31,7 +30,7 @@ class DifftestFlashRead extends Bundle {
   }
 }
 
-class FlashHelper extends ExtModule with HasExtModuleInline {
+class FlashHelper extends ExtModule {
   val clock = IO(Input(Clock()))
   val r = IO(new DifftestFlashRead)
 

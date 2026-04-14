@@ -16,7 +16,6 @@
 package difftest.dpic
 
 import chisel3._
-import chisel3.experimental.ExtModule
 import chisel3.reflect.DataMirror
 import chisel3.util._
 import difftest._
@@ -29,7 +28,7 @@ import difftest.util.Query
 
 import scala.collection.mutable.ListBuffer
 
-abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModuleInline {
+abstract class DPICBase(config: GatewayConfig) extends ExtModule {
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
   val dut_zone = Option.when(config.hasDutZone)(IO(Input(UInt(config.dutZoneWidth.W))))

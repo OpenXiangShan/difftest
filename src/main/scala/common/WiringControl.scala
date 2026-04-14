@@ -21,10 +21,6 @@ import chisel3.reflect.DataMirror
 
 // Wrapper for the Chisel wiring utils.
 private object WiringControl {
-  def addSource(data: Data, name: String): Unit = BoringUtils.addSource(data, s"difftest_$name")
-
-  def addSink(data: Data, name: String): Unit = BoringUtils.addSink(data, s"difftest_$name")
-
   def tapAndRead[T <: Data](source: T): T = BoringUtils.tapAndRead(source)
 
   def bore[T <: Data](source: T): T = BoringUtils.bore(source)

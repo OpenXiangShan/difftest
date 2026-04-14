@@ -16,7 +16,6 @@
 package difftest.replay
 
 import chisel3._
-import chisel3.experimental.ExtModule
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
@@ -81,7 +80,7 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   }
 }
 
-class ReplayControl(config: GatewayConfig) extends ExtModule with HasExtModuleInline {
+class ReplayControl(config: GatewayConfig) extends ExtModule {
   val clock = IO(Input(Clock()))
   val reset = IO(Input(Reset()))
   val replay = IO(Output(Bool()))

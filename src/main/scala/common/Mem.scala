@@ -16,7 +16,6 @@
 package difftest.common
 
 import chisel3._
-import chisel3.experimental.ExtModule
 import chisel3.util._
 
 private trait HasMemInitializer { this: ExtModule =>
@@ -208,7 +207,6 @@ private class CppMemWriteIO extends Bundle {
 
 private class MemRWHelper(size: BigInt, val nr: Int, val nw: Int)
   extends ExtModule(Map("RAM_SIZE" -> size))
-  with HasExtModuleInline
   with HasMemInitializer
   with HasMemReadHelper
   with HasMemWriteHelper {
