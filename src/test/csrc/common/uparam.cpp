@@ -77,9 +77,9 @@ void embedding_to_uparam(std::vector<int> embedding) {
     uparam.robsize = embedding[EMDIdx::ROB];
     printf("Set ROB size to %d\n", uparam.robsize);
     // uparam.l2mshrs = embedding[EMDIdx::L2MSHRS];
-    // uparam.l2sets = embedding[EMDIdx::L2SETS];
+    uparam.l2sets = embedding[EMDIdx::L2SETS];
     // uparam.l3mshrs = embedding[EMDIdx::L3MSHRS];
-    // uparam.l3sets = embedding[EMDIdx::L3SETS];
+    uparam.l3sets = embedding[EMDIdx::L3SETS];
     uparam.intphyregs = embedding[EMDIdx::INTPHYREGS];
     uparam.fpphyregs = embedding[EMDIdx::FPPHYREGS];
     // uparam.rasssize = embedding[EMDIdx::RASSIZE];
