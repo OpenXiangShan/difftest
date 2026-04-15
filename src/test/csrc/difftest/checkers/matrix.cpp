@@ -17,7 +17,76 @@
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
+#include <cassert>
+
+#ifndef CONFIG_DIFF_AMU_ARLEN
+#error "Missing CONFIG_DIFF_AMU_ARLEN: should be generated from hardware TLEN."
+#endif
+
+#ifndef CONFIG_DIFF_AMU_TRLEN
+#error "Missing CONFIG_DIFF_AMU_TRLEN: should be generated from hardware TRLEN."
+#endif
+
+#ifndef CONFIG_DIFF_AMU_BANK_WIDTH
+#error "Missing CONFIG_DIFF_AMU_BANK_WIDTH: should be generated from AmuFinishEvent layout."
+#endif
+
+#ifndef CONFIG_DIFF_AMU_FINISH_BANKS
+#error "Missing CONFIG_DIFF_AMU_FINISH_BANKS: should be generated from AmuFinishEvent layout."
+#endif
+
+#ifndef CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK
+#error "Missing CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK: should be generated from AmuFinishEvent layout."
+#endif
+
+#ifndef CONFIG_DIFF_AMU_AB_WORDS_PER_BANK
+#error "Missing CONFIG_DIFF_AMU_AB_WORDS_PER_BANK: should be generated from AB matrix-register layout."
+#endif
+
+#ifndef CONFIG_DIFF_AMU_C_WORDS_PER_BANK
+#error "Missing CONFIG_DIFF_AMU_C_WORDS_PER_BANK: should be generated from C matrix-register layout."
+#endif
+
+#ifndef CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES
+#error "Missing CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES: should be generated from AB matrix-register size."
+#endif
+
+#ifndef CONFIG_DIFF_AMU_C_REG_SIZE_BYTES
+#error "Missing CONFIG_DIFF_AMU_C_REG_SIZE_BYTES: should be generated from C matrix-register size."
+#endif
+
+static_assert(CONFIG_DIFF_AMU_FINISH_BANKS > 0, "CONFIG_DIFF_AMU_FINISH_BANKS should be positive");
+static_assert(CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK > 0, "CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK should be positive");
+static_assert(CONFIG_DIFF_AMU_AB_WORDS_PER_BANK > 0, "CONFIG_DIFF_AMU_AB_WORDS_PER_BANK should be positive");
+static_assert(CONFIG_DIFF_AMU_C_WORDS_PER_BANK > 0, "CONFIG_DIFF_AMU_C_WORDS_PER_BANK should be positive");
+static_assert(CONFIG_DIFF_AMU_AB_WORDS_PER_BANK <= CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK,
+              "AB words-per-bank should not exceed event payload words-per-bank");
+static_assert(CONFIG_DIFF_AMU_C_WORDS_PER_BANK <= CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK,
+              "C words-per-bank should not exceed event payload words-per-bank");
+static_assert(CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES > 0, "CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES should be positive");
+static_assert(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES > 0, "CONFIG_DIFF_AMU_C_REG_SIZE_BYTES should be positive");
+
 static char amu_ctrl_op_str[4][16] = {"MMA", "MLS", "MRELEASE", "MARITH"};
+
+static inline size_t get_amu_result_size(const DifftestAmuCtrlEvent &amu_event) {
+  const size_t rows = amu_event.mtilem;
+  const size_t cols = amu_event.mtilen;
+  const size_t element_size = get_element_size(amu_event.typed);
+
+  switch (amu_event.op) {
+    case 0: // MMA
+      return rows * cols * element_size;
+    case 1: // Matrix load/store
+      // Keep old behavior: only alloc in load-like path.
+      return (amu_event.sat == 0) ? rows * cols * element_size : 0;
+    case 3: // Matrix Arith
+      // MARITH writes a whole matrix register selected by md:
+      // md < 4  -> tile register (AB), md >= 4 -> accumulator register (C).
+      return (amu_event.md < 4) ? CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES : CONFIG_DIFF_AMU_C_REG_SIZE_BYTES;
+    default:
+      return 0;
+  }
+}
 
 // 1. Capture AME commit from DUT ROB → push to software ROB (WAIT_REF_COMMIT)
 bool AmuCtrlRecorder::get_valid(const DifftestAmuCtrlEvent &probe) {
@@ -161,49 +230,42 @@ void AmuExecRecorder::clear_valid(DifftestAmuFinishEvent &probe) {
 }
 
 int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
-  const static size_t ARLen = 128 * 32;
-  const static size_t TRLen = 64 * 8;
-  const static size_t ABankWidth = 256;
-  const static size_t TBankWidth = 256;
+  const static size_t ARLen = CONFIG_DIFF_AMU_ARLEN;
+  const static size_t TRLen = CONFIG_DIFF_AMU_TRLEN;
+  const static size_t bankWidth = CONFIG_DIFF_AMU_BANK_WIDTH;
   for (auto &entry : state->matrix_sw_rob) {
     if (entry.amu_event.pc == probe.pc && entry.state == DiffState::WAIT_DUT_EXEC) {
+      const size_t matrix_size = get_amu_result_size(entry.amu_event);
+      size_t matrix_u64_size = (matrix_size + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+      if (matrix_u64_size == 0) {
+        matrix_u64_size = 1;
+      }
       if (entry.res == NULL) {
         // first `valid` for this inst: alloc space for matrix inst
-        size_t matrix_size = 0;
-        switch (entry.amu_event.op) {
-          // TODO: do not use hardcoded matrix size here
-          case 0: // MMA
-            matrix_size = 128 * 128 * 4;
-            break;
-          case 1: // Matrix load/store
-          case 3: // Matrix Arith
-            if (entry.amu_event.sat == 0) {  // load
-              if ((entry.amu_event.md & 4) == 0) {  // tile register
-                matrix_size = 128 * 64 * 1;
-              } else {  // acc register
-                matrix_size = 128 * 128 * 4;
-              }
-            }
-            break;
-          default:
-            break;
-        }
-        entry.res = new uint64_t[matrix_size / 8];
-        memset(entry.res, 0, matrix_size);
+        entry.res = new uint64_t[matrix_u64_size];
+        memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
       }
       uint8_t md = entry.amu_event.md;
       size_t stride = 0;
       if (md < 4) {
-        stride = TRLen / TBankWidth;
+        stride = TRLen / bankWidth;
       } else {
-        stride = ARLen / ABankWidth;
+        stride = ARLen / bankWidth;
       }
-      for (int j = 0; j < 8; ++j) {  // for each bank
+      const size_t matrix_words_per_bank = (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
+      assert(stride > 0);
+      assert(matrix_words_per_bank > 0);
+
+      for (int j = 0; j < CONFIG_DIFF_AMU_FINISH_BANKS; ++j) {  // for each bank
         if (probe.bankValid[j]) {
-          size_t addr = probe.bankAddr[j];
-          for (int k = 0; k < 4; ++k) {
-            entry.res[(addr / stride * stride * 8 + j * stride + addr % stride) * 4 + k] =
-                probe.data[j * 4 + k];
+          const size_t addr = probe.bankAddr[j];
+          for (size_t k = 0; k < matrix_words_per_bank; ++k) {
+            const size_t group =
+                addr / stride * stride * CONFIG_DIFF_AMU_FINISH_BANKS + j * stride + addr % stride;
+            const size_t idx = group * matrix_words_per_bank + k;
+            assert(idx < matrix_u64_size);
+            
+            entry.res[idx] = probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK + static_cast<int>(k)];
           }
         }
       }

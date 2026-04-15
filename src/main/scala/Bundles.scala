@@ -434,11 +434,14 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
   def opType: UInt = base
 }
 
-class AmuFinishEvent extends DifftestBaseBundle with HasValid {
+class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends DifftestBaseBundle with HasValid {
+  require(nBanks > 0, s"nBanks should be positive, got $nBanks")
+  require(wordsPerBank > 0, s"wordsPerBank should be positive, got $wordsPerBank")
+
   val pc        = UInt(64.W)
-  val bankValid = Vec(8, Bool())
-  val bankAddr  = Vec(8, UInt(8.W))
-  val data      = Vec(32, UInt(64.W))
+  val bankValid = Vec(nBanks, Bool())
+  val bankAddr  = Vec(nBanks, UInt(8.W))
+  val data      = Vec(nBanks * wordsPerBank, UInt(64.W))
   val finish    = Bool()
 }
 

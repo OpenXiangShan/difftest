@@ -260,27 +260,31 @@ void MmaVerifier::mma_verification_thread_func() {
 #define MMA_EPILOGUE \
   return memcpy(buffer->dut_result, buffer->src3, tile_m * tile_n * sizeof(int32_t)) == 0;
 
-// Helper function to read bits from byte array
-template<int total_bits, int rlenb>
-static uint32_t read_bits(const uint8_t* data, size_t index0, size_t index1) {
+// Helper function to read bits from byte array.
+// row_bytes is the byte width of each logical matrix row.
+template<int total_bits>
+static uint32_t read_bits(const uint8_t* data, size_t index0, size_t index1, size_t row_bytes) {
+  const uint8_t *row_ptr = data + index0 * row_bytes;
   if constexpr (total_bits <= 8) {
-    return data[index0 * rlenb + index1];
+    return row_ptr[index1];
   } else if constexpr (total_bits <= 16) {
-    return reinterpret_cast<const uint16_t*>(data)[index0 * rlenb / 2 + index1];
+    return reinterpret_cast<const uint16_t*>(row_ptr)[index1];
   } else {
-    return reinterpret_cast<const uint32_t*>(data)[index0 * rlenb / 4 + index1];
+    return reinterpret_cast<const uint32_t*>(row_ptr)[index1];
   }
 }
 
-// Helper function to write bits to byte array
-template<int total_bits, int rlenb>
-static void write_bits(uint8_t* data, size_t index0, size_t index1, uint32_t value) {
+// Helper function to write bits to byte array.
+// row_bytes is the byte width of each logical matrix row.
+template<int total_bits>
+static void write_bits(uint8_t* data, size_t index0, size_t index1, size_t row_bytes, uint32_t value) {
+  uint8_t *row_ptr = data + index0 * row_bytes;
   if constexpr (total_bits <= 8) {
-    data[index0 * rlenb + index1] = static_cast<uint8_t>(value);
+    row_ptr[index1] = static_cast<uint8_t>(value);
   } else if constexpr (total_bits <= 16) {
-    reinterpret_cast<uint16_t*>(data)[index0 * rlenb / 2 + index1] = static_cast<uint16_t>(value);
+    reinterpret_cast<uint16_t*>(row_ptr)[index1] = static_cast<uint16_t>(value);
   } else {
-    reinterpret_cast<uint32_t*>(data)[index0 * rlenb / 4 + index1] = value;
+    reinterpret_cast<uint32_t*>(row_ptr)[index1] = value;
   }
 }
 
@@ -375,19 +379,21 @@ bool MmaVerifier::mfmacc_template(MmaVerificationBuffer *buffer) {
   
   constexpr int src_total_bits = 1 + src_exp_bits + src_mantissa_bits;
   constexpr int result_total_bits = 1 + result_exp_bits + result_mantissa_bits;
+  constexpr size_t src_elem_bytes = src_total_bits / 8;
+  constexpr size_t result_elem_bytes = result_total_bits / 8;
+  const size_t src_row_bytes = static_cast<size_t>(tile_k) * src_elem_bytes;
+  const size_t result_row_bytes = static_cast<size_t>(tile_n) * result_elem_bytes;
   
   for (int i = 0; i < tile_m; i++) {
     for (int j = 0; j < tile_n; j++) {
       // Read initial accumulator value
-      // TODO: Do not hardcode 128 here
-      uint32_t acc_bits = read_bits<result_total_bits, 512>(buffer->src3, i, j);
+      uint32_t acc_bits = read_bits<result_total_bits>(buffer->src3, i, j, result_row_bytes);
       double accumulator = parse_custom_float<result_exp_bits, result_mantissa_bits>(acc_bits);
       
       for (int k = 0; k < tile_k; k++) {
         // Parse source operands
-        // TODO: Do not hardcode 64 here
-        uint32_t src1_bits = read_bits<src_total_bits, 64>(buffer->src1, i, k);
-        uint32_t src2_bits = read_bits<src_total_bits, 64>(buffer->src2, j, k);
+        uint32_t src1_bits = read_bits<src_total_bits>(buffer->src1, i, k, src_row_bytes);
+        uint32_t src2_bits = read_bits<src_total_bits>(buffer->src2, j, k, src_row_bytes);
         double src1 = parse_custom_float<src_exp_bits, src_mantissa_bits>(src1_bits);
         double src2 = parse_custom_float<src_exp_bits, src_mantissa_bits>(src2_bits);
 
@@ -397,7 +403,7 @@ bool MmaVerifier::mfmacc_template(MmaVerificationBuffer *buffer) {
       }
       // Encode result back to target format
       uint32_t result_bits = encode_custom_float<result_exp_bits, result_mantissa_bits>(accumulator);
-      write_bits<result_total_bits, 512>(buffer->src3, i, j, result_bits);
+      write_bits<result_total_bits>(buffer->src3, i, j, result_row_bytes, result_bits);
     }
   }
   
