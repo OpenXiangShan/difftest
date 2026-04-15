@@ -160,7 +160,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   // returns a seq of Group name of this bundle, Default: REF
   // Only bundles with same GroupName will affect others' squash state.
   // Some bundle will have several GroupName, such as LoadEvent
-  // Optional GroupName: REF / GOLDENMEM
+  // Optional GroupName: REF / GOLDENMEM / MATRIX
   val squashGroup: Seq[String] = Seq("REF")
   // returns a squashed, right-value Bundle. Default: overriding `base` with `this`
   def squash(base: DifftestBundle): DifftestBundle = this
@@ -521,14 +521,20 @@ class DiffSyncCustomMflushpwrEvent extends SyncCustomMflushpwrEvent with Difftes
 
 class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "amu_ctrl"
+
+  override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
 }
 
 class DiffAmuFinishEvent extends AmuFinishEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "amu_finish"
+
+  override val squashGroup: Seq[String] = Seq("MATRIX")
 }
 
 class DiffTokenEvent extends TokenEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "token"
+
+  override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
 }
 
 private[difftest] class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
