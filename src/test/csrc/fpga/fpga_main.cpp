@@ -25,6 +25,7 @@
 #include "refproxy.h"
 #include "xdma.h"
 #include <condition_variable>
+#include <cstdlib>
 #include <getopt.h>
 #include <mutex>
 #include <unistd.h>
@@ -46,17 +47,20 @@ enum {
 
 static uint8_t fpga_result = FPGA_RUN;
 static CommonArgs args;
+static const char *fpga_ddr_load_cmd = nullptr;
 
 void fpga_init();
 void fpga_step();
 void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
+bool run_ddr_load_cmd();
 
 FpgaXdma *xdma_device = NULL;
 #ifdef USE_SERIAL_PORT
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
 int main(int argc, const char *argv[]) {
+  fpga_ddr_load_cmd = std::getenv("FPGA_DDR_LOAD_CMD");
   args = parse_args(argc, argv);
 
   fpga_init();
@@ -66,6 +70,35 @@ int main(int argc, const char *argv[]) {
   fpga_finish();
   printf("difftest releases the fpga device and exits\n");
   return !(fpga_result == FPGA_GOODTRAP);
+}
+
+bool run_ddr_load_cmd() {
+  if (!fpga_ddr_load_cmd || !fpga_ddr_load_cmd[0]) {
+    return false;
+  }
+
+  printf("[fpga-host] running external DDR load command: %s\n", fpga_ddr_load_cmd);
+  fflush(stdout);
+
+  int rc = std::system(fpga_ddr_load_cmd);
+  if (rc == -1) {
+    perror("[fpga-host] failed to launch DDR load command");
+    return false;
+  }
+  if (WIFEXITED(rc) && WEXITSTATUS(rc) == 0) {
+    printf("[fpga-host] external DDR load command completed successfully\n");
+    fflush(stdout);
+    return true;
+  }
+
+  if (WIFEXITED(rc)) {
+    fprintf(stderr, "[fpga-host] external DDR load command exited with code %d\n", WEXITSTATUS(rc));
+  } else if (WIFSIGNALED(rc)) {
+    fprintf(stderr, "[fpga-host] external DDR load command terminated by signal %d\n", WTERMSIG(rc));
+  } else {
+    fprintf(stderr, "[fpga-host] external DDR load command failed with status 0x%x\n", rc);
+  }
+  return false;
 }
 
 void fpga_init() {
@@ -84,14 +117,25 @@ void fpga_init() {
   init_ram(args.image, DEFAULT_EMU_RAM_SIZE);
   init_flash(args.flash_bin);
 
-  difftest_init(args.enable_diff, DEFAULT_EMU_RAM_SIZE);
-
   init_device();
 
 #ifndef FPGA_SIM
+  if (fpga_ddr_load_cmd) {
+    if (!run_ddr_load_cmd()) {
+      fprintf(stderr, "[fpga-host] warning: failed to load DDR with external command\n");
+      exit(0);
+    }
+  }
 #ifdef USE_XDMA_DDR_LOAD
-  xdma_device->ddr_load_workload(args.image);
+  else {
+    xdma_device->ddr_load_workload(args.image);
+  }
 #endif // USE_XDMA_DDR_LOAD
+#endif // FPGA_SIM
+
+  difftest_init(args.enable_diff, DEFAULT_EMU_RAM_SIZE);
+
+#ifndef FPGA_SIM
   xdma_device->fpga_io(HOST_IO_RESET, false);
 #endif // FPGA_SIM
 }
