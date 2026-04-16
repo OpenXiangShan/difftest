@@ -41,6 +41,7 @@ public:
     if (write_thread.joinable()) {
       write_thread.join();
     }
+    close_port();
   }
 
 private:
