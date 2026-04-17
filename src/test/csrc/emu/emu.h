@@ -40,6 +40,7 @@ private:
   int trapCode;
   uint32_t lasttime_snapshot = 0;
   uint64_t core_max_instr[NUM_CORES];
+  uint64_t last_progress_commit_pc[NUM_CORES] = {0};
   uint32_t lasttime_poll = 0;
   uint32_t elapsed_time;
   bool progress_trace_enabled = false;

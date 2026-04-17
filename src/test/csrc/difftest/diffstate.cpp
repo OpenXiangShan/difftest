@@ -56,7 +56,39 @@ void DiffState::display() {
   fflush(stdout);
 }
 
-DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {}
+DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {
+  cycle_count = 0;
+  has_progress = false;
+  has_commit = false;
+  last_commit_cycle = 0;
+  has_trap = false;
+  trap_code = 0;
+#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
+  memset(delayed_int, 0, sizeof(delayed_int));
+#endif
+#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
+  memset(delayed_fp, 0, sizeof(delayed_fp));
+#endif
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  store_event_queue = {};
+#endif
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+  cmo_inval_event_set.clear();
+#endif
+#ifdef CONFIG_DIFFTEST_SQUASH
+  commit_stamp = 0;
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+  load_event_queue = {};
+#endif
+#endif
+#ifdef DEBUG_REFILL
+  track_instr = 0;
+#endif
+  dump_commit_trace = false;
+  retire_group_queue = {};
+  commit_trace = {};
+  commit_counter = 0;
+}
 
 static uint64_t get_int_data(const DiffTestState *state, int index) {
 #ifdef CONFIG_DIFFTEST_PHYINTREGSTATE

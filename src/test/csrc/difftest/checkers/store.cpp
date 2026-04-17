@@ -25,12 +25,28 @@ void StoreRecorder::clear_valid(DifftestStoreEvent &probe) {
 }
 
 int StoreRecorder::check(const DifftestStoreEvent &probe) {
+  static int debug_store_record_count = 0;
+  if (debug_store_record_count < 8) {
+    Info("[STORE_REC] state=%p valid=%u addr=0x%016lx data=0x%016lx mask=0x%02x pc=0x%016lx robidx=0x%x qsize_before=%zu\n",
+         state, probe.valid, probe.addr, probe.data, probe.mask, probe.pc, probe.robidx, state->store_event_queue.size());
+  }
   state->store_event_queue.push(probe);
+  if (debug_store_record_count < 8) {
+    Info("[STORE_REC] qsize_after=%zu\n", state->store_event_queue.size());
+  }
+  debug_store_record_count++;
   return STATE_OK;
 }
 
 int StoreChecker::check() {
+  static int debug_store_check_count = 0;
+  if (debug_store_check_count < 8) {
+    Info("[STORE_CHK] state=%p qsize_begin=%zu\n", state, state->store_event_queue.size());
+  }
   while (!state->store_event_queue.empty()) {
+    if (debug_store_check_count < 8) {
+      Info("[STORE_CHK] about_to_front qsize=%zu\n", state->store_event_queue.size());
+    }
     auto &probe = state->store_event_queue.front();
 #ifdef CONFIG_DIFFTEST_SQUASH
     if (probe.stamp != state->commit_stamp)
@@ -60,6 +76,7 @@ int StoreChecker::check() {
     }
 
     state->store_event_queue.pop();
+    debug_store_check_count++;
   }
 
   return STATE_OK;

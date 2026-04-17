@@ -667,20 +667,26 @@ int Emulator::tick() {
 #ifndef CONFIG_NO_DIFFTEST
     uint64_t max_cycle_cnt = cycles;
     uint64_t max_instr_cnt = 0;
-    uint64_t progress_pc = difftest[0]->get_trap_event()->pc;
+    uint64_t progress_commit_pc = last_progress_commit_pc[0];
+    uint64_t progress_trap_pc = difftest[0]->get_trap_event()->pc;
+    int progress_core = 0;
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
+      last_progress_commit_pc[i] = difftest[i]->get_last_commit_pc();
       if (trap->cycleCnt > max_cycle_cnt) {
         max_cycle_cnt = trap->cycleCnt;
-        progress_pc = trap->pc;
       }
-      if (trap->instrCnt > max_instr_cnt) {
+      if (trap->instrCnt > max_instr_cnt || (trap->instrCnt == max_instr_cnt && trap->cycleCnt >= max_cycle_cnt)) {
         max_instr_cnt = trap->instrCnt;
+        progress_commit_pc = last_progress_commit_pc[i];
+        progress_trap_pc = trap->pc;
+        progress_core = i;
       }
     }
     Info("[EMU_PROGRESS] host_cycles=%" PRIu64 " model_cycles=%" PRIu64
-         " instr=%" PRIu64 " pc=0x%" PRIx64 " host_ms=%u\n",
-         cycles, max_cycle_cnt, max_instr_cnt, progress_pc, uptime() - elapsed_time);
+         " instr=%" PRIu64 " commit_pc=0x%" PRIx64 " trap_pc=0x%" PRIx64 " core=%d host_ms=%u\n",
+         cycles, max_cycle_cnt, max_instr_cnt, progress_commit_pc, progress_trap_pc, progress_core,
+         uptime() - elapsed_time);
 #else
     Info("[EMU_PROGRESS] host_cycles=%" PRIu64 " host_ms=%u\n", cycles, uptime() - elapsed_time);
 #endif

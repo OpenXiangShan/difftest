@@ -157,6 +157,10 @@ public:
     return state->dump_commit_trace;
   }
 
+  uint64_t get_last_commit_pc() const {
+    return last_commit_pc;
+  }
+
   void warmup_record() {
     auto trap = get_trap_event();
     warmup_info.instrCnt = trap->instrCnt;
@@ -174,6 +178,7 @@ protected:
 
   static const uint64_t delay_wb_limit = 80;
   uint32_t num_commit = 0; // # of commits if made progress
+  uint64_t last_commit_pc = 0;
 
   // For compare the first instr pc of a commit group
   bool pc_mismatch = false;

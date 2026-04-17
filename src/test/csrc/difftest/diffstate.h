@@ -177,11 +177,19 @@ private:
 
   uint64_t commit_counter = 0;
   void push_back_trace(CommitTrace *trace) {
+    static int debug_commit_trace_count = 0;
+    if (debug_commit_trace_count < 8) {
+      Info("[COMMIT_TRACE] state=%p trace=%p qaddr=%p qsize_before=%zu commit_counter=%lu\n", this, trace,
+           &commit_trace, commit_trace.size(), commit_counter);
+    }
     if (commit_trace.size() >= DEBUG_INST_TRACE_SIZE) {
       delete commit_trace.front();
       commit_trace.pop();
     }
     commit_trace.push(trace);
+    if (debug_commit_trace_count < 8) {
+      Info("[COMMIT_TRACE] qsize_after=%zu\n", commit_trace.size());
+    }
     if (dump_commit_trace) {
       // Traces from multiple cores may mix together. Use coreid to distinguish them.
       if (NUM_CORES > 1) {
@@ -191,6 +199,7 @@ private:
       commit_counter++;
       fflush(stdout);
     }
+    debug_commit_trace_count++;
   }
 };
 

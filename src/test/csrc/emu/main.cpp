@@ -17,6 +17,23 @@
 #include "common.h"
 #include "dut.h"
 #include "emu.h"
+#include <csignal>
+#include <cstdlib>
+#include <execinfo.h>
+#include <unistd.h>
+
+namespace {
+
+void emu_sigsegv_handler(int sig) {
+  void *frames[128];
+  const int frame_count = backtrace(frames, 128);
+  const char header[] = "\n[EMU_BACKTRACE] caught SIGSEGV\n";
+  write(STDERR_FILENO, header, sizeof(header) - 1);
+  backtrace_symbols_fd(frames, frame_count, STDERR_FILENO);
+  std::_Exit(128 + sig);
+}
+
+} // namespace
 
 #ifdef FUZZER_LIB
 
@@ -29,6 +46,7 @@ int sim_main(int argc, const char *argv[]) {
 #else
 int main(int argc, const char *argv[]) {
 #endif // FUZZER_LIB
+  std::signal(SIGSEGV, emu_sigsegv_handler);
   common_init_without_assertion(argv[0]);
 
   // initialize the design-under-test (DUT)
