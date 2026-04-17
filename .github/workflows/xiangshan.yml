@@ -24,15 +24,11 @@ jobs:
         debug_args: [ "--difftest-config ZESNHP" ]
         config: [ DefaultConfig ]
 
-    runs-on: self-hosted
+    runs-on: [self-hosted, open]
     timeout-minutes: 720
     name: XS-PLDM(${{ matrix.branch }}-${{ matrix.topo.name }})
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set Env
-        run: |
-          source /nfs/home/ci-runner/ci-runner-difftest/tools/env.sh
 
       - name: Prepare XiangShan
         run: |
@@ -71,7 +67,7 @@ jobs:
       fail-fast: false
       matrix:
         branch: [ kunminghu-v2, kunminghu-v3 ]
-    runs-on: self-hosted
+    runs-on: [self-hosted, open]
     timeout-minutes: 720
     name: XS-FPGA(${{ matrix.branch }})
     steps:
