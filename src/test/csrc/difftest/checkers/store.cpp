@@ -63,7 +63,7 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
       uint64_t selVecData = offset >= 8 ? highData : lowData;
       uint16_t rawOffset = offset % 8;
       uint64_t refStoreCommitData = selVecData << (64 - (rawOffset * 8)) >> (64 - (rawOffset * 8));
-      uint8_t refStoreCommitMask = mask << rawOffset >> rawOffset;
+      uint8_t refStoreCommitMask = mask & ((1U << rawOffset) - 1);
       DiffState::StoreCommit storeCommit = {probe.valid,
                                             addr,
                                             refStoreCommitData,
