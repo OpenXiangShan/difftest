@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "serial_port.h"
+#include <cerrno>
 #include <fcntl.h>
 #include <iostream>
 #include <sys/select.h>
@@ -66,7 +67,7 @@ void SerialPort::close_port() {
 }
 
 SerialPort::~SerialPort() {
-  close_port();
+  stop();
 }
 void SerialPort::start_read_thread() {
   char buf[256];
@@ -74,15 +75,29 @@ void SerialPort::start_read_thread() {
     printf("SerailPort: start read from %s\n", device_);
     setvbuf(stdout, NULL, _IONBF, 0);
     while (running) {
+      if (fd_ < 0) {
+        break;
+      }
       fd_set readfds;
       FD_ZERO(&readfds);
       FD_SET(fd_, &readfds);
-      int ret = select(fd_ + 1, &readfds, nullptr, nullptr, nullptr);
+      timeval tv{0, 100000};
+      int ret = select(fd_ + 1, &readfds, nullptr, nullptr, &tv);
+      if (ret < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        std::cerr << "SerialPort: read select failed" << std::endl;
+        break;
+      }
       if (ret > 0 && FD_ISSET(fd_, &readfds)) {
         ssize_t n = read(fd_, buf, sizeof(buf) - 1);
         if (n > 0) {
           buf[n] = '\0';
           printf("%s", buf);
+        } else if (n < 0 && errno != EINTR) {
+          std::cerr << "SerialPort: read failed" << std::endl;
+          break;
         }
       }
     }
@@ -101,13 +116,16 @@ void SerialPort::start_write_thread() {
       fd_set readfds;
       FD_ZERO(&readfds);
       FD_SET(STDIN_FILENO, &readfds);
-      timeval tv{1, 0}; // eheck timeout per second
+      timeval tv{0, 100000};
       int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv);
       if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds)) {
         std::string line;
         if (std::getline(std::cin, line)) {
           line.push_back('\n');
-          write(fd_, line.c_str(), line.size());
+          // write(fd_, line.c_str(), line.size());
+          if (fd_ >= 0) {
+            write(fd_, line.c_str(), line.size());
+          }
         }
       }
     }
