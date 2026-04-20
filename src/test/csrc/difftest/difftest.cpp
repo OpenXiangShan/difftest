@@ -377,7 +377,7 @@ void Difftest::init_checkers() {
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     std::vector<DiffTestChecker *> tmp_checkers = inst_op_checkers;
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
-    inst_op_checkers.push_back(load_checker[i]);
+    tmp_checkers.push_back(load_checker[i]);
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
     instr_commit_checker[i] =
         new InstrCommitChecker([this, i]() -> DifftestInstrCommit & { return dut->commit[i]; }, state, proxy, i,
