@@ -172,6 +172,8 @@ endif
 # ConstantIn
 WITH_CONSTANTIN ?= 1
 ifeq ($(WITH_CONSTANTIN), 1)
+CONSTANTIN_STATIC_CSRC = $(abspath ./src/test/csrc/util/constantin_static.cpp)
+SIM_CXXFILES += $(CONSTANTIN_STATIC_CSRC)
 SIM_CXXFILES += $(BUILD_DIR)/constantin.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
 endif
