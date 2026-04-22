@@ -35,6 +35,7 @@ extern void constantinUpdate(string name, uint64_t num){
     assert(0);
   }
   constantinMap[name] = num;
+  cout << "[INFO] constant updated: " << name << " = " << num << endl;
   return;
 }
 
@@ -75,4 +76,4 @@ extern void constantinLoad(const char *cst_file) {
   }
 }
 
-#endif // CONSTANTIN
+#endif // ENABLE_CONSTANTIN
