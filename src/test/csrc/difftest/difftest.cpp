@@ -517,6 +517,12 @@ void Difftest::do_replay() {
     state->load_event_queue.pop();
 #endif
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  for (auto &entry : state->matrix_sw_rob) {
+    if (entry.res != nullptr) {
+      delete[] entry.res;
+      entry.res = nullptr;
+    }
+  }
   state->matrix_sw_rob.clear();
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 #ifdef CONFIG_DIFFTEST_TOKENEVENT
