@@ -69,6 +69,7 @@ static inline void print_help(const char *file) {
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
+  printf("      --cst-file=FILE        load constantin from FILE, stdin, or default init values\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
@@ -131,6 +132,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "overwrite-auto",    1, NULL,  0  },
     { "instr-trace",       1, NULL,  0  },
     { "copy-ram",          1, NULL,  0  },
+    { "cst-file",          1, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -241,6 +243,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           case 27: args.overwrite_nbytes_autoset = true; continue;
           case 28: args.instr_trace = optarg; continue;
           case 29: args.copy_ram_offset = parse_ramsize(optarg); continue;
+          case 30: args.cst_file = optarg; continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);

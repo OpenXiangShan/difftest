@@ -172,6 +172,7 @@ endif
 # ConstantIn
 WITH_CONSTANTIN ?= 1
 ifeq ($(WITH_CONSTANTIN), 1)
+SIM_CXXFILES += $(shell find $(PLUGIN_CSRC_DIR)/constantin -name "*.cpp")
 SIM_CXXFILES += $(BUILD_DIR)/constantin.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
 endif

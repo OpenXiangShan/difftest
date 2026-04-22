@@ -69,8 +69,8 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif
 
 #ifdef ENABLE_CONSTANTIN
-  void constantinLoad();
-  constantinLoad();
+  void constantinLoad(const char *cst_file);
+  constantinLoad(args.cst_file);
 #endif // CONSTANTIN
 #ifdef VERILATOR
   // srand
