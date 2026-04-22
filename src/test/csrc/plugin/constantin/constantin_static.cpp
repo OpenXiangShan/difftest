@@ -17,20 +17,20 @@
 
 #ifdef ENABLE_CONSTANTIN
 
-#include <iostream>
-#include <fstream>
-#include <map>
-#include <string>
-#include <cstring>
-#include <stdint.h>
 #include <assert.h>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <stdint.h>
+#include <string>
 using namespace std;
 
 extern map<string, uint64_t> constantinMap;
 extern void constantinInit();
 
-extern void constantinUpdate(string name, uint64_t num){
-  if(constantinMap.find(name) == constantinMap.end()){
+extern void constantinUpdate(string name, uint64_t num) {
+  if (constantinMap.find(name) == constantinMap.end()) {
     cout << "[ERROR] constant does not exist: " << name << ", please check the input." << endl;
     assert(0);
   }
@@ -70,7 +70,7 @@ extern void constantinLoad(const char *cst_file) {
     }
     cf.close();
     return;
-  }else{
+  } else {
     cerr << "[ERROR] constantin file does not exist: " << cst_file << endl;
     assert(0);
   }
