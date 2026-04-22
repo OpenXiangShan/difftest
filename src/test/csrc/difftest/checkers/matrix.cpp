@@ -296,9 +296,12 @@ int AmuExecChecker::do_step() {
           memcpy(buffer->dut_result, iter->res,
                  amu_event.mtilem * amu_event.mtilen * get_element_size(amu_event.typed));
           // Call get_amu_lazy with buffer pointers
+          // Store REF's src1/2/3 in the buffer, and copy DUT's result to REF
+          // REF will directly take DUT's result instead of executing the MMA instruction
           proxy->get_amu_lazy(&amu_event, iter->res, buffer->src1, buffer->src2, buffer->src3);
           // Pass buffer to verification thread
           mma_verifier->add_to_verification_queue(buffer);
+          delete[] iter->res;
           break;
         case 1: // MLS
         case 2: // MRelease
@@ -306,11 +309,23 @@ int AmuExecChecker::do_step() {
           if (proxy->get_amu_exec(&amu_event, iter->res) == 1) {
             printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc,
                    amu_ctrl_op_str[amu_event.op]);
+            if (iter->res != nullptr) {
+              delete[] iter->res;
+              iter->res = nullptr;
+            }
             return STATE_ERROR;
+          }
+          if (iter->res != nullptr) {
+            delete[] iter->res;
+            iter->res = nullptr;
           }
           break;
         default:
           printf("Unknown amu event op: %d\n", op);
+          if (iter->res != nullptr) {
+            delete[] iter->res;
+            iter->res = nullptr;
+          }
           return STATE_ERROR;
       }
       // Remove the processed event from matrix_sw_rob
