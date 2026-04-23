@@ -427,6 +427,9 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#include <cstdint>"
     interfaceCpp += "#include \"difftest-state.h\""
+    interfaceCpp += "#ifdef CONFIG_DIFFTEST_QUERY"
+    interfaceCpp += "#include \"difftest-query.h\""
+    interfaceCpp += "#endif // CONFIG_DIFFTEST_QUERY"
     interfaceCpp += "#if defined(CONFIG_DIFFTEST_BATCH) && !defined(CONFIG_DIFFTEST_FPGA)"
     interfaceCpp += "#include \"svdpi.h\""
     interfaceCpp += "#endif // CONFIG_DIFFTEST_BATCH && !CONFIG_DIFFTEST_FPGA"
@@ -434,9 +437,9 @@ object DPIC {
       Delta.collect()
       interfaceCpp += "#include \"difftest-delta.h\""
     }
-    val phyRegs = instances.distinctBy(_.desiredCppName).filter(_.desiredCppName.contains("pregs"))
+    val phyRegs = instances.distinctBy(_.desiredCppName).collect { case p: DiffPhyRegState => p }
     if (phyRegs.nonEmpty) {
-      interfaceCpp += "static inline void diffstate_update_archreg(DiffTestState* dut) {"
+      interfaceCpp += "static inline void diffstate_update_archreg(uint8_t coreid, DiffTestState* dut) {"
       phyRegs.foreach { p =>
         val suffix = p.desiredCppName.replace("pregs_", "")
         val (regName, pregName, ratName) = (s"regs.$suffix", s"pregs_$suffix", s"rat_$suffix")
@@ -447,6 +450,9 @@ object DPIC {
           "i"
         }
         interfaceCpp += s"  for (int i = 0; i < $regSize; i++) { dut->$regName.value[i] = dut->$pregName.value[$index]; }"
+        interfaceCpp += "#ifdef CONFIG_DIFFTEST_QUERY"
+        interfaceCpp += s"  if (qStats) ${Query.writeInvoke(p.archTarget)}"
+        interfaceCpp += "#endif // CONFIG_DIFFTEST_QUERY"
       }
       interfaceCpp += "}"
     }
@@ -459,8 +465,9 @@ object DPIC {
          |  int read_ptr = 0;
          |  int zone_ptr = 0;
          |  bool init = true;
+         |  uint8_t coreid;
          |public:
-         |  DPICBuffer() {
+         |  DPICBuffer(uint8_t coreid): coreid(coreid) {
          |    memset(buffer, 0, sizeof(buffer));
          |  }
          |  inline DiffTestState* get(int zone, int index) {
@@ -468,7 +475,7 @@ object DPIC {
          |  }
          |  inline DiffTestState* next() {
          |    DiffTestState* ret = buffer[zone_ptr] + read_ptr;
-         |    ${if (phyRegs.nonEmpty) "diffstate_update_archreg(ret);" else ""}
+         |    ${if (phyRegs.nonEmpty) "diffstate_update_archreg(coreid, ret);" else ""}
          |    read_ptr = (read_ptr + 1) % CONFIG_DIFFTEST_BUFLEN;
          |    return ret;
          |  }
@@ -515,7 +522,7 @@ object DPIC {
          |void diffstate_buffer_init() {
          |  diffstate_buffer = new DiffStateBuffer*[NUM_CORES];
          |  for (int i = 0; i < NUM_CORES; i++) {
-         |    diffstate_buffer[i] = new DPICBuffer;
+         |    diffstate_buffer[i] = new DPICBuffer(i);
          |  }
          |  ${if (config.isDelta) "dStats = new DeltaStats;" else ""}
          |}
