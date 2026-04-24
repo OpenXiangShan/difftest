@@ -109,7 +109,7 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String, dutZone: String) {
        |  void ${tableName}_init() {
        |    const char* createSql = \" CREATE TABLE $tableName(\" \\
        |      "ID INTEGER PRIMARY KEY AUTOINCREMENT," \\
-       |      ${sqlArgs.map("\"" + _._1 + " INT NOT NULL").mkString("", ",\" \\\n      ", ");\";")}
+       |      ${sqlArgs.map("\"" + _._1 + " INTEGER NOT NULL").mkString("", ",\" \\\n      ", ");\";")}
        |    const char* insertSql = \"INSERT INTO $tableName (${sqlArgs.map(_._1).mkString(",")}) \" \\
        |      \" VALUES (${Seq.fill(sqlArgs.length) { "?" }.mkString(",")});\";
        |    $instName = new Query(mem_db, createSql, insertSql);

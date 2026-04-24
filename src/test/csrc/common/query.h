@@ -21,11 +21,32 @@
 
 #ifdef CONFIG_DIFFTEST_QUERY
 #include <sqlite3.h>
+#include <type_traits>
 
 class Query {
 protected:
   sqlite3_stmt *pPrepare = nullptr;
   sqlite3 *query_db = nullptr;
+
+private:
+  void bindValues(int index) {
+    assert(index == sqlite3_bind_parameter_count(pPrepare) + 1);
+  }
+
+  template <typename T>
+  typename std::enable_if<std::is_integral<typename std::decay<T>::type>::value, void>::type bindValue(int index,
+                                                                                                       T value) {
+    int rc = sqlite3_bind_int64(pPrepare, index, static_cast<sqlite3_int64>(value));
+    if (rc != SQLITE_OK) {
+      printf("SQL bind error: %s\n", sqlite3_errmsg(query_db));
+      assert(0);
+    }
+  }
+
+  template <typename T, typename... Args> void bindValues(int index, T value, Args... args) {
+    bindValue(index, value);
+    bindValues(index + 1, args...);
+  }
 
 public:
   Query(sqlite3 *db, const char *createSql, const char *insertSql) {
@@ -46,15 +67,16 @@ public:
   ~Query() {
     sqlite3_finalize(pPrepare);
   }
-  void write(int count, ...) {
-    va_list args;
-    va_start(args, count);
+  template <typename... Args> void write(int count, Args... args) {
+    assert(count == (int)sizeof...(Args));
     sqlite3_reset(pPrepare);
-    for (int i = 0; i < count; i++) {
-      sqlite3_bind_int(pPrepare, i + 1, va_arg(args, int));
+    sqlite3_clear_bindings(pPrepare);
+    bindValues(1, args...);
+    int rc = sqlite3_step(pPrepare);
+    if (rc != SQLITE_DONE) {
+      printf("SQL step error: %s\n", sqlite3_errmsg(query_db));
+      assert(0);
     }
-    va_end(args);
-    sqlite3_step(pPrepare);
   }
 };
 
