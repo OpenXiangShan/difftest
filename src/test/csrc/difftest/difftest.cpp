@@ -429,12 +429,6 @@ int Difftest::step() {
 inline int Difftest::check_all() {
   state->cycle_count = get_trap_event()->cycleCnt;
   state->has_progress = false;
-  if (state->cycle_count <= 8 || state->cycle_count == 100 || state->cycle_count == 200 || state->cycle_count == 300 ||
-      state->cycle_count == 400 || state->cycle_count == 500 || state->cycle_count == 600) {
-    Info("[DIFFTEST_STATE] cycle=%lu state=%p store_q_addr=%p store_qsize=%zu has_commit=%d\n", state->cycle_count,
-         state, &state->store_event_queue, state->store_event_queue.size(), state->has_commit);
-  }
-
   // normal checkers
   for (auto checker: checkers) {
     if (int ret = checker->step()) {
