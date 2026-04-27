@@ -48,12 +48,13 @@ enum {
 static uint8_t fpga_result = FPGA_RUN;
 static CommonArgs args;
 static const char *fpga_ddr_load_cmd = nullptr;
+static const char *fpga_ila_dump_cmd = nullptr;
 
 void fpga_init();
 void fpga_step();
 void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
-bool run_ddr_load_cmd();
+static bool run_external_cmd(const char *cmd, const char *tag);
 
 FpgaXdma *xdma_device = NULL;
 #ifdef USE_SERIAL_PORT
@@ -61,6 +62,7 @@ SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
 int main(int argc, const char *argv[]) {
   fpga_ddr_load_cmd = std::getenv("FPGA_DDR_LOAD_CMD");
+  fpga_ila_dump_cmd = std::getenv("FPGA_ILA_DUMP_CMD");
   args = parse_args(argc, argv);
 
   fpga_init();
@@ -71,32 +73,31 @@ int main(int argc, const char *argv[]) {
   printf("difftest releases the fpga device and exits\n");
   return !(fpga_result == FPGA_GOODTRAP);
 }
-
-bool run_ddr_load_cmd() {
-  if (!fpga_ddr_load_cmd || !fpga_ddr_load_cmd[0]) {
+static bool run_external_cmd(const char *cmd, const char *tag) {
+  if (!cmd || !cmd[0]) {
     return false;
   }
 
-  printf("[fpga-host] running external DDR load command: %s\n", fpga_ddr_load_cmd);
+  printf("[fpga-host] running external %s command: %s\n", tag, cmd);
   fflush(stdout);
 
-  int rc = std::system(fpga_ddr_load_cmd);
+  int rc = std::system(cmd);
   if (rc == -1) {
-    perror("[fpga-host] failed to launch DDR load command");
+    fprintf(stderr, "[fpga-host] failed to launch external %s command\n", tag);
     return false;
   }
   if (WIFEXITED(rc) && WEXITSTATUS(rc) == 0) {
-    printf("[fpga-host] external DDR load command completed successfully\n");
+    printf("[fpga-host] external %s command completed successfully\n", tag);
     fflush(stdout);
     return true;
   }
 
   if (WIFEXITED(rc)) {
-    fprintf(stderr, "[fpga-host] external DDR load command exited with code %d\n", WEXITSTATUS(rc));
+    fprintf(stderr, "[fpga-host] external %s command exited with code %d\n", tag, WEXITSTATUS(rc));
   } else if (WIFSIGNALED(rc)) {
-    fprintf(stderr, "[fpga-host] external DDR load command terminated by signal %d\n", WTERMSIG(rc));
+    fprintf(stderr, "[fpga-host] external %s command terminated by signal %d\n", tag, WTERMSIG(rc));
   } else {
-    fprintf(stderr, "[fpga-host] external DDR load command failed with status 0x%x\n", rc);
+    fprintf(stderr, "[fpga-host] external %s command failed with status 0x%x\n", tag, rc);
   }
   return false;
 }
@@ -106,6 +107,7 @@ void fpga_init() {
 #ifndef FPGA_SIM
   xdma_device->fpga_io(HOST_IO_RESET, true);
   xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
+  xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
   usleep(1000);
 #endif // FPGA_SIM
 
@@ -121,8 +123,7 @@ void fpga_init() {
 
 #ifndef FPGA_SIM
   if (fpga_ddr_load_cmd) {
-    if (!run_ddr_load_cmd()) {
-      fprintf(stderr, "[fpga-host] warning: failed to load DDR with external command\n");
+    if (!run_external_cmd(fpga_ddr_load_cmd, "DDR load")) {
       exit(0);
     }
   }
@@ -136,6 +137,13 @@ void fpga_init() {
   difftest_init(args.enable_diff, DEFAULT_EMU_RAM_SIZE);
 
 #ifndef FPGA_SIM
+  xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
+  if (fpga_ila_dump_cmd) {
+    if (!run_external_cmd(fpga_ila_dump_cmd, "ILA dump")) {
+      fprintf(stderr, "[fpga-host] warning: failed to arm external ILA dump command\n");
+      exit(1);
+    }
+  }
   xdma_device->fpga_io(HOST_IO_RESET, false);
 #endif // FPGA_SIM
 }
@@ -180,6 +188,9 @@ int fpga_get_result(uint8_t step) {
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
+#ifndef FPGA_SIM
+    xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
+#endif // FPGA_SIM
     if (trapCode == STATE_GOODTRAP)
       return FPGA_GOODTRAP;
     else
