@@ -16,7 +16,7 @@
 
 package difftest.util
 
-import difftest.DifftestBundle
+import difftest.{DiffDeltaElem, DiffPhyRegState, DifftestBundle}
 import difftest.common.FileControl
 
 import scala.collection.mutable.ListBuffer
@@ -26,13 +26,32 @@ object Query {
   private var batchTable: Option[BatchQueryTable] = None
   def register(gen: DifftestBundle, locPrefix: String, dutZone: String) = {
     tables += new QueryTable(gen, locPrefix, dutZone)
+    val softArchGen = gen match {
+      case preg: DiffPhyRegState =>
+        Some(preg.archTarget)
+      case elem: DiffDeltaElem =>
+        elem.srcGenType match {
+          case preg: DiffPhyRegState => Some(preg.archTarget)
+          case _                     => None
+        }
+      case _ => None
+    }
+    softArchGen.foreach { archGen =>
+      tables += new QueryTable(archGen, "", "0", softArch = true)
+    }
   }
   def registerBatch(gens: Seq[DifftestBundle], locPrefix: String, dutZone: String) = {
-    gens.foreach { gen => tables += new QueryTable(gen, locPrefix, dutZone) }
+    gens.foreach(register(_, locPrefix, dutZone))
     batchTable = Some(new BatchQueryTable(gens))
   }
+  private def findTable(gen: DifftestBundle): QueryTable = {
+    tables.find(_.gen.eq(gen)).getOrElse {
+      val tableName = gen.desiredModuleName.replace("Difftest", "")
+      tables.find(_.tableName == tableName).get
+    }
+  }
   def writeInvoke(gen: DifftestBundle): String = {
-    tables.find(_.gen == gen).get.writeInvoke
+    findTable(gen).writeInvoke
   }
   def collect() = {
     val queryCpp = ListBuffer.empty[String]
@@ -70,7 +89,7 @@ object Query {
   }
 }
 
-class QueryTable(val gen: DifftestBundle, locPrefix: String, dutZone: String) {
+class QueryTable(val gen: DifftestBundle, locPrefix: String, dutZone: String, softArch: Boolean = false) {
   val tableName: String = gen.desiredModuleName.replace("Difftest", "")
   // Args: (key, value)
   private val stepArgs: Seq[(String, String)] = Seq(("STEP", s"query_step + (query_zone != $dutZone)"))
@@ -118,14 +137,27 @@ class QueryTable(val gen: DifftestBundle, locPrefix: String, dutZone: String) {
   val initInvoke = s"${tableName}_init();"
   val packetType = if (gen.isDeltaElem) s"uint${gen.deltaElemWidth}_t" else gen.desiredModuleName
   val writeDecl = {
-    val locParam = locArgs.map("uint8_t " + _._2).mkString(", ")
-    s"""
-       |  void ${tableName}_write(int dut_zone, $locParam, ${packetType}* packet) {
-       |    query_${tableName}->write(${sqlArgs.length}, ${sqlArgs.map(_._2).mkString(", ")});
-       |  }
-       |""".stripMargin
+    if (softArch) {
+      val softWriteArgs =
+        Seq("(int)query_step", "coreid") ++
+          dataArgs.map(_._2.replace("packet->", s"dut->${gen.actualCppName}."))
+      s"""
+         |  void ${tableName}_write(uint8_t coreid, DiffTestState* dut) {
+         |    query_${tableName}->write(${sqlArgs.length}, ${softWriteArgs.mkString(", ")});
+         |  }
+         |""".stripMargin
+    } else {
+      val locParam = locArgs.map("uint8_t " + _._2).mkString(", ")
+      s"""
+         |  void ${tableName}_write(int dut_zone, $locParam, ${packetType}* packet) {
+         |    query_${tableName}->write(${sqlArgs.length}, ${sqlArgs.map(_._2).mkString(", ")});
+         |  }
+         |""".stripMargin
+    }
   }
-  val writeInvoke = s"qStats->${tableName}_write($dutZone, ${locArgs.map(locPrefix + _._2).mkString(", ")}, packet);"
+  val writeInvoke =
+    if (softArch) s"qStats->${tableName}_write(coreid, dut);"
+    else s"qStats->${tableName}_write($dutZone, ${locArgs.map(locPrefix + _._2).mkString(", ")}, packet);"
 }
 
 class BatchQueryTable(template: Seq[DifftestBundle]) {

@@ -225,6 +225,7 @@ private[difftest] class DiffDeltaElem(gen: DifftestBundle)
   extends DeltaElem(gen.deltaElemWidth)
   with DifftestBundle
   with DifftestWithIndex {
+  def srcGenType: DifftestBundle = gen
   override val desiredCppName: String = gen.desiredCppName + "_elem"
   override def desiredModuleName: String = gen.desiredModuleName + "Elem"
 }
