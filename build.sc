@@ -20,7 +20,8 @@ import publish._
 
 object ivys {
   val scala = "2.13.14"
-  val chisel = (ivy"org.chipsalliance::chisel:7.3.0", ivy"org.chipsalliance:::chisel-plugin:7.3.0")
+  val chisel = (ivy"org.chipsalliance::chisel:7.11.0", ivy"org.chipsalliance:::chisel-plugin:7.11.0")
+  val scalatest = ivy"org.scalatest::scalatest:3.2.19"
 }
 
 trait CommonDiffTest extends ScalaModule with SbtModule {
@@ -51,5 +52,7 @@ trait Difftest extends CommonDiffTest { outer =>
 
   override def millSourcePath = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
 
-  object test extends SbtTests with TestModule.ScalaTest
+  object test extends SbtTests with TestModule.ScalaTest {
+    override def ivyDeps = super.ivyDeps() ++ Agg(ivys.scalatest)
+  }
 }
