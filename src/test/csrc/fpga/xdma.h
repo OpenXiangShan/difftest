@@ -20,6 +20,7 @@
 #include "diffstate.h"
 #include "mpool.h"
 #include <atomic>
+#include <cstdint>
 #include <queue>
 #include <signal.h>
 #include <stdbool.h>
@@ -33,9 +34,20 @@
 #include "xdma_sim.h"
 #endif // FPGA_SIM
 
-#define HOST_IO_RESET           0x0
-#define HOST_IO_DIFFTEST_ENABLE 0x4
-#define HOST_IO_ILA_TRIGGER     0x8
+#define HOST_IO_RESET            0x0
+#define HOST_IO_DIFFTEST_ENABLE  0x4
+#define HOST_IO_ILA_TRIGGER      0x8
+#define HOST_IO_DDR_SYNC_CTRL    0xc
+#define HOST_IO_DDR_SYNC_ADDR_LO 0x10
+#define HOST_IO_DDR_SYNC_ADDR_HI 0x14
+#define HOST_IO_DDR_SYNC_SIZE    0x18
+
+#define HOST_IO_DDR_SYNC_START     (1u << 0)
+#define HOST_IO_DDR_SYNC_CLEAR     (1u << 1)
+#define HOST_IO_DDR_SYNC_BUSY      (1u << 0)
+#define HOST_IO_DDR_SYNC_DONE      (1u << 1)
+#define HOST_IO_DDR_SYNC_ERROR     (1u << 2)
+#define HOST_IO_DDR_SYNC_SUPPORTED (1u << 31)
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
@@ -98,17 +110,15 @@ public:
   }
 
   void fpga_io(uint64_t address, bool enable) {
-    if (enable)
-      device_write(false, nullptr, address, 0x1);
-    else
-      device_write(false, nullptr, address, 0x0);
+    bar_write32(address, enable ? 0x1 : 0x0);
   }
 
   void ddr_load_workload(const char *workload) {
     fpga_io(HOST_IO_RESET, true);
     device_write(true, workload, 0, 0);
-    fpga_io(HOST_IO_RESET, false);
   }
+
+  bool sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool compare_with_image, bool strict_compare);
 
 private:
   bool running = false;
@@ -118,6 +128,9 @@ private:
 #endif
 
   void device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);
+  void bar_write32(uint64_t addr, uint32_t value);
+  uint32_t bar_read32(uint64_t addr);
+  bool read_c2h_exact(int channel, void *buf, size_t n_bytes, int idle_timeout_ms);
 
 #ifdef USE_THREAD_MEMPOOL
   std::mutex thread_mtx;

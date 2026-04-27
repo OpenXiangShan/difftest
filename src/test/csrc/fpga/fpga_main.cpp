@@ -24,10 +24,16 @@
 #include "ram.h"
 #include "refproxy.h"
 #include "xdma.h"
+#include <cerrno>
+#include <cinttypes>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <getopt.h>
 #include <mutex>
+#include <strings.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
@@ -54,7 +60,10 @@ void fpga_init();
 void fpga_step();
 void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
+static bool env_flag_enabled(const char *name, bool default_value);
+static uint64_t env_uint64(const char *name, uint64_t default_value);
 static bool run_external_cmd(const char *cmd, const char *tag);
+static void clone_sim_memory_to_ref();
 
 FpgaXdma *xdma_device = NULL;
 #ifdef USE_SERIAL_PORT
@@ -102,6 +111,55 @@ static bool run_external_cmd(const char *cmd, const char *tag) {
   return false;
 }
 
+static bool env_flag_enabled(const char *name, bool default_value) {
+  const char *value = std::getenv(name);
+  if (!value || !value[0]) {
+    return default_value;
+  }
+  if (!strcmp(value, "0") || !strcasecmp(value, "false") || !strcasecmp(value, "no") || !strcasecmp(value, "off")) {
+    return false;
+  }
+  if (!strcmp(value, "1") || !strcasecmp(value, "true") || !strcasecmp(value, "yes") || !strcasecmp(value, "on")) {
+    return true;
+  }
+  fprintf(stderr, "[fpga-host] invalid boolean %s=%s, using %s\n", name, value, default_value ? "true" : "false");
+  return default_value;
+}
+
+static uint64_t env_uint64(const char *name, uint64_t default_value) {
+  const char *value = std::getenv(name);
+  if (!value || !value[0]) {
+    return default_value;
+  }
+
+  errno = 0;
+  char *end = nullptr;
+  uint64_t result = strtoull(value, &end, 0);
+  if (errno != 0 || end == value || *end != '\0') {
+    fprintf(stderr, "[fpga-host] invalid integer %s=%s, using 0x%" PRIx64 "\n", name, value, default_value);
+    return default_value;
+  }
+  return result;
+}
+
+static void clone_sim_memory_to_ref() {
+  if (!args.enable_diff || !simMemory) {
+    return;
+  }
+
+  simMemory->clone_on_demand(
+      [](uint64_t offset, void *src, size_t n) {
+        uint64_t dest_addr = PMEM_BASE + offset;
+        for (int i = 0; i < NUM_CORES; i++) {
+          if (difftest[i] && difftest[i]->proxy) {
+            difftest[i]->proxy->mem_init(dest_addr, src, n, DUT_TO_REF);
+          }
+        }
+      },
+      true);
+  printf("[fpga-host] cloned simMemory to NEMU before FPGA reset release\n");
+}
+
 void fpga_init() {
   xdma_device = new FpgaXdma();
 #ifndef FPGA_SIM
@@ -134,7 +192,21 @@ void fpga_init() {
 #endif // USE_XDMA_DDR_LOAD
 #endif // FPGA_SIM
 
+#ifndef FPGA_SIM
+  if (args.enable_diff && env_flag_enabled("FPGA_XDMA_SYNC_DDR", true)) {
+    uint64_t sync_addr = env_uint64("FPGA_XDMA_SYNC_DDR_ADDR", 0);
+    uint64_t sync_bytes = env_uint64("FPGA_XDMA_SYNC_DDR_BYTES", simMemory->get_img_size());
+    bool compare = env_flag_enabled("FPGA_XDMA_SYNC_DDR_COMPARE", true);
+    bool strict_compare = env_flag_enabled("FPGA_XDMA_SYNC_DDR_STRICT", false);
+    if (!xdma_device->sync_ddr_to_sim_memory(sync_addr, sync_bytes, compare, strict_compare)) {
+      fprintf(stderr, "[fpga-host] failed to sync DDR initial state through XDMA\n");
+      exit(1);
+    }
+  }
+#endif // FPGA_SIM
+
   difftest_init(args.enable_diff, DEFAULT_EMU_RAM_SIZE);
+  clone_sim_memory_to_ref();
 
 #ifndef FPGA_SIM
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);

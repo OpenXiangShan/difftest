@@ -17,10 +17,15 @@
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
+#include <cerrno>
+#include <cinttypes>
+#include <cstdint>
+#include <cstring>
 #include <execinfo.h>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +37,22 @@
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
+
+static int getenv_int(const char *name, int default_value) {
+  const char *value = getenv(name);
+  if (!value || !value[0]) {
+    return default_value;
+  }
+
+  char *end = nullptr;
+  errno = 0;
+  long parsed = strtol(value, &end, 0);
+  if (errno != 0 || end == value || *end != '\0' || parsed <= 0 || parsed > INT32_MAX) {
+    fprintf(stderr, "[fpga-host] invalid integer %s=%s, using %d\n", name, value, default_value);
+    return default_value;
+  }
+  return static_cast<int>(parsed);
+}
 
 void signal_handler(int sig) {
   void *array[20];
@@ -83,6 +104,275 @@ FpgaXdma::FpgaXdma()
   }
   std::cout << "XDMA link " << XDMA_H2C_DEVICE << std::endl;
 #endif
+}
+
+void FpgaXdma::bar_write32(uint64_t addr, uint32_t value) {
+  device_write(false, nullptr, addr, value);
+}
+
+uint32_t FpgaXdma::bar_read32(uint64_t addr) {
+  uint64_t pg_size = sysconf(_SC_PAGE_SIZE);
+  uint64_t size = 0x1000;
+  uint64_t aligned_size = (size + 0xffful) & ~0xffful;
+  uint64_t base = addr & ~0xffful;
+  uint32_t offset = addr & 0xfffu;
+
+  if (base % pg_size != 0) {
+    printf("base must be a multiple of system page size\n");
+    exit(-1);
+  }
+
+  int fd = open(XDMA_USER, O_RDWR | O_SYNC);
+  if (fd < 0) {
+    printf("Failed to open %s\n", XDMA_USER);
+    exit(-1);
+  }
+
+  void *m_ptr = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, base);
+  if (m_ptr == MAP_FAILED) {
+    close(fd);
+    printf("failed to mmap\n");
+    exit(-1);
+  }
+
+  uint32_t value = ((volatile uint32_t *)m_ptr)[offset >> 2];
+  munmap(m_ptr, aligned_size);
+  close(fd);
+  return value;
+}
+
+bool FpgaXdma::read_c2h_exact(int channel, void *buf, size_t n_bytes, int idle_timeout_ms) {
+  uint8_t *dst = reinterpret_cast<uint8_t *>(buf);
+  size_t done = 0;
+
+#ifndef FPGA_SIM
+  int fd = xdma_c2h_fd[channel];
+  int old_flags = fcntl(fd, F_GETFL, 0);
+  if (old_flags < 0) {
+    perror("failed to get XDMA C2H fd flags");
+    return false;
+  }
+  if (fcntl(fd, F_SETFL, old_flags | O_NONBLOCK) < 0) {
+    perror("failed to set XDMA C2H nonblocking mode");
+    return false;
+  }
+  auto restore_flags = [&]() {
+    if (fcntl(fd, F_SETFL, old_flags) < 0) {
+      perror("failed to restore XDMA C2H fd flags");
+    }
+  };
+  int idle_ms = 0;
+#endif // FPGA_SIM
+
+  while (done < n_bytes) {
+    size_t want = n_bytes - done;
+    if (want > (1u << 20)) {
+      want = 1u << 20;
+    }
+#ifdef FPGA_SIM
+    ssize_t n = xdma_sim_read(channel, reinterpret_cast<char *>(dst + done), want);
+#else
+    ssize_t n = read(fd, dst + done, want);
+#endif // FPGA_SIM
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+#ifndef FPGA_SIM
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        struct pollfd pfd;
+        pfd.fd = fd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        int poll_ms = idle_timeout_ms - idle_ms;
+        if (poll_ms > 100) {
+          poll_ms = 100;
+        }
+        if (poll_ms <= 0) {
+          fprintf(stderr, "XDMA C2H read idle timeout after %zu/%zu bytes\n", done, n_bytes);
+          restore_flags();
+          return false;
+        }
+        int ret = poll(&pfd, 1, poll_ms);
+        if (ret > 0) {
+          if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            fprintf(stderr, "XDMA C2H poll error revents=0x%x after %zu/%zu bytes\n",
+                    pfd.revents, done, n_bytes);
+            restore_flags();
+            return false;
+          }
+          if (pfd.revents & POLLIN) {
+            idle_ms = 0;
+            continue;
+          }
+        }
+        if (ret < 0) {
+          if (errno == EINTR) {
+            continue;
+          }
+          perror("XDMA C2H poll failed");
+          restore_flags();
+          return false;
+        }
+        idle_ms += poll_ms;
+        if (idle_ms >= idle_timeout_ms) {
+          fprintf(stderr, "XDMA C2H read idle timeout after %zu/%zu bytes\n", done, n_bytes);
+          restore_flags();
+          return false;
+        }
+        continue;
+      }
+#endif // FPGA_SIM
+      perror("XDMA C2H read failed");
+#ifndef FPGA_SIM
+      restore_flags();
+#endif // FPGA_SIM
+      return false;
+    }
+    if (n == 0) {
+      fprintf(stderr, "XDMA C2H read returned EOF after %zu/%zu bytes\n", done, n_bytes);
+#ifndef FPGA_SIM
+      restore_flags();
+#endif // FPGA_SIM
+      return false;
+    }
+    done += static_cast<size_t>(n);
+#ifndef FPGA_SIM
+    idle_ms = 0;
+#endif // FPGA_SIM
+  }
+#ifndef FPGA_SIM
+  restore_flags();
+#endif // FPGA_SIM
+  return true;
+}
+
+bool FpgaXdma::sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool compare_with_image,
+                                      bool strict_compare) {
+#ifdef FPGA_SIM
+  (void)ddr_addr;
+  (void)n_bytes;
+  (void)compare_with_image;
+  (void)strict_compare;
+  printf("[fpga-host] XDMA DDR sync is not available in FPGA_SIM\n");
+  return false;
+#else
+  if (n_bytes == 0) {
+    return true;
+  }
+  if (!simMemory || !simMemory->as_ptr()) {
+    fprintf(stderr, "[fpga-host] XDMA DDR sync requires mmap-backed simMemory\n");
+    return false;
+  }
+  if ((ddr_addr & 63ull) != 0) {
+    fprintf(stderr, "[fpga-host] XDMA DDR sync address must be 64-byte aligned: 0x%" PRIx64 "\n", ddr_addr);
+    return false;
+  }
+  static constexpr uint64_t ddr_sync_addr_limit = 1ull << 40;
+  if (ddr_addr >= ddr_sync_addr_limit) {
+    fprintf(stderr, "[fpga-host] XDMA DDR sync address exceeds 40-bit DDR port: 0x%" PRIx64 "\n", ddr_addr);
+    return false;
+  }
+  if (n_bytes > simMemory->get_size()) {
+    fprintf(stderr, "[fpga-host] XDMA DDR sync size 0x%" PRIx64 " exceeds simMemory size 0x%" PRIx64 "\n", n_bytes,
+            simMemory->get_size());
+    return false;
+  }
+
+  uint64_t aligned_bytes = (n_bytes + 63ull) & ~63ull;
+  if (aligned_bytes > UINT32_MAX) {
+    fprintf(stderr, "[fpga-host] XDMA DDR sync size 0x%" PRIx64 " exceeds 32-bit BAR size field\n", aligned_bytes);
+    return false;
+  }
+  if (aligned_bytes > ddr_sync_addr_limit - ddr_addr) {
+    fprintf(stderr, "[fpga-host] XDMA DDR sync range [0x%" PRIx64 ", +0x%" PRIx64 "] exceeds 40-bit DDR port\n",
+            ddr_addr, aligned_bytes);
+    return false;
+  }
+
+  uint32_t status = bar_read32(HOST_IO_DDR_SYNC_CTRL);
+  if ((status & HOST_IO_DDR_SYNC_SUPPORTED) == 0) {
+    fprintf(stderr, "[fpga-host] bitstream does not report XDMA DDR sync support, status=0x%08x\n", status);
+    return false;
+  }
+
+  void *buffer = nullptr;
+  int ret = posix_memalign(&buffer, 4096, static_cast<size_t>(aligned_bytes));
+  if (ret != 0 || !buffer) {
+    errno = ret;
+    perror("posix_memalign failed");
+    return false;
+  }
+  memset(buffer, 0, static_cast<size_t>(aligned_bytes));
+
+  printf("[fpga-host] syncing DDR[0x%" PRIx64 ", +0x%" PRIx64 "] to simMemory via XDMA C2H\n", ddr_addr, n_bytes);
+  fflush(stdout);
+
+  bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_CLEAR);
+  bar_write32(HOST_IO_DDR_SYNC_ADDR_LO, static_cast<uint32_t>(ddr_addr));
+  bar_write32(HOST_IO_DDR_SYNC_ADDR_HI, static_cast<uint32_t>(ddr_addr >> 32));
+  bar_write32(HOST_IO_DDR_SYNC_SIZE, static_cast<uint32_t>(n_bytes));
+  bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_START);
+
+  int idle_timeout_ms = getenv_int("FPGA_XDMA_SYNC_DDR_IDLE_TIMEOUT_MS", 10000);
+  bool ok = read_c2h_exact(0, buffer, static_cast<size_t>(aligned_bytes), idle_timeout_ms);
+  if (ok) {
+    bool done = false;
+    for (int i = 0; i < 10000; i++) {
+      status = bar_read32(HOST_IO_DDR_SYNC_CTRL);
+      if (status & HOST_IO_DDR_SYNC_ERROR) {
+        fprintf(stderr, "[fpga-host] XDMA DDR sync hardware error, status=0x%08x\n", status);
+        ok = false;
+        break;
+      }
+      if (status & HOST_IO_DDR_SYNC_DONE) {
+        done = true;
+        break;
+      }
+      usleep(1000);
+    }
+    if (!done) {
+      fprintf(stderr, "[fpga-host] XDMA DDR sync timed out, status=0x%08x\n", status);
+      ok = false;
+    }
+  }
+
+  if (ok && compare_with_image) {
+    const uint8_t *expected = reinterpret_cast<const uint8_t *>(simMemory->as_ptr());
+    const uint8_t *actual = reinterpret_cast<const uint8_t *>(buffer);
+    uint64_t mismatch_count = 0;
+    uint64_t first_mismatch = 0;
+    for (uint64_t i = 0; i < n_bytes; i++) {
+      if (expected[i] != actual[i]) {
+        if (mismatch_count == 0) {
+          first_mismatch = i;
+        }
+        mismatch_count++;
+      }
+    }
+    if (mismatch_count != 0) {
+      fprintf(stderr,
+              "[fpga-host] XDMA DDR sync differs from init_ram image: "
+              "%" PRIu64 " mismatches, first offset=0x%" PRIx64 "\n",
+              mismatch_count, first_mismatch);
+      if (strict_compare) {
+        ok = false;
+      }
+    } else {
+      printf("[fpga-host] XDMA DDR sync matches init_ram image for 0x%" PRIx64 " bytes\n", n_bytes);
+    }
+  }
+
+  if (ok) {
+    memcpy(simMemory->as_ptr(), buffer, static_cast<size_t>(n_bytes));
+    simMemory->extend_img_size(n_bytes);
+    printf("[fpga-host] copied 0x%" PRIx64 " bytes from XDMA DDR sync buffer into simMemory\n", n_bytes);
+  }
+
+  bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_CLEAR);
+  free(buffer);
+  return ok;
+#endif // FPGA_SIM
 }
 
 // write xdma_bypass memory or xdma_user

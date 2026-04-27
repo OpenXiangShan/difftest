@@ -123,6 +123,7 @@ public:
   virtual void clone_on_demand(std::function<void(uint64_t, void *, size_t)> func, bool skip_zero = false) {
     clone([func](void *src, size_t n) { func(0, src, n); }, skip_zero);
   }
+  virtual void extend_img_size(uint64_t n_bytes) {}
   virtual uint64_t *as_ptr() {
     return nullptr;
   }
@@ -152,6 +153,11 @@ public:
   }
   virtual inline uint64_t get_img_size() {
     return img_size;
+  }
+  void extend_img_size(uint64_t n_bytes) {
+    if (n_bytes > img_size) {
+      img_size = n_bytes > memory_size ? memory_size : n_bytes;
+    }
   }
 };
 
