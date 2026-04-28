@@ -76,6 +76,9 @@ inline void port_write(std::array<T, N> &dest, uint64_t value) {
 class GrhSIMDiffTestSim final : public Simulator {
 private:
   GrhSIMModel *dut;
+  bool phase_timing_enabled_ = false;
+  uint64_t model_step_count_ = 0;
+  uint64_t model_step_time_us_ = 0;
 
 protected:
   inline unsigned get_uart_out_valid() override {
@@ -98,15 +101,14 @@ public:
   void waveform_init(uint64_t cycles) override;
   void waveform_init(uint64_t cycles, const char *filename) override;
   void waveform_tick() override;
+  void step() override;
+  SimulatorRuntimeStats runtime_stats() const override;
 
   inline void set_clock(unsigned clock) override {
     grhsim_detail::port_write(dut->clock, clock);
   }
   inline void set_reset(unsigned reset) override {
     grhsim_detail::port_write(dut->reset, reset);
-  }
-  inline void step() override {
-    dut->eval();
   }
 
   inline uint64_t get_difftest_exit() override {

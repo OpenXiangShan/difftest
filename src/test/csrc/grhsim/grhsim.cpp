@@ -17,10 +17,22 @@
 
 #include "simulator.h"
 
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
 
+namespace {
+
+bool env_flag(const char *name) {
+  const char *value = std::getenv(name);
+  return value != nullptr && value[0] != '\0' && value[0] != '0';
+}
+
+} // namespace
+
 GrhSIMDiffTestSim::GrhSIMDiffTestSim() : dut(new GrhSIMModel) {
+  phase_timing_enabled_ = env_flag("EMU_PHASE_TIMING");
   dut->init();
 }
 
@@ -57,6 +69,34 @@ void GrhSIMDiffTestSim::waveform_init(uint64_t cycles, const char *filename) {
 
 void GrhSIMDiffTestSim::waveform_tick() {
   // GrhSIM emits waveform records at eval boundaries after waveform_init() enables it.
+}
+
+void GrhSIMDiffTestSim::step() {
+  ++model_step_count_;
+  if (!phase_timing_enabled_) {
+    dut->eval();
+    return;
+  }
+  const auto begin = std::chrono::steady_clock::now();
+  dut->eval();
+  model_step_time_us_ += static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - begin).count());
+}
+
+SimulatorRuntimeStats GrhSIMDiffTestSim::runtime_stats() const {
+  const auto counters = dut->perf_counters();
+  return {
+      .modelStepCount = model_step_count_,
+      .modelStepTimeUs = model_step_time_us_,
+      .evalCount = counters.evalCount,
+      .round1Count = counters.round1Count,
+      .round2Count = counters.round2Count,
+      .totalRoundCount = counters.totalRoundCount,
+      .computeBatchExecCount = counters.computeBatchExecCount,
+      .commitBatchExecCount = counters.commitBatchExecCount,
+      .touchedStateShadowCount = counters.touchedStateShadowCount,
+      .touchedWriteCount = counters.touchedWriteCount,
+  };
 }
 
 #endif // GRHSIM

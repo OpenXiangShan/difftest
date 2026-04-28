@@ -22,6 +22,7 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "sdcard.h"
+#include <chrono>
 #include <cstdlib>
 #include <getopt.h>
 #include <signal.h>
@@ -61,6 +62,18 @@ uint64_t parse_env_u64(const char *name, uint64_t default_value = 0) {
   return static_cast<uint64_t>(parsed);
 }
 
+bool env_flag(const char *name) {
+  const char *value = std::getenv(name);
+  return value != nullptr && value[0] != '\0' && value[0] != '0';
+}
+
+uint64_t steady_now_us() {
+  return static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+}
+
 } // namespace
 
 Emulator::Emulator(int argc, const char *argv[])
@@ -85,6 +98,7 @@ Emulator::Emulator(int argc, const char *argv[])
   progress_trace_interval_cycles = parse_env_u64("EMU_PROGRESS_EVERY_CYCLES", 0);
   progress_trace_enabled = progress_trace_interval_cycles != 0;
   next_progress_trace_cycle = progress_trace_interval_cycles;
+  phase_timing_enabled = env_flag("EMU_PHASE_TIMING");
   if (args.max_cycles == static_cast<uint64_t>(-1)) {
     Info("max cycles: unlimited\n");
   } else {
@@ -92,6 +106,9 @@ Emulator::Emulator(int argc, const char *argv[])
   }
   if (progress_trace_enabled) {
     Info("[EMU_PROGRESS] enabled interval=%" PRIu64 " cycles\n", progress_trace_interval_cycles);
+  }
+  if (phase_timing_enabled) {
+    Info("[EMU_PHASE_TIMING] enabled\n");
   }
 #ifdef VERILATOR
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
@@ -309,6 +326,30 @@ Emulator::~Emulator() {
        args.seed, cycles);
   Info(ANSI_COLOR_BLUE "Host time spent: %'dms\n" ANSI_COLOR_RESET, elapsed_time);
 
+  if (phase_timing_enabled) {
+    const auto runtime_stats = dut_ptr->runtime_stats();
+    const uint64_t model_step_us = runtime_stats.modelStepTimeUs;
+    const uint64_t single_cycle_other_us =
+        phase_timing_single_cycle_us > model_step_us ? phase_timing_single_cycle_us - model_step_us : 0;
+    const uint64_t tick_misc_us =
+        phase_timing_tick_total_us > phase_timing_single_cycle_us + phase_timing_difftest_us
+            ? phase_timing_tick_total_us - phase_timing_single_cycle_us - phase_timing_difftest_us
+            : 0;
+    Info("[EMU_PHASE_TIMING] tick_total_us=%" PRIu64 " single_cycle_us=%" PRIu64
+         " model_step_us=%" PRIu64 " single_cycle_other_us=%" PRIu64
+         " difftest_us=%" PRIu64 " tick_misc_us=%" PRIu64 "\n",
+         phase_timing_tick_total_us, phase_timing_single_cycle_us, model_step_us, single_cycle_other_us,
+         phase_timing_difftest_us, tick_misc_us);
+    Info("[EMU_PHASE_TIMING] model_step_count=%" PRIu64 " eval_count=%" PRIu64
+         " round1_count=%" PRIu64 " round2_count=%" PRIu64 " total_round_count=%" PRIu64
+         " compute_batch_exec_count=%" PRIu64 " commit_batch_exec_count=%" PRIu64
+         " touched_state_shadow_count=%" PRIu64 " touched_write_count=%" PRIu64 "\n",
+         runtime_stats.modelStepCount, runtime_stats.evalCount, runtime_stats.round1Count,
+         runtime_stats.round2Count, runtime_stats.totalRoundCount, runtime_stats.computeBatchExecCount,
+         runtime_stats.commitBatchExecCount, runtime_stats.touchedStateShadowCount,
+         runtime_stats.touchedWriteCount);
+  }
+
   if (enable_simjtag) {
     delete jtag;
   }
@@ -409,6 +450,7 @@ end_single_cycle:
 }
 
 int Emulator::tick() {
+  const uint64_t tick_begin_us = phase_timing_enabled ? steady_now_us() : 0;
 
 #ifdef SHOW_SCREEN
   uint32_t t = uptime();
@@ -566,7 +608,11 @@ int Emulator::tick() {
   }
 #endif // CONFIG_NO_DIFFTEST
 
+  const uint64_t single_cycle_begin_us = phase_timing_enabled ? steady_now_us() : 0;
   single_cycle();
+  if (phase_timing_enabled) {
+    phase_timing_single_cycle_us += steady_now_us() - single_cycle_begin_us;
+  }
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles--;
 #endif // CONFIG_NO_DIFFTEST
@@ -575,6 +621,7 @@ int Emulator::tick() {
   dut_ptr->set_perf_dump(0);
 
 #ifndef CONFIG_NO_DIFFTEST
+  const uint64_t difftest_begin_us = phase_timing_enabled ? steady_now_us() : 0;
   int step = 0;
   if (args.trace_name && args.trace_is_read) {
     step = 1;
@@ -610,7 +657,14 @@ int Emulator::tick() {
       stats.exit_code = SimExitCode::bad_trap;
     }
 #endif
+    if (phase_timing_enabled) {
+      phase_timing_difftest_us += steady_now_us() - difftest_begin_us;
+      phase_timing_tick_total_us += steady_now_us() - tick_begin_us;
+    }
     return trapCode;
+  }
+  if (phase_timing_enabled) {
+    phase_timing_difftest_us += steady_now_us() - difftest_begin_us;
   }
 #endif // CONFIG_NO_DIFFTEST
 
@@ -692,6 +746,10 @@ int Emulator::tick() {
 #endif
     fflush(stdout);
     next_progress_trace_cycle += progress_trace_interval_cycles;
+  }
+
+  if (phase_timing_enabled) {
+    phase_timing_tick_total_us += steady_now_us() - tick_begin_us;
   }
 
   return 0;

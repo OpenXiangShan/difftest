@@ -18,6 +18,19 @@
 
 #include "common.h"
 
+struct SimulatorRuntimeStats {
+  uint64_t modelStepCount = 0;
+  uint64_t modelStepTimeUs = 0;
+  uint64_t evalCount = 0;
+  uint64_t round1Count = 0;
+  uint64_t round2Count = 0;
+  uint64_t totalRoundCount = 0;
+  uint64_t computeBatchExecCount = 0;
+  uint64_t commitBatchExecCount = 0;
+  uint64_t touchedStateShadowCount = 0;
+  uint64_t touchedWriteCount = 0;
+};
+
 class Simulator {
 private:
   static void report_waveform_error() {
@@ -97,6 +110,11 @@ public:
   // To load the simulation snapshot from a file.
   virtual std::function<void(void *, size_t)> snapshot_load(const char *filename) {
     return report_snapshot_error;
+  }
+
+  // To expose simulator/runtime counters to the emu harness.
+  virtual SimulatorRuntimeStats runtime_stats() const {
+    return {};
   }
 
   /******* final methods *******/
