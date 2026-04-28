@@ -130,6 +130,7 @@ private:
   void device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);
   void bar_write32(uint64_t addr, uint32_t value);
   uint32_t bar_read32(uint64_t addr);
+  bool drain_c2h_until_idle(int channel, int idle_timeout_ms, size_t *drained_bytes);
   bool read_c2h_exact(int channel, void *buf, size_t n_bytes, int idle_timeout_ms);
 
 #ifdef USE_THREAD_MEMPOOL

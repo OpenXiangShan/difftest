@@ -18,6 +18,7 @@
 #include "mpool.h"
 #include "ram.h"
 #include <cerrno>
+#include <chrono>
 #include <cinttypes>
 #include <cstdint>
 #include <cstring>
@@ -32,6 +33,7 @@
 #include <string>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <vector>
 
 #define XDMA_USER       "/dev/xdma0_user"
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
@@ -141,6 +143,98 @@ uint32_t FpgaXdma::bar_read32(uint64_t addr) {
   return value;
 }
 
+bool FpgaXdma::drain_c2h_until_idle(int channel, int idle_timeout_ms, size_t *drained_bytes) {
+  if (drained_bytes) {
+    *drained_bytes = 0;
+  }
+#ifdef FPGA_SIM
+  (void)channel;
+  (void)idle_timeout_ms;
+  return true;
+#else
+  int fd = xdma_c2h_fd[channel];
+  int old_flags = fcntl(fd, F_GETFL, 0);
+  if (old_flags < 0) {
+    perror("failed to get XDMA C2H fd flags");
+    return false;
+  }
+  if (fcntl(fd, F_SETFL, old_flags | O_NONBLOCK) < 0) {
+    perror("failed to set XDMA C2H nonblocking mode");
+    return false;
+  }
+  auto restore_flags = [&]() {
+    if (fcntl(fd, F_SETFL, old_flags) < 0) {
+      perror("failed to restore XDMA C2H fd flags");
+    }
+  };
+
+  std::vector<uint8_t> discard(1u << 20);
+  int idle_ms = 0;
+  while (true) {
+    ssize_t n = read(fd, discard.data(), discard.size());
+    if (n > 0) {
+      if (drained_bytes) {
+        *drained_bytes += static_cast<size_t>(n);
+      }
+      idle_ms = 0;
+      continue;
+    }
+    if (n == 0) {
+      restore_flags();
+      return true;
+    }
+    if (errno == EINTR) {
+      continue;
+    }
+    if (errno == ETIMEDOUT) {
+      restore_flags();
+      return true;
+    }
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      int poll_ms = idle_timeout_ms - idle_ms;
+      if (poll_ms > 10) {
+        poll_ms = 10;
+      }
+      if (poll_ms <= 0) {
+        restore_flags();
+        return true;
+      }
+
+      struct pollfd pfd;
+      pfd.fd = fd;
+      pfd.events = POLLIN;
+      pfd.revents = 0;
+      int ret = poll(&pfd, 1, poll_ms);
+      if (ret > 0) {
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+          fprintf(stderr, "XDMA C2H drain poll error revents=0x%x\n", pfd.revents);
+          restore_flags();
+          return false;
+        }
+        if (pfd.revents & POLLIN) {
+          idle_ms = 0;
+          continue;
+        }
+      }
+      if (ret < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        perror("XDMA C2H drain poll failed");
+        restore_flags();
+        return false;
+      }
+      idle_ms += poll_ms;
+      continue;
+    }
+
+    perror("XDMA C2H drain read failed");
+    restore_flags();
+    return false;
+  }
+#endif // FPGA_SIM
+}
+
 bool FpgaXdma::read_c2h_exact(int channel, void *buf, size_t n_bytes, int idle_timeout_ms) {
   uint8_t *dst = reinterpret_cast<uint8_t *>(buf);
   size_t done = 0;
@@ -196,8 +290,7 @@ bool FpgaXdma::read_c2h_exact(int channel, void *buf, size_t n_bytes, int idle_t
         int ret = poll(&pfd, 1, poll_ms);
         if (ret > 0) {
           if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            fprintf(stderr, "XDMA C2H poll error revents=0x%x after %zu/%zu bytes\n",
-                    pfd.revents, done, n_bytes);
+            fprintf(stderr, "XDMA C2H poll error revents=0x%x after %zu/%zu bytes\n", pfd.revents, done, n_bytes);
             restore_flags();
             return false;
           }
@@ -308,6 +401,17 @@ bool FpgaXdma::sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool 
   printf("[fpga-host] syncing DDR[0x%" PRIx64 ", +0x%" PRIx64 "] to simMemory via XDMA C2H\n", ddr_addr, n_bytes);
   fflush(stdout);
 
+  int drain_idle_ms = getenv_int("FPGA_XDMA_SYNC_DDR_DRAIN_IDLE_MS", 50);
+  size_t drained_bytes = 0;
+  if (!drain_c2h_until_idle(0, drain_idle_ms, &drained_bytes)) {
+    free(buffer);
+    return false;
+  }
+  if (drained_bytes != 0) {
+    printf("[fpga-host] drained %zu stale C2H bytes before XDMA DDR sync\n", drained_bytes);
+  }
+
+  const auto sync_begin = std::chrono::steady_clock::now();
   bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_CLEAR);
   bar_write32(HOST_IO_DDR_SYNC_ADDR_LO, static_cast<uint32_t>(ddr_addr));
   bar_write32(HOST_IO_DDR_SYNC_ADDR_HI, static_cast<uint32_t>(ddr_addr >> 32));
@@ -315,7 +419,9 @@ bool FpgaXdma::sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool 
   bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_START);
 
   int idle_timeout_ms = getenv_int("FPGA_XDMA_SYNC_DDR_IDLE_TIMEOUT_MS", 10000);
+  const auto c2h_begin = std::chrono::steady_clock::now();
   bool ok = read_c2h_exact(0, buffer, static_cast<size_t>(aligned_bytes), idle_timeout_ms);
+  const auto c2h_end = std::chrono::steady_clock::now();
   if (ok) {
     bool done = false;
     for (int i = 0; i < 10000; i++) {
@@ -335,6 +441,18 @@ bool FpgaXdma::sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool 
       fprintf(stderr, "[fpga-host] XDMA DDR sync timed out, status=0x%08x\n", status);
       ok = false;
     }
+  }
+  const auto sync_end = std::chrono::steady_clock::now();
+
+  if (ok) {
+    double c2h_seconds = std::chrono::duration<double>(c2h_end - c2h_begin).count();
+    double total_seconds = std::chrono::duration<double>(sync_end - sync_begin).count();
+    double aligned_mib = static_cast<double>(aligned_bytes) / (1024.0 * 1024.0);
+    double c2h_mib_s = c2h_seconds > 0.0 ? aligned_mib / c2h_seconds : 0.0;
+    double total_mib_s = total_seconds > 0.0 ? aligned_mib / total_seconds : 0.0;
+    printf("[fpga-host] XDMA DDR sync C2H read: 0x%" PRIx64 " aligned bytes in %.6f s, %.3f MiB/s\n", aligned_bytes,
+           c2h_seconds, c2h_mib_s);
+    printf("[fpga-host] XDMA DDR sync total hardware phase: %.6f s, %.3f MiB/s\n", total_seconds, total_mib_s);
   }
 
   if (ok && compare_with_image) {
