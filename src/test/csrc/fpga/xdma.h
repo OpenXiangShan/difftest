@@ -118,7 +118,10 @@ public:
     device_write(true, workload, 0, 0);
   }
 
-  bool sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool compare_with_image, bool strict_compare);
+  // Sync FPGA DDR physical range [paddr, paddr + n_bytes) into
+  // simMemory[paddr - PMEM_BASE]. The BAR still carries the DDR-local address
+  // after subtracting PMEM_BASE; callers should use CPU physical addresses.
+  bool sync_ddr_to_sim_memory(uint64_t paddr, uint64_t n_bytes, bool compare_with_image, bool strict_compare);
 
 private:
   bool running = false;
@@ -131,6 +134,9 @@ private:
   void bar_write32(uint64_t addr, uint32_t value);
   uint32_t bar_read32(uint64_t addr);
   bool drain_c2h_until_idle(int channel, int idle_timeout_ms, size_t *drained_bytes);
+  // Read exactly n_bytes from the XDMA C2H stream. Linux/XDMA may return short
+  // reads even when more stream data is pending, so this helper loops with an
+  // idle timeout instead of relying on a single blocking read.
   bool read_c2h_exact(int channel, void *buf, size_t n_bytes, int idle_timeout_ms);
 
 #ifdef USE_THREAD_MEMPOOL

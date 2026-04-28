@@ -62,6 +62,8 @@ void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
 static bool env_flag_enabled(const char *name, bool default_value);
 static uint64_t env_uint64(const char *name, uint64_t default_value);
+static uint64_t env_size(const char *name, uint64_t default_value);
+static bool parse_size_value(const char *value, uint64_t *result);
 static bool run_external_cmd(const char *cmd, const char *tag);
 static void clone_sim_memory_to_ref();
 
@@ -142,6 +144,52 @@ static uint64_t env_uint64(const char *name, uint64_t default_value) {
   return result;
 }
 
+static bool parse_size_value(const char *value, uint64_t *result) {
+  if (!value || !value[0]) {
+    return false;
+  }
+
+  errno = 0;
+  char *end = nullptr;
+  uint64_t base = strtoull(value, &end, 0);
+  if (errno != 0 || end == value) {
+    return false;
+  }
+
+  uint64_t scale = 1;
+  if (*end != '\0') {
+    if (!strcasecmp(end, "B")) {
+      scale = 1;
+    } else if (!strcasecmp(end, "K") || !strcasecmp(end, "KB") || !strcasecmp(end, "KiB")) {
+      scale = 1024ull;
+    } else if (!strcasecmp(end, "M") || !strcasecmp(end, "MB") || !strcasecmp(end, "MiB")) {
+      scale = 1024ull * 1024;
+    } else if (!strcasecmp(end, "G") || !strcasecmp(end, "GB") || !strcasecmp(end, "GiB")) {
+      scale = 1024ull * 1024 * 1024;
+    } else {
+      return false;
+    }
+  }
+
+  if (base > UINT64_MAX / scale) {
+    return false;
+  }
+  *result = base * scale;
+  return true;
+}
+
+static uint64_t env_size(const char *name, uint64_t default_value) {
+  const char *value = std::getenv(name);
+  uint64_t result = 0;
+  if (!parse_size_value(value, &result)) {
+    if (value && value[0]) {
+      fprintf(stderr, "[fpga-host] invalid size %s=%s, using 0x%" PRIx64 "\n", name, value, default_value);
+    }
+    return default_value;
+  }
+  return result;
+}
+
 static void clone_sim_memory_to_ref() {
   if (!args.enable_diff || !simMemory) {
     return;
@@ -157,7 +205,6 @@ static void clone_sim_memory_to_ref() {
         }
       },
       true);
-  printf("[fpga-host] cloned simMemory to NEMU before FPGA reset release\n");
 }
 
 void fpga_init() {
@@ -174,7 +221,16 @@ void fpga_init() {
   serial_port->start();
 #endif // USE_SERIAL_PORT
 
-  init_ram(args.image, DEFAULT_EMU_RAM_SIZE);
+  uint64_t ram_size = env_size("FPGA_DDR_SIZE", DEFAULT_EMU_RAM_SIZE);
+  if (ram_size == 0) {
+    fprintf(stderr, "[fpga-host] FPGA_DDR_SIZE must be non-zero, using default 0x%lx\n", DEFAULT_EMU_RAM_SIZE);
+    ram_size = DEFAULT_EMU_RAM_SIZE;
+  }
+  if (args.ram_size) {
+    ram_size = parse_ramsize(args.ram_size);
+  }
+
+  init_ram(args.image, ram_size);
   init_flash(args.flash_bin);
 
   init_device();
@@ -194,8 +250,8 @@ void fpga_init() {
 
 #ifndef FPGA_SIM
   if (args.enable_diff && env_flag_enabled("FPGA_XDMA_SYNC_DDR", true)) {
-    uint64_t sync_addr = env_uint64("FPGA_XDMA_SYNC_DDR_ADDR", 0);
-    uint64_t sync_bytes = env_uint64("FPGA_XDMA_SYNC_DDR_BYTES", simMemory->get_img_size());
+    uint64_t sync_addr = env_uint64("FPGA_XDMA_SYNC_DDR_ADDR", PMEM_BASE);
+    uint64_t sync_bytes = env_size("FPGA_XDMA_SYNC_DDR_BYTES", ram_size);
     bool compare = env_flag_enabled("FPGA_XDMA_SYNC_DDR_COMPARE", true);
     bool strict_compare = env_flag_enabled("FPGA_XDMA_SYNC_DDR_STRICT", false);
     if (!xdma_device->sync_ddr_to_sim_memory(sync_addr, sync_bytes, compare, strict_compare)) {
@@ -205,7 +261,7 @@ void fpga_init() {
   }
 #endif // FPGA_SIM
 
-  difftest_init(args.enable_diff, DEFAULT_EMU_RAM_SIZE);
+  difftest_init(args.enable_diff, ram_size);
   clone_sim_memory_to_ref();
 
 #ifndef FPGA_SIM

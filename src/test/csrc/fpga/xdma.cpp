@@ -40,21 +40,11 @@
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
 
-static int getenv_int(const char *name, int default_value) {
-  const char *value = getenv(name);
-  if (!value || !value[0]) {
-    return default_value;
-  }
-
-  char *end = nullptr;
-  errno = 0;
-  long parsed = strtol(value, &end, 0);
-  if (errno != 0 || end == value || *end != '\0' || parsed <= 0 || parsed > INT32_MAX) {
-    fprintf(stderr, "[fpga-host] invalid integer %s=%s, using %d\n", name, value, default_value);
-    return default_value;
-  }
-  return static_cast<int>(parsed);
-}
+static constexpr int kDdrSyncDrainIdleMs = 50;
+static constexpr int kDdrSyncReadIdleTimeoutMs = 10000;
+static constexpr int kDdrSyncDonePolls = 10000;
+static constexpr uint64_t kDdrSyncAddrLimit = 1ull << 40;
+static constexpr uint64_t kDdrSyncChunkBytes = 256ull * 1024 * 1024;
 
 void signal_handler(int sig) {
   void *array[20];
@@ -340,10 +330,10 @@ bool FpgaXdma::read_c2h_exact(int channel, void *buf, size_t n_bytes, int idle_t
   return true;
 }
 
-bool FpgaXdma::sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool compare_with_image,
+bool FpgaXdma::sync_ddr_to_sim_memory(uint64_t paddr, uint64_t n_bytes, bool compare_with_image,
                                       bool strict_compare) {
 #ifdef FPGA_SIM
-  (void)ddr_addr;
+  (void)paddr;
   (void)n_bytes;
   (void)compare_with_image;
   (void)strict_compare;
@@ -357,29 +347,27 @@ bool FpgaXdma::sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool 
     fprintf(stderr, "[fpga-host] XDMA DDR sync requires mmap-backed simMemory\n");
     return false;
   }
-  if ((ddr_addr & 63ull) != 0) {
-    fprintf(stderr, "[fpga-host] XDMA DDR sync address must be 64-byte aligned: 0x%" PRIx64 "\n", ddr_addr);
+  if ((paddr & 63ull) != 0) {
+    fprintf(stderr, "[fpga-host] XDMA DDR sync address must be 64-byte aligned: 0x%" PRIx64 "\n", paddr);
     return false;
   }
-  static constexpr uint64_t ddr_sync_addr_limit = 1ull << 40;
-  if (ddr_addr >= ddr_sync_addr_limit) {
-    fprintf(stderr, "[fpga-host] XDMA DDR sync address exceeds 40-bit DDR port: 0x%" PRIx64 "\n", ddr_addr);
-    return false;
-  }
-  if (n_bytes > simMemory->get_size()) {
-    fprintf(stderr, "[fpga-host] XDMA DDR sync size 0x%" PRIx64 " exceeds simMemory size 0x%" PRIx64 "\n", n_bytes,
-            simMemory->get_size());
+  if (paddr < PMEM_BASE) {
+    fprintf(stderr, "[fpga-host] XDMA DDR sync address 0x%" PRIx64 " is below PMEM_BASE 0x%" PRIx64 "\n", paddr,
+            PMEM_BASE);
     return false;
   }
 
-  uint64_t aligned_bytes = (n_bytes + 63ull) & ~63ull;
-  if (aligned_bytes > UINT32_MAX) {
-    fprintf(stderr, "[fpga-host] XDMA DDR sync size 0x%" PRIx64 " exceeds 32-bit BAR size field\n", aligned_bytes);
+  uint64_t mem_offset = paddr - PMEM_BASE;
+  if (mem_offset > simMemory->get_size() || n_bytes > simMemory->get_size() - mem_offset) {
+    fprintf(stderr,
+            "[fpga-host] XDMA DDR sync range [0x%" PRIx64 ", +0x%" PRIx64 "] exceeds simMemory [0x%" PRIx64
+            ", +0x%" PRIx64 "]\n",
+            paddr, n_bytes, PMEM_BASE, simMemory->get_size());
     return false;
   }
-  if (aligned_bytes > ddr_sync_addr_limit - ddr_addr) {
+  if (mem_offset >= kDdrSyncAddrLimit || n_bytes > kDdrSyncAddrLimit - mem_offset) {
     fprintf(stderr, "[fpga-host] XDMA DDR sync range [0x%" PRIx64 ", +0x%" PRIx64 "] exceeds 40-bit DDR port\n",
-            ddr_addr, aligned_bytes);
+            paddr, n_bytes);
     return false;
   }
 
@@ -389,106 +377,130 @@ bool FpgaXdma::sync_ddr_to_sim_memory(uint64_t ddr_addr, uint64_t n_bytes, bool 
     return false;
   }
 
-  void *buffer = nullptr;
-  int ret = posix_memalign(&buffer, 4096, static_cast<size_t>(aligned_bytes));
-  if (ret != 0 || !buffer) {
-    errno = ret;
-    perror("posix_memalign failed");
-    return false;
-  }
-  memset(buffer, 0, static_cast<size_t>(aligned_bytes));
-
-  printf("[fpga-host] syncing DDR[0x%" PRIx64 ", +0x%" PRIx64 "] to simMemory via XDMA C2H\n", ddr_addr, n_bytes);
-  fflush(stdout);
-
-  int drain_idle_ms = getenv_int("FPGA_XDMA_SYNC_DDR_DRAIN_IDLE_MS", 50);
   size_t drained_bytes = 0;
-  if (!drain_c2h_until_idle(0, drain_idle_ms, &drained_bytes)) {
-    free(buffer);
+  if (!drain_c2h_until_idle(0, kDdrSyncDrainIdleMs, &drained_bytes)) {
     return false;
   }
   if (drained_bytes != 0) {
     printf("[fpga-host] drained %zu stale C2H bytes before XDMA DDR sync\n", drained_bytes);
   }
 
-  const auto sync_begin = std::chrono::steady_clock::now();
-  bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_CLEAR);
-  bar_write32(HOST_IO_DDR_SYNC_ADDR_LO, static_cast<uint32_t>(ddr_addr));
-  bar_write32(HOST_IO_DDR_SYNC_ADDR_HI, static_cast<uint32_t>(ddr_addr >> 32));
-  bar_write32(HOST_IO_DDR_SYNC_SIZE, static_cast<uint32_t>(n_bytes));
-  bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_START);
+  uint8_t *sim_base = reinterpret_cast<uint8_t *>(simMemory->as_ptr());
+  const uint64_t original_img_size = simMemory->get_img_size();
+  uint64_t compared_bytes = 0;
+  uint64_t mismatch_count = 0;
+  uint64_t first_mismatch_offset = 0;
+  uint64_t total_aligned_bytes = 0;
+  double c2h_seconds = 0.0;
+  bool ok = true;
 
-  int idle_timeout_ms = getenv_int("FPGA_XDMA_SYNC_DDR_IDLE_TIMEOUT_MS", 10000);
-  const auto c2h_begin = std::chrono::steady_clock::now();
-  bool ok = read_c2h_exact(0, buffer, static_cast<size_t>(aligned_bytes), idle_timeout_ms);
-  const auto c2h_end = std::chrono::steady_clock::now();
-  if (ok) {
-    bool done = false;
-    for (int i = 0; i < 10000; i++) {
-      status = bar_read32(HOST_IO_DDR_SYNC_CTRL);
-      if (status & HOST_IO_DDR_SYNC_ERROR) {
-        fprintf(stderr, "[fpga-host] XDMA DDR sync hardware error, status=0x%08x\n", status);
-        ok = false;
-        break;
-      }
-      if (status & HOST_IO_DDR_SYNC_DONE) {
-        done = true;
-        break;
-      }
-      usleep(1000);
+  const auto sync_begin = std::chrono::steady_clock::now();
+  uint64_t done_bytes = 0;
+  while (done_bytes < n_bytes) {
+    uint64_t chunk_bytes = n_bytes - done_bytes;
+    if (chunk_bytes > kDdrSyncChunkBytes) {
+      chunk_bytes = kDdrSyncChunkBytes;
     }
-    if (!done) {
-      fprintf(stderr, "[fpga-host] XDMA DDR sync timed out, status=0x%08x\n", status);
+    uint64_t aligned_bytes = (chunk_bytes + 63ull) & ~63ull;
+    total_aligned_bytes += aligned_bytes;
+
+    void *buffer = nullptr;
+    int ret = posix_memalign(&buffer, 4096, static_cast<size_t>(aligned_bytes));
+    if (ret != 0 || !buffer) {
+      errno = ret;
+      perror("posix_memalign failed");
       ok = false;
+      break;
     }
+
+    uint64_t ddr_local_addr = mem_offset + done_bytes;
+    bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_CLEAR);
+    bar_write32(HOST_IO_DDR_SYNC_ADDR_LO, static_cast<uint32_t>(ddr_local_addr));
+    bar_write32(HOST_IO_DDR_SYNC_ADDR_HI, static_cast<uint32_t>(ddr_local_addr >> 32));
+    bar_write32(HOST_IO_DDR_SYNC_SIZE, static_cast<uint32_t>(chunk_bytes));
+    bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_START);
+
+    const auto c2h_begin = std::chrono::steady_clock::now();
+    ok = read_c2h_exact(0, buffer, static_cast<size_t>(aligned_bytes), kDdrSyncReadIdleTimeoutMs);
+    const auto c2h_end = std::chrono::steady_clock::now();
+    c2h_seconds += std::chrono::duration<double>(c2h_end - c2h_begin).count();
+
+    if (ok) {
+      bool hw_done = false;
+      for (int i = 0; i < kDdrSyncDonePolls; i++) {
+        status = bar_read32(HOST_IO_DDR_SYNC_CTRL);
+        if (status & HOST_IO_DDR_SYNC_ERROR) {
+          fprintf(stderr, "[fpga-host] XDMA DDR sync hardware error, status=0x%08x\n", status);
+          ok = false;
+          break;
+        }
+        if (status & HOST_IO_DDR_SYNC_DONE) {
+          hw_done = true;
+          break;
+        }
+        usleep(1000);
+      }
+      if (!hw_done) {
+        fprintf(stderr, "[fpga-host] XDMA DDR sync timed out, status=0x%08x\n", status);
+        ok = false;
+      }
+    }
+
+    if (ok && compare_with_image && mem_offset + done_bytes < original_img_size) {
+      uint64_t compare_bytes = original_img_size - (mem_offset + done_bytes);
+      if (compare_bytes > chunk_bytes) {
+        compare_bytes = chunk_bytes;
+      }
+      compared_bytes += compare_bytes;
+      const uint8_t *expected = sim_base + mem_offset + done_bytes;
+      const uint8_t *actual = reinterpret_cast<const uint8_t *>(buffer);
+      for (uint64_t i = 0; i < compare_bytes; i++) {
+        if (expected[i] != actual[i]) {
+          if (mismatch_count == 0) {
+            first_mismatch_offset = mem_offset + done_bytes + i;
+          }
+          mismatch_count++;
+        }
+      }
+      if (strict_compare && mismatch_count != 0) {
+        ok = false;
+      }
+    }
+
+    if (ok) {
+      memcpy(sim_base + mem_offset + done_bytes, buffer, static_cast<size_t>(chunk_bytes));
+    }
+
+    free(buffer);
+    if (!ok) {
+      break;
+    }
+    done_bytes += chunk_bytes;
   }
   const auto sync_end = std::chrono::steady_clock::now();
 
+  if (mismatch_count != 0) {
+    fprintf(stderr,
+            "[fpga-host] XDMA DDR sync differs from init_ram image over 0x%" PRIx64
+            " compared bytes: %" PRIu64 " mismatches, first paddr=0x%" PRIx64 "\n",
+            compared_bytes, mismatch_count, PMEM_BASE + first_mismatch_offset);
+    if (strict_compare) {
+      fprintf(stderr, "[fpga-host] strict compare is enabled; aborting DDR sync\n");
+    }
+  }
+
   if (ok) {
-    double c2h_seconds = std::chrono::duration<double>(c2h_end - c2h_begin).count();
+    simMemory->extend_img_size(mem_offset + n_bytes);
     double total_seconds = std::chrono::duration<double>(sync_end - sync_begin).count();
-    double aligned_mib = static_cast<double>(aligned_bytes) / (1024.0 * 1024.0);
+    double aligned_mib = static_cast<double>(total_aligned_bytes) / (1024.0 * 1024.0);
     double c2h_mib_s = c2h_seconds > 0.0 ? aligned_mib / c2h_seconds : 0.0;
     double total_mib_s = total_seconds > 0.0 ? aligned_mib / total_seconds : 0.0;
-    printf("[fpga-host] XDMA DDR sync C2H read: 0x%" PRIx64 " aligned bytes in %.6f s, %.3f MiB/s\n", aligned_bytes,
-           c2h_seconds, c2h_mib_s);
-    printf("[fpga-host] XDMA DDR sync total hardware phase: %.6f s, %.3f MiB/s\n", total_seconds, total_mib_s);
-  }
-
-  if (ok && compare_with_image) {
-    const uint8_t *expected = reinterpret_cast<const uint8_t *>(simMemory->as_ptr());
-    const uint8_t *actual = reinterpret_cast<const uint8_t *>(buffer);
-    uint64_t mismatch_count = 0;
-    uint64_t first_mismatch = 0;
-    for (uint64_t i = 0; i < n_bytes; i++) {
-      if (expected[i] != actual[i]) {
-        if (mismatch_count == 0) {
-          first_mismatch = i;
-        }
-        mismatch_count++;
-      }
-    }
-    if (mismatch_count != 0) {
-      fprintf(stderr,
-              "[fpga-host] XDMA DDR sync differs from init_ram image: "
-              "%" PRIu64 " mismatches, first offset=0x%" PRIx64 "\n",
-              mismatch_count, first_mismatch);
-      if (strict_compare) {
-        ok = false;
-      }
-    } else {
-      printf("[fpga-host] XDMA DDR sync matches init_ram image for 0x%" PRIx64 " bytes\n", n_bytes);
-    }
-  }
-
-  if (ok) {
-    memcpy(simMemory->as_ptr(), buffer, static_cast<size_t>(n_bytes));
-    simMemory->extend_img_size(n_bytes);
-    printf("[fpga-host] copied 0x%" PRIx64 " bytes from XDMA DDR sync buffer into simMemory\n", n_bytes);
+    printf("[fpga-host] XDMA DDR sync: [0x%" PRIx64 ", +0x%" PRIx64
+           "] -> simMemory, 0x%" PRIx64 " aligned bytes, C2H %.3f MiB/s, total %.3f MiB/s\n",
+           paddr, n_bytes, total_aligned_bytes, c2h_mib_s, total_mib_s);
   }
 
   bar_write32(HOST_IO_DDR_SYNC_CTRL, HOST_IO_DDR_SYNC_CLEAR);
-  free(buffer);
   return ok;
 #endif // FPGA_SIM
 }
