@@ -34,5 +34,5 @@ void GsimSim::waveform_init(uint64_t cycles, const char *filename) {
 }
 
 void GsimSim::waveform_tick() {
-  // GSIM emits waveform changes from SSimTop::step(), so no extra tick hook is needed.
+  dut->emitAllSignalValues();
 }
