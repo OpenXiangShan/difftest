@@ -32,7 +32,8 @@ trait DifftestWithCoreid {
 }
 
 trait DifftestWithIndex {
-  val index = UInt(8.W)
+  def idxWidth = 8
+  val index = UInt(idxWidth.W)
 }
 
 trait DifftestWithStamp {
@@ -177,6 +178,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   val supportsDelta: Boolean = false
   def isDeltaElem: Boolean = this.isInstanceOf[DiffDeltaElem]
   def deltaElemWidth: Int = dataElements.map(_._2).max
+  def deltaIdxWidth: Int = math.max(8, log2Ceil(dataElements.map(_._3.length).sum))
 
   // Byte align all elements
   def getByteAlignElems(isTrace: Boolean): Seq[(String, Data)] = {
@@ -226,6 +228,7 @@ private[difftest] class DiffDeltaElem(gen: DifftestBundle)
   with DifftestBundle
   with DifftestWithIndex {
   def srcGenType: DifftestBundle = gen
+  override def idxWidth = gen.deltaIdxWidth
   override val desiredCppName: String = gen.desiredCppName + "_elem"
   override def desiredModuleName: String = gen.desiredModuleName + "Elem"
 }
