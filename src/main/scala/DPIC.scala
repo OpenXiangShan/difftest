@@ -234,7 +234,8 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     elem_names.zipWithIndex.foreach { case (name, idx) =>
       if (Seq("coreid", "index", "address").contains(name)) {
         val offset = elem_bytes.take(idx).sum
-        unpack += s"$name = data[$offset];"
+        val typeStr = s"uint${elem_bytes(idx) * 8}_t"
+        unpack += s"$name = *(($typeStr*)(data + $offset));"
       }
     }
     unpack += getPacketDecl(gen, "", config)
