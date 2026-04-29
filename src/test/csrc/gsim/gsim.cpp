@@ -20,3 +20,19 @@ GsimSim::GsimSim() : dut(new SSimTop) {}
 GsimSim::~GsimSim() {
   delete dut;
 }
+
+void GsimSim::waveform_init(uint64_t cycles) {
+  (void)cycles;
+  dut->setWaveformPath(create_noop_filename(".fst"));
+  dut->enableWaveform();
+}
+
+void GsimSim::waveform_init(uint64_t cycles, const char *filename) {
+  (void)cycles;
+  dut->setWaveformPath(filename);
+  dut->enableWaveform();
+}
+
+void GsimSim::waveform_tick() {
+  // GSIM emits waveform changes from SSimTop::step(), so no extra tick hook is needed.
+}
