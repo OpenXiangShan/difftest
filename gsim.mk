@@ -25,8 +25,9 @@ GSIM_EMU_TARGET = $(abspath $(GSIM_EMU_BUILD_DIR)/emu)
 ##############################################
 
 GSIM_GEN_CSRC_DIR = $(GSIM_EMU_BUILD_DIR)/model
-GSIM_RUNTIME_CSRC = $(GSIM_GEN_CSRC_DIR)/gsim_fst_impl.cpp
-GSIM_MODEL_CXXFILES = $(filter-out $(GSIM_RUNTIME_CSRC),$(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null))
+GSIM_GEN_RUNTIME_CSRC = $(GSIM_GEN_CSRC_DIR)/gsim_fst_impl.cpp
+GSIM_RUNTIME_CSRC = $(GSIM_EMU_BUILD_DIR)/support/gsim_fst_impl.cpp
+GSIM_MODEL_CXXFILES = $(filter-out $(GSIM_GEN_RUNTIME_CSRC),$(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null))
 GSIM_FLAGS = --supernode-max-size=15 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --sep-aggr=__DOT__
 
 ifneq (,$(filter $(EMU_TRACE),vcd VCD))
@@ -41,7 +42,15 @@ $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir
 	$(GSIM_BIN) $(GSIM_FLAGS) --dir $(@D) $< | tee $(GSIM_EMU_BUILD_DIR)/gsim-gen-cpp.log
 
 $(GSIM_RUNTIME_CSRC): $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
-	@:
+	@mkdir -p $(@D)
+	@if [ -f "$(GSIM_GEN_RUNTIME_CSRC)" ]; then \
+		cp "$(GSIM_GEN_RUNTIME_CSRC)" "$@"; \
+	elif [ -f "$(GSIM_GEN_CSRC_DIR)/gsimFst.h" ]; then \
+		printf '#define GSIM_FST_IMPL 1\n#include "gsimFst.h"\n' > "$@"; \
+	else \
+		echo "[gsim] error: missing $(GSIM_GEN_RUNTIME_CSRC) and $(GSIM_GEN_CSRC_DIR)/gsimFst.h; please use a newer gsim release" >&2; \
+		exit 1; \
+	fi
 
 gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 
@@ -55,7 +64,7 @@ GSIM_CXXFILES = $(EMU_CXXFILES) $(GSIM_RUNTIME_CSRC) $(shell find $(GSIM_OTHER_C
 GSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GSIM_CXXFLAGS += -I$(GSIM_OTHER_CSRC_DIR) -I$(GSIM_GEN_CSRC_DIR)/ -DGSIM
 GSIM_CXXFLAGS += $(EMU_OPTIMIZE) -fbracket-depth=2048 -Wno-parentheses-equality $(PGO_CFLAGS)
-GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
+GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl -lz $(PGO_LDFLAGS)
 
 # $(1): object file
 # $(2): source file
