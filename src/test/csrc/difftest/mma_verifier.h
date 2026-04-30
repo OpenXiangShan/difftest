@@ -23,17 +23,18 @@
 #include <condition_variable>
 #include <atomic>
 #include "refproxy.h"
+#include "mma_backend/mma_backend.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
 // MMA verification buffer structure
-typedef struct {
+struct MmaVerificationBuffer {
   DifftestAmuCtrlEvent amu_event;  // AMU control event for this MMA instruction
   uint8_t *src1;                   // Pointer to source matrix 1 data
   uint8_t *src2;                   // Pointer to source matrix 2 data
   uint8_t *src3;                   // Pointer to source matrix 3 data (accumulator)
   uint8_t *dut_result;             // Pointer to DUT result data
-} MmaVerificationBuffer;
+};
 
 // Calculate element size based on typed field
 static inline size_t get_element_size(uint8_t typed) {
@@ -114,23 +115,12 @@ private:
   std::atomic<bool> mma_has_error{false};
   // Buffer of the first failed MMA instruction (retained for error reporting)
   std::atomic<MmaVerificationBuffer*> mma_error_buffer{nullptr};
+
+  // MMA verification backend (CPU by default)
+  IMmaBackend *backend = nullptr;
   
   // Thread function
   void mma_verification_thread_func();
-  
-  // Template function for integer matrix multiplication
-  // src1_t: int8_t for signed, uint8_t for unsigned
-  // src2_t: int8_t for signed, uint8_t for unsigned
-  template<class src1_t, class src2_t>
-  bool mmacc_template(MmaVerificationBuffer *buffer);
-  
-  // Template function for floating-point matrix multiplication
-  // src_exp_bits: exponent bit width of source operands (src1 and src2 have the same format)
-  // src_mantissa_bits: mantissa bit width of source operands
-  // result_exp_bits: exponent bit width of result (accumulator)
-  // result_mantissa_bits: mantissa bit width of result (accumulator)
-  template<int src_exp_bits, int src_mantissa_bits, int result_exp_bits, int result_mantissa_bits>
-  bool mfmacc_template(MmaVerificationBuffer *buffer);
 };
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
