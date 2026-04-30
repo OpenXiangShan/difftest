@@ -33,6 +33,7 @@ static bool warn_waveform_unsupported() {
 
 void GsimSim::waveform_init(uint64_t cycles) {
   (void)cycles;
+#if defined(GSIM_HAS_FST_WAVE)
   if (!SSimTop::kTraceFstCompiled) {
     waveform_active = warn_waveform_unsupported();
     return;
@@ -40,10 +41,15 @@ void GsimSim::waveform_init(uint64_t cycles) {
   dut->setWaveformPath(create_noop_filename(".fst"));
   dut->enableWaveform();
   waveform_active = true;
+#else
+  waveform_active = warn_waveform_unsupported();
+#endif
 }
 
 void GsimSim::waveform_init(uint64_t cycles, const char *filename) {
   (void)cycles;
+  (void)filename;
+#if defined(GSIM_HAS_FST_WAVE)
   if (!SSimTop::kTraceFstCompiled) {
     waveform_active = warn_waveform_unsupported();
     return;
@@ -51,9 +57,14 @@ void GsimSim::waveform_init(uint64_t cycles, const char *filename) {
   dut->setWaveformPath(filename);
   dut->enableWaveform();
   waveform_active = true;
+#else
+  waveform_active = warn_waveform_unsupported();
+#endif
 }
 
 void GsimSim::waveform_tick() {
+#if defined(GSIM_HAS_FST_WAVE)
   if (!waveform_active) return;
   dut->emitAllSignalValues();
+#endif
 }
