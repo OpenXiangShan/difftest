@@ -95,6 +95,20 @@ else
 SIM_CXXFILES += $(DIFFTEST_CXXFILES)
 SIM_CXXFLAGS += -I$(DIFFTEST_CSRC_DIR)
 SIM_VFLAGS   += +define+DIFFTEST
+
+# Optional CUDA toolchain detection for MMA backend.
+# NOTE: strict-mode behavior is enforced in C++: CONFIG_DIFFTEST_MMA_CUDA
+# without CONFIG_DIFFTEST_HAS_CUDA_TOOLCHAIN will trigger compile-time error.
+CUDA_HOME ?= /usr/local/cuda
+CUDA_INCLUDE_DIR ?= $(CUDA_HOME)/include
+CUDA_LIB_DIR ?= $(CUDA_HOME)/lib64
+ifneq ($(wildcard $(CUDA_INCLUDE_DIR)/cuda_runtime_api.h),)
+ifneq ($(wildcard $(CUDA_LIB_DIR)/libcudart.so),)
+SIM_CXXFLAGS += -DCONFIG_DIFFTEST_HAS_CUDA_TOOLCHAIN -I$(CUDA_INCLUDE_DIR)
+SIM_LDFLAGS  += -L$(CUDA_LIB_DIR) -lcudart
+endif
+endif
+
 ifeq ($(DIFFTEST_PERFCNT), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
 endif
