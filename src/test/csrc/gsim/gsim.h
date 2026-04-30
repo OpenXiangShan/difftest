@@ -21,6 +21,7 @@
 class GsimSim final : public Simulator {
 private:
   SSimTop *dut;
+  bool waveform_active = false;
 
 protected:
   inline unsigned get_uart_out_valid() override {
