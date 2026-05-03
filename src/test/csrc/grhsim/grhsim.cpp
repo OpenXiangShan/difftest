@@ -22,6 +22,10 @@
 #include <cstdlib>
 #include <stdexcept>
 
+#ifndef WOLVRIX_GRHSIM_PERF
+#define WOLVRIX_GRHSIM_PERF 0
+#endif
+
 namespace {
 
 bool env_flag(const char *name) {
@@ -84,19 +88,22 @@ void GrhSIMDiffTestSim::step() {
 }
 
 SimulatorRuntimeStats GrhSIMDiffTestSim::runtime_stats() const {
-  const auto counters = dut->perf_counters();
-  return {
+  SimulatorRuntimeStats stats{
       .modelStepCount = model_step_count_,
       .modelStepTimeUs = model_step_time_us_,
-      .evalCount = counters.evalCount,
-      .round1Count = counters.round1Count,
-      .round2Count = counters.round2Count,
-      .totalRoundCount = counters.totalRoundCount,
-      .computeBatchExecCount = counters.computeBatchExecCount,
-      .commitBatchExecCount = counters.commitBatchExecCount,
-      .touchedStateShadowCount = counters.touchedStateShadowCount,
-      .touchedWriteCount = counters.touchedWriteCount,
   };
+#if WOLVRIX_GRHSIM_PERF
+  const auto counters = dut->perf_counters();
+  stats.evalCount = counters.evalCount;
+  stats.round1Count = counters.round1Count;
+  stats.round2Count = counters.round2Count;
+  stats.totalRoundCount = counters.totalRoundCount;
+  stats.computeBatchExecCount = counters.computeBatchExecCount;
+  stats.commitBatchExecCount = counters.commitBatchExecCount;
+  stats.touchedStateShadowCount = counters.touchedStateShadowCount;
+  stats.touchedWriteCount = counters.touchedWriteCount;
+#endif
+  return stats;
 }
 
 #endif // GRHSIM
