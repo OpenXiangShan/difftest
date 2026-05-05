@@ -19,6 +19,8 @@ import "DPI-C" function byte pte_helper (
   input  longint satp,
   input  longint vsatp,
   input  longint hgatp,
+  input  byte    mPBMTE,
+  input  byte    hPBMTE,
   input  longint vpn,
   input  byte    s2xlate,
   output longint pte,
@@ -35,6 +37,8 @@ module PTEHelper(
   input      [63:0] satp,
   input      [63:0] vsatp,
   input      [63:0] hgatp,
+  input      [ 7:0] mPBMTE,
+  input      [ 7:0] hPBMTE,
   input      [63:0] vpn,
   input      [ 7:0] s2xlate,
   output     [63:0] pte,
@@ -55,7 +59,7 @@ module PTEHelper(
 `ifndef TB_NO_DPIC
   always @(*) begin
     if (enable) begin
-      pf_comb = pte_helper(satp, vsatp, hgatp, vpn, s2xlate,
+      pf_comb = pte_helper(satp, vsatp, hgatp, mPBMTE, hPBMTE, vpn, s2xlate,
                            pte_comb, level_comb,
                            s1_pte_comb, s2_pte_comb, s1_level_comb);
     end else begin

@@ -119,6 +119,8 @@ typedef struct {
  * @param satp    Host SATP register (for noS2xlate mode)
  * @param vsatp   Guest VSATP register (for VS-stage translation)
  * @param hgatp   Hypervisor HGATP register (for G-stage translation)
+ * @param mPBMTE  MENVCFG.PBMTE state for G-stage translation checks
+ * @param hPBMTE  HENVCFG.PBMTE state for VS-stage translation checks
  * @param vpn     Virtual page number to translate
  * @param s2xlate Translation mode (noS2xlate/onlyStage1/onlyStage2/allStage)
  * @param pte     Output: final PTE value
@@ -129,6 +131,8 @@ extern "C" uint8_t pte_helper(
     uint64_t satp,
     uint64_t vsatp,
     uint64_t hgatp,
+  uint8_t  mPBMTE,
+  uint8_t  hPBMTE,
     uint64_t vpn,
     uint8_t  s2xlate,
     uint64_t *pte,

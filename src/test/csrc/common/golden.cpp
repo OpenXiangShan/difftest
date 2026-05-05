@@ -37,6 +37,18 @@ static inline uint64_t read_pte(uint64_t pte_addr) {
   return pte_val;
 }
 
+static inline bool pte_is_leaf(const PTE &pte) {
+  return pte.r || pte.x || pte.w;
+}
+
+static inline bool pte_has_pbmt_fault(const PTE &pte, bool pbmte) {
+  return pte.pbmt == 3 || (!pbmte && pte.pbmt != 0);
+}
+
+static inline bool pte_has_stage_fault(const PTE &pte, uint8_t level, bool pbmte) {
+  return !pte.v || (!pte.r && pte.w) || (!pte_is_leaf(pte) && level == 0) || pte_has_pbmt_fault(pte, pbmte);
+}
+
 /**
  * G-Stage page table walk (GPA -> HPA)
  * Implementation aligned with do_s2xlate() in tlb.cpp
@@ -92,6 +104,7 @@ static r_s2xlate do_g_stage(Hgatp *hgatp, uint64_t gpaddr) {
  * - allStage:   Full two-stage (GVA -> GPA -> HPA)
  */
 uint8_t pte_helper(uint64_t satp, uint64_t vsatp, uint64_t hgatp,
+                   uint8_t mPBMTE, uint8_t hPBMTE,
                    uint64_t vpn, uint8_t s2xlate,
                    uint64_t *pte, uint8_t *level,
                    uint64_t *s1_pte, uint64_t *s2_pte, uint8_t *s1_level) {
@@ -125,8 +138,8 @@ uint8_t pte_helper(uint64_t satp, uint64_t vsatp, uint64_t hgatp,
     result_pte = g_result.pte;
     result_level = g_result.level;
 
-    // Check for G-stage page fault: invalid or illegal permission (w && !r)
-    if (!result_pte.v || (!result_pte.r && result_pte.w)) {
+    // Check for G-stage page fault, including PBMTE-gated PBMT legality.
+    if (pte_has_stage_fault(result_pte, result_level, mPBMTE)) {
       *pte = result_pte.val;
       *level = result_level;
       *s1_pte = 0;
@@ -143,8 +156,8 @@ uint8_t pte_helper(uint64_t satp, uint64_t vsatp, uint64_t hgatp,
         // Translate PTE address through G-stage
         g_result = do_g_stage(hgatp_p, paddr);
 
-        // Check for G-stage page fault during PTE access: invalid or illegal permission
-        if (!g_result.pte.v || (!g_result.pte.r && g_result.pte.w)) {
+        // Check for G-stage page fault during PTE access, including PBMTE-gated PBMT legality.
+        if (pte_has_stage_fault(g_result.pte, g_result.level, mPBMTE)) {
           *pte = g_result.pte.val;
           *level = g_result.level;
           *s1_pte = 0;
@@ -171,8 +184,8 @@ uint8_t pte_helper(uint64_t satp, uint64_t vsatp, uint64_t hgatp,
       }
     }
 
-    // Check for VS-stage page fault: invalid or illegal permission (w && !r)
-    if (!result_pte.v || (!result_pte.r && result_pte.w)) {
+    // Check for VS-stage page fault, including PBMTE-gated PBMT legality.
+    if (pte_has_stage_fault(result_pte, result_level, hPBMTE)) {
       *pte = result_pte.val;
       *level = result_level;
       *s1_pte = 0;
@@ -201,8 +214,8 @@ uint8_t pte_helper(uint64_t satp, uint64_t vsatp, uint64_t hgatp,
     if (hasAllStage && result_pte.v) {
       g_result = do_g_stage(hgatp_p, pg_base);
 
-      // Check for G-stage page fault: invalid or illegal permission
-      if (!g_result.pte.v || (!g_result.pte.r && g_result.pte.w)) {
+      // Check for final G-stage page fault, including PBMTE-gated PBMT legality.
+      if (pte_has_stage_fault(g_result.pte, g_result.level, mPBMTE)) {
         *pte = g_result.pte.val;
         *level = g_result.level;
         *s2_pte = 0;
