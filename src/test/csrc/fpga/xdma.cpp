@@ -74,6 +74,9 @@ FpgaXdma::FpgaXdma()
     std::cout << "XDMA link " << c2h_device << std::endl;
 #endif // FPGA_SIM
   }
+#ifdef FPGA_SIM
+  xdma_sim_axilite_open(true);
+#endif // FPGA_SIM
 #ifdef CONFIG_USE_XDMA_H2C
   xdma_h2c_fd = open(XDMA_H2C_DEVICE, O_WRONLY);
   if (xdma_h2c_fd == -1) {
@@ -85,8 +88,32 @@ FpgaXdma::FpgaXdma()
 #endif
 }
 
+FpgaXdma::~FpgaXdma() {
+#ifdef FPGA_SIM
+  for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
+    xdma_sim_close(i);
+  }
+  xdma_sim_axilite_close(true);
+#endif // FPGA_SIM
+}
+
 // write xdma_bypass memory or xdma_user
 void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
+#ifdef FPGA_SIM
+  if (is_bypass) {
+    // FPGA_SIM already passes the workload to simv through +workload. Keep the
+    // host API shape but avoid a duplicate per-byte DPI DDR load path.
+    (void)workload;
+    printf("[fpga-host] FPGA_SIM uses simv +workload for DDR init; skip XDMA bypass load\n");
+    return;
+  }
+  if (xdma_sim_axilite_write(static_cast<uint32_t>(addr), static_cast<uint32_t>(value), 0xf) != 0) {
+    fprintf(stderr, "[fpga-host] FPGA_SIM AXI-Lite command queue is full, addr=0x%lx value=0x%lx\n", addr, value);
+    exit(-1);
+  }
+  return;
+#endif // FPGA_SIM
+
   uint64_t pg_size = sysconf(_SC_PAGE_SIZE);
   uint64_t size = !is_bypass ? 0x1000 : 0x100000;
   uint64_t aligned_size = (size + 0xffful) & ~0xffful;
@@ -198,7 +225,8 @@ void FpgaXdma::write_difftest_thread() {
   }
 }
 
-#else
+#else // !USE_THREAD_MEMPOOL
+
 void *posix_memalignd_malloc(size_t size) {
   void *ptr = nullptr;
   int ret = posix_memalign(&ptr, 4096, size);

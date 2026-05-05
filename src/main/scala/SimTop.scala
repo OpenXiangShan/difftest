@@ -18,9 +18,10 @@ package difftest
 
 import chisel3._
 import chisel3.experimental.prefix
+import chisel3.experimental.dataview._
 import chisel3.reflect.DataMirror
-import difftest.common.DifftestWiring
-import difftest.fpga.HostEndpoint
+import difftest.common.{AXI4LiteBundle, DifftestWiring, VerilogAXI4LiteRecord}
+import difftest.fpga.{HostEndpoint, XDMAConfigBar, XDMAHostCtrlIO}
 
 class DifftestTopIO extends Bundle {
   val exit = Output(UInt(64.W))
@@ -94,10 +95,11 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
   override def desiredName: String = modPrefix.getOrElse("") + super.desiredName
   val cpu = Module(cpuGen)
   cpu.dutClock := clock
-  cpu.dutReset := reset.asTypeOf(cpu.dutReset)
 
   val cpuName = cpu.cpuName.getOrElse(cpu.getClass.getName.split("\\.").last)
   val gateway = DifftestModule.collect(cpuName)
+  val fpgaHostReset = WireInit(false.B)
+  val fpgaDiffEnable = WireInit(true.B)
 
   // IO: difftest_*
   val difftest = IO(new DifftestTopIO)
@@ -120,22 +122,41 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
 
     // IO: difftest_fpga_*
     gateway.fpgaIO.foreach { fpgaIO =>
-      val host = withClock(ref_clock) { Module(new HostEndpoint(fpgaIO.bits.getWidth)) }
-      host.io.difftest <> fpgaIO
+      val ref_reset = IO(Input(Bool()))
+      val cfg = withClockAndReset(ref_clock.get, ref_reset) {
+        Module(new XDMAConfigBar)
+      }
+      val host = withClock(ref_clock.get) {
+        Module(new HostEndpoint(fpgaIO.bits.getWidth))
+      }
+
+      host.io.difftest.valid := fpgaIO.valid && cfg.io.ctrl.diffEnable
+      host.io.difftest.bits := fpgaIO.bits
+      fpgaIO.ready := Mux(cfg.io.ctrl.diffEnable, host.io.difftest.ready, true.B)
       val pcie_clock = IO(Input(Clock()))
       host.io.pcie_clock := pcie_clock
 
       val toHost = host.io.to_host_axis
       val to_host_axis = IO(chiselTypeOf(toHost))
       to_host_axis <> toHost
+
+      val cfg_axilite = IO(Flipped(new VerilogAXI4LiteRecord(32, 32)))
+      cfg.io.axilite <> cfg_axilite.viewAs[AXI4LiteBundle]
+
+      val hostCtrl = IO(Output(new XDMAHostCtrlIO))
+      hostCtrl := cfg.io.ctrl
+
+      fpgaHostReset := hostCtrl.reset
+      fpgaDiffEnable := hostCtrl.diffEnable
     }
 
     gateway.clockEnable.foreach { clockEnable =>
       val clock_enable = IO(Output(Bool()))
-      clock_enable := clockEnable
+      clock_enable := clockEnable || fpgaHostReset || !fpgaDiffEnable
     }
   }
 
+  cpu.dutReset := (reset.asBool || fpgaHostReset).asTypeOf(cpu.dutReset)
   cpu.connectTopIOs(difftest)
   cpu.dutIOs.foreach { case (name, gen) =>
     val io = IO(chiselTypeOf(gen)).suggestName(name)
