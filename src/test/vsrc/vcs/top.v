@@ -151,6 +151,7 @@ wire sim_clock;
   wire        host_ctrl_reset;
   wire        host_ctrl_diff_enable;
   wire        host_ctrl_ila_trigger;
+  wire        host_ctrl_enable_squash;
 
   assign difftest_pcie_clock = clock;
 xdma_clock xclk(
@@ -208,6 +209,7 @@ SimTop sim(
   .difftest_hostCtrl_reset(host_ctrl_reset),
   .difftest_hostCtrl_diffEnable(host_ctrl_diff_enable),
   .difftest_hostCtrl_ilaTrigger(host_ctrl_ila_trigger),
+  .difftest_hostCtrl_enableSquash(host_ctrl_enable_squash),
   .difftest_to_host_axis_valid(c2h_axi_tvalid),
   .difftest_to_host_axis_ready(c2h_axi_tready),
   .difftest_to_host_axis_bits_data(c2h_axi_tdata),

@@ -28,6 +28,7 @@ object Squash {
   def apply(
     bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]],
     config: GatewayConfig,
+    fpgaEnable: Option[Bool] = None,
   ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
     val squashInBits = Stamp(bundles.bits)
     val squashIn = Wire(Decoupled(chiselTypeOf(squashInBits)))
@@ -35,6 +36,7 @@ object Squash {
     squashIn.valid := bundles.valid
     bundles.ready := squashIn.ready
     val module = Module(new SquashEndpoint(chiselTypeOf(squashInBits).toSeq, config))
+    module.fpgaEnable.foreach(_ := fpgaEnable.getOrElse(true.B))
     module.in <> squashIn
     module.out
   }
@@ -110,6 +112,7 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
 
 class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
   val in = IO(Flipped(Decoupled(MixedVec(bundles))))
+  val fpgaEnable = Option.when(config.isFPGA)(IO(Input(Bool())))
   val numCores = in.bits.count(_.bits.isUniqueIdentifier)
 
   val pipelined = Wire(Decoupled(MixedVec(bundles)))
@@ -125,7 +128,8 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .foldLeft(false.B)(_ || _)
   val timeout_count = RegInit(0.U(32.W))
   val timeout = timeout_count === 200000.U
-  val global_tick = !control.enable || in_replay || timeout
+  val squash_enable = fpgaEnable.getOrElse(control.enable)
+  val global_tick = !squash_enable || in_replay || timeout
 
   val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredCppName)
   // Tick and Submit the pending non-squashable events immediately.

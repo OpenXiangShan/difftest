@@ -107,6 +107,7 @@ void fpga_init() {
   xdma_device->fpga_io(HOST_IO_RESET, true);
   xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
+  xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, true);
 #ifndef FPGA_SIM
   usleep(1000);
 #endif // FPGA_SIM

@@ -148,6 +148,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
 
       fpgaHostReset := hostCtrl.reset
       fpgaDiffEnable := hostCtrl.diffEnable
+      gateway.fpgaSquashEnable.foreach(_ := hostCtrl.enableSquash)
     }
 
     gateway.clockEnable.foreach { clockEnable =>

@@ -26,16 +26,18 @@ import difftest.common.AXI4LiteBundle
   *   - 0x00: HOST_IO_RESET
   *   - 0x04: HOST_IO_DIFF_ENABLE
   *   - 0x08: HOST_IO_ILA_TRIGGER
-  *   - 0x0c..0x1c: reserved, read as zero
+  *   - 0x0c: HOST_IO_SQUASH_ENABLE
+  *   - 0x10..0x1c: reserved, read as zero
   */
 class XDMAHostCtrlIO extends Bundle {
   val reset = Bool()
   val diffEnable = Bool()
   val ilaTrigger = Bool()
+  val enableSquash = Bool()
 }
 
 private object XDMAConfigReg extends Enumeration {
-  val HostReset, DiffEnable, IlaTrigger = Value
+  val HostReset, DiffEnable, IlaTrigger, EnableSquash = Value
 }
 
 class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
@@ -53,6 +55,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   io.ctrl.reset := regfile(XDMAConfigReg.HostReset.id)(0)
   io.ctrl.diffEnable := regfile(XDMAConfigReg.DiffEnable.id)(0)
   io.ctrl.ilaTrigger := regfile(XDMAConfigReg.IlaTrigger.id)(0)
+  io.ctrl.enableSquash := regfile(XDMAConfigReg.EnableSquash.id)(0)
 
   private def mergeByByte(oldData: UInt, newData: UInt, strb: UInt): UInt = {
     VecInit((0 until dataWidth / 8).map { i =>
