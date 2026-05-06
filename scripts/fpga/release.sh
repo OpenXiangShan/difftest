@@ -70,6 +70,16 @@ if [ -n "$RELEASE_SUFFIX" ]; then
 fi
 RELEASE_HOME="$CPU_DIR/$RELEASE_TAG"
 
+copy_with_tar() {
+    local src="$1"
+    local dst="$2"
+    shift 2
+
+    echo "rsync not found; using tar fallback."
+    mkdir -p "$dst"
+    tar -C "$src" "$@" -cf - . | tar -C "$dst" -xf -
+}
+
 # ----------------------------------------------------------
 # 3. Copy RTL and Source Code
 # ----------------------------------------------------------
@@ -77,19 +87,32 @@ RELEASE_HOME="$CPU_DIR/$RELEASE_TAG"
 mkdir -p ${RELEASE_HOME}
 
 echo "Copying $CPU_DIR/build/ into $RELEASE_HOME/build ..."
-rsync -av \
-    --exclude='rtl/*.fir' \
-    --exclude='*-compile/' \
-    --exclude='emu/' \
-    --exclude='simv*' \
-    "$CPU_DIR/build/" "$RELEASE_HOME/build/"
+if command -v rsync >/dev/null 2>&1; then
+    rsync -av \
+        --exclude='rtl/*.fir' \
+        --exclude='*-compile/' \
+        --exclude='emu/' \
+        --exclude='simv*' \
+        "$CPU_DIR/build/" "$RELEASE_HOME/build/"
+else
+    copy_with_tar "$CPU_DIR/build" "$RELEASE_HOME/build" \
+        --exclude='rtl/*.fir' \
+        --exclude='*-compile' \
+        --exclude='emu' \
+        --exclude='simv*'
+fi
 echo "CPU Build copied."
 
 echo "Copying $DIFF_HOME into $RELEASE_HOME ..."
-rsync -av \
-    --exclude='build/***' \
-    --exclude='build/' \
-    "$DIFF_HOME/" "$RELEASE_HOME/difftest/"
+if command -v rsync >/dev/null 2>&1; then
+    rsync -av \
+        --exclude='build/***' \
+        --exclude='build/' \
+        "$DIFF_HOME/" "$RELEASE_HOME/difftest/"
+else
+    copy_with_tar "$DIFF_HOME" "$RELEASE_HOME/difftest" \
+        --exclude='build'
+fi
 
 RELEASE_RTL="$RELEASE_HOME/build/rtl"
 echo "Copying $DIFF_HOME/src/test/vsrc/common/DifftestClockGate.v into $RELEASE_RTL ..."
