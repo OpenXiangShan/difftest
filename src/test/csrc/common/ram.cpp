@@ -32,8 +32,31 @@ CoDRAMsim3 *dram = NULL;
 
 SimMemory *simMemory = nullptr;
 
-void init_ram(const char *image, uint64_t ram_size) {
-  simMemory = new MmapMemory(image, ram_size);
+void init_ram(const char *image, uint64_t ram_size, bool random_mem, uint32_t seed) {
+  simMemory = new MmapMemory(image, ram_size, random_mem, seed);
+}
+
+static uint64_t random_init_memory(void *ram, uint64_t memory_size, uint32_t seed) {
+  uint64_t state = seed;
+
+  auto next_word = [&state]() {
+    uint64_t bit = ((state >> 0) ^ (state >> 1) ^ (state >> 3) ^ (state >> 4)) & 1;
+    state = (state >> 1) | (bit << 63);
+    if (state == 0)
+      state = 1; // avoid stuck in zero state
+    return state;
+  };
+
+  uint64_t *dst = reinterpret_cast<uint64_t *>(ram);
+  uint64_t words = memory_size / sizeof(uint64_t);
+  uint64_t first_word = 0;
+  for (uint64_t i = 0; i < words; i++) {
+    dst[i] = next_word();
+    if (i == 0) {
+      first_word = dst[i];
+    }
+  }
+  return first_word;
 }
 
 #ifdef TLB_UNITTEST
@@ -250,7 +273,7 @@ void SimMemory::display_stats() {
 #endif // FUZZING
 }
 
-MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes) {
+MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed) : SimMemory(n_bytes) {
   // initialize memory using Linux mmap
   ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {
@@ -263,6 +286,17 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes)
     }
   }
   Info("Using simulated %luMB RAM\n", memory_size / (1024 * 1024));
+  if (random_mem) {
+    if (seed == 0) {
+      Info("Skip memory random init for seed = 0\n");
+    } else {
+      uint32_t start = uptime();
+      uint64_t first_word = random_init_memory(ram, memory_size, seed);
+      uint32_t elapsed = uptime() - start;
+      Info("Using memory random init seed = %u, first word = 0x%016" PRIx64 ", elapsed = %ums\n", seed, first_word,
+           elapsed);
+    }
+  }
 
 #ifdef TLB_UNITTEST
   //new add
@@ -350,8 +384,9 @@ void pmem_write(uint64_t waddr, uint64_t wdata) {
   return difftest_ram_write(waddr / sizeof(uint64_t), wdata, -1UL);
 }
 
-MmapMemoryWithFootprints::MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name)
-    : MmapMemory(image, n_bytes) {
+MmapMemoryWithFootprints::MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name,
+                                                   bool random_mem, uint32_t seed)
+    : MmapMemory(image, n_bytes, random_mem, seed) {
   uint64_t n_touched = memory_size / sizeof(uint64_t);
   touched = (uint8_t *)mmap(NULL, n_touched, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   footprints_file.open(footprints_name, std::ios::binary);

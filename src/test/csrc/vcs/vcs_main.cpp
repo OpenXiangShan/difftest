@@ -171,6 +171,15 @@ extern "C" void set_no_diff() {
   args.enable_diff = false;
 }
 
+extern "C" void set_seed(uint64_t seed) {
+  args.seed = seed;
+  Info("Using seed = %d\n", args.seed);
+}
+
+extern "C" void set_random_mem() {
+  args.random_mem = true;
+}
+
 extern "C" void set_simjtag() {
   enable_simjtag = true;
 }
@@ -186,7 +195,7 @@ extern "C" uint8_t simv_init() {
   if (args.ram_size) {
     ram_size = parse_ramsize(args.ram_size);
   }
-  init_ram(args.image, ram_size);
+  init_ram(args.image, ram_size, args.random_mem, args.seed);
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);
 #endif
