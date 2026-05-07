@@ -128,6 +128,7 @@ case class GatewayResult(
   exit: Option[UInt] = None,
   step: Option[UInt] = None,
   fpgaIO: Option[FpgaDiffIO] = None,
+  fpgaSquashEnable: Option[Bool] = None,
   clockEnable: Option[Bool] = None,
 ) {
   def +(that: GatewayResult): GatewayResult = {
@@ -142,6 +143,7 @@ case class GatewayResult(
       exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
       fpgaIO = if (fpgaIO.isDefined) fpgaIO else that.fpgaIO,
+      fpgaSquashEnable = if (fpgaSquashEnable.isDefined) fpgaSquashEnable else that.fpgaSquashEnable,
       clockEnable = if (clockEnable.isDefined) clockEnable else that.clockEnable,
     )
   }
@@ -222,6 +224,7 @@ object Gateway {
         refClock = Option.when(config.hasClockGate)(endpoint.clock),
         step = Some(endpoint.step),
         fpgaIO = endpoint.fpgaIO,
+        fpgaSquashEnable = endpoint.fpgaSquashEnable,
         clockEnable = endpoint.clockEnable,
       )
     } else {
@@ -241,6 +244,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val in_bundle = in.asTypeOf(MixedVec(instanceWithDelay.map(_._1)))
   val decoupledIn = Wire(Decoupled(chiselTypeOf(in_bundle)))
   val clockEnable = Option.when(config.hasClockGate)(IO(Output(Bool())))
+  val fpgaSquashEnable = Option.when(config.isSquash && config.isFPGA)(IO(Input(Bool())))
   // clockEnable should hold with one cycle fire to sample signals
   decoupledIn.valid := !reset.asBool
   clockEnable.foreach { ce =>
@@ -281,7 +285,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val validated = Validate(replayed, config)
 
   val squashed = if (config.isSquash) {
-    Squash(validated, config)
+    Squash(validated, config, fpgaSquashEnable)
   } else {
     validated
   }

@@ -36,6 +36,7 @@
 #define HOST_IO_RESET           0x0
 #define HOST_IO_DIFFTEST_ENABLE 0x4
 #define HOST_IO_ILA_TRIGGER     0x8
+#define HOST_IO_SQUASH_ENABLE   0xc
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
