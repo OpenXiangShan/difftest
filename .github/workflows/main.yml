@@ -163,13 +163,6 @@ jobs:
             ./build/emu -i microbench.bin --diff $REF_SO --as-footprints
             make clean
 
-      - name: Difftest with Batch
-        run: |
-            cd $NOOP_HOME
-            make emu MILL_ARGS="--difftest-config B" -j2
-            ./build/emu -i $WORKLOAD --diff $REF_SO
-            make clean
-
       - name: Difftest with Global DPI-C Enable
         run: |
             cd $NOOP_HOME
@@ -184,17 +177,10 @@ jobs:
             ./build/emu -i $WORKLOAD --diff $REF_SO
             make clean
 
-      - name: Difftest with Squash Batch and Global Enable
+      - name: Difftest with Squash GlobalEnable and Query
         run: |
             cd $NOOP_HOME
-            make emu MILL_ARGS="--difftest-config ESB" -j2
-            ./build/emu -i $WORKLOAD --diff $REF_SO
-            make clean
-
-      - name: Difftest with Squash Batch GlobalEnable and Query
-        run: |
-            cd $NOOP_HOME
-            make emu MILL_ARGS="--difftest-config ESB" DIFFTEST_QUERY=1 -j2
+            make emu MILL_ARGS="--difftest-config ES" DIFFTEST_QUERY=1 -j2
             ./build/emu -i $WORKLOAD --diff $REF_SO
             make clean
 

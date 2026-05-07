@@ -19,7 +19,6 @@ import chisel3._
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
-import difftest.common.DifftestPerf
 import difftest.util.{LookupTree, PipelineConnect}
 
 import scala.collection.mutable.ListBuffer
@@ -28,40 +27,45 @@ import scala.collection.mutable.ListBuffer
 case class BatchParam(config: GatewayConfig, bundles: Seq[DifftestBundle]) {
   val infoWidth = (new BatchInfo).getWidth
   val infoByte = infoWidth / 8 // byteAligned by default
+  val ChunkByteLen = config.batchChunkBytes
+  val ChunkBitLen = ChunkByteLen * 8
+  val BeatChunkSize = config.batchBeatChunks
+  val BeatByteLen = BeatChunkSize * ChunkByteLen
+  val BeatBitLen = BeatByteLen * 8
 
-  // Maximum Byte length decided by transmission function
-  val MaxDataByteLen = config.batchArgByteLen._1
-  val MaxDataBitLen = MaxDataByteLen * 8
-  val MaxInfoByteLen = config.batchArgByteLen._2
-  val MaxInfoBitLen = MaxInfoByteLen * 8
-  val MaxInfoSize = MaxInfoByteLen / infoByte
+  require(BeatChunkSize > 0, s"Batch beat chunk size $BeatChunkSize must be greater than 0")
+  require(isPow2(BeatChunkSize), s"Batch beat chunk size $BeatChunkSize must be a power of 2")
 
-  val StepGroupSize = bundles.groupBy(_.desiredCppName).values.flatMap(_.grouped(8).toSeq).size
-  val StepDataByteLen = bundles.map(_.getByteAlignWidth).map { w => w / 8 }.sum
-  val StepDataBitLen = StepDataByteLen * 8
-  val StepInfoByteLen = (StepGroupSize + 1) * (infoWidth / 8) // Include BatchStep to update buffer index
+  def alignChunkBytes(bytes: Int): Int = ((bytes + ChunkByteLen - 1) / ChunkByteLen) * ChunkByteLen
+
+  val ClusterGroups = bundles.groupBy(_.desiredCppName).values.toSeq
+  val StepGroupSize = ClusterGroups.size
+  val ClusterDataByteLen = ClusterGroups
+    .map(group => alignChunkBytes(group.length * group.head.getByteAlignWidth / 8))
+    .toSeq
+  val StepDataByteLen = ClusterDataByteLen.sum
+  // Include BatchHead and BatchStep.
+  val StepInfoSize = StepGroupSize + 2
+  val StepInfoRawByteLen = StepInfoSize * infoByte
+  val StepInfoByteLen = alignChunkBytes(StepInfoRawByteLen)
   val StepInfoBitLen = StepInfoByteLen * 8
+  val StepInfoChunks = StepInfoByteLen / ChunkByteLen
 
-  // Width of statistic for data/info byte length
-  val StatsDataWidth = log2Ceil(math.max(MaxDataByteLen, StepDataByteLen))
-  val StatsInfoWidth = log2Ceil(math.max(MaxInfoSize, StepGroupSize + 1))
-
-  // Truncate width when shifting to reduce useless gates
-  val TruncDataBitLen = math.min(MaxDataBitLen, StepDataBitLen)
-}
-
-class BatchIO(param: BatchParam) extends Bundle {
-  val data = UInt(param.MaxDataBitLen.W)
-  val info = UInt(param.MaxInfoBitLen.W)
+  // Width of statistic for data chunk length
+  val StepDataChunks = StepDataByteLen / ChunkByteLen
+  val StatsDataWidth = math.max(1, log2Ceil(StepDataChunks + 1))
+  val StatsInfoWidth = math.max(1, log2Ceil(StepInfoSize + 1))
 }
 
 class BatchStats(param: BatchParam) extends Bundle {
-  val data_bytes = UInt(param.StatsDataWidth.W)
-  val info_size = UInt(param.StatsInfoWidth.W)
+  val data_chunks = UInt(param.StatsDataWidth.W)
+  val info_cnt = UInt(param.StatsInfoWidth.W)
+  val cluster_data_chunks = UInt(param.StatsDataWidth.W)
+  val cluster_info_cnt = UInt(param.StatsInfoWidth.W)
 }
 
-class BatchOutput(param: BatchParam, config: GatewayConfig) extends Bundle {
-  val io = new BatchIO(param)
+class BatchIO(val param: BatchParam, config: GatewayConfig) extends Bundle {
+  val payload = UInt(param.BeatBitLen.W)
   val step = UInt(config.stepWidth.W)
 }
 
@@ -70,18 +74,10 @@ class BatchInfo extends Bundle {
   val num = UInt(8.W)
 }
 
-class BatchStepResult(param: BatchParam, config: GatewayConfig) extends Bundle {
-  val data = UInt(param.StepDataBitLen.W)
-  val info = UInt(param.StepInfoBitLen.W)
-  // status of step_data_head split in different loc
-  val status = Vec(param.StepGroupSize, new BatchStats(param))
-  val trace_info = Option.when(config.hasReplay)(new DiffTraceInfo(config))
-}
-
 object Batch {
   private val template = ListBuffer.empty[DifftestBundle]
 
-  def apply(bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]], config: GatewayConfig): DecoupledIO[BatchOutput] = {
+  def apply(bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]], config: GatewayConfig): DecoupledIO[BatchIO] = {
     template ++= chiselTypeOf(bundles.bits).map(_.bits).distinctBy(_.desiredCppName)
     val module = Module(new BatchEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
     module.in <> bundles
@@ -103,16 +99,14 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   val collector = Module(new BatchCollector(bundles, param, config))
   PipelineConnect(in, collector.in, collector.in.fire)
 
-  // Assemble collected data from different cycles
-  val assembler = Module(new BatchAssembler(param, config))
-  assembler.in <> collector.out
-  val out = IO(chiselTypeOf(assembler.out))
-  out <> assembler.out
+  val out = IO(Decoupled(new BatchIO(param, config)))
+  out <> collector.out
 }
 
 // Cluster Data from same group in same cycle
 class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam) extends Module {
   val alignWidth = bundleType.getByteAlignWidth
+  val elemBytes = alignWidth / 8
   val in = IO(Input(Vec(groupSize, Valid(bundleType))))
   val out_data = IO(Output(UInt((groupSize * alignWidth).W)))
   val out_info = IO(Output(UInt(param.infoWidth.W)))
@@ -138,26 +132,41 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   info.num := v_size
   out_info := Mux(v_size =/= 0.U, info.asUInt, 0.U)
 
-  val bytes_map = Seq.tabulate(groupSize + 1) { vi => (vi.U, (alignWidth / 8 * vi).U) }
-  status_sum.data_bytes := status_base.data_bytes +& LookupTree(v_size, bytes_map)
-  status_sum.info_size := status_base.info_size +& Mux(v_size =/= 0.U, 1.U, 0.U)
+  val chunks_map = Seq.tabulate(groupSize + 1) { vi =>
+    (vi.U, (param.alignChunkBytes(elemBytes * vi) / param.ChunkByteLen).U)
+  }
+  val cluster_data_chunks = LookupTree(v_size, chunks_map)
+  val cluster_info_cnt = Mux(v_size =/= 0.U, 1.U, 0.U)
+  status_sum.data_chunks := status_base.data_chunks +& cluster_data_chunks
+  status_sum.info_cnt := status_base.info_cnt +& cluster_info_cnt
+  status_sum.cluster_data_chunks := cluster_data_chunks
+  status_sum.cluster_info_cnt := cluster_info_cnt
 }
 
 // Collect Data from different group in same cycle
 class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, config: GatewayConfig) extends Module {
   val in = IO(Flipped(Decoupled(MixedVec(bundles))))
-  val out = IO(Decoupled(new BatchStepResult(param, config)))
+  val out = IO(Decoupled(new BatchIO(param, config)))
 
-  def getGroupDataWidth: Seq[Valid[DifftestBundle]] => Int = { group =>
+  def getGroupDataWidth(group: Seq[Valid[DifftestBundle]]): Int =
     group.length * group.head.bits.getByteAlignWidth
+
+  def getGroupDataChunks(group: Seq[Valid[DifftestBundle]]): Int = {
+    val bytes = group.length * group.head.bits.getByteAlignWidth / 8
+    param.alignChunkBytes(bytes) / param.ChunkByteLen
   }
 
   val in_group = in.bits.groupBy(_.bits.desiredCppName).values
   val in_group_single = in_group.filter(_.size == 1).toSeq
-  val in_group_multi = in_group.filterNot(_.size == 1).flatMap(_.grouped(8)).toSeq
+  val in_group_multi = in_group.filterNot(_.size == 1).toSeq
   val sorted = in_group_single.sortBy(getGroupDataWidth).reverse ++ in_group_multi.sortBy(getGroupDataWidth)
+  val clusterMaxDataChunks = sorted.map(getGroupDataChunks)
+  val stepMaxDataChunks = clusterMaxDataChunks.sum
+  val stepMaxPayloadChunks = param.StepInfoChunks + stepMaxDataChunks
+  val stepMaxPayloadBeats = (stepMaxPayloadChunks + param.BeatChunkSize - 1) / param.BeatChunkSize
+  require(stepMaxPayloadChunks <= 255, s"BatchStep.num only has 8 bits, but max batch chunks is $stepMaxPayloadChunks")
 
-  // Stage 1: concat bundles with same desiredCppName
+  // Stage 1: compact valid bundles inside each cluster and collect per-cluster stats.
   class GroupBundle extends Bundle {
     val data = MixedVec(sorted.map(getGroupDataWidth).map(group_w => UInt(group_w.W)))
     val info = Vec(param.StepGroupSize, UInt(param.infoWidth.W))
@@ -181,247 +190,157 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
     grouped.bits.status(gid) := cluster.status_sum
   }
 
-  // Stage 2: delay grouped data, concat different group
+  // Stage 2: build the chunk-aligned step payload from info and cluster data.
+  // This pipeline register is held while Batch scans the payload beats.
   val delay_grouped = Wire(Decoupled(new GroupBundle))
   PipelineConnect(grouped, delay_grouped, delay_grouped.fire)
-  delay_grouped.ready := out.ready
 
   val delay_group_data = delay_grouped.bits.data
   val delay_group_info = delay_grouped.bits.info
   val delay_group_status = delay_grouped.bits.status
-  val info_num = delay_group_status.last.info_size
+  val info_num = delay_group_status.last.info_cnt
+
+  val cluster_chunk_count = delay_group_status.map(_.cluster_data_chunks)
+
+  val BatchHead = Wire(new BatchInfo)
+  BatchHead.id := Batch.getTemplate.length.U
+  BatchHead.num := info_num
   val BatchStep = Wire(new BatchInfo)
-  BatchStep.id := Batch.getTemplate.length.U
-  BatchStep.num := info_num // unused, only for debugging
+  BatchStep.id := (Batch.getTemplate.length + 1).U
 
-  out.valid := delay_grouped.valid && info_num =/= 0.U
-  // append BatchStep to last step_status
-  out.bits.status := delay_group_status
-  out.bits.status.last.info_size := delay_group_status.last.info_size + 1.U
-
-  val toCat_data = delay_group_data.take(in_group_single.size).reverse
-  val toCat_info = delay_group_info.take(in_group_single.size).reverse
-  val res_single = Wire(MixedVec(Seq.tabulate(in_group_single.size) { idx =>
-    val width = toCat_data.take(idx + 1).map(_.getWidth).sum
-    UInt(width.W)
-  }))
-  res_single(0) := toCat_data(0)
-  (1 until in_group_single.size).foreach { idx =>
-    val base = res_single(idx - 1)
-    res_single(idx) := Mux(toCat_info(idx) =/= 0.U, Cat(base, toCat_data(idx)), base)
-  }
-  // Collect data by shifter
-  val res_multi = if (in_group_multi.size != 0) {
-    MixedVecInit(
-      delay_group_data.zipWithIndex
-        .drop(in_group_single.size)
-        .map { case (gen, idx) =>
-          val maxWidth = delay_group_data.take(idx).map(_.getWidth).sum
-          // Truncate width of offset to reduce useless gates
-          val offset = Wire(UInt(log2Ceil(maxWidth + 1).W))
-          if (idx == 0) {
-            offset := 0.U
-          } else {
-            offset := delay_group_status(idx - 1).data_bytes << 3
-          }
-          (gen << offset).asUInt
-        }
-        .toSeq
-    ).reduce(_ | _)
-  } else {
-    0.U
-  }
-  out.bits.data := res_single.last | res_multi
-
-  // Collect info from tail, collect(i) include last 0~i
+  // Collect info as BatchHead, valid bundle infos, BatchStep.
+  // C++ scans BatchInfo from low bits to high bits, so append BatchHead at the
+  // lowest bits and keep BatchStep after the compacted bundle infos.
   val toCollect_info = delay_group_info.reverse
   val info_res = Wire(MixedVec(Seq.tabulate(param.StepGroupSize) { idx => UInt(((idx + 2) * param.infoWidth).W) }))
   Seq.tabulate(param.StepGroupSize) { idx =>
     val info_base = if (idx == 0) BatchStep.asUInt else info_res(idx - 1)
     info_res(idx) := Mux(toCollect_info(idx) =/= 0.U, Cat(info_base, toCollect_info(idx)), info_base)
   }
-  out.bits.info := info_res.last
-  out.bits.trace_info.foreach(_ := delay_grouped.bits.trace_info.get)
-}
+  val info_raw = Cat(info_res.last, BatchHead.asUInt)
+  val info_chunks = info_raw.pad(param.StepInfoBitLen).asTypeOf(Vec(param.StepInfoChunks, UInt(param.ChunkBitLen.W)))
+  val info_chunk_count_map = Seq.tabulate(param.StepInfoSize + 1) { size =>
+    val infoBytes = param.alignChunkBytes(size * param.infoByte)
+    (size.U, (infoBytes / param.ChunkByteLen).U)
+  }
+  val info_chunk_count = LookupTree(info_num + 2.U, info_chunk_count_map)
 
-// Assemble step_data from different cycles
-class BatchAssembler(
-  param: BatchParam,
-  config: GatewayConfig,
-) extends Module {
-  val in = IO(Flipped(Decoupled(new BatchStepResult(param, config))))
-  val out = IO(Decoupled(new BatchOutput(param, config)))
+  val payload_chunks = Wire(Vec(stepMaxPayloadChunks, UInt(param.ChunkBitLen.W)))
+  val payload_chunk_valid = Wire(Vec(stepMaxPayloadChunks, Bool()))
+  payload_chunks.foreach(_ := 0.U)
+  payload_chunk_valid.foreach(_ := false.B)
 
-  val state_data = RegInit(0.U(param.MaxDataBitLen.W))
-  val state_info = RegInit(0.U(param.MaxInfoBitLen.W))
-  val state_status = RegInit(0.U.asTypeOf(new BatchStats(param)))
-  val state_step_cnt = RegInit(0.U(config.stepWidth.W))
-  val state_trace_size = Option.when(config.hasReplay)(RegInit(0.U(config.replayWidth.W)))
-
-  // Assemble step data/info into state in 3 stage
-  // Stage 1:
-  //   1. RegNext signal from BatchCollector to cut of combination logic path
-  //   1. data/info_exceed_vec: mark whether different length fragments of step data/info exceed available space
-  //   2. concat/remain_stats: record statistic for data/info to be concatenated to output or remained to state
-  val delay_step = Wire(Decoupled(new BatchStepResult(param, config)))
-  PipelineConnect(in, delay_step, delay_step.fire)
-  val want_tick = Wire(Bool())
-  delay_step.ready := out.ready
-  val delay_step_data = delay_step.bits.data
-  val delay_step_info = delay_step.bits.info
-  val delay_step_status = delay_step.bits.status
-  val delay_step_enable = delay_step.valid
-  val delay_step_trace_info = delay_step.bits.trace_info
-  val data_bytes_avail = param.MaxDataByteLen.U -& state_status.data_bytes
-  // Always leave space for BatchFinish, use MaxInfoSize - 1
-  val info_size_avail = (param.MaxInfoSize - 1).U -& state_status.info_size
-  val data_exceed = Wire(Bool())
-  val info_exceed = Wire(Bool())
-  val append_data = Wire(UInt(param.TruncDataBitLen.W))
-  val append_info = Wire(UInt(param.StepInfoBitLen.W))
-  val finish_step = Wire(UInt(config.stepWidth.W))
-  val next_state_step_cnt = Wire(UInt(config.stepWidth.W))
-  val next_state_data = Wire(UInt(param.MaxDataBitLen.W))
-  val next_state_info = Wire(UInt(param.MaxInfoBitLen.W))
-  val next_state_stats = Wire(new BatchStats(param))
-
-  val BatchFinish = Wire(new BatchInfo)
-  BatchFinish.id := (Batch.getTemplate.length + 1).U
-  BatchFinish.num := finish_step
-
-  val step_exceed = delay_step_enable && (state_step_cnt === config.batchSize.U)
-  val cont_exceed = data_exceed || info_exceed
-  val state_flush = in.valid && in.bits.status.last.data_bytes >= param.MaxDataByteLen.U // use Stage 1 bytes to flush ahead
-
-  if (config.batchSplit) {
-    val data_exceed_v = VecInit(delay_step_status.map(_.data_bytes > data_bytes_avail && delay_step_enable))
-    val info_exceed_v = VecInit(delay_step_status.map(_.info_size > info_size_avail && delay_step_enable))
-    data_exceed := data_exceed_v.asUInt.orR
-    info_exceed := info_exceed_v.asUInt.orR
-    val exceed_v = VecInit(data_exceed_v.zip(info_exceed_v).map { case (de, ie) => de | ie })
-
-    // Extract last non-exceed stats
-    // When no stats exceeds, return step_stats to append whole step for state flushing
-    val concat_mask = VecInit.tabulate(param.StepGroupSize - 1) { idx => exceed_v(idx) ^ exceed_v(idx + 1) }
-    val concat_stats = Mux(
-      !exceed_v.asUInt.orR,
-      delay_step_status.last,
-      VecInit(delay_step_status.dropRight(1).zip(concat_mask).map { case (stats, mask) =>
-        Mux(mask, stats.asUInt, 0.U)
-      }).reduceTree(_ | _).asTypeOf(new BatchStats(param)),
-    )
-    val remain_stats = Wire(new BatchStats(param))
-    remain_stats.data_bytes := delay_step_status.last.data_bytes -& concat_stats.data_bytes
-    remain_stats.info_size := delay_step_status.last.info_size -& concat_stats.info_size
-    assert(remain_stats.data_bytes <= param.MaxDataByteLen.U)
-    assert(remain_stats.info_size + 1.U <= param.MaxInfoSize.U)
-
-    // Note we need only lowest bits to update state, truncate high bits to reduce gates
-    val concat_data = (~(~0.U(param.TruncDataBitLen.W) <<
-      (concat_stats.data_bytes << 3).asUInt)).asUInt & delay_step_data
-    val concat_info = (~(~0.U(param.StepInfoBitLen.W) <<
-      (concat_stats.info_size * param.infoWidth.U))).asUInt & delay_step_info
-    val remain_data = (delay_step_data >> (concat_stats.data_bytes << 3).asUInt).asUInt
-    val remain_info = (delay_step_info >> (concat_stats.info_size * param.infoWidth.U)).asUInt
-
-    // Delay step can be partly appended to output for making full use of transmission param
-    // Avoid appending when step equals batchSize(delay_step_exceed), last appended data will overwrite first step data
-    val has_append = delay_step_enable && (state_flush || cont_exceed) && !exceed_v.asUInt.andR && !step_exceed
-    // When the whole step is appended to output, state_step should be 0, and output step + 1
-    val append_whole = has_append && !cont_exceed
-    finish_step := state_step_cnt + Mux(append_whole, 1.U, 0.U)
-
-    append_data := Mux(has_append, concat_data(param.TruncDataBitLen - 1, 0), 0.U)
-    val append_finish_map = Seq.tabulate(param.StepGroupSize + 2) { g =>
-      (g.U, (BatchFinish.asUInt << (g * param.infoWidth)).asUInt)
+  Seq.tabulate(param.StepInfoChunks) { idx =>
+    payload_chunks(idx) := info_chunks(idx)
+    payload_chunk_valid(idx) := idx.U < info_chunk_count
+  }
+  var payloadOffset = param.StepInfoChunks
+  delay_group_data.zip(clusterMaxDataChunks).zipWithIndex.foreach { case ((data, chunks), groupIdx) =>
+    val data_chunks = data.pad(chunks * param.ChunkBitLen).asTypeOf(Vec(chunks, UInt(param.ChunkBitLen.W)))
+    Seq.tabulate(chunks) { chunkIdx =>
+      payload_chunks(payloadOffset + chunkIdx) := data_chunks(chunkIdx)
+      payload_chunk_valid(payloadOffset + chunkIdx) := chunkIdx.U < cluster_chunk_count(groupIdx)
     }
-    append_info := Mux(
-      has_append,
-      concat_info | LookupTree(concat_stats.info_size, append_finish_map),
-      BatchFinish.asUInt,
-    )
-
-    next_state_step_cnt := Mux(has_append && append_whole, 0.U, 1.U)
-    next_state_data := Mux(has_append, remain_data, delay_step_data)
-    next_state_info := Mux(has_append, remain_info, delay_step_info)
-    next_state_stats.data_bytes := Mux(has_append, remain_stats.data_bytes, delay_step_status.last.data_bytes)
-    next_state_stats.info_size := Mux(has_append, remain_stats.info_size, delay_step_status.last.info_size)
-  } else {
-    data_exceed := delay_step_enable && delay_step_status.last.data_bytes > data_bytes_avail
-    info_exceed := delay_step_enable && delay_step_status.last.info_size > info_size_avail
-    assert(delay_step_status.last.data_bytes <= param.MaxDataByteLen.U)
-    assert(delay_step_status.last.info_size <= param.MaxInfoSize.U)
-
-    finish_step := state_step_cnt
-    append_data := 0.U
-    append_info := BatchFinish.asUInt
-
-    next_state_step_cnt := 1.U
-    next_state_data := delay_step_data
-    next_state_info := delay_step_info
-    next_state_stats.data_bytes := delay_step_status.last.data_bytes
-    next_state_stats.info_size := delay_step_status.last.info_size
+    payloadOffset += chunks
   }
 
-  // Stage 2:
-  // update state
-  val trace_exceed = Option.when(config.hasReplay) {
-    delay_step_enable && (state_trace_size.get +& delay_step_trace_info.get.trace_size >= config.replaySize.U)
-  }
-  val timeout_count = RegInit(0.U(32.W))
-  val timeout = timeout_count === 200000.U
-  if (config.hasBuiltInPerf) {
-    DifftestPerf("BatchExceed_data", data_exceed)
-    DifftestPerf("BatchExceed_info", info_exceed)
-    DifftestPerf("BatchExceed_step", step_exceed.asUInt)
-    DifftestPerf("BatchExceed_flush", state_flush.asUInt)
-    DifftestPerf("BatchExceed_timeout", timeout.asUInt)
-    if (config.hasReplay) DifftestPerf("BatchExceed_trace", trace_exceed.get.asUInt)
-  }
-  val in_replay = Option.when(config.hasReplay)(delay_step.bits.trace_info.get.in_replay)
+  val payload_chunk_count = info_chunk_count +& cluster_chunk_count.reduce(_ +& _)
+  BatchStep.num := payload_chunk_count.pad(8)(7, 0)
 
-  want_tick := timeout || state_flush || cont_exceed || step_exceed ||
-    trace_exceed.getOrElse(false.B) || in_replay.getOrElse(false.B)
-  val should_tick = want_tick && out.ready
-  when(!should_tick) {
-    timeout_count := timeout_count + 1.U
-  }.otherwise {
-    timeout_count := 0.U
+  val payload_beats = payload_chunks.asUInt
+    .pad(stepMaxPayloadBeats * param.BeatBitLen)
+    .asTypeOf(Vec(stepMaxPayloadBeats, Vec(param.BeatChunkSize, UInt(param.ChunkBitLen.W))))
+  val payload_beat_valid = payload_chunk_valid.asUInt
+    .pad(stepMaxPayloadBeats * param.BeatChunkSize)
+    .asTypeOf(Vec(stepMaxPayloadBeats, UInt(param.BeatChunkSize.W)))
+
+  val beatIdxWidth = math.max(1, log2Ceil(stepMaxPayloadBeats))
+  val stateCountWidth = log2Ceil(param.BeatChunkSize + 1)
+  val appendIndexWidth = log2Ceil(param.BeatChunkSize * 2 + 1)
+  val remain_beat_mask = RegInit(0.U(stepMaxPayloadBeats.W))
+  val state_chunks = RegInit(0.U.asTypeOf(Vec(param.BeatChunkSize, UInt(param.ChunkBitLen.W))))
+  val state_count = RegInit(0.U(stateCountWidth.W))
+  val pending_beat = Reg(Vec(param.BeatChunkSize, UInt(param.ChunkBitLen.W)))
+  val pending_valid_mask = RegInit(0.U(param.BeatChunkSize.W))
+  val pending_last = RegInit(false.B)
+  val pending_valid = RegInit(false.B)
+
+  // Stage 3: scan the payload beat bitmap and register one selected beat as pending.
+  // Stage 4: independently merge pending into state and refill pending with the next beat.
+  val pending_count = PopCount(pending_valid_mask)
+  val merged_count = state_count +& pending_count
+  val pending_pos = Wire(Vec(param.BeatChunkSize, UInt(appendIndexWidth.W)))
+  pending_pos(0) := state_count
+  for (pid <- 1 until param.BeatChunkSize) {
+    pending_pos(pid) := pending_pos(pid - 1) + pending_valid_mask(pid - 1).asUInt
   }
+  val merged_chunks = Seq.tabulate(param.BeatChunkSize * 2) { idx =>
+    val stateOpt = Option.when(idx < param.BeatChunkSize)(Mux(idx.U < state_count, state_chunks(idx), 0.U))
+    val choices = stateOpt.toSeq ++ Seq.tabulate(param.BeatChunkSize) { pid =>
+      Mux(pending_valid_mask(pid) && pending_pos(pid) === idx.U, pending_beat(pid), 0.U)
+    }
+    VecInit(choices).reduce(_ | _)
+  }
+  val merged_head_chunks = VecInit(merged_chunks.take(param.BeatChunkSize))
+  val merged_tail_chunks = VecInit(merged_chunks.drop(param.BeatChunkSize))
+  val merge_full = merged_count >= param.BeatChunkSize.U
+  val payload_beat_mask = VecInit(payload_beat_valid.map(_.orR)).asUInt
+  val input_step_valid = delay_grouped.valid && info_num =/= 0.U && payload_beat_mask =/= 0.U
+  val select_beat_mask = Mux(
+    remain_beat_mask === 0.U,
+    Mux(!pending_valid && state_count === 0.U && input_step_valid, payload_beat_mask, 0.U),
+    remain_beat_mask,
+  )
+  val select_beat_idx = PriorityEncoder(select_beat_mask).pad(beatIdxWidth)
+  val select_beat =
+    if (stepMaxPayloadBeats == 1) payload_beats(0) else payload_beats(select_beat_idx)
+  val select_beat_valid =
+    if (stepMaxPayloadBeats == 1) payload_beat_valid(0) else payload_beat_valid(select_beat_idx)
+  val next_remain_beat_mask = select_beat_mask & ~UIntToOH(select_beat_idx, stepMaxPayloadBeats)
+  val state_tick = !pending_valid && select_beat_mask === 0.U && state_count =/= 0.U
+  val merged_tick = pending_valid && (merge_full || pending_last)
+  // A tick means emitting one Batch beat.
+  val should_tick = merged_tick || state_tick
+  val state_update = !should_tick || out.ready
+  val pending_consumed = pending_valid && state_update
+  // Only refill pending in the same cycle when the old pending beat can be
+  // merged into state without waiting for downstream ready. This cuts the
+  // out.ready -> load_pending_beat -> delay_grouped.ready control path.
+  val pending_consumed_without_tick = pending_valid && !should_tick
+  val pending_can_refill = !pending_valid || pending_consumed_without_tick
+  val load_pending_beat = pending_can_refill && select_beat_mask =/= 0.U
+  val next_state_chunks =
+    Mux(merged_tick, merged_tail_chunks.asUInt, merged_head_chunks.asUInt).asTypeOf(state_chunks)
+  val next_state_count = Mux(
+    merged_tick,
+    Mux(merge_full, merged_count - param.BeatChunkSize.U, 0.U),
+    merged_count,
+  )
+  val is_last_step_beat = state_tick || (merged_tick && pending_last && merged_count <= param.BeatChunkSize.U)
 
-  out.bits.io.data := state_data | (append_data << (state_status.data_bytes << 3).asUInt).asUInt
-  out.bits.io.info := state_info | (append_info << (state_status.info_size * param.infoWidth.U)).asUInt
-  out.bits.step := Mux(out.valid, finish_step, 0.U)
-  out.valid := want_tick
-
-  val delay_step_fire = delay_step.fire
-  val state_update = delay_step_fire || (should_tick && !delay_step_enable)
+  // Keep delay_grouped.bits stable while scanning the current step payload.
+  delay_grouped.ready := !input_step_valid || (load_pending_beat && next_remain_beat_mask === 0.U)
+  out.valid := should_tick
+  out.bits.payload := Mux(state_tick, state_chunks.asUInt, merged_head_chunks.asUInt)
+  out.bits.step := Mux(out.valid && is_last_step_beat, 1.U(config.stepWidth.W), 0.U)
 
   when(state_update) {
-    when(delay_step_fire) {
-      when(should_tick) {
-        state_step_cnt := next_state_step_cnt
-        state_data := next_state_data
-        state_info := next_state_info
-        state_status := next_state_stats
-        if (config.hasReplay) state_trace_size.get := delay_step_trace_info.get.trace_size
-      }.otherwise {
-        state_step_cnt := state_step_cnt + 1.U
-        state_data := state_data |
-          (delay_step_data(param.TruncDataBitLen - 1, 0) << (state_status.data_bytes << 3).asUInt).asUInt
-        state_info := state_info |
-          (delay_step_info << (state_status.info_size * param.infoWidth.U)).asUInt
-        state_status.data_bytes := state_status.data_bytes + delay_step_status.last.data_bytes
-        state_status.info_size := state_status.info_size + delay_step_status.last.info_size
-        if (config.hasReplay) state_trace_size.get := state_trace_size.get + delay_step_trace_info.get.trace_size
-      }
-    }.otherwise { // state_flush without new-coming step
-      state_step_cnt := 0.U
-      state_data := 0.U
-      state_info := 0.U
-      state_status.data_bytes := 0.U
-      state_status.info_size := 0.U
-      if (config.hasReplay) state_trace_size.get := 0.U
+    when(pending_valid) {
+      state_chunks := next_state_chunks
+      state_count := next_state_count(stateCountWidth - 1, 0)
+    }.elsewhen(state_tick) {
+      state_chunks := 0.U.asTypeOf(state_chunks)
+      state_count := 0.U
     }
+  }
+
+  when(load_pending_beat) {
+    remain_beat_mask := next_remain_beat_mask
+    pending_beat := select_beat
+    pending_valid_mask := select_beat_valid
+    pending_last := next_remain_beat_mask === 0.U
+    pending_valid := true.B
+  }.elsewhen(pending_consumed) {
+    pending_valid := false.B
   }
 }
