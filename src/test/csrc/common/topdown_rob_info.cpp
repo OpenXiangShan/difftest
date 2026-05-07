@@ -14,26 +14,30 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __TOPDOWN_IQ_INFO_H__
-#define __TOPDOWN_IQ_INFO_H__
+#include "topdown_rob_info.h"
 
-#include "common.h"
+void topdown_rob_info_apply(int iq_entries_num, int rob_entries_num, const TopdownRobInfoFrame *in,
+                            TopdownRobInfoFrame *out) {
+  for (int i = 0; i < rob_entries_num; i++) {
+    out[i].valid = 0;
+    out[i].robIdx = i;
+    out[i].robFlag = 0;
+    out[i].cancelSource = 0;
+    out[i].issued = 0;
+    out[i].idealIssueTime = 0;
+  }
 
-struct TopdownIQInfoFrame {
-  bool valid;
-  uint16_t robIdx;
-  bool robFlag;
-  uint8_t pipeNum;
-  uint8_t cancelSource;
-  bool srcReady;
-  uint8_t futype;
-  bool issued;
-};
+  for (int i = 0; i < iq_entries_num; i++) {
+    if (in[i].valid == 0) {
+      continue;
+    }
 
-struct TopdownExtendedIQInfoFrame {
-  bool idealIssueTime;
-};
-
-void topdown_iq_info_apply(int entries_num, const TopdownIQInfoFrame *in, TopdownExtendedIQInfoFrame *out);
-
-#endif // __TOPDOWN_IQ_INFO_H__
+    TopdownRobInfoFrame &entry = out[in[i].robIdx];
+    entry.valid = 1;
+    entry.robIdx = in[i].robIdx;
+    entry.robFlag = in[i].robFlag;
+    entry.cancelSource = in[i].cancelSource;
+    entry.issued = in[i].issued;
+    entry.idealIssueTime = in[i].idealIssueTime;
+  }
+}

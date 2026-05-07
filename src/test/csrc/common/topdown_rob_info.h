@@ -14,26 +14,21 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __TOPDOWN_IQ_INFO_H__
-#define __TOPDOWN_IQ_INFO_H__
+#ifndef __TOPDOWN_ROB_INFO_H__
+#define __TOPDOWN_ROB_INFO_H__
 
 #include "common.h"
 
-struct TopdownIQInfoFrame {
+struct TopdownRobInfoFrame {
   bool valid;
   uint16_t robIdx;
   bool robFlag;
-  uint8_t pipeNum;
   uint8_t cancelSource;
-  bool srcReady;
-  uint8_t futype;
   bool issued;
-};
-
-struct TopdownExtendedIQInfoFrame {
   bool idealIssueTime;
 };
 
-void topdown_iq_info_apply(int entries_num, const TopdownIQInfoFrame *in, TopdownExtendedIQInfoFrame *out);
+void topdown_rob_info_apply(int iq_entries_num, int rob_entries_num, const TopdownRobInfoFrame *in,
+                            TopdownRobInfoFrame *out);
 
-#endif // __TOPDOWN_IQ_INFO_H__
+#endif // __TOPDOWN_ROB_INFO_H__

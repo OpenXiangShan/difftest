@@ -543,6 +543,8 @@ object DifftestModule {
   private val interfaces = ListBuffer.empty[(DifftestBundle, Int)]
   private val cppExtModules = ListBuffer.empty[(String, String)]
   private val cppExtHeaders = ListBuffer.empty[String]
+  private val cppDPICModules = ListBuffer.empty[(String, String)]
+  private val cppDPICHeaders = ListBuffer.empty[String]
   private val nameExcludes = ListBuffer.empty[String]
   private val cmdConfigs = ListBuffer.empty[String]
 
@@ -600,6 +602,9 @@ object DifftestModule {
       gateway.structPacked.getOrElse(false),
       gateway.structAligned.getOrElse(false),
     )
+    if (cppDPICModules.nonEmpty) {
+      generateCppDPICModules()
+    }
     if (gateway.cppExtModule.getOrElse(false)) {
       generateCppExtModules()
     }
@@ -787,10 +792,29 @@ object DifftestModule {
   }
   def createCppExtModule(name: String, func: String): Unit = createCppExtModule(name, func, None)
 
+  def createCppDPICModule(name: String, func: String, header: Option[String]): Unit = {
+    if (!cppDPICModules.exists(_._1 == name)) {
+      cppDPICModules += ((name, func))
+      if (header.isDefined && !cppDPICHeaders.contains(header.get)) {
+        cppDPICHeaders += header.get
+      }
+    }
+  }
+  def createCppDPICModule(name: String, func: String): Unit = createCppDPICModule(name, func, None)
+
+  def generateCppDPICModules(): Unit = {
+    val difftestCppDPICs = ListBuffer.empty[String]
+    difftestCppDPICs += "#include <cstdint>"
+    cppDPICHeaders.foreach(h => difftestCppDPICs += s"#include $h")
+    cppDPICModules.foreach(m => difftestCppDPICs += m._2)
+    FileControl.write(difftestCppDPICs, "difftest-dpic-ext.cpp")
+  }
+
   def generateCppExtModules(): Unit = {
     val difftestCppExts = ListBuffer.empty[String]
     difftestCppExts += "#ifdef GSIM"
     difftestCppExts += "#include <cstdint>"
+    difftestCppExts += "#include <cstring>"
     difftestCppExts += "#include \"SimTop.h\""
     cppExtHeaders.foreach(h => difftestCppExts += s"#include $h")
     cppExtModules.foreach(m => difftestCppExts += m._2)

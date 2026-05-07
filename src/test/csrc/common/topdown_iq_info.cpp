@@ -20,16 +20,20 @@ void topdown_iq_info_apply(int entries_num, const TopdownIQInfoFrame *in, Topdow
   for (int i = 0; i < entries_num; i++) {
     int olderCanIssueNum = 0;
     for (int j = 0; j < entries_num; j++) {
+      if (j == i) {
+        continue;
+      }
       bool valid_j = in[j].valid != 0;
       bool src_ready = valid_j && in[j].srcReady != 0;
       bool differentFlag = in[j].robFlag != in[i].robFlag;
-      bool compare = in[j].robIdx > in[i].robIdx;
+      bool compare = in[j].robIdx < in[i].robIdx;
       bool older = differentFlag ^ compare;
-      olderCanIssueNum += older && src_ready;
+      bool sameFutype = in[j].futype == in[i].futype;
+      olderCanIssueNum += older && src_ready && sameFutype && in[j].issued == 0;
     }
 
     const bool valid = in[i].valid != 0;
     const bool src_ready = valid && in[i].srcReady != 0;
-    out[i].idealIssueTime = valid && src_ready && olderCanIssueNum < in[i].pipeNum;
+    out[i].idealIssueTime = valid && ((src_ready && olderCanIssueNum < in[i].pipeNum) || in[i].issued);
   }
 }
