@@ -1,18 +1,18 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
-*
-* DiffTest is licensed under Mulan PSL v2.
-* You can use this software according to the terms and conditions of the Mulan PSL v2.
-* You may obtain a copy of Mulan PSL v2 at:
-*          http://license.coscl.org.cn/MulanPSL2
-*
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-*
-* See the Mulan PSL v2 for more details.
-***************************************************************************************/
+ * Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+ * Copyright (c) 2020-2021 Peng Cheng Laboratory
+ *
+ * DiffTest is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the Mulan PSL v2 for more details.
+ ***************************************************************************************/
 
 package difftest.common
 
@@ -20,71 +20,67 @@ import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util._
 
-class TopdownIQInfo extends Bundle {
+class TopdownRobInfo extends Bundle {
   val valid = Bool()
   val robIdx = UInt(16.W)
   val robFlag = Bool()
-  val pipeNum = UInt(8.W)
   val cancelSource = UInt(3.W)
-  val srcReady = Bool()
-}
-
-class TopdownExtendedIQInfo extends Bundle {
+  val issued = Bool()
   val idealIssueTime = Bool()
 }
 
-class TopdownInfo(val entriesNum: Int) extends Bundle {
-  val in = Input(Vec(entriesNum, new TopdownIQInfo))
-  val out = Output(Vec(entriesNum, new TopdownExtendedIQInfo))
+class TopdownRobInfoBundle(val IQEntriesNum: Int, val RobEntriesNum: Int) extends Bundle {
+  val in = Input(Vec(IQEntriesNum, new TopdownRobInfo))
+  val out = Output(Vec(RobEntriesNum, new TopdownRobInfo))
 }
 
-object TopdownIQInfoPacking {
-  val inputFieldSpecs: Seq[(String, Int)] = Seq(
+object TopdownRobInfoPacking {
+  val fieldSpecs: Seq[(String, Int)] = Seq(
     "valid" -> 1,
     "robIdx" -> 16,
     "robFlag" -> 1,
-    "pipeNum" -> 8,
     "cancelSource" -> 3,
-    "srcReady" -> 1,
-  )
-
-  val outputFieldSpecs: Seq[(String, Int)] = Seq(
+    "issued" -> 1,
     "idealIssueTime" -> 1,
   )
 
   def packedWidth(entriesNum: Int, fieldWidth: Int): Int = entriesNum * fieldWidth
 }
 
-class TopdownIQInfoPackedBundle(val entriesNum: Int) extends Bundle {
-  import TopdownIQInfoPacking._
+class TopdownRobInfoPackedBundle(val IQEntriesNum: Int, val RobEntriesNum: Int) extends Bundle {
+  import TopdownRobInfoPacking._
 
-  val in_valid = Input(UInt(packedWidth(entriesNum, 1).W))
-  val in_robIdx = Input(UInt(packedWidth(entriesNum, 16).W))
-  val in_robFlag = Input(UInt(packedWidth(entriesNum, 1).W))
-  val in_pipeNum = Input(UInt(packedWidth(entriesNum, 8).W))
-  val in_cancelSource = Input(UInt(packedWidth(entriesNum, 3).W))
-  val in_srcReady = Input(UInt(packedWidth(entriesNum, 1).W))
+  val in_valid = Input(UInt(packedWidth(IQEntriesNum, 1).W))
+  val in_robIdx = Input(UInt(packedWidth(IQEntriesNum, 16).W))
+  val in_robFlag = Input(UInt(packedWidth(IQEntriesNum, 1).W))
+  val in_cancelSource = Input(UInt(packedWidth(IQEntriesNum, 3).W))
+  val in_issued = Input(UInt(packedWidth(IQEntriesNum, 1).W))
+  val in_idealIssueTime = Input(UInt(packedWidth(IQEntriesNum, 1).W))
 
-  val out_idealIssueTime = Output(UInt(packedWidth(entriesNum, 1).W))
+  val out_valid = Output(UInt(packedWidth(RobEntriesNum, 1).W))
+  val out_robIdx = Output(UInt(packedWidth(RobEntriesNum, 16).W))
+  val out_robFlag = Output(UInt(packedWidth(RobEntriesNum, 1).W))
+  val out_cancelSource = Output(UInt(packedWidth(RobEntriesNum, 3).W))
+  val out_issued = Output(UInt(packedWidth(RobEntriesNum, 1).W))
+  val out_idealIssueTime = Output(UInt(packedWidth(RobEntriesNum, 1).W))
 }
 
-class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModuleInline {
-  import TopdownIQInfoPacking._
+class TopdownRobInfoHelper(val IQEntriesNum: Int, val RobEntriesNum: Int) extends ExtModule with HasExtModuleInline {
+  import TopdownRobInfoPacking._
 
   private case class PackedArg(name: String, totalWidth: Int, fieldWidth: Int, entriesNum: Int)
 
-  override def desiredName: String = s"TopdownIQInfoHelper_${entriesNum}"
+  override def desiredName: String = s"TopdownRobInfoHelper_${IQEntriesNum}_${RobEntriesNum}"
 
-  private val dpiFuncName = s"topdown_iq_info_${entriesNum}"
+  private val dpiFuncName = s"topdown_rob_info_${IQEntriesNum}_${RobEntriesNum}"
 
-  val clock = IO(Input(Clock()))
-  val io = IO(new TopdownIQInfoPackedBundle(entriesNum))
+  val io = IO(new TopdownRobInfoPackedBundle(IQEntriesNum, RobEntriesNum))
 
-  private val inputArgs = inputFieldSpecs.map { case (fieldName, fieldWidth) =>
-    PackedArg(s"io_in_$fieldName", packedWidth(entriesNum, fieldWidth), fieldWidth, entriesNum)
+  private val inputArgs = fieldSpecs.map { case (fieldName, fieldWidth) =>
+    PackedArg(s"io_in_$fieldName", packedWidth(IQEntriesNum, fieldWidth), fieldWidth, IQEntriesNum)
   }
-  private val outputArgs = outputFieldSpecs.map { case (fieldName, fieldWidth) =>
-    PackedArg(s"io_out_$fieldName", packedWidth(entriesNum, fieldWidth), fieldWidth, entriesNum)
+  private val outputArgs = fieldSpecs.map { case (fieldName, fieldWidth) =>
+    PackedArg(s"io_out_$fieldName", packedWidth(RobEntriesNum, fieldWidth), fieldWidth, RobEntriesNum)
   }
 
   private def scalarCType(width: Int): String = width match {
@@ -127,9 +123,9 @@ class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModu
     outputArgs.map(arg => cppArg(arg.name, arg.totalWidth, isOutput = true))
   private val dpiArgs = inputArgs.map(arg => dpiArg(arg.name, arg.totalWidth, isOutput = false)) ++
     outputArgs.map(arg => dpiArg(arg.name, arg.totalWidth, isOutput = true))
-  private val modulePorts = Seq("input clock") ++
+  private val modulePorts =
     inputArgs.map(arg => modulePortArg(arg.name, arg.totalWidth, isOutput = false)) ++
-    outputArgs.map(arg => modulePortArg(arg.name, arg.totalWidth, isOutput = true))
+      outputArgs.map(arg => modulePortArg(arg.name, arg.totalWidth, isOutput = true))
   private val outputRegs = outputArgs.map(arg => (s"${arg.name}_reg", arg.totalWidth, arg.name))
   private val dpiCallArgs = inputArgs.map(_.name) ++ outputRegs.map(_._1)
   private val synthDefaults = outputRegs.map { case (regName, width, _) =>
@@ -160,7 +156,7 @@ class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModu
 
   private val inputAssigns = inputArgs.flatMap { arg =>
     val fieldName = arg.name.stripPrefix("io_in_")
-    (0 until entriesNum).map(idx => s"in[$idx].$fieldName = ${decodeExpr(arg, idx)};")
+    (0 until IQEntriesNum).map(idx => s"in[$idx].$fieldName = ${decodeExpr(arg, idx)};")
   }
   private val scalarOutputAccums = outputArgs.filter(_.totalWidth <= 64).map(arg => s"uint64_t ${arg.name}_packed = 0;")
   private val wideOutputZeros = outputArgs.filter(_.totalWidth > 64).map(arg =>
@@ -168,7 +164,7 @@ class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModu
   )
   private val outputAssigns = outputArgs.flatMap { arg =>
     val fieldName = arg.name.stripPrefix("io_out_")
-    (0 until entriesNum).map(idx => encodeStmt(arg, idx, s"out[$idx].$fieldName"))
+    (0 until RobEntriesNum).map(idx => encodeStmt(arg, idx, s"out[$idx].$fieldName"))
   }
   private val scalarOutputWrites = outputArgs.filter(_.totalWidth <= 64).map(arg =>
     s"${arg.name} = static_cast<${scalarCType(arg.totalWidth)}>(${arg.name}_packed);"
@@ -207,80 +203,79 @@ class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModu
 
   private val wrapperBody =
     s"""
-      |  TopdownIQInfoFrame in[$entriesNum] = {};
-      |  TopdownExtendedIQInfoFrame out[$entriesNum] = {};
-      |  ${packedBitHelpers.mkString("\n  ")}
-      |  ${scalarOutputAccums.mkString("\n  ")}
-      |  ${wideOutputZeros.mkString("\n  ")}
-      |  ${inputAssigns.mkString("\n  ")}
-      |  topdown_iq_info_apply($entriesNum, in, out);
-      |  ${outputAssigns.mkString("\n  ")}
-      |  ${scalarOutputWrites.mkString("\n  ")}
-      |""".stripMargin
+       |  TopdownRobInfoFrame in[$IQEntriesNum] = {};
+       |  TopdownRobInfoFrame out[$RobEntriesNum] = {};
+       |  ${packedBitHelpers.mkString("\n  ")}
+       |  ${scalarOutputAccums.mkString("\n  ")}
+       |  ${wideOutputZeros.mkString("\n  ")}
+       |  ${inputAssigns.mkString("\n  ")}
+       |  topdown_rob_info_apply($IQEntriesNum, $RobEntriesNum, in, out);
+       |  ${outputAssigns.mkString("\n  ")}
+       |  ${scalarOutputWrites.mkString("\n  ")}
+       |""".stripMargin
 
   private val cppDPICModule =
     s"""
-      |extern "C" void $dpiFuncName (
-      |  ${cppArgs.mkString(",\n  ")}
-      |) {
-      |$wrapperBody
-      |}
-      |""".stripMargin
+       |extern "C" void $dpiFuncName (
+       |  ${cppArgs.mkString(",\n  ")}
+       |) {
+       |$wrapperBody
+       |}
+       |""".stripMargin
 
   private val cppExtModule =
     s"""
-      |void $desiredName (
-      |  ${cppArgs.mkString(",\n  ")}
-      |) {
-      |  $dpiFuncName(
-      |    ${dpiCallArgs.mkString(",\n    ")}
-      |  );
-      |}
-      |""".stripMargin
-  difftest.DifftestModule.createCppDPICModule(dpiFuncName, cppDPICModule, Some("\"topdown_iq_info.h\""))
-  difftest.DifftestModule.createCppExtModule(desiredName, cppExtModule, Some("\"topdown_iq_info.h\""))
+       |void $desiredName (
+       |  ${cppArgs.mkString(",\n  ")}
+       |) {
+       |  $dpiFuncName(
+       |    ${dpiCallArgs.mkString(",\n    ")}
+       |  );
+       |}
+       |""".stripMargin
+  difftest.DifftestModule.createCppDPICModule(dpiFuncName, cppDPICModule, Some("\"topdown_rob_info.h\""))
+  difftest.DifftestModule.createCppExtModule(desiredName, cppExtModule, Some("\"topdown_rob_info.h\""))
 
   setInline(
     s"$desiredName.v",
     s"""
-      |`ifndef SYNTHESIS
-      |import "DPI-C" function void $dpiFuncName(
-      |  ${dpiArgs.mkString(",\n  ")}
-      |);
-      |`endif // SYNTHESIS
-      |
-      |module $desiredName (
-      |  ${modulePorts.mkString(",\n  ")}
-      |);
+       |`ifndef SYNTHESIS
+       |import "DPI-C" function void $dpiFuncName(
+       |  ${dpiArgs.mkString(",\n  ")}
+       |);
+       |`endif // SYNTHESIS
+       |
+       |module $desiredName (
+       |  ${modulePorts.mkString(",\n  ")}
+       |);
       |
       |  ${outputRegDecls.mkString("\n  ")}
       |  ${outputNetAssigns.mkString("\n  ")}
-      |
-      |`ifdef SYNTHESIS
+       |
+       |`ifdef SYNTHESIS
+       |  always @(*) begin
+       |    ${synthDefaults.mkString("\n    ")}
+       |  end
+       |`else
       |  always @(*) begin
       |    ${synthDefaults.mkString("\n    ")}
-      |  end
-      |`else
-      |  always @(*) begin
-      |    ${synthDefaults.mkString("\n    ")}
-      |    $dpiFuncName(
-      |      ${dpiCallArgs.mkString(",\n      ")}
-      |    );
-      |  end
-      |`endif // SYNTHESIS
-      |
-      |endmodule
+       |    $dpiFuncName(
+       |      ${dpiCallArgs.mkString(",\n      ")}
+       |    );
+       |  end
+       |`endif // SYNTHESIS
+       |
+       |endmodule
      """.stripMargin,
   )
 }
 
-class TopdownIQInfoCollect(val entriesNum: Int) extends Module {
-  import TopdownIQInfoPacking._
+class TopdownRobInfoCollect(val IQEntriesNum: Int, val RobEntriesNum: Int) extends Module {
+  import TopdownRobInfoPacking._
 
-  val io = IO(new TopdownInfo(entriesNum))
+  val io = IO(new TopdownRobInfoBundle(IQEntriesNum, RobEntriesNum))
 
-  val helper = Module(new TopdownIQInfoHelper(entriesNum))
-  helper.clock := clock
+  val helper = Module(new TopdownRobInfoHelper(IQEntriesNum, RobEntriesNum))
 
   private def packFields(data: Seq[UInt]): UInt = Cat(data.reverse)
 
@@ -291,11 +286,17 @@ class TopdownIQInfoCollect(val entriesNum: Int) extends Module {
   helper.io.in_valid := packFields(io.in.map(_.valid.asUInt))
   helper.io.in_robIdx := packFields(io.in.map(_.robIdx))
   helper.io.in_robFlag := packFields(io.in.map(_.robFlag.asUInt))
-  helper.io.in_pipeNum := packFields(io.in.map(_.pipeNum))
   helper.io.in_cancelSource := packFields(io.in.map(_.cancelSource))
-  helper.io.in_srcReady := packFields(io.in.map(_.srcReady.asUInt))
+  helper.io.in_issued := packFields(io.in.map(_.issued.asUInt))
+  helper.io.in_idealIssueTime := packFields(io.in.map(_.idealIssueTime.asUInt))
 
-  for (idx <- 0 until entriesNum) {
+  for (idx <- 0 until RobEntriesNum) {
+    io.out(idx).valid := unpackField(helper.io.out_valid, idx, 1).asBool
+    io.out(idx).robIdx := unpackField(helper.io.out_robIdx, idx, 16)
+    io.out(idx).robFlag := unpackField(helper.io.out_robFlag, idx, 1).asBool
+    io.out(idx).cancelSource := unpackField(helper.io.out_cancelSource, idx, 3)
+    io.out(idx).issued := unpackField(helper.io.out_issued, idx, 1).asBool
     io.out(idx).idealIssueTime := unpackField(helper.io.out_idealIssueTime, idx, 1).asBool
   }
+
 }
