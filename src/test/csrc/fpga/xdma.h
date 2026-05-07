@@ -58,6 +58,7 @@ typedef struct __attribute__((packed)) {
 class FpgaXdma {
 public:
   FpgaXdma();
+  ~FpgaXdma();
 
   void start(bool enable_diff) {
     running = true;

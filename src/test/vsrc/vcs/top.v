@@ -131,19 +131,57 @@ wire sim_clock;
   wire c2h_axi_tready;
   wire c2h_axi_tvalid;
   wire [511:0] c2h_axi_tdata;
+  wire [31:0] cfg_awaddr;
+  wire        cfg_awvalid;
+  wire        cfg_awready;
+  wire [31:0] cfg_wdata;
+  wire [3:0]  cfg_wstrb;
+  wire        cfg_wvalid;
+  wire        cfg_wready;
+  wire [1:0]  cfg_bresp;
+  wire        cfg_bvalid;
+  wire        cfg_bready;
+  wire [31:0] cfg_araddr;
+  wire        cfg_arvalid;
+  wire        cfg_arready;
+  wire [31:0] cfg_rdata;
+  wire [1:0]  cfg_rresp;
+  wire        cfg_rvalid;
+  wire        cfg_rready;
+  wire        host_ctrl_reset;
+  wire        host_ctrl_diff_enable;
+  wire        host_ctrl_ila_trigger;
 
   assign difftest_pcie_clock = clock;
-xdma_axi xaxi(
-  .clock(difftest_pcie_clock),
-  .reset(reset),
-  .axi_tdata(c2h_axi_tdata),
-  .axi_tlast(c2h_axi_tlast),
-  .axi_tready(c2h_axi_tready),
-  .axi_tvalid(c2h_axi_tvalid)
-);
 xdma_clock xclk(
   .clock(difftest_pcie_clock),
   .clock_out(sim_clock)
+);
+xdma_wrapper xdma(
+  .pcie_clock(difftest_pcie_clock),
+  .axilite_clock(sim_clock),
+  .reset(reset),
+  .axi_c2h_tdata(c2h_axi_tdata),
+  .axi_c2h_tlast(c2h_axi_tlast),
+  .axi_c2h_tready(c2h_axi_tready),
+  .axi_c2h_tvalid(c2h_axi_tvalid),
+  .cfg_awaddr(cfg_awaddr),
+  .cfg_awvalid(cfg_awvalid),
+  .cfg_awready(cfg_awready),
+  .cfg_wdata(cfg_wdata),
+  .cfg_wstrb(cfg_wstrb),
+  .cfg_wvalid(cfg_wvalid),
+  .cfg_wready(cfg_wready),
+  .cfg_bresp(cfg_bresp),
+  .cfg_bvalid(cfg_bvalid),
+  .cfg_bready(cfg_bready),
+  .cfg_araddr(cfg_araddr),
+  .cfg_arvalid(cfg_arvalid),
+  .cfg_arready(cfg_arready),
+  .cfg_rdata(cfg_rdata),
+  .cfg_rresp(cfg_rresp),
+  .cfg_rvalid(cfg_rvalid),
+  .cfg_rready(cfg_rready)
 );
 `else
   assign sim_clock = clock;
@@ -166,10 +204,31 @@ SimTop sim(
   .reset(reset),
 `ifdef FPGA_SIM
   .difftest_pcie_clock(difftest_pcie_clock),
+  .difftest_ref_reset(reset),
+  .difftest_hostCtrl_reset(host_ctrl_reset),
+  .difftest_hostCtrl_diffEnable(host_ctrl_diff_enable),
+  .difftest_hostCtrl_ilaTrigger(host_ctrl_ila_trigger),
   .difftest_to_host_axis_valid(c2h_axi_tvalid),
   .difftest_to_host_axis_ready(c2h_axi_tready),
   .difftest_to_host_axis_bits_data(c2h_axi_tdata),
   .difftest_to_host_axis_bits_last(c2h_axi_tlast),
+  .difftest_cfg_axilite_awvalid(cfg_awvalid),
+  .difftest_cfg_axilite_awaddr(cfg_awaddr),
+  .difftest_cfg_axilite_awready(cfg_awready),
+  .difftest_cfg_axilite_wvalid(cfg_wvalid),
+  .difftest_cfg_axilite_wdata(cfg_wdata),
+  .difftest_cfg_axilite_wstrb(cfg_wstrb),
+  .difftest_cfg_axilite_wready(cfg_wready),
+  .difftest_cfg_axilite_bvalid(cfg_bvalid),
+  .difftest_cfg_axilite_bresp(cfg_bresp),
+  .difftest_cfg_axilite_bready(cfg_bready),
+  .difftest_cfg_axilite_arvalid(cfg_arvalid),
+  .difftest_cfg_axilite_araddr(cfg_araddr),
+  .difftest_cfg_axilite_arready(cfg_arready),
+  .difftest_cfg_axilite_rvalid(cfg_rvalid),
+  .difftest_cfg_axilite_rdata(cfg_rdata),
+  .difftest_cfg_axilite_rresp(cfg_rresp),
+  .difftest_cfg_axilite_rready(cfg_rready),
 `endif // FPGA_SIM
 `ifdef CONFIG_DIFFTEST_CLOCKGATE
   .difftest_ref_clock(sim_clock),

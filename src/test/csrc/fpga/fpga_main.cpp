@@ -104,10 +104,10 @@ static bool run_external_cmd(const char *cmd, const char *tag) {
 
 void fpga_init() {
   xdma_device = new FpgaXdma();
-#ifndef FPGA_SIM
   xdma_device->fpga_io(HOST_IO_RESET, true);
   xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
+#ifndef FPGA_SIM
   usleep(1000);
 #endif // FPGA_SIM
 
@@ -136,16 +136,16 @@ void fpga_init() {
 
   difftest_init(args.enable_diff, DEFAULT_EMU_RAM_SIZE);
 
-#ifndef FPGA_SIM
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
+#ifndef FPGA_SIM
   if (fpga_ila_dump_cmd) {
     if (!run_external_cmd(fpga_ila_dump_cmd, "ILA dump")) {
       fprintf(stderr, "[fpga-host] warning: failed to arm external ILA dump command\n");
       exit(1);
     }
   }
-  xdma_device->fpga_io(HOST_IO_RESET, false);
 #endif // FPGA_SIM
+  xdma_device->fpga_io(HOST_IO_RESET, false);
 }
 
 void fpga_finish() {
@@ -188,9 +188,7 @@ int fpga_get_result(uint8_t step) {
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
-#ifndef FPGA_SIM
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
-#endif // FPGA_SIM
     if (trapCode == STATE_GOODTRAP)
       return FPGA_GOODTRAP;
     else

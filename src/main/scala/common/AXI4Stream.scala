@@ -14,7 +14,7 @@
  * See the Mulan PSL v2 for more details.
  ***************************************************************************************/
 
-package difftest.fpga
+package difftest.common
 import chisel3._
 import chisel3.util._
 

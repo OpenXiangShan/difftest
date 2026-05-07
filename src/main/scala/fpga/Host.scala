@@ -18,6 +18,7 @@ package difftest.fpga
 
 import chisel3._
 import chisel3.util._
+import difftest.common.AXI4Stream
 import difftest.gateway.FpgaDiffIO
 import difftest.util.{Delayer, PipelineConnect}
 
