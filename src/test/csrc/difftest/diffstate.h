@@ -23,10 +23,11 @@
 
 class CommitTrace {
 public:
+  uint64_t cycle;
   uint64_t pc;
   uint32_t inst;
 
-  CommitTrace(uint64_t pc, uint32_t inst) : pc(pc), inst(inst) {}
+  CommitTrace(uint64_t cycle, uint64_t pc, uint32_t inst) : cycle(cycle), pc(pc), inst(inst) {}
   virtual ~CommitTrace() {}
   virtual const char *get_type() = 0;
   virtual void display(bool use_spike = false);
@@ -49,9 +50,9 @@ public:
   uint8_t isStore;
   uint8_t sqidx;
 
-  InstrTrace(uint64_t pc, uint32_t inst, uint8_t wen, uint8_t dest, uint64_t data, uint8_t lqidx, uint8_t sqidx,
+  InstrTrace(uint64_t cycle, uint64_t pc, uint32_t inst, uint8_t wen, uint8_t dest, uint64_t data, uint8_t lqidx, uint8_t sqidx,
              uint16_t robidx, uint8_t isLoad, uint8_t isStore, bool skip = false, bool delayed = false)
-      : CommitTrace(pc, inst), robidx(robidx), isLoad(isLoad), lqidx(lqidx), isStore(isStore), sqidx(sqidx), wen(wen),
+      : CommitTrace(cycle, pc, inst), robidx(robidx), isLoad(isLoad), lqidx(lqidx), isStore(isStore), sqidx(sqidx), wen(wen),
         dest(dest), data(data), tag(get_tag(skip, delayed)) {}
   virtual inline const char *get_type() {
     return "commit";
@@ -85,7 +86,7 @@ private:
 class ExceptionTrace : public CommitTrace {
 public:
   uint64_t cause;
-  ExceptionTrace(uint64_t pc, uint32_t inst, uint64_t cause) : CommitTrace(pc, inst), cause(cause) {}
+  ExceptionTrace(uint64_t cycle, uint64_t pc, uint32_t inst, uint64_t cause) : CommitTrace(cycle, pc, inst), cause(cause) {}
   virtual inline const char *get_type() {
     return "exception";
   };
@@ -98,7 +99,7 @@ protected:
 
 class InterruptTrace : public ExceptionTrace {
 public:
-  InterruptTrace(uint64_t pc, uint32_t inst, uint64_t cause) : ExceptionTrace(pc, inst, cause) {}
+  InterruptTrace(uint64_t cycle, uint64_t pc, uint32_t inst, uint64_t cause) : ExceptionTrace(cycle, pc, inst, cause) {}
   virtual inline const char *get_type() {
     return "interrupt";
   }
@@ -151,13 +152,13 @@ public:
   }
   void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip, bool delayed,
                    uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore) {
-    push_back_trace(new InstrTrace(pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
+    push_back_trace(new InstrTrace(cycle_count, pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
   };
   void record_exception(uint64_t pc, uint32_t inst, uint64_t cause) {
-    push_back_trace(new ExceptionTrace(pc, inst, cause));
+    push_back_trace(new ExceptionTrace(cycle_count, pc, inst, cause));
   };
   void record_interrupt(uint64_t pc, uint32_t inst, uint64_t cause) {
-    push_back_trace(new InterruptTrace(pc, inst, cause));
+    push_back_trace(new InterruptTrace(cycle_count, pc, inst, cause));
   };
   void display();
 

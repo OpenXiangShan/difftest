@@ -18,7 +18,7 @@
 #include "spikedasm.h"
 
 void CommitTrace::display(bool use_spike) {
-  Info("%s pc %016lx inst %08x", get_type(), pc, inst);
+  Info("%s cycle %lu pc %016lx inst %08x", get_type(), cycle, pc, inst);
   display_custom();
   if (use_spike) {
     Info(" %s", spike_dasm(inst));
