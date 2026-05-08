@@ -27,14 +27,14 @@ jobs:
       - name: Build XiangShan
         run: |
           cd $NOOP_HOME
-          make verilog DEBUG_ARGS="--difftest-config ESBIFDU --difftest-exclude Vec" FPGA=1 WITH_CHISELDB=0 WITH_CONSTANTIN=0 CONFIG=XSNoCDiffTopConfig -j10
+          make verilog CHISEL_TARGET=chirrtl DEBUG_ARGS="--difftest-config ESBIFDU" FPGA=1 WITH_CHISELDB=0 WITH_CONSTANTIN=0 CONFIG=FpgaDiffDefaultConfig -j64
 
       - name: Build DiffTest
         run: |
           cd $NOOP_HOME/difftest
           export NOOP_HOME=$(pwd)
-          make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUMCORES=1 CONFIG=ESBIFDU  
-    
+          make difftest_verilog PROFILE=../build/generated-src/difftest_profile.json NUM_CORES=1 CONFIG=ESBIFDU -j64
+
       - name: Run STA
         run: |
           export PATH=/nfs/home/share/tools/yosys:$PATH
