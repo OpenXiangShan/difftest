@@ -20,16 +20,18 @@
 #include "common.h"
 
 struct TopdownIQInfoFrame {
-  uint8_t valid;
+  bool valid;
   uint16_t robIdx;
-  uint8_t robFlag;
+  bool robFlag;
   uint8_t pipeNum;
   uint8_t cancelSource;
-  uint8_t srcReady;
+  bool srcReady;
+  uint8_t futype;
+  bool issued;
 };
 
 struct TopdownExtendedIQInfoFrame {
-  uint8_t idealIssueTime;
+  bool idealIssueTime;
 };
 
 void topdown_iq_info_apply(int entries_num, const TopdownIQInfoFrame *in, TopdownExtendedIQInfoFrame *out);

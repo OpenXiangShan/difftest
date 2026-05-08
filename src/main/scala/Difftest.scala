@@ -808,6 +808,7 @@ object DifftestModule {
     val difftestCppExts = ListBuffer.empty[String]
     difftestCppExts += "#ifdef GSIM"
     difftestCppExts += "#include <cstdint>"
+    difftestCppExts += "#include <cstring>"
     difftestCppExts += "#include \"SimTop.h\""
     cppExtHeaders.foreach(h => difftestCppExts += s"#include $h")
     cppExtModules.foreach(m => difftestCppExts += m._2)

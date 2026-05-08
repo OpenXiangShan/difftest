@@ -20,12 +20,12 @@
 #include "common.h"
 
 struct TopdownRobInfoFrame {
-  uint8_t valid;
+  bool valid;
   uint16_t robIdx;
-  uint8_t robFlag;
+  bool robFlag;
   uint8_t cancelSource;
-  uint8_t issued;
-  uint8_t idealIssueTime;
+  bool issued;
+  bool idealIssueTime;
 };
 
 void topdown_rob_info_apply(int iq_entries_num, int rob_entries_num, const TopdownRobInfoFrame *in, TopdownRobInfoFrame *out);

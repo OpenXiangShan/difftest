@@ -27,6 +27,8 @@ class TopdownIQInfo extends Bundle {
   val pipeNum = UInt(8.W)
   val cancelSource = UInt(3.W)
   val srcReady = Bool()
+  val futype = UInt(8.W) // not one-hot
+  val issued = Bool()
 }
 
 class TopdownExtendedIQInfo extends Bundle {
@@ -46,6 +48,8 @@ object TopdownIQInfoPacking {
     "pipeNum" -> 8,
     "cancelSource" -> 3,
     "srcReady" -> 1,
+    "futype" -> 8,
+    "issued" -> 1,
   )
 
   val outputFieldSpecs: Seq[(String, Int)] = Seq(
@@ -64,6 +68,8 @@ class TopdownIQInfoPackedBundle(val entriesNum: Int) extends Bundle {
   val in_pipeNum = Input(UInt(packedWidth(entriesNum, 8).W))
   val in_cancelSource = Input(UInt(packedWidth(entriesNum, 3).W))
   val in_srcReady = Input(UInt(packedWidth(entriesNum, 1).W))
+  val in_futype = Input(UInt(packedWidth(entriesNum, 8).W))
+  val in_issued = Input(UInt(packedWidth(entriesNum, 1).W))
 
   val out_idealIssueTime = Output(UInt(packedWidth(entriesNum, 1).W))
 }
@@ -107,6 +113,11 @@ class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModu
     Seq("reg", widthString, s"$name;").mkString(" ")
   }
 
+  private def moduleWireDecl(name: String, width: Int): String = {
+    val widthString = if (width == 1) "      " else f"[${width - 1}%2d:0]"
+    Seq("wire", widthString, s"$name;").mkString(" ")
+  }
+
   private def dpiArg(name: String, width: Int, isOutput: Boolean): String = {
     val direction = if (isOutput) "output" else "input"
     val typeString = if (width == 1) "bit" else s"bit [${width - 1}:0]"
@@ -123,20 +134,92 @@ class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModu
     }
   }
 
+  private def gsimAlignedWidth(width: Int): Int = ((width + 63) / 64) * 64
+
+  private def gsimCppArg(name: String, width: Int, isOutput: Boolean): String = {
+    if (width <= 64) {
+      cppArg(name, width, isOutput)
+    } else {
+      val typeString = s"unsigned _BitInt(${gsimAlignedWidth(width)})"
+      if (isOutput) s"$typeString &$name" else s"$typeString $name"
+    }
+  }
+
+  private def gsimWideWordCount(width: Int): Int = gsimAlignedWidth(width) / 32
+
   private val cppArgs = inputArgs.map(arg => cppArg(arg.name, arg.totalWidth, isOutput = false)) ++
     outputArgs.map(arg => cppArg(arg.name, arg.totalWidth, isOutput = true))
+  private val gsimCppArgs = inputArgs.map(arg => gsimCppArg(arg.name, arg.totalWidth, isOutput = false)) ++
+    outputArgs.map(arg => gsimCppArg(arg.name, arg.totalWidth, isOutput = true))
   private val dpiArgs = inputArgs.map(arg => dpiArg(arg.name, arg.totalWidth, isOutput = false)) ++
     outputArgs.map(arg => dpiArg(arg.name, arg.totalWidth, isOutput = true))
   private val modulePorts = Seq("input clock") ++
     inputArgs.map(arg => modulePortArg(arg.name, arg.totalWidth, isOutput = false)) ++
     outputArgs.map(arg => modulePortArg(arg.name, arg.totalWidth, isOutput = true))
-  private val outputRegs = outputArgs.map(arg => (s"${arg.name}_reg", arg.totalWidth, arg.name))
-  private val dpiCallArgs = inputArgs.map(_.name) ++ outputRegs.map(_._1)
-  private val synthDefaults = outputRegs.map { case (regName, width, _) =>
-    if (width == 1) s"$regName = 1'b0;" else s"$regName = ${width}'b0;"
+  private val outputModuleTemps = outputArgs.map(arg => (s"${arg.name.stripPrefix("io_out_")}_tmp", arg.totalWidth, arg.name))
+  private val outputCallTemps = outputArgs.map(arg => (s"${arg.name.stripPrefix("io_out_")}_dpi_tmp", arg.totalWidth, arg.name))
+  private val svDpiCallArgs = inputArgs.map(_.name) ++ outputCallTemps.map(_._1)
+  private val outputTmpDecls = outputModuleTemps.map { case (tmpName, width, _) => moduleWireDecl(tmpName, width) }
+  private val synthTmpAssigns = outputModuleTemps.map { case (tmpName, width, _) =>
+    if (width == 1) s"assign $tmpName = 1'b0;" else s"assign $tmpName = ${width}'b0;"
   }
-  private val outputRegDecls = outputRegs.map { case (regName, width, _) => moduleRegDecl(regName, width) }
-  private val outputNetAssigns = outputRegs.map { case (regName, _, portName) => s"assign $portName = $regName;" }
+  private val cppExtWideInputTemps = inputArgs.filter(_.totalWidth > 64).map { arg =>
+    val tempName = s"${arg.name}_words"
+    val wordCount = gsimWideWordCount(arg.totalWidth)
+    s"uint32_t $tempName[$wordCount] = {};\n  std::memcpy($tempName, &${arg.name}, sizeof($tempName));"
+  }
+  private val cppExtWideOutputTemps = outputArgs.filter(_.totalWidth > 64).map { arg =>
+    val tempName = s"${arg.name}_words"
+    val wordCount = gsimWideWordCount(arg.totalWidth)
+    s"uint32_t $tempName[$wordCount] = {};"
+  }
+  private val cppExtCallArgs = inputArgs.map { arg =>
+    if (arg.totalWidth <= 64) arg.name else s"${arg.name}_words"
+  } ++ outputArgs.map { arg =>
+    if (arg.totalWidth <= 64) arg.name else s"${arg.name}_words"
+  }
+  private val cppExtWideOutputCopies = outputArgs.filter(_.totalWidth > 64).map { arg =>
+    val tempName = s"${arg.name}_words"
+    s"std::memcpy(&${arg.name}, $tempName, sizeof($tempName));"
+  }
+
+  private def localVarDecl(name: String, width: Int): String = {
+    if (width == 1) s"bit $name;" else s"bit [${width - 1}:0] $name;"
+  }
+
+  private def functionType(width: Int): String = {
+    if (width == 1) "bit" else s"bit [${width - 1}:0]"
+  }
+
+  private val outputEvalFuncs = outputArgs.map { arg =>
+    val funcName = s"${arg.name}_value"
+    val localDecls = outputCallTemps.map { case (tmpName, width, _) => localVarDecl(tmpName, width) }
+    val localDefaults = outputCallTemps.map { case (tmpName, width, _) =>
+      if (width == 1) s"$tmpName = 1'b0;" else s"$tmpName = ${width}'b0;"
+    }
+    val returnTmpName = s"${arg.name.stripPrefix("io_out_")}_dpi_tmp"
+
+    s"""
+      |function automatic ${functionType(arg.totalWidth)} $funcName;
+      |  ${localDecls.mkString("\n  ")}
+      |  begin
+      |    ${localDefaults.mkString("\n    ")}
+      |    $dpiFuncName(
+      |      ${svDpiCallArgs.mkString(",\n      ")}
+      |    );
+      |    $funcName = $returnTmpName;
+      |  end
+      |endfunction
+      |""".stripMargin
+  }
+  private val outputTmpAssigns = outputArgs.map(arg => {
+    val tmpName = s"${arg.name.stripPrefix("io_out_")}_tmp"
+    s"assign $tmpName = ${arg.name}_value();"
+  })
+  private val outputNetAssigns = outputArgs.map(arg => {
+    val tmpName = s"${arg.name.stripPrefix("io_out_")}_tmp"
+    s"assign ${arg.name} = $tmpName;"
+  })
 
   private def maskExpr(width: Int): String = if (width == 32) "0xffffffffULL" else s"((1ULL << $width) - 1ULL)"
 
@@ -229,12 +312,19 @@ class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModu
 
   private val cppExtModule =
     s"""
-      |void $desiredName (
+      |extern \"C\" void $dpiFuncName (
       |  ${cppArgs.mkString(",\n  ")}
+      |);
+      |
+      |void $desiredName (
+      |  ${gsimCppArgs.mkString(",\n  ")}
       |) {
+      |  ${cppExtWideInputTemps.mkString("\n  ")}
+      |  ${cppExtWideOutputTemps.mkString("\n  ")}
       |  $dpiFuncName(
-      |    ${dpiCallArgs.mkString(",\n    ")}
+      |    ${cppExtCallArgs.mkString(",\n    ")}
       |  );
+      |  ${cppExtWideOutputCopies.mkString("\n  ")}
       |}
       |""".stripMargin
   difftest.DifftestModule.createCppDPICModule(dpiFuncName, cppDPICModule, Some("\"topdown_iq_info.h\""))
@@ -253,20 +343,15 @@ class TopdownIQInfoHelper(val entriesNum: Int) extends ExtModule with HasExtModu
       |  ${modulePorts.mkString(",\n  ")}
       |);
       |
-      |  ${outputRegDecls.mkString("\n  ")}
-      |  ${outputNetAssigns.mkString("\n  ")}
+      |  ${outputTmpDecls.mkString("\n  ")}
       |
       |`ifdef SYNTHESIS
-      |  always @(*) begin
-      |    ${synthDefaults.mkString("\n    ")}
-      |  end
+      |  ${synthTmpAssigns.mkString("\n  ")}
+      |  ${outputNetAssigns.mkString("\n  ")}
       |`else
-      |  always @(*) begin
-      |    ${synthDefaults.mkString("\n    ")}
-      |    $dpiFuncName(
-      |      ${dpiCallArgs.mkString(",\n      ")}
-      |    );
-      |  end
+      |  ${outputEvalFuncs.mkString("\n  ")}
+      |  ${outputTmpAssigns.mkString("\n  ")}
+      |  ${outputNetAssigns.mkString("\n  ")}
       |`endif // SYNTHESIS
       |
       |endmodule
@@ -294,6 +379,8 @@ class TopdownIQInfoCollect(val entriesNum: Int) extends Module {
   helper.io.in_pipeNum := packFields(io.in.map(_.pipeNum))
   helper.io.in_cancelSource := packFields(io.in.map(_.cancelSource))
   helper.io.in_srcReady := packFields(io.in.map(_.srcReady.asUInt))
+  helper.io.in_futype := packFields(io.in.map(_.futype))
+  helper.io.in_issued := packFields(io.in.map(_.issued.asUInt))
 
   for (idx <- 0 until entriesNum) {
     io.out(idx).idealIssueTime := unpackField(helper.io.out_idealIssueTime, idx, 1).asBool
