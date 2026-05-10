@@ -46,6 +46,7 @@ private:
   bool progress_trace_enabled = false;
   uint64_t progress_trace_interval_cycles = 0;
   uint64_t next_progress_trace_cycle = 0;
+  bool runtime_profile_enabled = false;
   bool phase_timing_enabled = false;
   uint64_t phase_timing_tick_total_us = 0;
   uint64_t phase_timing_single_cycle_us = 0;

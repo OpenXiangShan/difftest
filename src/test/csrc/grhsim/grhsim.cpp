@@ -106,4 +106,12 @@ SimulatorRuntimeStats GrhSIMDiffTestSim::runtime_stats() const {
   return stats;
 }
 
+void GrhSIMDiffTestSim::set_runtime_profile_enabled(bool enabled) {
+  dut->set_runtime_profile_enabled(enabled);
+}
+
+void GrhSIMDiffTestSim::dump_runtime_profile() const {
+  dut->dump_runtime_profile();
+}
+
 #endif // GRHSIM

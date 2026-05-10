@@ -103,6 +103,8 @@ public:
   void waveform_tick() override;
   void step() override;
   SimulatorRuntimeStats runtime_stats() const override;
+  void set_runtime_profile_enabled(bool enabled) override;
+  void dump_runtime_profile() const override;
 
   inline void set_clock(unsigned clock) override {
     grhsim_detail::port_write(dut->clock, clock);

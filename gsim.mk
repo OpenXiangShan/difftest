@@ -26,10 +26,15 @@ GSIM_EMU_TARGET = $(abspath $(GSIM_EMU_BUILD_DIR)/emu)
 
 GSIM_GEN_CSRC_DIR = $(GSIM_EMU_BUILD_DIR)/model
 GSIM_FLAGS = --supernode-max-size=15 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --sep-aggr=__DOT__
+GSIM_EMIT_RUNTIME_PROFILE ?= 0
 
 $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir
 	@mkdir -p $(@D)
-	$(GSIM_BIN) $(GSIM_FLAGS) --dir $(@D) $< | tee $(GSIM_EMU_BUILD_DIR)/gsim-gen-cpp.log
+	@/bin/bash -o pipefail -c 'GSIM_EMIT_RUNTIME_PROFILE=$(GSIM_EMIT_RUNTIME_PROFILE) $(GSIM_BIN) $(GSIM_FLAGS) --dir "$$1" "$$2" | tee "$$3"' _ "$(@D)" "$<" "$(GSIM_EMU_BUILD_DIR)/gsim-gen-cpp.log"
+	@if [ ! -f "$(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h" ]; then \
+		echo "GSIM model generation did not produce $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h"; \
+		exit 1; \
+	fi
 
 gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 
@@ -42,6 +47,9 @@ GSIM_CXXFILES = $(EMU_CXXFILES) $(shell find $(GSIM_OTHER_CSRC_DIR) -name "*.cpp
 # We need to replace extra '\' as this is native in Makefile for GSIM
 GSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GSIM_CXXFLAGS += -I$(GSIM_OTHER_CSRC_DIR) -I$(GSIM_GEN_CSRC_DIR)/ -DGSIM
+ifeq ($(GSIM_EMIT_RUNTIME_PROFILE),1)
+GSIM_CXXFLAGS += -DGSIM_RUNTIME_PROFILE
+endif
 GSIM_CXXFLAGS += $(EMU_OPTIMIZE) -fbracket-depth=2048 -Wno-parentheses-equality $(PGO_CFLAGS)
 GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
 

@@ -116,6 +116,10 @@ public:
   virtual SimulatorRuntimeStats runtime_stats() const {
     return {};
   }
+  virtual void set_runtime_profile_enabled(bool enabled) {
+    (void)enabled;
+  }
+  virtual void dump_runtime_profile() const {}
 
   /******* final methods *******/
 

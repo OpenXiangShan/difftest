@@ -70,6 +70,16 @@ public:
   inline void set_log_end(uint64_t end) override {
     dut->set_difftest__DOT__logCtrl__DOT__end(end);
   }
+
+#ifdef GSIM_RUNTIME_PROFILE
+  inline void set_runtime_profile_enabled(bool enabled) override {
+    dut->set_runtime_profile_enabled(enabled);
+  }
+
+  inline void dump_runtime_profile() const override {
+    dut->dump_runtime_profile();
+  }
+#endif
 };
 
 #endif // __SIMULATOR_GSIM_H

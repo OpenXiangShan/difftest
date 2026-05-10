@@ -98,7 +98,11 @@ Emulator::Emulator(int argc, const char *argv[])
   progress_trace_interval_cycles = parse_env_u64("EMU_PROGRESS_EVERY_CYCLES", 0);
   progress_trace_enabled = progress_trace_interval_cycles != 0;
   next_progress_trace_cycle = progress_trace_interval_cycles;
+  runtime_profile_enabled = env_flag("EMU_RUNTIME_PROFILE");
   phase_timing_enabled = env_flag("EMU_PHASE_TIMING");
+#if defined(GSIM_RUNTIME_PROFILE) || defined(GRHSIM)
+  dut_ptr->set_runtime_profile_enabled(runtime_profile_enabled);
+#endif
   if (args.max_cycles == static_cast<uint64_t>(-1)) {
     Info("max cycles: unlimited\n");
   } else {
@@ -109,6 +113,9 @@ Emulator::Emulator(int argc, const char *argv[])
   }
   if (phase_timing_enabled) {
     Info("[EMU_PHASE_TIMING] enabled\n");
+  }
+  if (runtime_profile_enabled) {
+    Info("[EMU_RUNTIME_PROFILE] enabled\n");
   }
 #ifdef VERILATOR
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
@@ -348,6 +355,11 @@ Emulator::~Emulator() {
          runtime_stats.round2Count, runtime_stats.totalRoundCount, runtime_stats.computeBatchExecCount,
          runtime_stats.commitBatchExecCount, runtime_stats.touchedStateShadowCount,
          runtime_stats.touchedWriteCount);
+  }
+  if (runtime_profile_enabled) {
+#if defined(GSIM_RUNTIME_PROFILE) || defined(GRHSIM)
+    dut_ptr->dump_runtime_profile();
+#endif
   }
 
   if (enable_simjtag) {
