@@ -29,6 +29,7 @@
 #   CLK_PORT_NAME      - Clock port name, default clock
 #   SDC_FILE           - SDC constraints file path
 #   PDK                - Process design kit, default nangate45
+#   YOSYS_SHARE_MODE   - Resource sharing mode: skip, normal, fast, aggressive. default skip
 #
 # Examples:
 #   # Use yosys-sta from environment variable
@@ -63,6 +64,7 @@ print_help() {
     echo "  CLK_PORT_NAME   - Clock port name, default clock"
     echo "  SDC_FILE        - SDC constraints file path"
     echo "  PDK             - Process design kit, default nangate45"
+    echo "  YOSYS_SHARE_MODE - Resource sharing mode: skip, normal, fast, aggressive. default skip"
     echo ""
     echo "Notes:"
     echo "  - .v, .vh, .sv files will be processed as design files"
@@ -127,6 +129,7 @@ RUN_STA_STATUS_FILE="${RUN_STA_STATUS_FILE:-${RESULT_DIR}/run_sta.status}"
 YOSYS_TIMEOUT="${YOSYS_TIMEOUT:-12h}"
 ISTA_TIMEOUT="${ISTA_TIMEOUT:-24h}"
 TIMEOUT_KILL_AFTER="${TIMEOUT_KILL_AFTER:-10m}"
+export YOSYS_SHARE_MODE="${YOSYS_SHARE_MODE:-skip}"
 
 # Resolve log/status paths to absolute paths because cwd changes during flow.
 if [[ "${RUN_STA_LOG_FILE}" != /* ]]; then
@@ -170,7 +173,7 @@ trap 'on_signal HUP 129' HUP
 trap 'on_signal QUIT 131' QUIT
 
 # Set ABC threads
-ABC_THREADS="${ABC_THREADS:-16}"
+export ABC_THREADS="${ABC_THREADS:-16}"
 [ "$STA_VERBOSE" = "1" ] && echo "ABC threads: ${ABC_THREADS}"
 
 # Set synthesized netlist path
@@ -188,6 +191,7 @@ echo "PDK:                 ${PDK}"
 echo "Result directory:    ${RESULT_DIR}"
 echo "Yosys timeout:       ${YOSYS_TIMEOUT}"
 echo "iSTA timeout:        ${ISTA_TIMEOUT}"
+echo "Yosys share mode:    ${YOSYS_SHARE_MODE}"
 echo ""
 
 # Check yosys-sta directory
@@ -302,6 +306,18 @@ fi
 
 echo -e "${YELLOW}Using SDC file: $SDC_FILE${NC}"
 
+case "${YOSYS_SHARE_MODE}" in
+    skip|normal|fast|aggressive)
+        ;;
+    *)
+        echo -e "${RED}Error: Unsupported YOSYS_SHARE_MODE: ${YOSYS_SHARE_MODE}${NC}"
+        echo -e "${YELLOW}Supported values: skip, normal, fast, aggressive${NC}"
+        exit 1
+        ;;
+esac
+
+status_mark "YOSYS_SCRIPT share=${YOSYS_SHARE_MODE} path=${YOSYS_STA_DIR}/scripts/yosys.tcl"
+
 # Preprocess RTL files (convert incompatible SV syntax)
 echo -e "${YELLOW}Preprocessing RTL files...${NC}"
 PREPROCESSED_RTL_DIR="${RESULT_DIR}/rtl_preprocessed"
@@ -360,11 +376,11 @@ YOSYS_INC_CMD="verilog_defaults -add -I${PREPROCESSED_RTL_DIR}"
 status_mark "YOSYS_START timeout=${YOSYS_TIMEOUT}"
 set +e
 if [ "${YOSYS_TIMEOUT}" != "0" ] && command -v timeout >/dev/null 2>&1; then
-    echo "${YOSYS_INC_CMD}; tcl scripts/yosys.tcl ${TOP_MODULE} ${PDK} \"${RTL_FILES}\" ${NETLIST_SYN_V}" | \
+    echo "${YOSYS_INC_CMD}; tcl scripts/yosys.tcl ${TOP_MODULE} ${PDK} \"${RTL_FILES}\" ${NETLIST_SYN_V} ${YOSYS_SHARE_MODE}" | \
         timeout --foreground --signal=TERM --kill-after="${TIMEOUT_KILL_AFTER}" "${YOSYS_TIMEOUT}" \
         yosys -g -l "${RESULT_DIR}/yosys.log" -s -
 else
-    echo "${YOSYS_INC_CMD}; tcl scripts/yosys.tcl ${TOP_MODULE} ${PDK} \"${RTL_FILES}\" ${NETLIST_SYN_V}" | \
+    echo "${YOSYS_INC_CMD}; tcl scripts/yosys.tcl ${TOP_MODULE} ${PDK} \"${RTL_FILES}\" ${NETLIST_SYN_V} ${YOSYS_SHARE_MODE}" | \
         yosys -g -l "${RESULT_DIR}/yosys.log" -s -
 fi
 YOSYS_EXIT_CODE=$?

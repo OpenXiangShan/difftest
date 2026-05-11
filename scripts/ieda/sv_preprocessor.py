@@ -170,8 +170,8 @@ def preprocess_assignment_pattern(content):
     """
     Convert assignment pattern syntax '{...} to compatible format
 
-    Original: wire/logic [15:0][3:0] _GEN = '{4'h0, 4'h0, ...};
-    Converted: wire/logic [15:0][3:0] _GEN;
+    Original: wire [15:0][3:0] _GEN = '{4'h0, 4'h0, ...};
+    Converted: wire [15:0][3:0] _GEN;
                assign _GEN[0] = 4'h0;
                assign _GEN[1] = 4'h0;
                ...
