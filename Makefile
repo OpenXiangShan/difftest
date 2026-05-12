@@ -312,13 +312,14 @@ endif
 include pgo.mk
 include emu.mk
 include vcs.mk
+include uvs.mk
 include galaxsim.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
 include pdb.mk
 
-clean: vcs-clean pldm-clean fpga-clean
+clean: vcs-clean uvs-clean pldm-clean fpga-clean
 	rm -rf $(BUILD_DIR)
 
 format: scala-format clang-format
