@@ -61,6 +61,8 @@ FpgaXdma *xdma_device = NULL;
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
 int main(int argc, const char *argv[]) {
+  common_set_locale();
+
   fpga_ddr_load_cmd = std::getenv("FPGA_DDR_LOAD_CMD");
   fpga_ila_dump_cmd = std::getenv("FPGA_ILA_DUMP_CMD");
   args = parse_args(argc, argv);
