@@ -167,7 +167,8 @@ void difftest_finish() {
 #endif
 #ifdef CONFIG_DIFFTEST_PERFCNT
   uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
-  difftest_perfcnt_finish(cycleCnt);
+  uint64_t instrCnt = difftest[0]->get_trap_event()->instrCnt;
+  difftest_perfcnt_finish(cycleCnt, instrCnt);
 #endif // CONFIG_DIFFTEST_PERFCNT
 #ifdef CONFIG_DIFFTEST_IOTRACE
   difftest_iotrace_free();

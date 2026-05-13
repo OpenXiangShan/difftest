@@ -31,14 +31,20 @@ void difftest_perfcnt_init() {
   diffstate_perfcnt_init();
 }
 
-void difftest_perfcnt_finish(uint64_t cycleCnt) {
+void difftest_perfcnt_finish(uint64_t cycleCnt, uint64_t instrCnt) {
   printf("==================== Difftest PerfCnt ====================\n");
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
   perf_run_msec = ts.tv_sec * 1000 + ts.tv_nsec / 1000000 - perf_run_msec;
   printf("Run time: %lld s %lld ms\n", perf_run_msec / 1000, perf_run_msec % 1000);
-  float speed = (float)cycleCnt / (float)perf_run_msec;
-  printf("Simulation speed: %.2f KHz\n", speed);
+  float khz = (float)cycleCnt / (float)perf_run_msec;
+  float kips = (float)instrCnt / (float)perf_run_msec;
+  printf("Simulation speed: ");
+  if (khz < 1000) {
+    printf("%.2f KHz, %.2f KIPS\n", khz, kips);
+  } else {
+    printf("%.2f MHz, %.2f MIPS\n", khz / 1000, kips / 1000);
+  }
   printf("%30s %15s %17s %16s %18s\n", "DPIC_FUNC", "DPIC_CALLS", "DPIC_CALLS/s", "DPIC_BYTES", "DPIC_BYTES/s");
   printf(">>> DiffState Func\n");
   diffstate_perfcnt_finish(perf_run_msec);

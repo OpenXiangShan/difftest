@@ -111,6 +111,9 @@ void common_init(const char *program_name);
 void common_init_without_assertion(const char *program_name);
 void common_enable_assert();
 
+// Set locale for printf thousands separators.
+void common_set_locale();
+
 // Enable external log system
 typedef int (*eprintf_handle_t)(const char *fmt, va_list ap);
 extern "C" void common_enable_log(eprintf_handle_t h);

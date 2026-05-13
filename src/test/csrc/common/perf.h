@@ -25,7 +25,7 @@ static inline void difftest_perfcnt_print(const char *name, long long calls, lon
   printf("%30s %15lld %15lld/s %15lldB %15lldB/s\n", name, calls, calls_mean, bytes, bytes_mean);
 }
 void difftest_perfcnt_init();
-void difftest_perfcnt_finish(uint64_t cycleCnt);
+void difftest_perfcnt_finish(uint64_t cycleCnt, uint64_t instrCnt);
 enum DIFFTEST_PERF {
   perf_difftest_nstep,
   perf_difftest_ram_read,
