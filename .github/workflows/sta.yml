@@ -100,3 +100,47 @@ jobs:
             echo "ERROR: critical_paths.txt not found!"
             exit 1
           fi
+
+      - name: Publish STA timing summary
+        run: |
+          cd $NOOP_HOME/difftest
+          SUMMARY_FILE=./scripts/ieda/sta_results/sta_summary.txt
+          CRITICAL_FILE=./scripts/ieda/sta_results/critical_paths.txt
+          RUN_STA_LOG=./scripts/ieda/sta_results/run_sta.log
+
+          if [ ! -f "$SUMMARY_FILE" ]; then
+            echo "ERROR: sta_summary.txt not found!"
+            exit 1
+          fi
+          if [ ! -f "$CRITICAL_FILE" ]; then
+            echo "ERROR: critical_paths.txt not found!"
+            exit 1
+          fi
+
+          {
+            echo "## STA timing analysis"
+            echo ""
+            echo "### Summary"
+            echo '```txt'
+            sed -n '1,160p' "$SUMMARY_FILE"
+            echo '```'
+            echo ""
+            echo "### Critical paths"
+            echo '```txt'
+            sed -n '1,220p' "$CRITICAL_FILE"
+            echo '```'
+          } | tee -a "$RUN_STA_LOG"
+
+          ARTIFACT_DIR="$GITHUB_WORKSPACE/sta-results"
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+          cp "$SUMMARY_FILE" "$CRITICAL_FILE" \
+            ./scripts/ieda/sta_results/run_sta.log \
+            ./scripts/ieda/sta_results/run_sta.status \
+            "$ARTIFACT_DIR"/
+
+      - name: Upload STA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sta-results
+          path: sta-results/*
