@@ -86,10 +86,11 @@ VERILATOR_FLAGS_ALL =               \
   +define+RANDOMIZE_GARBAGE_ASSIGN  \
   +define+RANDOMIZE_DELAY=0         \
   -Wno-STMTDLY -Wno-WIDTH           \
+  -Wno-UNOPTTHREADS                 \
   --max-num-width 150000            \
   --assert --x-assign unique        \
-  --output-split 30000              \
-  --output-split-cfuncs 30000       \
+  --output-split 2500               \
+  --output-split-cfuncs 2500        \
   -I$(RTL_DIR)                      \
   -I$(GEN_VSRC_DIR)                 \
   -CFLAGS "$(VERILATOR_CXXFLAGS)"   \
