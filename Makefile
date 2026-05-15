@@ -312,6 +312,7 @@ endif
 include pgo.mk
 include emu.mk
 include vcs.mk
+include uvs.mk
 include galaxsim.mk
 include palladium.mk
 include libso.mk
