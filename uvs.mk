@@ -110,6 +110,9 @@ UVS_FLAGS += +incdir+$(GEN_VSRC_DIR)
 # enable usdb dump
 UVS_FLAGS += $(EXTRA)
 
+UVS_EXTRA_OPTS ?=
+UVS_FLAGS += $(UVS_EXTRA_OPTS)
+
 UVS_VSRC_DIR = $(abspath ./src/test/vsrc/vcs)
 UVS_VFILES   = $(SIM_VSRC) $(shell find $(UVS_VSRC_DIR) -name "*.v" -or -name "*.sv")
 $(UVS_TARGET): $(SIM_TOP_V) $(UVS_CXXFILES) $(UVS_VFILES)
@@ -132,6 +135,9 @@ RUN_OPTS += +no-diff
 endif
 
 RUN_OPTS += -sva_single_exit_maxfail 30 -sva_exit_maxfail 10000   
+
+RUN_EXTRA_OPTS ?=
+RUN_OPTS += $(RUN_EXTRA_OPTS)
 
 uvsim-run:
 	$(shell if [ ! -e $(UVS_RUN_DIR) ]; then mkdir -p $(UVS_RUN_DIR); fi)
