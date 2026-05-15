@@ -21,7 +21,7 @@ import chisel3.reflect.DataMirror
 import chisel3.util._
 import difftest._
 import difftest.DifftestModule.createCppExtModule
-import difftest.batch.{BatchInfo, BatchIO}
+import difftest.batch.{Batch, BatchIO, BatchParam}
 import difftest.common.FileControl
 import difftest.delta.Delta
 import difftest.gateway.{GatewayConfig, GatewayResult, GatewaySinkControl}
@@ -96,6 +96,12 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
     }
     val index = if (gen.isIndexed) s"[${prefix}index]" else if (gen.isFlatten) s"[${prefix}address]" else ""
     s"auto packet = &($packet$index);"
+  }
+  def indentCppBlock(code: String, indent: Int): String = {
+    val prefix = " " * indent
+    code.linesIterator.map { line =>
+      if (line.isEmpty || line.startsWith("#")) line else s"$prefix$line"
+    }.mkString("\n")
   }
   def dpicFuncAssigns: Seq[String]
   def perfCnt: String = {
@@ -225,9 +231,9 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
 }
 
 class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: GatewayConfig) extends DPICBase(config) {
-  val io = IO(Input(UInt(batchIO.getWidth.W)))
+  val io = IO(Input(UInt(batchIO.payload.getWidth.W)))
 
-  def getDPICBundleUnpack(gen: DifftestBundle): String = {
+  def getDPICBundleUnpack(gen: DifftestBundle, source: String): String = {
     val unpack = ListBuffer.empty[String]
     // Note: locating elems will not in struct defined, but at the end of reordered Bundle
     val (elem_names, elem_bytes) = gen.getByteAlignElems.map { case (name, data) => (name, data.getWidth / 8) }.unzip
@@ -235,7 +241,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
       if (Seq("coreid", "index", "address").contains(name)) {
         val offset = elem_bytes.take(idx).sum
         val typeStr = s"uint${elem_bytes(idx) * 8}_t"
-        unpack += s"$name = *(($typeStr*)(data + $offset));"
+        unpack += s"$name = *(($typeStr*)($source + $offset));"
       }
     }
     unpack += getPacketDecl(gen, "", config)
@@ -244,111 +250,115 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     } else {
       s"sizeof(${gen.desiredModuleName})"
     }
-    unpack += s"memcpy(packet, data, $size);"
-    unpack += s"data += ${elem_bytes.sum};"
+    unpack += s"memcpy(packet, $source, $size);"
     if (config.isDelta && gen.isDeltaElem) {
       unpack += "dStats->hasProgress = true;"
     }
-    unpack +=
-      s"""
-         |#ifdef CONFIG_DIFFTEST_QUERY
-         |        ${Query.writeInvoke(gen)}
-         |#endif // CONFIG_DIFFTEST_QUERY
-         |""".stripMargin
-    unpack.toSeq.mkString("\n        ")
+    unpack += "#ifdef CONFIG_DIFFTEST_QUERY"
+    unpack += Query.writeInvoke(gen)
+    unpack += "#endif // CONFIG_DIFFTEST_QUERY"
+    unpack.toSeq.mkString("\n")
   }
 
   override def modPorts = super.modPorts ++ Seq(Seq(("io", io)))
 
   override def desiredName: String = "DiffExtBatch"
   override def dpicFuncAssigns: Seq[String] = {
-    val bundleEnum = template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchStep", "BatchFinish")
+    val bundleEnum = template.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchHead", "BatchStep")
+    def elemSizeExpr(gen: DifftestBundle): String = {
+      val packetSize = if (config.isDelta && gen.isDeltaElem) {
+        s"sizeof(uint${gen.deltaElemWidth}_t)"
+      } else {
+        s"sizeof(${gen.desiredModuleName})"
+      }
+      val locatorBytes = gen.getByteAlignElems.collect {
+        case (name, data) if Seq("coreid", "index", "address").contains(name) => data.getWidth / 8
+      }.sum
+      if (locatorBytes == 0) packetSize else s"($packetSize + $locatorBytes)"
+    }
     val bundleAssign = template.zipWithIndex.map { case (t, idx) =>
       val bundleName = bundleEnum(idx)
       val perfName = "perf_Batch_" + bundleName
-      s"""
-         |    else if (id == $bundleName) {
+      val elemSize = elemSizeExpr(t)
+      s"""    else if (id == $bundleName) {
+         |      if (!parser.recv_cluster(chunk_payload, num, $elemSize)) continue;
          |#ifdef CONFIG_DIFFTEST_PERFCNT
          |      dpic_calls[$perfName] += num;
-         |      dpic_bytes[$perfName] += num * ${t.getByteAlignWidth / 8};
+         |      dpic_bytes[$perfName] += num * $elemSize;
          |#endif // CONFIG_DIFFTEST_PERFCNT
+         |      uint8_t* data = parser.cluster_buf();
          |      for (int j = 0; j < num; j++) {
-         |        ${getDPICBundleUnpack(t)}
+         |${indentCppBlock(getDPICBundleUnpack(t, "data"), 8)}
+         |        data += $elemSize;
          |      }
+         |      parser.finish_cluster();
          |    }
         """.stripMargin
-    }.mkString("")
+    }.mkString("\n")
 
-    def parse(gen: BatchIO): (String, Int) = {
-      val info = new BatchInfo
-      val infoLen = gen.info.getWidth / info.getWidth
-      val structDecl =
-        s"""
-           |  typedef struct {
-           |    ${info.elements.toSeq.map { case (name, data) => getDPICArgString(name, data, true, false) }
-            .mkString(";\n    ")};
-           |  } BatchInfo;
-           |  typedef struct {
-           |    ${gen.elements.toSeq.map { case (name, data) =>
-            if (name == "info") s"BatchInfo info[$infoLen]" else getDPICArgString(name, data, true, false)
-          }.mkString(";\n    ")};
-           |  } BatchPack;
-           |  BatchPack* batch = (BatchPack*)io;
-           |  BatchInfo* info = batch->info;
-           |  uint8_t* data = batch->data;
-           |""".stripMargin
-      (structDecl, infoLen)
-    }
-    val (batchDecl, infoLen) = parse(batchIO)
     val stepPending = if (config.isDelta) {
       """
-        |      if (dStats->need_pending())
-        |        continue; // Not changing dut_index
+        |      if (dStats->need_pending()) {
+        |        return; // Not changing dut_index
+        |      }
         |      dStats->sync(0, dut_index);
         |""".stripMargin
     } else ""
+    val batchStepAssign =
+      s"""    if (id == BatchStep) {
+         |      if (parser.info_count() != parser.parsed_info_count()) {
+         |        printf("Batch info size mismatch: expected %u, parsed %u\\n",
+         |          parser.info_count(), parser.parsed_info_count());
+         |        assert(0);
+         |      }
+         |      if (num != parser.parsed_chunk_count()) {
+         |        printf("Batch chunk size mismatch: expected %u, parsed %u\\n",
+         |          num, parser.parsed_chunk_count());
+         |        assert(0);
+         |      }
+         |#ifdef CONFIG_DIFFTEST_QUERY
+         |      if (qStats) qStats->BatchStep_write(batch_query_nums);
+         |      memset(batch_query_nums, 0, sizeof(batch_query_nums));
+         |#endif // CONFIG_DIFFTEST_QUERY
+         |      parser.reset_step();
+         |$stepPending
+         |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
+         |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
+         |#ifdef FPGA_HOST
+         |      extern void fpga_nstep(uint8_t step);
+         |      fpga_nstep(1);
+         |#else
+         |      extern void simv_nstep(uint8_t step);
+         |      simv_nstep(1);
+         |#endif // FPGA_HOST
+         |#endif // CONFIG_DIFFTEST_INTERNAL_STEP
+         |      return;
+         |    }
+         |""".stripMargin
     Seq(s"""
-           |  enum DifftestBundleType {
-           |  ${bundleEnum.mkString(",\n  ")}
-           |  };
+           |  uint8_t* payload = (uint8_t*)io;
+           |  static DifftestBatchParser parser;
            |  static int dut_index = 0;
-           |#ifdef CONFIG_DIFFTEST_QUERY
-           |  static int batch_query_nums[${bundleEnum.length}] = {0};
-           |#endif // CONFIG_DIFFTEST_QUERY
-           |  $batchDecl
-           |  for (int i = 0; i < $infoLen; i++) {
-           |    if (!diffstate_buffer) return;
-           |    uint8_t id = info[i].id;
-           |    uint8_t num = info[i].num;
+           |
+           |  for (uint32_t chunk = 0; chunk <= DIFFTEST_BATCH_BEAT_CHUNKS; chunk++) {
+           |    bool has_chunk = chunk < DIFFTEST_BATCH_BEAT_CHUNKS;
+           |    const uint8_t* chunk_payload = payload + chunk * DIFFTEST_BATCH_CHUNK_BYTES;
+           |    if (has_chunk && parser.reading_info()) {
+           |      if (!parser.recv_info(chunk_payload)) return;
+           |      if (parser.reading_info() || parser.current_info().id != BatchStep) continue;
+           |    }
+           |    if (parser.reading_info()) continue;
+           |    if (!has_chunk && parser.current_info().id != BatchStep) continue;
+           |
+           |    uint8_t id = parser.current_info().id;
+           |    uint8_t num = parser.current_info().num;
            |    uint32_t coreid, index, address;
-           |#ifdef CONFIG_DIFFTEST_QUERY
-           |    if (qStats) {
-           |      qStats->BatchInfo_write(id, num);
-           |      batch_query_nums[id] = num;
+           |$batchStepAssign
+           |$bundleAssign
+           |    else {
+           |      printf("Batch bundle id mismatch: id %u\\n", id);
+           |      assert(0);
            |    }
-           |#endif // CONFIG_DIFFTEST_QUERY
-           |    if (id == BatchFinish) {
-           |      break;
-           |    }
-           |    else if (id == BatchStep) {
-           |#ifdef CONFIG_DIFFTEST_QUERY
-           |      if (qStats) qStats->BatchStep_write(batch_query_nums);
-           |      memset(batch_query_nums, 0, sizeof(batch_query_nums));
-           |#endif // CONFIG_DIFFTEST_QUERY
-           |      $stepPending
-           |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
-           |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
-           |#ifdef FPGA_HOST
-           |      extern void fpga_nstep(uint8_t step);
-           |      fpga_nstep(1);
-           |#else
-           |      extern void simv_nstep(uint8_t step);
-           |      simv_nstep(1);
-           |#endif // FPGA_HOST
-           |#endif // CONFIG_DIFFTEST_INTERNAL_STEP
-           |      continue;
-           |    }
-           |    $bundleAssign
            |  }
            |""".stripMargin)
   }
@@ -379,13 +389,14 @@ private class DummyDPICBatchWrapper(
   dpic.clock := clock
   dpic.enable := control.enable && !reset.asBool
   if (config.hasDutZone) dpic.dut_zone.get := control.dut_zone.get
-  dpic.io := io.asUInt
+  dpic.io := io.payload
 }
 
 object DPIC {
   private val interfaces = ListBuffer.empty[(String, String, String)]
   private val deltaInstances = ListBuffer.empty[DifftestBundle]
   private val perfs = ListBuffer.empty[String]
+  private var batchParam: Option[BatchParam] = None
 
   def apply(control: GatewaySinkControl, io: Valid[DifftestBundle], config: GatewayConfig): Unit = {
     val bundleType = chiselTypeOf(io)
@@ -394,7 +405,8 @@ object DPIC {
     module.io := io
     val dpic = module.dpic
     if (!interfaces.map(_._1).contains(dpic.dpicFuncName)) {
-      Query.register(bundleType.bits, "io_", "dut_zone")
+      val dut_zone = if (config.hasDutZone) "dut_zone" else "0"
+      Query.register(bundleType.bits, "io_", dut_zone)
       perfs += dpic.dpicFuncName
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
@@ -406,6 +418,7 @@ object DPIC {
 
   def batch(template: Seq[DifftestBundle], control: GatewaySinkControl, io: BatchIO, config: GatewayConfig): Unit = {
     Query.registerBatch(template, "", "0")
+    batchParam = Some(io.param)
     val module = Module(new DummyDPICBatchWrapper(template, chiselTypeOf(io), config))
     module.control := control
     module.io := io
@@ -507,6 +520,27 @@ object DPIC {
     interfaceCpp += "#include \"perf.h\""
     interfaceCpp += "#endif // CONFIG_DIFFTEST_PERFCNT"
     interfaceCpp += ""
+    if (config.isBatch) {
+      val batchTemplate = Batch.getTemplate
+      val param = batchParam.get
+      val bundleEnum = batchTemplate.map(_.desiredModuleName.replace("Difftest", "")) ++ Seq("BatchHead", "BatchStep")
+      val maxDataByteLen = param.ClusterDataByteLen.max
+      interfaceCpp +=
+        s"""
+           |enum DifftestBundleType {
+           |  ${bundleEnum.mkString(",\n  ")}
+           |};
+           |
+           |#define DIFFTEST_BATCH_CHUNK_BYTES ${param.ChunkByteLen}
+           |#define DIFFTEST_BATCH_BEAT_CHUNKS ${param.BeatChunkSize}
+           |#define DIFFTEST_BATCH_INFO_BYTES ${param.StepInfoByteLen}
+           |#define DIFFTEST_BATCH_MAX_DATA_BYTES $maxDataByteLen
+           |
+           |#ifdef CONFIG_DIFFTEST_QUERY
+           |static int batch_query_nums[${bundleEnum.length}] = {0};
+           |#endif // CONFIG_DIFFTEST_QUERY
+           |""".stripMargin
+    }
     if (config.isDelta) {
       interfaceCpp +=
         s"""
@@ -537,6 +571,133 @@ object DPIC {
          |  ${if (config.isDelta) "delete dStats;" else ""}
          |}
       """.stripMargin
+    if (config.isBatch) {
+      interfaceCpp +=
+        """
+          |typedef struct __attribute__((packed)) {
+          |  uint8_t num;
+          |  uint8_t id;
+          |} DifftestBatchInfo;
+          |
+          |class DifftestBatchParser {
+          |private:
+          |  uint32_t info_num = 0;
+          |  uint32_t parsed_infos = 0;
+          |  uint32_t info_idx = 0;
+          |  uint32_t data_len = 0;
+          |  uint32_t info_len = 0;
+          |  uint32_t info_bytes = 0;
+          |  uint32_t parsed_chunks = 0;
+          |  uint32_t cluster_bytes = 0;
+          |  uint8_t info_buf[DIFFTEST_BATCH_INFO_BYTES] = {0};
+          |  uint8_t data_buf[DIFFTEST_BATCH_MAX_DATA_BYTES] = {0};
+          |
+          |  inline uint32_t align_chunk(uint32_t bytes) const { return (bytes + DIFFTEST_BATCH_CHUNK_BYTES - 1) / DIFFTEST_BATCH_CHUNK_BYTES * DIFFTEST_BATCH_CHUNK_BYTES; }
+          |
+          |  inline DifftestBatchInfo* info_entries() { return reinterpret_cast<DifftestBatchInfo*>(info_buf); }
+          |
+          |public:
+          |  bool reading_info() const { return info_idx == 0; }
+          |  uint32_t info_count() const { return info_num; }
+          |  uint32_t parsed_info_count() const { return parsed_infos; }
+          |  uint32_t parsed_chunk_count() const { return parsed_chunks; }
+          |  DifftestBatchInfo current_info() { return info_entries()[info_idx]; }
+          |  uint8_t* cluster_buf() { return data_buf; }
+          |
+          |  bool recv_info(const uint8_t* chunk_payload) {
+          |    if (info_len + DIFFTEST_BATCH_CHUNK_BYTES > sizeof(info_buf)) {
+          |      printf("Batch info buffer overflow: offset %u, chunk %u, buffer %zu\n",
+          |        info_len, (uint32_t)DIFFTEST_BATCH_CHUNK_BYTES, sizeof(info_buf));
+          |      assert(0);
+          |    }
+          |    memcpy(info_buf + info_len, chunk_payload, DIFFTEST_BATCH_CHUNK_BYTES);
+          |    info_len += DIFFTEST_BATCH_CHUNK_BYTES;
+          |    DifftestBatchInfo* entries = info_entries();
+          |
+          |    if (info_bytes == 0) {
+          |      uint8_t id = entries[0].id;
+          |      uint8_t num = entries[0].num;
+          |      if (id != BatchHead) {
+          |        printf("Batch head marker mismatch: id %u, expected %u\n", id, BatchHead);
+          |        assert(0);
+          |      }
+          |      info_num = num;
+          |      info_bytes = align_chunk((info_num + 2) * sizeof(DifftestBatchInfo));
+          |      if (info_bytes > sizeof(info_buf)) {
+          |        printf("Batch info buffer overflow: expected %u, buffer %zu\n", info_bytes, sizeof(info_buf));
+          |        assert(0);
+          |      }
+          |    }
+          |
+          |    if (info_len < info_bytes) return true;
+          |    if (info_len != info_bytes) {
+          |      printf("Batch info size mismatch: received %u, expected %u\n", info_len, info_bytes);
+          |      assert(0);
+          |    }
+          |    for (uint32_t i = 0; i < info_num + 2; i++) {
+          |      if (!diffstate_buffer) return false;
+          |      uint8_t id = entries[i].id;
+          |      uint8_t num = entries[i].num;
+          |      if (i == info_num + 1) {
+          |        if (id != BatchStep) {
+          |          printf("Batch step marker mismatch: id %u, expected %u\n", id, BatchStep);
+          |          assert(0);
+          |        }
+          |      } else if (i > 0 && id == BatchStep) {
+          |        printf("Batch info size mismatch: BatchStep at %u, expected %u\n", i, info_num + 1);
+          |        assert(0);
+          |      }
+          |#ifdef CONFIG_DIFFTEST_QUERY
+          |      if (qStats) {
+          |        qStats->BatchInfo_write(id, num);
+          |        batch_query_nums[id] = num;
+          |      }
+          |#endif // CONFIG_DIFFTEST_QUERY
+          |    }
+          |    info_len = 0;
+          |    parsed_infos = 0;
+          |    info_idx = 1;
+          |    parsed_chunks = info_bytes / DIFFTEST_BATCH_CHUNK_BYTES;
+          |    return true;
+          |  }
+          |
+          |  bool recv_cluster(const uint8_t* chunk_payload, uint8_t num, uint32_t elem_bytes) {
+          |    uint32_t data_size = (uint32_t)num * elem_bytes;
+          |    cluster_bytes = align_chunk(data_size);
+          |    if (data_len + DIFFTEST_BATCH_CHUNK_BYTES > sizeof(data_buf)) {
+          |      printf("Batch data buffer overflow: offset %u, chunk %u, buffer %zu\n",
+          |        data_len, (uint32_t)DIFFTEST_BATCH_CHUNK_BYTES, sizeof(data_buf));
+          |      assert(0);
+          |    }
+          |    memcpy(data_buf + data_len, chunk_payload, DIFFTEST_BATCH_CHUNK_BYTES);
+          |    data_len += DIFFTEST_BATCH_CHUNK_BYTES;
+          |    if (data_len < cluster_bytes) return false;
+          |    if (data_len != cluster_bytes) {
+          |      printf("Batch cluster size mismatch: received %u, expected %u\n", data_len, cluster_bytes);
+          |      assert(0);
+          |    }
+          |    return true;
+          |  }
+          |
+          |  void finish_cluster() {
+          |    data_len = 0;
+          |    parsed_chunks += cluster_bytes / DIFFTEST_BATCH_CHUNK_BYTES;
+          |    parsed_infos++;
+          |    info_idx++;
+          |  }
+          |
+          |  void reset_step() {
+          |    info_idx = 0;
+          |    data_len = 0;
+          |    info_len = 0;
+          |    info_bytes = 0;
+          |    info_num = 0;
+          |    parsed_infos = 0;
+          |    parsed_chunks = 0;
+          |  }
+          |};
+          |""".stripMargin
+    }
     val diffstate_perfhead = if (perfs.head.contains("Batch")) 1 else 0
     interfaceCpp +=
       s"""

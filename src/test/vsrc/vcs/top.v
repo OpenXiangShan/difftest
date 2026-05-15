@@ -268,7 +268,7 @@ SimTop sim(
 );
 
 DifftestEndpoint difftest(
-  .clock(core_clock),
+  .clock(sim_clock),
   .reset(reset),
 `ifdef ENABLE_WORKLOAD_SWITCH
   .workload_switch(workload_switch),
