@@ -23,6 +23,8 @@ ForkShareMemory::ForkShareMemory() {
   info->notgood = false;
   info->endCycles = 0;
   info->oldest = 0;
+  info->do_cpt = false;
+  info->cpt_filepath[0] = '\0';
 }
 
 ForkShareMemory::~ForkShareMemory() {

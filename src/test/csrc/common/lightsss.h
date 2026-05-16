@@ -18,6 +18,7 @@
 #define __LIGHTSSS_H
 
 #include "common.h"
+#include <cstring>
 #include <deque>
 #include <list>
 #include <signal.h>
@@ -32,6 +33,8 @@ typedef struct shinfo {
   bool notgood;
   uint64_t endCycles;
   pid_t oldest;
+  bool do_cpt;
+  char cpt_filepath[256];
 } shinfo;
 
 class ForkShareMemory {
@@ -67,6 +70,17 @@ public:
   int do_clear();
   uint64_t get_end_cycles() {
     return forkshm.info->endCycles;
+  }
+  bool get_do_cpt() {
+    return forkshm.info->do_cpt;
+  }
+  const char *get_cpt_filepath() {
+    return forkshm.info->cpt_filepath;
+  }
+  void set_cpt_request(const char *filepath) {
+    forkshm.info->do_cpt = true;
+    strncpy(forkshm.info->cpt_filepath, filepath, sizeof(forkshm.info->cpt_filepath) - 1);
+    forkshm.info->cpt_filepath[sizeof(forkshm.info->cpt_filepath) - 1] = '\0';
   }
 };
 

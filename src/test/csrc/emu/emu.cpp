@@ -234,6 +234,12 @@ Emulator::~Emulator() {
   if (args.enable_fork && !is_fork_child()) {
     bool need_wakeup = trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED && trapCode != STATE_SIG;
     if (need_wakeup) {
+#ifndef CONFIG_NO_DIFFTEST
+      if (difftest_auto_cpt) {
+        const char *base_filepath = create_noop_filename("");
+        lightsss->set_cpt_request(base_filepath);
+      }
+#endif // CONFIG_NO_DIFFTEST
       lightsss->wakeup_child(cycles);
     } else {
       lightsss->do_clear();
@@ -758,5 +764,17 @@ void Emulator::fork_child_init() {
     difftest[i]->proxy->set_debug(true);
   }
 #endif
+
+  // Generate checkpoint from the fork snapshot state if requested
+  if (lightsss->get_do_cpt()) {
+    const char *base_filepath = lightsss->get_cpt_filepath();
+    FORK_PRINTF("Generating checkpoint from fork snapshot: %s_memory_.gz\n", base_filepath)
+    for (int i = 0; i < NUM_CORES; i++) {
+      if (difftest[i]->proxy) {
+        difftest[i]->proxy->trigger_checkpoint(base_filepath);
+        break; // checkpoint covers all cores' shared NEMU memory
+      }
+    }
+  }
 #endif // CONFIG_NO_DIFFTEST
 }

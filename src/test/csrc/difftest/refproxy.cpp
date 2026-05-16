@@ -23,6 +23,8 @@
 
 uint8_t *ref_golden_mem = NULL;
 const char *difftest_ref_so = NULL;
+bool difftest_auto_cpt = false;
+bool cpt_from_fork = false;
 
 #define check_and_assert(func)                             \
   do {                                                     \

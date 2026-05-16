@@ -89,6 +89,7 @@ static inline void print_help(const char *file) {
   printf("      --as-footprints        load the image as memory access footprints\n");
   printf("      --dump-linearized=NAME dump the linearized footprints to NAME\n");
   printf("      --copy-ram=OFFSET      duplicate the memory at OFFSET\n");
+  printf("      --auto-checkpoint       save checkpoint to $NOOP_HOME/build/ on difftest error\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -98,6 +99,8 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   int long_index = 0;
 #ifndef CONFIG_NO_DIFFTEST
   extern const char *difftest_ref_so;
+  extern bool difftest_auto_cpt;
+  extern bool cpt_from_fork;
 #endif // CONFIG_NO_DIFFTEST
 
   /* clang-format off */
@@ -133,6 +136,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "instr-trace",       1, NULL,  0  },
     { "copy-ram",          1, NULL,  0  },
     { "cst-file",          1, NULL,  0  },
+    { "auto-checkpoint",   0, NULL,  0  },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -167,7 +171,11 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           case 4: difftest_ref_so = optarg; continue;
 #endif // CONFIG_NO_DIFFTEST
           case 5: args.enable_diff = false; continue;
-          case 6: args.enable_fork = true; continue;
+          case 6: args.enable_fork = true;
+#ifndef CONFIG_NO_DIFFTEST
+            cpt_from_fork = true;
+#endif // CONFIG_NO_DIFFTEST
+            continue;
           case 7: enable_simjtag = true; continue;
           case 8: args.wave_path = optarg; continue;
           case 9: args.ram_size = optarg; continue;
@@ -244,6 +252,11 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           case 28: args.instr_trace = optarg; continue;
           case 29: args.copy_ram_offset = parse_ramsize(optarg); continue;
           case 30: args.cst_file = optarg; continue;
+          case 31: args.auto_checkpoint = true;
+#ifndef CONFIG_NO_DIFFTEST
+            difftest_auto_cpt = true;
+#endif
+            continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);
