@@ -139,7 +139,14 @@ int difftest_step() {
   for (int i = 0; i < NUM_CORES; i++) {
     if (int ret = difftest[i]->step()) {
       switch (ret) {
-        case DiffTestChecker::STATE_DIFF: difftest[i]->display();
+        case DiffTestChecker::STATE_DIFF:
+          difftest[i]->display();
+          // When --enable-fork is active, the fork child (at the earlier snapshot)
+          // handles checkpoint generation. Skip triggering it from the parent here.
+          if (difftest_auto_cpt && !cpt_from_fork && difftest[i]->proxy) {
+            const char *base_filepath = create_noop_filename("");
+            difftest[i]->proxy->trigger_checkpoint(base_filepath);
+          }
         case DiffTestChecker::STATE_ERROR: return STATE_ABORT;
         default: // STATE_TRAP
           return difftest[i]->get_trap_code();
