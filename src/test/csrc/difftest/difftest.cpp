@@ -420,13 +420,12 @@ void Difftest::init_checkers() {
   checkers.push_back(new AmuExecChecker(state, proxy));
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
-#ifdef CONFIG_DIFFTEST_TOKENEVENT
-  for (int i = 0; i < CONFIG_DIFF_TOKEN_WIDTH; i++) {
-    checkers.push_back(new TokenRecorder(
-        [this, i]() -> DifftestTokenEvent & { return dut->token[i]; }, state, proxy));
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  for (int i = 0; i < CONFIG_DIFF_MSYNC_WIDTH; i++) {
+    checkers.push_back(new MsyncRecorder(
+        [this, i]() -> DifftestMsyncEvent & { return dut->msync[i]; }, state, proxy));
   }
-  checkers.push_back(new TokenChecker(state, proxy));
-#endif // CONFIG_DIFFTEST_TOKENEVENT
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 
   arch_event_checker = new ArchEventChecker([this]() -> DifftestArchEvent & { return dut->event; }, state, proxy,
                                             [this]() -> const DiffTestRegState & { return dut->regs; });
@@ -440,6 +439,9 @@ void Difftest::init_checkers() {
   store_checker = new StoreChecker(state, proxy);
   inst_op_checkers.push_back(store_checker);
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  inst_op_checkers.push_back(new MsyncChecker(state, proxy));
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     std::vector<DiffTestChecker *> tmp_checkers = inst_op_checkers;
@@ -525,10 +527,10 @@ void Difftest::do_replay() {
   }
   state->matrix_sw_rob.clear();
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
-#ifdef CONFIG_DIFFTEST_TOKENEVENT
-  while (!state->token_event_queue.empty())
-    state->token_event_queue.pop();
-#endif // CONFIG_DIFFTEST_TOKENEVENT
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  while (!state->msync_event_queue.empty())
+    state->msync_event_queue.pop();
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 

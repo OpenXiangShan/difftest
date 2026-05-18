@@ -190,9 +190,9 @@ public:
   std::deque<AmeInstRobEntry> matrix_sw_rob;
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
-#ifdef CONFIG_DIFFTEST_TOKENEVENT
-  std::queue<DifftestTokenEvent> token_event_queue;
-#endif // CONFIG_DIFFTEST_TOKENEVENT
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  std::queue<DifftestMsyncEvent> msync_event_queue;
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 
 #ifdef DEBUG_REFILL
   uint64_t track_instr = 0;

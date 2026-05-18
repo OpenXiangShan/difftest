@@ -497,23 +497,23 @@ public:
 };
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
-#ifdef CONFIG_DIFFTEST_TOKENEVENT
-class TokenRecorder : public ProbeChecker<DifftestTokenEvent> {
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+class MsyncRecorder : public ProbeChecker<DifftestMsyncEvent> {
 public:
-  TokenRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
-      : ProbeChecker<DifftestTokenEvent>(get_probe, state, proxy) {}
+  MsyncRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestMsyncEvent>(get_probe, state, proxy) {}
 
-  bool get_valid(const DifftestTokenEvent &probe) override;
-  void clear_valid(DifftestTokenEvent &probe) override;
-  int check(const DifftestTokenEvent &probe) override;
+  bool get_valid(const DifftestMsyncEvent &probe) override;
+  void clear_valid(DifftestMsyncEvent &probe) override;
+  int check(const DifftestMsyncEvent &probe) override;
 };
 
-class TokenChecker : public DiffTestChecker {
+class MsyncChecker : public DiffTestChecker {
 public:
-  TokenChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
+  MsyncChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
 
   int do_step() override;
 };
-#endif // CONFIG_DIFFTEST_TOKENEVENT
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 
 #endif // __DIFFTEST_CHECKER_H__
