@@ -531,8 +531,8 @@ class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
 
-class DiffTokenEvent extends TokenEvent with DifftestBundle with DifftestWithIndex {
-  override val desiredCppName: String = "token"
+class DiffMsyncEvent extends MsyncEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "msync"
 
   override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
 }

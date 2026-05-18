@@ -154,7 +154,7 @@ int AmuCtrlChecker::do_step() {
                    amu_event.mtilem, amu_event.mtilen, amu_event.typed);
             break;
           case 2: // MRelease
-            printf("                tokenRd %d\n", amu_event.mtilem);
+            printf("                msyncRd %d\n", amu_event.mtilem);
             break;
           case 3: // Arith
             printf("                md %d, opType %#lx\n", amu_event.md, amu_event.base);
@@ -176,7 +176,7 @@ int AmuCtrlChecker::do_step() {
                    md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
             break;
           case 2: // MRelease
-            printf("                tokenRd %d\n", mtilem);
+            printf("                msyncRd %d\n", mtilem);
             break;
           case 3: // Arith
             printf("                md %d, opType %#lx\n", md, base);
@@ -202,7 +202,7 @@ int AmuCtrlChecker::do_step() {
                    md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
             break;
           case 2: // MRelease
-            printf("                tokenRd %d\n", mtilem);
+            printf("                msyncRd %d\n", mtilem);
             break;
           case 3: // Arith
             printf("                md %d, opType %#lx\n", md, base);
@@ -341,57 +341,57 @@ int AmuExecChecker::do_step() {
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
-#ifdef CONFIG_DIFFTEST_TOKENEVENT
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
 
-static char token_event_op_str[2][16] = {"msyncregreset", "macquire"};
+static char msync_event_op_str[2][16] = {"msyncregreset", "macquire"};
 
-int TokenChecker::do_step() {
-  while (!state->token_event_queue.empty()) {
-    DifftestTokenEvent token_event = state->token_event_queue.front();
+int MsyncChecker::do_step() {
+  while (!state->msync_event_queue.empty()) {
+    DifftestMsyncEvent msync_event = state->msync_event_queue.front();
 #ifdef CONFIG_DIFFTEST_SQUASH
     // TODO: What is squash? How to squash?
 #endif // CONFIG_DIFFTEST_SQUASH
-    // Save the token event info
-    auto op = token_event.op;
-    auto tokenRd = token_event.tokenRd;
-    uint64_t pc = token_event.pc;
+    // Save the msync event info.
+    auto op = msync_event.op;
+    auto msyncRd = msync_event.msyncRd;
+    uint64_t pc = msync_event.pc;
 
-    int check_res = proxy->get_token_event(&token_event);
+    int check_res = proxy->get_msync_event(&msync_event);
 
     if (check_res == 1) {
-      // Compare the token event info
-      // For dismatch, proxy returns 1 and sets the token event info
+      // Compare the msync event info.
+      // For mismatch, proxy returns 1 and sets the msync event info.
       // Use global difftest pointer to access the owning Difftest instance for this core
-      printf("\n==============  Token Event (Core %d)  ==============\n", state->coreid);
-      printf("Mismatch for token event\n");
-      printf("  REF Token: pc 0x%016lx, op %s, tokenRd %d\n", token_event.pc,
-             token_event_op_str[token_event.op], token_event.tokenRd);
-      printf("  DUT Token: pc 0x%016lx, op %s, tokenRd %d\n", pc, token_event_op_str[op], tokenRd);
-      state->token_event_queue.pop();
+      printf("\n==============  Msync Event (Core %d)  ==============\n", state->coreid);
+      printf("Mismatch for Msync event\n");
+      printf("  REF Msync: pc 0x%016lx, op %s, MsyncRd %d\n", msync_event.pc,
+             msync_event_op_str[msync_event.op], msync_event.msyncRd);
+      printf("  DUT Msync: pc 0x%016lx, op %s, MsyncRd %d\n", pc, msync_event_op_str[op], msyncRd);
+      state->msync_event_queue.pop();
       return STATE_ERROR;
     } else if (check_res == -1) {
-      printf("\n==============  Token Event (Core %d)  ==============\n", state->coreid);
-      printf("  No available REF Token\n");
-      printf("  DUT Token: pc 0x%016lx, op %s, tokenRd %d\n", pc, token_event_op_str[op], tokenRd);
-      state->token_event_queue.pop();
+      printf("\n==============  Msync Event (Core %d)  ==============\n", state->coreid);
+      printf("  No available REF Msync events\n");
+      printf("  DUT Msync: pc 0x%016lx, op %s, MsyncRd %d\n", pc, msync_event_op_str[op], msyncRd);
+      state->msync_event_queue.pop();
       return STATE_ERROR;
     }
-    state->token_event_queue.pop();
+    state->msync_event_queue.pop();
   }
   return STATE_OK;
 }
 
-bool TokenRecorder::get_valid(const DifftestTokenEvent &probe) {
+bool MsyncRecorder::get_valid(const DifftestMsyncEvent &probe) {
   return probe.valid;
 }
 
-void TokenRecorder::clear_valid(DifftestTokenEvent &probe) {
+void MsyncRecorder::clear_valid(DifftestMsyncEvent &probe) {
   probe.valid = 0;
 }
 
-int TokenRecorder::check(const DifftestTokenEvent &probe) {
-  state->token_event_queue.push(probe);
+int MsyncRecorder::check(const DifftestMsyncEvent &probe) {
+  state->msync_event_queue.push(probe);
   return STATE_OK;
 }
 
-#endif // CONFIG_DIFFTEST_TOKENEVENT
+#endif // CONFIG_DIFFTEST_MSYNCEVENT

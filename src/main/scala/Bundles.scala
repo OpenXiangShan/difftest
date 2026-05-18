@@ -235,20 +235,19 @@ class FpCSRState extends DifftestBaseBundle {
 }
 
 class MatrixCSRState extends DifftestBaseBundle {
-  val xmcsr = UInt(64.W)
-  val xmxrm = UInt(64.W)
-  val xmsat = UInt(64.W)
-  val xmfflags = UInt(64.W)
-  val xmfrm = UInt(64.W)
-  val xmsaten = UInt(64.W)
-  val xmisa = UInt(64.W)
-  val xtlenb = UInt(64.W)
-  val xtrlenb = UInt(64.W)
-  val xalenb = UInt(64.W)
-  val mtok = UInt(64.W)
+  val mcsr = UInt(64.W)
+  val mxrm = UInt(64.W)
+  val msat = UInt(64.W)
+  val mfflags = UInt(64.W)
+  val mfrm = UInt(64.W)
+  val msaten = UInt(64.W)
+  val tlenb = UInt(64.W)
+  val trlenb = UInt(64.W)
+  val alenb = UInt(64.W)
   val mtilem = UInt(64.W)
   val mtilen = UInt(64.W)
   val mtilek = UInt(64.W)
+  val msync = UInt(64.W)
 }
 
 class SbufferEvent extends DifftestBaseBundle with HasValid {
@@ -429,7 +428,7 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
   
   val pc = UInt(64.W)
 
-  def tokenRd: UInt = mtilem
+  def msyncRd: UInt = mtilem
 
   def opType: UInt = base
 }
@@ -445,9 +444,9 @@ class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends Dif
   val finish    = Bool()
 }
 
-class TokenEvent extends DifftestBaseBundle with HasValid {
+class MsyncEvent extends DifftestBaseBundle with HasValid {
   val op = UInt(1.W) // 0: msyncregreset, 1: macquire
-  val tokenRd = UInt(5.W)
+  val msyncRd = UInt(5.W)
   val pc = UInt(64.W)
 }
 
