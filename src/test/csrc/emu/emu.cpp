@@ -119,9 +119,9 @@ Emulator::Emulator(int argc, const char *argv[])
   // normal linear memory
   else {
     if (args.footprints_name) {
-      simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
+      simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name, args.random_mem, args.seed);
     } else {
-      init_ram(args.image, ram_size);
+      init_ram(args.image, ram_size, args.random_mem, args.seed);
 #ifdef WITH_DRAMSIM3
       dramsim3_init(args.dramsim3_ini, args.dramsim3_outdir);
 #endif

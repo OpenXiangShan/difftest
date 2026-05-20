@@ -69,6 +69,7 @@ Key runtime options:
 | `-b, --log-begin=NUM` | Start logging at cycle N |
 | `-e, --log-end=NUM` | Stop logging at cycle N |
 | `-s, --seed=NUM` | Random seed |
+| `--random-mem` | Fill memory from a `--seed`-initialized LFSR stream before loading the image |
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
 
@@ -124,6 +125,9 @@ Key runtime options:
 | `+no-diff` | Run without difftest comparison |
 | `+max-cycles=NUM` | Maximum simulation cycles |
 | `+max-instrs=NUM` | Maximum instructions |
+| `+ram_size=SIZE` | Simulation memory size, for example `8GB` / `128MB` |
+| `+seed=NUM` | Random seed |
+| `+random-mem` | Fill memory from a `+seed`-initialized LFSR stream before loading the workload |
 | `+dump-wave` | Dump waveform (requires `EMU_TRACE=fst` at build) |
 | `+b=NUM` | Start logging at cycle N |
 | `+e=NUM` | Stop logging at cycle N |
