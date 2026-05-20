@@ -92,6 +92,15 @@ class TopdownRobInfoHelper(val IQEntriesNum: Int, val RobEntriesNum: Int) extend
     case w                                  => throw new Exception(s"Unsupported C width: $w")
   }
 
+  private def scalarSvDpiType(width: Int): String = width match {
+    case 1                                  => "bit"
+    case w if w > 1 && w <= 8               => "byte unsigned"
+    case w if w > 8 && w <= 16              => "shortint unsigned"
+    case w if w > 16 && w <= 32             => "int unsigned"
+    case w if w > 32 && w <= 64             => "longint unsigned"
+    case w                                  => throw new Exception(s"Unsupported SV DPI width: $w")
+  }
+
   private def modulePortArg(name: String, width: Int, isOutput: Boolean): String = {
     val direction = if (isOutput) "output" else "input"
     val widthString = if (width == 1) "      " else f"[${width - 1}%2d:0]"
@@ -110,7 +119,7 @@ class TopdownRobInfoHelper(val IQEntriesNum: Int, val RobEntriesNum: Int) extend
 
   private def dpiArg(name: String, width: Int, isOutput: Boolean): String = {
     val direction = if (isOutput) "output" else "input"
-    val typeString = if (width == 1) "bit" else s"bit [${width - 1}:0]"
+    val typeString = if (width <= 64) scalarSvDpiType(width) else s"bit [${width - 1}:0]"
     s"$direction $typeString $name"
   }
 
@@ -174,11 +183,11 @@ class TopdownRobInfoHelper(val IQEntriesNum: Int, val RobEntriesNum: Int) extend
   }
 
   private def localVarDecl(name: String, width: Int): String = {
-    if (width == 1) s"bit $name;" else s"bit [${width - 1}:0] $name;"
+    if (width <= 64) s"${scalarSvDpiType(width)} $name;" else s"bit [${width - 1}:0] $name;"
   }
 
   private def functionType(width: Int): String = {
-    if (width == 1) "bit" else s"bit [${width - 1}:0]"
+    if (width <= 64) scalarSvDpiType(width) else s"bit [${width - 1}:0]"
   }
 
   private val outputEvalFuncs = outputArgs.map { arg =>
