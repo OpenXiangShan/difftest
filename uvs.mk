@@ -17,13 +17,13 @@
 # 1. COMPANY PROFILE
 #    Name : Shanghai UniVista Industrial Software Group Co., Ltd.
 #    Web  : https://www.univista-isg.com/
-
+#
 # 2. SIMULATOR: UniVista Simulator Plus (UVS+)
 #    A high-performance simulator built on a self-developed architecture.
 #    Supports full-flow verification from RTL to gate-level (SDF), mixed-signal,
 #    low-power (UPF), etc. Delivers industry-leading performance for
 #    large-scale SoC verification.
-
+#
 # 3. DEBUGGER: UniVista Debugger Plus (UVD+)
 #    A full-featured debug platform with a self-developed architecture and modern GUI,
 #    featuring a high-performance waveform engine and smart source tracing.
