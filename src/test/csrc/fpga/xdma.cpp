@@ -99,6 +99,23 @@ FpgaXdma::~FpgaXdma() {
 #endif // FPGA_SIM
 }
 
+void FpgaXdma::wait_fpga_io_done(uint64_t address, const char *tag) {
+  const int max_retry = 600000; // 10 minute
+  for (int retry = 0; retry < max_retry; retry++) {
+    uint32_t status = fpga_io_read(address) & 0x3;
+    if (status == 0x2) {
+      return;
+    }
+    if (status == 0x3) {
+      fprintf(stderr, "[fpga-host] %s failed: address range exceeds FPGA AXI address width\n", tag);
+      exit(1);
+    }
+    usleep(1000);
+  }
+  fprintf(stderr, "[fpga-host] timeout waiting for %s\n", tag);
+  exit(1);
+}
+
 // write xdma_bypass memory or xdma_user
 void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
 #ifdef FPGA_SIM
@@ -154,6 +171,50 @@ void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr,
 
   munmap(m_ptr, aligned_size);
   close(fd);
+}
+
+uint32_t FpgaXdma::device_read(bool is_bypass, uint64_t addr) {
+#ifdef FPGA_SIM
+  if (is_bypass) {
+    fprintf(stderr, "[fpga-host] FPGA_SIM XDMA bypass read is unsupported\n");
+    exit(-1);
+  }
+  uint32_t data = 0;
+  if (xdma_sim_axilite_read(static_cast<uint32_t>(addr), &data) != 0) {
+    fprintf(stderr, "[fpga-host] FPGA_SIM AXI-Lite read failed, addr=0x%lx\n", addr);
+    exit(-1);
+  }
+  return data;
+#endif // FPGA_SIM
+
+  uint64_t pg_size = sysconf(_SC_PAGE_SIZE);
+  uint64_t size = !is_bypass ? 0x1000 : 0x100000;
+  uint64_t aligned_size = (size + 0xffful) & ~0xffful;
+  uint64_t base = addr & ~0xffful;
+  uint32_t offset = addr & 0xfffu;
+
+  if (base % pg_size != 0) {
+    printf("base must be a multiple of system page size\n");
+    exit(-1);
+  }
+
+  int fd = open(is_bypass ? XDMA_BYPASS : XDMA_USER, O_RDWR | O_SYNC);
+  if (fd < 0) {
+    printf("Failed to open %s\n", is_bypass ? XDMA_BYPASS : XDMA_USER);
+    exit(-1);
+  }
+
+  void *m_ptr = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, base);
+  if (m_ptr == MAP_FAILED) {
+    close(fd);
+    printf("failed to mmap\n");
+    exit(-1);
+  }
+
+  uint32_t value = ((volatile uint32_t *)m_ptr)[offset >> 2];
+  munmap(m_ptr, aligned_size);
+  close(fd);
+  return value;
 }
 
 #ifdef USE_THREAD_MEMPOOL

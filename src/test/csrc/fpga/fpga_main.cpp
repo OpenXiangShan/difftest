@@ -75,6 +75,7 @@ int main(int argc, const char *argv[]) {
   printf("difftest releases the fpga device and exits\n");
   return !(fpga_result == FPGA_GOODTRAP);
 }
+
 static bool run_external_cmd(const char *cmd, const char *tag) {
   if (!cmd || !cmd[0]) {
     return false;
@@ -105,12 +106,39 @@ static bool run_external_cmd(const char *cmd, const char *tag) {
 }
 
 void fpga_init() {
+  uint64_t ram_size = args.ram_size ? parse_ramsize(args.ram_size) : DEFAULT_EMU_RAM_SIZE;
+  if (ram_size % (1024 * 1024) != 0) {
+    fprintf(stderr, "[fpga-host] --ram-size must be aligned to MB, got %s\n", args.ram_size);
+    exit(1);
+  }
+  uint32_t ram_size_mb = ram_size / (1024 * 1024);
+
   xdma_device = new FpgaXdma();
+  xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
+  sleep(1);
+
+  if (args.random_mem) {
+    xdma_device->fpga_io(HOST_IO_SEED, args.seed);
+    xdma_device->fpga_io(HOST_IO_RAM_SIZE_MB, ram_size_mb);
+    printf("[fpga-host] init mem with seed = %d, size = %dMB\n", args.seed, ram_size_mb);
+    uint32_t init_mem_start = uptime();
+    xdma_device->fpga_io(HOST_IO_MEM_INIT, true);
+    xdma_device->wait_fpga_io_done(HOST_IO_MEM_INIT, "memory random init");
+    printf("[fpga-host] init mem done, elapsed = %ums\n", uptime() - init_mem_start);
+  }
+
 #ifdef FPGA_SIM
   xdma_sim_set_workload(args.image);
+#else
+  if (fpga_ddr_load_cmd) {
+    if (!run_external_cmd(fpga_ddr_load_cmd, "DDR load")) {
+      exit(0);
+    }
+  }
 #endif // FPGA_SIM
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
+  xdma_device->fpga_io(HOST_IO_MEM_CPU, true);
   xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
   xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, true);
@@ -123,25 +151,12 @@ void fpga_init() {
   serial_port->start();
 #endif // USE_SERIAL_PORT
 
-  init_ram(args.image, DEFAULT_EMU_RAM_SIZE);
+  init_ram(args.image, ram_size, args.random_mem, args.seed);
   init_flash(args.flash_bin);
 
   init_device();
 
-#ifndef FPGA_SIM
-  if (fpga_ddr_load_cmd) {
-    if (!run_external_cmd(fpga_ddr_load_cmd, "DDR load")) {
-      exit(0);
-    }
-  }
-#ifdef USE_XDMA_DDR_LOAD
-  else {
-    xdma_device->ddr_load_workload(args.image);
-  }
-#endif // USE_XDMA_DDR_LOAD
-#endif // FPGA_SIM
-
-  difftest_init(args.enable_diff, DEFAULT_EMU_RAM_SIZE);
+  difftest_init(args.enable_diff, ram_size);
 
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
 #ifndef FPGA_SIM

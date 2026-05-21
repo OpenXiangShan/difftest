@@ -27,6 +27,7 @@ void xdma_sim_workload_close(bool is_host);
 int xdma_sim_read(int channel, char *buf, size_t size);
 int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size);
 int xdma_sim_axilite_write(uint32_t addr, uint32_t data, uint8_t strb);
+int xdma_sim_axilite_read(uint32_t addr, uint32_t *data);
 int xdma_sim_set_workload(const char *workload);
 int xdma_sim_wait_workload(char *workload, size_t size);
 void xdma_sim_complete_workload();

@@ -33,10 +33,15 @@
 #include "xdma_sim.h"
 #endif // FPGA_SIM
 
-#define HOST_IO_RESET           0x0
-#define HOST_IO_DIFFTEST_ENABLE 0x4
-#define HOST_IO_ILA_TRIGGER     0x8
-#define HOST_IO_SQUASH_ENABLE   0xc
+#define HOST_IO_CFG_RESET       0x0
+#define HOST_IO_RESET           0x4
+#define HOST_IO_DIFFTEST_ENABLE 0x8
+#define HOST_IO_ILA_TRIGGER     0xc
+#define HOST_IO_SQUASH_ENABLE   0x10
+#define HOST_IO_SEED            0x14
+#define HOST_IO_RAM_SIZE_MB     0x18
+#define HOST_IO_MEM_INIT        0x1c
+#define HOST_IO_MEM_CPU         0x20
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
@@ -99,17 +104,21 @@ public:
 #endif // USE_THREAD_MEMPOOL
   }
 
-  void fpga_io(uint64_t address, bool enable) {
-    if (enable)
-      device_write(false, nullptr, address, 0x1);
-    else
-      device_write(false, nullptr, address, 0x0);
+  void fpga_io(uint64_t address, uint32_t value) {
+    device_write(false, nullptr, address, value);
   }
 
+  void fpga_io(uint64_t address, bool enable) {
+    fpga_io(address, enable ? 1u : 0u);
+  }
+
+  uint32_t fpga_io_read(uint64_t address) {
+    return device_read(false, address);
+  }
+
+  void wait_fpga_io_done(uint64_t address, const char *tag);
   void ddr_load_workload(const char *workload) {
-    fpga_io(HOST_IO_RESET, true);
     device_write(true, workload, 0, 0);
-    fpga_io(HOST_IO_RESET, false);
   }
 
 private:
@@ -120,6 +129,7 @@ private:
 #endif
 
   void device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);
+  uint32_t device_read(bool is_bypass, uint64_t addr);
 
 #ifdef USE_THREAD_MEMPOOL
   std::mutex thread_mtx;

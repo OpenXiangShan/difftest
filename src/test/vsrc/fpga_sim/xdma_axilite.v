@@ -50,6 +50,7 @@ import "DPI-C" context function void v_xdma_axilite_set_scope();
 localparam [1:0] AXIL_IDLE = 2'd0;
 localparam [1:0] AXIL_WRITE = 2'd1;
 localparam [1:0] AXIL_RESP = 2'd2;
+localparam [1:0] AXIL_READ = 2'd3;
 
 reg [1:0]  state;
 reg [31:0] cmd_addr;
@@ -57,12 +58,18 @@ reg [31:0] cmd_data;
 reg [3:0]  cmd_strb;
 reg        cmd_request;
 reg        cmd_ack;
+reg        read_pending;
+reg        read_done;
+reg        pending_is_read;
 reg [31:0] pending_addr;
 reg [31:0] pending_data;
 reg [3:0]  pending_strb;
 reg        awvalid_r;
 reg        wvalid_r;
 reg        bready_r;
+reg        arvalid_r;
+reg        rready_r;
+reg [31:0] read_data_r;
 
 assign awaddr = cmd_addr;
 assign awvalid = awvalid_r;
@@ -71,16 +78,13 @@ assign wstrb = cmd_strb;
 assign wvalid = wvalid_r;
 assign bready = bready_r;
 
-assign araddr = 32'h0;
-assign arvalid = 1'b0;
-assign rready = 1'b1;
+assign araddr = cmd_addr;
+assign arvalid = arvalid_r;
+assign rready = rready_r;
 
 /* verilator lint_off UNUSED */
 wire [1:0]  unused_bresp = bresp;
-wire        unused_arready = arready;
-wire [31:0] unused_rdata = rdata;
 wire [1:0]  unused_rresp = rresp;
-wire        unused_rvalid = rvalid;
 /* verilator lint_on UNUSED */
 
 initial begin
@@ -90,12 +94,18 @@ initial begin
   cmd_strb = 4'h0;
   cmd_request = 1'b0;
   cmd_ack = 1'b0;
+  read_pending = 1'b0;
+  read_done = 1'b0;
+  pending_is_read = 1'b0;
   pending_addr = 32'h0;
   pending_data = 32'h0;
   pending_strb = 4'h0;
   awvalid_r = 1'b0;
   wvalid_r = 1'b0;
   bready_r = 1'b0;
+  arvalid_r = 1'b0;
+  rready_r = 1'b0;
+  read_data_r = 32'h0;
   v_xdma_axilite_set_scope();
 end
 
@@ -108,6 +118,7 @@ task v_xdma_axilite_write(
 );
 begin
   if (!reset && (cmd_request == cmd_ack)) begin
+    pending_is_read = 1'b0;
     pending_addr = addr;
     pending_data = data;
     pending_strb = strb[3:0];
@@ -115,6 +126,36 @@ begin
     accepted = 8'd1;
   end
   else begin
+    accepted = 8'd0;
+  end
+end
+endtask
+
+export "DPI-C" task v_xdma_axilite_read;
+task v_xdma_axilite_read(
+  input int unsigned addr,
+  output int unsigned data,
+  output byte unsigned accepted
+);
+begin
+  if (!reset && read_pending && read_done) begin
+    read_pending = 1'b0;
+    read_done = 1'b0;
+    data = read_data_r;
+    accepted = 8'd1;
+  end
+  else if (!reset && !read_pending && (cmd_request == cmd_ack)) begin
+    read_pending = 1'b1;
+    pending_is_read = 1'b1;
+    pending_addr = addr;
+    pending_data = 32'h0;
+    pending_strb = 4'h0;
+    cmd_request = ~cmd_request;
+    data = read_data_r;
+    accepted = 8'd0;
+  end
+  else begin
+    data = read_data_r;
     accepted = 8'd0;
   end
 end
@@ -129,6 +170,12 @@ always @(posedge clock) begin
     awvalid_r <= 1'b0;
     wvalid_r <= 1'b0;
     bready_r <= 1'b0;
+    arvalid_r <= 1'b0;
+    rready_r <= 1'b0;
+    read_data_r = 32'h0;
+    read_pending = 1'b0;
+    read_done = 1'b0;
+    pending_is_read = 1'b0;
     cmd_ack <= cmd_request;
   end
   else begin
@@ -137,14 +184,22 @@ always @(posedge clock) begin
         awvalid_r <= 1'b0;
         wvalid_r <= 1'b0;
         bready_r <= 1'b0;
+        arvalid_r <= 1'b0;
+        rready_r <= 1'b0;
         if (cmd_request != cmd_ack) begin
           cmd_addr <= pending_addr;
           cmd_data <= pending_data;
           cmd_strb <= pending_strb;
           cmd_ack <= cmd_request;
-          awvalid_r <= 1'b1;
-          wvalid_r <= 1'b1;
-          state <= AXIL_WRITE;
+          if (pending_is_read) begin
+            arvalid_r <= 1'b1;
+            state <= AXIL_READ;
+          end
+          else begin
+            awvalid_r <= 1'b1;
+            wvalid_r <= 1'b1;
+            state <= AXIL_WRITE;
+          end
         end
       end
       AXIL_WRITE: begin
@@ -162,6 +217,18 @@ always @(posedge clock) begin
       AXIL_RESP: begin
         if (bvalid) begin
           bready_r <= 1'b0;
+          state <= AXIL_IDLE;
+        end
+      end
+      AXIL_READ: begin
+        if (arvalid_r && arready) begin
+          arvalid_r <= 1'b0;
+          rready_r <= 1'b1;
+        end
+        if (rvalid) begin
+          read_data_r = rdata;
+          read_done = 1'b1;
+          rready_r <= 1'b0;
           state <= AXIL_IDLE;
         end
       end

@@ -134,13 +134,14 @@ class MmapMemory : public SimMemory {
 private:
   uint64_t *ram;
   uint64_t img_size;
+  bool clone_full_mem;
 
 public:
   MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed);
   virtual ~MmapMemory();
   void load_image(const char *image);
   void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
-    uint64_t n_bytes = skip_zero ? img_size : get_size();
+    uint64_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
     func(ram, n_bytes);
   }
   uint64_t &at(uint64_t index) {

@@ -176,6 +176,7 @@ make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2
 ```bash
 bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO
 bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO WAVE=1   # with waveform
+bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO RAM_SIZE=128MB SEED=1234 RANDOM_MEM=1
 ```
 
 | Parameter | Effect |
@@ -183,6 +184,14 @@ bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO WAVE=1  
 | `WORKLOAD=FILE` | Boot image path (required) |
 | `DIFF=PATH` | Reference SO (required) |
 | `WAVE=1` | Enable waveform dump |
+| `RAM_SIZE=SIZE` | Forward the RAM size to `fpga-host` and `simv`; must be MB-aligned for FPGA_SIM ConfigBar |
+| `SEED=NUM` | Forward the random seed to `fpga-host` and `simv` |
+| `RANDOM_MEM=1` | Enable random memory initialization in `fpga-host` and `simv` |
+
+In FPGA_SIM, `fpga-host` writes seed, RAM size in MB, and random-memory enable
+to the XDMA ConfigBar. `cosim.sh` also passes matching plusargs to `simv`, so
+the software memory image and simulated hardware memory start from the same
+random contents.
 
 #### Precautions
 

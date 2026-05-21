@@ -279,7 +279,8 @@ void SimMemory::display_stats() {
 #endif // FUZZING
 }
 
-MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed) : SimMemory(n_bytes) {
+MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed)
+    : SimMemory(n_bytes), clone_full_mem(random_mem && seed != 0) {
   // initialize memory using Linux mmap
   ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {

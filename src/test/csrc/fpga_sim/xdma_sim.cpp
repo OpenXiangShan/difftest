@@ -89,9 +89,11 @@ typedef struct {
   pthread_cond_t done_cond;
   bool valid;
   bool done;
+  bool is_read;
   uint32_t addr;
   uint32_t data;
   uint8_t strb;
+  uint32_t read_data;
 } xdma_axilite_shm;
 
 typedef struct {
@@ -189,11 +191,20 @@ public:
   }
 
   int write(uint32_t addr, uint32_t data, uint8_t strb) {
+    return request(false, addr, data, strb, nullptr);
+  }
+
+  int read(uint32_t addr, uint32_t *data) {
+    return request(true, addr, 0, 0, data);
+  }
+
+  int request(bool is_read, uint32_t addr, uint32_t data, uint8_t strb, uint32_t *read_data) {
     pthread_mutex_lock(&shm_ptr->lock);
     while (shm_ptr->valid) {
       pthread_cond_wait(&shm_ptr->done_cond, &shm_ptr->lock);
     }
 
+    shm_ptr->is_read = is_read;
     shm_ptr->addr = addr;
     shm_ptr->data = data;
     shm_ptr->strb = strb;
@@ -204,15 +215,18 @@ public:
     while (!shm_ptr->done) {
       pthread_cond_wait(&shm_ptr->done_cond, &shm_ptr->lock);
     }
+    if (read_data != nullptr) {
+      *read_data = shm_ptr->read_data;
+    }
     shm_ptr->valid = false;
     pthread_cond_broadcast(&shm_ptr->done_cond);
     pthread_mutex_unlock(&shm_ptr->lock);
     return 0;
   }
 
-  int wait(uint32_t *addr, uint32_t *data, uint8_t *strb, volatile bool *stop) {
+  int wait(bool *is_read, uint32_t *addr, uint32_t *data, uint8_t *strb, volatile bool *stop) {
     pthread_mutex_lock(&shm_ptr->lock);
-    while (!shm_ptr->valid && !*stop) {
+    while ((!shm_ptr->valid || shm_ptr->done) && !*stop) {
       pthread_cond_wait(&shm_ptr->write_cond, &shm_ptr->lock);
     }
     if (*stop) {
@@ -220,6 +234,7 @@ public:
       return 0;
     }
 
+    *is_read = shm_ptr->is_read;
     *addr = shm_ptr->addr;
     *data = shm_ptr->data;
     *strb = shm_ptr->strb;
@@ -227,8 +242,9 @@ public:
     return 1;
   }
 
-  void complete() {
+  void complete(uint32_t read_data = 0) {
     pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->read_data = read_data;
     shm_ptr->done = true;
     pthread_cond_broadcast(&shm_ptr->done_cond);
     pthread_mutex_unlock(&shm_ptr->lock);
@@ -393,6 +409,10 @@ int xdma_sim_axilite_write(uint32_t addr, uint32_t data, uint8_t strb) {
   return axilite_sim->write(addr, data, strb);
 }
 
+int xdma_sim_axilite_read(uint32_t addr, uint32_t *data) {
+  return axilite_sim->read(addr, data);
+}
+
 int xdma_sim_set_workload(const char *workload) {
   return workload_sim->set_workload(workload);
 }
@@ -424,27 +444,33 @@ static bool axilite_thread_started = false;
 static volatile bool axilite_thread_stop = false;
 
 extern "C" void v_xdma_axilite_write(uint32_t addr, uint32_t data, uint8_t strb, uint8_t *accepted);
+extern "C" void v_xdma_axilite_read(uint32_t addr, uint32_t *data, uint8_t *accepted);
 
 static void *xdma_axilite_thread_main(void *) {
   xdma_sim_axilite_open(false);
   while (!axilite_thread_stop) {
+    bool is_read = false;
     uint32_t addr = 0;
     uint32_t data = 0;
     uint8_t strb = 0;
-    if (!axilite_sim->wait(&addr, &data, &strb, &axilite_thread_stop)) {
+    if (!axilite_sim->wait(&is_read, &addr, &data, &strb, &axilite_thread_stop)) {
       continue;
     }
 
     uint8_t accepted = 0;
     while (!accepted && !axilite_thread_stop) {
       svSetScope(axilite_scope);
-      v_xdma_axilite_write(addr, data, strb, &accepted);
+      if (is_read) {
+        v_xdma_axilite_read(addr, &data, &accepted);
+      } else {
+        v_xdma_axilite_write(addr, data, strb, &accepted);
+      }
       if (!accepted) {
         usleep(1000);
       }
     }
 
-    axilite_sim->complete();
+    axilite_sim->complete(is_read ? data : 0);
   }
   return nullptr;
 }
