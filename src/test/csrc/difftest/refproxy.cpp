@@ -216,18 +216,16 @@ int RefProxy::compare(DiffTestState *dut) {
 void RefProxy::display(DiffTestState *dut) {
   if (dut) {
     const uint64_t diff_pc = (dut->commit[0].valid ? dut->commit[0].pc : dut->trap.pc);
-#define PROXY_COMPARE_AND_DISPLAY(field, field_names)                         \
-  do {                                                                        \
-    _Pragma("GCC diagnostic push")                                            \
-    _Pragma("GCC diagnostic ignored \"-Waddress-of-packed-member\"")          \
-    uint64_t *_ptr_dut = (uint64_t *)(&((dut)->regs.field));                  \
-    uint64_t *_ptr_ref = (uint64_t *)(&(state.field));                        \
-    _Pragma("GCC diagnostic pop")                                             \
-    for (size_t i = 0; i < sizeof(state.field) / sizeof(uint64_t); i++) {     \
-      if (_ptr_dut[i] != _ptr_ref[i]) {                                       \
-        REPORT_DIFFERENCE(field_names[i], diff_pc, _ptr_ref[i], _ptr_dut[i]); \
-      }                                                                       \
-    }                                                                         \
+#define PROXY_COMPARE_AND_DISPLAY(field, field_names)                                                   \
+  do {                                                                                                  \
+    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Waddress-of-packed-member\"")     \
+        uint64_t *_ptr_dut = (uint64_t *)(&((dut)->regs.field));                                        \
+    uint64_t *_ptr_ref = (uint64_t *)(&(state.field));                                                  \
+    _Pragma("GCC diagnostic pop") for (size_t i = 0; i < sizeof(state.field) / sizeof(uint64_t); i++) { \
+      if (_ptr_dut[i] != _ptr_ref[i]) {                                                                 \
+        REPORT_DIFFERENCE(field_names[i], diff_pc, _ptr_ref[i], _ptr_dut[i]);                           \
+      }                                                                                                 \
+    }                                                                                                   \
   } while (0);
 
     PROXY_COMPARE_AND_DISPLAY(xrf, regs_name_int)
