@@ -128,6 +128,7 @@ ifeq ($(REMOTE),localhost)
 						OPT_FAST=$(OPT_FAST) \
 						PGO_CFLAGS="$(PGO_CFLAGS)" \
 						PGO_LDFLAGS="$(PGO_LDFLAGS)" \
+						OBJCACHE="$(OBJCACHE)" \
 						-C $(VERILATOR_BUILD_DIR) -f $(VERILATOR_MK) $(EMU_COMPILE_FILTER)
 	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 else
@@ -136,7 +137,8 @@ else
 					   -j `nproc` \
 					   OPT_FAST="'"$(OPT_FAST)"'" \
 					   PGO_CFLAGS="'"$(PGO_CFLAGS)"'" \
-					   PGO_LDFLAGS="'"$(PGO_LDFLAGS)"'"'
+					   PGO_LDFLAGS="'"$(PGO_LDFLAGS)"'" \
+					   OBJCACHE="'"$(OBJCACHE)"'"'
 endif
 
 # Profile Guided Optimization
