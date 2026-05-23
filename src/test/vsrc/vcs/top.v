@@ -255,6 +255,12 @@ DifftestEndpoint difftest(
 `ifdef ENABLE_WORKLOAD_SWITCH
   .workload_switch(workload_switch),
 `endif // ENABLE_WORKLOAD_SWITCH
+`ifdef FPGA_SIM
+  .difftest_hostCtrl_reset(host_ctrl_reset),
+  .difftest_hostCtrl_diffEnable(host_ctrl_diff_enable),
+  .difftest_hostCtrl_ilaTrigger(host_ctrl_ila_trigger),
+  .difftest_hostCtrl_enableSquash(host_ctrl_enable_squash),
+`endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),
   .difftest_logCtrl_level(difftest_logCtrl_level),

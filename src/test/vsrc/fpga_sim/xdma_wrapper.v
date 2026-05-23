@@ -22,7 +22,7 @@
 //   - AXI4-Lite replays fpga-host BAR writes into the Chisel ConfigBar.
 //
 // H2C/DDRs are intentionally not modeled here; BOARD=sim keeps RAM/MMIO inside
-// SimTop and the workload still enters through the existing simv +workload path.
+// SimTop and the host asks simv to load DDR through XDMA_SIM shared memory.
 module xdma_wrapper(
   input pcie_clock,
   input axilite_clock,

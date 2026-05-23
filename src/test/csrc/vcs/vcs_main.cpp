@@ -184,6 +184,15 @@ extern "C" void set_simjtag() {
   enable_simjtag = true;
 }
 
+#ifdef FPGA_SIM
+extern "C" void simv_load_workload() {
+  char workload[4096];
+  if (xdma_sim_get_workload(workload, sizeof(workload))) {
+    load_ram_image(workload);
+  }
+}
+#endif // FPGA_SIM
+
 extern "C" uint8_t simv_init() {
   if (workload_list != NULL) {
     if (switch_workload())
@@ -199,12 +208,16 @@ extern "C" uint8_t simv_init() {
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);
 #endif
+#ifdef FPGA_SIM
+  xdma_sim_workload_open(false);
+#else
   if (args.gcpt_restore != NULL) {
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }
   if (args.copy_ram_offset) {
     copy_ram(args.copy_ram_offset);
   }
+#endif // FPGA_SIM
 
   init_flash(args.flash_bin);
 
@@ -281,6 +294,7 @@ void simv_finish() {
   simMemory = nullptr;
 
 #ifdef FPGA_SIM
+  xdma_sim_workload_close(false);
   xdma_sim_close(0);
 #endif //FPGA_SIM
 }

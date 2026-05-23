@@ -29,7 +29,8 @@
 #include "svdpi.h"
 #endif // FPGA_HOST
 
-#define BUFFER_SIZE 65536
+#define BUFFER_SIZE        65536
+#define WORKLOAD_PATH_SIZE 4096
 
 template <typename T> class xdma_shm_device {
 private:
@@ -92,6 +93,14 @@ typedef struct {
   uint32_t data;
   uint8_t strb;
 } xdma_axilite_shm;
+
+typedef struct {
+  pthread_mutex_t lock;
+  pthread_cond_t accepted_cond;
+  bool valid;
+  bool accepted;
+  char workload[WORKLOAD_PATH_SIZE];
+} xdma_workload_shm;
 
 class xdma_sim : private xdma_shm_device<xdma_shm> {
 private:
@@ -232,9 +241,72 @@ public:
   }
 };
 
+class xdma_workload_sim : private xdma_shm_device<xdma_workload_shm> {
+private:
+  static const char *path() {
+    return "/xdma_sim_workload";
+  }
+
+public:
+  xdma_workload_sim(bool is_host) : xdma_shm_device(path(), sizeof(xdma_workload_shm), is_host, "workload") {
+    if (is_host) {
+      pthread_mutexattr_t attr;
+      pthread_mutexattr_init(&attr);
+      pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+      pthread_mutex_init(&shm_ptr->lock, &attr);
+      pthread_condattr_t cattr;
+      pthread_condattr_init(&cattr);
+      pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+      pthread_cond_init(&shm_ptr->accepted_cond, &cattr);
+    }
+  }
+
+  int set_workload(const char *workload) {
+    if (workload == nullptr || strlen(workload) >= WORKLOAD_PATH_SIZE) {
+      return -1;
+    }
+
+    pthread_mutex_lock(&shm_ptr->lock);
+    while (shm_ptr->valid) {
+      pthread_cond_wait(&shm_ptr->accepted_cond, &shm_ptr->lock);
+    }
+
+    strcpy(shm_ptr->workload, workload);
+    shm_ptr->accepted = false;
+    shm_ptr->valid = true;
+    pthread_cond_broadcast(&shm_ptr->accepted_cond);
+    while (!shm_ptr->accepted) {
+      pthread_cond_wait(&shm_ptr->accepted_cond, &shm_ptr->lock);
+    }
+    pthread_mutex_unlock(&shm_ptr->lock);
+    return 0;
+  }
+
+  int get_workload(char *workload, size_t size) {
+    if (workload == nullptr || size == 0) {
+      return -1;
+    }
+
+    pthread_mutex_lock(&shm_ptr->lock);
+    if (!shm_ptr->valid) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return 0;
+    }
+
+    strncpy(workload, shm_ptr->workload, size - 1);
+    workload[size - 1] = '\0';
+    shm_ptr->valid = false;
+    shm_ptr->accepted = true;
+    pthread_cond_broadcast(&shm_ptr->accepted_cond);
+    pthread_mutex_unlock(&shm_ptr->lock);
+    return 1;
+  }
+};
+
 // API for shared XDMA Dev
 xdma_sim *xsim[8] = {nullptr};
 xdma_axilite_sim *axilite_sim = nullptr;
+xdma_workload_sim *workload_sim = nullptr;
 static pthread_mutex_t xsim_lock = PTHREAD_MUTEX_INITIALIZER;
 
 #ifndef FPGA_HOST
@@ -284,8 +356,32 @@ void xdma_sim_axilite_close(bool is_host) {
   pthread_mutex_unlock(&xsim_lock);
 }
 
+void xdma_sim_workload_open(bool is_host) {
+  pthread_mutex_lock(&xsim_lock);
+  if (workload_sim == nullptr) {
+    workload_sim = new xdma_workload_sim(is_host);
+  }
+  pthread_mutex_unlock(&xsim_lock);
+}
+
+void xdma_sim_workload_close(bool is_host) {
+  (void)is_host;
+  pthread_mutex_lock(&xsim_lock);
+  delete workload_sim;
+  workload_sim = nullptr;
+  pthread_mutex_unlock(&xsim_lock);
+}
+
 int xdma_sim_axilite_write(uint32_t addr, uint32_t data, uint8_t strb) {
   return axilite_sim->write(addr, data, strb);
+}
+
+int xdma_sim_set_workload(const char *workload) {
+  return workload_sim->set_workload(workload);
+}
+
+int xdma_sim_get_workload(char *workload, size_t size) {
+  return workload_sim->get_workload(workload, size);
 }
 
 extern "C" void v_xdma_write(uint8_t channel, const char *axi_tdata, uint8_t axi_tlast) {

@@ -36,6 +36,12 @@ void init_ram(const char *image, uint64_t ram_size, bool random_mem, uint32_t se
   simMemory = new MmapMemory(image, ram_size, random_mem, seed);
 }
 
+void load_ram_image(const char *image) {
+  auto *mem = dynamic_cast<MmapMemory *>(simMemory);
+  assert(mem);
+  mem->load_image(image);
+}
+
 static uint64_t random_init_memory(void *ram, uint64_t memory_size, uint32_t seed) {
   uint64_t state = seed;
 
@@ -304,6 +310,10 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uin
   //new end
 #endif
 
+  load_image(image);
+}
+
+void MmapMemory::load_image(const char *image) {
   if (image == NULL) {
     img_size = 0;
     return;
