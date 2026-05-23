@@ -76,6 +76,7 @@ FpgaXdma::FpgaXdma()
   }
 #ifdef FPGA_SIM
   xdma_sim_axilite_open(true);
+  xdma_sim_workload_open(true);
 #endif // FPGA_SIM
 #ifdef CONFIG_USE_XDMA_H2C
   xdma_h2c_fd = open(XDMA_H2C_DEVICE, O_WRONLY);
@@ -93,6 +94,7 @@ FpgaXdma::~FpgaXdma() {
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     xdma_sim_close(i);
   }
+  xdma_sim_workload_close(true);
   xdma_sim_axilite_close(true);
 #endif // FPGA_SIM
 }
@@ -101,11 +103,8 @@ FpgaXdma::~FpgaXdma() {
 void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
 #ifdef FPGA_SIM
   if (is_bypass) {
-    // FPGA_SIM already passes the workload to simv through +workload. Keep the
-    // host API shape but avoid a duplicate per-byte DPI DDR load path.
-    (void)workload;
-    printf("[fpga-host] FPGA_SIM uses simv +workload for DDR init; skip XDMA bypass load\n");
-    return;
+    fprintf(stderr, "[fpga-host] FPGA_SIM XDMA bypass write is unsupported\n");
+    exit(-1);
   }
   if (xdma_sim_axilite_write(static_cast<uint32_t>(addr), static_cast<uint32_t>(value), 0xf) != 0) {
     fprintf(stderr, "[fpga-host] FPGA_SIM AXI-Lite command queue is full, addr=0x%lx value=0x%lx\n", addr, value);

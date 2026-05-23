@@ -53,7 +53,7 @@ if [[ "${WAVE}" -eq 1 ]]; then
   WAVE_ARGS="+dump-wave"
 fi
 
-./build/simv +workload="${WORKLOAD}" +e=0 +diff="${DIFF}" ${WAVE_ARGS} &
+./build/simv +e=0 +diff="${DIFF}" ${WAVE_ARGS} &
 SIMV_PID=$!
 
 set +e # disable exit to get exitCode

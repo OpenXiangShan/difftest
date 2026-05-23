@@ -24,6 +24,13 @@ module DifftestEndpoint(
   output wire        workload_switch,
 `endif // ENABLE_WORKLOAD_SWITCH
 
+`ifdef FPGA_SIM
+  input  wire        difftest_hostCtrl_reset,
+  input  wire        difftest_hostCtrl_diffEnable,
+  input  wire        difftest_hostCtrl_ilaTrigger,
+  input  wire        difftest_hostCtrl_enableSquash,
+`endif // FPGA_SIM
+
   /* DifftestTopIO */
   output wire [63:0] difftest_logCtrl_begin,
   output wire [63:0] difftest_logCtrl_end,
@@ -49,6 +56,9 @@ import "DPI-C" function void set_seed(longint seed);
 import "DPI-C" function void set_random_mem();
 import "DPI-C" function void set_simjtag();
 import "DPI-C" function byte simv_init();
+`ifdef FPGA_SIM
+import "DPI-C" function void simv_load_workload();
+`endif // FPGA_SIM
 import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
@@ -293,6 +303,11 @@ always @(posedge clock) begin
         end
       end
     end
+`ifdef FPGA_SIM
+    if (difftest_hostCtrl_reset) begin
+      simv_load_workload();
+    end
+`endif // FPGA_SIM
   end
 end
 

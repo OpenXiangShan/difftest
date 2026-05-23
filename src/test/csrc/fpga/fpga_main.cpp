@@ -124,7 +124,9 @@ void fpga_init() {
 
   init_device();
 
-#ifndef FPGA_SIM
+#ifdef FPGA_SIM
+  xdma_sim_set_workload(args.image);
+#else
   if (fpga_ddr_load_cmd) {
     if (!run_external_cmd(fpga_ddr_load_cmd, "DDR load")) {
       exit(0);
