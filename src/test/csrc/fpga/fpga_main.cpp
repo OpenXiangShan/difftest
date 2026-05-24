@@ -106,6 +106,10 @@ static bool run_external_cmd(const char *cmd, const char *tag) {
 
 void fpga_init() {
   xdma_device = new FpgaXdma();
+#ifdef FPGA_SIM
+  xdma_sim_set_workload(args.image);
+#endif // FPGA_SIM
+
   xdma_device->fpga_io(HOST_IO_RESET, true);
   xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
@@ -124,9 +128,7 @@ void fpga_init() {
 
   init_device();
 
-#ifdef FPGA_SIM
-  xdma_sim_set_workload(args.image);
-#else
+#ifndef FPGA_SIM
   if (fpga_ddr_load_cmd) {
     if (!run_external_cmd(fpga_ddr_load_cmd, "DDR load")) {
       exit(0);

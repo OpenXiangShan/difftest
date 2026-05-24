@@ -37,11 +37,19 @@
 #include "remote_bitbang.h"
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
+#include <pthread.h>
 #endif // FPGA_SIM
 
 static bool has_reset = false;
 static char *workload_list = NULL;
 static CommonArgs args;
+
+#ifdef FPGA_SIM
+static struct {
+  pthread_t thread;
+  bool started;
+} workload_loader;
+#endif // FPGA_SIM
 
 enum {
   SIMV_RUN,
@@ -185,11 +193,41 @@ extern "C" void set_simjtag() {
 }
 
 #ifdef FPGA_SIM
-extern "C" void simv_load_workload() {
+static void *fpga_sim_workload_thread_main(void *) {
   char workload[4096];
-  if (xdma_sim_get_workload(workload, sizeof(workload))) {
+  while (true) {
+    int ret = xdma_sim_wait_workload(workload, sizeof(workload));
+    if (ret <= 0) {
+      break;
+    }
     load_ram_image(workload);
+    xdma_sim_complete_workload();
   }
+  return nullptr;
+}
+
+static void start_fpga_sim_workload_thread() {
+  if (workload_loader.started) {
+    return;
+  }
+
+  int ret = pthread_create(&workload_loader.thread, nullptr, fpga_sim_workload_thread_main, nullptr);
+  if (ret != 0) {
+    errno = ret;
+    perror("XDMA_SIM: Failed to create workload loader thread");
+    exit(-1);
+  }
+  workload_loader.started = true;
+}
+
+static void stop_fpga_sim_workload_thread() {
+  if (!workload_loader.started) {
+    return;
+  }
+
+  xdma_sim_cancel_workload();
+  pthread_join(workload_loader.thread, nullptr);
+  workload_loader.started = false;
 }
 #endif // FPGA_SIM
 
@@ -210,6 +248,7 @@ extern "C" uint8_t simv_init() {
 #endif
 #ifdef FPGA_SIM
   xdma_sim_workload_open(false);
+  start_fpga_sim_workload_thread();
 #else
   if (args.gcpt_restore != NULL) {
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
@@ -288,6 +327,10 @@ void simv_finish() {
     goldenmem_finish();
   }
 #endif // CONFIG_NO_DIFFTEST
+
+#ifdef FPGA_SIM
+  stop_fpga_sim_workload_thread();
+#endif // FPGA_SIM
 
   finish_device();
   delete simMemory;
