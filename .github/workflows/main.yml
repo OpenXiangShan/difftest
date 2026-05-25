@@ -418,6 +418,20 @@ jobs:
             bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=./ready-to-run/microbench.bin DIFF=./ready-to-run/riscv64-nemu-interpreter-so
             make -C difftest fpga-clean vcs-clean
 
+      - name: FPGA-difftest Build (ASYNC_CLK, RANDOM_MEM, H2C)
+        run: |
+            cd $NOOP_HOME
+            make simv MILL_ARGS="--difftest-config ESBIDUF" VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2N=1
+            make -C difftest fpga-build FPGA=1 FPGA_SIM=1 USE_XDMA_H2C=1 DIFFTEST_PERFCNT=1
+            set -euo pipefail
+            bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=./ready-to-run/microbench.bin DIFF=./ready-to-run/riscv64-nemu-interpreter-so RAM_SIZE=1MB SEED=1234 RANDOM_MEM=1 2>&1 | tee fpga-h2c-async-random.log
+            grep -q 'FPGA_SIM H2C queued' fpga-h2c-async-random.log
+            grep -q 'H2C load done' fpga-h2c-async-random.log
+            host_first_word=$(grep 'Using memory random init seed' fpga-h2c-async-random.log | head -n1 | sed -n 's/.*first word = \(0x[0-9a-fA-F]*\).*/\1/p' || true)
+            simv_first_word=$(grep 'FPGA_SIM.*Memory random init with seed' fpga-h2c-async-random.log | head -n1 | sed -n 's/.*first word = \(0x[0-9a-fA-F]*\).*/\1/p' || true)
+            test -n "$host_first_word" && test -n "$simv_first_word" && test "$host_first_word" = "$simv_first_word"
+            make -C difftest fpga-clean vcs-clean
+
 
       - name: FPGA-difftest Release
         run: |

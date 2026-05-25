@@ -117,6 +117,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     // AXI output
     io.axis.valid := inTransfer
     io.axis.bits.data := packetBeats(sendCnt)
+    io.axis.bits.keep := Fill(axis_width / 8, 1.U(1.W))
     io.axis.bits.last := inTransfer && sendLast && sendPacketEnd
   }
 }

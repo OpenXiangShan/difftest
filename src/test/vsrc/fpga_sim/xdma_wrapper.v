@@ -19,10 +19,8 @@
 //
 // Each XDMA-facing bus is represented by a small Verilog/DPI wrapper:
 //   - C2H AXI-Stream writes DiffTest packets into shared memory.
+//   - H2C AXI-Stream replays host workload packets into the Chisel memory path.
 //   - AXI4-Lite replays fpga-host BAR writes into the Chisel ConfigBar.
-//
-// H2C/DDRs are intentionally not modeled here; BOARD=sim keeps RAM/MMIO inside
-// SimTop and the host asks simv to load DDR through XDMA_SIM shared memory.
 module xdma_wrapper(
   input pcie_clock,
   input axilite_clock,
@@ -32,6 +30,12 @@ module xdma_wrapper(
   input         axi_c2h_tlast,
   output        axi_c2h_tready,
   input         axi_c2h_tvalid,
+
+  output [511:0] axi_h2c_tdata,
+  output [63:0]  axi_h2c_tkeep,
+  output         axi_h2c_tlast,
+  input          axi_h2c_tready,
+  output         axi_h2c_tvalid,
 
   output [31:0] cfg_awaddr,
   output        cfg_awvalid,
@@ -50,6 +54,16 @@ module xdma_wrapper(
   input  [1:0]  cfg_rresp,
   input         cfg_rvalid,
   output        cfg_rready
+);
+
+xdma_axi_h2c xdma_h2c(
+  .clock(pcie_clock),
+  .reset(reset),
+  .axi_tdata(axi_h2c_tdata),
+  .axi_tkeep(axi_h2c_tkeep),
+  .axi_tlast(axi_h2c_tlast),
+  .axi_tready(axi_h2c_tready),
+  .axi_tvalid(axi_h2c_tvalid)
 );
 
 xdma_axi_c2h xdma_c2h(

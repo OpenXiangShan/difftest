@@ -131,6 +131,12 @@ wire sim_clock;
   wire c2h_axi_tready;
   wire c2h_axi_tvalid;
   wire [511:0] c2h_axi_tdata;
+  wire [63:0] c2h_axi_tkeep;
+  wire h2c_axi_tlast;
+  wire h2c_axi_tready;
+  wire h2c_axi_tvalid;
+  wire [511:0] h2c_axi_tdata;
+  wire [63:0] h2c_axi_tkeep;
   wire [31:0] cfg_awaddr;
   wire        cfg_awvalid;
   wire        cfg_awready;
@@ -166,6 +172,11 @@ xdma_wrapper xdma(
   .axi_c2h_tlast(c2h_axi_tlast),
   .axi_c2h_tready(c2h_axi_tready),
   .axi_c2h_tvalid(c2h_axi_tvalid),
+  .axi_h2c_tdata(h2c_axi_tdata),
+  .axi_h2c_tkeep(h2c_axi_tkeep),
+  .axi_h2c_tlast(h2c_axi_tlast),
+  .axi_h2c_tready(h2c_axi_tready),
+  .axi_h2c_tvalid(h2c_axi_tvalid),
   .cfg_awaddr(cfg_awaddr),
   .cfg_awvalid(cfg_awvalid),
   .cfg_awready(cfg_awready),
@@ -213,7 +224,13 @@ SimTop sim(
   .difftest_to_host_axis_valid(c2h_axi_tvalid),
   .difftest_to_host_axis_ready(c2h_axi_tready),
   .difftest_to_host_axis_bits_data(c2h_axi_tdata),
+  .difftest_to_host_axis_bits_keep(c2h_axi_tkeep),
   .difftest_to_host_axis_bits_last(c2h_axi_tlast),
+  .difftest_from_host_axis_valid(h2c_axi_tvalid),
+  .difftest_from_host_axis_ready(h2c_axi_tready),
+  .difftest_from_host_axis_bits_data(h2c_axi_tdata),
+  .difftest_from_host_axis_bits_keep(h2c_axi_tkeep),
+  .difftest_from_host_axis_bits_last(h2c_axi_tlast),
   .difftest_cfg_axilite_awvalid(cfg_awvalid),
   .difftest_cfg_axilite_awaddr(cfg_awaddr),
   .difftest_cfg_axilite_awready(cfg_awready),

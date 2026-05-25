@@ -77,7 +77,11 @@ public:
 typedef struct {
   pthread_mutex_t lock;
   pthread_cond_t read_cond;
+  pthread_cond_t write_cond;
   bool read_waiting;
+  bool data_valid;
+  uint64_t tkeep;
+  uint8_t tlast;
   int read_size;
   int write_size;
   char buffer[BUFFER_SIZE];
@@ -124,6 +128,7 @@ public:
       pthread_condattr_init(&cattr);
       pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
       pthread_cond_init(&shm_ptr->read_cond, &cattr);
+      pthread_cond_init(&shm_ptr->write_cond, &cattr);
     }
   }
 
@@ -166,6 +171,77 @@ public:
     pthread_mutex_unlock(&shm_ptr->lock);
 
     return to_write;
+  }
+};
+
+class xdma_h2c_sim : private xdma_shm_device<xdma_shm> {
+private:
+  static std::string path(int channel) {
+    char path[128];
+    sprintf(path, "/xdma_sim_h2c%d", channel);
+    return path;
+  }
+
+public:
+  xdma_h2c_sim(int channel, bool is_host) : xdma_shm_device(path(channel).c_str(), sizeof(xdma_shm), is_host, "H2C") {
+    if (is_host) {
+      pthread_mutexattr_t attr;
+      pthread_mutexattr_init(&attr);
+      pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+      pthread_mutex_init(&shm_ptr->lock, &attr);
+      pthread_condattr_t cattr;
+      pthread_condattr_init(&cattr);
+      pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+      pthread_cond_init(&shm_ptr->read_cond, &cattr);
+      pthread_cond_init(&shm_ptr->write_cond, &cattr);
+    }
+  }
+
+  int write(const char *buf, uint64_t tkeep, unsigned char tlast, size_t size) {
+    assert(size <= BUFFER_SIZE);
+    pthread_mutex_lock(&shm_ptr->lock);
+    while (shm_ptr->data_valid) {
+      pthread_cond_wait(&shm_ptr->read_cond, &shm_ptr->lock);
+    }
+    memcpy(shm_ptr->buffer, buf, size);
+    shm_ptr->write_size = size;
+    shm_ptr->tkeep = tkeep;
+    shm_ptr->tlast = tlast;
+    shm_ptr->data_valid = true;
+    pthread_cond_broadcast(&shm_ptr->write_cond);
+    while (shm_ptr->data_valid) {
+      pthread_cond_wait(&shm_ptr->read_cond, &shm_ptr->lock);
+    }
+    pthread_mutex_unlock(&shm_ptr->lock);
+    return size;
+  }
+
+  bool wait(char *buf, uint64_t *tkeep, uint8_t *tlast, size_t size, volatile bool *stop) {
+    assert(size <= BUFFER_SIZE);
+    pthread_mutex_lock(&shm_ptr->lock);
+    while (!shm_ptr->data_valid && !*stop) {
+      pthread_cond_wait(&shm_ptr->write_cond, &shm_ptr->lock);
+    }
+    if (*stop) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return false;
+    }
+
+    size_t to_copy = size < (size_t)shm_ptr->write_size ? size : (size_t)shm_ptr->write_size;
+    memcpy(buf, shm_ptr->buffer, to_copy);
+    *tkeep = shm_ptr->tkeep;
+    *tlast = shm_ptr->tlast;
+    shm_ptr->data_valid = false;
+    pthread_cond_broadcast(&shm_ptr->read_cond);
+    pthread_mutex_unlock(&shm_ptr->lock);
+    return to_copy == size;
+  }
+
+  void notify() {
+    pthread_mutex_lock(&shm_ptr->lock);
+    pthread_cond_broadcast(&shm_ptr->read_cond);
+    pthread_cond_broadcast(&shm_ptr->write_cond);
+    pthread_mutex_unlock(&shm_ptr->lock);
   }
 };
 
@@ -338,12 +414,14 @@ public:
 
 // API for shared XDMA Dev
 xdma_sim *xsim[8] = {nullptr};
+xdma_h2c_sim *h2c_sim[8] = {nullptr};
 xdma_axilite_sim *axilite_sim = nullptr;
 xdma_workload_sim *workload_sim = nullptr;
 static pthread_mutex_t xsim_lock = PTHREAD_MUTEX_INITIALIZER;
 
 #ifndef FPGA_HOST
 static void xdma_axilite_stop_thread();
+static void xdma_h2c_stop_thread();
 #endif // FPGA_HOST
 
 void xdma_sim_open(int channel, bool is_host) {
@@ -367,6 +445,28 @@ int xdma_sim_read(int channel, char *buf, size_t size) {
 
 int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size) {
   return xsim[channel]->write(buf, tlast, size);
+}
+
+void xdma_sim_h2c_open(int channel, bool is_host) {
+  pthread_mutex_lock(&xsim_lock);
+  if (h2c_sim[channel] == nullptr) {
+    h2c_sim[channel] = new xdma_h2c_sim(channel, is_host);
+  }
+  pthread_mutex_unlock(&xsim_lock);
+}
+
+void xdma_sim_h2c_close(int channel) {
+#ifndef FPGA_HOST
+  xdma_h2c_stop_thread();
+#endif // FPGA_HOST
+  pthread_mutex_lock(&xsim_lock);
+  delete h2c_sim[channel];
+  h2c_sim[channel] = nullptr;
+  pthread_mutex_unlock(&xsim_lock);
+}
+
+int xdma_sim_h2c_write(int channel, const char *buf, uint64_t tkeep, uint8_t tlast, size_t size) {
+  return h2c_sim[channel]->write(buf, tkeep, tlast, size);
 }
 
 void xdma_sim_axilite_open(bool is_host) {
@@ -439,12 +539,39 @@ extern "C" void v_xdma_c2h_write(uint8_t channel, const char *axi_tdata, uint8_t
 
 #ifndef FPGA_HOST
 static svScope axilite_scope = nullptr;
+static svScope h2c_scope = nullptr;
 static pthread_t axilite_thread;
+static pthread_t h2c_thread;
 static bool axilite_thread_started = false;
+static bool h2c_thread_started = false;
 static volatile bool axilite_thread_stop = false;
+static volatile bool h2c_thread_stop = false;
 
 extern "C" void v_xdma_axilite_write(uint32_t addr, uint32_t data, uint8_t strb, uint8_t *accepted);
 extern "C" void v_xdma_axilite_read(uint32_t addr, uint32_t *data, uint8_t *accepted);
+extern "C" void v_xdma_h2c_write(const svBitVecVal *axi_tdata, uint64_t axi_tkeep, svBit axi_tlast, uint8_t *accepted);
+
+static void *xdma_h2c_thread_main(void *) {
+  xdma_sim_h2c_open(0, false);
+  while (!h2c_thread_stop) {
+    svBitVecVal data[16] = {};
+    uint64_t tkeep = 0;
+    uint8_t tlast = 0;
+    if (!h2c_sim[0]->wait(reinterpret_cast<char *>(data), &tkeep, &tlast, 64, &h2c_thread_stop)) {
+      continue;
+    }
+
+    uint8_t accepted = 0;
+    while (!accepted && !h2c_thread_stop) {
+      svSetScope(h2c_scope);
+      v_xdma_h2c_write(data, tkeep, tlast, &accepted);
+      if (!accepted) {
+        usleep(1000);
+      }
+    }
+  }
+  return nullptr;
+}
 
 static void *xdma_axilite_thread_main(void *) {
   xdma_sim_axilite_open(false);
@@ -491,6 +618,22 @@ extern "C" void v_xdma_axilite_set_scope() {
   axilite_thread_started = true;
 }
 
+extern "C" void v_xdma_h2c_set_scope() {
+  h2c_scope = svGetScope();
+  if (h2c_thread_started) {
+    return;
+  }
+
+  h2c_thread_stop = false;
+  int ret = pthread_create(&h2c_thread, nullptr, xdma_h2c_thread_main, nullptr);
+  if (ret != 0) {
+    errno = ret;
+    perror("XDMA_SIM: Failed to create H2C thread");
+    exit(-1);
+  }
+  h2c_thread_started = true;
+}
+
 static void xdma_axilite_stop_thread() {
   if (!axilite_thread_started) {
     return;
@@ -503,5 +646,19 @@ static void xdma_axilite_stop_thread() {
   pthread_join(axilite_thread, nullptr);
   axilite_thread_started = false;
   axilite_scope = nullptr;
+}
+
+static void xdma_h2c_stop_thread() {
+  if (!h2c_thread_started) {
+    return;
+  }
+
+  h2c_thread_stop = true;
+  if (h2c_sim[0] != nullptr) {
+    h2c_sim[0]->notify();
+  }
+  pthread_join(h2c_thread, nullptr);
+  h2c_thread_started = false;
+  h2c_scope = nullptr;
 }
 #endif // FPGA_HOST
