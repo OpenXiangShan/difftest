@@ -18,10 +18,197 @@ package difftest.fpga
 import chisel3._
 import chisel3.util._
 import difftest.DifftestMemIO
-import difftest.common.AXI4Bundle
+import difftest.common.{AXI4Bundle, AXI4Stream, AXI4StreamBundle}
 
 object MemInitState extends ChiselEnum {
   val sIdle, sSetup, sAddr, sData, sResp, sDone = Value
+}
+
+object H2CAXIs2MemState extends ChiselEnum {
+  val sIdle, sReadPayload, sAddr, sData, sResp, sDone = Value
+}
+
+class AsyncClockFIFO[T <: Data](gen: T, depth: Int) extends Module {
+  require(isPow2(depth), s"AsyncClockFIFO depth must be power-of-two, got $depth")
+  require(depth >= 4, s"AsyncClockFIFO depth must be at least 4, got $depth")
+
+  val io = IO(new Bundle {
+    val enqClock = Input(Clock())
+    val enq = Flipped(Decoupled(gen))
+    val deq = Decoupled(gen)
+  })
+
+  private val idxWidth = log2Ceil(depth)
+  private val ptrWidth = idxWidth + 1
+  private val mem = Mem(depth, gen)
+
+  private def binToGray(x: UInt): UInt = (x >> 1) ^ x
+
+  private val rdPtrBin = RegInit(0.U(ptrWidth.W))
+  private val rdPtrGray = RegInit(0.U(ptrWidth.W))
+
+  private val (wrPtrBin, wrPtrGray) = withClockAndReset(io.enqClock, reset) {
+    val bin = RegInit(0.U(ptrWidth.W))
+    val gray = RegInit(0.U(ptrWidth.W))
+    (bin, gray)
+  }
+
+  private val wrPtrGraySync = RegNext(RegNext(wrPtrGray, 0.U), 0.U)
+  private val empty = wrPtrGraySync === rdPtrGray
+
+  io.deq.valid := !empty
+  io.deq.bits := mem(rdPtrBin(idxWidth - 1, 0))
+  when(io.deq.fire) {
+    val next = rdPtrBin + 1.U
+    rdPtrBin := next
+    rdPtrGray := binToGray(next)
+  }
+
+  withClockAndReset(io.enqClock, reset) {
+    val rdPtrGraySync = RegNext(RegNext(rdPtrGray, 0.U), 0.U)
+    val wrPtrBinNext = wrPtrBin + 1.U
+    val wrPtrGrayNext = binToGray(wrPtrBinNext)
+    val full = wrPtrGrayNext === Cat(
+      ~rdPtrGraySync(ptrWidth - 1, ptrWidth - 2),
+      rdPtrGraySync(ptrWidth - 3, 0),
+    )
+
+    io.enq.ready := !full
+    when(io.enq.fire) {
+      mem.write(wrPtrBin(idxWidth - 1, 0), io.enq.bits)
+      wrPtrBin := wrPtrBinNext
+      wrPtrGray := wrPtrGrayNext
+    }
+  }
+}
+
+class H2CAXIs2Mem(
+  val axisWidth: Int,
+  val addrWidth: Int,
+  val dataWidth: Int,
+  val idWidth: Int,
+  val userWidth: Int,
+  val baseAddr: BigInt,
+) extends Module {
+  require(axisWidth % 8 == 0, s"AXIS width $axisWidth must be byte-aligned")
+  require(dataWidth % 8 == 0, s"AXI data width $dataWidth must be byte-aligned")
+  require(axisWidth % dataWidth == 0, s"AXIS width $axisWidth must be a multiple of AXI data width $dataWidth")
+  require(isPow2(dataWidth / 8), s"AXI data width must be power-of-two bytes, got $dataWidth bits")
+  require(
+    baseAddr >= 0 && baseAddr < (BigInt(1) << addrWidth),
+    s"H2C base address 0x${baseAddr.toString(16)} exceeds $addrWidth-bit AXI address",
+  )
+
+  val io = IO(new Bundle {
+    val pcie_clock = Input(Clock())
+    val enable = Input(Bool())
+    val axis = Flipped(new AXI4Stream(axisWidth))
+    val axi = new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth)
+    val done = Output(Bool())
+  })
+
+  import H2CAXIs2MemState._
+
+  private val fifoDepth = 32
+  private val chunksPerAxis = axisWidth / dataWidth
+  private val chunkWidth = log2Ceil(chunksPerAxis).max(1)
+  private val burstWidth = log2Ceil(chunksPerAxis + 1).max(1)
+  private val beatBytes = dataWidth / 8
+  private val axisBytes = axisWidth / 8
+
+  private val fifo = Module(new AsyncClockFIFO(new AXI4StreamBundle(axisWidth), fifoDepth))
+  private val enableSync = withClockAndReset(io.pcie_clock, reset) {
+    RegNext(RegNext(io.enable, false.B), false.B)
+  }
+
+  fifo.io.enqClock := io.pcie_clock
+  fifo.io.enq.valid := io.axis.valid && enableSync
+  fifo.io.enq.bits := io.axis.bits
+  io.axis.ready := fifo.io.enq.ready && enableSync
+
+  private val state = RegInit(sIdle)
+  private val addr = RegInit(baseAddr.U(addrWidth.W))
+  private val payload = Reg(UInt(axisWidth.W))
+  private val payloadKeep = Reg(UInt(axisBytes.W))
+  private val payloadLast = RegInit(false.B)
+  private val chunk = RegInit(0.U(chunkWidth.W))
+  private val burstBeats = RegInit(0.U(burstWidth.W))
+  private val burstBeat = RegInit(0.U(burstWidth.W))
+  private val payloadWords = payload.asTypeOf(Vec(chunksPerAxis, UInt(dataWidth.W)))
+  private val payloadKeeps = payloadKeep.asTypeOf(Vec(chunksPerAxis, UInt(beatBytes.W)))
+  private val validBytes = PopCount(fifo.io.deq.bits.keep.asBools)
+  private val beatsFromKeep = (validBytes + (beatBytes - 1).U) >> log2Ceil(beatBytes)
+  private val beatsInPayload = beatsFromKeep(burstWidth - 1, 0)
+
+  io.axi.aw.valid := state === sAddr
+  io.axi.aw.bits := 0.U.asTypeOf(io.axi.aw.bits)
+  io.axi.aw.bits.addr := addr
+  io.axi.aw.bits.len := burstBeats - 1.U
+  io.axi.aw.bits.size := log2Ceil(beatBytes).U
+  io.axi.aw.bits.burst := 1.U
+
+  io.axi.w.valid := state === sData
+  io.axi.w.bits.data := payloadWords(chunk)
+  io.axi.w.bits.strb := payloadKeeps(chunk)
+  io.axi.w.bits.last := burstBeat === burstBeats - 1.U
+
+  io.axi.b.ready := state === sResp
+  io.axi.ar.valid := false.B
+  io.axi.ar.bits := 0.U.asTypeOf(io.axi.ar.bits)
+  io.axi.r.ready := false.B
+
+  io.done := state === sDone
+  fifo.io.deq.ready := state === sReadPayload && io.enable
+
+  when(!io.enable) {
+    state := sIdle
+    addr := baseAddr.U(addrWidth.W)
+  }.otherwise {
+    switch(state) {
+      is(sIdle) {
+        when(fifo.io.deq.valid) {
+          state := sReadPayload
+        }
+      }
+      is(sReadPayload) {
+        when(fifo.io.deq.fire) {
+          payload := fifo.io.deq.bits.data
+          payloadKeep := fifo.io.deq.bits.keep
+          payloadLast := fifo.io.deq.bits.last
+          chunk := 0.U
+          burstBeat := 0.U
+          burstBeats := beatsInPayload
+          state := Mux(beatsInPayload === 0.U, Mux(fifo.io.deq.bits.last, sDone, sReadPayload), sAddr)
+        }
+      }
+      is(sAddr) {
+        when(io.axi.aw.fire) {
+          state := sData
+        }
+      }
+      is(sData) {
+        when(io.axi.w.fire) {
+          addr := addr + beatBytes.U
+          when(io.axi.w.bits.last) {
+            state := sResp
+          }.otherwise {
+            chunk := chunk + 1.U
+            burstBeat := burstBeat + 1.U
+          }
+        }
+      }
+      is(sResp) {
+        when(io.axi.b.fire) {
+          state := Mux(payloadLast, sDone, sReadPayload)
+        }
+      }
+      is(sDone) {
+        when(!io.enable) {
+          state := sIdle
+        }
+      }
+    }
+  }
 }
 
 class DifftestMemCtrl(
@@ -39,6 +226,8 @@ class DifftestMemCtrl(
 
   val io = IO(new Bundle {
     val ctrl = Flipped(new XDMAMemCtrlIO)
+    val pcie_clock = Input(Clock())
+    val h2c = Flipped(new AXI4Stream(512))
     val cpu = Flipped(new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth))
     val mem = new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth)
   })
@@ -63,14 +252,21 @@ class DifftestMemCtrl(
   private val nextState = stepLFSR(lfsr, wordsPerBeat)
   private val memDone = state === sDone
   private val memSrcInit = io.ctrl.memInit
-  private val memSrcCPU = io.ctrl.memCPU && !memSrcInit
+  private val memSrcH2C = io.ctrl.memH2C && !memSrcInit
+  private val memSrcCPU = io.ctrl.memCPU && !memSrcInit && !memSrcH2C
   private val memInitAxi = Wire(new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth))
+  private val h2c = Module(new H2CAXIs2Mem(512, addrWidth, dataWidth, idWidth, userWidth, baseAddr))
+
+  h2c.io.pcie_clock := io.pcie_clock
+  h2c.io.enable := io.ctrl.memH2C
+  h2c.io.axis <> io.h2c
 
   io.ctrl.memStatus := MuxCase(
     0.U(2.W),
     Seq(
       (io.ctrl.memInit && initRangeError) -> 3.U(2.W),
       (io.ctrl.memInit && memDone) -> 2.U(2.W),
+      (io.ctrl.memH2C && h2c.io.done) -> 2.U(2.W),
     ),
   )
 
@@ -91,7 +287,7 @@ class DifftestMemCtrl(
   memInitAxi.ar.bits := 0.U.asTypeOf(memInitAxi.ar.bits)
   memInitAxi.r.ready := false.B
 
-  connectMux(Seq(io.cpu -> memSrcCPU, memInitAxi -> memSrcInit))
+  connectMux(Seq(io.cpu -> memSrcCPU, h2c.io.axi -> memSrcH2C, memInitAxi -> memSrcInit))
 
   switch(state) {
     is(sIdle) {

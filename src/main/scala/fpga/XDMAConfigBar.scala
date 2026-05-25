@@ -32,6 +32,7 @@ import difftest.common.AXI4LiteBundle
   *   - 0x18: HOST_IO_RAM_SIZE_MB
   *   - 0x1c: HOST_IO_MEM_INIT
   *   - 0x20: HOST_IO_MEM_CPU
+  *   - 0x24: HOST_IO_MEM_H2C
   */
 class XDMAHostCtrlIO extends Bundle {
   val reset = Bool()
@@ -42,6 +43,7 @@ class XDMAHostCtrlIO extends Bundle {
 
 class XDMAMemCtrlIO extends Bundle {
   val memInit = Output(Bool())
+  val memH2C = Output(Bool())
   val memCPU = Output(Bool())
   val seed = Output(UInt(32.W))
   val ramSizeMB = Output(UInt(32.W))
@@ -49,7 +51,7 @@ class XDMAMemCtrlIO extends Bundle {
 }
 
 private object XDMAConfigReg extends Enumeration {
-  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, Seed, RamSizeMB, MemInit, MemCPU = Value
+  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, Seed, RamSizeMB, MemInit, MemCPU, MemH2C = Value
 }
 
 class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
@@ -71,6 +73,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   io.hostCtrl.ilaTrigger := regfile(XDMAConfigReg.IlaTrigger.id)(0)
   io.hostCtrl.enableSquash := regfile(XDMAConfigReg.EnableSquash.id)(0)
   io.memCtrl.memInit := regfile(XDMAConfigReg.MemInit.id)(0)
+  io.memCtrl.memH2C := regfile(XDMAConfigReg.MemH2C.id)(0)
   io.memCtrl.memCPU := regfile(XDMAConfigReg.MemCPU.id)(0)
   io.memCtrl.seed := regfile(XDMAConfigReg.Seed.id)
   io.memCtrl.ramSizeMB := regfile(XDMAConfigReg.RamSizeMB.id)
@@ -145,5 +148,8 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
 
   when(io.memCtrl.memInit && io.memCtrl.memStatus =/= 0.U) {
     regfile(XDMAConfigReg.MemInit.id) := io.memCtrl.memStatus
+  }
+  when(io.memCtrl.memH2C && io.memCtrl.memStatus =/= 0.U) {
+    regfile(XDMAConfigReg.MemH2C.id) := io.memCtrl.memStatus
   }
 }

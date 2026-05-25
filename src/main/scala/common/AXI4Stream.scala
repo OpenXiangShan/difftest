@@ -19,7 +19,10 @@ import chisel3._
 import chisel3.util._
 
 class AXI4StreamBundle(val dataWidth: Int) extends Bundle {
+  require(dataWidth % 8 == 0, s"AXI-Stream data width must be byte-aligned, got $dataWidth")
+
   val data = UInt(dataWidth.W)
+  val keep = UInt((dataWidth / 8).W)
   val last = Bool()
 }
 

@@ -127,6 +127,13 @@ void fpga_init() {
     printf("[fpga-host] init mem done, elapsed = %ums\n", uptime() - init_mem_start);
   }
 
+#ifdef CONFIG_USE_XDMA_H2C
+  uint32_t h2c_start = uptime();
+  xdma_device->fpga_io(HOST_IO_MEM_H2C, true);
+  xdma_device->h2c_load_workload(args.image, ram_size);
+  xdma_device->wait_fpga_io_done(HOST_IO_MEM_H2C, "memory H2C load");
+  printf("[fpga-host] H2C load done, elapsed = %ums\n", uptime() - h2c_start);
+#else // CONFIG_USE_XDMA_H2C
 #ifdef FPGA_SIM
   xdma_sim_set_workload(args.image);
 #else
@@ -136,6 +143,7 @@ void fpga_init() {
     }
   }
 #endif // FPGA_SIM
+#endif // CONFIG_USE_XDMA_H2C
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
   xdma_device->fpga_io(HOST_IO_MEM_CPU, true);
