@@ -232,16 +232,12 @@ static void stop_fpga_sim_workload_thread() {
 #endif // FPGA_SIM
 
 extern "C" uint8_t simv_init() {
-  if (workload_list != NULL) {
-    if (switch_workload())
-      return 1;
+  if (workload_list != NULL && switch_workload()) {
+    return 1;
   }
   common_init("simv");
 
-  uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
-  if (args.ram_size) {
-    ram_size = parse_ramsize(args.ram_size);
-  }
+  uint64_t ram_size = args.ram_size ? parse_ramsize(args.ram_size) : DEFAULT_EMU_RAM_SIZE;
   init_ram(args.image, ram_size, args.random_mem, args.seed);
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);

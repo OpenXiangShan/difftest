@@ -4,6 +4,9 @@ set -o pipefail
 WORKLOAD=""
 DIFF=""
 WAVE=0
+RAM_SIZE=""
+SEED=""
+RANDOM_MEM=0
 
 for arg in "$@"; do
   case "${arg}" in
@@ -15,6 +18,15 @@ for arg in "$@"; do
       ;;
     WAVE=*)
       WAVE="${arg#WAVE=}"
+      ;;
+    RAM_SIZE=*)
+      RAM_SIZE="${arg#RAM_SIZE=}"
+      ;;
+    SEED=*)
+      SEED="${arg#SEED=}"
+      ;;
+    RANDOM_MEM=*)
+      RANDOM_MEM="${arg#RANDOM_MEM=}"
       ;;
     *)
       echo "Unknown argument: ${arg}" >&2
@@ -43,17 +55,31 @@ cleanup() {
 
 trap cleanup INT TERM EXIT
 
-./build/fpga-host --diff "${DIFF}" -i "${WORKLOAD}" &
+HOST_ARGS=(--diff "${DIFF}" -i "${WORKLOAD}")
+if [[ -n "${RAM_SIZE}" ]]; then
+  HOST_ARGS+=(--ram-size="${RAM_SIZE}")
+fi
+if [[ -n "${SEED}" ]]; then
+  HOST_ARGS+=(--seed="${SEED}")
+fi
+if [[ "${RANDOM_MEM}" -eq 1 ]]; then
+  HOST_ARGS+=(--random-mem)
+fi
+
+./build/fpga-host "${HOST_ARGS[@]}" &
 HOST_PID=$!
 
 sleep 2
 
-WAVE_ARGS=""
+SIMV_ARGS=(+e=0 +no-diff)
+if [[ -n "${RAM_SIZE}" ]]; then
+  SIMV_ARGS+=(+ram_size="${RAM_SIZE}")
+fi
 if [[ "${WAVE}" -eq 1 ]]; then
-  WAVE_ARGS="+dump-wave"
+  SIMV_ARGS+=(+dump-wave)
 fi
 
-./build/simv +e=0 +diff="${DIFF}" ${WAVE_ARGS} &
+./build/simv "${SIMV_ARGS[@]}" &
 SIMV_PID=$!
 
 set +e # disable exit to get exitCode
