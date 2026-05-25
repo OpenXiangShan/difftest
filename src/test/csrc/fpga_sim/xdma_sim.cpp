@@ -99,6 +99,7 @@ typedef struct {
   pthread_cond_t accepted_cond;
   bool valid;
   bool accepted;
+  bool closed;
   char workload[WORKLOAD_PATH_SIZE];
 } xdma_workload_shm;
 
@@ -271,6 +272,7 @@ public:
       pthread_cond_wait(&shm_ptr->accepted_cond, &shm_ptr->lock);
     }
 
+    shm_ptr->closed = false;
     strcpy(shm_ptr->workload, workload);
     shm_ptr->accepted = false;
     shm_ptr->valid = true;
@@ -282,24 +284,39 @@ public:
     return 0;
   }
 
-  int get_workload(char *workload, size_t size) {
+  int wait_workload(char *workload, size_t size) {
     if (workload == nullptr || size == 0) {
       return -1;
     }
 
     pthread_mutex_lock(&shm_ptr->lock);
-    if (!shm_ptr->valid) {
+    while (!shm_ptr->valid && !shm_ptr->closed) {
+      pthread_cond_wait(&shm_ptr->accepted_cond, &shm_ptr->lock);
+    }
+    if (shm_ptr->closed) {
       pthread_mutex_unlock(&shm_ptr->lock);
       return 0;
     }
 
     strncpy(workload, shm_ptr->workload, size - 1);
     workload[size - 1] = '\0';
+    pthread_mutex_unlock(&shm_ptr->lock);
+    return 1;
+  }
+
+  void complete_workload() {
+    pthread_mutex_lock(&shm_ptr->lock);
     shm_ptr->valid = false;
     shm_ptr->accepted = true;
     pthread_cond_broadcast(&shm_ptr->accepted_cond);
     pthread_mutex_unlock(&shm_ptr->lock);
-    return 1;
+  }
+
+  void cancel() {
+    pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->closed = true;
+    pthread_cond_broadcast(&shm_ptr->accepted_cond);
+    pthread_mutex_unlock(&shm_ptr->lock);
   }
 };
 
@@ -380,8 +397,16 @@ int xdma_sim_set_workload(const char *workload) {
   return workload_sim->set_workload(workload);
 }
 
-int xdma_sim_get_workload(char *workload, size_t size) {
-  return workload_sim->get_workload(workload, size);
+int xdma_sim_wait_workload(char *workload, size_t size) {
+  return workload_sim->wait_workload(workload, size);
+}
+
+void xdma_sim_complete_workload() {
+  workload_sim->complete_workload();
+}
+
+void xdma_sim_cancel_workload() {
+  workload_sim->cancel();
 }
 
 extern "C" void v_xdma_write(uint8_t channel, const char *axi_tdata, uint8_t axi_tlast) {

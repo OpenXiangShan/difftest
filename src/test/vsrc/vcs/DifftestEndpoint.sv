@@ -56,9 +56,6 @@ import "DPI-C" function void set_seed(longint seed);
 import "DPI-C" function void set_random_mem();
 import "DPI-C" function void set_simjtag();
 import "DPI-C" function byte simv_init();
-`ifdef FPGA_SIM
-import "DPI-C" function void simv_load_workload();
-`endif // FPGA_SIM
 import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
@@ -303,11 +300,6 @@ always @(posedge clock) begin
         end
       end
     end
-`ifdef FPGA_SIM
-    if (difftest_hostCtrl_reset) begin
-      simv_load_workload();
-    end
-`endif // FPGA_SIM
   end
 end
 
