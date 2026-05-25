@@ -27,6 +27,7 @@ import difftest.common.{
   DifftestWiring,
   VerilogAXI4LiteRecord,
   VerilogAXI4Record,
+  VerilogAXI4StreamRecord,
 }
 import difftest.fpga.{DifftestMemCtrl, HostEndpoint, XDMAConfigBar, XDMAHostCtrlIO}
 
@@ -166,10 +167,10 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         host.io.pcie_clock := pcie_clock
 
         val toHost = host.io.to_host_axis
-        val to_host_axis = IO(chiselTypeOf(toHost))
-        to_host_axis <> toHost
+        val to_host_axis = IO(VerilogAXI4StreamRecord.typeOf(toHost))
+        to_host_axis.viewAs[AXI4Stream] <> toHost
 
-        val from_host_axis = IO(Flipped(new AXI4Stream(512)))
+        val from_host_axis = IO(Flipped(new VerilogAXI4StreamRecord(512)))
 
         val cfg_axilite = IO(Flipped(new VerilogAXI4LiteRecord(32, 32)))
         cfg.io.axilite <> cfg_axilite.viewAs[AXI4LiteBundle]
@@ -181,14 +182,14 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         gateway.fpgaSquashEnable.foreach(_ := ctrl.enableSquash)
 
         cfg.io.memCtrl.memStatus := 0.U
-        from_host_axis.ready := false.B
+        from_host_axis.viewAs[AXI4Stream].ready := false.B
         cpu.difftestMemIO.foreach { case DifftestMemIO(cpuRecord, memRecord) =>
           val cpuAxi = Wire(AXI4Bundle.typeOf(cpuRecord))
           AXI4Bundle.connectRecord(cpuAxi, cpuRecord)
           val memCtrl = Module(new DifftestMemCtrl(cpuAxi.cloneType, baseAddr = 0x80000000L))
           memCtrl.io.ctrl <> cfg.io.memCtrl
           memCtrl.io.pcie_clock := pcie_clock
-          memCtrl.io.h2c <> from_host_axis
+          memCtrl.io.h2c <> from_host_axis.viewAs[AXI4Stream]
           memCtrl.io.cpu <> cpuAxi
           memRecord match {
             case Some(record) =>

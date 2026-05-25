@@ -16,7 +16,9 @@
 
 package difftest.common
 import chisel3._
+import chisel3.experimental.dataview._
 import chisel3.util._
+import scala.collection.immutable.SeqMap
 
 class AXI4StreamBundle(val dataWidth: Int) extends Bundle {
   require(dataWidth % 8 == 0, s"AXI-Stream data width must be byte-aligned, got $dataWidth")
@@ -27,3 +29,35 @@ class AXI4StreamBundle(val dataWidth: Int) extends Bundle {
 }
 
 class AXI4Stream(val dataWidth: Int) extends DecoupledIO(new AXI4StreamBundle(dataWidth))
+
+class VerilogAXI4StreamRecord(val dataWidth: Int) extends Record {
+  require(dataWidth % 8 == 0, s"AXI-Stream data width must be byte-aligned, got $dataWidth")
+
+  private val elems = SeqMap[String, Data](
+    "tvalid" -> Output(Bool()),
+    "tready" -> Input(Bool()),
+    "tdata" -> Output(UInt(dataWidth.W)),
+    "tkeep" -> Output(UInt((dataWidth / 8).W)),
+    "tlast" -> Output(Bool()),
+  )
+
+  override def elements: SeqMap[String, Data] = elems
+}
+
+object VerilogAXI4StreamRecord {
+  def typeOf(axis: AXI4Stream): VerilogAXI4StreamRecord =
+    new VerilogAXI4StreamRecord(axis.dataWidth)
+
+  implicit val recordToBundle: DataView[VerilogAXI4StreamRecord, AXI4Stream] =
+    DataView[VerilogAXI4StreamRecord, AXI4Stream](
+      record => new AXI4Stream(record.dataWidth),
+      (record, axis) => record.elements("tvalid") -> axis.valid,
+      (record, axis) => record.elements("tready") -> axis.ready,
+      (record, axis) => record.elements("tdata") -> axis.bits.data,
+      (record, axis) => record.elements("tkeep") -> axis.bits.keep,
+      (record, axis) => record.elements("tlast") -> axis.bits.last,
+    )
+
+  implicit val bundleToRecord: DataView[AXI4Stream, VerilogAXI4StreamRecord] =
+    recordToBundle.invert(axis => new VerilogAXI4StreamRecord(axis.dataWidth))
+}
