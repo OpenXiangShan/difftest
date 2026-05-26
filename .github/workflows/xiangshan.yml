@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 720
     name: XS-PLDM(${{ matrix.branch }}-${{ matrix.topo.name }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Prepare XiangShan
         run: |
@@ -71,7 +71,7 @@ jobs:
     timeout-minutes: 720
     name: XS-FPGA(${{ matrix.branch }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set Env
         run: |
