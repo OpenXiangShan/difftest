@@ -14,7 +14,7 @@ jobs:
     container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Compile
         run: |
@@ -61,7 +61,7 @@ jobs:
     needs: test-difftest-main
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Enable -Werror for EMU Build
         run: |
@@ -213,7 +213,7 @@ jobs:
     needs: test-difftest-main
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Enable -Werror for EMU Build
         run: |
@@ -378,7 +378,7 @@ jobs:
     needs: test-difftest-main
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Prepare NutShell
         run: |
@@ -444,7 +444,7 @@ jobs:
     container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download latest released GSIM
         run: |

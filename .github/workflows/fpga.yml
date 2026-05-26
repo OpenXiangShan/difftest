@@ -12,7 +12,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Prepare NutShell
         run: |
@@ -64,7 +64,7 @@ jobs:
 
 
       - name: Comment utilization to latest PR on master
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           VIVADO_HIER_MD: ${{ env.VIVADO_HIER_MD }}
         with:
