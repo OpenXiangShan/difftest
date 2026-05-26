@@ -17,9 +17,12 @@
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
+#include <algorithm>
+#include <cstring>
 #include <execinfo.h>
 #include <fcntl.h>
 #include <fstream>
+#include <inttypes.h>
 #include <iostream>
 #include <signal.h>
 #include <stdio.h>
@@ -32,6 +35,7 @@
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
+static const size_t H2C_AXIS_BYTES = 64;
 
 void signal_handler(int sig) {
   void *array[20];
@@ -76,9 +80,11 @@ FpgaXdma::FpgaXdma()
   }
 #ifdef FPGA_SIM
   xdma_sim_axilite_open(true);
+  xdma_sim_workload_open(true);
+  xdma_sim_h2c_open(0, true);
 #endif // FPGA_SIM
-#ifdef CONFIG_USE_XDMA_H2C
-  xdma_h2c_fd = open(XDMA_H2C_DEVICE, O_WRONLY);
+#if defined(CONFIG_USE_XDMA_H2C) && !defined(FPGA_SIM)
+  xdma_h2c_fd = open(XDMA_H2C_DEVICE, O_WRONLY | O_TRUNC);
   if (xdma_h2c_fd == -1) {
     std::cout << XDMA_H2C_DEVICE << std::endl;
     perror("Failed to open XDMA device");
@@ -93,19 +99,76 @@ FpgaXdma::~FpgaXdma() {
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     xdma_sim_close(i);
   }
+  xdma_sim_workload_close(true);
+  xdma_sim_h2c_close(0);
   xdma_sim_axilite_close(true);
 #endif // FPGA_SIM
 }
 
+void FpgaXdma::wait_fpga_io_done(uint64_t address, const char *tag) {
+  const int max_retry = 600000; // 10 minute
+  for (int retry = 0; retry < max_retry; retry++) {
+    uint32_t status = fpga_io_read(address) & 0x3;
+    if (status == 0x2) {
+      return;
+    }
+    if (status == 0x3) {
+      fprintf(stderr, "[fpga-host] %s failed: address range exceeds FPGA AXI address width\n", tag);
+      exit(1);
+    }
+    usleep(1000);
+  }
+  fprintf(stderr, "[fpga-host] timeout waiting for %s\n", tag);
+  exit(1);
+}
+
+#ifdef CONFIG_USE_XDMA_H2C
+void FpgaXdma::h2c_load_workload(const char *workload, uint64_t ram_size) {
+  MmapMemory memory(workload, ram_size, false, 0);
+  uint64_t img_size = memory.get_img_size();
+  const uint8_t *image = reinterpret_cast<const uint8_t *>(memory.as_ptr());
+  if (image == nullptr) {
+    fprintf(stderr, "[fpga-host] H2C load requires mmap-backed memory image\n");
+    exit(-1);
+  }
+
+#ifdef FPGA_SIM
+  uint64_t offset = 0;
+  while (offset < img_size) {
+    size_t beatBytes = std::min<uint64_t>(H2C_AXIS_BYTES, img_size - offset);
+    char beat[H2C_AXIS_BYTES] = {};
+    memcpy(beat, image + offset, beatBytes);
+    uint64_t tkeep = beatBytes == H2C_AXIS_BYTES ? UINT64_MAX : ((1ULL << beatBytes) - 1);
+    if (xdma_sim_h2c_write(0, beat, tkeep, offset + beatBytes >= img_size, sizeof(beat)) != (int)sizeof(beat)) {
+      fprintf(stderr, "[fpga-host] FPGA_SIM H2C shared-memory write failed\n");
+      exit(-1);
+    }
+    offset += beatBytes;
+  }
+  printf("[fpga-host] FPGA_SIM H2C queued %" PRIu64 " bytes\n", img_size);
+#else
+  const char *payload = reinterpret_cast<const char *>(image);
+  ssize_t written = write(xdma_h2c_fd, payload, img_size);
+  if (written < 0) {
+    perror("[fpga-host] XDMA H2C write failed");
+    exit(-1);
+  }
+  if ((size_t)written != img_size) {
+    fprintf(stderr, "[fpga-host] XDMA H2C partial write: %zd/%" PRIu64 " bytes\n", written, img_size);
+    exit(-1);
+  }
+  printf("[fpga-host] XDMA H2C queued %" PRIu64 " bytes\n", img_size);
+#endif // FPGA_SIM
+}
+#endif // CONFIG_USE_XDMA_H2C
+
 // write xdma_bypass memory or xdma_user
 void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
+  (void)workload;
 #ifdef FPGA_SIM
   if (is_bypass) {
-    // FPGA_SIM already passes the workload to simv through +workload. Keep the
-    // host API shape but avoid a duplicate per-byte DPI DDR load path.
-    (void)workload;
-    printf("[fpga-host] FPGA_SIM uses simv +workload for DDR init; skip XDMA bypass load\n");
-    return;
+    fprintf(stderr, "[fpga-host] FPGA_SIM XDMA bypass write is unsupported\n");
+    exit(-1);
   }
   if (xdma_sim_axilite_write(static_cast<uint32_t>(addr), static_cast<uint32_t>(value), 0xf) != 0) {
     fprintf(stderr, "[fpga-host] FPGA_SIM AXI-Lite command queue is full, addr=0x%lx value=0x%lx\n", addr, value);
@@ -157,6 +220,50 @@ void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr,
   close(fd);
 }
 
+uint32_t FpgaXdma::device_read(bool is_bypass, uint64_t addr) {
+#ifdef FPGA_SIM
+  if (is_bypass) {
+    fprintf(stderr, "[fpga-host] FPGA_SIM XDMA bypass read is unsupported\n");
+    exit(-1);
+  }
+  uint32_t data = 0;
+  if (xdma_sim_axilite_read(static_cast<uint32_t>(addr), &data) != 0) {
+    fprintf(stderr, "[fpga-host] FPGA_SIM AXI-Lite read failed, addr=0x%lx\n", addr);
+    exit(-1);
+  }
+  return data;
+#endif // FPGA_SIM
+
+  uint64_t pg_size = sysconf(_SC_PAGE_SIZE);
+  uint64_t size = !is_bypass ? 0x1000 : 0x100000;
+  uint64_t aligned_size = (size + 0xffful) & ~0xffful;
+  uint64_t base = addr & ~0xffful;
+  uint32_t offset = addr & 0xfffu;
+
+  if (base % pg_size != 0) {
+    printf("base must be a multiple of system page size\n");
+    exit(-1);
+  }
+
+  int fd = open(is_bypass ? XDMA_BYPASS : XDMA_USER, O_RDWR | O_SYNC);
+  if (fd < 0) {
+    printf("Failed to open %s\n", is_bypass ? XDMA_BYPASS : XDMA_USER);
+    exit(-1);
+  }
+
+  void *m_ptr = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, base);
+  if (m_ptr == MAP_FAILED) {
+    close(fd);
+    printf("failed to mmap\n");
+    exit(-1);
+  }
+
+  uint32_t value = ((volatile uint32_t *)m_ptr)[offset >> 2];
+  munmap(m_ptr, aligned_size);
+  close(fd);
+  return value;
+}
+
 #ifdef USE_THREAD_MEMPOOL
 void FpgaXdma::start_transmit_thread() {
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
@@ -181,7 +288,7 @@ void FpgaXdma::stop_thansmit_thread() {
 
   if (process_thread.joinable())
     process_thread.join();
-#ifdef CONFIG_USE_XDMA_H2C
+#if defined(CONFIG_USE_XDMA_H2C) && !defined(FPGA_SIM)
   close(xdma_h2c_fd);
 #endif
 }

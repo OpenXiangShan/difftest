@@ -134,12 +134,14 @@ class MmapMemory : public SimMemory {
 private:
   uint64_t *ram;
   uint64_t img_size;
+  bool clone_full_mem;
 
 public:
-  MmapMemory(const char *image, uint64_t n_bytes);
+  MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed);
   virtual ~MmapMemory();
+  void load_image(const char *image);
   void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
-    uint64_t n_bytes = skip_zero ? img_size : get_size();
+    uint64_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
     func(ram, n_bytes);
   }
   uint64_t &at(uint64_t index) {
@@ -161,7 +163,8 @@ private:
   std::ofstream footprints_file;
 
 public:
-  MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name);
+  MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name, bool random_mem,
+                           uint32_t seed);
   ~MmapMemoryWithFootprints();
   uint64_t &at(uint64_t index);
 };
@@ -213,7 +216,8 @@ public:
 
 extern SimMemory *simMemory;
 // This is to initialize the common mmap RAM
-void init_ram(const char *image, uint64_t n_bytes);
+void init_ram(const char *image, uint64_t n_bytes, bool random_mem = false, uint32_t seed = 0);
+void load_ram_image(const char *image);
 void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes);
 void copy_ram(uint64_t copy_ram_offset);
 uint64_t parse_ramsize(const char *ramsize_str);

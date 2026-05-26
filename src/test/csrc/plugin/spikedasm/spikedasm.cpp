@@ -42,10 +42,14 @@ bool spike_valid() {
 static void execute_dasm_cmd() {
   FILE *ptr = popen(dasm_cmd, "r");
   if (ptr) {
-    fgets(dasm_result, sizeof(dasm_result), ptr);
+    if (fgets(dasm_result, sizeof(dasm_result), ptr) == nullptr) {
+      printf("fgets %s error\n", dasm_cmd);
+      dasm_result[0] = '\0';
+    }
     pclose(ptr);
   } else {
     printf("popen %s error\n", dasm_cmd);
+    dasm_result[0] = '\0';
   }
 }
 

@@ -43,7 +43,8 @@ void xs_assert_v2(const char *filename, long long line) {
 
 void sig_handler(int signo) {
   static const char msg[] = "[common] SIGINT captured\n";
-  write(STDERR_FILENO, msg, sizeof(msg) - 1);
+  ssize_t ret = write(STDERR_FILENO, msg, sizeof(msg) - 1);
+  (void)ret; // suppress unused variable warning
   if (signal_num != 0)
     exit(0);
   signal_num = signo;

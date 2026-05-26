@@ -74,7 +74,7 @@ emu:
 ifeq ($(GSIM),1)
 	@$(MAKE) emu-gsim
 else
-	@$(MAKE) emu-verilator
+	@$(MAKE) emu-verilator OBJCACHE="$(OBJCACHE)"
 endif
 
 emu-mk: verilator-emu-mk

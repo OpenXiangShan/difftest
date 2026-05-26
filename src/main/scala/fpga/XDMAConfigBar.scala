@@ -23,11 +23,16 @@ import difftest.common.AXI4LiteBundle
 /** XDMA Config BAR for both FPGA/FPGA_SIM
   *
   * Register Map:
-  *   - 0x00: HOST_IO_RESET
-  *   - 0x04: HOST_IO_DIFF_ENABLE
-  *   - 0x08: HOST_IO_ILA_TRIGGER
-  *   - 0x0c: HOST_IO_SQUASH_ENABLE
-  *   - 0x10..0x1c: reserved, read as zero
+  *   - 0x00: HOST_IO_CFG_RESET
+  *   - 0x04: HOST_IO_RESET
+  *   - 0x08: HOST_IO_DIFF_ENABLE
+  *   - 0x0c: HOST_IO_ILA_TRIGGER
+  *   - 0x10: HOST_IO_SQUASH_ENABLE
+  *   - 0x14: HOST_IO_SEED
+  *   - 0x18: HOST_IO_RAM_SIZE_MB
+  *   - 0x1c: HOST_IO_MEM_INIT
+  *   - 0x20: HOST_IO_MEM_CPU
+  *   - 0x24: HOST_IO_MEM_H2C
   */
 class XDMAHostCtrlIO extends Bundle {
   val reset = Bool()
@@ -36,8 +41,17 @@ class XDMAHostCtrlIO extends Bundle {
   val enableSquash = Bool()
 }
 
+class XDMAMemCtrlIO extends Bundle {
+  val memInit = Output(Bool())
+  val memH2C = Output(Bool())
+  val memCPU = Output(Bool())
+  val seed = Output(UInt(32.W))
+  val ramSizeMB = Output(UInt(32.W))
+  val memStatus = Input(UInt(2.W))
+}
+
 private object XDMAConfigReg extends Enumeration {
-  val HostReset, DiffEnable, IlaTrigger, EnableSquash = Value
+  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, Seed, RamSizeMB, MemInit, MemCPU, MemH2C = Value
 }
 
 class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
@@ -45,17 +59,25 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
 
   val io = IO(new Bundle {
     val axilite = Flipped(new AXI4LiteBundle(addrWidth, dataWidth))
-    val ctrl = Output(new XDMAHostCtrlIO)
+    val cfgReset = Output(Bool())
+    val hostCtrl = Output(new XDMAHostCtrlIO)
+    val memCtrl = new XDMAMemCtrlIO
   })
 
   private val numRegs = XDMAConfigReg.maxId
   private val idxBits = log2Ceil(numRegs)
   private val regfile = RegInit(VecInit(Seq.fill(numRegs)(0.U(dataWidth.W))))
 
-  io.ctrl.reset := regfile(XDMAConfigReg.HostReset.id)(0)
-  io.ctrl.diffEnable := regfile(XDMAConfigReg.DiffEnable.id)(0)
-  io.ctrl.ilaTrigger := regfile(XDMAConfigReg.IlaTrigger.id)(0)
-  io.ctrl.enableSquash := regfile(XDMAConfigReg.EnableSquash.id)(0)
+  io.hostCtrl.reset := regfile(XDMAConfigReg.HostReset.id)(0)
+  io.hostCtrl.diffEnable := regfile(XDMAConfigReg.DiffEnable.id)(0)
+  io.hostCtrl.ilaTrigger := regfile(XDMAConfigReg.IlaTrigger.id)(0)
+  io.hostCtrl.enableSquash := regfile(XDMAConfigReg.EnableSquash.id)(0)
+  io.memCtrl.memInit := regfile(XDMAConfigReg.MemInit.id)(0)
+  io.memCtrl.memH2C := regfile(XDMAConfigReg.MemH2C.id)(0)
+  io.memCtrl.memCPU := regfile(XDMAConfigReg.MemCPU.id)(0)
+  io.memCtrl.seed := regfile(XDMAConfigReg.Seed.id)
+  io.memCtrl.ramSizeMB := regfile(XDMAConfigReg.RamSizeMB.id)
+  io.cfgReset := regfile(XDMAConfigReg.CfgReset.id)(0)
 
   private def mergeByByte(oldData: UInt, newData: UInt, strb: UInt): UInt = {
     VecInit((0 until dataWidth / 8).map { i =>
@@ -81,6 +103,8 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   val nextWData = Mux(wFire, io.axilite.w.bits.data, wdata)
   val nextWStrb = Mux(wFire, io.axilite.w.bits.strb, wstrb)
   val doWrite = !bValid && (awValid || awFire) && (wValid || wFire)
+  val writeWord = nextAwAddr(addrWidth - 1, 2)
+  val writeIdx = writeWord(idxBits - 1, 0)
 
   when(awFire) {
     awaddr := io.axilite.aw.bits.addr
@@ -92,8 +116,6 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     wValid := true.B
   }
   when(doWrite) {
-    val writeWord = nextAwAddr(addrWidth - 1, 2)
-    val writeIdx = writeWord(idxBits - 1, 0)
     when(writeWord < numRegs.U) {
       regfile(writeIdx) := mergeByByte(regfile(writeIdx), nextWData, nextWStrb)
     }
@@ -122,5 +144,12 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   }.elsewhen(rValid && io.axilite.r.ready) {
     arReady := true.B
     rValid := false.B
+  }
+
+  when(io.memCtrl.memInit && io.memCtrl.memStatus =/= 0.U) {
+    regfile(XDMAConfigReg.MemInit.id) := io.memCtrl.memStatus
+  }
+  when(io.memCtrl.memH2C && io.memCtrl.memStatus =/= 0.U) {
+    regfile(XDMAConfigReg.MemH2C.id) := io.memCtrl.memStatus
   }
 }
