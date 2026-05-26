@@ -1,4 +1,5 @@
 #include "difftrace.h"
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -43,27 +44,36 @@ template <typename T> bool DiffTrace<T>::read_next(T *trace) {
 }
 
 template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
-  memset(file_name, 0, 128);
+  memset(file_name, 0, PATH_MAX);
   static uint64_t trace_index = 0;
-  char dirname[128];
+  char dirname[PATH_MAX];
+  int ret = 0;
   if (strchr(trace_name, '/')) {
-    snprintf(dirname, 128, "%s", trace_name);
+    ret = snprintf(dirname, sizeof(dirname), "%s", trace_name);
   } else {
     char *noop_home = getenv("NOOP_HOME");
-    snprintf(dirname, 128, "%s/%s", noop_home, trace_name);
+    ret = snprintf(dirname, sizeof(dirname), "%s/%s", noop_home, trace_name);
+  }
+  if (ret < 0 || ret >= (int)sizeof(dirname)) {
+    printf("Directory name is too long: %s\n", trace_name);
+    exit(0);
   }
   mkdir(dirname, 0755);
 #ifndef CONFIG_IOTRACE_ZSTD
-  const char *prefix = "bin";
+  const char *suffix = "bin";
 #else
-  const char *prefix = "zstd";
+  const char *suffix = "zstd";
 #endif // CONFIG_IOTRACE_ZSTD
-  snprintf(file_name, 128, "%s/%lu.%s", dirname, trace_index, prefix);
+  ret = snprintf(file_name, PATH_MAX, "%s/%lu.%s", dirname, trace_index, suffix);
+  if (ret < 0 || ret >= PATH_MAX) {
+    printf("File name is too long: %s/%lu.%s\n", dirname, trace_index, suffix);
+    exit(0);
+  }
   trace_index++;
 }
 
 template <typename T> bool DiffTrace<T>::trace_file_next() {
-  static char *filename = (char *)malloc(128);
+  static char *filename = (char *)malloc(PATH_MAX);
 #ifdef CONFIG_IOTRACE_ZSTD
   if (trace_zstd->need_load_new_file == true && is_read) {
     next_file_name(filename);

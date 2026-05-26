@@ -132,7 +132,10 @@ Emulator::Emulator(int argc, const char *argv[])
     if (args.overwrite_nbytes_autoset) {
       FILE *fp = fopen(args.gcpt_restore, "rb");
       fseek(fp, 4, SEEK_SET);
-      fread(&args.overwrite_nbytes, sizeof(uint32_t), 1, fp);
+      if (fread(&args.overwrite_nbytes, sizeof(uint32_t), 1, fp) != 1) {
+        printf("Failed to read overwrite_nbytes from gcpt_restore file %s\n", args.gcpt_restore);
+        assert(0);
+      }
       fclose(fp);
     }
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
