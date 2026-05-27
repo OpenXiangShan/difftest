@@ -84,7 +84,11 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                                  commitLowData,
                                                  commitLowMask,
                                                  pc,
-                                                 robIdx
+                                                 robIdx,
+                                                 addr,
+                                                 lowData,
+                                                 highData,
+                                                 mask
 #ifdef CONFIG_DIFFTEST_SQUASH
                                                  ,
                                                  probe.stamp
@@ -104,7 +108,11 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                                   commitHighData,
                                                   commitHighMask,
                                                   pc,
-                                                  robIdx
+                                                  robIdx,
+                                                  addr,
+                                                  lowData,
+                                                  highData,
+                                                  mask
 #ifdef CONFIG_DIFFTEST_SQUASH
                                                   ,
                                                   probe.stamp
@@ -125,7 +133,11 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                             refStoreCommitData,
                                             refStoreCommitMask,
                                             pc,
-                                            robIdx
+                                            robIdx,
+                                            addr,
+                                            lowData,
+                                            highData,
+                                            mask
 #ifdef CONFIG_DIFFTEST_SQUASH
                                             ,
                                             probe.stamp
@@ -147,7 +159,11 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                                commitLowData,
                                                commitLowMask,
                                                pc,
-                                               robIdx
+                                               robIdx,
+                                               addr,
+                                               lowData,
+                                               highData,
+                                               mask
 #ifdef CONFIG_DIFFTEST_SQUASH
                                                ,
                                                probe.stamp
@@ -166,7 +182,11 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                                 commitHighData,
                                                 commitHighMask,
                                                 pc,
-                                                robIdx
+                                                robIdx,
+                                                addr,
+                                                lowData,
+                                                highData,
+                                                mask
 #ifdef CONFIG_DIFFTEST_SQUASH
                                                 ,
                                                 probe.stamp
@@ -201,9 +221,11 @@ int StoreChecker::check() {
       Info("\n==============  Store Commit Event (Core %d)  ==============\n", state->coreid);
       proxy->get_store_event_other_info(&pc);
       Info("Mismatch for store commits \n");
-      Info("  REF commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx\n", addr, data, mask, pc);
-      Info("  DUT commits addr 0x%016lx, data 0x%016lx, mask 0x%04x, pc 0x%016lx, robidx 0x%x\n", probe.addr,
+      Info("  REF commits addr 0x%016lx, data 0x%016lx, mask 0x%02x, pc 0x%016lx\n", addr, data, mask, pc);
+      Info("  DUT commits addr 0x%016lx, data 0x%016lx, mask 0x%02x, pc 0x%016lx, robidx 0x%x\n", probe.addr,
            probe.data, probe.mask, probe.pc, probe.robidx);
+      Info("  DUT origin: addr 0x%016lx, high:0x%016lx, low 0x%016lx, mask:0x%04x\n", probe.origin_addr,
+           probe.origin_highdata, probe.origin_lowdata, probe.origin_mask);
 
       state->store_event_queue.pop();
       return STATE_ERROR;
