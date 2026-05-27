@@ -130,6 +130,10 @@ public:
     uint8_t mask;
     uint64_t pc;
     uint16_t robidx;
+    uint64_t origin_addr;
+    uint64_t origin_lowdata;
+    uint64_t origin_highdata;
+    uint16_t origin_mask;
 #ifdef CONFIG_DIFFTEST_SQUASH
     uint32_t stamp;
 #endif
