@@ -74,6 +74,24 @@ initial begin
   end
 `endif
 
+`ifdef UVS
+// enable waveform
+if ($test$plusargs("dump-wave")) begin
+  $value$plusargs("dump-wave=%s", wave_type);
+`ifdef CONSIDER_USDB
+  if (wave_type == "usdb") begin
+    $usdbDumpfile("uvsim.usdb");
+    $usdbDumpvars(0);
+    $usdbDumpvars("+mda");
+  end
+  else begin
+    $display("unknown wave file format, want [usdb] but:%s\n", wave_type);
+    $fatal;
+  end
+`endif
+end
+`endif
+
 `ifdef EMU_TRACE
   // enable waveform for verilator
   if ($test$plusargs("dump-wave")) begin
