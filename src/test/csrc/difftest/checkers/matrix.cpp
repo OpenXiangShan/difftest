@@ -343,7 +343,7 @@ int AmuExecChecker::do_step() {
 
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
 
-static char msync_event_op_str[2][16] = {"msyncregreset", "macquire"};
+static char msync_event_op_str[3][16] = {"msyncregreset", "macquire", "mfence"};
 
 int MsyncChecker::do_step() {
   while (!state->msync_event_queue.empty()) {
