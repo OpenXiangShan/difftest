@@ -445,7 +445,7 @@ class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends Dif
 }
 
 class MsyncEvent extends DifftestBaseBundle with HasValid {
-  val op = UInt(1.W) // 0: msyncregreset, 1: macquire
+  val op = UInt(2.W) // 0: msyncregreset, 1: macquire, 2: mfence
   val msyncRd = UInt(5.W)
   val pc = UInt(64.W)
 }
