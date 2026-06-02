@@ -156,6 +156,8 @@ object Gateway {
   private val instanceWithDelay = ListBuffer.empty[(DifftestBundle, Int)]
   private var config = GatewayConfig()
 
+  def isFPGA: Boolean = config.isFPGA
+
   def setConfig(cfg: String): Unit = {
     cfg.foreach {
       case 'E' => config = config.copy(hasGlobalEnable = true)
