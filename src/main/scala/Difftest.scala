@@ -546,6 +546,8 @@ object DifftestModule {
   private val nameExcludes = ListBuffer.empty[String]
   private val cmdConfigs = ListBuffer.empty[String]
 
+  def isFPGA: Boolean = Gateway.isFPGA
+
   // Some FIRTOOL options are customized for DiffTest
   def parseArgs(args: Array[String]): (Array[String], Seq[FirtoolOption]) = {
     cmdConfigs ++= args

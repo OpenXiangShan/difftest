@@ -208,12 +208,6 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
     }
   }
 
-  if (gateway.fpgaIO.isEmpty) {
-    cpu.difftestMemIO.foreach { case DifftestMemIO(cpuRecord, memRecord) =>
-      require(memRecord.isDefined, "Non-FPGA difftest memory requires a memory AXI sink")
-      AXI4Bundle.connectRecord(memRecord.get, cpuRecord)
-    }
-  }
   cpu.dutReset := (reset.asBool || fpgaHostReset).asTypeOf(cpu.dutReset)
   cpu.connectTopIOs(difftest)
   cpu.dutIOs.foreach { case (name, gen) =>
