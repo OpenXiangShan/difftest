@@ -79,7 +79,7 @@ trait HasDiffTestInterfaces extends ImplicitClock with ImplicitReset { this: Raw
     val memPorts = difftestMemIO.toSeq.flatMap { memIO =>
       memIO.cpu +: memIO.mem.toSeq
     }
-    def memPortFilter(data: Data): Boolean = memPorts.contains(data)
+    def memPortFilter(data: Data): Boolean = memPorts.contains(data) && DifftestModule.isFPGA
     def portFilter(port: (String, Data)): Boolean = {
       memPortFilter(port._2) ||
       port._1.contains("bore") || // Internal port created by BoringUtils, connected to difftest only
