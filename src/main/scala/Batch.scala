@@ -19,7 +19,7 @@ import chisel3._
 import chisel3.util._
 import difftest._
 import difftest.gateway.GatewayConfig
-import difftest.util.{LookupTree, PipelineConnect}
+import difftest.util.{LookupTree, PipelineConnect, SkidBufferConnect}
 
 import scala.collection.mutable.ListBuffer
 
@@ -160,6 +160,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val in_group_single = in_group.filter(_.size == 1).toSeq
   val in_group_multi = in_group.filterNot(_.size == 1).toSeq
   val sorted = in_group_single.sortBy(getGroupDataWidth).reverse ++ in_group_multi.sortBy(getGroupDataWidth)
+  val groupDataWidths = sorted.map(getGroupDataWidth)
   val clusterMaxDataChunks = sorted.map(getGroupDataChunks)
   val stepMaxDataChunks = clusterMaxDataChunks.sum
   val stepMaxPayloadChunks = param.StepInfoChunks + stepMaxDataChunks
@@ -168,7 +169,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
 
   // Stage 1: compact valid bundles inside each cluster and collect per-cluster stats.
   class GroupBundle extends Bundle {
-    val data = MixedVec(sorted.map(getGroupDataWidth).map(group_w => UInt(group_w.W)))
+    val data = MixedVec(groupDataWidths.map(group_w => UInt(group_w.W)))
     val info = Vec(param.StepGroupSize, UInt(param.infoWidth.W))
     val status = Vec(param.StepGroupSize, new BatchStats(param))
     val trace_info = Option.when(config.hasReplay)(new DiffTraceInfo(config))
@@ -191,9 +192,10 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   }
 
   // Stage 2: build the chunk-aligned step payload from info and cluster data.
-  // This pipeline register is held while Batch scans the payload beats.
+  // This register is held while Batch scans the payload beats.
+  // Ready backpressure chain is cut off by skidBuffer for timing
   val delay_grouped = Wire(Decoupled(new GroupBundle))
-  PipelineConnect(grouped, delay_grouped, delay_grouped.fire)
+  SkidBufferConnect(grouped, delay_grouped, splitDepth = 2)
 
   val delay_group_data = delay_grouped.bits.data
   val delay_group_info = delay_grouped.bits.info
