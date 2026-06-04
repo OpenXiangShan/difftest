@@ -30,6 +30,7 @@ import difftest.common.{
   VerilogAXI4StreamRecord,
 }
 import difftest.fpga.{DifftestMemCtrl, HostEndpoint, XDMAConfigBar, XDMAHostCtrlIO}
+import difftest.gateway.Gateway
 
 class DifftestTopIO extends Bundle {
   val exit = Output(UInt(64.W))
@@ -158,7 +159,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         val cfg = Module(new XDMAConfigBar)
         cfgResetReq := cfg.io.cfgReset
         val ctrl = cfg.io.hostCtrl
-        val host = Module(new HostEndpoint(fpgaIO.bits.getWidth))
+        val host = Module(new HostEndpoint(fpgaIO.bits.getWidth, Gateway.hostAxisWidth))
 
         host.io.difftest.valid := fpgaIO.valid && ctrl.diffEnable
         host.io.difftest.bits := fpgaIO.bits
@@ -170,7 +171,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         val to_host_axis = IO(VerilogAXI4StreamRecord.typeOf(toHost))
         to_host_axis.viewAs[AXI4Stream] <> toHost
 
-        val from_host_axis = IO(Flipped(new VerilogAXI4StreamRecord(512)))
+        val from_host_axis = IO(Flipped(new VerilogAXI4StreamRecord(Gateway.hostAxisWidth)))
 
         val cfg_axilite = IO(Flipped(new VerilogAXI4LiteRecord(32, 32)))
         cfg.io.axilite <> cfg_axilite.viewAs[AXI4LiteBundle]
@@ -186,7 +187,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         cpu.difftestMemIO.foreach { case DifftestMemIO(cpuRecord, memRecord) =>
           val cpuAxi = Wire(AXI4Bundle.typeOf(cpuRecord))
           AXI4Bundle.connectRecord(cpuAxi, cpuRecord)
-          val memCtrl = Module(new DifftestMemCtrl(cpuAxi.cloneType, baseAddr = 0x80000000L))
+          val memCtrl = Module(new DifftestMemCtrl(cpuAxi.cloneType, Gateway.hostAxisWidth, baseAddr = 0x80000000L))
           memCtrl.io.ctrl <> cfg.io.memCtrl
           memCtrl.io.pcie_clock := pcie_clock
           memCtrl.io.h2c <> from_host_axis.viewAs[AXI4Stream]

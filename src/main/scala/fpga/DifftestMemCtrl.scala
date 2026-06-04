@@ -213,6 +213,7 @@ class H2CAXIs2Mem(
 
 class DifftestMemCtrl(
   axiType: AXI4Bundle,
+  hostAxisWidth: Int,
   baseAddr: BigInt,
 ) extends Module {
   private val addrWidth = axiType.addrWidth
@@ -227,7 +228,7 @@ class DifftestMemCtrl(
   val io = IO(new Bundle {
     val ctrl = Flipped(new XDMAMemCtrlIO)
     val pcie_clock = Input(Clock())
-    val h2c = Flipped(new AXI4Stream(512))
+    val h2c = Flipped(new AXI4Stream(hostAxisWidth))
     val cpu = Flipped(new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth))
     val mem = new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth)
   })
@@ -255,7 +256,7 @@ class DifftestMemCtrl(
   private val memSrcH2C = io.ctrl.memH2C && !memSrcInit
   private val memSrcCPU = io.ctrl.memCPU && !memSrcInit && !memSrcH2C
   private val memInitAxi = Wire(new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth))
-  private val h2c = Module(new H2CAXIs2Mem(512, addrWidth, dataWidth, idWidth, userWidth, baseAddr))
+  private val h2c = Module(new H2CAXIs2Mem(hostAxisWidth, addrWidth, dataWidth, idWidth, userWidth, baseAddr))
 
   h2c.io.pcie_clock := io.pcie_clock
   h2c.io.enable := io.ctrl.memH2C

@@ -26,13 +26,13 @@ module xdma_wrapper(
   input axilite_clock,
   input reset,
 
-  input [511:0] axi_c2h_tdata,
+  input [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] axi_c2h_tdata,
   input         axi_c2h_tlast,
   output        axi_c2h_tready,
   input         axi_c2h_tvalid,
 
-  output [511:0] axi_h2c_tdata,
-  output [63:0]  axi_h2c_tkeep,
+  output [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] axi_h2c_tdata,
+  output [`CONFIG_DIFFTEST_HOST_AXIS_BYTES-1:0] axi_h2c_tkeep,
   output         axi_h2c_tlast,
   input          axi_h2c_tready,
   output         axi_h2c_tvalid,

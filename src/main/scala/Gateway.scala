@@ -41,9 +41,10 @@ case class GatewayConfig(
   isDelta: Boolean = false,
   isBatch: Boolean = false,
   batchSize: Int = 64,
-  batchChunkBytes: Int = 64,
+  batchChunkBytes: Int = 32,
   batchBeatChunks: Int = 2,
   hasInternalStep: Boolean = false,
+  hostAxisBytes: Int = 32,
   isNonBlock: Boolean = false,
   hasBuiltInPerf: Boolean = false,
   traceDump: Boolean = false,
@@ -88,7 +89,7 @@ case class GatewayConfig(
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
-    if (isFPGA) macros += "CONFIG_DIFFTEST_FPGA"
+    if (isFPGA) macros ++= Seq("CONFIG_DIFFTEST_FPGA", s"CONFIG_DIFFTEST_HOST_AXIS_BYTES ${hostAxisBytes}")
     macros.toSeq
   }
   def vMacros: Seq[String] = {
@@ -99,7 +100,12 @@ case class GatewayConfig(
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
-    if (isFPGA) macros += "CONFIG_DIFFTEST_FPGA"
+    if (isFPGA)
+      macros ++= Seq(
+        "CONFIG_DIFFTEST_FPGA",
+        s"CONFIG_DIFFTEST_HOST_AXIS_BYTES ${hostAxisBytes}",
+        s"CONFIG_DIFFTEST_HOST_AXIS_WIDTH ${hostAxisBytes * 8}",
+      )
     if (hasClockGate) macros += "CONFIG_DIFFTEST_CLOCKGATE"
     macros.toSeq
   }
@@ -107,7 +113,7 @@ case class GatewayConfig(
     if (hasReplay) require(isSquash)
     if (hasInternalStep) require(isBatch)
     if (isBatch) require(!hasDutZone)
-    if (isBatch) require(batchChunkBytes >= 64 && isPow2(batchChunkBytes))
+    if (isBatch) require(isPow2(batchChunkBytes))
     if (isBatch) require(batchBeatChunks > 0 && isPow2(batchBeatChunks))
     // Currently Delta depends on Batch to ensure update and sync order
     if (isDelta) require(isBatch)
@@ -157,6 +163,8 @@ object Gateway {
   private var config = GatewayConfig()
 
   def isFPGA: Boolean = config.isFPGA
+  def hostAxisBytes: Int = config.hostAxisBytes
+  def hostAxisWidth: Int = hostAxisBytes * 8
 
   def setConfig(cfg: String): Unit = {
     cfg.foreach {

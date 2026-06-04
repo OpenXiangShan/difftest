@@ -14,6 +14,7 @@
  * See the Mulan PSL v2 for more details.
  ***************************************************************************************/
 #include "xdma_sim.h"
+#include "difftest-state.h"
 #include <assert.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -530,11 +531,11 @@ void xdma_sim_cancel_workload() {
 }
 
 extern "C" void v_xdma_write(uint8_t channel, const char *axi_tdata, uint8_t axi_tlast) {
-  xdma_sim_write(channel, axi_tdata, axi_tlast, 64);
+  xdma_sim_write(channel, axi_tdata, axi_tlast, CONFIG_DIFFTEST_HOST_AXIS_BYTES);
 }
 
 extern "C" void v_xdma_c2h_write(uint8_t channel, const char *axi_tdata, uint8_t axi_tlast) {
-  xdma_sim_write(channel, axi_tdata, axi_tlast, 64);
+  xdma_sim_write(channel, axi_tdata, axi_tlast, CONFIG_DIFFTEST_HOST_AXIS_BYTES);
 }
 
 #ifndef FPGA_HOST
@@ -554,10 +555,11 @@ extern "C" void v_xdma_h2c_write(const svBitVecVal *axi_tdata, uint64_t axi_tkee
 static void *xdma_h2c_thread_main(void *) {
   xdma_sim_h2c_open(0, false);
   while (!h2c_thread_stop) {
-    svBitVecVal data[16] = {};
+    svBitVecVal data[(CONFIG_DIFFTEST_HOST_AXIS_BYTES + sizeof(svBitVecVal) - 1) / sizeof(svBitVecVal)] = {};
     uint64_t tkeep = 0;
     uint8_t tlast = 0;
-    if (!h2c_sim[0]->wait(reinterpret_cast<char *>(data), &tkeep, &tlast, 64, &h2c_thread_stop)) {
+    if (!h2c_sim[0]->wait(reinterpret_cast<char *>(data), &tkeep, &tlast, CONFIG_DIFFTEST_HOST_AXIS_BYTES,
+                          &h2c_thread_stop)) {
       continue;
     }
 
