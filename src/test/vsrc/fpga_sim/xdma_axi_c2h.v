@@ -19,7 +19,7 @@
 module xdma_axi_c2h(
   input clock,
   input reset,
-  input [511:0] axi_tdata,
+  input [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] axi_tdata,
   input axi_tlast,
   output axi_tready,
   input axi_tvalid
@@ -27,7 +27,7 @@ module xdma_axi_c2h(
 
 import "DPI-C" function void v_xdma_c2h_write(
   input byte channel,
-  input bit [511:0] axi_tdata,
+  input bit [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] axi_tdata,
   input bit axi_tlast
 );
 

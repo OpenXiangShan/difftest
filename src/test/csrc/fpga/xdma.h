@@ -46,8 +46,10 @@
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
-#define DMA_PACKGE_LEN     (CONFIG_DIFFTEST_BATCH_BYTELEN + 1)
-#define DMA_PACKGE_ALIGNED ((DMA_PACKGE_LEN + 63) / 64 * 64)
+#define DMA_PACKGE_LEN (CONFIG_DIFFTEST_BATCH_BYTELEN + 1)
+#define DMA_PACKGE_ALIGNED                                                                    \
+  ((DMA_PACKGE_LEN + CONFIG_DIFFTEST_HOST_AXIS_BYTES - 1) / CONFIG_DIFFTEST_HOST_AXIS_BYTES * \
+   CONFIG_DIFFTEST_HOST_AXIS_BYTES)
 #define DMA_PACKGE_PADDING (DMA_PACKGE_ALIGNED - DMA_PACKGE_LEN)
 
 typedef struct __attribute__((packed)) {

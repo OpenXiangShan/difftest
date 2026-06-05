@@ -35,7 +35,7 @@
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
-static const size_t H2C_AXIS_BYTES = 64;
+static const size_t H2C_AXIS_BYTES = CONFIG_DIFFTEST_HOST_AXIS_BYTES;
 
 void signal_handler(int sig) {
   void *array[20];

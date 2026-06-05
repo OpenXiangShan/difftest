@@ -38,8 +38,14 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   val fifo_depth = 16
   val fifo_addr_width = log2Ceil(fifo_depth)
 
-  // FIFO implementation using SyncReadMem
-  val fifo_ram = SyncReadMem(fifo_depth, UInt(difftest_width.W))
+  // FIFO implementation using banked SyncReadMem.
+  // Each bank is one AXI beat wide, so the read side can keep the original
+  // packet-to-AXIS slicing order while reducing the width of every memory.
+  val bank_width = axis_width
+  val num_banks = (difftest_width + bank_width - 1) / bank_width
+  val banked_width = num_banks * bank_width
+  val bank_pad_width = banked_width - difftest_width
+  val fifo_banks = Seq.fill(num_banks)(SyncReadMem(fifo_depth, UInt(bank_width.W)))
 
   // Define counters that are accessible in both clock domains
   val wr_cnt = RegInit(0.U(64.W))
@@ -56,7 +62,16 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   val wr_en = io.difftest.fire
 
   when(wr_en) {
-    fifo_ram.write(wr_ptr, io.difftest.bits)
+    val writePayload =
+      if (bank_pad_width > 0) {
+        Cat(0.U(bank_pad_width.W), io.difftest.bits)
+      } else {
+        io.difftest.bits
+      }
+    val writeBanks = writePayload.asTypeOf(Vec(num_banks, UInt(bank_width.W)))
+    for (i <- 0 until num_banks) {
+      fifo_banks(i).write(wr_ptr, writeBanks(i))
+    }
     wr_ptr := wr_ptr + 1.U
     wr_cnt := wr_cnt + 1.U // Increment write counter
   }
@@ -74,8 +89,12 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     val counter = RegInit(0.U(3.W)) // 0 to 7
     val currentPktID = RegInit(0.U(pkt_id_w.W))
     val sendPacketEnd = counter === (numPacketPerRange - 1).U
-    // Read from FIFO
-    val fifo_out = fifo_ram.read(rd_ptr)
+    // Read from FIFO banks and reconstruct the original packet payload.
+    val fifoBankOut = Wire(Vec(num_banks, UInt(bank_width.W)))
+    for (i <- 0 until num_banks) {
+      fifoBankOut(i) := fifo_banks(i).read(rd_ptr)
+    }
+    val fifo_out = fifoBankOut.asUInt(difftest_width - 1, 0)
     val packetPayload =
       if (payload_pad_width > 0) {
         Cat(0.U(payload_pad_width.W), fifo_out, currentPktID)
@@ -124,7 +143,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
 class HostEndpoint(
   val diffWidth: Int,
-  val axisWidth: Int = 512,
+  val axisWidth: Int,
 ) extends Module {
   val io = IO(new Bundle {
     val difftest = Flipped(new FpgaDiffIO(diffWidth))

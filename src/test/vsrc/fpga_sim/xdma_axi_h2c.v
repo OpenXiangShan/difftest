@@ -19,8 +19,8 @@
 module xdma_axi_h2c(
   input clock,
   input reset,
-  output reg [511:0] axi_tdata,
-  output reg [63:0] axi_tkeep,
+  output reg [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] axi_tdata,
+  output reg [`CONFIG_DIFFTEST_HOST_AXIS_BYTES-1:0] axi_tkeep,
   output reg axi_tlast,
   input axi_tready,
   output reg axi_tvalid
@@ -29,25 +29,25 @@ module xdma_axi_h2c(
 import "DPI-C" context function void v_xdma_h2c_set_scope();
 
 reg        pending_valid;
-reg [511:0] pending_data;
-reg [63:0] pending_keep;
+reg [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] pending_data;
+reg [`CONFIG_DIFFTEST_HOST_AXIS_BYTES-1:0] pending_keep;
 reg        pending_last;
 
 initial begin
-  axi_tdata = 512'b0;
-  axi_tkeep = 64'b0;
+  axi_tdata = `CONFIG_DIFFTEST_HOST_AXIS_WIDTH'b0;
+  axi_tkeep = `CONFIG_DIFFTEST_HOST_AXIS_BYTES'b0;
   axi_tlast = 1'b0;
   axi_tvalid = 1'b0;
   pending_valid = 1'b0;
-  pending_data = 512'b0;
-  pending_keep = 64'b0;
+  pending_data = `CONFIG_DIFFTEST_HOST_AXIS_WIDTH'b0;
+  pending_keep = `CONFIG_DIFFTEST_HOST_AXIS_BYTES'b0;
   pending_last = 1'b0;
   v_xdma_h2c_set_scope();
 end
 
 export "DPI-C" task v_xdma_h2c_write;
 task v_xdma_h2c_write(
-  input bit [511:0] data,
+  input bit [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] data,
   input longint unsigned keep,
   input bit last,
   output byte unsigned accepted
@@ -68,8 +68,8 @@ endtask
 
 always @(posedge clock) begin
   if (reset) begin
-    axi_tdata <= 512'b0;
-    axi_tkeep <= 64'b0;
+    axi_tdata <= `CONFIG_DIFFTEST_HOST_AXIS_WIDTH'b0;
+    axi_tkeep <= `CONFIG_DIFFTEST_HOST_AXIS_BYTES'b0;
     axi_tlast <= 1'b0;
     axi_tvalid <= 1'b0;
     pending_valid = 1'b0;
