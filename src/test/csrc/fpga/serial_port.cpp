@@ -16,11 +16,46 @@
 
 #include "serial_port.h"
 #include <cerrno>
+#include <cstring>
 #include <fcntl.h>
 #include <iostream>
-#include <sys/select.h>
+#include <poll.h>
+#include <termios.h>
+#include <unistd.h>
 
 #ifdef USE_SERIAL_PORT
+
+namespace {
+
+void close_fd(int &fd) {
+  if (fd >= 0) {
+    close(fd);
+    fd = -1;
+  }
+}
+
+bool wait_readable(int fd, int stop_fd, const char *name) {
+  pollfd fds[2] = {{fd, POLLIN, 0}, {stop_fd, POLLIN, 0}};
+
+  while (poll(fds, 2, -1) < 0) {
+    if (errno == EINTR) {
+      continue;
+    }
+    std::cerr << "SerialPort: " << name << " poll failed" << std::endl;
+    return false;
+  }
+
+  if (fds[1].revents) {
+    return false;
+  }
+  if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+    std::cerr << "SerialPort: " << name << " poll failed" << std::endl;
+    return false;
+  }
+  return fds[0].revents & POLLIN;
+}
+
+} // namespace
 
 bool SerialPort::open_port(int baudrate) {
   fd_ = open(device_, O_RDWR | O_NOCTTY | O_SYNC);
@@ -32,6 +67,7 @@ bool SerialPort::open_port(int baudrate) {
   memset(&tty, 0, sizeof tty);
   if (tcgetattr(fd_, &tty) != 0) {
     std::cerr << "Error from tcgetattr" << std::endl;
+    close_port();
     return false;
   }
   cfsetospeed(&tty, baudrate);
@@ -54,51 +90,63 @@ bool SerialPort::open_port(int baudrate) {
 
   if (tcsetattr(fd_, TCSANOW, &tty) != 0) {
     std::cerr << "Error from tcsetattr" << std::endl;
+    close_port();
     return false;
   }
   return true;
 }
 
 void SerialPort::close_port() {
-  if (fd_ >= 0) {
-    close(fd_);
-    fd_ = -1;
-  }
+  close_fd(fd_);
 }
 
 SerialPort::~SerialPort() {
   stop();
 }
+
+void SerialPort::start() {
+  if (pipe(stop_pipe_) != 0) {
+    std::cerr << "SerialPort: failed to create stop pipe" << std::endl;
+    return;
+  }
+  if (!open_port(B115200)) {
+    close_fd(stop_pipe_[0]);
+    close_fd(stop_pipe_[1]);
+    return;
+  }
+  read_thread = std::thread(&SerialPort::start_read_thread, this);
+  write_thread = std::thread(&SerialPort::start_write_thread, this);
+}
+
+void SerialPort::stop() {
+  if (stop_pipe_[1] >= 0) {
+    char byte = 0;
+    (void)write(stop_pipe_[1], &byte, sizeof(byte));
+  }
+  if (read_thread.joinable()) {
+    read_thread.join();
+  }
+  if (write_thread.joinable()) {
+    write_thread.join();
+  }
+  close_fd(stop_pipe_[0]);
+  close_fd(stop_pipe_[1]);
+  close_port();
+}
+
 void SerialPort::start_read_thread() {
   char buf[256];
   try {
     printf("SerailPort: start read from %s\n", device_);
     setvbuf(stdout, NULL, _IONBF, 0);
-    while (running) {
-      if (fd_ < 0) {
+    while (wait_readable(fd_, stop_pipe_[0], "read")) {
+      ssize_t n = read(fd_, buf, sizeof(buf) - 1);
+      if (n > 0) {
+        buf[n] = '\0';
+        printf("%s", buf);
+      } else if (n < 0 && errno != EINTR) {
+        std::cerr << "SerialPort: read failed" << std::endl;
         break;
-      }
-      fd_set readfds;
-      FD_ZERO(&readfds);
-      FD_SET(fd_, &readfds);
-      timeval tv{0, 100000};
-      int ret = select(fd_ + 1, &readfds, nullptr, nullptr, &tv);
-      if (ret < 0) {
-        if (errno == EINTR) {
-          continue;
-        }
-        std::cerr << "SerialPort: read select failed" << std::endl;
-        break;
-      }
-      if (ret > 0 && FD_ISSET(fd_, &readfds)) {
-        ssize_t n = read(fd_, buf, sizeof(buf) - 1);
-        if (n > 0) {
-          buf[n] = '\0';
-          printf("%s", buf);
-        } else if (n < 0 && errno != EINTR) {
-          std::cerr << "SerialPort: read failed" << std::endl;
-          break;
-        }
       }
     }
   } catch (const std::exception &e) {
@@ -111,22 +159,20 @@ void SerialPort::start_read_thread() {
 void SerialPort::start_write_thread() {
   try {
     printf("SerialPort: start write to %s\n", device_);
-    std::string line;
-    while (running) {
-      fd_set readfds;
-      FD_ZERO(&readfds);
-      FD_SET(STDIN_FILENO, &readfds);
-      timeval tv{0, 100000};
-      int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv);
-      if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds)) {
-        std::string line;
-        if (std::getline(std::cin, line)) {
-          line.push_back('\n');
-          // write(fd_, line.c_str(), line.size());
-          if (fd_ >= 0) {
-            write(fd_, line.c_str(), line.size());
-          }
+    if (!isatty(STDIN_FILENO)) {
+      printf("SerialPort: stdin is not a TTY, disable UART input\n");
+      return;
+    }
+    while (wait_readable(STDIN_FILENO, stop_pipe_[0], "write")) {
+      std::string line;
+      if (std::getline(std::cin, line)) {
+        line.push_back('\n');
+        // write(fd_, line.c_str(), line.size());
+        if (fd_ >= 0) {
+          write(fd_, line.c_str(), line.size());
         }
+      } else {
+        break;
       }
     }
   } catch (const std::exception &e) {
