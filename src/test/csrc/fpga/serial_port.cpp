@@ -36,13 +36,13 @@ bool SerialPort::open_port(int baudrate) {
   }
   cfsetospeed(&tty, baudrate);
   cfsetispeed(&tty, baudrate);
-  tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8; // 8-bit chars
-  tty.c_iflag &= ~IGNBRK;                     // disable break processing
-  tty.c_lflag = 0;                            // no signaling chars, no echo,
-                                              // no canonical processing
-  tty.c_oflag = 0;                            // no remapping, no delays
-  tty.c_cc[VMIN] = 1;                         // read blocks
-  tty.c_cc[VTIME] = 1;                        // 0.1 seconds read timeout
+  tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;       // 8-bit chars
+  tty.c_iflag &= ~(IGNBRK | IGNCR | ICRNL | INLCR); // disable break and CR/LF remapping
+  tty.c_lflag = 0;                                  // no signaling chars, no echo,
+                                                    // no canonical processing
+  tty.c_oflag = 0;                                  // no remapping, no delays
+  tty.c_cc[VMIN] = 1;                               // read blocks
+  tty.c_cc[VTIME] = 1;                              // 0.1 seconds read timeout
 
   tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
 
