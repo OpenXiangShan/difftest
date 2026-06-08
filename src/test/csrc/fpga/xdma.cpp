@@ -19,6 +19,7 @@
 #include "ram.h"
 #include <algorithm>
 #include <cstring>
+#include <errno.h>
 #include <execinfo.h>
 #include <fcntl.h>
 #include <fstream>
@@ -123,41 +124,51 @@ void FpgaXdma::wait_fpga_io_done(uint64_t address, const char *tag) {
 }
 
 #ifdef CONFIG_USE_XDMA_H2C
-void FpgaXdma::h2c_load_workload(const char *workload, uint64_t ram_size) {
-  MmapMemory memory(workload, ram_size, false, 0);
-  uint64_t img_size = memory.get_img_size();
-  const uint8_t *image = reinterpret_cast<const uint8_t *>(memory.as_ptr());
-  if (image == nullptr) {
+void FpgaXdma::h2c_load_workload(const void *payload, uint64_t size) {
+  if (payload == nullptr) {
     fprintf(stderr, "[fpga-host] H2C load requires mmap-backed memory image\n");
+    exit(-1);
+  }
+  if (size == 0) {
+    fprintf(stderr, "[fpga-host] H2C workload size must be non-zero\n");
     exit(-1);
   }
 
 #ifdef FPGA_SIM
   uint64_t offset = 0;
-  while (offset < img_size) {
-    size_t beatBytes = std::min<uint64_t>(H2C_AXIS_BYTES, img_size - offset);
+  while (offset < size) {
+    size_t beatBytes = std::min<uint64_t>(H2C_AXIS_BYTES, size - offset);
     char beat[H2C_AXIS_BYTES] = {};
-    memcpy(beat, image + offset, beatBytes);
+    memcpy(beat, reinterpret_cast<const uint8_t *>(payload) + offset, beatBytes);
     uint64_t tkeep = beatBytes == H2C_AXIS_BYTES ? UINT64_MAX : ((1ULL << beatBytes) - 1);
-    if (xdma_sim_h2c_write(0, beat, tkeep, offset + beatBytes >= img_size, sizeof(beat)) != (int)sizeof(beat)) {
+    if (xdma_sim_h2c_write(0, beat, tkeep, offset + beatBytes >= size, sizeof(beat)) != (int)sizeof(beat)) {
       fprintf(stderr, "[fpga-host] FPGA_SIM H2C shared-memory write failed\n");
       exit(-1);
     }
     offset += beatBytes;
   }
-  printf("[fpga-host] FPGA_SIM H2C queued %" PRIu64 " bytes\n", img_size);
+  printf("[fpga-host] FPGA_SIM H2C queued %" PRIu64 " bytes\n", size);
 #else
-  const char *payload = reinterpret_cast<const char *>(image);
-  ssize_t written = write(xdma_h2c_fd, payload, img_size);
-  if (written < 0) {
-    perror("[fpga-host] XDMA H2C write failed");
-    exit(-1);
+  const char *buf = reinterpret_cast<const char *>(payload);
+  uint64_t offset = 0;
+  while (offset < size) {
+    uint64_t remaining = size - offset;
+    size_t request = std::min<uint64_t>(64ull * 1024ull * 1024ull, remaining); // 64MB per XDMA transfer
+    ssize_t written = write(xdma_h2c_fd, buf + offset, request);
+    if (written < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      perror("[fpga-host] XDMA H2C write failed");
+      exit(-1);
+    }
+    if (written == 0) {
+      fprintf(stderr, "[fpga-host] XDMA H2C zero write at offset=%" PRIu64 "\n", offset);
+      exit(-1);
+    }
+    offset += written;
   }
-  if ((size_t)written != img_size) {
-    fprintf(stderr, "[fpga-host] XDMA H2C partial write: %zd/%" PRIu64 " bytes\n", written, img_size);
-    exit(-1);
-  }
-  printf("[fpga-host] XDMA H2C queued %" PRIu64 " bytes\n", img_size);
+  printf("[fpga-host] XDMA H2C queued %" PRIu64 " bytes\n", size);
 #endif // FPGA_SIM
 }
 #endif // CONFIG_USE_XDMA_H2C
