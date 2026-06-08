@@ -16,37 +16,19 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstring>
-#include <termios.h>
 #include <thread>
-#include <unistd.h>
 #ifdef USE_SERIAL_PORT
 
 class SerialPort {
 public:
   SerialPort(const char *device) : fd_(-1), device_(device) {}
   ~SerialPort();
-  void start() {
-    running = true;
-    open_port(B115200);
-    read_thread = std::thread(&SerialPort::start_read_thread, this);
-    write_thread = std::thread(&SerialPort::start_write_thread, this);
-  }
-  void stop() {
-    running = false;
-    if (read_thread.joinable()) {
-      read_thread.join();
-    }
-    if (write_thread.joinable()) {
-      write_thread.join();
-    }
-    close_port();
-  }
+  void start();
+  void stop();
 
 private:
-  bool running = false;
   int fd_;
+  int stop_pipe_[2] = {-1, -1};
   const char *device_;
   std::thread read_thread;
   std::thread write_thread;
