@@ -27,7 +27,9 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <getopt.h>
+#include <inttypes.h>
 #include <mutex>
+#include <stdint.h>
 #include <unistd.h>
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
@@ -117,6 +119,11 @@ void fpga_init() {
   xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
   sleep(1);
 
+  init_ram(args.image, ram_size, args.random_mem, args.seed);
+  init_flash(args.flash_bin);
+
+  init_device();
+
   if (args.random_mem) {
     xdma_device->fpga_io(HOST_IO_SEED, args.seed);
     xdma_device->fpga_io(HOST_IO_RAM_SIZE_MB, ram_size_mb);
@@ -128,9 +135,15 @@ void fpga_init() {
   }
 
 #ifdef CONFIG_USE_XDMA_H2C
+  auto *mem = dynamic_cast<MmapMemory *>(simMemory);
+  assert(mem);
+  uint64_t h2c_size = mem->pad_img_size(1024ull * 1024ull);
+  uint64_t h2c_size_mb = h2c_size / (1024ull * 1024ull);
+  printf("[fpga-host] H2C workload size: %" PRIu64 " bytes (%" PRIu64 "MB)\n", h2c_size, h2c_size_mb);
   uint32_t h2c_start = uptime();
+  xdma_device->fpga_io(HOST_IO_H2C_SIZE_MB, static_cast<uint32_t>(h2c_size_mb));
   xdma_device->fpga_io(HOST_IO_MEM_H2C, true);
-  xdma_device->h2c_load_workload(args.image, ram_size);
+  xdma_device->h2c_load_workload(mem->as_ptr(), h2c_size);
   xdma_device->wait_fpga_io_done(HOST_IO_MEM_H2C, "memory H2C load");
   printf("[fpga-host] H2C load done, elapsed = %ums\n", uptime() - h2c_start);
 #else // CONFIG_USE_XDMA_H2C
@@ -158,11 +171,6 @@ void fpga_init() {
   serial_port = new SerialPort("/dev/ttyUSB0");
   serial_port->start();
 #endif // USE_SERIAL_PORT
-
-  init_ram(args.image, ram_size, args.random_mem, args.seed);
-  init_flash(args.flash_bin);
-
-  init_device();
 
   difftest_init(args.enable_diff, ram_size);
 

@@ -18,6 +18,7 @@
 #include "common.h"
 #include "compress.h"
 #include "elfloader.h"
+#include <cstring>
 #include <iostream>
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
@@ -338,6 +339,24 @@ void MmapMemory::load_image(const char *image) {
     img_size = reader->read_all(ram, memory_size);
     delete reader;
   }
+}
+
+uint64_t MmapMemory::pad_img_size(uint64_t align) {
+  if (align == 0) {
+    fprintf(stderr, "invalid image padding alignment: 0\n");
+    exit(1);
+  }
+
+  uint64_t padded_size = ((img_size + align - 1) / align) * align;
+  if (padded_size > memory_size) {
+    fprintf(stderr, "image padding exceeds memory size: image=%lu padded=%lu memory=%lu\n", img_size, padded_size,
+            memory_size);
+    exit(1);
+  }
+
+  memset(reinterpret_cast<uint8_t *>(ram) + img_size, 0, padded_size - img_size);
+  img_size = padded_size;
+  return img_size;
 }
 
 MmapMemory::~MmapMemory() {

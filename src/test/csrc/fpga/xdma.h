@@ -43,6 +43,7 @@
 #define HOST_IO_MEM_INIT        0x1c
 #define HOST_IO_MEM_CPU         0x20
 #define HOST_IO_MEM_H2C         0x24
+#define HOST_IO_H2C_SIZE_MB     0x28
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
@@ -121,7 +122,7 @@ public:
 
   void wait_fpga_io_done(uint64_t address, const char *tag);
 #ifdef CONFIG_USE_XDMA_H2C
-  void h2c_load_workload(const char *workload, uint64_t ram_size);
+  void h2c_load_workload(const void *payload, uint64_t size);
 #endif
 
 private:
