@@ -85,7 +85,6 @@ ifeq ($(FPGA),1)
 $(info FPGA is enabled. ChiselDB and ConstantIn are implicitly disabled.)
 WITH_CHISELDB = 0
 WITH_CONSTANTIN = 0
-SIM_CXXFLAGS += -DCONFIG_SPLITVIEW
 endif
 
 DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")

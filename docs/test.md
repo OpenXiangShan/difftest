@@ -64,9 +64,9 @@ make SPLITVIEW=1   # enable for emu builds
 make SPLITVIEW=0   # disable for emu builds
 ```
 
-When enabled and run directly in an interactive terminal, UART output and host logs are shown side by side in the split view. The same streams are also written asynchronously to `build/logs/uart.log`, `build/logs/host.log`, and a combined `build/logs/all.log` by default, and remaining buffered text is drained before normal shutdown completes. Use `--log=PATH`, `log=PATH`, or `+log=PATH` to write `uart.log`, `host.log`, and `all.log` under a custom directory. Non-interactive environments keep the normal linear output.
+When enabled and run directly in an interactive terminal, UART output and host logs are shown side by side in the split view. The same streams are also written asynchronously to `build/logs/uart.log`, `build/logs/host.log`, and a combined `build/logs/all.log` by default, and remaining buffered text is drained before normal shutdown completes. Use `--splitview-log=PATH` to write `uart.log`, `host.log`, and `all.log` under a custom directory. Finished interactive splitview sessions keep the final screen visible; press `q` or `Q` to leave. Non-interactive environments keep the normal linear output.
 
-`fpga-host` keeps splitview enabled by default unless `make config SPLITVIEW=0` explicitly disables it.
+`fpga-host` uses the same build flag as the other targets: pass `SPLITVIEW=1` to enable splitview.
 
 Key runtime options:
 

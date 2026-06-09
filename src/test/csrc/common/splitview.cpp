@@ -26,7 +26,7 @@ void common_splitview_force_cleanup() {}
 
 void common_splitview_release_input_capture() {}
 
-void common_splitview_set_capture_input(bool) {}
+void common_splitview_set_uart_input_fd(int) {}
 
 void common_splitview_set_log_path(const char *) {}
 
@@ -265,12 +265,12 @@ struct NativeSplitViewRuntime {
   int log_pipe_read = -1;
   int uart_pipe_read = -1;
   int uart_pipe_write = -1;
+  std::atomic<int> uart_input_fd = -1;
   struct termios saved_input_termios {};
   std::thread render_thread;
 };
 
 NativeSplitViewRuntime g_runtime;
-std::atomic<bool> g_splitview_capture_input = true;
 std::string g_splitview_log_path = kDefaultLogPath;
 
 void handle_sigwinch(int) {
@@ -300,6 +300,13 @@ void close_if_open(int &fd) {
   if (fd >= 0) {
     close(fd);
     fd = -1;
+  }
+}
+
+void close_uart_input_fd() {
+  const int fd = g_runtime.uart_input_fd.exchange(-1);
+  if (fd >= 0) {
+    close(fd);
   }
 }
 
@@ -966,7 +973,8 @@ ParseResult parse_input_event(std::string_view text, InputEvent &event, size_t &
   return ParseResult::Skipped;
 }
 
-void consume_input_events(std::string &pending_input, std::string_view chunk, std::vector<InputEvent> &events) {
+void consume_input(std::string &pending_input, std::string_view chunk, bool finished, std::vector<InputEvent> &events,
+                   std::string &uart_input) {
   pending_input.append(chunk.data(), chunk.size());
   size_t offset = 0;
   while (offset < pending_input.size()) {
@@ -980,7 +988,13 @@ void consume_input_events(std::string &pending_input, std::string_view chunk, st
       consumed = 1;
     }
     if (result == ParseResult::Parsed) {
-      events.push_back(event);
+      if (event.type == InputEvent::Type::Quit && !finished) {
+        uart_input.append(pending_input.data() + offset, consumed);
+      } else {
+        events.push_back(event);
+      }
+    } else if (result == ParseResult::Skipped && !finished) {
+      uart_input.append(pending_input.data() + offset, consumed);
     }
     offset += consumed;
   }
@@ -1052,6 +1066,19 @@ bool drain_pipe_into_pane(int fd, short revents, PaneBuffer &pane, int width, in
   return pipe_open;
 }
 
+void handle_uart_input(std::string_view chunk, PaneBuffer &uart, const SplitLayout &layout, ScrollState &scroll,
+                       bool &dirty) {
+  const int uart_input_fd = g_runtime.uart_input_fd.load();
+  if (uart_input_fd < 0 || chunk.empty()) {
+    return;
+  }
+
+  const ssize_t ignored = write(uart_input_fd, chunk.data(), chunk.size());
+  (void)ignored;
+  adjust_scroll_for_appended_output(uart, layout.left_width, scroll.uart_offset, chunk);
+  dirty = true;
+}
+
 void handle_input_event(const InputEvent &event, ScrollState &scroll, PaneBuffer &uart, PaneBuffer &logs,
                         const SplitLayout &layout, bool finished, bool &should_quit, bool &dirty) {
   switch (event.type) {
@@ -1092,7 +1119,7 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
   bool should_quit = false;
   bool dirty = true;
   std::string pending_input;
-  bool input_enabled = g_splitview_capture_input && enable_input_mode(input_fd, g_runtime.saved_input_termios);
+  bool input_enabled = enable_input_mode(input_fd, g_runtime.saved_input_termios);
   g_runtime.input_mode_enabled = input_enabled;
   SplitLogPaths log_paths = make_split_log_paths();
   uart_log.start(log_paths.uart.c_str());
@@ -1161,7 +1188,12 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
       ssize_t n = read(input_fd, buf.data(), buf.size());
       if (n > 0) {
         std::vector<InputEvent> events;
-        consume_input_events(pending_input, std::string_view(buf.data(), static_cast<size_t>(n)), events);
+        std::string uart_input;
+        std::string_view input_chunk(buf.data(), static_cast<size_t>(n));
+        consume_input(pending_input, input_chunk, finished, events, uart_input);
+        if (!finished) {
+          handle_uart_input(uart_input, uart, layout, scroll, dirty);
+        }
         for (const InputEvent &event: events) {
           handle_input_event(event, scroll, uart, logs, layout, finished, should_quit, dirty);
         }
@@ -1298,6 +1330,7 @@ void common_splitview_finish() {
   g_runtime.active = false;
   close_if_open(g_runtime.tty_fd);
   close_if_open(g_runtime.input_fd);
+  close_uart_input_fd();
   close_if_open(g_runtime.control_pipe_read);
   close_if_open(g_runtime.control_pipe_write);
   g_runtime.input_capture_released = false;
@@ -1319,6 +1352,7 @@ void common_splitview_force_cleanup() {
     close_if_open(g_runtime.log_pipe_read);
     close_if_open(g_runtime.uart_pipe_read);
     close_if_open(g_runtime.input_fd);
+    close_uart_input_fd();
     close_if_open(g_runtime.tty_fd);
   }
 }
@@ -1335,9 +1369,10 @@ void common_splitview_release_input_capture() {
   }
 }
 
-void common_splitview_set_capture_input(bool enabled) {
-  if (!g_runtime.initialized) {
-    g_splitview_capture_input = enabled;
+void common_splitview_set_uart_input_fd(int fd) {
+  const int old_fd = g_runtime.uart_input_fd.exchange(fd);
+  if (old_fd >= 0) {
+    close(old_fd);
   }
 }
 

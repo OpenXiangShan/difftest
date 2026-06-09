@@ -71,10 +71,6 @@ int main(int argc, const char *argv[]) {
   fpga_ila_dump_cmd = std::getenv("FPGA_ILA_DUMP_CMD");
   args = parse_args(argc, argv);
 
-#ifdef USE_SERIAL_PORT
-  // Keep terminal stdin available for interactive serial input.
-  common_splitview_set_capture_input(false);
-#endif
   common_init(argv[0]);
 
   fpga_init();

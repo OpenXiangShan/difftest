@@ -32,7 +32,7 @@ struct CommonArgs {
   const char *dramsim3_ini = nullptr;
   uint64_t copy_ram_offset = 0;
   const char *dramsim3_outdir = nullptr;
-  const char *log_path = nullptr;
+  const char *splitview_log_path = nullptr;
   bool random_mem = false;
 #ifdef DEBUG_REFILL
   uint64_t track_instr = 0;

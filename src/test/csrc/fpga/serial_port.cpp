@@ -57,25 +57,16 @@ bool wait_readable(int fd, int stop_fd, const char *name) {
   return fds[0].revents & POLLIN;
 }
 
-void write_all_retry(int fd, const char *buf, size_t len) {
-  while (len > 0) {
-    ssize_t written = write(fd, buf, len);
-    if (written > 0) {
-      buf += written;
-      len -= static_cast<size_t>(written);
-      continue;
-    }
-    if (written < 0 && errno == EINTR) {
-      continue;
-    }
-    return;
-  }
-}
-
 void emit_serial_output(const char *buf, size_t len) {
+  int fd = STDOUT_FILENO;
+#ifdef CONFIG_SPLITVIEW
   const int uart_fd = common_splitview_uart_fd();
-  const int fd = uart_fd >= 0 ? uart_fd : STDOUT_FILENO;
-  write_all_retry(fd, buf, len);
+  if (uart_fd >= 0) {
+    fd = uart_fd;
+  }
+#endif
+  const ssize_t ignored = write(fd, buf, len);
+  (void)ignored;
 }
 
 } // namespace
@@ -137,14 +128,22 @@ void SerialPort::start() {
     close_fd(stop_pipe_[1]);
     return;
   }
+#ifdef CONFIG_SPLITVIEW
+  if (common_splitview_is_active()) {
+    common_splitview_set_uart_input_fd(dup(fd_));
+  }
+#endif
   read_thread = std::thread(&SerialPort::start_read_thread, this);
-  write_thread = std::thread(&SerialPort::start_write_thread, this);
+  if (!common_splitview_is_active()) {
+    write_thread = std::thread(&SerialPort::start_write_thread, this);
+  }
 }
 
 void SerialPort::stop() {
   if (stop_pipe_[1] >= 0) {
     char byte = 0;
-    (void)write(stop_pipe_[1], &byte, sizeof(byte));
+    const ssize_t ignored = write(stop_pipe_[1], &byte, sizeof(byte));
+    (void)ignored;
   }
   if (read_thread.joinable()) {
     read_thread.join();
@@ -191,7 +190,8 @@ void SerialPort::start_write_thread() {
         line.push_back('\n');
         // write(fd_, line.c_str(), line.size());
         if (fd_ >= 0) {
-          write(fd_, line.c_str(), line.size());
+          const ssize_t ignored = write(fd_, line.c_str(), line.size());
+          (void)ignored;
         }
       } else {
         break;

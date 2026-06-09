@@ -20,7 +20,7 @@ void common_splitview_preinit(const char *program_name);
 void common_splitview_finish();
 void common_splitview_force_cleanup();
 void common_splitview_release_input_capture();
-void common_splitview_set_capture_input(bool enabled);
+void common_splitview_set_uart_input_fd(int fd);
 void common_splitview_set_log_path(const char *path);
 bool common_splitview_is_active();
 int common_splitview_uart_fd();

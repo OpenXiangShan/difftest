@@ -17,6 +17,7 @@
 #define __SIMULATOR_H
 
 #include "common.h"
+#include "splitview.h"
 
 class Simulator {
 private:
@@ -105,7 +106,16 @@ public:
   // This method cannot be overridden.
   inline void step_uart() {
     if (get_uart_out_valid()) {
-      difftest_uart_putc(static_cast<char>(get_uart_out_ch()));
+      char ch = static_cast<char>(get_uart_out_ch());
+      int fd = STDOUT_FILENO;
+#ifdef CONFIG_SPLITVIEW
+      const int uart_fd = common_splitview_uart_fd();
+      if (uart_fd >= 0) {
+        fd = uart_fd;
+      }
+#endif
+      const ssize_t ignored = write(fd, &ch, 1);
+      (void)ignored;
     }
     if (get_uart_in_valid()) {
       extern uint8_t uart_getc();
