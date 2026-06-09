@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "common.h"
+#include "splitview.h"
 #include <limits.h>
 #include <locale.h>
 #include <signal.h>
@@ -24,6 +25,8 @@
 int assert_count = 0;
 int signal_num = 0;
 const char *emu_path = NULL;
+static bool common_initialized = false;
+static bool common_finished = false;
 
 // Usage in SV/Verilog: xs_assert(`__LINE__);
 void xs_assert(long long line) {
@@ -43,10 +46,13 @@ void xs_assert_v2(const char *filename, long long line) {
 
 void sig_handler(int signo) {
   static const char msg[] = "[common] SIGINT captured\n";
-  ssize_t ret = write(STDERR_FILENO, msg, sizeof(msg) - 1);
-  (void)ret; // suppress unused variable warning
-  if (signal_num != 0)
-    exit(0);
+  const ssize_t ignored = write(STDERR_FILENO, msg, sizeof(msg) - 1);
+  (void)ignored;
+  if (signal_num != 0) {
+    common_splitview_force_cleanup();
+    _exit(128 + signo);
+  }
+  common_splitview_release_input_capture();
   signal_num = signo;
 }
 
@@ -93,6 +99,13 @@ void common_set_locale() {
 }
 
 void common_init_without_assertion(const char *program_name) {
+  if (common_initialized) {
+    return;
+  }
+
+  common_splitview_preinit(program_name);
+  atexit(common_splitview_finish);
+
   // set emu_path
   emu_path = program_name;
 
@@ -100,8 +113,10 @@ void common_init_without_assertion(const char *program_name) {
   elf_name = elf_name ? elf_name + 1 : program_name;
   Info("%s compiled at %s, %s\n", elf_name, __DATE__, __TIME__);
 
-  // set buffer for stderr
-  setbuf(stderr, mybuf);
+  // use buffered stderr only in linear log mode
+  if (!common_splitview_is_active()) {
+    setbuf(stderr, mybuf);
+  }
 
   // enable thousands separator for printf()
   common_set_locale();
@@ -115,6 +130,8 @@ void common_init_without_assertion(const char *program_name) {
 
   assert_count = -1;
   signal_num = 0;
+  common_initialized = true;
+  common_finished = false;
 }
 
 void common_enable_assert() {
@@ -128,6 +145,8 @@ void common_init(const char *program_name) {
 
 void common_finish() {
   fflush(stdout);
+  fflush(stderr);
+  common_finished = true;
 }
 
 static eprintf_handle_t eprintf_handle = vprintf;

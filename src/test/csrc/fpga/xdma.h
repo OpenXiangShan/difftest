@@ -73,27 +73,17 @@ public:
   void start(bool enable_diff) {
     running = true;
     if (enable_diff == false) {
-      static volatile sig_atomic_t signal_received = 0;
-
-      auto handler = [](int sig) {
-        signal_received = sig;
-        printf("\nReceived signal %d, terminating...\n", sig);
-        exit(0);
-      };
-
-      signal(SIGINT, handler);
-      signal(SIGTERM, handler);
-
-      while (signal_received == 0) {
+      while (signal_num == 0) {
         usleep(10000);
       }
+      running = false;
     } else {
 #ifdef USE_THREAD_MEMPOOL
-      std::unique_lock<std::mutex> lock(thread_mtx);
       start_transmit_thread();
-      while (running) {
-        thread_cv.wait(lock); // wait notify from stop
+      while (running && signal_num == 0) {
+        usleep(10000);
       }
+      running = false;
       stop_thansmit_thread();
 #else
       read_and_process();

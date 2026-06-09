@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "args.h"
+#include "common.h"
 #include "device.h"
 #include "diffstate.h"
 #include "difftest.h"
@@ -23,6 +24,7 @@
 #include "mpool.h"
 #include "ram.h"
 #include "refproxy.h"
+#include "splitview.h"
 #include "xdma.h"
 #include <condition_variable>
 #include <cstdlib>
@@ -69,12 +71,21 @@ int main(int argc, const char *argv[]) {
   fpga_ila_dump_cmd = std::getenv("FPGA_ILA_DUMP_CMD");
   args = parse_args(argc, argv);
 
+#ifdef USE_SERIAL_PORT
+  // Keep terminal stdin available for interactive serial input.
+  common_splitview_set_capture_input(false);
+#endif
+  common_init(argv[0]);
+
   fpga_init();
 
   printf("fpga init\n");
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
   fpga_finish();
   printf("difftest releases the fpga device and exits\n");
+  if (signal_num != 0) {
+    return 128 + signal_num;
+  }
   return !(fpga_result == FPGA_GOODTRAP);
 }
 

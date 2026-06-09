@@ -15,12 +15,14 @@
 ***************************************************************************************/
 
 #include "difftest.h"
+#include "common.h"
 #include "difftrace.h"
 #include "dut.h"
 #include "flash.h"
 #include "goldenmem.h"
 #include "ram.h"
 #include "spikedasm.h"
+#include "splitview.h"
 #include <csignal>
 #include <cstdlib>
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
@@ -38,9 +40,11 @@ static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
   if (difftest_signal_handling) {
+    common_splitview_force_cleanup();
     _Exit(128 + signo);
   }
   difftest_signal_handling = 1;
+  common_splitview_force_cleanup();
   if (difftest != NULL) {
     difftest_finish();
   }

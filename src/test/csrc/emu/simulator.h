@@ -105,8 +105,7 @@ public:
   // This method cannot be overridden.
   inline void step_uart() {
     if (get_uart_out_valid()) {
-      printf("%c", get_uart_out_ch());
-      fflush(stdout);
+      difftest_uart_putc(static_cast<char>(get_uart_out_ch()));
     }
     if (get_uart_in_valid()) {
       extern uint8_t uart_getc();

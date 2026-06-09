@@ -7,8 +7,11 @@ USE_SERIAL_PORT ?= 1
 
 FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp")
 FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DCONFIG_DMA_CHANNELS=$(DMA_CHANNELS) -DFPGA_HOST
-FPGA_CXXFLAGS += -std=c++11 -O3 -flto -march=native -mtune=native
+FPGA_CXXFLAGS += -std=c++20 -O3 -flto -march=native -mtune=native
 FPGA_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
+ifneq ($(SPLITVIEW),0)
+FPGA_CXXFLAGS += -DCONFIG_SPLITVIEW
+endif
 
 fpga-build: fpga-clean fpga-host
 

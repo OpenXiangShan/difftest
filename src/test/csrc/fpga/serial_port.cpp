@@ -15,6 +15,8 @@
 ***************************************************************************************/
 
 #include "serial_port.h"
+#include "common.h"
+#include "splitview.h"
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -53,6 +55,27 @@ bool wait_readable(int fd, int stop_fd, const char *name) {
     return false;
   }
   return fds[0].revents & POLLIN;
+}
+
+void write_all_retry(int fd, const char *buf, size_t len) {
+  while (len > 0) {
+    ssize_t written = write(fd, buf, len);
+    if (written > 0) {
+      buf += written;
+      len -= static_cast<size_t>(written);
+      continue;
+    }
+    if (written < 0 && errno == EINTR) {
+      continue;
+    }
+    return;
+  }
+}
+
+void emit_serial_output(const char *buf, size_t len) {
+  const int uart_fd = common_splitview_uart_fd();
+  const int fd = uart_fd >= 0 ? uart_fd : STDOUT_FILENO;
+  write_all_retry(fd, buf, len);
 }
 
 } // namespace
@@ -142,8 +165,7 @@ void SerialPort::start_read_thread() {
     while (wait_readable(fd_, stop_pipe_[0], "read")) {
       ssize_t n = read(fd_, buf, sizeof(buf) - 1);
       if (n > 0) {
-        buf[n] = '\0';
-        printf("%s", buf);
+        emit_serial_output(buf, static_cast<size_t>(n));
       } else if (n < 0 && errno != EINTR) {
         std::cerr << "SerialPort: read failed" << std::endl;
         break;
