@@ -17,10 +17,15 @@
 #include "args.h"
 #include "ram.h"
 #include "remote_bitbang.h"
+#include "splitview.h"
 #include <getopt.h>
 #ifdef CONFIG_DIFFTEST_IOTRACE
 #include "difftest-iotrace.h"
 #endif // CONFIG_DIFFTEST_IOTRACE
+
+enum {
+  OPT_SPLITVIEW_LOG = 1000,
+};
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
   if (strspn(str, " +-0123456789") != strlen(str)) {
@@ -89,6 +94,7 @@ static inline void print_help(const char *file) {
   printf("      --as-footprints        load the image as memory access footprints\n");
   printf("      --dump-linearized=NAME dump the linearized footprints to NAME\n");
   printf("      --copy-ram=OFFSET      duplicate the memory at OFFSET\n");
+  printf("      --splitview-log=PATH   write splitview uart.log, host.log, and all.log under PATH\n");
   printf("      --random-mem           initialize memory from --seed\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
@@ -135,6 +141,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "copy-ram",          1, NULL,  0  },
     { "cst-file",          1, NULL,  0  },
     { "random-mem",        0, NULL,  0  },
+    { "splitview-log",     1, NULL, OPT_SPLITVIEW_LOG },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -250,6 +257,10 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         }
         // fall through
       default: print_help(argv[0]); exit(0);
+      case OPT_SPLITVIEW_LOG:
+        args.splitview_log_path = optarg;
+        common_splitview_set_log_path(args.splitview_log_path);
+        continue;
       case 's':
         if (std::string(optarg) != "NO_SEED") {
           args.seed = atoll_strict(optarg, "seed");

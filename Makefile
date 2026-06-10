@@ -57,6 +57,9 @@ SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp") $(shell find $(SIM_CO
 SIM_CXXFLAGS = -I$(SIM_CSRC_DIR) -I$(SIM_CONFIG_DIR)
 
 SIM_CXXFLAGS += -DNOOP_HOME=\\\"$(NOOP_HOME)\\\"
+ifeq ($(SPLITVIEW),1)
+SIM_CXXFLAGS += -DCONFIG_SPLITVIEW
+endif
 
 # generated-src
 GEN_CSRC_DIR  = $(BUILD_DIR)/generated-src

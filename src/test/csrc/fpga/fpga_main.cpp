@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "args.h"
+#include "common.h"
 #include "device.h"
 #include "diffstate.h"
 #include "difftest.h"
@@ -23,6 +24,7 @@
 #include "mpool.h"
 #include "ram.h"
 #include "refproxy.h"
+#include "splitview.h"
 #include "xdma.h"
 #include <condition_variable>
 #include <cstdlib>
@@ -69,12 +71,16 @@ int main(int argc, const char *argv[]) {
   fpga_ila_dump_cmd = std::getenv("FPGA_ILA_DUMP_CMD");
   args = parse_args(argc, argv);
 
+  common_init(argv[0]);
+
   fpga_init();
 
   printf("fpga init\n");
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
   fpga_finish();
-  printf("difftest releases the fpga device and exits\n");
+  if (signal_num != 0) {
+    return 128 + signal_num;
+  }
   return !(fpga_result == FPGA_GOODTRAP);
 }
 
@@ -188,16 +194,20 @@ void fpga_init() {
 
 void fpga_finish() {
   delete xdma_device;
+
+  if (signal_num == 0) {
+    difftest_finish();
+    goldenmem_finish();
+    finish_device();
+  }
+  printf("difftest releases the fpga device and exits\n");
+  common_splitview_finish();
 #ifdef USE_SERIAL_PORT
   serial_port->stop();
   delete serial_port;
 #endif // USE_SERIAL_PORT
 
   common_finish();
-
-  difftest_finish();
-  goldenmem_finish();
-  finish_device();
 
   delete simMemory;
   simMemory = nullptr;

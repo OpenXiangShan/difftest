@@ -53,17 +53,11 @@ template <typename Func, typename Obj, typename... Args> void thread_wrapper(Fun
   (obj->*func)(args...);
 }
 
-void handle_sigint(int sig) {
-  printf("handle sigint unlink pcie success, exit fpga-host!\n");
-  exit(1);
-}
-
 FpgaXdma::FpgaXdma()
 #ifdef USE_THREAD_MEMPOOL
     : xdma_mempool(sizeof(FpgaPackgeHead))
 #endif // USE_THREAD_MEMPOOL
 {
-  signal(SIGINT, handle_sigint);
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     char c2h_device[64];
     sprintf(c2h_device, "%s%d", XDMA_C2H_DEVICE, i);
@@ -306,13 +300,19 @@ void FpgaXdma::stop_thansmit_thread() {
 
 void FpgaXdma::read_xdma_thread(int channel) {
   size_t mem_get_idx = 0;
-  while (running) {
+  while (running && signal_num == 0) {
     char *mem = xdma_mempool.get_free_chunk(&mem_get_idx);
 #ifdef FPGA_SIM
-    size_t size = xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead));
+    ssize_t size = static_cast<ssize_t>(xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead)));
 #else
-    size_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
+    ssize_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
+    if (size <= 0) {
+      if (signal_num != 0 || (size < 0 && errno == EINTR)) {
+        break;
+      }
+      continue;
+    }
     if (xdma_mempool.write_free_chunk(mem[0], mem_get_idx) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
@@ -324,7 +324,7 @@ void FpgaXdma::write_difftest_thread() {
   FpgaPackgeHead *packge;
   uint8_t recv_count = 0;
   xdma_mempool.wait_mempool_start();
-  while (running) {
+  while (running && signal_num == 0) {
     packge = reinterpret_cast<FpgaPackgeHead *>(xdma_mempool.read_busy_chunk());
     if (packge == nullptr) {
       printf("Failed to read data from the XDMA memory pool\n");
@@ -358,12 +358,18 @@ void FpgaXdma::read_and_process() {
   printf("start channel 0\n");
   FpgaPackgeHead *packge = (FpgaPackgeHead *)posix_memalignd_malloc(sizeof(FpgaPackgeHead));
   memset(packge, 0, sizeof(FpgaPackgeHead));
-  while (running) {
+  while (running && signal_num == 0) {
 #ifdef FPGA_SIM
-    size_t size = xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead));
+    ssize_t size = static_cast<ssize_t>(xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead)));
 #else
-    size_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
+    ssize_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
+    if (size <= 0) {
+      if (signal_num != 0 || (size < 0 && errno == EINTR)) {
+        break;
+      }
+      continue;
+    }
     for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
       v_difftest_Batch(packge->diff_packge[i].diff_packge);
     }

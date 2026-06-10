@@ -15,6 +15,8 @@
 ***************************************************************************************/
 
 #include "serial_port.h"
+#include "common.h"
+#include "splitview.h"
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -53,6 +55,17 @@ bool wait_readable(int fd, int stop_fd, const char *name) {
     return false;
   }
   return fds[0].revents & POLLIN;
+}
+
+void emit_serial_output(const char *buf, size_t len) {
+  int fd = STDOUT_FILENO;
+#ifdef CONFIG_SPLITVIEW
+  const int uart_fd = common_splitview_uart_fd();
+  if (uart_fd >= 0) {
+    fd = uart_fd;
+  }
+#endif
+  write(fd, buf, len);
 }
 
 } // namespace
@@ -114,14 +127,21 @@ void SerialPort::start() {
     close_fd(stop_pipe_[1]);
     return;
   }
+#ifdef CONFIG_SPLITVIEW
+  if (common_splitview_is_active()) {
+    common_splitview_set_uart_input_fd(dup(fd_));
+  }
+#endif
   read_thread = std::thread(&SerialPort::start_read_thread, this);
-  write_thread = std::thread(&SerialPort::start_write_thread, this);
+  if (!common_splitview_is_active()) {
+    write_thread = std::thread(&SerialPort::start_write_thread, this);
+  }
 }
 
 void SerialPort::stop() {
   if (stop_pipe_[1] >= 0) {
     char byte = 0;
-    (void)write(stop_pipe_[1], &byte, sizeof(byte));
+    write(stop_pipe_[1], &byte, sizeof(byte));
   }
   if (read_thread.joinable()) {
     read_thread.join();
@@ -142,8 +162,7 @@ void SerialPort::start_read_thread() {
     while (wait_readable(fd_, stop_pipe_[0], "read")) {
       ssize_t n = read(fd_, buf, sizeof(buf) - 1);
       if (n > 0) {
-        buf[n] = '\0';
-        printf("%s", buf);
+        emit_serial_output(buf, static_cast<size_t>(n));
       } else if (n < 0 && errno != EINTR) {
         std::cerr << "SerialPort: read failed" << std::endl;
         break;
