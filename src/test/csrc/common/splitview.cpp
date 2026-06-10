@@ -45,6 +45,7 @@ int common_splitview_uart_fd() {
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <csignal>
 #include <deque>
@@ -68,6 +69,8 @@ constexpr const char *kDefaultLogPath = "build/logs";
 constexpr const char *kUartLogName = "uart.log";
 constexpr const char *kHostLogName = "host.log";
 constexpr const char *kAllLogName = "all.log";
+constexpr auto kFinishDrainQuietTime = std::chrono::milliseconds(150);
+constexpr std::string_view kExitHintText = "Press Q to exit\n";
 constexpr const char *kAnsiReset = "\033[0m";
 constexpr const char *kAnsiHeaderUart = "\033[1;92m";
 constexpr const char *kAnsiHeaderLogs = "\033[1;38;5;214m";
@@ -242,6 +245,7 @@ struct ScrollState {
 struct InputEvent {
   enum class Type {
     Quit,
+    Interrupt,
     MouseWheel,
   } type;
   int amount = 0;
@@ -317,6 +321,26 @@ void close_uart_input_fd() {
 void cleanup_pipe_array(std::array<int, 2> &pipe_fds) {
   close_if_open(pipe_fds[0]);
   close_if_open(pipe_fds[1]);
+}
+
+void maybe_start_external_uart_input() {
+  if (!g_runtime.active) {
+    return;
+  }
+
+  const char *path = getenv("DIFFTEST_SPLITVIEW_UART_INPUT");
+  if (path == nullptr || path[0] == '\0') {
+    return;
+  }
+
+  int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+  if (fd < 0) {
+    return;
+  }
+
+  close_if_open(g_runtime.uart_pipe_read);
+  g_runtime.uart_pipe_read = fd;
+  close_if_open(g_runtime.uart_pipe_write);
 }
 
 void write_all(int fd, const char *data, size_t len) {
@@ -787,7 +811,7 @@ bool enable_input_mode(int input_fd, struct termios &saved_termios) {
   }
 
   struct termios raw = saved_termios;
-  raw.c_lflag &= static_cast<unsigned int>(~(ICANON | ECHO));
+  raw.c_lflag &= static_cast<unsigned int>(~(ICANON | ECHO | ISIG));
   raw.c_cc[VMIN] = 0;
   raw.c_cc[VTIME] = 0;
   return tcsetattr(input_fd, TCSANOW, &raw) == 0;
@@ -932,6 +956,7 @@ ParseResult parse_input_event(std::string_view text, InputEvent &event, size_t &
     switch (text[0]) {
       case 'q':
       case 'Q': event.type = InputEvent::Type::Quit; return ParseResult::Parsed;
+      case '\x03': event.type = InputEvent::Type::Interrupt; return ParseResult::Parsed;
       default: return ParseResult::Skipped;
     }
   }
@@ -1021,6 +1046,24 @@ void adjust_scroll_for_appended_output(PaneBuffer &pane, int width, int &scroll_
   scroll_offset = std::max(0, scroll_offset + after - before);
 }
 
+void append_exit_hint(PaneBuffer &uart, const SplitLayout &layout, ScrollState &scroll, bool &dirty,
+                      bool &exit_hint_written) {
+  if (exit_hint_written) {
+    return;
+  }
+  std::string hint;
+  if (!uart.lines.empty() && !uart.lines.back().empty()) {
+    hint.push_back('\n');
+  }
+  hint += kExitHintText;
+  scroll.uart_offset = 0;
+  adjust_scroll_for_appended_output(uart, layout.left_width, scroll.uart_offset, hint);
+  scroll.uart_offset = 0;
+  scroll.focused = PaneId::Uart;
+  exit_hint_written = true;
+  dirty = true;
+}
+
 void clamp_scroll_state(ScrollState &scroll, PaneBuffer &uart, PaneBuffer &logs, const SplitLayout &layout) {
   scroll.uart_offset =
       clamp_scroll_offset(scroll.uart_offset, uart.wrapped_line_count(layout.left_width), layout.body_rows);
@@ -1036,7 +1079,7 @@ void apply_scroll_delta(PaneId pane, int delta, ScrollState &scroll, PaneBuffer 
 }
 
 bool drain_pipe_into_pane(int fd, short revents, PaneBuffer &pane, int width, int &scroll_offset,
-                          AsyncFileWriter &file_writer, AsyncFileWriter &all_writer, bool &dirty) {
+                          AsyncFileWriter &file_writer, AsyncFileWriter &all_writer, bool &dirty, bool &saw_output) {
   if (fd < 0 || (revents & (POLLIN | POLLHUP)) == 0) {
     return true;
   }
@@ -1051,6 +1094,7 @@ bool drain_pipe_into_pane(int fd, short revents, PaneBuffer &pane, int width, in
       all_writer.enqueue(chunk);
       adjust_scroll_for_appended_output(pane, width, scroll_offset, chunk);
       dirty = true;
+      saw_output = true;
       continue;
     }
     if (n == 0) {
@@ -1084,13 +1128,26 @@ void handle_uart_input(std::string_view chunk, PaneBuffer &uart, const SplitLayo
 }
 
 void handle_input_event(const InputEvent &event, ScrollState &scroll, PaneBuffer &uart, PaneBuffer &logs,
-                        const SplitLayout &layout, bool finished, bool input_enabled, bool &should_quit, bool &dirty) {
+                        const SplitLayout &layout, bool &finish_pending,
+                        std::chrono::steady_clock::time_point &finish_ready_at, bool finished, bool input_enabled,
+                        bool &should_quit, bool &dirty) {
   switch (event.type) {
     case InputEvent::Type::Quit:
       if (finished) {
         should_quit = true;
         detach_splitview_runtime(input_enabled);
       }
+      return;
+    case InputEvent::Type::Interrupt:
+      if (finished) {
+        should_quit = true;
+        detach_splitview_runtime(input_enabled);
+        return;
+      }
+      signal_num = SIGINT;
+      finish_pending = true;
+      finish_ready_at = std::chrono::steady_clock::now() + kFinishDrainQuietTime;
+      dirty = true;
       return;
     case InputEvent::Type::MouseWheel: {
       PaneId pane = scroll.focused;
@@ -1102,6 +1159,17 @@ void handle_input_event(const InputEvent &event, ScrollState &scroll, PaneBuffer
       dirty = true;
       return;
     }
+  }
+}
+
+void enable_quit_input_if_needed(int tty_fd, int input_fd, bool &input_enabled) {
+  if (input_enabled) {
+    return;
+  }
+  input_enabled = enable_input_mode(input_fd, g_runtime.saved_input_termios);
+  g_runtime.input_mode_enabled = input_enabled;
+  if (input_enabled) {
+    write_all(tty_fd, "\033[?1000h\033[?1006h");
   }
 }
 
@@ -1121,9 +1189,12 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
   ScrollState scroll;
   bool log_open = true;
   bool uart_open = true;
+  bool finish_pending = false;
   bool finished = false;
   bool should_quit = false;
   bool dirty = true;
+  bool exit_hint_written = false;
+  std::chrono::steady_clock::time_point finish_ready_at;
   std::string pending_input;
   bool input_enabled = enable_input_mode(input_fd, g_runtime.saved_input_termios);
   g_runtime.input_mode_enabled = input_enabled;
@@ -1161,42 +1232,44 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
       break;
     }
     if (g_runtime.finish_requested.exchange(false)) {
-      finished = true;
-      g_runtime.finished = true;
+      finish_pending = true;
+      finish_ready_at = std::chrono::steady_clock::now() + kFinishDrainQuietTime;
       dirty = true;
-      if (!input_enabled) {
-        input_enabled = enable_input_mode(input_fd, g_runtime.saved_input_termios);
-        g_runtime.input_mode_enabled = input_enabled;
-        if (input_enabled) {
-          write_all(tty_fd, "\033[?1000h\033[?1006h");
-        }
-      }
     }
 
     std::array<char, 512> buf{};
+    bool saw_output = false;
 
     if (log_open) {
       log_open = drain_pipe_into_pane(pfds[0].fd, pfds[0].revents, logs, layout.right_width, scroll.log_offset,
-                                      host_log, all_log, dirty);
+                                      host_log, all_log, dirty, saw_output);
     }
 
     if (uart_open) {
       uart_open = drain_pipe_into_pane(pfds[1].fd, pfds[1].revents, uart, layout.left_width, scroll.uart_offset,
-                                       uart_log, all_log, dirty);
+                                       uart_log, all_log, dirty, saw_output);
+    }
+
+    if (finish_pending && saw_output) {
+      finish_ready_at = std::chrono::steady_clock::now() + kFinishDrainQuietTime;
     }
 
     const bool streams_finished = !log_open && !uart_open;
     if (streams_finished && !finished) {
-      finished = true;
-      g_runtime.finished = true;
+      finish_pending = true;
+      finish_ready_at = std::chrono::steady_clock::now();
       dirty = true;
-      if (!input_enabled) {
-        input_enabled = enable_input_mode(input_fd, g_runtime.saved_input_termios);
-        g_runtime.input_mode_enabled = input_enabled;
-        if (input_enabled) {
-          write_all(tty_fd, "\033[?1000h\033[?1006h");
-        }
-      }
+    }
+
+    if (finish_pending && !finished && std::chrono::steady_clock::now() >= finish_ready_at) {
+      finished = true;
+      finish_pending = false;
+      g_runtime.finished = true;
+      enable_quit_input_if_needed(tty_fd, input_fd, input_enabled);
+    }
+
+    if (finished) {
+      append_exit_hint(uart, layout, scroll, dirty, exit_hint_written);
     }
 
     if (finished && !input_enabled) {
@@ -1214,7 +1287,8 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
           handle_uart_input(uart_input, uart, layout, scroll, dirty);
         }
         for (const InputEvent &event: events) {
-          handle_input_event(event, scroll, uart, logs, layout, finished, input_enabled, should_quit, dirty);
+          handle_input_event(event, scroll, uart, logs, layout, finish_pending, finish_ready_at, finished,
+                             input_enabled, should_quit, dirty);
         }
       }
     }
@@ -1326,6 +1400,7 @@ void common_splitview_preinit(const char *program_name) {
   g_runtime.input_capture_released = false;
   g_runtime.force_cleanup_started = false;
   g_runtime.active = true;
+  maybe_start_external_uart_input();
   g_runtime.render_thread = std::thread(render_loop, g_runtime.tty_fd, g_runtime.input_fd, g_runtime.control_pipe_read,
                                         g_runtime.log_pipe_read, g_runtime.uart_pipe_read, runtime_program_name);
 }
