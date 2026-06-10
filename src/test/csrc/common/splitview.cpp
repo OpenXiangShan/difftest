@@ -70,7 +70,7 @@ constexpr const char *kUartLogName = "uart.log";
 constexpr const char *kHostLogName = "host.log";
 constexpr const char *kAllLogName = "all.log";
 constexpr auto kFinishDrainQuietTime = std::chrono::milliseconds(150);
-constexpr std::string_view kExitHintText = "Press Q to exit\n";
+constexpr std::string_view kExitHintText = "\033[1;35mPress Q/q to exit\033[0m\n";
 constexpr const char *kAnsiReset = "\033[0m";
 constexpr const char *kAnsiHeaderUart = "\033[1;92m";
 constexpr const char *kAnsiHeaderLogs = "\033[1;38;5;214m";
@@ -730,26 +730,7 @@ std::string make_footer_text(const std::string &program_name, bool finished, boo
     left += std::to_string(scroll.log_offset);
   }
 
-  if (!(finished && input_enabled)) {
-    return fit_text(left, width);
-  }
-
-  const std::string right = "Press Q to exit";
-  if (static_cast<int>(left.size() + right.size() + 1) > width) {
-    const int right_width = static_cast<int>(right.size());
-    if (width <= right_width + 3) {
-      return fit_text(right, width);
-    }
-    std::string footer = fit_text(left, width - right_width - 3);
-    footer += " | ";
-    footer += right;
-    return footer;
-  }
-
-  std::string footer = left;
-  footer.append(static_cast<size_t>(width - static_cast<int>(left.size() + right.size())), ' ');
-  footer += right;
-  return footer;
+  return fit_text(left, width);
 }
 
 void draw_screen(int tty_fd, PaneBuffer &uart, PaneBuffer &logs, const SplitLayout &layout, const ScrollState &scroll,
@@ -1046,20 +1027,20 @@ void adjust_scroll_for_appended_output(PaneBuffer &pane, int width, int &scroll_
   scroll_offset = std::max(0, scroll_offset + after - before);
 }
 
-void append_exit_hint(PaneBuffer &uart, const SplitLayout &layout, ScrollState &scroll, bool &dirty,
+void append_exit_hint(PaneBuffer &logs, const SplitLayout &layout, ScrollState &scroll, bool &dirty,
                       bool &exit_hint_written) {
   if (exit_hint_written) {
     return;
   }
   std::string hint;
-  if (!uart.lines.empty() && !uart.lines.back().empty()) {
+  if (!logs.lines.empty() && !logs.lines.back().empty()) {
     hint.push_back('\n');
   }
   hint += kExitHintText;
-  scroll.uart_offset = 0;
-  adjust_scroll_for_appended_output(uart, layout.left_width, scroll.uart_offset, hint);
-  scroll.uart_offset = 0;
-  scroll.focused = PaneId::Uart;
+  scroll.log_offset = 0;
+  adjust_scroll_for_appended_output(logs, layout.right_width, scroll.log_offset, hint);
+  scroll.log_offset = 0;
+  scroll.focused = PaneId::Logs;
   exit_hint_written = true;
   dirty = true;
 }
@@ -1269,7 +1250,7 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
     }
 
     if (finished) {
-      append_exit_hint(uart, layout, scroll, dirty, exit_hint_written);
+      append_exit_hint(logs, layout, scroll, dirty, exit_hint_written);
     }
 
     if (finished && !input_enabled) {
