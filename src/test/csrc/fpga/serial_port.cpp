@@ -65,8 +65,7 @@ void emit_serial_output(const char *buf, size_t len) {
     fd = uart_fd;
   }
 #endif
-  const ssize_t ignored = write(fd, buf, len);
-  (void)ignored;
+  write(fd, buf, len);
 }
 
 } // namespace
@@ -142,8 +141,7 @@ void SerialPort::start() {
 void SerialPort::stop() {
   if (stop_pipe_[1] >= 0) {
     char byte = 0;
-    const ssize_t ignored = write(stop_pipe_[1], &byte, sizeof(byte));
-    (void)ignored;
+    write(stop_pipe_[1], &byte, sizeof(byte));
   }
   if (read_thread.joinable()) {
     read_thread.join();
@@ -190,8 +188,7 @@ void SerialPort::start_write_thread() {
         line.push_back('\n');
         // write(fd_, line.c_str(), line.size());
         if (fd_ >= 0) {
-          const ssize_t ignored = write(fd_, line.c_str(), line.size());
-          (void)ignored;
+          write(fd_, line.c_str(), line.size());
         }
       } else {
         break;

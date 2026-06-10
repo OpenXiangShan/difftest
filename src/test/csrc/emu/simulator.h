@@ -114,8 +114,7 @@ public:
         fd = uart_fd;
       }
 #endif
-      const ssize_t ignored = write(fd, &ch, 1);
-      (void)ignored;
+      write(fd, &ch, 1);
     }
     if (get_uart_in_valid()) {
       extern uint8_t uart_getc();

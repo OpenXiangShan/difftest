@@ -1102,8 +1102,7 @@ void handle_uart_input(std::string_view chunk, PaneBuffer &uart, const SplitLayo
     return;
   }
 
-  const ssize_t ignored = write(uart_input_fd, chunk.data(), chunk.size());
-  (void)ignored;
+  write(uart_input_fd, chunk.data(), chunk.size());
   adjust_scroll_for_appended_output(uart, layout.left_width, scroll.uart_offset, chunk);
   dirty = true;
 }
@@ -1401,8 +1400,7 @@ void common_splitview_finish() {
   g_runtime.finish_requested = true;
   if (g_runtime.control_pipe_write >= 0) {
     static const char wake = 'f';
-    const ssize_t ignored = write(g_runtime.control_pipe_write, &wake, 1);
-    (void)ignored;
+    write(g_runtime.control_pipe_write, &wake, 1);
   }
 
   if (g_runtime.render_thread.joinable()) {
@@ -1454,8 +1452,7 @@ void common_splitview_request_finish() {
   g_runtime.finish_requested = true;
   if (g_runtime.control_pipe_write >= 0) {
     static const char wake = 'f';
-    const ssize_t ignored = write(g_runtime.control_pipe_write, &wake, 1);
-    (void)ignored;
+    write(g_runtime.control_pipe_write, &wake, 1);
   }
 }
 
@@ -1466,8 +1463,7 @@ void common_splitview_request_detach() {
 
   if (g_runtime.control_pipe_write >= 0) {
     static const char wake = 'q';
-    const ssize_t ignored = write(g_runtime.control_pipe_write, &wake, 1);
-    (void)ignored;
+    write(g_runtime.control_pipe_write, &wake, 1);
   }
 }
 

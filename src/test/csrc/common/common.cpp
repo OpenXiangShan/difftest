@@ -46,8 +46,7 @@ void xs_assert_v2(const char *filename, long long line) {
 
 void sig_handler(int signo) {
   static const char msg[] = "[common] SIGINT captured\n";
-  const ssize_t ignored = write(STDERR_FILENO, msg, sizeof(msg) - 1);
-  (void)ignored;
+  write(STDERR_FILENO, msg, sizeof(msg) - 1);
   if (signal_num != 0) {
     common_splitview_force_cleanup();
     _exit(128 + signo);
