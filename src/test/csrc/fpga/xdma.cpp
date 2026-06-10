@@ -303,10 +303,16 @@ void FpgaXdma::read_xdma_thread(int channel) {
   while (running && signal_num == 0) {
     char *mem = xdma_mempool.get_free_chunk(&mem_get_idx);
 #ifdef FPGA_SIM
-    size_t size = xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead));
+    ssize_t size = static_cast<ssize_t>(xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead)));
 #else
-    size_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
+    ssize_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
+    if (size <= 0) {
+      if (signal_num != 0 || (size < 0 && errno == EINTR)) {
+        break;
+      }
+      continue;
+    }
     if (xdma_mempool.write_free_chunk(mem[0], mem_get_idx) == false) {
       printf("It should not be the case that no available block can be found\n");
       assert(0);
@@ -354,10 +360,16 @@ void FpgaXdma::read_and_process() {
   memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running && signal_num == 0) {
 #ifdef FPGA_SIM
-    size_t size = xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead));
+    ssize_t size = static_cast<ssize_t>(xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead)));
 #else
-    size_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
+    ssize_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
+    if (size <= 0) {
+      if (signal_num != 0 || (size < 0 && errno == EINTR)) {
+        break;
+      }
+      continue;
+    }
     for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
       v_difftest_Batch(packge->diff_packge[i].diff_packge);
     }

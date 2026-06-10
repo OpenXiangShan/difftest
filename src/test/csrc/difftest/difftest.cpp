@@ -39,21 +39,30 @@ Difftest **difftest = NULL;
 static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
+  if (signo != SIGINT) {
+    common_splitview_force_cleanup();
+    if (difftest != NULL) {
+      difftest_finish();
+    }
+    std::signal(signo, SIG_DFL);
+    raise(signo);
+    return;
+  }
+
   if (difftest_signal_handling) {
     common_splitview_force_cleanup();
     _Exit(128 + signo);
   }
   difftest_signal_handling = 1;
-  common_splitview_force_cleanup();
-  if (difftest != NULL) {
-    difftest_finish();
-  }
-  std::signal(signo, SIG_DFL);
-  raise(signo);
+  common_splitview_request_finish();
+  signal_num = signo;
 }
 
 static void difftest_register_exit_handlers() {
-  std::signal(SIGINT, difftest_signal_handler);
+  struct sigaction sigint_action {};
+  sigint_action.sa_handler = difftest_signal_handler;
+  sigemptyset(&sigint_action.sa_mask);
+  sigaction(SIGINT, &sigint_action, nullptr);
   std::signal(SIGTERM, difftest_signal_handler);
   std::signal(SIGABRT, difftest_signal_handler);
   std::signal(SIGSEGV, difftest_signal_handler);

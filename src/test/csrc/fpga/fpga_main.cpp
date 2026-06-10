@@ -78,7 +78,6 @@ int main(int argc, const char *argv[]) {
   printf("fpga init\n");
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
   fpga_finish();
-  printf("difftest releases the fpga device and exits\n");
   if (signal_num != 0) {
     return 128 + signal_num;
   }
@@ -195,16 +194,20 @@ void fpga_init() {
 
 void fpga_finish() {
   delete xdma_device;
+
+  if (signal_num == 0) {
+    difftest_finish();
+    goldenmem_finish();
+    finish_device();
+  }
+  printf("difftest releases the fpga device and exits\n");
+  common_splitview_finish();
 #ifdef USE_SERIAL_PORT
   serial_port->stop();
   delete serial_port;
 #endif // USE_SERIAL_PORT
 
   common_finish();
-
-  difftest_finish();
-  goldenmem_finish();
-  finish_device();
 
   delete simMemory;
   simMemory = nullptr;

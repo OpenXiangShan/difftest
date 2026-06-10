@@ -24,7 +24,9 @@ void common_splitview_finish() {}
 
 void common_splitview_force_cleanup() {}
 
-void common_splitview_release_input_capture() {}
+void common_splitview_request_finish() {}
+
+void common_splitview_request_detach() {}
 
 void common_splitview_set_uart_input_fd(int) {}
 
@@ -251,6 +253,8 @@ struct NativeSplitViewRuntime {
   std::atomic<bool> initialized = false;
   std::atomic<bool> active = false;
   std::atomic<bool> stopping = false;
+  std::atomic<bool> finish_requested = false;
+  std::atomic<bool> finished = false;
   std::atomic<bool> detach_requested = false;
   std::atomic<bool> resize_requested = false;
   std::atomic<bool> input_mode_enabled = false;
@@ -1080,11 +1084,12 @@ void handle_uart_input(std::string_view chunk, PaneBuffer &uart, const SplitLayo
 }
 
 void handle_input_event(const InputEvent &event, ScrollState &scroll, PaneBuffer &uart, PaneBuffer &logs,
-                        const SplitLayout &layout, bool finished, bool &should_quit, bool &dirty) {
+                        const SplitLayout &layout, bool finished, bool input_enabled, bool &should_quit, bool &dirty) {
   switch (event.type) {
     case InputEvent::Type::Quit:
       if (finished) {
         should_quit = true;
+        detach_splitview_runtime(input_enabled);
       }
       return;
     case InputEvent::Type::MouseWheel: {
@@ -1104,6 +1109,7 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
                  const std::string program_name) {
   set_nonblocking(log_pipe_read);
   set_nonblocking(uart_pipe_read);
+  set_nonblocking(control_pipe_read);
 
   PaneBuffer uart;
   PaneBuffer logs;
@@ -1154,6 +1160,18 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
     if (g_runtime.stopping) {
       break;
     }
+    if (g_runtime.finish_requested.exchange(false)) {
+      finished = true;
+      g_runtime.finished = true;
+      dirty = true;
+      if (!input_enabled) {
+        input_enabled = enable_input_mode(input_fd, g_runtime.saved_input_termios);
+        g_runtime.input_mode_enabled = input_enabled;
+        if (input_enabled) {
+          write_all(tty_fd, "\033[?1000h\033[?1006h");
+        }
+      }
+    }
 
     std::array<char, 512> buf{};
 
@@ -1167,11 +1185,12 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
                                        uart_log, all_log, dirty);
     }
 
-    const bool now_finished = !log_open && !uart_open;
-    if (now_finished != finished) {
-      finished = now_finished;
+    const bool streams_finished = !log_open && !uart_open;
+    if (streams_finished && !finished) {
+      finished = true;
+      g_runtime.finished = true;
       dirty = true;
-      if (finished && !input_enabled) {
+      if (!input_enabled) {
         input_enabled = enable_input_mode(input_fd, g_runtime.saved_input_termios);
         g_runtime.input_mode_enabled = input_enabled;
         if (input_enabled) {
@@ -1195,7 +1214,7 @@ void render_loop(int tty_fd, int input_fd, int control_pipe_read, int log_pipe_r
           handle_uart_input(uart_input, uart, layout, scroll, dirty);
         }
         for (const InputEvent &event: events) {
-          handle_input_event(event, scroll, uart, logs, layout, finished, should_quit, dirty);
+          handle_input_event(event, scroll, uart, logs, layout, finished, input_enabled, should_quit, dirty);
         }
       }
     }
@@ -1301,6 +1320,8 @@ void common_splitview_preinit(const char *program_name) {
   setvbuf(stderr, nullptr, _IONBF, 0);
 
   g_runtime.stopping = false;
+  g_runtime.finish_requested = false;
+  g_runtime.finished = false;
   g_runtime.detach_requested = false;
   g_runtime.input_capture_released = false;
   g_runtime.force_cleanup_started = false;
@@ -1321,19 +1342,27 @@ void common_splitview_finish() {
   fflush(stderr);
 
   restore_standard_streams();
-  close_if_open(g_runtime.uart_pipe_write);
+  g_runtime.finish_requested = true;
+  if (g_runtime.control_pipe_write >= 0) {
+    static const char wake = 'f';
+    const ssize_t ignored = write(g_runtime.control_pipe_write, &wake, 1);
+    (void)ignored;
+  }
 
   if (g_runtime.render_thread.joinable()) {
     g_runtime.render_thread.join();
   }
 
   g_runtime.active = false;
+  close_if_open(g_runtime.uart_pipe_write);
   close_if_open(g_runtime.tty_fd);
   close_if_open(g_runtime.input_fd);
   close_uart_input_fd();
   close_if_open(g_runtime.control_pipe_read);
   close_if_open(g_runtime.control_pipe_write);
   g_runtime.input_capture_released = false;
+  g_runtime.finish_requested = false;
+  g_runtime.finished = false;
   g_runtime.detach_requested = false;
   g_runtime.force_cleanup_started = false;
 }
@@ -1357,7 +1386,24 @@ void common_splitview_force_cleanup() {
   }
 }
 
-void common_splitview_release_input_capture() {
+void common_splitview_request_finish() {
+  if (!g_runtime.active || g_runtime.input_capture_released) {
+    return;
+  }
+  if (g_runtime.finished) {
+    common_splitview_request_detach();
+    return;
+  }
+
+  g_runtime.finish_requested = true;
+  if (g_runtime.control_pipe_write >= 0) {
+    static const char wake = 'f';
+    const ssize_t ignored = write(g_runtime.control_pipe_write, &wake, 1);
+    (void)ignored;
+  }
+}
+
+void common_splitview_request_detach() {
   if (!g_runtime.active || g_runtime.input_capture_released || g_runtime.detach_requested.exchange(true)) {
     return;
   }

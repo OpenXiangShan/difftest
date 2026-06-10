@@ -52,7 +52,7 @@ void sig_handler(int signo) {
     common_splitview_force_cleanup();
     _exit(128 + signo);
   }
-  common_splitview_release_input_capture();
+  common_splitview_request_finish();
   signal_num = signo;
 }
 
