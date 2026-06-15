@@ -28,9 +28,10 @@ object H2CAXIs2MemState extends ChiselEnum {
   val sIdle, sReadPayload, sAddr, sData, sResp, sDone = Value
 }
 
-class AsyncClockFIFO[T <: Data](gen: T, depth: Int) extends Module {
+class AsyncClockFIFO[T <: Data](gen: T, depth: Int, bankWidth: Int = 0) extends Module {
   require(isPow2(depth), s"AsyncClockFIFO depth must be power-of-two, got $depth")
   require(depth >= 4, s"AsyncClockFIFO depth must be at least 4, got $depth")
+  require(bankWidth >= 0, s"AsyncClockFIFO bankWidth must be non-negative, got $bankWidth")
 
   val io = IO(new Bundle {
     val enqClock = Input(Clock())
@@ -40,9 +41,48 @@ class AsyncClockFIFO[T <: Data](gen: T, depth: Int) extends Module {
 
   private val idxWidth = log2Ceil(depth)
   private val ptrWidth = idxWidth + 1
-  private val mem = Mem(depth, gen)
+  private val dataWidth = io.enq.bits.asUInt.getWidth
+  private val useBankedMem = bankWidth > 0 && bankWidth < dataWidth
+  private val numBanks = if (useBankedMem) (dataWidth + bankWidth - 1) / bankWidth else 0
+  private val bankedWidth = if (useBankedMem) numBanks * bankWidth else 0
+  private val bankPadWidth = if (useBankedMem) bankedWidth - dataWidth else 0
+  private val mem = if (useBankedMem) None else Some(Mem(depth, gen))
+  private val memBanks =
+    if (useBankedMem) Some(Seq.fill(numBanks)(Mem(depth, UInt(bankWidth.W)))) else None
 
   private def binToGray(x: UInt): UInt = (x >> 1) ^ x
+
+  private def readMem(addr: UInt): T = {
+    val out = Wire(chiselTypeOf(io.deq.bits))
+    if (useBankedMem) {
+      val bankOut = Wire(Vec(numBanks, UInt(bankWidth.W)))
+      memBanks.get.zipWithIndex.foreach { case (bank, i) =>
+        bankOut(i) := bank.read(addr)
+      }
+      out := bankOut.asUInt(dataWidth - 1, 0).asTypeOf(out)
+    } else {
+      out := mem.get.read(addr)
+    }
+    out
+  }
+
+  private def writeMem(addr: UInt, data: T): Unit = {
+    if (useBankedMem) {
+      val dataUInt = data.asUInt
+      val writePayload =
+        if (bankPadWidth > 0) {
+          Cat(0.U(bankPadWidth.W), dataUInt)
+        } else {
+          dataUInt
+        }
+      val writeBanks = writePayload.asTypeOf(Vec(numBanks, UInt(bankWidth.W)))
+      memBanks.get.zipWithIndex.foreach { case (bank, i) =>
+        bank.write(addr, writeBanks(i))
+      }
+    } else {
+      mem.get.write(addr, data)
+    }
+  }
 
   private val rdPtrBin = RegInit(0.U(ptrWidth.W))
   private val rdPtrGray = RegInit(0.U(ptrWidth.W))
@@ -57,7 +97,7 @@ class AsyncClockFIFO[T <: Data](gen: T, depth: Int) extends Module {
   private val empty = wrPtrGraySync === rdPtrGray
 
   io.deq.valid := !empty
-  io.deq.bits := mem(rdPtrBin(idxWidth - 1, 0))
+  io.deq.bits := readMem(rdPtrBin(idxWidth - 1, 0))
   when(io.deq.fire) {
     val next = rdPtrBin + 1.U
     rdPtrBin := next
@@ -75,7 +115,7 @@ class AsyncClockFIFO[T <: Data](gen: T, depth: Int) extends Module {
 
     io.enq.ready := !full
     when(io.enq.fire) {
-      mem.write(wrPtrBin(idxWidth - 1, 0), io.enq.bits)
+      writeMem(wrPtrBin(idxWidth - 1, 0), io.enq.bits)
       wrPtrBin := wrPtrBinNext
       wrPtrGray := wrPtrGrayNext
     }
