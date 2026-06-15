@@ -90,11 +90,11 @@ object AXI4Bundle {
   }
 
   private case class AXI4RecordView(axi: Record) {
-    val aw: ReadyValidIO[Data] = channel("aw")
-    val w: ReadyValidIO[Data] = channel("w")
-    val b: ReadyValidIO[Data] = channel("b")
-    val ar: ReadyValidIO[Data] = channel("ar")
-    val r: ReadyValidIO[Data] = channel("r")
+    val aw: AXI4ChannelView = channel("aw")
+    val w: AXI4ChannelView = channel("w")
+    val b: AXI4ChannelView = channel("b")
+    val ar: AXI4ChannelView = channel("ar")
+    val r: AXI4ChannelView = channel("r")
 
     def difftestType: AXI4Bundle =
       new AXI4Bundle(
@@ -112,16 +112,58 @@ object AXI4Bundle {
       connectChannel(src.r, r)
     }
 
-    private def channel(name: String): ReadyValidIO[Data] =
-      axi.elements(name).asInstanceOf[ReadyValidIO[Data]]
+    private def channel(name: String): AXI4ChannelView =
+      axi.elements.get(name) match {
+        case Some(channel: ReadyValidIO[_]) =>
+          AXI4NestedChannelView(channel.asInstanceOf[ReadyValidIO[Data]])
+        case Some(_) =>
+          throw new IllegalArgumentException(s"AXI channel $name is not ReadyValidIO")
+        case _ =>
+          AXI4FlatChannelView(axi, name)
+      }
   }
 
-  private def fieldWidth(channel: ReadyValidIO[Data], fieldName: String): Int =
-    channel.bits.asInstanceOf[Record].elements.get(fieldName).map(_.getWidth.max(1)).getOrElse(1)
+  private trait AXI4ChannelView {
+    def valid: Bool
+    def ready: Bool
+    def bits: SeqMap[String, Data]
+  }
 
-  private def connectChannel(dst: ReadyValidIO[Data], src: ReadyValidIO[Data]): Unit = {
+  private case class AXI4NestedChannelView(channel: ReadyValidIO[Data]) extends AXI4ChannelView {
+    def valid: Bool = channel.valid
+    def ready: Bool = channel.ready
+    def bits: SeqMap[String, Data] = channel.bits.asInstanceOf[Record].elements
+  }
+
+  private case class AXI4FlatChannelView(record: Record, name: String) extends AXI4ChannelView {
+    def valid: Bool = boolField("valid")
+    def ready: Bool = boolField("ready")
+    def bits: SeqMap[String, Data] =
+      SeqMap.from(record.elements.toSeq.flatMap { case (fieldName, field) =>
+        val bitName = fieldName.drop(name.length)
+        Option.when(fieldName.startsWith(name) && bitName != "valid" && bitName != "ready")(bitName -> field)
+      })
+
+    private def boolField(suffix: String): Bool =
+      record.elements
+        .getOrElse(
+          s"$name$suffix",
+          throw new IllegalArgumentException(s"AXI flat record is missing field $name$suffix"),
+        )
+        .asInstanceOf[Bool]
+  }
+
+  private def fieldWidth(channel: AXI4ChannelView, fieldName: String): Int =
+    channel.bits.get(fieldName).map(_.getWidth.max(1)).getOrElse(1)
+
+  private def connectChannel(dst: AXI4ChannelView, src: AXI4ChannelView): Unit = {
     dst.valid := src.valid
-    connectFields(dst.bits, src.bits)
+    dst.bits.foreach { case (name, dstField) =>
+      src.bits.get(name) match {
+        case Some(srcField) => connectFields(dstField, srcField)
+        case None           => dstField := 0.U.asTypeOf(dstField)
+      }
+    }
     src.ready := dst.ready
   }
 }
