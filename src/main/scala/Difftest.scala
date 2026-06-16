@@ -81,6 +81,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   protected val needFlatten: Boolean = false
   def isFlatten: Boolean = hasAddress && this.needFlatten
 
+  def fpgaFilterElems: Seq[String] = Seq.empty
+
   // Convert elements into flatten UInt/Vec[UInt]
   private def seqUIntHelper(in: Seq[(String, Data)]): Seq[(String, Seq[UInt])] = {
     in.flatMap { case (s, data) =>
@@ -241,6 +243,8 @@ class DiffArchEvent extends ArchEvent with DifftestBundle {
 
 class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "commit"
+  override def fpgaFilterElems: Seq[String] =
+    Seq("robIdx", "lqIdx", "sqIdx", "isLoad", "isStore", "nFused", "special")
 
   private val maxNumFused = 255
   override def supportsSquash(base: DifftestBundle): Bool = {
@@ -276,6 +280,7 @@ private[difftest] class DiffVecCommitData extends VecCommitData with DifftestBun
 
 class DiffTrapEvent extends TrapEvent with DifftestBundle {
   override val desiredCppName: String = "trap"
+  override def fpgaFilterElems: Seq[String] = Seq("code")
   override def supportsSquashBase: Bool = !hasTrap && !hasWFI
 }
 
