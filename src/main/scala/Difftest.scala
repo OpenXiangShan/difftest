@@ -260,7 +260,7 @@ class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with Dif
   override def classArgs: Map[String, Any] = Map("nPhyRegs" -> nPhyRegs)
 }
 
-private[difftest] class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
+class DiffCommitData extends CommitData with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "commit_data"
   override def supportsSquashBase: Bool = true.B
 }
@@ -304,7 +304,7 @@ class DiffTriggerCSRState extends TriggerCSRState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
-private[difftest] class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
+class DiffArchIntRegState extends ArchIntRegState with DifftestBundle {
   override val desiredCppName: String = "xrf"
   override val desiredRegOffset: Option[Int] = Some(0)
   override val updateDependency: Seq[String] = Seq("commit", "event")

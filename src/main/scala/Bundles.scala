@@ -93,7 +93,7 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
 }
 
 // Instantiate inside DiffTest, work for get_commit_data specially
-private[difftest] class CommitData extends DifftestBaseBundle with HasValid {
+class CommitData extends DifftestBaseBundle with HasValid {
   val data = UInt(64.W)
 }
 
