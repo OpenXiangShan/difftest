@@ -33,7 +33,9 @@ object Preprocess {
   }
 
   def getArchRegs(bundles: Seq[DifftestBundle], isHardware: Boolean): Seq[ArchRegState with DifftestBundle] = {
+    val hasDirectXrf = bundles.exists(_.desiredCppName == "xrf")
     bundles.collect { case p: DiffPhyRegState => p }
+      .filterNot(p => hasDirectXrf && p.archTarget.desiredCppName == "xrf")
       .groupBy(_.desiredCppName)
       .flatMap { case (name, pregs) =>
         val archTarget = pregs.head.archTarget
@@ -74,12 +76,14 @@ object Preprocess {
     val archRegs = getArchRegs(bundles, true)
 
     val commits = getBundle[DiffInstrCommit]("commit")
+    val directCommitData = getBundle[DiffCommitData]("commit_data")
+    require(directCommitData.isEmpty || directCommitData.length == commits.length)
     val phyInts = getBundle[DiffPhyIntRegState]("pregs_xrf")
     val phyFps = getBundle[DiffPhyFpRegState]("pregs_frf")
     val phyVecs = getBundle[DiffPhyVecRegState]("pregs_vrf")
     val commitDatas = commits.zipWithIndex.flatMap { case (c, idx) =>
       val coreID = idx / (commits.length / numCores)
-      val intData = phyInts(coreID).value(c.wpdest)
+      val intData = if (directCommitData.nonEmpty) directCommitData(idx).data else phyInts(coreID).value(c.wpdest)
       val fpData = if (phyFps.nonEmpty) phyFps(coreID).value(c.wpdest) else 0.U
       val cd = Wire(new DiffCommitData)
       cd.coreid := c.coreid
@@ -100,7 +104,8 @@ object Preprocess {
       Seq(cd) ++ vcd.toSeq
     }
 
-    bundles.filterNot(b => Seq("pregs_", "rat_").exists(s => b.desiredCppName.contains(s))) ++ archRegs ++ commitDatas
+    bundles.filterNot(b => Seq("pregs_", "rat_").exists(s => b.desiredCppName.contains(s)) || b.desiredCppName == "commit_data") ++
+      archRegs ++ commitDatas
   }
 }
 

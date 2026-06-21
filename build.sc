@@ -51,5 +51,7 @@ trait Difftest extends CommonDiffTest { outer =>
 
   override def millSourcePath = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
 
-  object test extends SbtTests with TestModule.ScalaTest
+  object test extends SbtTests with TestModule.ScalaTest {
+    override def ivyDeps = super.ivyDeps() ++ Agg(ivy"org.scalatest::scalatest:3.2.19")
+  }
 }
