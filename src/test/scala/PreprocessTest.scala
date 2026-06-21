@@ -116,6 +116,28 @@ private class DirectIntPreprocessProbe(includeDirectXrf: Boolean, includeDirectC
 class PreprocessTest extends AnyFlatSpec with Matchers with ChiselSim {
   behavior of "Difftest Preprocess"
 
+  private def checkDirectIntReusePattern(): Unit = {
+    simulate(new DirectIntPreprocessProbe(includeDirectXrf = true, includeDirectCommitData = true)) { dut =>
+      val valueFromA = BigInt("a001", 16)
+      val valueFromC = BigInt("c003", 16)
+      val fpValue = BigInt("f00d", 16)
+
+      dut.io.directX1.poke(valueFromA.U)
+      dut.io.physX1.poke(valueFromC.U)
+      dut.io.directCommitData.poke(valueFromA.U)
+      dut.io.physCommitData.poke(valueFromC.U)
+      dut.io.fpCommitData.poke(fpValue.U)
+
+      dut.io.outX1.expect(valueFromA.U)
+      dut.io.outCommit0Data.expect(valueFromA.U)
+      dut.io.outCommit1Data.expect(fpValue.U)
+      dut.io.outXrfCount.expect(1.U)
+      dut.io.outCommitDataCount.expect(2.U)
+      dut.io.outHasPregsXrf.expect(false.B)
+      dut.io.outHasRatXrf.expect(false.B)
+    }
+  }
+
   it should "prefer direct integer xrf over physical integer synthesis" in {
     simulate(new DirectIntPreprocessProbe(includeDirectXrf = true, includeDirectCommitData = false)) { dut =>
       dut.io.directX1.poke("h1111".U)
@@ -186,5 +208,9 @@ class PreprocessTest extends AnyFlatSpec with Matchers with ChiselSim {
       dut.io.outHasPregsXrf.expect(false.B)
       dut.io.outHasRatXrf.expect(false.B)
     }
+  }
+
+  it should "keep direct integer data ahead of recycled physical values in an A B C reuse pattern" in {
+    checkDirectIntReusePattern()
   }
 }
