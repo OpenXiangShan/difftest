@@ -61,7 +61,7 @@ extern uint64_t FIRST_INST_ADDRESS;
 #if defined(CPU_ROCKET_CHIP)
 #define DEFAULT_EMU_FLASH_SIZE 0x10000UL
 #else
-#define DEFAULT_EMU_FLASH_SIZE (32 * 1024UL) // 4 MB
+#define DEFAULT_EMU_FLASH_SIZE 0x100000UL // 1 MB
 #endif
 extern unsigned long EMU_FLASH_SIZE;
 
