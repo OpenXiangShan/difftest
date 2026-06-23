@@ -17,6 +17,7 @@ package difftest
 
 import chisel3._
 import chisel3.simulator.scalatest.ChiselSim
+import difftest.gateway.Gateway
 import difftest.preprocess.Preprocess
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -208,6 +209,20 @@ class PreprocessTest extends AnyFlatSpec with Matchers with ChiselSim {
       dut.io.outHasPregsXrf.expect(false.B)
       dut.io.outHasRatXrf.expect(false.B)
     }
+  }
+
+  it should "keep FP and vector architecture states when direct integer xrf is present" in {
+    val event = new DiffArchEvent
+    val directXrf = new DiffArchIntRegState
+    val pregsXrf = new DiffPhyIntRegState(64)
+    val pregsFrf = new DiffPhyFpRegState(64)
+    val pregsVrf = new DiffPhyVecRegState(128)
+
+    val names = Gateway.getInstance(Seq(event, directXrf, pregsXrf, pregsFrf, pregsVrf)).map(_.desiredCppName)
+
+    names should contain("xrf")
+    names should contain("frf")
+    names should contain("vrf")
   }
 
   it should "keep direct integer data ahead of recycled physical values in an A B C reuse pattern" in {
