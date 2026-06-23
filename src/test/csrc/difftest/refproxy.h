@@ -158,7 +158,8 @@ public:
   f(ref_sync_custom_mflushpwr, difftest_sync_custom_mflushpwr, void, bool)                                  \
   f(ref_get_vec_load_vdNum, difftest_get_vec_load_vdNum, int, )                                             \
   f(ref_get_vec_load_dual_goldenmem_reg, difftest_get_vec_load_dual_goldenmem_reg, void*, )                 \
-  f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )
+  f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )                                   \
+  f(ref_trigger_checkpoint, difftest_trigger_checkpoint, void, const char *)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -393,6 +394,11 @@ public:
 
   inline int get_status() {
     return ref_status ? ref_status() : 0;
+  }
+
+  inline void trigger_checkpoint(const char *base_filepath) {
+    assert(ref_trigger_checkpoint);
+    ref_trigger_checkpoint(base_filepath);
   }
 
 private:
