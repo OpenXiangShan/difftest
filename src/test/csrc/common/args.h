@@ -71,6 +71,7 @@ struct CommonArgs {
   bool dump_coverage = false;
   bool image_as_footprints = false;
   bool overwrite_nbytes_autoset = false;
+  bool auto_checkpoint = false;
 };
 
 CommonArgs parse_args(int argc, const char *argv[]);

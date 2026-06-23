@@ -47,6 +47,10 @@ private:
   inline void single_cycle();
   void trigger_stat_dump();
   void display_stats();
+#ifndef CONFIG_NO_DIFFTEST
+  void dump_checkpoint_from_ref();
+  void trigger_auto_checkpoint();
+#endif
 
   inline const char *logdb_filename() {
     return create_noop_filename(".db");
