@@ -26,27 +26,43 @@
 #include <type_traits>
 
 template <int total_bits>
+struct BitsStorageType {
+  typedef typename std::conditional<
+      (total_bits <= 8),
+      uint8_t,
+      typename std::conditional<(total_bits <= 16), uint16_t, uint32_t>::type>::type Type;
+};
+
+template <int total_bits>
 static uint32_t read_bits(const uint8_t *data, size_t index0, size_t index1, size_t row_bytes) {
+  typedef typename BitsStorageType<total_bits>::Type StorageType;
   const uint8_t *row_ptr = data + index0 * row_bytes;
-  if constexpr (total_bits <= 8) {
-    return row_ptr[index1];
-  } else if constexpr (total_bits <= 16) {
-    return reinterpret_cast<const uint16_t *>(row_ptr)[index1];
-  } else {
-    return reinterpret_cast<const uint32_t *>(row_ptr)[index1];
-  }
+  return static_cast<uint32_t>(reinterpret_cast<const StorageType *>(row_ptr)[index1]);
 }
 
 template <int total_bits>
 static void write_bits(uint8_t *data, size_t index0, size_t index1, size_t row_bytes, uint32_t value) {
+  typedef typename BitsStorageType<total_bits>::Type StorageType;
   uint8_t *row_ptr = data + index0 * row_bytes;
-  if constexpr (total_bits <= 8) {
-    row_ptr[index1] = static_cast<uint8_t>(value);
-  } else if constexpr (total_bits <= 16) {
-    reinterpret_cast<uint16_t *>(row_ptr)[index1] = static_cast<uint16_t>(value);
-  } else {
-    reinterpret_cast<uint32_t *>(row_ptr)[index1] = value;
-  }
+  reinterpret_cast<StorageType *>(row_ptr)[index1] = static_cast<StorageType>(value);
+}
+
+template <class src1_t, class src2_t>
+struct MmaAccumTypes {
+  static const bool both_unsigned = !std::is_signed<src1_t>::value && !std::is_signed<src2_t>::value;
+  typedef typename std::conditional<both_unsigned, uint32_t, int32_t>::type ResultType;
+  typedef typename std::conditional<both_unsigned, uint64_t, int64_t>::type ComputeType;
+};
+
+template <typename compute_t>
+static compute_t saturate_accum(compute_t value, std::true_type) {
+  return value > UINT32_MAX ? UINT32_MAX : value;
+}
+
+template <typename compute_t>
+static compute_t saturate_accum(compute_t value, std::false_type) {
+  value = value > INT32_MAX ? INT32_MAX : value;
+  return value < INT32_MIN ? INT32_MIN : value;
 }
 
 template <int exp_bits, int mantissa_bits>
@@ -238,9 +254,9 @@ bool CpuMmaBackend::mmacc_template(MmaVerificationBuffer *buffer) {
   int tile_k = buffer->amu_event.mtilek;
   int tile_n = buffer->amu_event.mtilen;
 
-  constexpr bool both_unsigned = !std::is_signed_v<src1_t> && !std::is_signed_v<src2_t>;
-  using result_type = std::conditional_t<both_unsigned, uint32_t, int32_t>;
-  using compute_type = std::conditional_t<both_unsigned, uint64_t, int64_t>;
+  typedef MmaAccumTypes<src1_t, src2_t> AccumTypes;
+  typedef typename AccumTypes::ResultType result_type;
+  typedef typename AccumTypes::ComputeType compute_type;
 
   for (int i = 0; i < tile_m; i++) {
     for (int j = 0; j < tile_n; j++) {
@@ -251,12 +267,7 @@ bool CpuMmaBackend::mmacc_template(MmaVerificationBuffer *buffer) {
         src_3 += src_1 * src_2;
 
         if (buffer->amu_event.sat) {
-          if constexpr (both_unsigned) {
-            src_3 = src_3 > UINT32_MAX ? UINT32_MAX : src_3;
-          } else {
-            src_3 = src_3 > INT32_MAX ? INT32_MAX : src_3;
-            src_3 = src_3 < INT32_MIN ? INT32_MIN : src_3;
-          }
+          src_3 = saturate_accum(src_3, std::integral_constant<bool, AccumTypes::both_unsigned>());
         }
       }
       ((result_type *)(buffer->src3))[(i * tile_n + j)] = static_cast<result_type>(src_3);
