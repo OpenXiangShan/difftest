@@ -441,6 +441,7 @@ class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends Dif
   val bankValid = Vec(nBanks, Bool())
   val bankAddr  = Vec(nBanks, UInt(8.W))
   val data      = Vec(nBanks * wordsPerBank, UInt(64.W))
+  val bankMask  = Vec(nBanks, UInt((wordsPerBank * 8).W))
   val finish    = Bool()
 }
 

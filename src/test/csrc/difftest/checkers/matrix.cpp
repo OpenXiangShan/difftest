@@ -259,13 +259,20 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
       for (int j = 0; j < CONFIG_DIFF_AMU_FINISH_BANKS; ++j) {  // for each bank
         if (probe.bankValid[j]) {
           const size_t addr = probe.bankAddr[j];
-          for (size_t k = 0; k < matrix_words_per_bank; ++k) {
-            const size_t group =
-                addr / stride * stride * CONFIG_DIFF_AMU_FINISH_BANKS + j * stride + addr % stride;
-            const size_t idx = group * matrix_words_per_bank + k;
-            assert(idx < matrix_u64_size);
-            
-            entry.res[idx] = probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK + static_cast<int>(k)];
+          const size_t matrix_entry =
+              addr / stride * stride * CONFIG_DIFF_AMU_FINISH_BANKS + j * stride + addr % stride;
+          const size_t idx = matrix_entry * matrix_words_per_bank;
+          assert(idx + matrix_words_per_bank <= matrix_u64_size);
+
+          uint8_t *dst = reinterpret_cast<uint8_t *>(&entry.res[idx]);
+          const uint8_t *src = reinterpret_cast<const uint8_t *>(
+              &probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK]);
+          const uint64_t mask = probe.bankMask[j];
+          const size_t bank_bytes = matrix_words_per_bank * sizeof(uint64_t);
+          for (size_t k = 0; k < bank_bytes; ++k) {
+            if ((mask >> k) & 0x1U) {
+              dst[k] = src[k];
+            }
           }
         }
       }
