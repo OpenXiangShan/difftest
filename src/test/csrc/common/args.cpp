@@ -266,7 +266,6 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         continue;
       case OPT_DB_PATH:
 #ifdef ENABLE_CHISEL_DB
-        args.dump_db = true;
         args.db_path = optarg;
 #else
         printf("[WARN] chisel db is not enabled at compile time, ignore --db-path\n");
