@@ -25,6 +25,7 @@
 
 enum {
   OPT_SPLITVIEW_LOG = 1000,
+  OPT_DB_PATH,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -68,6 +69,7 @@ static inline void print_help(const char *file) {
   printf("      --dump-commit-trace    dump commit trace when log is enabled\n");
 #ifdef ENABLE_CHISEL_DB
   printf("      --dump-db              enable database dump\n");
+  printf("      --db-path=FILE         dump database to FILE\n");
   printf("      --dump-select-db       select database's table to dump\n");
 #endif
   printf("  -F, --flash                the flash bin file for simulation\n");
@@ -142,6 +144,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "cst-file",          1, NULL,  0  },
     { "random-mem",        0, NULL,  0  },
     { "splitview-log",     1, NULL, OPT_SPLITVIEW_LOG },
+    { "db-path",           1, NULL, OPT_DB_PATH },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -260,6 +263,14 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_SPLITVIEW_LOG:
         args.splitview_log_path = optarg;
         common_splitview_set_log_path(args.splitview_log_path);
+        continue;
+      case OPT_DB_PATH:
+#ifdef ENABLE_CHISEL_DB
+        args.dump_db = true;
+        args.db_path = optarg;
+#else
+        printf("[WARN] chisel db is not enabled at compile time, ignore --db-path\n");
+#endif
         continue;
       case 's':
         if (std::string(optarg) != "NO_SEED") {

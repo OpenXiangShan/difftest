@@ -272,7 +272,7 @@ Emulator::~Emulator() {
 
 #ifdef ENABLE_CHISEL_DB
   if (args.dump_db) {
-    save_db(logdb_filename());
+    save_db(args.db_path ? args.db_path : logdb_filename());
   }
 #endif
 
