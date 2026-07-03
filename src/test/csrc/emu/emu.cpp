@@ -272,7 +272,7 @@ Emulator::~Emulator() {
 
 #ifdef ENABLE_CHISEL_DB
   if (args.dump_db) {
-    save_db(logdb_filename());
+    save_db(db_filename());
   }
 #endif
 
@@ -578,7 +578,7 @@ int Emulator::tick() {
 #ifdef DEBUG_TILELINK
   if (args.dump_tl_interval != 0) {
     if ((cycles != 0) && (cycles % args.dump_tl_interval == 0)) {
-      checkpoint_db(logdb_filename());
+      checkpoint_db(db_filename());
     }
   }
 #endif

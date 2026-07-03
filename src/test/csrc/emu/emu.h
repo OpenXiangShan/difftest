@@ -52,6 +52,10 @@ private:
     return create_noop_filename(".db");
   }
 
+  inline const char *db_filename() {
+    return args.db_path ? args.db_path : logdb_filename();
+  }
+
   void snapshot_save();
   void snapshot_load(const char *filename);
 
