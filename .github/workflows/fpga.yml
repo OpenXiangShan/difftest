@@ -12,7 +12,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Prepare NutShell
         run: |
