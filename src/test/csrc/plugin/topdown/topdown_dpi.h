@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2026 Beijing Institute of Open Source Chip
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -14,26 +14,26 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __TOPDOWN_IQ_INFO_H__
-#define __TOPDOWN_IQ_INFO_H__
+#ifndef __TOPDOWN_DPI_H__
+#define __TOPDOWN_DPI_H__
 
-#include "common.h"
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 
-struct TopdownIQInfoFrame {
-  bool valid;
-  uint16_t robIdx;
-  bool robFlag;
-  uint8_t pipeNum;
-  uint8_t cancelSource;
-  bool srcReady;
-  uint8_t futype;
-  bool issued;
-};
+#if defined(__has_include)
+#if __has_include("svdpi.h")
+#include "svdpi.h"
+#else
+typedef uint32_t svBitVecVal;
+#endif
+#else
+#include "svdpi.h"
+#endif
 
-struct TopdownExtendedIQInfoFrame {
-  bool idealIssueTime;
-};
+static inline void topdown_zero_bytes(svBitVecVal *data, size_t bytes) {
+  const size_t words = (bytes + sizeof(svBitVecVal) - 1) / sizeof(svBitVecVal);
+  std::memset(data, 0, words * sizeof(svBitVecVal));
+}
 
-void topdown_iq_info_apply(int entries_num, const TopdownIQInfoFrame *in, TopdownExtendedIQInfoFrame *out);
-
-#endif // __TOPDOWN_IQ_INFO_H__
+#endif // __TOPDOWN_DPI_H__

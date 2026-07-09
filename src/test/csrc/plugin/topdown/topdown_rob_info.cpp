@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2026 Beijing Institute of Open Source Chip
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -14,10 +14,22 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "topdown_rob_info.h"
+#include "topdown_dpi.h"
 
-void topdown_rob_info_apply(int iq_entries_num, int rob_entries_num, const TopdownRobInfoFrame *in,
-                            TopdownRobInfoFrame *out) {
+namespace {
+
+struct __attribute__((packed)) TopdownRobInfoFrame {
+  uint8_t valid;
+  uint16_t robIdx;
+  uint8_t robFlag;
+  uint8_t cancelSource;
+  uint8_t issued;
+  uint8_t idealIssueTime;
+};
+static_assert(sizeof(TopdownRobInfoFrame) == 7);
+
+static void topdown_rob_info_apply(int iq_entries_num, int rob_entries_num, const TopdownRobInfoFrame *in,
+                                   TopdownRobInfoFrame *out) {
   for (int i = 0; i < rob_entries_num; i++) {
     out[i].valid = 0;
     out[i].robIdx = i;
@@ -40,4 +52,15 @@ void topdown_rob_info_apply(int iq_entries_num, int rob_entries_num, const Topdo
     entry.issued = in[i].issued;
     entry.idealIssueTime = in[i].idealIssueTime;
   }
+}
+
+} // namespace
+
+extern "C" void topdown_rob_info_dpic(unsigned int iq_entries_num, unsigned int rob_entries_num,
+                                      const svBitVecVal *in_bits, svBitVecVal *out_bits) {
+  const auto *in = reinterpret_cast<const TopdownRobInfoFrame *>(in_bits);
+  auto *out = reinterpret_cast<TopdownRobInfoFrame *>(out_bits);
+
+  topdown_zero_bytes(out_bits, rob_entries_num * sizeof(TopdownRobInfoFrame));
+  topdown_rob_info_apply(iq_entries_num, rob_entries_num, in, out);
 }
