@@ -27,6 +27,8 @@ struct SimulatorRuntimeStats {
   uint64_t totalRoundCount = 0;
   uint64_t computeBatchExecCount = 0;
   uint64_t commitBatchExecCount = 0;
+  uint64_t computePhaseTimeUs = 0;
+  uint64_t commitPhaseTimeUs = 0;
   uint64_t touchedStateShadowCount = 0;
   uint64_t touchedWriteCount = 0;
 };

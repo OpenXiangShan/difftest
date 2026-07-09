@@ -350,10 +350,12 @@ Emulator::~Emulator() {
     Info("[EMU_PHASE_TIMING] model_step_count=%" PRIu64 " eval_count=%" PRIu64
          " round1_count=%" PRIu64 " round2_count=%" PRIu64 " total_round_count=%" PRIu64
          " compute_batch_exec_count=%" PRIu64 " commit_batch_exec_count=%" PRIu64
+         " compute_phase_us=%" PRIu64 " commit_phase_us=%" PRIu64
          " touched_state_shadow_count=%" PRIu64 " touched_write_count=%" PRIu64 "\n",
          runtime_stats.modelStepCount, runtime_stats.evalCount, runtime_stats.round1Count,
          runtime_stats.round2Count, runtime_stats.totalRoundCount, runtime_stats.computeBatchExecCount,
-         runtime_stats.commitBatchExecCount, runtime_stats.touchedStateShadowCount,
+         runtime_stats.commitBatchExecCount, runtime_stats.computePhaseTimeUs, runtime_stats.commitPhaseTimeUs,
+         runtime_stats.touchedStateShadowCount,
          runtime_stats.touchedWriteCount);
   }
   if (runtime_profile_enabled) {

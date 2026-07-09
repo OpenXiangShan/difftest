@@ -100,6 +100,8 @@ SimulatorRuntimeStats GrhSIMDiffTestSim::runtime_stats() const {
   stats.totalRoundCount = counters.totalRoundCount;
   stats.computeBatchExecCount = counters.computeBatchExecCount;
   stats.commitBatchExecCount = counters.commitBatchExecCount;
+  stats.computePhaseTimeUs = counters.computePhaseTimeUs;
+  stats.commitPhaseTimeUs = counters.commitPhaseTimeUs;
   stats.touchedStateShadowCount = counters.touchedStateShadowCount;
   stats.touchedWriteCount = counters.touchedWriteCount;
 #endif
