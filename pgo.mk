@@ -44,14 +44,14 @@ ifneq ($(PGO_BOLT),1)
 	@stat $(PGO_WORKLOAD) > /dev/null
 	@$(MAKE) $(PGO_CLEAN_OBJ)
 	@mkdir -p $(PGO_DIR)
-	@sync -d $(BUILD_DIR) -d $(PGO_EMU_DIR)
+	@sync -d $(BUILD_DIR) $(PGO_EMU_DIR)
 	@$(MAKE) $(PGO_BUILD_TARGET) \
 					   PGO_CFLAGS="-fprofile-generate=$(PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-generate=$(PGO_DIR)"
 	@echo "Training emu with PGO Workload..."
-	@sync -d $(BUILD_DIR) -d $(PGO_EMU_DIR)
+	@sync -d $(BUILD_DIR) $(PGO_EMU_DIR)
 	$(PGO_TARGET) $(PGO_RUN_OPT)
-	@sync -d $(BUILD_DIR) -d $(PGO_EMU_DIR)
+	@sync -d $(BUILD_DIR) $(PGO_EMU_DIR)
 ifdef LLVM_PROFDATA
 # When using LLVM's profile-guided optimization, the raw data can not
 # directly be used in -fprofile-use. We need to use a specific version of
@@ -75,7 +75,7 @@ else # ifdef LLVM_PROFDATA
 endif # ifdef LLVM_PROFDATA
 	@echo "Building emu with PGO profile..."
 	@$(MAKE) $(PGO_CLEAN_OBJ)
-	@sync -d $(BUILD_DIR) -d $(PGO_EMU_DIR)
+	@sync -d $(BUILD_DIR) $(PGO_EMU_DIR)
 	@$(MAKE) $(PGO_BUILD_TARGET) \
 					   PGO_CFLAGS="-fprofile-use=$(PGO_DIR)" \
 					   PGO_LDFLAGS="-fprofile-use=$(PGO_DIR)"
@@ -83,10 +83,10 @@ else # ifneq ($(PGO_BOLT),1)
 	@echo "Building emu..."
 	@$(MAKE) $(PGO_BUILD_TARGET) PGO_LDFLAGS="-Wl,--emit-relocs -fuse-ld=bfd"
 	@mv $(PGO_TARGET) $(PGO_TARGET).pre-bolt
-	@sync -d $(BUILD_DIR) -d $(PGO_EMU_DIR)
+	@sync -d $(BUILD_DIR) $(PGO_EMU_DIR)
 	@echo "Training emu with PGO Workload..."
 	@mkdir -p $(PGO_DIR)
-	@sync -d $(BUILD_DIR) -d $(PGO_EMU_DIR)
+	@sync -d $(BUILD_DIR) $(PGO_EMU_DIR)
 	@((perf record -j any,u -o $(PGO_DIR)/perf.data -- sh -c "\
 		$(PGO_TARGET).pre-bolt $(PGO_RUN_OPT) || true") && \
 		(perf2bolt -p=$(PGO_DIR)/perf.data -o=$(PGO_DIR)/perf.fdata $(PGO_TARGET).pre-bolt || true)) || \
@@ -100,4 +100,4 @@ else # ifneq ($(PGO_BOLT),1)
 		(echo -e "\033[31mBOLT optimization failed, fallback to non-PGO build\033[0m" && \
 		mv $(PGO_TARGET).pre-bolt $(PGO_TARGET))
 endif # ifneq ($(PGO_BOLT),1)
-	@sync -d $(BUILD_DIR) -d $(PGO_EMU_DIR)
+	@sync -d $(BUILD_DIR) $(PGO_EMU_DIR)
