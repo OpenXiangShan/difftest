@@ -19,40 +19,41 @@
 
 #include <cassert>
 
+// Temporary legacy defaults for designs that do not generate AMU geometry.
 #ifndef CONFIG_DIFF_AMU_ARLEN
-#error "Missing CONFIG_DIFF_AMU_ARLEN: should be generated from hardware TLEN."
+#define CONFIG_DIFF_AMU_ARLEN 4096
 #endif
 
 #ifndef CONFIG_DIFF_AMU_TRLEN
-#error "Missing CONFIG_DIFF_AMU_TRLEN: should be generated from hardware TRLEN."
+#define CONFIG_DIFF_AMU_TRLEN 512
 #endif
 
 #ifndef CONFIG_DIFF_AMU_BANK_WIDTH
-#error "Missing CONFIG_DIFF_AMU_BANK_WIDTH: should be generated from AmuFinishEvent layout."
+#define CONFIG_DIFF_AMU_BANK_WIDTH 256
 #endif
 
 #ifndef CONFIG_DIFF_AMU_FINISH_BANKS
-#error "Missing CONFIG_DIFF_AMU_FINISH_BANKS: should be generated from AmuFinishEvent layout."
+#define CONFIG_DIFF_AMU_FINISH_BANKS 8
 #endif
 
 #ifndef CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK
-#error "Missing CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK: should be generated from AmuFinishEvent layout."
+#define CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK 4
 #endif
 
 #ifndef CONFIG_DIFF_AMU_AB_WORDS_PER_BANK
-#error "Missing CONFIG_DIFF_AMU_AB_WORDS_PER_BANK: should be generated from AB matrix-register layout."
+#define CONFIG_DIFF_AMU_AB_WORDS_PER_BANK 4
 #endif
 
 #ifndef CONFIG_DIFF_AMU_C_WORDS_PER_BANK
-#error "Missing CONFIG_DIFF_AMU_C_WORDS_PER_BANK: should be generated from C matrix-register layout."
+#define CONFIG_DIFF_AMU_C_WORDS_PER_BANK 4
 #endif
 
 #ifndef CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES
-#error "Missing CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES: should be generated from AB matrix-register size."
+#define CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES 8192
 #endif
 
 #ifndef CONFIG_DIFF_AMU_C_REG_SIZE_BYTES
-#error "Missing CONFIG_DIFF_AMU_C_REG_SIZE_BYTES: should be generated from C matrix-register size."
+#define CONFIG_DIFF_AMU_C_REG_SIZE_BYTES 65536
 #endif
 
 static_assert(CONFIG_DIFF_AMU_FINISH_BANKS > 0, "CONFIG_DIFF_AMU_FINISH_BANKS should be positive");
