@@ -266,7 +266,7 @@ endif
 ifeq ($(ENABLE_SIMFRONTEND), 1)
 TRACE_CSR_DIR = $(abspath ./src/test/csrc/plugin/simfrontend)
 SIM_CXXFILES += $(shell find $(TRACE_CSR_DIR) -name "*.cpp")
-SIM_CXXFLAGS += -I$(TRACE_CSR_DIR) -DPLUGIN_SIMFRONTEND
+SIM_CXXFLAGS += -I$(TRACE_CSR_DIR) -DPLUGIN_SIMFRONTEND -DCPU_XIANGSHAN
 endif
 
 
