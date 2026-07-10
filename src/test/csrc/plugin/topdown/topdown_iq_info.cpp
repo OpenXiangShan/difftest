@@ -66,3 +66,12 @@ extern "C" void topdown_iq_info_dpic(unsigned int entries_num, const svBitVecVal
     out[i].idealIssueTime = get_ideal_issue_time(i, entries_num, in);
   }
 }
+
+#define DEFINE_TOPDOWN_IQ_INFO_DPIC(ENTRIES_NUM)                                                          \
+  extern "C" void topdown_iq_info_dpic_##ENTRIES_NUM(const svBitVecVal *in_bits, svBitVecVal *out_bits) { \
+    topdown_iq_info_dpic(ENTRIES_NUM, in_bits, out_bits);                                                 \
+  }
+
+DEFINE_TOPDOWN_IQ_INFO_DPIC(64)
+DEFINE_TOPDOWN_IQ_INFO_DPIC(80)
+DEFINE_TOPDOWN_IQ_INFO_DPIC(238)

@@ -64,3 +64,11 @@ extern "C" void topdown_rob_info_dpic(unsigned int iq_entries_num, unsigned int 
   topdown_zero_bytes(out_bits, rob_entries_num * sizeof(TopdownRobInfoFrame));
   topdown_rob_info_apply(iq_entries_num, rob_entries_num, in, out);
 }
+
+#define DEFINE_TOPDOWN_ROB_INFO_DPIC(IQ_ENTRIES_NUM, ROB_ENTRIES_NUM)                                    \
+  extern "C" void topdown_rob_info_dpic_##IQ_ENTRIES_NUM##_##ROB_ENTRIES_NUM(const svBitVecVal *in_bits, \
+                                                                             svBitVecVal *out_bits) {    \
+    topdown_rob_info_dpic(IQ_ENTRIES_NUM, ROB_ENTRIES_NUM, in_bits, out_bits);                           \
+  }
+
+DEFINE_TOPDOWN_ROB_INFO_DPIC(382, 352)

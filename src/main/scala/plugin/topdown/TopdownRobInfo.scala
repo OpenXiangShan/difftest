@@ -43,9 +43,11 @@ class TopdownRobInfoHelper(val IQEntriesNum: Int, val RobEntriesNum: Int)
     val out = Output(UInt((RobEntriesNum * TopdownDPI.robInfoWidth).W))
   })
 
-  override def desiredName: String = "TopdownRobInfoHelper"
+  override def desiredName: String = s"TopdownRobInfoHelper_${IQEntriesNum}_${RobEntriesNum}"
 
-  setInline("TopdownRobInfoHelper.v", TopdownDPI.robHelperVerilog)
+  private val dpiFuncName: String = s"topdown_rob_info_dpic_${IQEntriesNum}_${RobEntriesNum}"
+
+  setInline(s"$desiredName.v", TopdownDPI.robHelperVerilog(desiredName, dpiFuncName))
 }
 
 class TopdownRobInfoCollect(val IQEntriesNum: Int, val RobEntriesNum: Int) extends Module {

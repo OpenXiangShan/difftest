@@ -100,9 +100,9 @@ private[topdown] object TopdownDPI {
     }
   }
 
-  val iqHelperVerilog: String =
+  def iqHelperVerilog(moduleName: String, dpiFuncName: String): String =
     s"""
-       |module TopdownIQInfoHelper #(
+       |module $moduleName #(
        |  parameter integer ENTRY_NUM = 1,
        |  parameter integer INFO_WIDTH = $iqInfoWidth,
        |  parameter integer OUT_WIDTH = $extendedIQInfoWidth
@@ -115,18 +115,18 @@ private[topdown] object TopdownDPI {
        |  wire _unused_clock = clock;
        |
        |`ifndef SYNTHESIS
-       |  import "DPI-C" function void topdown_iq_info_dpic(
-       |    input  int unsigned       entries_num,
+       |  import "DPI-C" function void $dpiFuncName(
        |    input  bit [ENTRY_NUM*INFO_WIDTH-1:0] in,
        |    output bit [ENTRY_NUM*OUT_WIDTH-1:0] out
        |  );
        |`endif // SYNTHESIS
        |
        |  always @(*) begin
+       |    /* verilator lint_off WIDTHCONCAT */
        |    out = '0;
+       |    /* verilator lint_on WIDTHCONCAT */
        |`ifndef SYNTHESIS
-       |    topdown_iq_info_dpic(
-       |      ENTRY_NUM,
+       |    $dpiFuncName(
        |      in,
        |      out
        |    );
@@ -136,9 +136,9 @@ private[topdown] object TopdownDPI {
        |endmodule
        |""".stripMargin
 
-  val robHelperVerilog: String =
+  def robHelperVerilog(moduleName: String, dpiFuncName: String): String =
     s"""
-       |module TopdownRobInfoHelper #(
+       |module $moduleName #(
        |  parameter integer IQ_ENTRY_NUM = 1,
        |  parameter integer ROB_ENTRY_NUM = 1,
        |  parameter integer INFO_WIDTH = $robInfoWidth
@@ -148,20 +148,18 @@ private[topdown] object TopdownDPI {
        |);
        |
        |`ifndef SYNTHESIS
-       |  import "DPI-C" function void topdown_rob_info_dpic(
-       |    input  int unsigned           iq_entries_num,
-       |    input  int unsigned           rob_entries_num,
+       |  import "DPI-C" function void $dpiFuncName(
        |    input  bit [IQ_ENTRY_NUM*INFO_WIDTH-1:0] in,
        |    output bit [ROB_ENTRY_NUM*INFO_WIDTH-1:0] out
        |  );
        |`endif // SYNTHESIS
        |
        |  always @(*) begin
+       |    /* verilator lint_off WIDTHCONCAT */
        |    out = '0;
+       |    /* verilator lint_on WIDTHCONCAT */
        |`ifndef SYNTHESIS
-       |    topdown_rob_info_dpic(
-       |      IQ_ENTRY_NUM,
-       |      ROB_ENTRY_NUM,
+       |    $dpiFuncName(
        |      in,
        |      out
        |    );

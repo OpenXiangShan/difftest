@@ -54,9 +54,11 @@ class TopdownIQInfoHelper(val entriesNum: Int)
     val out = Output(UInt((entriesNum * TopdownDPI.extendedIQInfoWidth).W))
   })
 
-  override def desiredName: String = "TopdownIQInfoHelper"
+  override def desiredName: String = s"TopdownIQInfoHelper_$entriesNum"
 
-  setInline("TopdownIQInfoHelper.v", TopdownDPI.iqHelperVerilog)
+  private val dpiFuncName: String = s"topdown_iq_info_dpic_$entriesNum"
+
+  setInline(s"$desiredName.v", TopdownDPI.iqHelperVerilog(desiredName, dpiFuncName))
 }
 
 class TopdownIQInfoCollect(val entriesNum: Int) extends Module {
