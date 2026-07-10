@@ -59,17 +59,17 @@ static inline size_t calculate_mma_buffer_size(const DifftestAmuCtrlEvent *amu_e
   uint16_t m = amu_event->mtilem;
   uint16_t n = amu_event->mtilen;
   uint16_t k = amu_event->mtilek;
-  
+
   // Calculate size for each matrix:
   // src1: m×k matrix
-  // src2: k×n matrix  
+  // src2: k×n matrix
   // src3: m×n matrix (accumulator)
   // result: m×n matrix
   size_t src1_size = element_size_s1 * m * k;
   size_t src2_size = element_size_s2 * k * n;
   size_t src3_size = element_size_d * m * n;
   size_t result_size = element_size_d * m * n;
-  
+
   // Total buffer size
   return src1_size + src2_size + src3_size + result_size;
 }
@@ -78,18 +78,18 @@ class MmaVerifier {
 public:
   MmaVerifier();
   ~MmaVerifier();
-  
+
   // Thread management methods
   void start();
   void stop();
-  
+
   // Buffer management methods
   MmaVerificationBuffer* allocate_buffer(const DifftestAmuCtrlEvent *amu_event);
   void free_buffer(MmaVerificationBuffer *buffer);
-  
+
   // Add buffer to verification queue
   void add_to_verification_queue(MmaVerificationBuffer *buffer);
-  
+
   // Interface for DiffTest main flow:
   // 1. Returns true if there are MMA instructions that haven't completed verification yet
   bool has_pending_mma_verifications() const;
@@ -97,9 +97,9 @@ public:
   bool has_mma_verification_error() const;
   // 3. Returns the first failed MMA instruction's buffer (nullptr if no error)
   const MmaVerificationBuffer* get_error_buffer() const;
-  
+
 private:
-  
+
   // MMA verification thread state: NotStarted | Running | StoppedNotJoined
   enum class ThreadState : int { NotStarted = 0, Running = 1, StoppedNotJoined = 2 };
   std::thread mma_verification_thread;      // Verification thread
@@ -108,7 +108,7 @@ private:
   std::queue<MmaVerificationBuffer*> mma_verification_queue; // Pending verification queue
   std::mutex mma_queue_mutex;                // Mutex for queue access
   std::condition_variable mma_queue_cv;      // Condition variable for queue
-  
+
   // Count of MMA instructions pending verification (in queue or being processed)
   std::atomic<int> mma_pending_count{0};
   // Set to true when any MMA verification fails
@@ -118,7 +118,7 @@ private:
 
   // MMA verification backend (CPU by default)
   IMmaBackend *backend = nullptr;
-  
+
   // Thread function
   void mma_verification_thread_func();
 };

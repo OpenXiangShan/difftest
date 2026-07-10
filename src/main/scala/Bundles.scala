@@ -401,7 +401,7 @@ class SyncCustomMflushpwrEvent extends DifftestBaseBundle with HasValid {
 //            in the corresponding struct in NEMU.
 class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
   val op  = UInt(2.W)
-  
+
   val rm       = UInt(3.W)
   val md       = UInt(4.W)
   val sat      = Bool()
@@ -425,7 +425,7 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
   def row:       UInt = mtilem
   def column:    UInt = mtilen
   def widths:    UInt = typed
-  
+
   val pc = UInt(64.W)
 
   def msyncRd: UInt = mtilem

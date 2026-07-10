@@ -243,7 +243,7 @@ Difftest::Difftest(int coreid) {
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   mma_verifier = nullptr;
-  
+
   // Initialize AMU finish event buffers
   for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
     amu_finish_buffers[i] = new uint8_t[128 * 128 * 4];
@@ -258,7 +258,7 @@ Difftest::~Difftest() {
   if (mma_verifier) {
     delete mma_verifier;
   }
-  
+
   // Free AMU finish event buffers
   for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
     delete[] amu_finish_buffers[i];

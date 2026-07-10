@@ -78,17 +78,17 @@ MmaVerificationBuffer* MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
   size_t a_sz = element_sz_s1 * m * k;
   size_t b_sz = element_sz_s2 * k * n;
   size_t c_sz = element_sz_d * m * n;
-  
+
   // Allocate memory for the buffer structure and data
   MmaVerificationBuffer *buffer = new MmaVerificationBuffer();
   buffer->amu_event = *amu_event;
-  
+
   // Allocate memory for each source matrix and result
   buffer->src1 = new uint8_t[a_sz];
   buffer->src2 = new uint8_t[b_sz];
   buffer->src3 = new uint8_t[c_sz];
   buffer->dut_result = new uint8_t[c_sz];
-  
+
   return buffer;
 }
 
@@ -126,20 +126,20 @@ const MmaVerificationBuffer* MmaVerifier::get_error_buffer() const {
 void MmaVerifier::mma_verification_thread_func() {
   while (mma_thread_running) {
     MmaVerificationBuffer *buffer = nullptr;
-    
+
     // Check if there are buffers to process
     {
       std::unique_lock<std::mutex> lock(mma_queue_mutex);
-      
+
       // Wait for a buffer to be available or thread to be stopped
       mma_queue_cv.wait(lock, [this] {
         return !mma_thread_running || !mma_verification_queue.empty();
       });
-      
+
       if (!mma_thread_running) {
         break;
       }
-      
+
       if (!mma_verification_queue.empty()) {
         buffer = mma_verification_queue.front();
         mma_verification_queue.pop();
