@@ -68,6 +68,7 @@ SIM_CXXFLAGS += -I$(GEN_CSRC_DIR)
 
 PLUGIN_CSRC_DIR = $(abspath ./src/test/csrc/plugin)
 PLUGIN_INC_DIR  = $(abspath $(PLUGIN_CSRC_DIR)/include)
+SIM_CXXFILES   += $(shell find $(PLUGIN_CSRC_DIR)/topdown -name "*.cpp" 2> /dev/null)
 SIM_CXXFLAGS   += -I$(PLUGIN_INC_DIR)
 
 GEN_VSRC_DIR = $(BUILD_DIR)/generated-src
