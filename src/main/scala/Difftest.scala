@@ -526,9 +526,9 @@ class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWit
 }
 
 class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
-    extends AmuFinishEvent(nBanks, wordsPerBank)
-    with DifftestBundle
-    with DifftestWithIndex {
+  extends AmuFinishEvent(nBanks, wordsPerBank)
+  with DifftestBundle
+  with DifftestWithIndex {
   override val desiredCppName: String = "amu_finish"
 
   override val squashGroup: Seq[String] = Seq("MATRIX")

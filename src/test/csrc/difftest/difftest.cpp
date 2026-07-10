@@ -18,15 +18,15 @@
 #include "common.h"
 #include "difftrace.h"
 #include "dut.h"
-#include <chrono>
-#include <thread>
 #include "flash.h"
 #include "goldenmem.h"
 #include "ram.h"
 #include "spikedasm.h"
 #include "splitview.h"
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <thread>
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
@@ -343,7 +343,8 @@ void Difftest::init_checkers() {
 
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
   for (int i = 0; i < CONFIG_DIFF_MATRIX_STORE_WIDTH; i++) {
-    checkers.push_back(new MatrixStoreChecker([this, i]() -> DifftestMatrixStoreEvent & { return dut->matrix_store[i]; }, state, proxy));
+    checkers.push_back(new MatrixStoreChecker(
+        [this, i]() -> DifftestMatrixStoreEvent & { return dut->matrix_store[i]; }, state, proxy));
   }
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 
@@ -409,21 +410,20 @@ void Difftest::init_checkers() {
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   for (int i = 0; i < CONFIG_DIFF_AMU_CTRL_WIDTH; i++) {
-    checkers.push_back(new AmuCtrlRecorder(
-        [this, i]() -> DifftestAmuCtrlEvent & { return dut->amu_ctrl[i]; }, state, proxy));
+    checkers.push_back(
+        new AmuCtrlRecorder([this, i]() -> DifftestAmuCtrlEvent & { return dut->amu_ctrl[i]; }, state, proxy));
   }
   checkers.push_back(new AmuCtrlChecker(state, proxy));
   for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; i++) {
-    checkers.push_back(new AmuExecRecorder(
-        [this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
+    checkers.push_back(
+        new AmuExecRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
   }
   checkers.push_back(new AmuExecChecker(state, proxy));
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   for (int i = 0; i < CONFIG_DIFF_MSYNC_WIDTH; i++) {
-    checkers.push_back(new MsyncRecorder(
-        [this, i]() -> DifftestMsyncEvent & { return dut->msync[i]; }, state, proxy));
+    checkers.push_back(new MsyncRecorder([this, i]() -> DifftestMsyncEvent & { return dut->msync[i]; }, state, proxy));
   }
 #endif // CONFIG_DIFFTEST_MSYNCEVENT
 
@@ -457,7 +457,7 @@ void Difftest::init_checkers() {
 void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   proxy = new REF_PROXY(coreid, ram_size);
 
-  #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   mma_verifier = new MmaVerifier();
   mma_verifier->start();
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
@@ -519,7 +519,7 @@ void Difftest::do_replay() {
     state->load_event_queue.pop();
 #endif
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  for (auto &entry : state->matrix_sw_rob) {
+  for (auto &entry: state->matrix_sw_rob) {
     if (entry.res != nullptr) {
       delete[] entry.res;
       entry.res = nullptr;
@@ -568,8 +568,7 @@ int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   if (mma_verifier) {
     if (ret) { // find error, wait for mma verification to complete
-      while (mma_verifier->has_pending_mma_verifications() &&
-             !mma_verifier->has_mma_verification_error()) {
+      while (mma_verifier->has_pending_mma_verifications() && !mma_verifier->has_mma_verification_error()) {
         std::this_thread::sleep_for(std::chrono::microseconds(100));
       }
     }

@@ -83,8 +83,7 @@ static inline size_t get_amu_result_size(const DifftestAmuCtrlEvent &amu_event) 
       // MARITH writes a whole matrix register selected by md:
       // md < 4  -> tile register (AB), md >= 4 -> accumulator register (C).
       return (amu_event.md < 4) ? CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES : CONFIG_DIFF_AMU_C_REG_SIZE_BYTES;
-    default:
-      return 0;
+    default: return 0;
   }
 }
 
@@ -141,17 +140,19 @@ int AmuCtrlChecker::do_step() {
         printf("  REF AMU ctrl: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_str[amu_event.op]);
         switch (amu_event.op) {
           case 0: // MMA
-            printf("                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
-                   "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
-                   amu_event.md, amu_event.rm, amu_event.sat, amu_event.ms1, amu_event.ms2, amu_event.isfp,
-                   amu_event.mtilem, amu_event.mtilen, amu_event.mtilek, amu_event.types1, amu_event.types2,
-                   amu_event.typed);
+            printf(
+                "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
+                "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+                amu_event.md, amu_event.rm, amu_event.sat, amu_event.ms1, amu_event.ms2, amu_event.isfp,
+                amu_event.mtilem, amu_event.mtilen, amu_event.mtilek, amu_event.types1, amu_event.types2,
+                amu_event.typed);
             break;
           case 1: // MLS
-            printf("                md %d, ls %d, transpose %d, isacc %d,\n"
-                   "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                   amu_event.md, amu_event.sat, amu_event.isfp, amu_event.types1, amu_event.base, amu_event.stride,
-                   amu_event.mtilem, amu_event.mtilen, amu_event.typed);
+            printf(
+                "                md %d, ls %d, transpose %d, isacc %d,\n"
+                "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
+                amu_event.md, amu_event.sat, amu_event.isfp, amu_event.types1, amu_event.base, amu_event.stride,
+                amu_event.mtilem, amu_event.mtilen, amu_event.typed);
             break;
           case 2: // MRelease
             printf("                msyncRd %d\n", amu_event.mtilem);
@@ -159,21 +160,21 @@ int AmuCtrlChecker::do_step() {
           case 3: // Arith
             printf("                md %d, opType %#lx\n", amu_event.md, amu_event.base);
             break;
-          default:
-            printf("                Unknown amu event op\n");
-            break;
+          default: printf("                Unknown amu event op\n"); break;
         }
         printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
         switch (op) {
           case 0: // MMA
-            printf("                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
-                   "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
-                   md, rm, sat, ms1, ms2, isfp, mtilem, mtilen, mtilek, types1, types2, typed);
+            printf(
+                "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
+                "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+                md, rm, sat, ms1, ms2, isfp, mtilem, mtilen, mtilek, types1, types2, typed);
             break;
           case 1: // MLS
-            printf("                md %d, ls %d, transpose %d, isacc %d,\n"
-                   "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                   md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
+            printf(
+                "                md %d, ls %d, transpose %d, isacc %d,\n"
+                "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
+                md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
             break;
           case 2: // MRelease
             printf("                msyncRd %d\n", mtilem);
@@ -181,9 +182,7 @@ int AmuCtrlChecker::do_step() {
           case 3: // Arith
             printf("                md %d, opType %#lx\n", md, base);
             break;
-          default:
-            printf("                Unknown amu event op\n");
-            break;
+          default: printf("                Unknown amu event op\n"); break;
         }
         return STATE_ERROR;
       } else if (check_res == -1) {
@@ -192,14 +191,16 @@ int AmuCtrlChecker::do_step() {
         printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
         switch (op) {
           case 0: // MMA
-            printf("                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
-                   "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
-                   md, rm, sat, ms1, ms2, isfp, mtilem, mtilen, mtilek, types1, types2, typed);
+            printf(
+                "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
+                "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+                md, rm, sat, ms1, ms2, isfp, mtilem, mtilen, mtilek, types1, types2, typed);
             break;
           case 1: // MLS
-            printf("                md %d, ls %d, transpose %d, isacc %d,\n"
-                   "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                   md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
+            printf(
+                "                md %d, ls %d, transpose %d, isacc %d,\n"
+                "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
+                md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
             break;
           case 2: // MRelease
             printf("                msyncRd %d\n", mtilem);
@@ -207,9 +208,7 @@ int AmuCtrlChecker::do_step() {
           case 3: // Arith
             printf("                md %d, opType %#lx\n", md, base);
             break;
-          default:
-            printf("                Unknown amu event op\n");
-            break;
+          default: printf("                Unknown amu event op\n"); break;
         }
         return STATE_ERROR;
       } else {
@@ -233,7 +232,7 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
   const static size_t ARLen = CONFIG_DIFF_AMU_ARLEN;
   const static size_t TRLen = CONFIG_DIFF_AMU_TRLEN;
   const static size_t bankWidth = CONFIG_DIFF_AMU_BANK_WIDTH;
-  for (auto &entry : state->matrix_sw_rob) {
+  for (auto &entry: state->matrix_sw_rob) {
     if (entry.amu_event.pc == probe.pc && entry.state == DiffState::WAIT_DUT_EXEC) {
       const size_t matrix_size = get_amu_result_size(entry.amu_event);
       size_t matrix_u64_size = (matrix_size + sizeof(uint64_t) - 1) / sizeof(uint64_t);
@@ -252,11 +251,12 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
       } else {
         stride = ARLen / bankWidth;
       }
-      const size_t matrix_words_per_bank = (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
+      const size_t matrix_words_per_bank =
+          (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
       assert(stride > 0);
       assert(matrix_words_per_bank > 0);
 
-      for (int j = 0; j < CONFIG_DIFF_AMU_FINISH_BANKS; ++j) {  // for each bank
+      for (int j = 0; j < CONFIG_DIFF_AMU_FINISH_BANKS; ++j) { // for each bank
         if (probe.bankValid[j]) {
           const size_t addr = probe.bankAddr[j];
           const size_t matrix_entry =
@@ -265,8 +265,8 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
           assert(idx + matrix_words_per_bank <= matrix_u64_size);
 
           uint8_t *dst = reinterpret_cast<uint8_t *>(&entry.res[idx]);
-          const uint8_t *src = reinterpret_cast<const uint8_t *>(
-              &probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK]);
+          const uint8_t *src =
+              reinterpret_cast<const uint8_t *>(&probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK]);
           const uint64_t mask = probe.bankMask[j];
           const size_t bank_bytes = matrix_words_per_bank * sizeof(uint64_t);
           for (size_t k = 0; k < bank_bytes; ++k) {
@@ -314,8 +314,7 @@ int AmuExecChecker::do_step() {
         case 2: // MRelease
         case 3: // Arith
           if (proxy->get_amu_exec(&amu_event, iter->res) == 1) {
-            printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc,
-                   amu_ctrl_op_str[amu_event.op]);
+            printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_str[amu_event.op]);
             if (iter->res != nullptr) {
               delete[] iter->res;
               iter->res = nullptr;
@@ -371,8 +370,8 @@ int MsyncChecker::do_step() {
       // Use global difftest pointer to access the owning Difftest instance for this core
       printf("\n==============  Msync Event (Core %d)  ==============\n", state->coreid);
       printf("Mismatch for Msync event\n");
-      printf("  REF Msync: pc 0x%016lx, op %s, MsyncRd %d\n", msync_event.pc,
-             msync_event_op_str[msync_event.op], msync_event.msyncRd);
+      printf("  REF Msync: pc 0x%016lx, op %s, MsyncRd %d\n", msync_event.pc, msync_event_op_str[msync_event.op],
+             msync_event.msyncRd);
       printf("  DUT Msync: pc 0x%016lx, op %s, MsyncRd %d\n", pc, msync_event_op_str[op], msyncRd);
       state->msync_event_queue.pop();
       return STATE_ERROR;

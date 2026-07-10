@@ -18,19 +18,15 @@
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #include "mma_verifier.h"
-
 #include <climits>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
 
-template <int total_bits>
-struct BitsStorageType {
-  typedef typename std::conditional<
-      (total_bits <= 8),
-      uint8_t,
-      typename std::conditional<(total_bits <= 16), uint16_t, uint32_t>::type>::type Type;
+template <int total_bits> struct BitsStorageType {
+  typedef typename std::conditional<(total_bits <= 8), uint8_t,
+                                    typename std::conditional<(total_bits <= 16), uint16_t, uint32_t>::type>::type Type;
 };
 
 template <int total_bits>
@@ -47,26 +43,22 @@ static void write_bits(uint8_t *data, size_t index0, size_t index1, size_t row_b
   reinterpret_cast<StorageType *>(row_ptr)[index1] = static_cast<StorageType>(value);
 }
 
-template <class src1_t, class src2_t>
-struct MmaAccumTypes {
+template <class src1_t, class src2_t> struct MmaAccumTypes {
   static const bool both_unsigned = !std::is_signed<src1_t>::value && !std::is_signed<src2_t>::value;
   typedef typename std::conditional<both_unsigned, uint32_t, int32_t>::type ResultType;
   typedef typename std::conditional<both_unsigned, uint64_t, int64_t>::type ComputeType;
 };
 
-template <typename compute_t>
-static compute_t saturate_accum(compute_t value, std::true_type) {
+template <typename compute_t> static compute_t saturate_accum(compute_t value, std::true_type) {
   return value > UINT32_MAX ? UINT32_MAX : value;
 }
 
-template <typename compute_t>
-static compute_t saturate_accum(compute_t value, std::false_type) {
+template <typename compute_t> static compute_t saturate_accum(compute_t value, std::false_type) {
   value = value > INT32_MAX ? INT32_MAX : value;
   return value < INT32_MIN ? INT32_MIN : value;
 }
 
-template <int exp_bits, int mantissa_bits>
-static double parse_custom_float(uint32_t bits) {
+template <int exp_bits, int mantissa_bits> static double parse_custom_float(uint32_t bits) {
   constexpr int total_bits = 1 + exp_bits + mantissa_bits;
   constexpr uint64_t exp_mask = (1ULL << exp_bits) - 1;
   constexpr uint64_t mantissa_mask = (1ULL << mantissa_bits) - 1;
@@ -87,14 +79,13 @@ static double parse_custom_float(uint32_t bits) {
     uint64_t ull_value = (sign << 63) | (mantissa << (52 - mantissa_bits));
     return reinterpret_cast<double *>(&ull_value)[0];
   } else {
-    uint64_t ull_value = ((sign << 63) | (((int64_t)exp - bias + (1 << (11 - 1)) - 1) << 52) |
-                          (mantissa << (52 - mantissa_bits)));
+    uint64_t ull_value =
+        ((sign << 63) | (((int64_t)exp - bias + (1 << (11 - 1)) - 1) << 52) | (mantissa << (52 - mantissa_bits)));
     return reinterpret_cast<double *>(&ull_value)[0];
   }
 }
 
-template <int exp_bits, int mantissa_bits>
-static uint32_t encode_custom_float(double value) {
+template <int exp_bits, int mantissa_bits> static uint32_t encode_custom_float(double value) {
   uint64_t ull_value = reinterpret_cast<uint64_t *>(&value)[0];
 
   constexpr int total_bits = 1 + exp_bits + mantissa_bits;
@@ -133,77 +124,45 @@ bool CpuMmaBackend::verify(MmaVerificationBuffer *buffer) {
     switch (types) {
       case 0:
         switch (typed) {
-          case 1:
-            passed = mfmacc_template<5, 2, 5, 10>(buffer);
-            break;
-          case 2:
-            passed = mfmacc_template<5, 2, 8, 23>(buffer);
-            break;
-          case 5:
-            passed = mfmacc_template<5, 2, 8, 7>(buffer);
-            break;
-          default:
-            break;
+          case 1: passed = mfmacc_template<5, 2, 5, 10>(buffer); break;
+          case 2: passed = mfmacc_template<5, 2, 8, 23>(buffer); break;
+          case 5: passed = mfmacc_template<5, 2, 8, 7>(buffer); break;
+          default: break;
         }
         break;
       case 4:
         switch (typed) {
-          case 1:
-            passed = mfmacc_template<4, 3, 5, 10>(buffer);
-            break;
-          case 2:
-            passed = mfmacc_template<4, 3, 8, 23>(buffer);
-            break;
-          case 5:
-            passed = mfmacc_template<4, 3, 8, 7>(buffer);
-            break;
-          default:
-            break;
+          case 1: passed = mfmacc_template<4, 3, 5, 10>(buffer); break;
+          case 2: passed = mfmacc_template<4, 3, 8, 23>(buffer); break;
+          case 5: passed = mfmacc_template<4, 3, 8, 7>(buffer); break;
+          default: break;
         }
         break;
       case 1:
         switch (typed) {
-          case 1:
-            passed = mfmacc_template<5, 10, 5, 10>(buffer);
-            break;
-          case 2:
-            passed = mfmacc_template<5, 10, 8, 23>(buffer);
-            break;
-          default:
-            break;
+          case 1: passed = mfmacc_template<5, 10, 5, 10>(buffer); break;
+          case 2: passed = mfmacc_template<5, 10, 8, 23>(buffer); break;
+          default: break;
         }
         break;
       case 5:
         switch (typed) {
-          case 2:
-            passed = mfmacc_template<8, 7, 8, 23>(buffer);
-            break;
-          default:
-            break;
+          case 2: passed = mfmacc_template<8, 7, 8, 23>(buffer); break;
+          default: break;
         }
         break;
-      default:
-        break;
+      default: break;
     }
   } else {
     uint8_t types1 = buffer->amu_event.types1;
     uint8_t types2 = buffer->amu_event.types2;
     int op = ((types1 & 0x4) << 1) | (types2 & 0x4);
     switch (op) {
-      case 0:
-        passed = mmacc_template<uint8_t, uint8_t>(buffer);
-        break;
-      case 1:
-        passed = mmacc_template<uint8_t, int8_t>(buffer);
-        break;
-      case 2:
-        passed = mmacc_template<int8_t, uint8_t>(buffer);
-        break;
-      case 3:
-        passed = mmacc_template<int8_t, int8_t>(buffer);
-        break;
-      default:
-        break;
+      case 0: passed = mmacc_template<uint8_t, uint8_t>(buffer); break;
+      case 1: passed = mmacc_template<uint8_t, int8_t>(buffer); break;
+      case 2: passed = mmacc_template<int8_t, uint8_t>(buffer); break;
+      case 3: passed = mmacc_template<int8_t, int8_t>(buffer); break;
+      default: break;
     }
   }
 
@@ -243,13 +202,13 @@ bool CpuMmaBackend::mfmacc_template(MmaVerificationBuffer *buffer) {
     }
   }
 
-  size_t result_size = (result_total_bits <= 8) ? sizeof(uint8_t)
-                                                 : (result_total_bits <= 16) ? sizeof(uint16_t) : sizeof(uint32_t);
+  size_t result_size = (result_total_bits <= 8)    ? sizeof(uint8_t)
+                       : (result_total_bits <= 16) ? sizeof(uint16_t)
+                                                   : sizeof(uint32_t);
   return memcmp(buffer->dut_result, buffer->src3, tile_m * tile_n * result_size) == 0;
 }
 
-template <class src1_t, class src2_t>
-bool CpuMmaBackend::mmacc_template(MmaVerificationBuffer *buffer) {
+template <class src1_t, class src2_t> bool CpuMmaBackend::mmacc_template(MmaVerificationBuffer *buffer) {
   int tile_m = buffer->amu_event.mtilem;
   int tile_k = buffer->amu_event.mtilek;
   int tile_n = buffer->amu_event.mtilen;

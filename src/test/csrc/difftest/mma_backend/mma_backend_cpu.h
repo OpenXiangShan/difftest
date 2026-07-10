@@ -25,8 +25,7 @@ public:
   bool verify(MmaVerificationBuffer *buffer) override;
 
 private:
-  template <class src1_t, class src2_t>
-  bool mmacc_template(MmaVerificationBuffer *buffer);
+  template <class src1_t, class src2_t> bool mmacc_template(MmaVerificationBuffer *buffer);
 
   template <int src_exp_bits, int src_mantissa_bits, int result_exp_bits, int result_mantissa_bits>
   bool mfmacc_template(MmaVerificationBuffer *buffer);

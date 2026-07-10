@@ -38,7 +38,7 @@ MmaVerifier::~MmaVerifier() {
     mma_pending_count--;
     free_buffer(buffer);
   }
-  MmaVerificationBuffer* err_buf = mma_error_buffer.exchange(nullptr);
+  MmaVerificationBuffer *err_buf = mma_error_buffer.exchange(nullptr);
   if (err_buf) {
     free_buffer(err_buf);
   }
@@ -67,7 +67,7 @@ void MmaVerifier::stop() {
   }
 }
 
-MmaVerificationBuffer* MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *amu_event) {
+MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *amu_event) {
   size_t m = amu_event->mtilem;
   size_t n = amu_event->mtilen;
   size_t k = amu_event->mtilek;
@@ -119,7 +119,7 @@ bool MmaVerifier::has_mma_verification_error() const {
   return mma_has_error.load(std::memory_order_acquire);
 }
 
-const MmaVerificationBuffer* MmaVerifier::get_error_buffer() const {
+const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
   return mma_error_buffer.load(std::memory_order_acquire);
 }
 
@@ -132,9 +132,7 @@ void MmaVerifier::mma_verification_thread_func() {
       std::unique_lock<std::mutex> lock(mma_queue_mutex);
 
       // Wait for a buffer to be available or thread to be stopped
-      mma_queue_cv.wait(lock, [this] {
-        return !mma_thread_running || !mma_verification_queue.empty();
-      });
+      mma_queue_cv.wait(lock, [this] { return !mma_thread_running || !mma_verification_queue.empty(); });
 
       if (!mma_thread_running) {
         break;
@@ -157,7 +155,7 @@ void MmaVerifier::mma_verification_thread_func() {
         mma_error_buffer.store(buffer, std::memory_order_release);
         mma_thread_running.store(false, std::memory_order_release);
         mma_thread_state.store(ThreadState::StoppedNotJoined, std::memory_order_release);
-        break;  // Only care about first error, exit verification thread; buffer retained
+        break; // Only care about first error, exit verification thread; buffer retained
       }
     }
   }

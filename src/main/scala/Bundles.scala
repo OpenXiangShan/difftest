@@ -400,31 +400,31 @@ class SyncCustomMflushpwrEvent extends DifftestBaseBundle with HasValid {
 // Attention: the order of fields in this class must be the same as the order
 //            in the corresponding struct in NEMU.
 class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
-  val op  = UInt(2.W)
+  val op = UInt(2.W)
 
-  val rm       = UInt(3.W)
-  val md       = UInt(4.W)
-  val sat      = Bool()
-  val ms1      = UInt(4.W)
-  val ms2      = UInt(4.W)
-  val mtilem   = UInt(16.W)
-  val mtilen   = UInt(16.W)
-  val mtilek   = UInt(16.W)
-  val types1   = UInt(3.W)
-  val types2   = UInt(3.W)
-  val typed    = UInt(3.W)
-  val isfp     = Bool()
+  val rm = UInt(3.W)
+  val md = UInt(4.W)
+  val sat = Bool()
+  val ms1 = UInt(4.W)
+  val ms2 = UInt(4.W)
+  val mtilem = UInt(16.W)
+  val mtilen = UInt(16.W)
+  val mtilek = UInt(16.W)
+  val types1 = UInt(3.W)
+  val types2 = UInt(3.W)
+  val typed = UInt(3.W)
+  val isfp = Bool()
 
-  def ms:        UInt = md
-  def ls:        Bool = sat
+  def ms: UInt = md
+  def ls: Bool = sat
   def transpose: Bool = isfp
-  def isacc:     Bool = types1(0)
-  def isA:       Bool = types2(0)
-  val base            = UInt(64.W)
-  val stride          = UInt(64.W)
-  def row:       UInt = mtilem
-  def column:    UInt = mtilen
-  def widths:    UInt = typed
+  def isacc: Bool = types1(0)
+  def isA: Bool = types2(0)
+  val base = UInt(64.W)
+  val stride = UInt(64.W)
+  def row: UInt = mtilem
+  def column: UInt = mtilen
+  def widths: UInt = typed
 
   val pc = UInt(64.W)
 
@@ -437,12 +437,12 @@ class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends Dif
   require(nBanks > 0, s"nBanks should be positive, got $nBanks")
   require(wordsPerBank > 0, s"wordsPerBank should be positive, got $wordsPerBank")
 
-  val pc        = UInt(64.W)
+  val pc = UInt(64.W)
   val bankValid = Vec(nBanks, Bool())
-  val bankAddr  = Vec(nBanks, UInt(8.W))
-  val data      = Vec(nBanks * wordsPerBank, UInt(64.W))
-  val bankMask  = Vec(nBanks, UInt((wordsPerBank * 8).W))
-  val finish    = Bool()
+  val bankAddr = Vec(nBanks, UInt(8.W))
+  val data = Vec(nBanks * wordsPerBank, UInt(64.W))
+  val bankMask = Vec(nBanks, UInt((wordsPerBank * 8).W))
+  val finish = Bool()
 }
 
 class MsyncEvent extends DifftestBaseBundle with HasValid {

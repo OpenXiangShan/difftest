@@ -203,7 +203,7 @@ public:
   DiffState(int coreid);
   ~DiffState() {
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-    for (auto &entry : matrix_sw_rob) {
+    for (auto &entry: matrix_sw_rob) {
       if (entry.res != nullptr) {
         delete[] entry.res;
         entry.res = nullptr;

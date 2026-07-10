@@ -403,8 +403,9 @@ public:
     if (ref_amu_ctrl) {
       return ref_amu_ctrl(info);
     } else {
-      printf("This version of 'REF' does not support the 'PC' value of AmuCtrl event. Please use a newer version of "
-             "'REF'.\n");
+      printf(
+          "This version of 'REF' does not support the 'PC' value of AmuCtrl event. Please use a newer version of "
+          "'REF'.\n");
       return 1;
     }
   }
@@ -423,8 +424,9 @@ public:
     if (ref_msync_event) {
       return ref_msync_event(info);
     } else {
-      printf("This version of 'REF' does not support the 'PC' value of Msync event. Please use a newer version of "
-             "'REF'.\n");
+      printf(
+          "This version of 'REF' does not support the 'PC' value of Msync event. Please use a newer version of "
+          "'REF'.\n");
       return 1;
     }
   }
@@ -433,8 +435,9 @@ public:
     if (ref_get_msync_event_other_info) {
       ref_get_msync_event_other_info(info);
     } else {
-      printf("This version of 'REF' does not support the 'PC' value of Msync event. Please use a newer version of "
-             "'REF'.\n");
+      printf(
+          "This version of 'REF' does not support the 'PC' value of Msync event. Please use a newer version of "
+          "'REF'.\n");
     }
   }
 
@@ -442,8 +445,9 @@ public:
     if (ref_amu_exec) {
       return ref_amu_exec(amu_ctrl, matrix);
     } else {
-      printf("This version of 'REF' does not support AME. Please use a newer version of "
-             "'REF'.\n");
+      printf(
+          "This version of 'REF' does not support AME. Please use a newer version of "
+          "'REF'.\n");
       return 1;
     }
   }
@@ -453,8 +457,9 @@ public:
       ref_amu_lazy(amu_ctrl, res, src1, src2, src3);
       return 0;
     } else {
-      printf("This version of 'REF' does not support AME. Please use a newer version of "
-             "'REF'.\n");
+      printf(
+          "This version of 'REF' does not support AME. Please use a newer version of "
+          "'REF'.\n");
       return 1;
     }
   }
