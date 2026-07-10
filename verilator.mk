@@ -123,14 +123,14 @@ EMU_COMPILE_FILTER =
 
 verilator-build-emu:
 ifeq ($(REMOTE),localhost)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
+	@sync -d $(BUILD_DIR) $(VERILATOR_BUILD_DIR)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
 						OPT_FAST=$(OPT_FAST) \
 						PGO_CFLAGS="$(PGO_CFLAGS)" \
 						PGO_LDFLAGS="$(PGO_LDFLAGS)" \
 						OBJCACHE="$(OBJCACHE)" \
 						-C $(VERILATOR_BUILD_DIR) -f $(VERILATOR_MK) $(EMU_COMPILE_FILTER)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
+	@sync -d $(BUILD_DIR) $(VERILATOR_BUILD_DIR)
 else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); \
 					   $(MAKE) -C $(NOOP_HOME)/difftest verilator-build-emu \
