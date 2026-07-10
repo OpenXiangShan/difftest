@@ -531,6 +531,8 @@ class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
   with DifftestWithIndex {
   override val desiredCppName: String = "amu_finish"
 
+  override def classArgs: Map[String, Any] = Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank)
+
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
 
