@@ -264,12 +264,11 @@ SIM_CXXFILES += $(shell find $(PLUGIN_CSRC_DIR)/runahead -name "*.cpp")
 endif
 
 # SimFrontend plugin
+SIMFRONTEND_CSRC_DIR = $(abspath $(PLUGIN_CSRC_DIR)/simfrontend)
 ifeq ($(ENABLE_SIMFRONTEND), 1)
-TRACE_CSR_DIR = $(abspath ./src/test/csrc/plugin/simfrontend)
-SIM_CXXFILES += $(shell find $(TRACE_CSR_DIR) -name "*.cpp")
-SIM_CXXFLAGS += -I$(TRACE_CSR_DIR) -DPLUGIN_SIMFRONTEND -DCPU_XIANGSHAN
+SIM_CXXFILES += $(shell find $(SIMFRONTEND_CSRC_DIR) -name "*.cpp")
+SIM_CXXFLAGS += -I$(SIMFRONTEND_CSRC_DIR) -DPLUGIN_SIMFRONTEND -DCPU_XIANGSHAN
 endif
-
 
 # Check if XFUZZ is set
 ifeq ($(XFUZZ), 1)
