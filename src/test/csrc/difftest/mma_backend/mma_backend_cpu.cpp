@@ -24,6 +24,12 @@
 #include <cstring>
 #include <type_traits>
 
+#ifdef CONFIG_DIFF_MMA_REDUCE_WIDTH_BYTES
+static constexpr int kMmaReduceWidthBytes = CONFIG_DIFF_MMA_REDUCE_WIDTH_BYTES;
+#else
+static constexpr int kMmaReduceWidthBytes = 32;
+#endif
+
 template <int total_bits> struct BitsStorageType {
   typedef typename std::conditional<(total_bits <= 8), uint8_t,
                                     typename std::conditional<(total_bits <= 16), uint16_t, uint32_t>::type>::type Type;
@@ -156,7 +162,7 @@ bool CpuMmaBackend::verify(MmaVerificationBuffer *buffer) {
   } else {
     uint8_t types1 = buffer->amu_event.types1;
     uint8_t types2 = buffer->amu_event.types2;
-    int op = ((types1 & 0x4) << 1) | (types2 & 0x4);
+    int op = ((types1 & 0x4) >> 1) | ((types2 & 0x4) >> 2);
     switch (op) {
       case 0: passed = mmacc_template<uint8_t, uint8_t>(buffer); break;
       case 1: passed = mmacc_template<uint8_t, int8_t>(buffer); break;
@@ -179,26 +185,35 @@ bool CpuMmaBackend::mfmacc_template(MmaVerificationBuffer *buffer) {
   constexpr int result_total_bits = 1 + result_exp_bits + result_mantissa_bits;
   constexpr size_t src_elem_bytes = src_total_bits / 8;
   constexpr size_t result_elem_bytes = result_total_bits / 8;
+  constexpr int reduce_chunk_elems = kMmaReduceWidthBytes / src_elem_bytes;
   const size_t src_row_bytes = static_cast<size_t>(tile_k) * src_elem_bytes;
   const size_t result_row_bytes = static_cast<size_t>(tile_n) * result_elem_bytes;
 
   for (int i = 0; i < tile_m; i++) {
     for (int j = 0; j < tile_n; j++) {
       uint32_t acc_bits = read_bits<result_total_bits>(buffer->src3, i, j, result_row_bytes);
-      double accumulator = parse_custom_float<result_exp_bits, result_mantissa_bits>(acc_bits);
 
-      for (int k = 0; k < tile_k; k++) {
-        uint32_t src1_bits = read_bits<src_total_bits>(buffer->src1, i, k, src_row_bytes);
-        uint32_t src2_bits = read_bits<src_total_bits>(buffer->src2, j, k, src_row_bytes);
-        double src1 = parse_custom_float<src_exp_bits, src_mantissa_bits>(src1_bits);
-        double src2 = parse_custom_float<src_exp_bits, src_mantissa_bits>(src2_bits);
+      for (int k_base = 0; k_base < tile_k; k_base += reduce_chunk_elems) {
+        double accumulator = parse_custom_float<result_exp_bits, result_mantissa_bits>(acc_bits);
+        int k_end = k_base + reduce_chunk_elems;
+        if (k_end > tile_k) {
+          k_end = tile_k;
+        }
 
-        double product = src1 * src2;
-        accumulator = accumulator + product;
+        for (int k = k_base; k < k_end; k++) {
+          uint32_t src1_bits = read_bits<src_total_bits>(buffer->src1, i, k, src_row_bytes);
+          uint32_t src2_bits = read_bits<src_total_bits>(buffer->src2, j, k, src_row_bytes);
+          double src1 = parse_custom_float<src_exp_bits, src_mantissa_bits>(src1_bits);
+          double src2 = parse_custom_float<src_exp_bits, src_mantissa_bits>(src2_bits);
+
+          double product = src1 * src2;
+          accumulator = accumulator + product;
+        }
+
+        acc_bits = encode_custom_float<result_exp_bits, result_mantissa_bits>(accumulator);
       }
 
-      uint32_t result_bits = encode_custom_float<result_exp_bits, result_mantissa_bits>(accumulator);
-      write_bits<result_total_bits>(buffer->src3, i, j, result_row_bytes, result_bits);
+      write_bits<result_total_bits>(buffer->src3, i, j, result_row_bytes, acc_bits);
     }
   }
 
@@ -216,18 +231,28 @@ template <class src1_t, class src2_t> bool CpuMmaBackend::mmacc_template(MmaVeri
   typedef MmaAccumTypes<src1_t, src2_t> AccumTypes;
   typedef typename AccumTypes::ResultType result_type;
   typedef typename AccumTypes::ComputeType compute_type;
+  constexpr int reduce_chunk_elems = kMmaReduceWidthBytes / sizeof(src1_t);
 
   for (int i = 0; i < tile_m; i++) {
     for (int j = 0; j < tile_n; j++) {
       compute_type src_3 = ((result_type *)(buffer->src3))[(i * tile_n + j)];
-      for (int k = 0; k < tile_k; k++) {
-        compute_type src_1 = ((src1_t *)(buffer->src1))[(i * tile_k + k)];
-        compute_type src_2 = ((src2_t *)(buffer->src2))[(j * tile_k + k)];
-        src_3 += src_1 * src_2;
-
-        if (buffer->amu_event.sat) {
-          src_3 = saturate_accum(src_3, std::integral_constant<bool, AccumTypes::both_unsigned>());
+      for (int k_base = 0; k_base < tile_k; k_base += reduce_chunk_elems) {
+        int k_end = k_base + reduce_chunk_elems;
+        if (k_end > tile_k) {
+          k_end = tile_k;
         }
+
+        for (int k = k_base; k < k_end; k++) {
+          compute_type src_1 = ((src1_t *)(buffer->src1))[(i * tile_k + k)];
+          compute_type src_2 = ((src2_t *)(buffer->src2))[(j * tile_k + k)];
+          src_3 += src_1 * src_2;
+
+          if (buffer->amu_event.sat) {
+            src_3 = saturate_accum(src_3, std::integral_constant<bool, AccumTypes::both_unsigned>());
+          }
+        }
+
+        src_3 = static_cast<result_type>(src_3);
       }
       ((result_type *)(buffer->src3))[(i * tile_n + j)] = static_cast<result_type>(src_3);
     }
