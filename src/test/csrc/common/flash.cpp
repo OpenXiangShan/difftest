@@ -16,6 +16,7 @@
 
 #include "flash.h"
 #include "common.h"
+#include "compress.h"
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -85,6 +86,20 @@ void init_flash(const char *flash_bin) {
 
   flash_dev.img_path = (char *)flash_bin;
   Info("use %s as flash bin\n", flash_dev.img_path);
+
+  if (isGzFile(flash_dev.img_path)) {
+    long ret = readFromGz(flash_dev.base, flash_dev.img_path, flash_dev.size, LOAD_SNAPSHOT);
+    assert(ret >= 0);
+    flash_dev.img_size = ret;
+    return;
+  }
+
+  if (isZstdFile(flash_dev.img_path)) {
+    long ret = readFromZstd(flash_dev.base, flash_dev.img_path, flash_dev.size, LOAD_SNAPSHOT);
+    assert(ret >= 0);
+    flash_dev.img_size = ret;
+    return;
+  }
 
   FILE *flash_fp = fopen(flash_dev.img_path, "r");
   if (!flash_fp) {
