@@ -219,6 +219,10 @@ Emulator::Emulator(int argc, const char *argv[])
 Emulator::~Emulator() {
   // Simulation ends here, do clean up & display jobs
 
+#ifdef ENABLE_CHISEL_DB
+  bool db_saved_before_fork_replay = false;
+#endif
+
 #if VM_COVERAGE == 1
   // we dump coverage into files at the end
   // since we are not sure when an emu will stop
@@ -236,6 +240,12 @@ Emulator::~Emulator() {
 
   if (args.enable_fork && !is_fork_child()) {
     bool need_wakeup = trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED && trapCode != STATE_SIG;
+#ifdef ENABLE_CHISEL_DB
+    if (args.dump_db && need_wakeup) {
+      save_db(db_filename());
+      db_saved_before_fork_replay = true;
+    }
+#endif
     if (need_wakeup) {
       lightsss->wakeup_child(cycles);
     } else {
@@ -271,7 +281,7 @@ Emulator::~Emulator() {
   }
 
 #ifdef ENABLE_CHISEL_DB
-  if (args.dump_db) {
+  if (args.dump_db && !db_saved_before_fork_replay) {
     save_db(db_filename());
   }
 #endif
