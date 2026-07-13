@@ -89,7 +89,7 @@ else # ifneq ($(PGO_BOLT),1)
 	@sync -d $(BUILD_DIR) $(PGO_EMU_DIR)
 	@((perf record -j any,u -o $(PGO_DIR)/perf.data -- sh -c "\
 		$(PGO_TARGET).pre-bolt $(PGO_RUN_OPT) || true") && \
-		(perf2bolt -p=$(PGO_DIR)/perf.data -o=$(PGO_DIR)/perf.fdata $(PGO_TARGET).pre-bolt || true)) || \
+		(TMPDIR=$(PGO_DIR) perf2bolt -p=$(PGO_DIR)/perf.data -o=$(PGO_DIR)/perf.fdata $(PGO_TARGET).pre-bolt || true)) || \
 		(echo -e "\033[31mlinux-perf is not available, fallback to instrumentation-based PGO\033[0m" && \
 		$(LLVM_BOLT) $(PGO_TARGET).pre-bolt \
 			-instrument --instrumentation-file=$(PGO_DIR)/perf.fdata \
