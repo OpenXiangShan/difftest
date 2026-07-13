@@ -98,6 +98,7 @@ static inline void print_help(const char *file) {
   printf("      --copy-ram=OFFSET      duplicate the memory at OFFSET\n");
   printf("      --splitview-log=PATH   write splitview uart.log, host.log, and all.log under PATH\n");
   printf("      --random-mem           initialize memory from --seed\n");
+  printf("      --auto-checkpoint      save checkpoint to $NOOP_HOME/build/ on difftest error\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -143,6 +144,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "copy-ram",          1, NULL,  0  },
     { "cst-file",          1, NULL,  0  },
     { "random-mem",        0, NULL,  0  },
+    { "auto-checkpoint",   0, NULL,  0  },
     { "splitview-log",     1, NULL, OPT_SPLITVIEW_LOG },
     { "db-path",           1, NULL, OPT_DB_PATH },
     { "seed",              1, NULL, 's' },
@@ -257,6 +259,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           case 29: args.copy_ram_offset = parse_ramsize(optarg); continue;
           case 30: args.cst_file = optarg; continue;
           case 31: args.random_mem = true; continue;
+          case 32: args.auto_checkpoint = true; continue;
         }
         // fall through
       default: print_help(argv[0]); exit(0);

@@ -244,6 +244,10 @@ Emulator::~Emulator() {
     delete lightsss;
   }
 
+#ifndef CONFIG_NO_DIFFTEST
+  trigger_auto_checkpoint();
+#endif
+
   // warning: this function may still simulate the circuit
   // simulator resources must be released after this function
   display_stats();
@@ -289,6 +293,28 @@ Emulator::~Emulator() {
 
   delete dut_ptr;
 }
+
+#ifndef CONFIG_NO_DIFFTEST
+void Emulator::dump_checkpoint_from_ref() {
+  if (NUM_CORES != 1) {
+    Info("Skip checkpoint generation: multicore checkpoint is not supported yet.\n");
+    return;
+  }
+  const char *base_filepath = create_noop_filename("");
+  Info("Generating checkpoint: %s\n", base_filepath);
+  difftest[0]->proxy->trigger_checkpoint(base_filepath);
+}
+
+void Emulator::trigger_auto_checkpoint() {
+  if (!args.auto_checkpoint || args.enable_fork) {
+    return;
+  }
+  if (trapCode != STATE_ABORT) {
+    return;
+  }
+  dump_checkpoint_from_ref();
+}
+#endif
 
 inline void Emulator::reset_ncycles(size_t cycles) {
   if (args.trace_name && args.trace_is_read) {
@@ -529,7 +555,8 @@ int Emulator::tick() {
     stuck_timer++;
     if (stuck_timer >= Difftest::stuck_limit) {
       Info("No difftest check for more than %lu cycles, maybe get stuck.", Difftest::stuck_limit);
-      return STATE_ABORT;
+      trapCode = STATE_ABORT;
+      return trapCode;
     }
   }
 
@@ -746,6 +773,12 @@ void Emulator::snapshot_load(const char *filename) {
 
 void Emulator::fork_child_init() {
   dut_ptr->atClone();
+
+#ifndef CONFIG_NO_DIFFTEST
+  if (args.auto_checkpoint) {
+    dump_checkpoint_from_ref();
+  }
+#endif
 
   FORK_PRINTF("the oldest checkpoint start to dump wave and dump nemu log...\n")
 
