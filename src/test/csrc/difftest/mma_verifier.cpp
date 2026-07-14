@@ -19,14 +19,18 @@
 #include "mma_backend/mma_backend_cuda.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#include <cstdio>
 #include <cstring>
 
 MmaVerifier::MmaVerifier() : mma_thread_running(false) {
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
   backend = new CudaMmaBackend();
+  const char *backend_name = "CUDA";
 #else
   backend = new CpuMmaBackend();
+  const char *backend_name = "CPU";
 #endif
+  std::fprintf(stderr, "MMA reference model backend: %s\n", backend_name);
 }
 
 MmaVerifier::~MmaVerifier() {
