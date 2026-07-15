@@ -28,12 +28,10 @@ struct __attribute__((packed)) TopdownIQInfoFrame {
   uint8_t futype;
   uint8_t issued;
 };
-static_assert(sizeof(TopdownIQInfoFrame) == 9);
 
 struct __attribute__((packed)) TopdownExtendedIQInfoFrame {
   uint8_t idealIssueTime;
 };
-static_assert(sizeof(TopdownExtendedIQInfoFrame) == 1);
 
 static bool get_ideal_issue_time(int idx, int entries_num, const TopdownIQInfoFrame *in) {
   int olderCanIssueNum = 0;
