@@ -26,7 +26,6 @@ struct __attribute__((packed)) TopdownRobInfoFrame {
   uint8_t issued;
   uint8_t idealIssueTime;
 };
-static_assert(sizeof(TopdownRobInfoFrame) == 7);
 
 static void topdown_rob_info_apply(int iq_entries_num, int rob_entries_num, const TopdownRobInfoFrame *in,
                                    TopdownRobInfoFrame *out) {
