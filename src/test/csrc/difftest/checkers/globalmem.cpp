@@ -16,6 +16,7 @@
 
 #include "checkers.h"
 #include "goldenmem.h"
+#include <algorithm>
 
 void dumpGoldenMem(const char *banner, uint64_t addr, uint64_t time) {
 #ifdef DEBUG_REFILL
@@ -65,20 +66,95 @@ int SbufferChecker::check(const DifftestSbufferEvent &probe) {
 
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
 
-bool MatrixStoreChecker::get_valid(const DifftestMatrixStoreEvent &probe) {
-  return probe.valid;
+namespace {
+
+const char *matrix_store_status_name(MatrixStoreTrackerStatus status) {
+  switch (status) {
+    case MatrixStoreTrackerStatus::Ok: return "ok";
+    case MatrixStoreTrackerStatus::MalformedTag: return "malformed-tag";
+    case MatrixStoreTrackerStatus::DuplicateRequest: return "duplicate-request";
+    case MatrixStoreTrackerStatus::MissingResponse: return "missing-response";
+    case MatrixStoreTrackerStatus::AllocationFailure: return "allocation-failure";
+  }
+  return "unknown";
 }
 
-void MatrixStoreChecker::clear_valid(DifftestMatrixStoreEvent &probe) {
-  probe.valid = 0;
+void report_matrix_store_failure(const DiffState *state, const MatrixStoreFailure &failure) {
+  eprintf("[DiffTest][MatrixStore] core=%d cycle=%" PRIu64 " lane=%zu operation=%s encoded_id=0x%" PRIx64 " error=%s\n",
+          state->coreid, failure.cycle, failure.lane, failure.isRequest ? "request" : "response",
+          failure.encodedSourceId, matrix_store_status_name(failure.status));
 }
 
-int MatrixStoreChecker::check(const DifftestMatrixStoreEvent &probe) {
-  update_goldenmem(probe.addr, (void *)probe.data, probe.mask, 64);
-  if (probe.addr == state->track_instr) {
-    dumpGoldenMem("Matrix Store", state->track_instr, state->cycle_count);
+} // namespace
+
+MatrixStoreChecker::~MatrixStoreChecker() {
+  if (tracker.empty()) {
+    return;
+  }
+  eprintf("[DiffTest][MatrixStore] core=%d outstanding_requests=%zu at finalization\n", state->coreid, tracker.size());
+  for (const auto &[encodedSourceId, request]: tracker.entries()) {
+    eprintf("[DiffTest][MatrixStore] core=%d live_id=0x%" PRIx64 " request_lane=%zu request_cycle=%" PRIu64
+            " addr=0x%" PRIx64 "\n",
+            state->coreid, encodedSourceId, request.requestLane, request.requestCycle, request.addr);
+  }
+}
+
+int MatrixStoreChecker::do_step() {
+  std::array<MatrixStoreObservation, CONFIG_DIFF_MATRIX_STORE_WIDTH> observations{};
+  DifftestMatrixStoreEvent *probes = get_probes();
+
+  for (size_t lane = 0; lane < observations.size(); lane++) {
+    auto &probe = probes[lane];
+    if (probe.valid) {
+      auto &observation = observations[lane];
+      observation.reqValid = probe.reqValid;
+      observation.reqEncodedSourceId = probe.reqEncodedSourceId;
+      observation.request.addr = probe.addr;
+      std::copy_n(probe.data, observation.request.data.size(), observation.request.data.begin());
+      observation.request.mask = probe.mask;
+      observation.respValid = probe.respValid;
+      observation.respEncodedSourceId = probe.respEncodedSourceId;
+    }
+    probe.valid = 0;
+    probe.reqValid = 0;
+    probe.respValid = 0;
+  }
+
+  MatrixStoreFailure failure;
+  const auto status = tracker.process_cycle(
+      observations, state->cycle_count,
+      [this](MatrixStoreRequest &request) {
+        update_goldenmem(request.addr, request.data.data(), request.mask, 64);
+        if (request.addr == state->track_instr) {
+          dumpGoldenMem("Matrix Store", state->track_instr, state->cycle_count);
+        }
+      },
+      &failure);
+  if (status != MatrixStoreTrackerStatus::Ok) {
+    report_matrix_store_failure(state, failure);
+    return STATE_ERROR;
   }
   return STATE_OK;
+}
+
+bool MatrixStoreChecker::replay_snapshot() {
+  const auto status = tracker.snapshot();
+  if (status == MatrixStoreTrackerStatus::Ok) {
+    return true;
+  }
+  eprintf("[DiffTest][MatrixStore] core=%d cycle=%" PRIu64 " replay snapshot failed: %s\n", state->coreid,
+          state->cycle_count, matrix_store_status_name(status));
+  return false;
+}
+
+bool MatrixStoreChecker::replay_restore() {
+  const auto status = tracker.restore();
+  if (status == MatrixStoreTrackerStatus::Ok) {
+    return true;
+  }
+  eprintf("[DiffTest][MatrixStore] core=%d cycle=%" PRIu64 " replay restore failed: %s\n", state->coreid,
+          state->cycle_count, matrix_store_status_name(status));
+  return false;
 }
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 

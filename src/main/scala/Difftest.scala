@@ -622,6 +622,15 @@ object DifftestModule {
     difftest
   }
 
+  def applyVec[T <: DifftestBundle](
+    gens: Seq[T],
+    dontCare: Boolean = false,
+    delay: Int = 0,
+  ): Seq[T] = {
+    require(gens.nonEmpty, "DifftestModule.applyVec requires at least one lane")
+    gens.map(gen => apply(gen, dontCare, delay))
+  }
+
   def get_current_interfaces(): Seq[(DifftestBundle, Int)] = interfaces.toSeq
 
   def get_command_configs(): Seq[String] = cmdConfigs.toSeq

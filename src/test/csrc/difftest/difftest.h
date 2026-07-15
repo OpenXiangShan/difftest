@@ -202,6 +202,9 @@ protected:
   LoadSquashChecker *load_squash_checker = nullptr;
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_LOADEVENT
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  MatrixStoreChecker *matrix_store_checker = nullptr;
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   // MMA verifier instance
@@ -245,8 +248,8 @@ protected:
   uint64_t squash_csr_buf[4096];
   bool can_replay();
   bool in_replay_range();
-  void replay_snapshot();
-  void do_replay();
+  bool replay_snapshot();
+  bool do_replay();
 #endif // CONFIG_DIFFTEST_REPLAY
 };
 

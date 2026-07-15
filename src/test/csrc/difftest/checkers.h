@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "diffstate.h"
+#include "matrix_store_tracker.h"
 #include "refproxy.h"
 #include "stopwatch.h"
 
@@ -354,15 +355,22 @@ private:
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
-class MatrixStoreChecker : public ProbeChecker<DifftestMatrixStoreEvent> {
+class MatrixStoreChecker : public DiffTestChecker {
 public:
-  MatrixStoreChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
-      : ProbeChecker<DifftestMatrixStoreEvent>(get_probe, state, proxy) {}
+  using GetProbesFn = std::function<DifftestMatrixStoreEvent *()>;
+
+  MatrixStoreChecker(GetProbesFn get_probes, DiffState *state, RefProxy *proxy)
+      : DiffTestChecker(state, proxy), get_probes(std::move(get_probes)) {}
+  ~MatrixStoreChecker() override;
+
+  bool replay_snapshot();
+  bool replay_restore();
 
 private:
-  bool get_valid(const DifftestMatrixStoreEvent &probe) override;
-  void clear_valid(DifftestMatrixStoreEvent &probe) override;
-  int check(const DifftestMatrixStoreEvent &probe) override;
+  int do_step() override;
+
+  GetProbesFn get_probes;
+  MatrixStoreTracker tracker;
 };
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 

@@ -369,10 +369,9 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
-  for (int i = 0; i < CONFIG_DIFF_MATRIX_STORE_WIDTH; i++) {
-    checkers.push_back(new MatrixStoreChecker(
-        [this, i]() -> DifftestMatrixStoreEvent & { return dut->matrix_store[i]; }, state, proxy));
-  }
+  matrix_store_checker =
+      new MatrixStoreChecker([this]() -> DifftestMatrixStoreEvent * { return dut->matrix_store; }, state, proxy);
+  checkers.push_back(matrix_store_checker);
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 
 #ifdef CONFIG_DIFFTEST_ATOMICEVENT
@@ -514,7 +513,7 @@ bool Difftest::in_replay_range() {
   }
 }
 
-void Difftest::replay_snapshot() {
+bool Difftest::replay_snapshot() {
   memcpy(state_ss, state, sizeof(DiffState));
   memcpy(proxy_reg_ss, &proxy->state, sizeof(ref_state_t));
   proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
@@ -522,9 +521,15 @@ void Difftest::replay_snapshot() {
   proxy->set_store_log(true);
   goldenmem_store_log_reset();
   goldenmem_set_store_log(true);
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  if (matrix_store_checker != nullptr && !matrix_store_checker->replay_snapshot()) {
+    return false;
+  }
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  return true;
 }
 
-void Difftest::do_replay() {
+bool Difftest::do_replay() {
   auto info = dut->trace_info;
   replay_status.in_replay = true;
   replay_status.trace_head = info.trace_head;
@@ -535,6 +540,11 @@ void Difftest::do_replay() {
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
   proxy->ref_store_log_restore();
   goldenmem_store_log_restore();
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  if (matrix_store_checker != nullptr && !matrix_store_checker->replay_restore()) {
+    return false;
+  }
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
   difftest_replay_head(info.trace_head);
   // clear buffered queue
 #ifdef CONFIG_DIFFTEST_STOREEVENT
@@ -558,6 +568,7 @@ void Difftest::do_replay() {
   while (!state->msync_event_queue.empty())
     state->msync_event_queue.pop();
 #endif // CONFIG_DIFFTEST_MSYNCEVENT
+  return true;
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
@@ -577,7 +588,9 @@ int Difftest::step() {
   }
   bool canReplay = can_replay();
   if (canReplay) {
-    replay_snapshot();
+    if (!replay_snapshot()) {
+      return DiffTestChecker::STATE_ERROR;
+    }
   } else {
     proxy->set_store_log(false);
     goldenmem_set_store_log(false);
@@ -585,7 +598,9 @@ int Difftest::step() {
   int ret = check_all();
   if (ret && canReplay) {
     Info("\n**** Start replay for more accurate error location ****\n");
-    do_replay();
+    if (!do_replay()) {
+      return DiffTestChecker::STATE_ERROR;
+    }
     return 0;
   } else {
     return ret;
