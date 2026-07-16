@@ -17,6 +17,7 @@
 #define __SIMULATOR_GRHSIM_H
 
 #include "grhsim_model_select.hpp"
+#include "grhsim_port_abi.h"
 #include <array>
 #include <type_traits>
 
@@ -82,16 +83,16 @@ private:
 
 protected:
   inline unsigned get_uart_out_valid() override {
-    return static_cast<unsigned>(grhsim_detail::port_read(dut->difftest_uart_out_valid));
+    return static_cast<unsigned>(grhsim_detail::port_read(grhsim_port_abi::uart_out_valid(*dut)));
   }
   inline uint8_t get_uart_out_ch() override {
-    return static_cast<uint8_t>(grhsim_detail::port_read(dut->difftest_uart_out_ch));
+    return static_cast<uint8_t>(grhsim_detail::port_read(grhsim_port_abi::uart_out_ch(*dut)));
   }
   inline unsigned get_uart_in_valid() override {
-    return static_cast<unsigned>(grhsim_detail::port_read(dut->difftest_uart_in_valid));
+    return static_cast<unsigned>(grhsim_detail::port_read(grhsim_port_abi::uart_in_valid(*dut)));
   }
   inline void set_uart_in_ch(uint8_t ch) override {
-    grhsim_detail::port_write(dut->difftest_uart_in_ch, ch);
+    grhsim_detail::port_write(grhsim_port_abi::uart_in_ch(*dut), ch);
   }
 
 public:
@@ -114,24 +115,24 @@ public:
   }
 
   inline uint64_t get_difftest_exit() override {
-    return grhsim_detail::port_read(dut->difftest_exit);
+    return grhsim_detail::port_read(grhsim_port_abi::difftest_exit(*dut));
   }
   inline uint64_t get_difftest_step() override {
-    return grhsim_detail::port_read(dut->difftest_step);
+    return grhsim_detail::port_read(grhsim_port_abi::difftest_step(*dut));
   }
 
   inline void set_perf_clean(unsigned clean) override {
-    grhsim_detail::port_write(dut->difftest_perfCtrl_clean, clean);
+    grhsim_detail::port_write(grhsim_port_abi::perf_clean(*dut), clean);
   }
   inline void set_perf_dump(unsigned dump) override {
-    grhsim_detail::port_write(dut->difftest_perfCtrl_dump, dump);
+    grhsim_detail::port_write(grhsim_port_abi::perf_dump(*dut), dump);
   }
 
   inline void set_log_begin(uint64_t begin) override {
-    grhsim_detail::port_write(dut->difftest_logCtrl_begin, begin);
+    grhsim_detail::port_write(grhsim_port_abi::log_begin(*dut), begin);
   }
   inline void set_log_end(uint64_t end) override {
-    grhsim_detail::port_write(dut->difftest_logCtrl_end, end);
+    grhsim_detail::port_write(grhsim_port_abi::log_end(*dut), end);
   }
 };
 
