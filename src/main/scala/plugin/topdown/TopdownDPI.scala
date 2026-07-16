@@ -77,6 +77,10 @@ private[topdown] object TopdownDPI {
   val extendedIQInfoWidth: Int = (new TopdownExtendedIQInfoDPI).getWidth
   val robInfoWidth: Int = (new TopdownRobInfoDPI).getWidth
 
+  def gsimPaddedWidth(width: Int): Int = ((width + 63) / 64) * 64
+
+  def gsimBitIntType(width: Int): String = s"unsigned _BitInt(${gsimPaddedWidth(width)})"
+
   private val commonInfoFields = Seq("valid", "robIdx", "robFlag", "cancelSource", "issued")
   val iqInfoFields: Seq[String] = commonInfoFields ++ Seq("pipeNum", "srcReady", "futype")
   val extendedIQInfoFields: Seq[String] = Seq("idealIssueTime")

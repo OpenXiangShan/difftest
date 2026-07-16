@@ -59,6 +59,36 @@ class TopdownIQInfoHelper(val entriesNum: Int)
   private val dpiFuncName: String = s"topdown_iq_info_dpic_$entriesNum"
 
   setInline(s"$desiredName.v", TopdownDPI.iqHelperVerilog(desiredName, dpiFuncName))
+
+  private val inWidth = entriesNum * TopdownDPI.iqInfoWidth
+  private val outWidth = entriesNum * TopdownDPI.extendedIQInfoWidth
+  private val inPaddedWidth = TopdownDPI.gsimPaddedWidth(inWidth)
+  private val outPaddedWidth = TopdownDPI.gsimPaddedWidth(outWidth)
+  private val cppExtModule =
+    s"""
+       |extern "C" void topdown_iq_info_dpic(
+       |  unsigned int entries_num,
+       |  const uint32_t *in_bits,
+       |  uint32_t *out_bits
+       |);
+       |
+       |void $desiredName(
+       |  int ENTRY_NUM,
+       |  int INFO_WIDTH,
+       |  int OUT_WIDTH,
+       |  ${TopdownDPI.gsimBitIntType(inWidth)} in,
+       |  ${TopdownDPI.gsimBitIntType(outWidth)}& out
+       |) {
+       |  constexpr int in_words = ($inPaddedWidth + 31) / 32;
+       |  constexpr int out_words = ($outPaddedWidth + 31) / 32;
+       |  uint32_t in_bits[in_words];
+       |  uint32_t out_bits[out_words] = {};
+       |  std::memcpy(in_bits, &in, sizeof(in_bits));
+       |  topdown_iq_info_dpic(ENTRY_NUM, in_bits, out_bits);
+       |  std::memcpy(&out, out_bits, sizeof(out_bits));
+       |}
+       |""".stripMargin
+  difftest.DifftestModule.createCppExtModule(desiredName, cppExtModule, Some("<cstring>"))
 }
 
 class TopdownIQInfoCollect(val entriesNum: Int) extends Module {
