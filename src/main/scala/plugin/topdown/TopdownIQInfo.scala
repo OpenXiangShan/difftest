@@ -48,22 +48,26 @@ class TopdownIQInfoHelper(val entriesNum: Int)
     )
   )
   with HasBlackBoxInline {
+  private val inWidth = entriesNum * TopdownDPI.iqInfoWidth
+  private val outWidth = entriesNum * TopdownDPI.extendedIQInfoWidth
+  private val inPaddedWidth = TopdownDPI.gsimPaddedWidth(inWidth)
+  private val outPaddedWidth = TopdownDPI.gsimPaddedWidth(outWidth)
+
   val io = IO(new Bundle {
     val clock = Input(Clock())
-    val in = Input(UInt((entriesNum * TopdownDPI.iqInfoWidth).W))
-    val out = Output(UInt((entriesNum * TopdownDPI.extendedIQInfoWidth).W))
+    val in = Input(UInt(inPaddedWidth.W))
+    val out = Output(UInt(outPaddedWidth.W))
   })
 
   override def desiredName: String = s"TopdownIQInfoHelper_$entriesNum"
 
   private val dpiFuncName: String = s"topdown_iq_info_dpic_$entriesNum"
 
-  setInline(s"$desiredName.v", TopdownDPI.iqHelperVerilog(desiredName, dpiFuncName))
+  setInline(
+    s"$desiredName.v",
+    TopdownDPI.iqHelperVerilog(desiredName, dpiFuncName, inPaddedWidth, outPaddedWidth),
+  )
 
-  private val inWidth = entriesNum * TopdownDPI.iqInfoWidth
-  private val outWidth = entriesNum * TopdownDPI.extendedIQInfoWidth
-  private val inPaddedWidth = TopdownDPI.gsimPaddedWidth(inWidth)
-  private val outPaddedWidth = TopdownDPI.gsimPaddedWidth(outWidth)
   private val cppExtModule =
     s"""
        |extern "C" void topdown_iq_info_dpic(
@@ -76,11 +80,11 @@ class TopdownIQInfoHelper(val entriesNum: Int)
        |  int ENTRY_NUM,
        |  int INFO_WIDTH,
        |  int OUT_WIDTH,
-       |  ${TopdownDPI.gsimBitIntType(inWidth)} in,
-       |  ${TopdownDPI.gsimBitIntType(outWidth)}& out
+       |  unsigned _BitInt($inPaddedWidth) in,
+       |  unsigned _BitInt($outPaddedWidth)& out
        |) {
-       |  constexpr int in_words = ($inPaddedWidth + 31) / 32;
-       |  constexpr int out_words = ($outPaddedWidth + 31) / 32;
+       |  constexpr int in_words = $inPaddedWidth / 32;
+       |  constexpr int out_words = $outPaddedWidth / 32;
        |  uint32_t in_bits[in_words];
        |  uint32_t out_bits[out_words] = {};
        |  std::memcpy(in_bits, &in, sizeof(in_bits));
@@ -97,7 +101,9 @@ class TopdownIQInfoCollect(val entriesNum: Int) extends Module {
   val helper = Module(new TopdownIQInfoHelper(entriesNum))
 
   helper.io.clock := clock
-  helper.io.in := VecInit(io.in.map(info => TopdownIQInfoDPI.from(info))).asUInt
-  val out = helper.io.out.asTypeOf(Vec(entriesNum, new TopdownExtendedIQInfoDPI))
+  val packedIn = VecInit(io.in.map(info => TopdownIQInfoDPI.from(info))).asUInt
+  helper.io.in := packedIn.pad(helper.io.in.getWidth)
+  val packedOut = helper.io.out(entriesNum * TopdownDPI.extendedIQInfoWidth - 1, 0)
+  val out = packedOut.asTypeOf(Vec(entriesNum, new TopdownExtendedIQInfoDPI))
   io.out := VecInit(out.map(_.toTopdown))
 }
