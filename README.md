@@ -132,7 +132,7 @@ If you encountered any issues when integrating DiffTest to your own design, feel
 ## APIs (DiffTest Interfaces)
 
 Currently we are supporting the RISC-V base ISA as well as some extensions,
-including Float/Double, Debug, and Vector. We also support checking the cache
+including Float/Double, Debug, Vector, and Matrix. We also support checking the cache
 coherence via RefillTest.
 
 | Probe Name | Descriptions | Mandatory |
@@ -171,8 +171,9 @@ coherence via RefillTest.
 | `DiffSyncCustomMflushpwrEvent` | custom CSR mflushpwr | No |
 | `DiffUncacheMMStoreEvent` | Uncache buffer main memory store operations | No |
 | `DiffCMOInvalEvent` | Commit of cbo.inval | No |
-| `DiffAmuCtrlEvent` | AmuCtrl IO | No |
-| `DiffMsyncEvent` | msync event for msyncregreset & macquire insts | No |
+| `DiffAmuCtrlEvent` | AMU control events for Matrix instructions | No |
+| `DiffAmuFinishEvent` | AMU execution completion and matrix register-bank updates | No |
+| `DiffMsyncEvent` | Synchronization events for msyncregreset, macquire, and mfence instructions | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 They will be automatically created when calling `DifftestModule.finish(cpu: String)`.
