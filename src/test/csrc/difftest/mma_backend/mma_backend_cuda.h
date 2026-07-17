@@ -20,7 +20,7 @@
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
-class CudaMmaBackend : public IMmaBackend {
+class CudaMmaBackend : public MmaBackend {
 public:
   bool verify(MmaVerificationBuffer *buffer) override;
 };

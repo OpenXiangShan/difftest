@@ -22,9 +22,22 @@
 
 struct MmaVerificationBuffer;
 
-class IMmaBackend {
+enum MmaElementType : uint8_t {
+  Fp8E5M2 = 0,
+  Fp16 = 1,
+  Fp32 = 2,
+  Fp8E4M3 = 4,
+  Bf16 = 5,
+  Tf32 = 6,
+};
+
+static inline bool is_mma_32bit_result_type(uint8_t type) {
+  return (type & 3) == 2;
+}
+
+class MmaBackend {
 public:
-  virtual ~IMmaBackend() = default;
+  virtual ~MmaBackend() = default;
   virtual bool verify(MmaVerificationBuffer *buffer) = 0;
 };
 

@@ -102,6 +102,8 @@ USE_CUDA_MMA_BACKEND = $(or $(findstring C,$(DIFFTEST_CONFIG)),$(filter-out 0,$(
 CUDA_MMA_BACKEND_SRC = $(DIFFTEST_CSRC_DIR)/mma_backend/mma_backend_cuda_kernel.cu
 CUDA_MMA_BACKEND_OBJ = $(BUILD_DIR)/mma_backend_cuda_kernel.o
 NVCC ?= nvcc
+CUDA_MMA_BACKEND_HEADERS = $(DIFFTEST_CSRC_DIR)/mma_backend/mma_backend_cuda_impl.h \
+	$(DIFFTEST_CSRC_DIR)/mma_backend/mma_backend_cute_model.h
 
 # Optional CUDA toolchain detection for MMA backend.
 # NOTE: strict-mode behavior is enforced in C++: CONFIG_DIFFTEST_MMA_CUDA
@@ -121,7 +123,7 @@ endif
 
 SIM_EXTRA_OBJS += $(CUDA_MMA_BACKEND_OBJ)
 
-$(CUDA_MMA_BACKEND_OBJ): $(CUDA_MMA_BACKEND_SRC) $(DIFFTEST_STATE_HEADER) | $(BUILD_DIR)
+$(CUDA_MMA_BACKEND_OBJ): $(CUDA_MMA_BACKEND_SRC) $(CUDA_MMA_BACKEND_HEADERS) $(DIFFTEST_STATE_HEADER) | $(BUILD_DIR)
 	$(NVCC) -std=c++17 -c $(CUDA_MMA_BACKEND_SRC) $(SIM_CXXFLAGS) -o $@
 endif
 

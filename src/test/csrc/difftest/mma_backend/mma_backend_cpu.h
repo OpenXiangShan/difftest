@@ -20,15 +20,18 @@
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
-class CpuMmaBackend : public IMmaBackend {
+namespace cute_mma_model {
+enum class FloatFormat : uint8_t;
+}
+
+class CpuMmaBackend : public MmaBackend {
 public:
   bool verify(MmaVerificationBuffer *buffer) override;
 
 private:
-  template <class src1_t, class src2_t> bool mmacc_template(MmaVerificationBuffer *buffer);
+  template <cute_mma_model::FloatFormat Format> bool verify_fp_mma(MmaVerificationBuffer *buffer);
 
-  template <int src_exp_bits, int src_mantissa_bits, int result_exp_bits, int result_mantissa_bits>
-  bool mfmacc_template(MmaVerificationBuffer *buffer);
+  template <class src1_t, class src2_t> bool verify_int_mma(MmaVerificationBuffer *buffer);
 };
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

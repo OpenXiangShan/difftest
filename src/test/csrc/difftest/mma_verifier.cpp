@@ -30,7 +30,7 @@ MmaVerifier::MmaVerifier() : mma_thread_running(false) {
   backend = new CpuMmaBackend();
   const char *backend_name = "CPU";
 #endif
-  std::fprintf(stderr, "MMA reference model backend: %s\n", backend_name);
+  Info("[INFO] MMA reference model backend: %s\n", backend_name);
 }
 
 MmaVerifier::~MmaVerifier() {

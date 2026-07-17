@@ -119,7 +119,7 @@ private:
   std::atomic<MmaVerificationBuffer *> mma_error_buffer{nullptr};
 
   // MMA verification backend (CPU by default)
-  IMmaBackend *backend = nullptr;
+  MmaBackend *backend = nullptr;
 
   // Thread function
   void mma_verification_thread_func();

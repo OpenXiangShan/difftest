@@ -36,34 +36,18 @@ static bool report_cuda_error(const char *what, cudaError_t err) {
 }
 
 static bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType *type) {
+  if (!is_mma_32bit_result_type(event.typed)) {
+    return false;
+  }
+
   if (event.isfp) {
-    switch (event.types1) {
-      case 0:
-        switch (event.typed) {
-          case 1: *type = CudaMmaType::Fp8E5M2ToFp16; return true;
-          case 2: *type = CudaMmaType::Fp8E5M2ToFp32; return true;
-          case 5: *type = CudaMmaType::Fp8E5M2ToBf16; return true;
-          default: return false;
-        }
-      case 4:
-        switch (event.typed) {
-          case 1: *type = CudaMmaType::Fp8E4M3ToFp16; return true;
-          case 2: *type = CudaMmaType::Fp8E4M3ToFp32; return true;
-          case 5: *type = CudaMmaType::Fp8E4M3ToBf16; return true;
-          default: return false;
-        }
-      case 1:
-        switch (event.typed) {
-          case 1: *type = CudaMmaType::Fp16ToFp16; return true;
-          case 2: *type = CudaMmaType::Fp16ToFp32; return true;
-          default: return false;
-        }
-      case 5:
-        if (event.typed == 2) {
-          *type = CudaMmaType::Bf16ToFp32;
-          return true;
-        }
-        return false;
+    const MmaElementType source_type = static_cast<MmaElementType>(event.types1);
+    switch (source_type) {
+      case MmaElementType::Fp8E5M2: *type = CudaMmaType::Fp8E5M2ToFp32; return true;
+      case MmaElementType::Fp8E4M3: *type = CudaMmaType::Fp8E4M3ToFp32; return true;
+      case MmaElementType::Fp16: *type = CudaMmaType::Fp16ToFp32; return true;
+      case MmaElementType::Bf16: *type = CudaMmaType::Bf16ToFp32; return true;
+      case MmaElementType::Tf32: *type = CudaMmaType::Tf32ToFp32; return true;
       default: return false;
     }
   }
@@ -92,10 +76,9 @@ bool CudaMmaBackend::verify(MmaVerificationBuffer *buffer) {
     return report_cuda_error("cudaSetDevice", err);
   }
 
-  bool passed =
-      cuda_mma_backend_launch(type, buffer->amu_event.mtilem, buffer->amu_event.mtilek, buffer->amu_event.mtilen,
-                              buffer->amu_event.types1, buffer->amu_event.types2, buffer->amu_event.typed,
-                              buffer->amu_event.sat, buffer->src1, buffer->src2, buffer->src3, buffer->dut_result);
+  bool passed = cuda_mma_backend_launch(type, buffer->amu_event.mtilem, buffer->amu_event.mtilek,
+                                        buffer->amu_event.mtilen, buffer->amu_event.types1, buffer->amu_event.types2,
+                                        buffer->src1, buffer->src2, buffer->src3, buffer->dut_result);
   return passed && report_cuda_error("post-launch", cudaGetLastError());
 }
 

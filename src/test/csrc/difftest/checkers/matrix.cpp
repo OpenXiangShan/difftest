@@ -98,6 +98,11 @@ void AmuCtrlRecorder::clear_valid(DifftestAmuCtrlEvent &probe) {
 }
 
 int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
+  if (probe.op == 0 && !is_mma_32bit_result_type(probe.typed)) {
+    Info("Unsupported MMA result type: typed=%u is not 32-bit\n", static_cast<unsigned>(probe.typed));
+    return STATE_ERROR;
+  }
+
   DiffState::AmeInstRobEntry entry;
   entry.amu_event = probe;
   entry.state = DiffState::WAIT_REF_COMMIT;

@@ -24,19 +24,15 @@ enum class CudaMmaType : uint8_t {
   U8S8 = 1,
   S8U8 = 2,
   S8S8 = 3,
-  Fp8E5M2ToFp16 = 4,
   Fp8E5M2ToFp32 = 5,
-  Fp8E5M2ToBf16 = 6,
-  Fp8E4M3ToFp16 = 7,
   Fp8E4M3ToFp32 = 8,
-  Fp8E4M3ToBf16 = 9,
-  Fp16ToFp16 = 10,
   Fp16ToFp32 = 11,
   Bf16ToFp32 = 12,
+  Tf32ToFp32 = 13,
 };
 
 extern "C" bool cuda_mma_backend_launch(CudaMmaType type, uint16_t tile_m, uint16_t tile_k, uint16_t tile_n,
-                                        uint8_t types1, uint8_t types2, uint8_t typed, uint8_t sat, const uint8_t *src1,
-                                        const uint8_t *src2, uint8_t *src3, const uint8_t *dut_result);
+                                        uint8_t types1, uint8_t types2, const uint8_t *src1, const uint8_t *src2,
+                                        uint8_t *src3, const uint8_t *dut_result);
 
 #endif // __MMA_BACKEND_CUDA_IMPL_H__
