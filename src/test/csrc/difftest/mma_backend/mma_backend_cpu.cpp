@@ -68,8 +68,7 @@ bool CpuMmaBackend::verify(MmaVerificationBuffer *buffer) {
   }
 }
 
-template <cute_mma_model::FloatFormat Format>
-bool CpuMmaBackend::verify_fp_mma(MmaVerificationBuffer *buffer) {
+template <cute_mma_model::FloatFormat Format> bool CpuMmaBackend::verify_fp_mma(MmaVerificationBuffer *buffer) {
   const int tile_m = buffer->amu_event.mtilem;
   const int tile_k = buffer->amu_event.mtilek;
   const int tile_n = buffer->amu_event.mtilen;
