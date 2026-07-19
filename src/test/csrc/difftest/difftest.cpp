@@ -23,10 +23,8 @@
 #include "ram.h"
 #include "spikedasm.h"
 #include "splitview.h"
-#include <chrono>
 #include <csignal>
 #include <cstdlib>
-#include <thread>
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
@@ -568,9 +566,7 @@ int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   if (mma_verifier) {
     if (ret) { // find error, wait for mma verification to complete
-      while (mma_verifier->has_pending_mma_verifications() && !mma_verifier->has_mma_verification_error()) {
-        std::this_thread::sleep_for(std::chrono::microseconds(100));
-      }
+      mma_verifier->flush();
     }
     if (mma_verifier->has_mma_verification_error()) {
       auto buffer = mma_verifier->get_error_buffer();

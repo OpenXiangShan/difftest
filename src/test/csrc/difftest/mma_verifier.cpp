@@ -1,6 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2020-2021 Peng Cheng Laboratory
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -22,7 +21,7 @@
 #include <cstdio>
 #include <cstring>
 
-MmaVerifier::MmaVerifier() : mma_thread_running(false) {
+MmaVerifier::MmaVerifier() {
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
   backend = new CudaMmaBackend();
   const char *backend_name = "CUDA";
@@ -53,22 +52,40 @@ MmaVerifier::~MmaVerifier() {
 }
 
 void MmaVerifier::start() {
-  if (mma_thread_state.load(std::memory_order_acquire) == ThreadState::NotStarted) {
-    mma_thread_running.store(true, std::memory_order_release);
-    mma_thread_state.store(ThreadState::Running, std::memory_order_release);
-    mma_verification_thread = std::thread(&MmaVerifier::mma_verification_thread_func, this);
+  if (mma_verification_thread.joinable()) {
+    return;
   }
+
+  std::lock_guard<std::mutex> lock(mma_queue_mutex);
+  mma_stop_requested = false;
+  mma_verification_thread = std::thread(&MmaVerifier::mma_verification_thread_func, this);
 }
 
 void MmaVerifier::stop() {
-  if (mma_thread_state.load(std::memory_order_acquire) == ThreadState::Running) {
-    mma_thread_running.store(false, std::memory_order_release);
-    mma_queue_cv.notify_all();
+  {
+    std::lock_guard<std::mutex> lock(mma_queue_mutex);
+    mma_stop_requested = true;
   }
+  mma_worker_cv.notify_all();
+  mma_flush_cv.notify_all();
+
   if (mma_verification_thread.joinable()) {
     mma_verification_thread.join();
-    mma_thread_state.store(ThreadState::NotStarted, std::memory_order_release);
   }
+}
+
+bool MmaVerifier::flush() {
+  std::unique_lock<std::mutex> lock(mma_queue_mutex);
+  Assert(mma_pending_count == 0 || (mma_verification_thread.joinable() && !mma_stop_requested),
+         "MMA verifier is not running with %zu pending requests", mma_pending_count);
+
+  mma_flush_cv.wait(lock, [this] { return mma_pending_count == 0 || mma_stop_requested; });
+
+  if (mma_pending_count != 0) {
+    Assert(false, "MMA verifier stopped with %zu pending requests", mma_pending_count);
+    return false;
+  }
+  return !has_mma_verification_error();
 }
 
 MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *amu_event) {
@@ -109,18 +126,16 @@ void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
 }
 
 void MmaVerifier::add_to_verification_queue(MmaVerificationBuffer *buffer) {
-  std::unique_lock<std::mutex> lock(mma_queue_mutex);
-  mma_verification_queue.push(buffer);
-  mma_pending_count++;
-  mma_queue_cv.notify_one();
-}
-
-bool MmaVerifier::has_pending_mma_verifications() const {
-  return mma_pending_count.load(std::memory_order_acquire) > 0;
+  {
+    std::lock_guard<std::mutex> lock(mma_queue_mutex);
+    mma_verification_queue.push(buffer);
+    mma_pending_count++;
+  }
+  mma_worker_cv.notify_one();
 }
 
 bool MmaVerifier::has_mma_verification_error() const {
-  return mma_has_error.load(std::memory_order_acquire);
+  return mma_error_buffer.load(std::memory_order_acquire) != nullptr;
 }
 
 const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
@@ -128,7 +143,7 @@ const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
 }
 
 void MmaVerifier::mma_verification_thread_func() {
-  while (mma_thread_running) {
+  while (true) {
     MmaVerificationBuffer *buffer = nullptr;
 
     // Check if there are buffers to process
@@ -136,9 +151,9 @@ void MmaVerifier::mma_verification_thread_func() {
       std::unique_lock<std::mutex> lock(mma_queue_mutex);
 
       // Wait for a buffer to be available or thread to be stopped
-      mma_queue_cv.wait(lock, [this] { return !mma_thread_running || !mma_verification_queue.empty(); });
+      mma_worker_cv.wait(lock, [this] { return mma_stop_requested || !mma_verification_queue.empty(); });
 
-      if (!mma_thread_running) {
+      if (mma_stop_requested) {
         break;
       }
 
@@ -151,20 +166,28 @@ void MmaVerifier::mma_verification_thread_func() {
     if (buffer) {
       bool passed = backend ? backend->verify(buffer) : true;
 
-      mma_pending_count--;
       if (passed) {
         free_buffer(buffer);
       } else {
-        mma_has_error.store(true, std::memory_order_release);
-        mma_error_buffer.store(buffer, std::memory_order_release);
-        mma_thread_running.store(false, std::memory_order_release);
-        mma_thread_state.store(ThreadState::StoppedNotJoined, std::memory_order_release);
-        break; // Only care about first error, exit verification thread; buffer retained
+        MmaVerificationBuffer *expected = nullptr;
+        if (!mma_error_buffer.compare_exchange_strong(expected, buffer, std::memory_order_acq_rel)) {
+          free_buffer(buffer);
+        }
+      }
+
+      bool drained = false;
+      {
+        std::lock_guard<std::mutex> lock(mma_queue_mutex);
+        mma_pending_count--;
+        drained = (mma_pending_count == 0);
+      }
+
+      if (drained) {
+        mma_flush_cv.notify_all();
       }
     }
   }
-  // Thread exiting: mark as StoppedNotJoined so stop() knows to join
-  mma_thread_state.store(ThreadState::StoppedNotJoined, std::memory_order_release);
+  mma_flush_cv.notify_all();
 }
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
