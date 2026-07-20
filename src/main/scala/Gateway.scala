@@ -53,7 +53,6 @@ case class GatewayConfig(
   softArchUpdate: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
-  useCudaMmaBackend: Boolean = false,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -91,7 +90,6 @@ case class GatewayConfig(
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
     if (isFPGA) macros ++= Seq("CONFIG_DIFFTEST_FPGA", s"CONFIG_DIFFTEST_HOST_AXIS_BYTES ${hostAxisBytes}")
-    if (useCudaMmaBackend) macros += "CONFIG_DIFFTEST_MMA_CUDA"
     macros.toSeq
   }
   def vMacros: Seq[String] = {
@@ -184,7 +182,6 @@ object Gateway {
       case 'H' => config = config.copy(hierarchicalWiring = true)
       case 'F' => config = config.copy(isFPGA = true)
       case 'G' => config = config.copy(isGSIM = true)
-      case 'C' => config = config.copy(useCudaMmaBackend = true)
       case 'U' => config = config.copy(softArchUpdate = true)
       case x   => println(s"Unknown Gateway Config $x")
     }

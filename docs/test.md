@@ -39,6 +39,7 @@ Optional build flags:
 | `EMU_THREADS=<n>` | Multi-threaded Verilator simulation |
 | `DIFFTEST_QUERY=1` | Enable Query DB (SQLite) support |
 | `DIFFTEST_PERFCNT=1` | Enable performance counters |
+| `MMA_BACKEND=cpu\|cuda` | Select the software MMA reference backend (default: `cpu`) |
 | `MILL_ARGS="--difftest-config <CONFIG>"` | Set DifftestConfig (see [hw-flow.md](hw-flow.md)) |
 
 Examples:
@@ -104,6 +105,7 @@ Optional build flags:
 | `EMU_THREADS=<n>` | Multi-threaded simulation |
 | `DIFFTEST_QUERY=1` | Enable Query DB (SQLite) support |
 | `DIFFTEST_PERFCNT=1` | Enable performance counters |
+| `MMA_BACKEND=cpu\|cuda` | Select the software MMA reference backend (default: `cpu`) |
 | `SYNTHESIS=1` | Synthesis mode (no DPI-C difftest) |
 | `DISABLE_DIFFTEST_RAM_DPIC=1` | Disable RAM DPI-C |
 | `DISABLE_DIFFTEST_FLASH_DPIC=1` | Disable Flash DPI-C |

@@ -15,8 +15,13 @@
 #***************************************************************************************
 
 DIFFTEST_STATE_HEADER = $(GEN_CSRC_DIR)/difftest-state.h
-DIFFTEST_STATE_HAS_CUDA = $(shell grep -c '^#define CONFIG_DIFFTEST_MMA_CUDA' $(DIFFTEST_STATE_HEADER) 2> /dev/null)
-USE_CUDA_MMA_BACKEND = $(or $(findstring C,$(DIFFTEST_CONFIG)),$(filter-out 0,$(DIFFTEST_STATE_HAS_CUDA)))
+MMA_BACKEND ?= cpu
+ifneq ($(MMA_BACKEND),cpu)
+ifneq ($(MMA_BACKEND),cuda)
+$(error Unsupported MMA_BACKEND '$(MMA_BACKEND)'; expected cpu or cuda)
+endif
+endif
+
 CUDA_MMA_BACKEND_SRC = $(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cuda_kernel.cu
 CUDA_MMA_BACKEND_OBJ = $(BUILD_DIR)/mma_backend_cuda_kernel.o
 NVCC ?= nvcc
@@ -24,14 +29,13 @@ CUDA_MMA_BACKEND_HEADERS = $(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cuda_imp
 	$(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cute_model.h
 
 # Optional CUDA toolchain detection for MMA backend.
-# NOTE: strict-mode behavior is enforced in C++: CONFIG_DIFFTEST_MMA_CUDA
-# without CONFIG_DIFFTEST_HAS_CUDA_TOOLCHAIN will trigger compile-time error.
 CUDA_HOME ?= /usr/local/cuda
 CUDA_INCLUDE_FILE = $(firstword $(wildcard $(CUDA_HOME)/include/cuda_runtime_api.h /usr/local/cuda/include/cuda_runtime_api.h /usr/include/cuda_runtime_api.h))
 CUDA_LIB_FILE = $(firstword $(wildcard $(CUDA_HOME)/lib64/libcudart.so /usr/local/cuda/lib64/libcudart.so /usr/lib/x86_64-linux-gnu/libcudart.so /usr/lib64/libcudart.so))
 CUDA_INCLUDE_DIR ?= $(patsubst %/,%,$(dir $(CUDA_INCLUDE_FILE)))
 CUDA_LIB_DIR ?= $(patsubst %/,%,$(dir $(CUDA_LIB_FILE)))
-ifneq ($(USE_CUDA_MMA_BACKEND),)
+ifeq ($(MMA_BACKEND),cuda)
+SIM_CXXFLAGS += -DCONFIG_DIFFTEST_MMA_CUDA
 ifneq ($(wildcard $(CUDA_INCLUDE_DIR)/cuda_runtime_api.h),)
 ifneq ($(wildcard $(CUDA_LIB_DIR)/libcudart.so),)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_HAS_CUDA_TOOLCHAIN -I$(CUDA_INCLUDE_DIR)
