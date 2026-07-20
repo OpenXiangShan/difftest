@@ -17,11 +17,11 @@
 DIFFTEST_STATE_HEADER = $(GEN_CSRC_DIR)/difftest-state.h
 DIFFTEST_STATE_HAS_CUDA = $(shell grep -c '^#define CONFIG_DIFFTEST_MMA_CUDA' $(DIFFTEST_STATE_HEADER) 2> /dev/null)
 USE_CUDA_MMA_BACKEND = $(or $(findstring C,$(DIFFTEST_CONFIG)),$(filter-out 0,$(DIFFTEST_STATE_HAS_CUDA)))
-CUDA_MMA_BACKEND_SRC = $(DIFFTEST_CSRC_DIR)/mma_backend/mma_backend_cuda_kernel.cu
+CUDA_MMA_BACKEND_SRC = $(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cuda_kernel.cu
 CUDA_MMA_BACKEND_OBJ = $(BUILD_DIR)/mma_backend_cuda_kernel.o
 NVCC ?= nvcc
-CUDA_MMA_BACKEND_HEADERS = $(DIFFTEST_CSRC_DIR)/mma_backend/mma_backend_cuda_impl.h \
-	$(DIFFTEST_CSRC_DIR)/mma_backend/mma_backend_cute_model.h
+CUDA_MMA_BACKEND_HEADERS = $(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cuda_impl.h \
+	$(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cute_model.h
 
 # Optional CUDA toolchain detection for MMA backend.
 # NOTE: strict-mode behavior is enforced in C++: CONFIG_DIFFTEST_MMA_CUDA

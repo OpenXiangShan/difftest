@@ -17,7 +17,7 @@
 #ifndef __MMA_BACKEND_CUDA_H__
 #define __MMA_BACKEND_CUDA_H__
 
-#include "mma_backend/mma_backend.h"
+#include "mma/backend/mma_backend.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 

@@ -14,7 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "mma_backend/mma_backend_cuda.h"
+#include "mma/backend/mma_backend_cuda.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
@@ -23,8 +23,8 @@
 #error "CONFIG_DIFFTEST_MMA_CUDA requires CUDA toolchain, but none was detected"
 #endif
 
-#include "mma_backend/mma_backend_cuda_impl.h"
-#include "mma_verifier.h"
+#include "mma/backend/mma_backend_cuda_impl.h"
+#include "mma/mma_verifier.h"
 #include <cstdio>
 #include <cuda_runtime_api.h>
 

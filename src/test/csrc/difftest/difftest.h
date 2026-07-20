@@ -55,7 +55,7 @@ typedef struct {
 } WarmupInfo;
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-#include "mma_verifier.h"
+#include "mma/mma_verifier.h"
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 class Difftest {

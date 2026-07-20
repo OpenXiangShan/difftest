@@ -14,9 +14,9 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "mma_verifier.h"
-#include "mma_backend/mma_backend_cpu.h"
-#include "mma_backend/mma_backend_cuda.h"
+#include "mma/mma_verifier.h"
+#include "mma/backend/mma_backend_cpu.h"
+#include "mma/backend/mma_backend_cuda.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 #include <cstdio>

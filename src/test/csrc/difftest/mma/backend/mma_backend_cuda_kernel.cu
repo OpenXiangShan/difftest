@@ -14,8 +14,8 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "mma_backend/mma_backend_cuda_impl.h"
-#include "mma_backend/mma_backend_cute_model.h"
+#include "mma/backend/mma_backend_cuda_impl.h"
+#include "mma/backend/mma_backend_cute_model.h"
 #include <cuda_runtime_api.h>
 #include <stdint.h>
 #include <stdio.h>

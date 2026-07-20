@@ -14,12 +14,12 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "mma_backend/mma_backend_cpu.h"
-#include "mma_backend/mma_backend_cute_model.h"
+#include "mma/backend/mma_backend_cpu.h"
+#include "mma/backend/mma_backend_cute_model.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
-#include "mma_verifier.h"
+#include "mma/mma_verifier.h"
 #include <cstdint>
 #include <cstring>
 #include <type_traits>

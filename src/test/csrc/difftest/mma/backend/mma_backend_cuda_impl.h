@@ -14,27 +14,26 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __MMA_BACKEND_CPU_H__
-#define __MMA_BACKEND_CPU_H__
+#ifndef __MMA_BACKEND_CUDA_IMPL_H__
+#define __MMA_BACKEND_CUDA_IMPL_H__
 
-#include "mma_backend/mma_backend.h"
+#include "mma/backend/mma_backend.h"
+#include <cstdint>
 
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-
-namespace cute_mma_model {
-enum class FloatFormat : uint8_t;
-}
-
-class CpuMmaBackend : public MmaBackend {
-public:
-  bool verify(MmaVerificationBuffer *buffer) override;
-
-private:
-  template <cute_mma_model::FloatFormat Format> bool verify_fp_mma(MmaVerificationBuffer *buffer);
-
-  template <class src1_t, class src2_t> bool verify_int_mma(MmaVerificationBuffer *buffer);
+enum class CudaMmaType : uint8_t {
+  U8U8 = 0,
+  U8S8 = 1,
+  S8U8 = 2,
+  S8S8 = 3,
+  Fp8E5M2ToFp32 = 5,
+  Fp8E4M3ToFp32 = 8,
+  Fp16ToFp32 = 11,
+  Bf16ToFp32 = 12,
+  Tf32ToFp32 = 13,
 };
 
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+extern "C" bool cuda_mma_backend_launch(CudaMmaType type, uint16_t tile_m, uint16_t tile_k, uint16_t tile_n,
+                                        uint8_t types1, uint8_t types2, const uint8_t *src1, const uint8_t *src2,
+                                        uint8_t *src3, const uint8_t *dut_result);
 
-#endif // __MMA_BACKEND_CPU_H__
+#endif // __MMA_BACKEND_CUDA_IMPL_H__

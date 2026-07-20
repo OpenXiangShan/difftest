@@ -18,7 +18,7 @@
 #define __MMA_VERIFIER_H__
 
 #include "config.h"
-#include "mma_backend/mma_backend.h"
+#include "mma/backend/mma_backend.h"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
