@@ -77,6 +77,8 @@ private[topdown] object TopdownDPI {
   val extendedIQInfoWidth: Int = (new TopdownExtendedIQInfoDPI).getWidth
   val robInfoWidth: Int = (new TopdownRobInfoDPI).getWidth
 
+  def gsimPaddedWidth(width: Int): Int = ((width + 63) / 64) * 64
+
   private val commonInfoFields = Seq("valid", "robIdx", "robFlag", "cancelSource", "issued")
   val iqInfoFields: Seq[String] = commonInfoFields ++ Seq("pipeNum", "srcReady", "futype")
   val extendedIQInfoFields: Seq[String] = Seq("idealIssueTime")
@@ -100,7 +102,12 @@ private[topdown] object TopdownDPI {
     }
   }
 
-  def iqHelperVerilog(moduleName: String, dpiFuncName: String): String =
+  def iqHelperVerilog(
+    moduleName: String,
+    dpiFuncName: String,
+    inPaddedWidth: Int,
+    outPaddedWidth: Int,
+  ): String =
     s"""
        |module $moduleName #(
        |  parameter integer ENTRY_NUM = 1,
@@ -108,11 +115,12 @@ private[topdown] object TopdownDPI {
        |  parameter integer OUT_WIDTH = $extendedIQInfoWidth
        |) (
        |  input                         clock,
-       |  input  [ENTRY_NUM*INFO_WIDTH-1:0] in,
-       |  output reg [ENTRY_NUM*OUT_WIDTH-1:0] out
+       |  input  [${inPaddedWidth - 1}:0] in,
+       |  output reg [${outPaddedWidth - 1}:0] out
        |);
        |
        |  wire _unused_clock = clock;
+       |  reg [ENTRY_NUM*OUT_WIDTH-1:0] dpi_out;
        |
        |`ifndef SYNTHESIS
        |  import "DPI-C" function void $dpiFuncName(
@@ -124,28 +132,37 @@ private[topdown] object TopdownDPI {
        |  always @(*) begin
        |    /* verilator lint_off WIDTHCONCAT */
        |    out = '0;
+       |    dpi_out = '0;
        |    /* verilator lint_on WIDTHCONCAT */
        |`ifndef SYNTHESIS
        |    $dpiFuncName(
-       |      in,
-       |      out
+       |      in[ENTRY_NUM*INFO_WIDTH-1:0],
+       |      dpi_out
        |    );
        |`endif // SYNTHESIS
+       |    out[ENTRY_NUM*OUT_WIDTH-1:0] = dpi_out;
        |  end
        |
        |endmodule
        |""".stripMargin
 
-  def robHelperVerilog(moduleName: String, dpiFuncName: String): String =
+  def robHelperVerilog(
+    moduleName: String,
+    dpiFuncName: String,
+    inPaddedWidth: Int,
+    outPaddedWidth: Int,
+  ): String =
     s"""
        |module $moduleName #(
        |  parameter integer IQ_ENTRY_NUM = 1,
        |  parameter integer ROB_ENTRY_NUM = 1,
        |  parameter integer INFO_WIDTH = $robInfoWidth
        |) (
-       |  input  [IQ_ENTRY_NUM*INFO_WIDTH-1:0] in,
-       |  output reg [ROB_ENTRY_NUM*INFO_WIDTH-1:0] out
+       |  input  [${inPaddedWidth - 1}:0] in,
+       |  output reg [${outPaddedWidth - 1}:0] out
        |);
+       |
+       |  reg [ROB_ENTRY_NUM*INFO_WIDTH-1:0] dpi_out;
        |
        |`ifndef SYNTHESIS
        |  import "DPI-C" function void $dpiFuncName(
@@ -157,13 +174,15 @@ private[topdown] object TopdownDPI {
        |  always @(*) begin
        |    /* verilator lint_off WIDTHCONCAT */
        |    out = '0;
+       |    dpi_out = '0;
        |    /* verilator lint_on WIDTHCONCAT */
        |`ifndef SYNTHESIS
        |    $dpiFuncName(
-       |      in,
-       |      out
+       |      in[IQ_ENTRY_NUM*INFO_WIDTH-1:0],
+       |      dpi_out
        |    );
        |`endif // SYNTHESIS
+       |    out[ROB_ENTRY_NUM*INFO_WIDTH-1:0] = dpi_out;
        |  end
        |
        |endmodule
