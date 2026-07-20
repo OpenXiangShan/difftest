@@ -389,13 +389,15 @@ public:
 
   void flash_init(const uint8_t *flash_base, size_t size, const char *flash_bin);
 
+  inline void report_unsupported_ref(const char *feature) {
+    Info("This version of 'REF' does not support %s. Please use a newer version of 'REF'.\n", feature);
+  }
+
   inline void get_store_event_other_info(void *info) {
     if (ref_get_store_event_other_info) {
       ref_get_store_event_other_info(info);
     } else {
-      Info(
-          "This version of 'REF' does not support the 'PC' value of store commit event. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("the 'PC' value of store commit event");
     }
   }
 
@@ -403,9 +405,7 @@ public:
     if (ref_amu_ctrl) {
       return ref_amu_ctrl(info);
     } else {
-      printf(
-          "This version of 'REF' does not support the 'PC' value of AmuCtrl event. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("the 'PC' value of AmuCtrl event");
       return 1;
     }
   }
@@ -414,9 +414,7 @@ public:
     if (ref_get_amu_ctrl_event_other_info) {
       ref_get_amu_ctrl_event_other_info(info);
     } else {
-      printf(
-          "This version of 'REF' does not support the 'PC' value of AmuCtrl event. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("the 'PC' value of AmuCtrl event");
     }
   }
 
@@ -424,9 +422,7 @@ public:
     if (ref_msync_event) {
       return ref_msync_event(info);
     } else {
-      printf(
-          "This version of 'REF' does not support the 'PC' value of Msync event. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("the 'PC' value of Msync event");
       return 1;
     }
   }
@@ -435,9 +431,7 @@ public:
     if (ref_get_msync_event_other_info) {
       ref_get_msync_event_other_info(info);
     } else {
-      printf(
-          "This version of 'REF' does not support the 'PC' value of Msync event. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("the 'PC' value of Msync event");
     }
   }
 
@@ -445,9 +439,7 @@ public:
     if (ref_amu_exec) {
       return ref_amu_exec(amu_ctrl, matrix);
     } else {
-      printf(
-          "This version of 'REF' does not support AME. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("AME");
       return 1;
     }
   }
@@ -457,9 +449,7 @@ public:
       ref_amu_lazy(amu_ctrl, res, src1, src2, src3);
       return 0;
     } else {
-      printf(
-          "This version of 'REF' does not support AME. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("AME");
       return 1;
     }
   }
