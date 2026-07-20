@@ -199,6 +199,35 @@ void difftest_finish() {
   difftest = NULL;
 }
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+void difftest_mma_flush_all() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    auto verifier = difftest[i]->get_mma_verifier();
+    if (verifier) {
+      verifier->flush();
+    }
+  }
+}
+
+void difftest_mma_stop_all() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    auto verifier = difftest[i]->get_mma_verifier();
+    if (verifier) {
+      verifier->stop();
+    }
+  }
+}
+
+void difftest_mma_start_all() {
+  for (int i = 0; i < NUM_CORES; i++) {
+    auto verifier = difftest[i]->get_mma_verifier();
+    if (verifier) {
+      verifier->start();
+    }
+  }
+}
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 svScope squashScope;
 void set_squash_scope() {

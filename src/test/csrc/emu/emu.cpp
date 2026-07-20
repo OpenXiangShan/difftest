@@ -594,11 +594,22 @@ int Emulator::tick() {
     if (((timer - lasttime_snapshot > args.fork_interval) || !have_initial_fork) && !is_fork_child()) {
       have_initial_fork = true;
       lasttime_snapshot = timer;
+#if !defined(CONFIG_NO_DIFFTEST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+      difftest_mma_flush_all();
+      difftest_mma_stop_all();
+#endif // !CONFIG_NO_DIFFTEST && CONFIG_DIFFTEST_AMUCTRLEVENT
       switch (lightsss->do_fork()) {
-        case FORK_ERROR: return -1;
+        case FORK_ERROR:
+#if !defined(CONFIG_NO_DIFFTEST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+          difftest_mma_start_all();
+#endif // !CONFIG_NO_DIFFTEST && CONFIG_DIFFTEST_AMUCTRLEVENT
+          return -1;
         case FORK_CHILD: fork_child_init();
         default: break;
       }
+#if !defined(CONFIG_NO_DIFFTEST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+      difftest_mma_start_all();
+#endif // !CONFIG_NO_DIFFTEST && CONFIG_DIFFTEST_AMUCTRLEVENT
     }
   }
   return 0;
