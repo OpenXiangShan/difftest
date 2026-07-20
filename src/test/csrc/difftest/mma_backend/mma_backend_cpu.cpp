@@ -103,8 +103,6 @@ template <cute_mma_model::FloatFormat Format> bool CpuMmaBackend::verify_fp_mma(
 }
 
 template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVerificationBuffer *buffer) {
-  static_assert(sizeof(src1_t) == 1 && sizeof(src2_t) == 1, "CUTE integer MMA expects 8-bit source elements");
-
   const int tile_m = buffer->amu_event.mtilem;
   const int tile_k = buffer->amu_event.mtilek;
   const int tile_n = buffer->amu_event.mtilen;

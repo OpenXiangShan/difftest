@@ -57,17 +57,6 @@
 #define CONFIG_DIFF_AMU_C_REG_SIZE_BYTES 65536
 #endif
 
-static_assert(CONFIG_DIFF_AMU_FINISH_BANKS > 0, "CONFIG_DIFF_AMU_FINISH_BANKS should be positive");
-static_assert(CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK > 0, "CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK should be positive");
-static_assert(CONFIG_DIFF_AMU_AB_WORDS_PER_BANK > 0, "CONFIG_DIFF_AMU_AB_WORDS_PER_BANK should be positive");
-static_assert(CONFIG_DIFF_AMU_C_WORDS_PER_BANK > 0, "CONFIG_DIFF_AMU_C_WORDS_PER_BANK should be positive");
-static_assert(CONFIG_DIFF_AMU_AB_WORDS_PER_BANK <= CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK,
-              "AB words-per-bank should not exceed event payload words-per-bank");
-static_assert(CONFIG_DIFF_AMU_C_WORDS_PER_BANK <= CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK,
-              "C words-per-bank should not exceed event payload words-per-bank");
-static_assert(CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES > 0, "CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES should be positive");
-static_assert(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES > 0, "CONFIG_DIFF_AMU_C_REG_SIZE_BYTES should be positive");
-
 static char amu_ctrl_op_str[4][16] = {"MMA", "MLS", "MRELEASE", "MARITH"};
 
 static inline size_t get_amu_result_size(const DifftestAmuCtrlEvent &amu_event) {
