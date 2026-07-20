@@ -153,9 +153,9 @@ public:
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   enum AmeInstState {
     INVALID = 0,
-    WAIT_REF_COMMIT,   // Waiting for REF to commit the AME control event.
-    WAIT_DUT_EXEC,     // Waiting for DUT matrix execution and writeback.
-    WAIT_SWROB_COMMIT  // Waiting for the software ROB to commit the result.
+    WAIT_REF_COMMIT,  // Waiting for REF to commit the AME control event.
+    WAIT_DUT_EXEC,    // Waiting for DUT matrix execution and writeback.
+    WAIT_SWROB_COMMIT // Waiting for the software ROB to commit the result.
   };
 
   typedef struct {
