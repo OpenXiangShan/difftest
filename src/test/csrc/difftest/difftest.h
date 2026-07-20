@@ -261,31 +261,13 @@ int difftest_state();
 void difftest_finish();
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-/**
- * @brief Waits for all MMA verifier workers to drain their pending requests.
- *
- * Any published mismatch remains in its verifier and is reported later by the
- * normal DiffTest step path.
- *
- * @note When preparing to fork, call difftest_mma_stop_all() before submitting
- * any new MMA work.
- */
+//Waits for all MMA verifier workers to drain their pending requests.
 void difftest_mma_flush_all();
 
-/**
- * @brief Stops and joins all MMA verifier workers.
- *
- * @pre All pending MMA work has been drained with difftest_mma_flush_all().
- */
+// Stops and joins all MMA verifier workers.
 void difftest_mma_stop_all();
 
-/**
- * @brief Starts all MMA verifier workers.
- *
- * Call this in the parent after fork() returns and in the child after it wakes
- * up, before either process resumes simulation. It must also be called in the
- * parent when fork() fails after difftest_mma_stop_all().
- */
+// Starts all MMA verifier workers.
 void difftest_mma_start_all();
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
