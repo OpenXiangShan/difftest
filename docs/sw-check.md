@@ -99,6 +99,20 @@ Key reference model API:
 - `ref_regcpy()`: register state copy (DUT → REF or REF → DUT)
 - `ref_set_ramsize()`: set RAM size
 
+## MMA Reference Backend
+
+MMA verification is performed entirely in the C++ runtime.
+
+`AmuExecChecker` packages the DUT result and reference operands into an
+`MmaVerificationBuffer`. `MmaVerifier` submits the buffer to the selected
+software backend:
+
+- `MMA_BACKEND=cpu` (default): software CUTE-compatible reference backend
+- `MMA_BACKEND=cuda`: CUDA backend, requiring a CUDA toolkit and host GPU
+
+The backend selection affects only software-side numerical verification. It
+does not change the Gateway configuration or generated hardware interface.
+
 ## Initialization Flow
 
 `difftest_init()` (in [`difftest.cpp`](../src/test/csrc/difftest/difftest.cpp)):

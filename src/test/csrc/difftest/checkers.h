@@ -176,6 +176,8 @@ class TimeoutChecker : public ProbeChecker<DifftestTrapEvent> {
 public:
 #ifdef CONFIG_DIFFTEST_SQUASH
   static const uint64_t timeout_scale = 256;
+#elif defined(CONFIG_DIFFTEST_MATRIXCSRSTATE)
+  static const uint64_t timeout_scale = 8;
 #else
   static const uint64_t timeout_scale = 1;
 #endif // CONFIG_DIFFTEST_SQUASH
@@ -351,6 +353,19 @@ private:
 };
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+class MatrixStoreChecker : public ProbeChecker<DifftestMatrixStoreEvent> {
+public:
+  MatrixStoreChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestMatrixStoreEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestMatrixStoreEvent &probe) override;
+  void clear_valid(DifftestMatrixStoreEvent &probe) override;
+  int check(const DifftestMatrixStoreEvent &probe) override;
+};
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
+
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
 class UncacheMmStoreChecker : public ProbeChecker<DifftestUncacheMMStoreEvent> {
 public:
@@ -445,5 +460,60 @@ private:
   int check() override;
 };
 #endif // CONFIG_DIFFTEST_STOREEVENT
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+class AmuCtrlRecorder : public ProbeChecker<DifftestAmuCtrlEvent> {
+public:
+  AmuCtrlRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuCtrlEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestAmuCtrlEvent &probe) override;
+  void clear_valid(DifftestAmuCtrlEvent &probe) override;
+  int check(const DifftestAmuCtrlEvent &probe) override;
+};
+
+class AmuCtrlChecker : public DiffTestChecker {
+public:
+  AmuCtrlChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
+
+  int do_step() override;
+};
+
+class AmuExecRecorder : public ProbeChecker<DifftestAmuFinishEvent> {
+public:
+  AmuExecRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuFinishEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestAmuFinishEvent &probe) override;
+  void clear_valid(DifftestAmuFinishEvent &probe) override;
+  int check(const DifftestAmuFinishEvent &probe) override;
+};
+
+class AmuExecChecker : public DiffTestChecker {
+public:
+  AmuExecChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
+
+  int do_step() override;
+};
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+class MsyncRecorder : public ProbeChecker<DifftestMsyncEvent> {
+public:
+  MsyncRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestMsyncEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestMsyncEvent &probe) override;
+  void clear_valid(DifftestMsyncEvent &probe) override;
+  int check(const DifftestMsyncEvent &probe) override;
+};
+
+class MsyncChecker : public DiffTestChecker {
+public:
+  MsyncChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
+
+  int do_step() override;
+};
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 
 #endif // __DIFFTEST_CHECKER_H__

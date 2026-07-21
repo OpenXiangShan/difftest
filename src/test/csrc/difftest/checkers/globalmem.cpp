@@ -63,6 +63,25 @@ int SbufferChecker::check(const DifftestSbufferEvent &probe) {
 
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+
+bool MatrixStoreChecker::get_valid(const DifftestMatrixStoreEvent &probe) {
+  return probe.valid;
+}
+
+void MatrixStoreChecker::clear_valid(DifftestMatrixStoreEvent &probe) {
+  probe.valid = 0;
+}
+
+int MatrixStoreChecker::check(const DifftestMatrixStoreEvent &probe) {
+  update_goldenmem(probe.addr, (void *)probe.data, probe.mask, 64);
+  if (probe.addr == state->track_instr) {
+    dumpGoldenMem("Matrix Store", state->track_instr, state->cycle_count);
+  }
+  return STATE_OK;
+}
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
+
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
 bool UncacheMmStoreChecker::get_valid(const DifftestUncacheMMStoreEvent &probe) {
   return probe.valid;

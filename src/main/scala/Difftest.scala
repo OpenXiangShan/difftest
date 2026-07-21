@@ -160,7 +160,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   // returns a seq of Group name of this bundle, Default: REF
   // Only bundles with same GroupName will affect others' squash state.
   // Some bundle will have several GroupName, such as LoadEvent
-  // Optional GroupName: REF / GOLDENMEM
+  // Optional GroupName: REF / GOLDENMEM / MATRIX
   val squashGroup: Seq[String] = Seq("REF")
   // returns a squashed, right-value Bundle. Default: overriding `base` with `this`
   def squash(base: DifftestBundle): DifftestBundle = this
@@ -405,8 +405,19 @@ class DiffFpCSRState extends FpCSRState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
+class DiffMatrixCSRState extends MatrixCSRState with DifftestBundle {
+  override val desiredCppName: String = "mcsr"
+  override val desiredRegOffset: Option[Int] = Some(8)
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+}
+
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
+  override val squashGroup: Seq[String] = Seq("GOLDENMEM")
+}
+
+class DiffMatrixStoreEvent extends MatrixStoreEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "matrix_store"
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
 }
 
@@ -508,6 +519,29 @@ class DiffSyncCustomMflushpwrEvent extends SyncCustomMflushpwrEvent with Difftes
   override val desiredCppName: String = "sync_custom_mflushpwr"
 }
 
+class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "amu_ctrl"
+
+  override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
+}
+
+class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
+  extends AmuFinishEvent(nBanks, wordsPerBank)
+  with DifftestBundle
+  with DifftestWithIndex {
+  override val desiredCppName: String = "amu_finish"
+
+  override def classArgs: Map[String, Any] = Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank)
+
+  override val squashGroup: Seq[String] = Seq("MATRIX")
+}
+
+class DiffMsyncEvent extends MsyncEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "msync"
+
+  override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
+}
+
 private[difftest] class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 
@@ -545,6 +579,7 @@ object DifftestModule {
   private val cppExtHeaders = ListBuffer.empty[String]
   private val nameExcludes = ListBuffer.empty[String]
   private val cmdConfigs = ListBuffer.empty[String]
+  private val extraCppMacros = scala.collection.mutable.LinkedHashSet.empty[String]
 
   def isFPGA: Boolean = Gateway.isFPGA
 
@@ -590,6 +625,10 @@ object DifftestModule {
   def get_current_interfaces(): Seq[(DifftestBundle, Int)] = interfaces.toSeq
 
   def get_command_configs(): Seq[String] = cmdConfigs.toSeq
+
+  def addCppMacro(name: String, value: BigInt): Unit = {
+    extraCppMacros += s"$name $value"
+  }
 
   def collect(cpu: String): GatewayResult = {
     val gateway = Gateway.collect()
@@ -674,7 +713,7 @@ object DifftestModule {
     difftestCpp += "#include <cstdint>"
     difftestCpp += ""
 
-    macros.foreach(m => difftestCpp += s"#define $m")
+    (macros ++ extraCppMacros.toSeq).distinct.foreach(m => difftestCpp += s"#define $m")
     difftestCpp += ""
 
     val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
@@ -706,6 +745,17 @@ object DifftestModule {
         if (bundleType.isFlatten) {
           val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
           difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
+        }
+        if (bundleType.desiredCppName == "amu_finish") {
+          val amuFinish = bundleType.asInstanceOf[AmuFinishEvent]
+          val amuBanks = amuFinish.bankValid.length
+          val amuWordBits = amuFinish.data.head.getWidth
+          require(amuFinish.data.length % amuBanks == 0, "AmuFinishEvent.data length should be divisible by bank count")
+          val amuWordsPerBank = amuFinish.data.length / amuBanks
+          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_BANKS $amuBanks"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK $amuWordsPerBank"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_WORD_BITS $amuWordBits"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_BANK_WIDTH ${amuWordsPerBank * amuWordBits}"
         }
         difftestCpp += bundleType.toCppDeclaration(structPacked, structAligned)
         difftestCpp += ""

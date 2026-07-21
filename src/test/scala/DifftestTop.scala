@@ -29,6 +29,7 @@ class DifftestInterfaces extends Module {
   val trap_event = DifftestModule(new DiffTrapEvent, dontCare = true)
   val csr_state = DifftestModule(new DiffCSRState, dontCare = true)
   val hcsr_state = DifftestModule(new DiffHCSRState, dontCare = true)
+  val matrix_csr_state = DifftestModule(new DiffMatrixCSRState, dontCare = true)
   val debug_mode = DifftestModule(new DiffDebugMode, dontCare = true)
   val trigger_csr_state = DifftestModule(new DiffTriggerCSRState, dontCare = true)
   val arch_int_delayed_update = DifftestModule(new DiffArchIntDelayedUpdate, dontCare = true)
@@ -44,6 +45,7 @@ class DifftestInterfaces extends Module {
   val sbuffer_event = DifftestModule(new DiffSbufferEvent, dontCare = true)
   val uncache_mm_store = DifftestModule(new DiffUncacheMMStoreEvent, dontCare = true)
   val store_event = DifftestModule(new DiffStoreEvent, dontCare = true)
+  val matrix_store_event = DifftestModule(new DiffMatrixStoreEvent, dontCare = true)
   val load_event = DifftestModule(new DiffLoadEvent, dontCare = true)
   val atomic_event = DifftestModule(new DiffAtomicEvent, dontCare = true)
   val cmo_inval_event = DifftestModule(new DiffCMOInvalEvent, dontCare = true)
@@ -59,6 +61,8 @@ class DifftestInterfaces extends Module {
   val critical_error_event = DifftestModule(new DiffCriticalErrorEvent, dontCare = true)
   val sync_aia_event = DifftestModule(new DiffSyncAIAEvent, dontCare = true)
   val sync_custom_mflushpwr_event = DifftestModule(new DiffSyncCustomMflushpwrEvent, dontCare = true)
+  val amu_ctrl_event = DifftestModule(new DiffAmuCtrlEvent, dontCare = true)
+  val amu_finish_event = DifftestModule(new DiffAmuFinishEvent, dontCare = true)
 
   DifftestModule.collect("demo")
 }

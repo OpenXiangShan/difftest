@@ -95,6 +95,7 @@ else
 SIM_CXXFILES += $(DIFFTEST_CXXFILES)
 SIM_CXXFLAGS += -I$(DIFFTEST_CSRC_DIR)
 SIM_VFLAGS   += +define+DIFFTEST
+
 ifeq ($(DIFFTEST_PERFCNT), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
 endif
@@ -313,6 +314,7 @@ SIM_CXXFLAGS += -Werror
 endif
 
 include pgo.mk
+include cuda.mk
 include emu.mk
 include vcs.mk
 include uvs.mk

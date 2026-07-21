@@ -121,7 +121,7 @@ endif
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
 
-verilator-build-emu:
+verilator-build-emu: $(SIM_EXTRA_OBJS)
 ifeq ($(REMOTE),localhost)
 	@sync -d $(BUILD_DIR) $(VERILATOR_BUILD_DIR)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
@@ -144,7 +144,7 @@ endif
 # Profile Guided Optimization
 PGO_MAX_CYCLE = 2000000   # Default for Verilator; cmdline can override
 
-$(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILATOR_HEADERS)
+$(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILATOR_HEADERS) $(SIM_EXTRA_OBJS)
 	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 ifdef PGO_WORKLOAD

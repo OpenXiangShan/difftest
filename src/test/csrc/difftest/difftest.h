@@ -54,6 +54,10 @@ typedef struct {
   uint64_t cycleCnt;
 } WarmupInfo;
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#include "mma/mma_verifier.h"
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
 class Difftest {
 public:
   // Check whether DiffTest has produced any progress (step)
@@ -137,6 +141,12 @@ public:
     return dut;
   }
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  inline MmaVerifier *get_mma_verifier() {
+    return mma_verifier;
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
 #ifdef DEBUG_REFILL
   void set_track_instr(uint64_t instr) {
     state->track_instr = instr;
@@ -193,6 +203,15 @@ protected:
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_LOADEVENT
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  // MMA verifier instance
+  MmaVerifier *mma_verifier;
+
+  // AMU finish event buffers
+  // Each buffer is a 128x128 matrix of 32-bit elements (4 bytes each)
+  uint8_t *amu_finish_buffers[CONFIG_DIFF_AMU_FINISH_WIDTH];
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
   int check_all();
 
   inline bool in_disambiguation_state() {
@@ -240,6 +259,17 @@ void difftest_set_dut();
 int difftest_step();
 int difftest_state();
 void difftest_finish();
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+//Waits for all MMA verifier workers to drain their pending requests.
+void difftest_mma_flush_all();
+
+// Stops and joins all MMA verifier workers.
+void difftest_mma_stop_all();
+
+// Starts all MMA verifier workers.
+void difftest_mma_start_all();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 void difftest_trace_read();
 void difftest_trace_write(int step);

@@ -132,7 +132,7 @@ If you encountered any issues when integrating DiffTest to your own design, feel
 ## APIs (DiffTest Interfaces)
 
 Currently we are supporting the RISC-V base ISA as well as some extensions,
-including Float/Double, Debug, and Vector. We also support checking the cache
+including Float/Double, Debug, Vector, and Matrix. We also support checking the cache
 coherence via RefillTest.
 
 | Probe Name | Descriptions | Mandatory |
@@ -151,11 +151,13 @@ coherence via RefillTest.
 | `DiffVecCSRState` | CSRs for the Vector extension | No |
 | `DiffHCSRState` | CSRs for the Hypervisor extension | No |
 | `DiffTriggerCSRState` | CSRs for the Trigger support | No |
+| `DiffMatrixCSRState` | CSRs for the Matrix extension | No |
 | `DiffDebugMode` | Debug mode registers | No |
 | `DiffArchIntDelayedUpdate` | Delayed general-purpose writeback | No |
 | `DiffArchFpDelayedUpdate` | Delayed floating-point writeback | No |
 | `DiffStoreEvent` | Store operations | No |
 | `DiffSbufferEvent` | Store buffer operations | No |
+| `DiffMatrixStoreEvent` | Matrix store events | No |
 | `DiffLoadEvent` | Load operations | No |
 | `DiffAtomicEvent` | Atomic operations | No |
 | `DiffL1TLBEvent` | L1 TLB operations | No |
@@ -169,6 +171,9 @@ coherence via RefillTest.
 | `DiffSyncCustomMflushpwrEvent` | custom CSR mflushpwr | No |
 | `DiffUncacheMMStoreEvent` | Uncache buffer main memory store operations | No |
 | `DiffCMOInvalEvent` | Commit of cbo.inval | No |
+| `DiffAmuCtrlEvent` | AMU control events for Matrix instructions | No |
+| `DiffAmuFinishEvent` | AMU execution completion and matrix register-bank updates | No |
+| `DiffMsyncEvent` | Synchronization events for msyncregreset, macquire, and mfence instructions | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 They will be automatically created when calling `DifftestModule.finish(cpu: String)`.

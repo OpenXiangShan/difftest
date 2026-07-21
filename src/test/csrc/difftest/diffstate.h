@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include <cstdint>
+#include <deque>
 #include <queue>
 #include <unordered_set>
 
@@ -149,6 +150,27 @@ public:
 #endif // CONFIG_DIFFTEST_LOADEVENT
 #endif // CONFIG_DIFFTEST_SQUASH
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  enum AmeInstState {
+    INVALID = 0,
+    WAIT_REF_COMMIT,  // Waiting for REF to commit the AME control event.
+    WAIT_DUT_EXEC,    // Waiting for DUT matrix execution and writeback.
+    WAIT_SWROB_COMMIT // Waiting for the software ROB to commit the result.
+  };
+
+  typedef struct {
+    DifftestAmuCtrlEvent amu_event;
+    AmeInstState state;
+    uint64_t *res;
+  } AmeInstRobEntry;
+
+  std::deque<AmeInstRobEntry> matrix_sw_rob;
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  std::queue<DifftestMsyncEvent> msync_event_queue;
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
+
 #ifdef DEBUG_REFILL
   uint64_t track_instr = 0;
 #endif // DEBUG_REFILL
@@ -157,6 +179,15 @@ public:
 
   DiffState(int coreid);
   ~DiffState() {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+    for (auto &entry: matrix_sw_rob) {
+      if (entry.res != nullptr) {
+        delete[] entry.res;
+        entry.res = nullptr;
+      }
+    }
+    matrix_sw_rob.clear();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
     while (!commit_trace.empty()) {
       delete commit_trace.front();
       commit_trace.pop();

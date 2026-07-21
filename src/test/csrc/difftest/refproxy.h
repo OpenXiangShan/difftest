@@ -75,6 +75,12 @@ static const char *regs_name_fp_csr[] = {
   "fcsr"
 };
 
+static const char *regs_name_matrix_csr[] = {
+  "mcsr", "mxrm", "msat", "mfflags", "mfrm", "msaten",
+  "tlenb", "trlenb", "alenb",
+  "mtilem", "mtilen", "mtilek", "msync"
+};
+
 static const char *regs_name_triggercsr[] = {
   "tselect", "tdata1", "tinfo"
 };
@@ -158,7 +164,13 @@ public:
   f(ref_sync_custom_mflushpwr, difftest_sync_custom_mflushpwr, void, bool)                                  \
   f(ref_get_vec_load_vdNum, difftest_get_vec_load_vdNum, int, )                                             \
   f(ref_get_vec_load_dual_goldenmem_reg, difftest_get_vec_load_dual_goldenmem_reg, void*, )                 \
-  f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )
+  f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )                                   \
+  f(ref_amu_ctrl, difftest_amu_ctrl, int, void*)                                                            \
+  f(ref_get_amu_ctrl_event_other_info, difftest_get_amu_ctrl_event_other_info, void, void*)                 \
+  f(ref_msync_event, difftest_msync_event, int, void*)                                                      \
+  f(ref_get_msync_event_other_info, difftest_get_msync_event_other_info, void, void*)                       \
+  f(ref_amu_exec, difftest_amu_exec, int, void*, void*)                                                     \
+  f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -199,6 +211,9 @@ typedef struct __attribute__((packed)) {
 #ifdef CONFIG_DIFFTEST_FPCSRSTATE
   DifftestFpCSRState fcsr;
 #endif // CONFIG_DIFFTEST_FPCSRSTATE
+#ifdef CONFIG_DIFFTEST_MATRIXCSRSTATE
+  DifftestMatrixCSRState mcsr;
+#endif
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
   DifftestTriggerCSRState triggercsr;
 #endif // CONFIG_DIFFTEST_TRIGGERCSRSTATE
@@ -374,13 +389,68 @@ public:
 
   void flash_init(const uint8_t *flash_base, size_t size, const char *flash_bin);
 
+  inline void report_unsupported_ref(const char *feature) {
+    Info("This version of 'REF' does not support %s. Please use a newer version of 'REF'.\n", feature);
+  }
+
   inline void get_store_event_other_info(void *info) {
     if (ref_get_store_event_other_info) {
       ref_get_store_event_other_info(info);
     } else {
-      Info(
-          "This version of 'REF' does not support the 'PC' value of store commit event. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("the 'PC' value of store commit event");
+    }
+  }
+
+  inline int get_amu_ctrl_event(void *info) {
+    if (ref_amu_ctrl) {
+      return ref_amu_ctrl(info);
+    } else {
+      report_unsupported_ref("the 'PC' value of AmuCtrl event");
+      return 1;
+    }
+  }
+
+  inline void get_amu_ctrl_event_other_info(void *info) {
+    if (ref_get_amu_ctrl_event_other_info) {
+      ref_get_amu_ctrl_event_other_info(info);
+    } else {
+      report_unsupported_ref("the 'PC' value of AmuCtrl event");
+    }
+  }
+
+  inline int get_msync_event(void *info) {
+    if (ref_msync_event) {
+      return ref_msync_event(info);
+    } else {
+      report_unsupported_ref("the 'PC' value of Msync event");
+      return 1;
+    }
+  }
+
+  inline void get_msync_event_other_info(void *info) {
+    if (ref_get_msync_event_other_info) {
+      ref_get_msync_event_other_info(info);
+    } else {
+      report_unsupported_ref("the 'PC' value of Msync event");
+    }
+  }
+
+  inline int get_amu_exec(void *amu_ctrl, void *matrix) {
+    if (ref_amu_exec) {
+      return ref_amu_exec(amu_ctrl, matrix);
+    } else {
+      report_unsupported_ref("AME");
+      return 1;
+    }
+  }
+
+  inline int get_amu_lazy(void *amu_ctrl, void *res, void *src1, void *src2, void *src3) {
+    if (ref_amu_lazy) {
+      ref_amu_lazy(amu_ctrl, res, src1, src2, src3);
+      return 0;
+    } else {
+      report_unsupported_ref("AME");
+      return 1;
     }
   }
 
