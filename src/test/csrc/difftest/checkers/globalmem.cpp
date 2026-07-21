@@ -163,24 +163,22 @@ int AtomicChecker::check(const DifftestAtomicEvent &probe) {
     uint64_t ret;
     switch (op) {
       case 0: ret = t; break; // LR
-      case 1:               // SC
+      case 1:                 // SC
         if (t == 1)
           return STATE_OK;
         ret = rs;
         break;
-      case 2: ret = rs; break;                                      // SWAP
-      case 3: ret = t + rs; break;                                  // ADD
-      case 4: ret = t ^ rs; break;                                  // XOR
-      case 5: ret = t & rs; break;                                  // AND
-      case 6: ret = t | rs; break;                                  // OR
-      case 7: ret = as_signed(t) < as_signed(rs) ? t : rs; break;    // MIN
-      case 8: ret = as_signed(t) > as_signed(rs) ? t : rs; break;    // MAX
-      case 9: ret = t < rs ? t : rs; break;                          // MINU
-      case 10: ret = t > rs ? t : rs; break;                         // MAXU
-      case 11: ret = t == cmp ? rs : t; break;                       // CAS
-      default:
-        Info("Unknown atomic fuOpType: 0x%x\n", probe.fuop);
-        return STATE_ERROR;
+      case 2: ret = rs; break;                                    // SWAP
+      case 3: ret = t + rs; break;                                // ADD
+      case 4: ret = t ^ rs; break;                                // XOR
+      case 5: ret = t & rs; break;                                // AND
+      case 6: ret = t | rs; break;                                // OR
+      case 7: ret = as_signed(t) < as_signed(rs) ? t : rs; break; // MIN
+      case 8: ret = as_signed(t) > as_signed(rs) ? t : rs; break; // MAX
+      case 9: ret = t < rs ? t : rs; break;                       // MINU
+      case 10: ret = t > rs ? t : rs; break;                      // MAXU
+      case 11: ret = t == cmp ? rs : t; break;                    // CAS
+      default: Info("Unknown atomic fuOpType: 0x%x\n", probe.fuop); return STATE_ERROR;
     }
 
     uint64_t write_data = (ret & value_mask) << bit_shift;
