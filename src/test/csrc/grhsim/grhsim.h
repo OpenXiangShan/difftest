@@ -72,6 +72,43 @@ inline void port_write(std::array<T, N> &dest, uint64_t value) {
   }
 }
 
+template <typename T>
+inline bool termination_requested(const T &model) {
+  if constexpr (requires {
+                  static_cast<bool>(model.finish_requested());
+                  static_cast<bool>(model.stop_requested());
+                  static_cast<bool>(model.fatal_requested());
+                }) {
+    return model.finish_requested() || model.stop_requested() || model.fatal_requested();
+  }
+  return false;
+}
+
+template <typename T>
+inline void finalize_if_requested(T &model) {
+  if (!termination_requested(model)) {
+    return;
+  }
+  if constexpr (requires { model.finalize(); }) {
+    model.finalize();
+  }
+}
+
+template <typename T>
+inline uint64_t termination_exit(const T &model) {
+  if (!termination_requested(model)) {
+    return 0;
+  }
+  if constexpr (requires { static_cast<int>(model.system_exit_code()); }) {
+    const int exit_code = model.system_exit_code();
+    if (exit_code != 0) {
+      // Zero-extend so a negative int cannot collide with the all-ones good-exit marker.
+      return static_cast<uint64_t>(static_cast<uint32_t>(exit_code));
+    }
+  }
+  return ~uint64_t{0};
+}
+
 } // namespace grhsim_detail
 
 class GrhSIMDiffTestSim final : public Simulator {
@@ -115,6 +152,10 @@ public:
   }
 
   inline uint64_t get_difftest_exit() override {
+    const uint64_t termination_exit = grhsim_detail::termination_exit(*dut);
+    if (termination_exit != 0) {
+      return termination_exit;
+    }
     return grhsim_detail::port_read(grhsim_port_abi::difftest_exit(*dut));
   }
   inline uint64_t get_difftest_step() override {

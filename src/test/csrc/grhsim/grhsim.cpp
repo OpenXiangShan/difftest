@@ -76,13 +76,18 @@ void GrhSIMDiffTestSim::waveform_tick() {
 }
 
 void GrhSIMDiffTestSim::step() {
+  if (grhsim_detail::termination_requested(*dut)) {
+    return;
+  }
   ++model_step_count_;
   if (!phase_timing_enabled_) {
     dut->eval();
+    grhsim_detail::finalize_if_requested(*dut);
     return;
   }
   const auto begin = std::chrono::steady_clock::now();
   dut->eval();
+  grhsim_detail::finalize_if_requested(*dut);
   model_step_time_us_ += static_cast<uint64_t>(
       std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - begin).count());
 }
