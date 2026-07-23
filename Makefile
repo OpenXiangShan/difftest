@@ -88,7 +88,7 @@ WITH_CHISELDB = 0
 WITH_CONSTANTIN = 0
 endif
 
-DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
+DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp" ! -path "*/tests/*")
 ifeq ($(NO_DIFF), 1)
 SIM_CXXFLAGS += -DCONFIG_NO_DIFFTEST
 else
@@ -324,6 +324,17 @@ include libso.mk
 include fpga.mk
 include pdb.mk
 
+MATRIX_STORE_TRACKER_TEST_SRC = $(DIFFTEST_CSRC_DIR)/tests/matrix_store_tracker_test.cpp
+MATRIX_STORE_TRACKER_HEADER = $(DIFFTEST_CSRC_DIR)/matrix_store_tracker.h
+MATRIX_STORE_TRACKER_TEST = $(BUILD_DIR)/matrix-store-tracker-test
+
+$(MATRIX_STORE_TRACKER_TEST): $(MATRIX_STORE_TRACKER_TEST_SRC) $(MATRIX_STORE_TRACKER_HEADER)
+	@mkdir -p $(@D)
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -I$(DIFFTEST_CSRC_DIR) $< -o $@
+
+test-matrix-store-tracker: $(MATRIX_STORE_TRACKER_TEST)
+	$(MATRIX_STORE_TRACKER_TEST)
+
 clean: vcs-clean pldm-clean fpga-clean
 	rm -rf $(BUILD_DIR)
 
@@ -342,4 +353,4 @@ else
 	@echo "Please run \"pip install --user clang-format==$(CLANG_FORMAT_VER)\", then set PATH manually"
 endif
 
-.PHONY: sim-verilog emu difftest_verilog clean format scala-format clang-format
+.PHONY: sim-verilog emu difftest_verilog clean format scala-format clang-format test-matrix-store-tracker
