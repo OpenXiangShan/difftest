@@ -189,7 +189,20 @@ object Gateway {
   }
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
-    val bundle = WireInit(0.U.asTypeOf(gen)).suggestName(gen.desiredCppName)
+    val ret = WireInit(0.U.asTypeOf(gen)).suggestName(gen.desiredCppName)
+    val bundle = if (config.isFPGA && gen.fpgaFilterElems.nonEmpty) {
+      val filtered = WireInit(ret)
+      gen.fpgaFilterElems.foreach { name =>
+        require(
+          filtered.elements.contains(name),
+          s"${gen.desiredModuleName} does not contain FPGA DontCare field $name",
+        )
+        filtered.elements(name) := DontCare
+      }
+      filtered
+    } else {
+      ret
+    }
     dontTouch(bundle)
     if (!config.traceLoad) {
       if (config.needEndpoint) {
@@ -202,7 +215,7 @@ object Gateway {
       }
     }
     instanceWithDelay += ((gen, delay))
-    bundle
+    ret
   }
 
   def getInstance(bundles: Seq[DifftestBundle]): Seq[DifftestBundle] = {
