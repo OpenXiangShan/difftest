@@ -176,6 +176,7 @@ wire sim_clock;
   wire        host_ctrl_diff_enable;
   wire        host_ctrl_ila_trigger;
   wire        host_ctrl_enable_squash;
+  wire [7:0]  host_ctrl_squash_max_fused;
 
   assign difftest_pcie_clock = clock;
 xdma_clock xclk(
@@ -239,6 +240,7 @@ SimTop sim(
   .difftest_hostCtrl_diffEnable(host_ctrl_diff_enable),
   .difftest_hostCtrl_ilaTrigger(host_ctrl_ila_trigger),
   .difftest_hostCtrl_enableSquash(host_ctrl_enable_squash),
+  .difftest_hostCtrl_squashMaxFused(host_ctrl_squash_max_fused),
   .difftest_to_host_axis_tvalid(c2h_axi_tvalid),
   .difftest_to_host_axis_tready(c2h_axi_tready),
   .difftest_to_host_axis_tdata(c2h_axi_tdata),
@@ -295,6 +297,7 @@ DifftestEndpoint difftest(
   .difftest_hostCtrl_diffEnable(host_ctrl_diff_enable),
   .difftest_hostCtrl_ilaTrigger(host_ctrl_ila_trigger),
   .difftest_hostCtrl_enableSquash(host_ctrl_enable_squash),
+  .difftest_hostCtrl_squashMaxFused(host_ctrl_squash_max_fused),
 `endif // FPGA_SIM
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),

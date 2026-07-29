@@ -243,6 +243,16 @@ void difftest_squash_enable(int enable) {
   svSetScope(squashScope);
   set_squash_enable(enable);
 }
+
+extern "C" void set_squash_max_fused(int squash_max_fused);
+void difftest_squash_max_fused(int squash_max_fused) {
+  if (squashScope == NULL) {
+    printf("Error: Could not retrieve squash scope, set first\n");
+    assert(squashScope);
+  }
+  svSetScope(squashScope);
+  set_squash_max_fused(squash_max_fused);
+}
 #endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
 
 #ifdef CONFIG_DIFFTEST_REPLAY

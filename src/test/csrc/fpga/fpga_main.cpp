@@ -168,7 +168,9 @@ void fpga_init() {
   xdma_device->fpga_io(HOST_IO_MEM_CPU, true);
   xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
-  xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, true);
+  xdma_device->fpga_io(HOST_IO_SQUASH_MAX_FUSED, static_cast<uint32_t>(args.squash_size));
+  xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, args.enable_squash);
+  printf("[fpga-host] squash enable = %d, size = %u\n", args.enable_squash, static_cast<unsigned>(args.squash_size));
 #ifndef FPGA_SIM
   usleep(1000);
 #endif // FPGA_SIM

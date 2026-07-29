@@ -28,18 +28,20 @@ import difftest.common.AXI4LiteBundle
   *   - 0x08: HOST_IO_DIFF_ENABLE
   *   - 0x0c: HOST_IO_ILA_TRIGGER
   *   - 0x10: HOST_IO_SQUASH_ENABLE
-  *   - 0x14: HOST_IO_SEED
-  *   - 0x18: HOST_IO_RAM_SIZE_MB
-  *   - 0x1c: HOST_IO_MEM_INIT
-  *   - 0x20: HOST_IO_MEM_CPU
-  *   - 0x24: HOST_IO_MEM_H2C
-  *   - 0x28: HOST_IO_H2C_SIZE_MB
+  *   - 0x14: HOST_IO_SQUASH_MAX_FUSED
+  *   - 0x18: HOST_IO_SEED
+  *   - 0x1c: HOST_IO_RAM_SIZE_MB
+  *   - 0x20: HOST_IO_MEM_INIT
+  *   - 0x24: HOST_IO_MEM_CPU
+  *   - 0x28: HOST_IO_MEM_H2C
+  *   - 0x2c: HOST_IO_H2C_SIZE_MB
   */
 class XDMAHostCtrlIO extends Bundle {
   val reset = Bool()
   val diffEnable = Bool()
   val ilaTrigger = Bool()
   val enableSquash = Bool()
+  val squashMaxFused = UInt(8.W)
 }
 
 class XDMAMemCtrlIO extends Bundle {
@@ -53,8 +55,8 @@ class XDMAMemCtrlIO extends Bundle {
 }
 
 private object XDMAConfigReg extends Enumeration {
-  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, Seed, RamSizeMB, MemInit, MemCPU, MemH2C, H2CSizeMB =
-    Value
+  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, SquashMaxFused, Seed, RamSizeMB, MemInit, MemCPU,
+    MemH2C, H2CSizeMB = Value
 }
 
 class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
@@ -69,12 +71,16 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
 
   private val numRegs = XDMAConfigReg.maxId
   private val idxBits = log2Ceil(numRegs)
-  private val regfile = RegInit(VecInit(Seq.fill(numRegs)(0.U(dataWidth.W))))
+  private val regfile = RegInit(VecInit(Seq.tabulate(numRegs) { idx =>
+    val init = if (idx == XDMAConfigReg.SquashMaxFused.id) 255 else 0
+    init.U(dataWidth.W)
+  }))
 
   io.hostCtrl.reset := regfile(XDMAConfigReg.HostReset.id)(0)
   io.hostCtrl.diffEnable := regfile(XDMAConfigReg.DiffEnable.id)(0)
   io.hostCtrl.ilaTrigger := regfile(XDMAConfigReg.IlaTrigger.id)(0)
   io.hostCtrl.enableSquash := regfile(XDMAConfigReg.EnableSquash.id)(0)
+  io.hostCtrl.squashMaxFused := regfile(XDMAConfigReg.SquashMaxFused.id)(7, 0)
   io.memCtrl.memInit := regfile(XDMAConfigReg.MemInit.id)(0)
   io.memCtrl.memH2C := regfile(XDMAConfigReg.MemH2C.id)(0)
   io.memCtrl.memCPU := regfile(XDMAConfigReg.MemCPU.id)(0)

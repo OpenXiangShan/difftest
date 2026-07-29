@@ -29,6 +29,7 @@ module DifftestEndpoint(
   input  wire        difftest_hostCtrl_diffEnable,
   input  wire        difftest_hostCtrl_ilaTrigger,
   input  wire        difftest_hostCtrl_enableSquash,
+  input  wire [ 7:0] difftest_hostCtrl_squashMaxFused,
 `endif // FPGA_SIM
 
   /* DifftestTopIO */
@@ -52,6 +53,8 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_gcpt_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
+import "DPI-C" function void set_no_squash();
+import "DPI-C" function void set_squash_size(int size);
 import "DPI-C" function void set_seed(longint seed);
 import "DPI-C" function void set_random_mem();
 import "DPI-C" function void set_simjtag();
@@ -97,6 +100,7 @@ string workload_list;
 string iotrace_name;
 longint overwrite_nbytes;
 string ram_size;
+integer squash_size;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
@@ -171,6 +175,12 @@ initial begin
   // disable diff-test
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
+  end
+  if ($test$plusargs("no-squash")) begin
+    set_no_squash();
+  end
+  if ($value$plusargs("squash-size=%d", squash_size)) begin
+    set_squash_size(squash_size);
   end
   if ($value$plusargs("seed=%d", seed)) begin
     set_seed(seed);

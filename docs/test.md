@@ -67,7 +67,7 @@ make SPLITVIEW=0   # disable for emu builds
 
 When enabled and run directly in an interactive terminal, UART output and host logs are shown side by side in the split view. The same streams are also written asynchronously to `build/logs/uart.log`, `build/logs/host.log`, and a combined `build/logs/all.log` by default, and remaining buffered text is drained before normal shutdown completes. Use `--splitview-log=PATH` to write `uart.log`, `host.log`, and `all.log` under a custom directory. Finished interactive splitview sessions keep the final screen visible; press `q` or `Q` to leave. Non-interactive environments keep the normal linear output.
 
-`fpga-host` uses the same build flag as the other targets: pass `SPLITVIEW=1` to enable splitview.
+`fpga-host` uses the same build flag as the other targets: pass `SPLITVIEW=1` to enable splitview. At runtime, pass `--no-squash` to disable squash or `--squash-size=NUM` to set the maximum fused instruction count (`0`-`255`, default `255`).
 
 Key runtime options:
 
@@ -136,6 +136,8 @@ Key runtime options:
 | `+workload=FILE` | Boot image path |
 | `+diff=PATH` | Reference SO for differential testing |
 | `+no-diff` | Run without difftest comparison |
+| `+no-squash` | Disable squash |
+| `+squash-size=NUM` | Set maximum fused instruction count (`0`-`255`, default `255`) |
 | `+max-cycles=NUM` | Maximum simulation cycles |
 | `+max-instrs=NUM` | Maximum instructions |
 | `+ram_size=SIZE` | Simulation memory size, for example `8GB` / `128MB` |

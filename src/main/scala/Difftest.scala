@@ -155,7 +155,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   val updateDependency: Seq[String] = Seq()
 
   // returns Bool indicating whether `this` bundle can be squashed with `base`
-  def supportsSquash(base: DifftestBundle): Bool = supportsSquashBase
+  def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = supportsSquashBase
   def supportsSquashBase: Bool = if (hasValid) !getValid else true.B
   // returns a seq of Group name of this bundle, Default: REF
   // Only bundles with same GroupName will affect others' squash state.
@@ -242,11 +242,10 @@ class DiffArchEvent extends ArchEvent with DifftestBundle {
 class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "commit"
 
-  private val maxNumFused = 255
-  override def supportsSquash(base: DifftestBundle): Bool = {
+  override def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = {
     val that = base.asInstanceOf[DiffInstrCommit]
     val nextNFused = (nFused +& that.nFused) + 1.U
-    !valid || (!skip && (!that.valid || nextNFused <= maxNumFused.U) && !special.asUInt.orR)
+    !valid || (!skip && (!that.valid || nextNFused <= maxFused) && !special.asUInt.orR)
   }
   override def supportsSquashBase: Bool = {
     !valid || (!skip && !special.asUInt.orR)
@@ -546,7 +545,7 @@ private[difftest] class DiffTraceInfo(config: GatewayConfig) extends TraceInfo w
   override val desiredCppName: String = "trace_info"
 
   override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
-  override def supportsSquash(base: DifftestBundle): Bool = {
+  override def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = {
     val that = base.asInstanceOf[DiffTraceInfo]
     !valid || !that.valid || (trace_size +& that.trace_size <= config.replaySize.U)
   }
