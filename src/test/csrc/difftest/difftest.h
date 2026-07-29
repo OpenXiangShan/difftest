@@ -202,6 +202,9 @@ protected:
   LoadSquashChecker *load_squash_checker = nullptr;
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_LOADEVENT
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  MatrixStoreChecker *matrix_store_checker = nullptr;
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   // MMA verifier instance

@@ -369,10 +369,9 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
-  for (int i = 0; i < CONFIG_DIFF_MATRIX_STORE_WIDTH; i++) {
-    checkers.push_back(new MatrixStoreChecker(
-        [this, i]() -> DifftestMatrixStoreEvent & { return dut->matrix_store[i]; }, state, proxy));
-  }
+  matrix_store_checker =
+      new MatrixStoreChecker([this]() -> DifftestMatrixStoreEvent * { return dut->matrix_store; }, state, proxy);
+  checkers.push_back(matrix_store_checker);
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 
 #ifdef CONFIG_DIFFTEST_ATOMICEVENT
@@ -522,6 +521,11 @@ void Difftest::replay_snapshot() {
   proxy->set_store_log(true);
   goldenmem_store_log_reset();
   goldenmem_set_store_log(true);
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  if (matrix_store_checker != nullptr) {
+    matrix_store_checker->replay_snapshot();
+  }
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 }
 
 void Difftest::do_replay() {
@@ -535,6 +539,11 @@ void Difftest::do_replay() {
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
   proxy->ref_store_log_restore();
   goldenmem_store_log_restore();
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  if (matrix_store_checker != nullptr) {
+    matrix_store_checker->replay_restore();
+  }
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
   difftest_replay_head(info.trace_head);
   // clear buffered queue
 #ifdef CONFIG_DIFFTEST_STOREEVENT
