@@ -131,25 +131,33 @@ endif
 
 simv: $(VCS_TARGET)
 
-RUN_OPTS := +workload=$(RUN_BIN)
+VCS_RUN_OPTS := +workload=$(RUN_BIN)
 
 ifeq ($(TRACE),1)
 ifeq ($(CONSIDER_FSDB),1)
-RUN_OPTS += +dump-wave=fsdb
+VCS_RUN_OPTS += +dump-wave=fsdb
 else
-RUN_OPTS += +dump-wave=vpd
+VCS_RUN_OPTS += +dump-wave=vpd
 endif
 endif
 
 ifneq ($(REF_SO),)
-RUN_OPTS += +diff=$(REF_SO)
+VCS_RUN_OPTS += +diff=$(REF_SO)
 endif
 
 ifeq ($(NO_DIFF),1)
-RUN_OPTS += +no-diff
+VCS_RUN_OPTS += +no-diff
 endif
 
-RUN_OPTS += -assert finish_maxfail=30 -assert global_finish_maxfail=10000
+ifeq ($(EXTLLC_CLK_ASYNC),1)
+VCS_RUN_OPTS += +extllc-clock-async
+endif
+
+ifneq ($(EXTLLC_CLK_HALF_PERIOD),)
+VCS_RUN_OPTS += +extllc-clock-half-period=$(EXTLLC_CLK_HALF_PERIOD)
+endif
+
+VCS_RUN_OPTS += -assert finish_maxfail=30 -assert global_finish_maxfail=10000
 
 simv-run:
 	$(shell if [ ! -e $(VCS_RUN_DIR) ]; then mkdir -p $(VCS_RUN_DIR); fi)
@@ -158,7 +166,7 @@ simv-run:
 	$(shell if [ -e $(VCS_RUN_DIR)/simv.daidir ]; then rm -rf $(VCS_RUN_DIR)/simv.daidir; fi)
 	ln -s $(VCS_TARGET) $(VCS_RUN_DIR)/simv
 	ln -s $(BUILD_DIR)/simv.daidir $(VCS_RUN_DIR)/simv.daidir
-	cd $(VCS_RUN_DIR) && (./simv $(RUN_OPTS) 2> assert.log | tee sim.log)
+	cd $(VCS_RUN_DIR) && (./simv $(VCS_RUN_OPTS) 2> assert.log | tee sim.log)
 
 vcs-clean-obj:
 	rm -f $(VCS_BUILD_DIR)/*.o $(VCS_BUILD_DIR)/*.gch $(VCS_BUILD_DIR)/*.a $(VCS_TARGET)

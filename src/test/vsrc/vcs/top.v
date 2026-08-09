@@ -229,8 +229,36 @@ DifftestClockGate gate(
   assign core_clock = sim_clock;
 `endif // CONFIG_DIFFTEST_CLOCKGATE
 
+wire extllc_clock;
+`ifdef WIRE_CLK
+  assign extllc_clock = core_clock;
+`else
+reg extllc_clock_reg;
+reg extllc_clock_async;
+integer extllc_clock_half_period;
+initial begin
+  extllc_clock_reg = 0;
+  extllc_clock_async = $test$plusargs("extllc-clock-async");
+  if (!$value$plusargs("extllc-clock-half-period=%d", extllc_clock_half_period)) begin
+    extllc_clock_half_period = 2;
+  end
+  if (extllc_clock_half_period <= 0) begin
+    $fatal(1, "extllc-clock-half-period must be positive");
+  end
+  if (extllc_clock_async) begin
+    $display("Using independent extllc clock with half period %0d", extllc_clock_half_period);
+  end
+  else begin
+    $display("Using core clock for extllc clock");
+  end
+  forever #(extllc_clock_half_period) extllc_clock_reg = ~extllc_clock_reg;
+end
+assign extllc_clock = extllc_clock_async ? extllc_clock_reg : core_clock;
+`endif // WIRE_CLK
+
 SimTop sim(
   .clock(core_clock),
+  .extllc_clk(extllc_clock),
   .reset(reset),
 `ifdef FPGA_SIM
   .difftest_pcie_clock(difftest_pcie_clock),
