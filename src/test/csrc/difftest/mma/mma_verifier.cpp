@@ -27,7 +27,16 @@
 #define CONFIG_DIFF_MMA_BATCH_SIZE 64
 #endif
 
+#ifndef CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR
+#define CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR 4
+#endif
+
+static constexpr size_t kMmaBackpressurePendingLimit =
+    static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR;
+
 MmaVerifier::MmaVerifier() {
+  Assert(CONFIG_DIFF_MMA_BATCH_SIZE > 0, "CONFIG_DIFF_MMA_BATCH_SIZE must be positive");
+  Assert(CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR > 0, "CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR must be positive");
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
   backend = new CudaMmaBackend();
   const char *backend_name = "CUDA";
@@ -74,6 +83,7 @@ void MmaVerifier::stop() {
   }
   mma_worker_cv.notify_all();
   mma_flush_cv.notify_all();
+  mma_backpressure_cv.notify_all();
 
   if (mma_verification_thread.joinable()) {
     mma_verification_thread.join();
@@ -133,7 +143,9 @@ void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
 
 void MmaVerifier::add_to_verification_queue(MmaVerificationBuffer *buffer) {
   {
-    std::lock_guard<std::mutex> lock(mma_queue_mutex);
+    std::unique_lock<std::mutex> lock(mma_queue_mutex);
+    mma_backpressure_cv.wait(lock,
+                             [this] { return mma_stop_requested || mma_pending_count < kMmaBackpressurePendingLimit; });
     mma_verification_queue.push(buffer);
     mma_pending_count++;
   }
@@ -149,12 +161,6 @@ const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
 }
 
 void MmaVerifier::mma_verification_thread_func() {
-  if (CONFIG_DIFF_MMA_BATCH_SIZE <= 0) {
-    Assert(false, "CONFIG_DIFF_MMA_BATCH_SIZE must be positive");
-    mma_flush_cv.notify_all();
-    return;
-  }
-
   while (true) {
     std::vector<MmaVerificationBuffer *> buffers;
 
@@ -198,6 +204,7 @@ void MmaVerifier::mma_verification_thread_func() {
       drained = (mma_pending_count == 0);
     }
 
+    mma_backpressure_cv.notify_all();
     if (drained) {
       mma_flush_cv.notify_all();
     }

@@ -183,6 +183,8 @@ public:
    * @brief Submits a fully populated buffer for asynchronous verification.
    *
    * @param[in] buffer Non-null buffer returned by allocate_buffer().
+   * @note Blocks when queued or executing work reaches the configured backpressure
+   * factor times the maximum batch size.
    * @post Ownership is transferred to the verifier. The caller must not access
    * or free buffer after this call.
    */
@@ -217,6 +219,9 @@ private:
 
   // Notifies flush waiters of completed work
   std::condition_variable mma_flush_cv;
+
+  // Notifies producers when pending work falls below the backpressure limit.
+  std::condition_variable mma_backpressure_cv;
 
   // Protected by mma_queue_mutex.
   // Worker thread check it to know when to exit.
