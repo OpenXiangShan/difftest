@@ -17,10 +17,15 @@
 #include "mma/mma_verifier.h"
 #include "mma/backend/mma_backend_cpu.h"
 #include "mma/backend/mma_backend_cuda.h"
+#include "mma/mma_batch.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 #include <cstdio>
 #include <cstring>
+
+#ifndef CONFIG_DIFF_MMA_BATCH_SIZE
+#define CONFIG_DIFF_MMA_BATCH_SIZE 64
+#endif
 
 MmaVerifier::MmaVerifier() {
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
@@ -144,30 +149,37 @@ const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
 }
 
 void MmaVerifier::mma_verification_thread_func() {
-  while (true) {
-    MmaVerificationBuffer *buffer = nullptr;
+  if (CONFIG_DIFF_MMA_BATCH_SIZE <= 0) {
+    Assert(false, "CONFIG_DIFF_MMA_BATCH_SIZE must be positive");
+    mma_flush_cv.notify_all();
+    return;
+  }
 
-    // Check if there are buffers to process
+  while (true) {
+    std::vector<MmaVerificationBuffer *> buffers;
+
+    // Wait for work, then remove only a consecutive compatible FIFO prefix.
     {
       std::unique_lock<std::mutex> lock(mma_queue_mutex);
-
-      // Wait for a buffer to be available or thread to be stopped
       mma_worker_cv.wait(lock, [this] { return mma_stop_requested || !mma_verification_queue.empty(); });
 
       if (mma_stop_requested) {
         break;
       }
 
-      if (!mma_verification_queue.empty()) {
-        buffer = mma_verification_queue.front();
-        mma_verification_queue.pop();
-      }
+      buffers = take_contiguous_batch(mma_verification_queue, CONFIG_DIFF_MMA_BATCH_SIZE, *backend);
     }
 
-    if (buffer) {
-      bool passed = backend ? backend->verify(buffer) : true;
+    std::vector<uint8_t> passed;
+    backend->verify(buffers, passed);
+    Assert(passed.size() == buffers.size(), "MMA backend returned %zu results for a batch of %zu", passed.size(),
+           buffers.size());
 
-      if (passed) {
+    // A batch is FIFO ordered, so publishing failures in vector order keeps
+    // the first reported mismatch identical to singleton verification.
+    for (size_t i = 0; i < buffers.size(); ++i) {
+      auto *buffer = buffers[i];
+      if (passed[i]) {
         free_buffer(buffer);
       } else {
         MmaVerificationBuffer *expected = nullptr;
@@ -175,17 +187,19 @@ void MmaVerifier::mma_verification_thread_func() {
           free_buffer(buffer);
         }
       }
+    }
 
-      bool drained = false;
-      {
-        std::lock_guard<std::mutex> lock(mma_queue_mutex);
-        mma_pending_count--;
-        drained = (mma_pending_count == 0);
-      }
+    bool drained = false;
+    {
+      std::lock_guard<std::mutex> lock(mma_queue_mutex);
+      Assert(mma_pending_count >= buffers.size(), "MMA pending count underflow: %zu < %zu", mma_pending_count,
+             buffers.size());
+      mma_pending_count -= buffers.size();
+      drained = (mma_pending_count == 0);
+    }
 
-      if (drained) {
-        mma_flush_cv.notify_all();
-      }
+    if (drained) {
+      mma_flush_cv.notify_all();
     }
   }
   mma_flush_cv.notify_all();

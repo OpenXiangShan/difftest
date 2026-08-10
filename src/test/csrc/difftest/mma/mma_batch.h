@@ -14,36 +14,24 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifndef __MMA_BACKEND_CUDA_IMPL_H__
-#define __MMA_BACKEND_CUDA_IMPL_H__
+#ifndef __MMA_BATCH_H__
+#define __MMA_BATCH_H__
 
 #include <cstddef>
-#include <cstdint>
+#include <queue>
+#include <vector>
 
-enum class CudaMmaType : uint8_t {
-  U8U8 = 0,
-  U8S8 = 1,
-  S8U8 = 2,
-  S8S8 = 3,
-  Fp8E5M2ToFp32 = 5,
-  Fp8E4M3ToFp32 = 8,
-  Fp16ToFp32 = 11,
-  Bf16ToFp32 = 12,
-  Tf32ToFp32 = 13,
-};
+class MmaBackend;
+struct MmaVerificationBuffer;
 
-struct CudaMmaBatchItem {
-  uint16_t tile_m;
-  uint16_t tile_k;
-  uint16_t tile_n;
-  uint8_t types1;
-  uint8_t types2;
-  const uint8_t *src1;
-  const uint8_t *src2;
-  uint8_t *src3;
-  const uint8_t *dut_result;
-};
+/**
+ * @brief Removes one bounded, consecutive compatible prefix from a FIFO.
+ *
+ * The first item always starts the batch. Later items are included only while
+ * they remain compatible with that first item, so a type boundary is never
+ * crossed and FIFO order is preserved.
+ */
+std::vector<MmaVerificationBuffer *> take_contiguous_batch(std::queue<MmaVerificationBuffer *> &queue,
+                                                           std::size_t max_batch_size, const MmaBackend &backend);
 
-extern "C" bool cuda_mma_backend_launch(CudaMmaType type, const CudaMmaBatchItem *items, size_t count, uint8_t *passed);
-
-#endif // __MMA_BACKEND_CUDA_IMPL_H__
+#endif // __MMA_BATCH_H__

@@ -18,6 +18,7 @@
 #define __MMA_BACKEND_H__
 
 #include "common.h"
+#include <vector>
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
@@ -39,7 +40,25 @@ static inline bool is_mma_32bit_result_type(uint8_t type) {
 class MmaBackend {
 public:
   virtual ~MmaBackend() = default;
-  virtual bool verify(MmaVerificationBuffer *buffer) = 0;
+
+  /**
+   * @brief Verifies a FIFO-ordered batch and writes one result per request.
+   *
+   * A singleton batch is the non-batching execution mode.
+   */
+  virtual void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) = 0;
+
+  /**
+   * @brief Returns whether candidate can share one backend batch with first.
+   *
+   * The default keeps the existing singleton behavior. Backends may override
+   * this when they can execute a homogeneous consecutive batch efficiently.
+   */
+  virtual bool is_batch_compatible(const MmaVerificationBuffer *first, const MmaVerificationBuffer *candidate) const {
+    (void)first;
+    (void)candidate;
+    return false;
+  }
 };
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
