@@ -44,7 +44,7 @@ jobs:
       - name: Build the fuzzing corpus - riscv-arch-test
         run: |
             cd $GITHUB_WORKSPACE/..
-            git clone https://github.com/OpenXiangShan/riscv-arch-test.git
+            git clone -b main --single-branch https://github.com/OpenXiangShan/riscv-arch-test.git
             cd riscv-arch-test/riscv-test-suite
             make build_I CROSS=riscv64-linux-gnu- RISCV_ARCH=rv64gc -j2
             rm build/*.elf build/*.txt
