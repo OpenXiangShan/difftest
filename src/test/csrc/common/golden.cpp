@@ -64,11 +64,8 @@ enum {
   M_XA_MAXU = 15
 };
 
-uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
-#ifdef CONFIG_DIFFTEST_PERFCNT
-  difftest_calls[perf_amo_helper]++;
-  difftest_bytes[perf_amo_helper] += 18;
-#endif // CONFIG_DIFFTEST_PERFCNT
+#ifdef CPU_XIANGSHAN_KMHV3
+static uint64_t amo_helper_kmhv3(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
   const unsigned byte_offset = mask == 0 ? 0 : __builtin_ctz(mask);
   const unsigned bytes = __builtin_popcount(mask);
   const uint8_t contiguous_mask = bytes == 8 ? 0xff : ((1U << bytes) - 1) << byte_offset;
@@ -121,4 +118,79 @@ uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
   result = (rdata & ~(value_mask << bit_shift)) | ((result & value_mask) << bit_shift);
   pmem_write(aligned_addr, result);
   return rop << bit_shift;
+}
+#else
+#define SEXT32(data)      ((uint64_t)(data) | ((data >> 31) ? (0xffffffffUL << 32) : 0))
+#define GET_LOWER32(data) ((data) & ((1UL << 32) - 1))
+#define GET_UPPER32(data) ((data) >> 32)
+
+static uint64_t amo_helper_legacy(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
+  if (addr % 8 == 4 && mask == 0xf0) {
+    addr -= 4;
+  } else if (addr % 8 != 0) {
+    printf("warning: amo address %lx not naturally aligned to %x!!\n", addr, mask);
+  }
+  if (mask != 0xff && mask != 0xf && mask != 0xf0) {
+    printf("warning: amo data mask %x not aligned to 32-bit\n", mask);
+  }
+  static uint64_t lr_addr = 0, lr_valid = 0;
+  uint64_t rdata = pmem_read(addr);
+  uint64_t upper_r = GET_UPPER32(rdata), upper_w = GET_UPPER32(wdata);
+  uint64_t lower_r = GET_LOWER32(rdata), lower_w = GET_LOWER32(wdata);
+  uint64_t rop = (mask == 0xff) ? rdata : (mask == 0xf) ? lower_r : upper_r;
+  uint64_t wop = (mask == 0xff) ? wdata : (mask == 0xf) ? lower_w : upper_w;
+  uint64_t result = 0;
+  switch (cmd) {
+    case M_XA_SWAP: result = wop; break;
+    case M_XLR:
+      result = rdata;
+      lr_valid = 1;
+      lr_addr = addr;
+      break;
+    // always succeed
+    case M_XSC:
+      rop = !(lr_valid && lr_addr == addr);
+      lr_valid = 0;
+      result = wop;
+      break;
+    case M_XA_ADD: result = wop + rop; break;
+    case M_XA_XOR: result = wop ^ rop; break;
+    case M_XA_OR: result = wop | rop; break;
+    case M_XA_AND: result = wop & rop; break;
+    case M_XA_MIN:
+      if (mask == 0xff)
+        result = ((int64_t)wop > (int64_t)rop) ? rop : wop;
+      else
+        result = ((int32_t)((uint32_t)wop) > (int32_t)((uint32_t)rop)) ? rop : wop;
+      break;
+    case M_XA_MAX:
+      if (mask == 0xff)
+        result = ((int64_t)wop > (int64_t)rop) ? wop : rop;
+      else
+        result = ((int32_t)((uint32_t)wop) > (int32_t)((uint32_t)rop)) ? wop : rop;
+      break;
+    case M_XA_MINU: result = (wop > rdata) ? rop : wop; break;
+    case M_XA_MAXU: result = (wop > rdata) ? wop : rop; break;
+    default: printf("unknown atomic op %d!!\n", cmd); break;
+  }
+  if (mask == 0xf) {
+    result = (upper_r << 32) | (result & 0xffffffffUL);
+  } else if (mask == 0xf0) {
+    result = (result << 32) | lower_r;
+  }
+  pmem_write(addr, result);
+  return (mask == 0xf0) ? rop << 32 : rop;
+}
+#endif
+
+uint64_t amo_helper(uint8_t cmd, uint64_t addr, uint64_t wdata, uint8_t mask) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+  difftest_calls[perf_amo_helper]++;
+  difftest_bytes[perf_amo_helper] += 18;
+#endif // CONFIG_DIFFTEST_PERFCNT
+#ifdef CPU_XIANGSHAN_KMHV3
+  return amo_helper_kmhv3(cmd, addr, wdata, mask);
+#else
+  return amo_helper_legacy(cmd, addr, wdata, mask);
+#endif
 }

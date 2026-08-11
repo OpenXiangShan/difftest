@@ -20,7 +20,12 @@
 #include "difftest-state.h"
 
 #if defined(CPU_NUTSHELL)
+#elif defined(CPU_XIANGSHAN_YQH)
+#elif defined(CPU_XIANGSHAN_NH)
+#elif defined(CPU_XIANGSHAN_KMHV2)
+#elif defined(CPU_XIANGSHAN_KMHV3)
 #elif defined(CPU_XIANGSHAN)
+#define CPU_XIANGSHAN_KMHV3
 #elif defined(CPU_ROCKET_CHIP)
 #else
 // This is the default CPU
@@ -32,7 +37,8 @@
 // -----------------------------------------------------------------------
 
 // emulated memory size (Byte)
-#if defined(CPU_XIANGSHAN)
+#if defined(CPU_XIANGSHAN_YQH) || defined(CPU_XIANGSHAN_NH) || defined(CPU_XIANGSHAN_KMHV2) || \
+    defined(CPU_XIANGSHAN_KMHV3)
 #define DEFAULT_EMU_RAM_SIZE 0x7ff80000000UL // from 0x8000_0000 to 0x800_0000_0000, (8192-2)GB memory
 #else
 #define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
@@ -46,7 +52,8 @@ extern uint64_t FIRST_INST_ADDRESS;
 // first valid instruction's address, difftest starts from this instruction
 #if defined(CPU_NUTSHELL)
 #define _FIRST_INST_ADDRESS 0x80000000UL
-#elif defined(CPU_XIANGSHAN) || defined(CPU_ROCKET_CHIP)
+#elif defined(CPU_XIANGSHAN_YQH) || defined(CPU_XIANGSHAN_NH) || defined(CPU_XIANGSHAN_KMHV2) || \
+    defined(CPU_XIANGSHAN_KMHV3) || defined(CPU_ROCKET_CHIP)
 #define _FIRST_INST_ADDRESS 0x10000000UL
 #endif
 

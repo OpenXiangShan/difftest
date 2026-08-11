@@ -184,7 +184,8 @@ public:
 #endif // CONFIG_DIFFTEST_SQUASH
 #if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
   static const uint64_t first_commit_limit = 1000;
-#elif defined(CPU_XIANGSHAN)
+#elif defined(CPU_XIANGSHAN_YQH) || defined(CPU_XIANGSHAN_NH) || defined(CPU_XIANGSHAN_KMHV2) || \
+    defined(CPU_XIANGSHAN_KMHV3)
   static const uint64_t first_commit_limit = 15000;
 #endif
   static const uint64_t stuck_commit_limit = first_commit_limit * timeout_scale;
@@ -397,6 +398,8 @@ private:
   bool get_valid(const DifftestAtomicEvent &probe) override;
   void clear_valid(DifftestAtomicEvent &probe) override;
   int check(const DifftestAtomicEvent &probe) override;
+  int check_legacy(const DifftestAtomicEvent &probe);
+  int check_kmhv3(const DifftestAtomicEvent &probe);
 };
 #endif // CONFIG_DIFFTEST_ATOMICEVENT
 

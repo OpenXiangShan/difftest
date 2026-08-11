@@ -61,7 +61,7 @@ void init_flash(const char *flash_bin) {
   Info("Using simulated %luB flash\n", flash_dev.size);
 
   if (!flash_bin) {
-#ifdef CPU_XIANGSHAN
+#if defined(CPU_XIANGSHAN_KMHV2) || defined(CPU_XIANGSHAN_KMHV3)
     /** no specified flash_path, use defualt 6 instructions */
     // csrrsi x0, mnstatus, 8     # 0x74446073 set mnstatus.nmie
     // addiw  t0, zero, 1         # 0x0010029b
@@ -74,13 +74,14 @@ void init_flash(const char *flash_bin) {
     flash_dev.base[2] = 0x0002806701f29293;
     flash_dev.img_size = 3 * sizeof(uint64_t);
 #else
+    /** no specified flash_path, use defualt 3 instructions */
     // addiw   t0,zero,1
     // slli    to,to,  0x1f
     // jr      t0
     flash_dev.base[0] = 0x01f292930010029b;
     flash_dev.base[1] = 0x00028067;
     flash_dev.img_size = 2 * sizeof(uint64_t);
-#endif
+#endif // CPU_XIANGSHAN_KMHV2 || CPU_XIANGSHAN_KMHV3
     return;
   }
 
