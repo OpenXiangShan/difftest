@@ -16,6 +16,8 @@
 
 DIFFTEST_STATE_HEADER = $(GEN_CSRC_DIR)/difftest-state.h
 MMA_BACKEND ?= cpu
+MMA_BATCH_SIZE ?= 64
+SIM_CXXFLAGS += -DCONFIG_DIFF_MMA_BATCH_SIZE=$(MMA_BATCH_SIZE)
 ifneq ($(MMA_BACKEND),cpu)
 ifneq ($(MMA_BACKEND),cuda)
 $(error Unsupported MMA_BACKEND '$(MMA_BACKEND)'; expected cpu or cuda)

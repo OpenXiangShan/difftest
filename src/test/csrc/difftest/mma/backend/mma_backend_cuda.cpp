@@ -63,33 +63,82 @@ static bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType 
   }
 }
 
-bool CudaMmaBackend::verify(MmaVerificationBuffer *buffer) {
-  CudaMmaType type;
-  if (!select_cuda_mma_type(buffer->amu_event, &type)) {
-    fprintf(stderr, "CudaMmaBackend: unsupported MMA type pc=0x%lx isfp=%u types1=%u types2=%u typed=%u\n",
-            buffer->amu_event.pc, buffer->amu_event.isfp, buffer->amu_event.types1, buffer->amu_event.types2,
-            buffer->amu_event.typed);
+static bool select_cuda_device() {
+  cudaError_t err = cudaSetDevice(0);
+  return (err == cudaSuccess || err == cudaErrorSetOnActiveProcess) || report_cuda_error("cudaSetDevice", err);
+}
+
+bool CudaMmaBackend::is_batch_compatible(const MmaVerificationBuffer *first,
+                                         const MmaVerificationBuffer *candidate) const {
+  CudaMmaType first_type;
+  CudaMmaType candidate_type;
+  if (!first || !candidate || !select_cuda_mma_type(first->amu_event, &first_type) ||
+      !select_cuda_mma_type(candidate->amu_event, &candidate_type)) {
     return false;
   }
 
-  cudaError_t err = cudaSetDevice(0);
-  if (err != cudaSuccess && err != cudaErrorSetOnActiveProcess) {
-    return report_cuda_error("cudaSetDevice", err);
+  // Require exact operand/result encodings in addition to the selected kernel
+  // variant. Matrix dimensions may differ because each batch item carries its
+  // own geometry.
+  return first_type == candidate_type && first->amu_event.isfp == candidate->amu_event.isfp &&
+         first->amu_event.types1 == candidate->amu_event.types1 &&
+         first->amu_event.types2 == candidate->amu_event.types2 && first->amu_event.typed == candidate->amu_event.typed;
+}
+
+void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
+  passed.assign(buffers.size(), 0);
+  if (buffers.empty()) {
+    return;
   }
 
-  bool passed = cuda_mma_backend_launch(type, buffer->amu_event.mtilem, buffer->amu_event.mtilek,
-                                        buffer->amu_event.mtilen, buffer->amu_event.types1, buffer->amu_event.types2,
-                                        buffer->src1, buffer->src2, buffer->src3, buffer->dut_result);
-  return passed && report_cuda_error("post-launch", cudaGetLastError());
+  CudaMmaType type;
+  if (!select_cuda_mma_type(buffers.front()->amu_event, &type)) {
+    const auto &event = buffers.front()->amu_event;
+    fprintf(stderr, "CudaMmaBackend: unsupported MMA type pc=0x%lx isfp=%u types1=%u types2=%u typed=%u\n", event.pc,
+            event.isfp, event.types1, event.types2, event.typed);
+    return;
+  }
+
+  std::vector<CudaMmaBatchItem> items;
+  items.reserve(buffers.size());
+  for (auto *buffer: buffers) {
+    CudaMmaBatchItem item;
+    item.tile_m = buffer->amu_event.mtilem;
+    item.tile_k = buffer->amu_event.mtilek;
+    item.tile_n = buffer->amu_event.mtilen;
+    item.types1 = buffer->amu_event.types1;
+    item.types2 = buffer->amu_event.types2;
+    item.src1 = buffer->src1;
+    item.src2 = buffer->src2;
+    item.src3 = buffer->src3;
+    item.dut_result = buffer->dut_result;
+    items.push_back(item);
+  }
+
+  if (!select_cuda_device()) {
+    return;
+  }
+  if (!cuda_mma_backend_launch(type, items.data(), items.size(), passed.data())) {
+    return;
+  }
+  if (!report_cuda_error("post-batch-launch", cudaGetLastError())) {
+    passed.assign(buffers.size(), 0);
+  }
 }
 
 #else
 
 #include <cassert>
 
-bool CudaMmaBackend::verify(MmaVerificationBuffer *buffer) {
-  (void)buffer;
+void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
+  passed.assign(buffers.size(), 0);
   assert(false && "CudaMmaBackend is not implemented");
+}
+
+bool CudaMmaBackend::is_batch_compatible(const MmaVerificationBuffer *first,
+                                         const MmaVerificationBuffer *candidate) const {
+  (void)first;
+  (void)candidate;
   return false;
 }
 
