@@ -325,7 +325,14 @@ int AmuExecChecker::do_step() {
           // Call get_amu_lazy with buffer pointers
           // Store REF's src1/2/3 in the buffer, and copy DUT's result to REF
           // REF will directly take DUT's result instead of executing the MMA instruction
-          proxy->get_amu_lazy(&amu_event, iter->res, buffer->src1, buffer->src2, buffer->src3);
+          if (proxy->get_amu_lazy(&amu_event, iter->res, buffer->src1, buffer->src2, buffer->src3) != 0) {
+            printf("Failed to get REF operands for MMA verification: core %d, pc 0x%016lx\n", state->coreid,
+                   amu_event.pc);
+            mma_verifier->free_buffer(buffer);
+            delete[] iter->res;
+            iter->res = nullptr;
+            return STATE_ERROR;
+          }
           // Pass buffer to verification thread
           mma_verifier->add_to_verification_queue(buffer);
           delete[] iter->res;
