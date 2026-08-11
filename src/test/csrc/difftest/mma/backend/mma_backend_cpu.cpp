@@ -40,7 +40,15 @@ static inline void write_u32(uint8_t *data, size_t index0, size_t index1, size_t
   reinterpret_cast<uint32_t *>(row_ptr)[index1] = value;
 }
 
-bool CpuMmaBackend::verify(MmaVerificationBuffer *buffer) {
+void CpuMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
+  passed.clear();
+  passed.reserve(buffers.size());
+  for (auto *buffer: buffers) {
+    passed.push_back(verify_one(buffer) ? 1 : 0);
+  }
+}
+
+bool CpuMmaBackend::verify_one(MmaVerificationBuffer *buffer) {
   if (!is_mma_32bit_result_type(buffer->amu_event.typed)) {
     return false;
   }

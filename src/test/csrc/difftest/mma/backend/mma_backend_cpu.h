@@ -27,9 +27,11 @@ enum class FloatFormat : uint8_t;
 
 class CpuMmaBackend : public MmaBackend {
 public:
-  bool verify(MmaVerificationBuffer *buffer) override;
+  void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) override;
 
 private:
+  bool verify_one(MmaVerificationBuffer *buffer);
+
   template <cute_mma_model::FloatFormat Format> bool verify_fp_mma(MmaVerificationBuffer *buffer);
 
   template <class src1_t, class src2_t> bool verify_int_mma(MmaVerificationBuffer *buffer);
