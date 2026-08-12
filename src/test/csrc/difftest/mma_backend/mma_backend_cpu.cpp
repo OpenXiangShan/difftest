@@ -188,6 +188,9 @@ bool CpuMmaBackend::verify(MmaVerificationBuffer *buffer) {
   } else {
     uint8_t types1 = buffer->amu_event.types1;
     uint8_t types2 = buffer->amu_event.types2;
+    if (types1 == 5 && types2 == 4 && buffer->amu_event.typed == 2) {
+      return mmacc_i2_i8_template(buffer);
+    }
     int op = ((types1 & 0x4) << 1) | (types2 & 0x4);
     switch (op) {
       case 0:
@@ -208,6 +211,37 @@ bool CpuMmaBackend::verify(MmaVerificationBuffer *buffer) {
   }
 
   return passed;
+}
+
+static inline int8_t read_packed_i2(const uint8_t *src, int row, int k, int tile_k) {
+  const size_t packed_row_bytes = static_cast<size_t>((tile_k + 3) / 4);
+  uint8_t raw = (src[static_cast<size_t>(row) * packed_row_bytes + k / 4] >> ((k & 3) * 2)) & 0x3;
+  return (raw & 0x2) ? static_cast<int8_t>(raw | 0xfc) : static_cast<int8_t>(raw);
+}
+
+bool CpuMmaBackend::mmacc_i2_i8_template(MmaVerificationBuffer *buffer) {
+  int tile_m = buffer->amu_event.mtilem;
+  int tile_k = buffer->amu_event.mtilek;
+  int tile_n = buffer->amu_event.mtilen;
+
+  for (int i = 0; i < tile_m; i++) {
+    for (int j = 0; j < tile_n; j++) {
+      int64_t acc = reinterpret_cast<int32_t *>(buffer->src3)[i * tile_n + j];
+      for (int k = 0; k < tile_k; k++) {
+        int64_t src_1 = read_packed_i2(buffer->src1, i, k, tile_k);
+        int64_t src_2 = reinterpret_cast<int8_t *>(buffer->src2)[j * tile_k + k];
+        acc += src_1 * src_2;
+
+        if (buffer->amu_event.sat) {
+          acc = acc > INT32_MAX ? INT32_MAX : acc;
+          acc = acc < INT32_MIN ? INT32_MIN : acc;
+        }
+      }
+      reinterpret_cast<int32_t *>(buffer->src3)[i * tile_n + j] = static_cast<int32_t>(acc);
+    }
+  }
+
+  return memcmp(buffer->dut_result, buffer->src3, tile_m * tile_n * sizeof(int32_t)) == 0;
 }
 
 template <int src_exp_bits, int src_mantissa_bits, int result_exp_bits, int result_mantissa_bits>

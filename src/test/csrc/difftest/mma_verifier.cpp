@@ -75,7 +75,7 @@ MmaVerificationBuffer* MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
   size_t element_sz_s2 = get_element_size(amu_event->types2);
   size_t element_sz_d = get_element_size(amu_event->typed);
 
-  size_t a_sz = element_sz_s1 * m * k;
+  size_t a_sz = (!amu_event->isfp && amu_event->types1 == 5) ? ((k + 3) / 4) * m : element_sz_s1 * m * k;
   size_t b_sz = element_sz_s2 * k * n;
   size_t c_sz = element_sz_d * m * n;
   

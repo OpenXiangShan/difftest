@@ -65,7 +65,8 @@ static inline size_t calculate_mma_buffer_size(const DifftestAmuCtrlEvent *amu_e
   // src2: k×n matrix  
   // src3: m×n matrix (accumulator)
   // result: m×n matrix
-  size_t src1_size = element_size_s1 * m * k;
+  size_t src1_size = (!amu_event->isfp && amu_event->types1 == 5) ? ((static_cast<size_t>(k) + 3) / 4) * m
+                                                                    : element_size_s1 * m * k;
   size_t src2_size = element_size_s2 * k * n;
   size_t src3_size = element_size_d * m * n;
   size_t result_size = element_size_d * m * n;
