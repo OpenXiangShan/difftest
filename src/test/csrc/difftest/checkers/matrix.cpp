@@ -78,7 +78,13 @@ static inline size_t get_amu_result_size(const DifftestAmuCtrlEvent &amu_event) 
       return rows * cols * element_size;
     case 1: // Matrix load/store
       // Keep old behavior: only alloc in load-like path.
-      return (amu_event.sat == 0) ? rows * cols * element_size : 0;
+      if (amu_event.sat != 0) {
+        return 0;
+      }
+      if (amu_event.typed == 4 && amu_event.md < 4) {
+        return CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES;
+      }
+      return rows * cols * element_size;
     case 3: // Matrix Arith
       // MARITH writes a whole matrix register selected by md:
       // md < 4  -> tile register (AB), md >= 4 -> accumulator register (C).
