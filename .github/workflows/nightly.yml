@@ -32,13 +32,15 @@ jobs:
               | cut -d '"' -f 4                                                      \
               | xargs wget -O libfuzzer.a
 
-      - name: Download the customized firtool
+      - name: Download firtool from CIRCT
         run: |
-            curl -s https://api.github.com/repos/OpenXiangShan/circt/releases/latest \
+            curl -s https://api.github.com/repos/llvm/circt/releases/tags/firtool-1.155.0 \
               | grep "browser_download_url"                                          \
-              | grep "firtool-1.149.0-ubuntu-20.04"                                  \
+              | grep "firrtl-bin-linux-x64.tar.gz\""                                 \
               | cut -d '"' -f 4                                                      \
-              | xargs wget -O firtool
+              | xargs wget -O firrtl-bin-linux-x64.tar.gz
+            tar -xzf firrtl-bin-linux-x64.tar.gz bin/firtool
+            cp bin/firtool firtool
             chmod +x ./firtool
 
       - name: Build the fuzzing corpus - riscv-arch-test
