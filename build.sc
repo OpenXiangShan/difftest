@@ -20,7 +20,7 @@ import publish._
 
 object ivys {
   val scala = "2.13.14"
-  val chisel = (ivy"org.chipsalliance::chisel:7.13.0", ivy"org.chipsalliance:::chisel-plugin:7.13.0")
+  val chisel = (ivy"org.chipsalliance::chisel:7.14.0", ivy"org.chipsalliance:::chisel-plugin:7.14.0")
   val scalatest = ivy"org.scalatest::scalatest:3.2.20"
 }
 
