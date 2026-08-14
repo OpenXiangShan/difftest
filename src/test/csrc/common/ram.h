@@ -141,8 +141,8 @@ public:
   virtual ~MmapMemory();
   void load_image(const char *image);
   uint64_t pad_img_size(uint64_t align);
-  void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
-    uint64_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
+  void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) {
+    size_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
     func(ram, n_bytes);
   }
   uint64_t &at(uint64_t index) {
@@ -187,7 +187,7 @@ public:
   FootprintsMemory(const char *footprints_name, uint64_t n_bytes);
   ~FootprintsMemory();
   uint64_t &at(uint64_t index);
-  void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
+  void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) {
     printf("clone_instant not support by FootprintsMemory\n");
     assert(0);
   }
