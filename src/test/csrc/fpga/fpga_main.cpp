@@ -52,7 +52,7 @@ enum {
 static uint8_t fpga_result = FPGA_RUN;
 static CommonArgs args;
 static const char *fpga_ddr_load_cmd = nullptr;
-static const char *fpga_ila_dump_cmd = nullptr;
+static const char *fpga_ila_arm_cmd = nullptr;
 
 void fpga_init();
 void fpga_step();
@@ -68,7 +68,7 @@ int main(int argc, const char *argv[]) {
   common_set_locale();
 
   fpga_ddr_load_cmd = std::getenv("FPGA_DDR_LOAD_CMD");
-  fpga_ila_dump_cmd = std::getenv("FPGA_ILA_DUMP_CMD");
+  fpga_ila_arm_cmd = std::getenv("FPGA_ILA_ARM_CMD");
   args = parse_args(argc, argv);
 
   common_init(argv[0]);
@@ -178,17 +178,18 @@ void fpga_init() {
   serial_port->start();
 #endif // USE_SERIAL_PORT
 
-  difftest_init(args.enable_diff, ram_size);
-
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
 #ifndef FPGA_SIM
-  if (fpga_ila_dump_cmd) {
-    if (!run_external_cmd(fpga_ila_dump_cmd, "ILA dump")) {
-      fprintf(stderr, "[fpga-host] warning: failed to arm external ILA dump command\n");
+  if (fpga_ila_arm_cmd) {
+    if (!run_external_cmd(fpga_ila_arm_cmd, "ILA arm")) {
+      fprintf(stderr, "[fpga-host] warning: failed to run external ILA arm command\n");
       exit(1);
     }
   }
 #endif // FPGA_SIM
+
+  difftest_init(args.enable_diff, ram_size);
+
   xdma_device->fpga_io(HOST_IO_RESET, false);
 }
 
@@ -237,6 +238,8 @@ int fpga_get_result(uint8_t step) {
   int trapCode = difftest_nstep(step, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
+    // Release endpoint backpressure while ILA collects post-trigger samples.
+    xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, false);
     if (trapCode == STATE_GOODTRAP)
       return FPGA_GOODTRAP;
     else
