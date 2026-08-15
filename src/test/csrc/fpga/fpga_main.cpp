@@ -53,6 +53,8 @@ static uint8_t fpga_result = FPGA_RUN;
 static CommonArgs args;
 static const char *fpga_ddr_load_cmd = nullptr;
 static const char *fpga_ila_arm_cmd = nullptr;
+static const char *fpga_ila_upload_cmd = nullptr;
+static bool fpga_ila_triggered = false;
 
 void fpga_init();
 void fpga_step();
@@ -69,6 +71,7 @@ int main(int argc, const char *argv[]) {
 
   fpga_ddr_load_cmd = std::getenv("FPGA_DDR_LOAD_CMD");
   fpga_ila_arm_cmd = std::getenv("FPGA_ILA_ARM_CMD");
+  fpga_ila_upload_cmd = std::getenv("FPGA_ILA_UPLOAD_CMD");
   args = parse_args(argc, argv);
 
   common_init(argv[0]);
@@ -201,6 +204,13 @@ void fpga_finish() {
     goldenmem_finish();
     finish_device();
   }
+#ifndef FPGA_SIM
+  if (signal_num == 0 && fpga_ila_triggered && fpga_ila_upload_cmd) {
+    if (!run_external_cmd(fpga_ila_upload_cmd, "ILA upload")) {
+      fprintf(stderr, "[fpga-host] warning: failed to run external ILA upload command\n");
+    }
+  }
+#endif // FPGA_SIM
   printf("difftest releases the fpga device and exits\n");
   common_splitview_finish();
 #ifdef USE_SERIAL_PORT
@@ -238,6 +248,7 @@ int fpga_get_result(uint8_t step) {
   int trapCode = difftest_nstep(step, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
+    fpga_ila_triggered = true;
     // Release endpoint backpressure while ILA collects post-trigger samples.
     xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, false);
     if (trapCode == STATE_GOODTRAP)
