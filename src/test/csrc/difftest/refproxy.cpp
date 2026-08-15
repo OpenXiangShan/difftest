@@ -124,8 +124,12 @@ void *AbstractRefProxy::load_handler(const char *env, const char *file_path) {
 
   Info("The reference model is %s\n", difftest_ref_so);
 
+#if defined(__APPLE__)
+  void *so_handler = dlopen(difftest_ref_so, RTLD_LAZY);
+#else
   int mode = RTLD_LAZY | RTLD_DEEPBIND;
   void *so_handler = (NUM_CORES > 1) ? dlmopen(LM_ID_NEWLM, difftest_ref_so, mode) : dlopen(difftest_ref_so, mode);
+#endif
   check_and_assert(so_handler);
 
   if (!use_given_diff) {

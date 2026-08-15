@@ -24,7 +24,9 @@
 #include <mutex>
 #include <stdexcept>
 #include <vector>
+#if defined(__x86_64__) || defined(__i386__)
 #include <xmmintrin.h>
+#endif
 
 #define MEMPOOL_SIZE    16384 * 1024 // 16M memory
 #define MEMBLOCK_SIZE   4096         // 4K packge
@@ -86,8 +88,13 @@ class SpinLock {
 
 public:
   void lock() {
-    while (locked.test_and_set(std::memory_order_acquire))
+    while (locked.test_and_set(std::memory_order_acquire)) {
+#if defined(__x86_64__) || defined(__i386__)
       _mm_pause();
+#elif defined(__aarch64__) || defined(__arm__)
+      __asm__ volatile("yield" ::: "memory");
+#endif
+    }
   }
   void unlock() {
     locked.clear(std::memory_order_release);
