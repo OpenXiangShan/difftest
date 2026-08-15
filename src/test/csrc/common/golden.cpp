@@ -23,31 +23,288 @@
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
 
-uint8_t pte_helper(uint64_t satp, uint64_t vpn, uint64_t *pte, uint8_t *level) {
+static constexpr uint8_t MODE_BARE = 0;
+static constexpr uint8_t MODE_SV39X4 = 8;
+static constexpr uint8_t MODE_SV48X4 = 9;
+static constexpr uint8_t VPN_BITS_PER_LEVEL = 9;
+static constexpr uint8_t GPADDR_BITS_SV39X4 = 41;
+static constexpr uint8_t GPADDR_BITS_SV48X4 = 50;
+
+/**
+ * Read PTE from memory (physical address)
+ * Uses goldenmem in difftest mode, pmem_read otherwise
+ */
+static inline uint64_t read_pte(uint64_t pte_addr) {
+  uint64_t pte_val;
+#ifdef CONFIG_NO_DIFFTEST
+  pte_val = pmem_read(pte_addr);
+#else
+  read_goldenmem(pte_addr, &pte_val, 8);
+#endif // CONFIG_NO_DIFFTEST
+  return pte_val;
+}
+
+static inline bool pte_is_leaf(const PTE &pte) {
+  return pte.v && (pte.r || pte.x || pte.w);
+}
+
+static inline bool pte_is_next(const PTE &pte) {
+  return pte.v && !pte.r && !pte.x && !pte.w;
+}
+
+static inline bool pte_has_pbmt_fault(const PTE &pte, bool pbmte) {
+  return pte.pbmt == 3 || (!pbmte && pte.pbmt != 0);
+}
+
+static inline bool pte_is_legal_napot(const PTE &pte, uint8_t level) {
+  return level == 0 && pte.n && (pte.ppn & 0xf) == 0x8;
+}
+
+static inline bool pte_has_napot_fault(const PTE &pte, uint8_t level) {
+  return pte.n && !pte_is_legal_napot(pte, level);
+}
+
+static inline bool pte_has_unaligned_fault(const PTE &pte, uint8_t level) {
+  if (!pte_is_leaf(pte) || level == 0) {
+    return false;
+  }
+  uint64_t ppn_mask = (1ull << (VPN_BITS_PER_LEVEL * level)) - 1;
+  return (pte.ppn & ppn_mask) != 0;
+}
+
+static inline bool pte_has_vs_stage_fault(const PTE &pte, uint8_t level, bool pbmte) {
+  if (pte.rsvd != 0 || pte_has_pbmt_fault(pte, pbmte)) {
+    return true;
+  }
+  if (pte_is_next(pte)) {
+    return pte.u || pte.a || pte.d || pte.n || pte.pbmt != 0;
+  }
+  return !pte.v || (!pte.r && pte.w) || (!pte_is_leaf(pte) && level == 0) || pte_has_napot_fault(pte, level) ||
+         pte_has_unaligned_fault(pte, level);
+}
+
+static inline bool pte_has_g_stage_fault(const PTE &pte, uint8_t level, bool pbmte) {
+  return pte_has_vs_stage_fault(pte, level, pbmte) || (pte_is_leaf(pte) && (!pte.u || !pte.a));
+}
+
+static inline bool gpa_high_bits_invalid(uint8_t mode, uint64_t gpaddr) {
+  if (mode == MODE_SV39X4) {
+    return (gpaddr >> GPADDR_BITS_SV39X4) != 0;
+  }
+  if (mode == MODE_SV48X4) {
+    return (gpaddr >> GPADDR_BITS_SV48X4) != 0;
+  }
+  return false;
+}
+
+static inline void set_pte_helper_result(uint64_t *pte, uint8_t *level, uint64_t *s1_pte, uint64_t *s2_pte,
+                                         uint8_t *s1_level, const PTE &result_pte, uint8_t result_level,
+                                         uint64_t result_s1_pte = 0, uint64_t result_s2_pte = 0,
+                                         uint8_t result_s1_level = 0) {
+  *pte = result_pte.val;
+  *level = result_level;
+  *s1_pte = result_s1_pte;
+  *s2_pte = result_s2_pte;
+  *s1_level = result_s1_level;
+}
+
+/**
+ * G-Stage page table walk (GPA -> HPA)
+ * Implementation aligned with do_s2xlate() in tlb.cpp
+ *
+ * @param hgatp  HGATP register value
+ * @param gpaddr Guest physical address to translate
+ * @return       r_s2xlate containing PTE and level
+ */
+static r_s2xlate do_g_stage(Hgatp *hgatp, uint64_t gpaddr, bool pbmte) {
+  PTE pte;
+  uint64_t hpaddr;
+  uint8_t level;
+  uint64_t pg_base = hgatp->ppn << 12;
+  r_s2xlate result;
+
+  // If hgatp.mode == 0, G-stage is disabled, return GPA directly
+  if (hgatp->mode == MODE_BARE) {
+    result.pte.val = 0;
+    result.pte.ppn = gpaddr >> 12;
+    result.pte.v = 1;
+    result.pte.r = 1;
+    result.pte.w = 1;
+    result.pte.x = 1;
+    result.pte.u = 1;
+    result.pte.a = 1;
+    result.pte.d = 1;
+    result.level = 0;
+    return result;
+  }
+
+  // Determine max level: Sv39x4 (mode=8) -> 2, Sv48x4 (mode=9) -> 3
+  int max_level = (hgatp->mode == MODE_SV39X4) ? 2 : 3;
+
+  for (level = max_level; level >= 0; level--) {
+    // Use GVPNi macro: top level uses 11 bits, others use 9 bits
+    hpaddr = pg_base + GVPNi(gpaddr, level, max_level) * sizeof(uint64_t);
+    pte.val = read_pte(hpaddr);
+
+    // Stop on fault, leaf PTE, or the last level. Faults must not walk into the next level.
+    if (pte_has_g_stage_fault(pte, level, pbmte) || pte_is_leaf(pte) || level == 0) {
+      break;
+    }
+    pg_base = pte.ppn << 12;
+  }
+
+  result.pte = pte;
+  result.level = level;
+  return result;
+}
+
+/**
+ * Main pte_helper function with H-extension two-stage translation support
+ * Implementation aligned with L1TLBChecker::check() in tlb.cpp
+ *
+ * Translation modes:
+ * - noS2xlate:  Single-stage using satp (host mode)
+ * - onlyStage1: VS-stage only using vsatp (PTE addresses are physical)
+ * - onlyStage2: G-stage only using hgatp (vpn is GPA)
+ * - allStage:   Full two-stage (GVA -> GPA -> HPA)
+ */
+uint8_t pte_helper(uint64_t satp, uint64_t vsatp, uint64_t hgatp, uint8_t mPBMTE, uint8_t hPBMTE, uint64_t vpn,
+                   uint8_t s2xlate, uint64_t *pte, uint8_t *level, uint64_t *s1_pte, uint64_t *s2_pte,
+                   uint8_t *s1_level) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_calls[perf_pte_helper]++;
-  difftest_bytes[perf_pte_helper] += 25;
+  difftest_bytes[perf_pte_helper] += 61;
 #endif // CONFIG_DIFFTEST_PERFCNT
-  uint64_t pg_base = satp << 12, pte_addr;
-  PTE *pte_p = (PTE *)pte;
-  for (*level = 0; *level < 3; (*level)++) {
-    pte_addr = pg_base + VPNi(vpn, *level) * sizeof(uint64_t);
-#ifdef CONFIG_NO_DIFFTEST
-    pte_p->val = pmem_read(pte_addr);
-#else
-    read_goldenmem(pte_addr, &pte_p->val, 8);
-#endif // CONFIG_NO_DIFFTEST
-    pg_base = pte_p->ppn << 12;
-    // pf
-    if (!pte_p->v) {
-      return 1;
+
+  PTE result_pte;
+  uint64_t paddr;
+  uint8_t result_level;
+  r_s2xlate g_result;
+
+  Satp *satp_p = (Satp *)&satp;
+  Vsatp *vsatp_p = (Vsatp *)&vsatp;
+  Hgatp *hgatp_p = (Hgatp *)&hgatp;
+
+  uint8_t hasS2xlate = (s2xlate != noS2xlate);
+  uint8_t onlyS2 = (s2xlate == onlyStage2);
+  uint8_t hasAllStage = (s2xlate == allStage);
+  uint8_t stage1PBMTE = hasS2xlate ? hPBMTE : mPBMTE;
+
+  // Select satp based on translation mode
+  uint64_t pg_base = (hasS2xlate ? vsatp_p->ppn : satp_p->ppn) << 12;
+  int mode = hasS2xlate ? vsatp_p->mode : satp_p->mode;
+  int max_level = (mode == MODE_SV39X4) ? 2 : 3;
+
+  if (onlyS2) {
+    // G-Stage only: vpn is treated as GPA
+    if (gpa_high_bits_invalid(hgatp_p->mode, vpn << 12)) {
+      result_pte.val = 0;
+      set_pte_helper_result(pte, level, s1_pte, s2_pte, s1_level, result_pte, 0);
+      return PF_G_STAGE;
     }
-    // leaf pte
-    if (pte_p->r || pte_p->x) {
-      return 0;
+
+    g_result = do_g_stage(hgatp_p, vpn << 12, mPBMTE);
+    result_pte = g_result.pte;
+    result_level = g_result.level;
+
+    // Check for G-stage page fault, including PBMTE-gated PBMT legality.
+    if (pte_has_g_stage_fault(result_pte, result_level, mPBMTE)) {
+      set_pte_helper_result(pte, level, s1_pte, s2_pte, s1_level, result_pte, result_level);
+      return PF_G_STAGE;
+    }
+  } else {
+    // VS-stage walk (with optional G-stage for PTE addresses)
+    for (result_level = max_level; result_level >= 0; result_level--) {
+      paddr = pg_base + VPNi(vpn, result_level) * sizeof(uint64_t);
+
+      if (hasAllStage) {
+        // Translate PTE address through G-stage
+        if (gpa_high_bits_invalid(hgatp_p->mode, paddr)) {
+          result_pte.val = 0;
+          set_pte_helper_result(pte, level, s1_pte, s2_pte, s1_level, result_pte, 0);
+          return PF_G_STAGE;
+        }
+
+        g_result = do_g_stage(hgatp_p, paddr, mPBMTE);
+
+        // Check for G-stage page fault during PTE access, including PBMTE-gated PBMT legality.
+        if (pte_has_g_stage_fault(g_result.pte, g_result.level, mPBMTE)) {
+          set_pte_helper_result(pte, level, s1_pte, s2_pte, s1_level, g_result.pte, g_result.level, 0, g_result.pte.val,
+                                0);
+          return PF_G_STAGE;
+        }
+
+        // Calculate HPA from G-stage result (handle superpage)
+        uint64_t pg_mask = ((1ull << VPNiSHFT(g_result.level)) - 1);
+        if (pte_is_legal_napot(g_result.pte, g_result.level)) {
+          pg_mask = ((1ull << NAPOTSHFT) - 1);
+        }
+        pg_base = (g_result.pte.ppn << 12 & ~pg_mask) | (paddr & pg_mask & ~PAGE_MASK);
+        paddr = pg_base | (paddr & PAGE_MASK);
+      }
+
+      result_pte.val = read_pte(paddr);
+      bool stage_fault = pte_has_vs_stage_fault(result_pte, result_level, stage1PBMTE);
+      if (!stage_fault) {
+        pg_base = result_pte.ppn << 12;
+      }
+
+      // Stop on fault, leaf PTE, or the last level. Faults must not walk into the next level.
+      if (stage_fault || pte_is_leaf(result_pte) || result_level == 0) {
+        break;
+      }
+    }
+
+    // Check for VS-stage page fault, including PBMTE-gated PBMT legality.
+    if (pte_has_vs_stage_fault(result_pte, result_level, stage1PBMTE)) {
+      set_pte_helper_result(pte, level, s1_pte, s2_pte, s1_level, result_pte, result_level,
+                            hasAllStage ? result_pte.val : 0, 0, hasAllStage ? result_level : 0);
+      return PF_VS_STAGE;
+    }
+
+    // Save VS-stage PTE and level before G-stage final translation overwrites them
+    if (hasAllStage) {
+      *s1_pte = result_pte.val;
+      *s1_level = result_level;
+    }
+
+    // Handle superpage: calculate final pg_base
+    if (result_level > 0 && result_pte.v) {
+      uint64_t pg_mask = ((1ull << VPNiSHFT(result_level)) - 1);
+      pg_base = (result_pte.ppn << 12 & ~pg_mask) | (vpn << 12 & pg_mask & ~PAGE_MASK);
+    } else if (pte_is_legal_napot(result_pte, result_level)) {
+      uint64_t pg_mask = ((1ull << NAPOTSHFT) - 1);
+      pg_base = (result_pte.ppn << 12 & ~pg_mask) | (vpn << 12 & pg_mask & ~PAGE_MASK);
+    }
+
+    // Final G-stage translation for the leaf PTE's PPN
+    if (hasAllStage && result_pte.v) {
+      if (gpa_high_bits_invalid(hgatp_p->mode, pg_base)) {
+        PTE fault_pte;
+        fault_pte.val = 0;
+        set_pte_helper_result(pte, level, s1_pte, s2_pte, s1_level, fault_pte, 0, *s1_pte, 0, *s1_level);
+        return PF_G_STAGE;
+      }
+
+      g_result = do_g_stage(hgatp_p, pg_base, mPBMTE);
+
+      // Check for final G-stage page fault, including PBMTE-gated PBMT legality.
+      if (pte_has_g_stage_fault(g_result.pte, g_result.level, mPBMTE)) {
+        set_pte_helper_result(pte, level, s1_pte, s2_pte, s1_level, g_result.pte, g_result.level, *s1_pte,
+                              g_result.pte.val, *s1_level);
+        return PF_G_STAGE;
+      }
+
+      result_pte = g_result.pte;
+      result_level = g_result.level;
+      // save G-stage PTE for allStage mode
+      *s2_pte = g_result.pte.val;
     }
   }
-  return 1;
+
+  set_pte_helper_result(pte, level, s1_pte, s2_pte, s1_level, result_pte, result_level, hasAllStage ? *s1_pte : 0,
+                        hasAllStage ? *s2_pte : 0, hasAllStage ? *s1_level : 0);
+  return PF_NONE;
 }
 
 enum {
