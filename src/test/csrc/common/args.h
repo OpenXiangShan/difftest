@@ -66,6 +66,7 @@ struct CommonArgs {
   bool enable_diff = true;
   bool enable_squash = true;
   uint8_t squash_size = 255;
+  uint64_t no_squash_after_instr = -1;
   bool enable_fork = false;
   bool enable_runahead = false;
   bool dump_db = false;

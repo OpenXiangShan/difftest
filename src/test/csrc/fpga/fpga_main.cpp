@@ -171,6 +171,14 @@ void fpga_init() {
   xdma_device->fpga_io(HOST_IO_SQUASH_MAX_FUSED, static_cast<uint32_t>(args.squash_size));
   xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, args.enable_squash);
   printf("[fpga-host] squash enable = %d, size = %u\n", args.enable_squash, static_cast<unsigned>(args.squash_size));
+  if (args.no_squash_after_instr != UINT64_MAX) {
+    if (args.enable_squash) {
+      printf("[fpga-host] squash will be disabled after %" PRIu64 " committed instructions\n",
+             args.no_squash_after_instr);
+    } else {
+      printf("[fpga-host] --no-squash-after-instr is ignored because squash is disabled\n");
+    }
+  }
 #ifndef FPGA_SIM
   usleep(1000);
 #endif // FPGA_SIM
@@ -243,6 +251,17 @@ int fpga_get_result(uint8_t step) {
       return FPGA_GOODTRAP;
     else
       return FPGA_FAIL;
+  }
+  if (args.enable_squash && args.no_squash_after_instr != UINT64_MAX) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      uint64_t instr_count = difftest[i]->get_trap_event()->instrCnt;
+      if (instr_count >= args.no_squash_after_instr) {
+        xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, false);
+        args.enable_squash = false;
+        printf("[fpga-host] disabled squash at core %d instruction %" PRIu64 "\n", i, instr_count);
+        break;
+      }
+    }
   }
   // Max Instr Limit Check
   if (args.max_instr != -1) {
