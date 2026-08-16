@@ -56,6 +56,7 @@ class TopdownRobInfoHelper(val IQEntriesNum: Int, val RobEntriesNum: Int)
     s"$desiredName.v",
     TopdownDPI.robHelperVerilog(desiredName, dpiFuncName, inPaddedWidth, outPaddedWidth),
   )
+  difftest.DifftestModule.createCppDPICModule(dpiFuncName, TopdownDPI.robDPICWrapper(dpiFuncName))
 
   private val cppExtModule =
     s"""
