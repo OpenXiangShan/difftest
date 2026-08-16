@@ -67,6 +67,7 @@ class TopdownIQInfoHelper(val entriesNum: Int)
     s"$desiredName.v",
     TopdownDPI.iqHelperVerilog(desiredName, dpiFuncName, inPaddedWidth, outPaddedWidth),
   )
+  difftest.DifftestModule.createCppDPICModule(dpiFuncName, TopdownDPI.iqDPICWrapper(dpiFuncName))
 
   private val cppExtModule =
     s"""
