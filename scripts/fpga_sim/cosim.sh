@@ -136,6 +136,9 @@ wait $HOST_PID
 HOST_EXIT_CODE=$?
 set -e
 
-kill -9 $SIMV_PID
+# Let simv run final blocks (replay backpressure report) before force-kill.
+kill -INT $SIMV_PID 2>/dev/null || true
+sleep 1
+kill -9 $SIMV_PID 2>/dev/null || true
 
 exit $HOST_EXIT_CODE

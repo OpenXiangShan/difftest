@@ -41,49 +41,59 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   appendIn.last := info
   val out = IO(Decoupled(chiselTypeOf(appendIn)))
 
-  val control = Module(new ReplayControl(config))
-  control.clock := clock
-  control.reset := reset
-
-  val buffer = Mem(config.replaySize, chiselTypeOf(appendIn))
-  val ptr = RegInit(0.U(config.replayWidth.W))
-
-  // write
   // ignore useless data when hasGlobalEnable
   val needStore = WireInit(true.B)
   if (config.hasGlobalEnable) {
     needStore := VecInit(in.bits.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
   }
   info.valid := needStore
-  info.trace_head := ptr
   info.trace_size := 1.U
-  when(needStore && !control.replay) {
-    buffer(ptr) := appendIn
-    ptr := ptr + 1.U
-    when(ptr === (config.replaySize - 1).U) {
-      ptr := 0.U
-    }
-  }
 
-  // read
-  val in_replay = RegInit(false.B) // indicates ptr in correct replay pos
-  when(control.replay) {
-    when(!in_replay) {
-      in_replay := true.B
-      ptr := control.replay_head // position of first corresponding replay data
-    }.otherwise {
+  in.ready := out.ready
+  out.valid := in.valid
+
+  // FPGA replay only captures the live stream for the extra DDR path.
+  // Skip the software mux / DPI readback; still stamp DiffTraceInfo.
+  if (config.isFPGA) {
+    val ptr = RegInit(0.U(config.replayWidth.W))
+    info.trace_head := ptr
+    when(needStore && in.fire) {
+      ptr := Mux(ptr === (config.replaySize - 1).U, 0.U, ptr + 1.U)
+    }
+    out.bits := appendIn
+  } else {
+    val control = Module(new ReplayControl(config))
+    control.clock := clock
+    control.reset := reset
+
+    val buffer = Mem(config.replaySize, chiselTypeOf(appendIn))
+    val ptr = RegInit(0.U(config.replayWidth.W))
+    info.trace_head := ptr
+    when(needStore && !control.replay) {
+      buffer(ptr) := appendIn
       ptr := ptr + 1.U
       when(ptr === (config.replaySize - 1).U) {
         ptr := 0.U
       }
     }
-  }
-  in.ready := out.ready
-  out.valid := in.valid
-  out.bits := Mux(in_replay, buffer(ptr), appendIn)
-  out.bits.filter(_.desiredCppName == "trace_info").foreach { gen =>
-    val info = gen.asInstanceOf[DiffTraceInfo]
-    info.in_replay := in_replay
+
+    val in_replay = RegInit(false.B)
+    when(control.replay) {
+      when(!in_replay) {
+        in_replay := true.B
+        ptr := control.replay_head
+      }.otherwise {
+        ptr := ptr + 1.U
+        when(ptr === (config.replaySize - 1).U) {
+          ptr := 0.U
+        }
+      }
+    }
+    out.bits := Mux(in_replay, buffer(ptr), appendIn)
+    out.bits.filter(_.desiredCppName == "trace_info").foreach { gen =>
+      val replayInfo = gen.asInstanceOf[DiffTraceInfo]
+      replayInfo.in_replay := in_replay
+    }
   }
 }
 

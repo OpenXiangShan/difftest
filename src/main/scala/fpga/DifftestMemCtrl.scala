@@ -416,6 +416,124 @@ class DifftestMemCtrl(
   }
 }
 
+class ReplayH2CAXIs2Mem(
+  val axisWidth: Int,
+  val addrWidth: Int,
+  val dataWidth: Int,
+  val idWidth: Int,
+  val userWidth: Int,
+  val baseAddr: BigInt,
+) extends Module {
+  require(axisWidth % 8 == 0, s"AXIS width $axisWidth must be byte-aligned")
+  require(dataWidth % 8 == 0, s"AXI data width $dataWidth must be byte-aligned")
+  require(axisWidth % dataWidth == 0, s"AXIS width $axisWidth must be a multiple of AXI data width $dataWidth")
+  require(isPow2(dataWidth / 8), s"AXI data width must be power-of-two bytes, got $dataWidth bits")
+  require(
+    baseAddr >= 0 && baseAddr < (BigInt(1) << addrWidth),
+    s"Replay base address 0x${baseAddr.toString(16)} exceeds $addrWidth-bit AXI address",
+  )
+
+  val io = IO(new Bundle {
+    val replay_clock = Input(Clock())
+    val sizeMB = Input(UInt(32.W))
+    val axis = Flipped(new AXI4Stream(axisWidth))
+    val axi = new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth)
+  })
+
+  import H2CAXIs2MemState._
+
+  private val fifoDepth = 32
+  private val chunksPerAxis = axisWidth / dataWidth
+  private val chunkWidth = log2Ceil(chunksPerAxis).max(1)
+  private val burstWidth = log2Ceil(chunksPerAxis + 1).max(1)
+  private val beatBytes = dataWidth / 8
+
+  withClockAndReset(io.replay_clock, reset) {
+    val fifo = Module(new AsyncClockFIFO(new AXI4StreamBundle(axisWidth), fifoDepth))
+    fifo.io.enqClock := io.replay_clock
+    fifo.io.enq <> io.axis
+
+    val state = RegInit(sIdle)
+    val addr = RegInit(baseAddr.U(addrWidth.W))
+    val wrapBeats = (io.sizeMB << (20 - log2Ceil(beatBytes))).asUInt
+    val beatsLeft = RegInit(0.U((addrWidth + 1).W))
+    val payload = Reg(UInt(axisWidth.W))
+    val chunk = RegInit(0.U(chunkWidth.W))
+    val burstBeats = RegInit(0.U(burstWidth.W))
+    val burstBeat = RegInit(0.U(burstWidth.W))
+    val payloadWords = payload.asTypeOf(Vec(chunksPerAxis, UInt(dataWidth.W)))
+    val beatsInPayload = chunksPerAxis.U(burstWidth.W)
+
+    io.axi.aw.valid := state === sAddr
+    io.axi.aw.bits := 0.U.asTypeOf(io.axi.aw.bits)
+    io.axi.aw.bits.addr := addr
+    io.axi.aw.bits.len := burstBeats - 1.U
+    io.axi.aw.bits.size := log2Ceil(beatBytes).U
+    io.axi.aw.bits.burst := 1.U
+
+    io.axi.w.valid := state === sData
+    io.axi.w.bits.data := payloadWords(chunk)
+    io.axi.w.bits.strb := Fill(beatBytes, 1.U(1.W))
+    io.axi.w.bits.last := burstBeat === burstBeats - 1.U
+
+    io.axi.b.ready := state === sResp
+    io.axi.ar.valid := false.B
+    io.axi.ar.bits := 0.U.asTypeOf(io.axi.ar.bits)
+    io.axi.r.ready := false.B
+    fifo.io.deq.ready := state === sReadPayload
+
+    switch(state) {
+      is(sIdle) {
+        when(wrapBeats === 0.U) {
+          state := sIdle
+        }.elsewhen(beatsLeft === 0.U) {
+          addr := baseAddr.U(addrWidth.W)
+          beatsLeft := wrapBeats
+        }.elsewhen(fifo.io.deq.valid) {
+          state := sReadPayload
+        }
+      }
+      is(sReadPayload) {
+        when(fifo.io.deq.fire) {
+          payload := fifo.io.deq.bits.data
+          chunk := 0.U
+          burstBeat := 0.U
+          burstBeats := Mux(beatsLeft > beatsInPayload, beatsInPayload, beatsLeft(burstWidth - 1, 0))
+          state := sAddr
+        }
+      }
+      is(sAddr) {
+        when(io.axi.aw.fire) {
+          state := sData
+        }
+      }
+      is(sData) {
+        when(io.axi.w.fire) {
+          addr := addr + beatBytes.U
+          when(io.axi.w.bits.last) {
+            state := sResp
+          }.otherwise {
+            chunk := chunk + 1.U
+            burstBeat := burstBeat + 1.U
+          }
+        }
+      }
+      is(sResp) {
+        when(io.axi.b.fire) {
+          val remaining = beatsLeft - burstBeats.asTypeOf(beatsLeft)
+          when(remaining === 0.U) {
+            addr := baseAddr.U(addrWidth.W)
+            beatsLeft := wrapBeats
+          }.otherwise {
+            beatsLeft := remaining
+          }
+          state := sIdle
+        }
+      }
+    }
+  }
+}
+
 object DifftestMemCtrl {
   def exposeIO(cpu: Record, mem: Record, name: String = "bore_"): DifftestMemIO = {
     val cpuPort = IO(AXI4Bundle.typeOf(cpu)).suggestName(s"${name}CpuAXI")

@@ -120,3 +120,35 @@ class HostEndpoint(
   // AXI-Stream output domain (PCIe clock)
   io.to_host_axis <> diff2axis.io.axis
 }
+
+class ReplayDifftest2AXIs(difftest_width: Int, axis_width: Int) extends Module {
+  val io = IO(new Bundle {
+    val replay_clock = Input(Clock())
+    val reset = Input(Bool())
+    val difftest = Flipped(new FpgaDiffIO(difftest_width))
+    val axis = new AXI4Stream(axis_width)
+  })
+
+  val inner = Module(new Difftest2AXIs(difftest_width, axis_width))
+  inner.io.pcie_clock := io.replay_clock
+  inner.io.reset := io.reset
+  inner.io.difftest <> io.difftest
+  io.axis <> inner.io.axis
+}
+
+class ReplayHostEndpoint(
+  val diffWidth: Int,
+  val axisWidth: Int,
+) extends Module {
+  val io = IO(new Bundle {
+    val difftest = Flipped(new FpgaDiffIO(diffWidth))
+    val to_replay_axis = new AXI4Stream(axisWidth)
+    val replay_clock = Input(Clock())
+  })
+
+  val replayDiff2axis = Module(new ReplayDifftest2AXIs(diffWidth, axisWidth))
+  replayDiff2axis.io.replay_clock := io.replay_clock
+  replayDiff2axis.io.reset := reset
+  PipelineConnect(io.difftest, replayDiff2axis.io.difftest, replayDiff2axis.io.difftest.fire)
+  io.to_replay_axis <> replayDiff2axis.io.axis
+}

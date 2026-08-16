@@ -29,7 +29,7 @@ import difftest.common.{
   VerilogAXI4Record,
   VerilogAXI4StreamRecord,
 }
-import difftest.fpga.{DifftestMemCtrl, HostEndpoint, XDMAConfigBar, XDMAHostCtrlIO}
+import difftest.fpga.{DifftestMemCtrl, HostEndpoint, ReplayH2CAXIs2Mem, ReplayHostEndpoint, XDMAConfigBar, XDMAHostCtrlIO}
 import difftest.gateway.Gateway
 
 class DifftestTopIO extends Bundle {
@@ -200,12 +200,43 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
               mem.viewAs[AXI4Bundle] <> memCtrl.io.mem
           }
         }
+
+        gateway.fpgaReplayIO.foreach { replayIO =>
+          val replay_clock = IO(Input(Clock()))
+          val replayHost = Module(new ReplayHostEndpoint(replayIO.bits.getWidth, Gateway.hostAxisWidth))
+          replayHost.io.difftest.valid := replayIO.valid && ctrl.diffEnable
+          replayHost.io.difftest.bits := replayIO.bits
+          replayIO.ready := Mux(ctrl.diffEnable, replayHost.io.difftest.ready, true.B)
+          replayHost.io.replay_clock := replay_clock
+
+          val replayMem = Module(
+            new ReplayH2CAXIs2Mem(
+              Gateway.hostAxisWidth,
+              addrWidth = 32,
+              dataWidth = 64,
+              idWidth = 1,
+              userWidth = 1,
+              baseAddr = 0,
+            )
+          )
+          replayMem.io.replay_clock := replay_clock
+          replayMem.io.sizeMB := 16.U
+          replayMem.io.axis <> replayHost.io.to_replay_axis
+          val replay_axi = IO(VerilogAXI4Record.typeOf(replayMem.io.axi))
+          replay_axi.viewAs[AXI4Bundle] <> replayMem.io.axi
+        }
       }
     }
 
     gateway.clockEnable.foreach { clockEnable =>
       val clock_enable = IO(Output(Bool()))
       clock_enable := clockEnable || fpgaHostReset || !fpgaDiffEnable
+    }
+
+    gateway.fpgaReplayStall.foreach { stall =>
+      val replay_stall = IO(Output(Bool()))
+      replay_stall := stall
+      dontTouch(replay_stall)
     }
   }
 

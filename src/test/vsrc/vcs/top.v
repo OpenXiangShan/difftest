@@ -148,13 +148,13 @@ wire sim_clock;
   wire c2h_axi_tlast;
   wire c2h_axi_tready;
   wire c2h_axi_tvalid;
-  wire [511:0] c2h_axi_tdata;
-  wire [63:0] c2h_axi_tkeep;
+  wire [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] c2h_axi_tdata;
+  wire [`CONFIG_DIFFTEST_HOST_AXIS_BYTES-1:0] c2h_axi_tkeep;
   wire h2c_axi_tlast;
   wire h2c_axi_tready;
   wire h2c_axi_tvalid;
-  wire [511:0] h2c_axi_tdata;
-  wire [63:0] h2c_axi_tkeep;
+  wire [`CONFIG_DIFFTEST_HOST_AXIS_WIDTH-1:0] h2c_axi_tdata;
+  wire [`CONFIG_DIFFTEST_HOST_AXIS_BYTES-1:0] h2c_axi_tkeep;
   wire [31:0] cfg_awaddr;
   wire        cfg_awvalid;
   wire        cfg_awready;
@@ -176,6 +176,98 @@ wire sim_clock;
   wire        host_ctrl_diff_enable;
   wire        host_ctrl_ila_trigger;
   wire        host_ctrl_enable_squash;
+`ifdef CONFIG_DIFFTEST_FPGA_REPLAY
+  wire        difftest_replay_stall;
+  wire        difftest_replay_clock;
+  wire        replay_awvalid;
+  wire        replay_awready;
+  wire [31:0] replay_awaddr;
+  wire        replay_awid;
+  wire [7:0]  replay_awlen;
+  wire [2:0]  replay_awsize;
+  wire [1:0]  replay_awburst;
+  wire        replay_awlock;
+  wire [3:0]  replay_awcache;
+  wire [2:0]  replay_awprot;
+  wire [3:0]  replay_awqos;
+  wire        replay_awuser;
+  wire        replay_wvalid;
+  wire        replay_wready;
+  wire [63:0] replay_wdata;
+  wire [7:0]  replay_wstrb;
+  wire        replay_wlast;
+  wire        replay_bvalid;
+  wire        replay_bready;
+  wire [1:0]  replay_bresp;
+  wire        replay_bid;
+  wire        replay_buser;
+  wire        replay_arvalid;
+  wire        replay_arready;
+  wire [31:0] replay_araddr;
+  wire        replay_arid;
+  wire [7:0]  replay_arlen;
+  wire [2:0]  replay_arsize;
+  wire [1:0]  replay_arburst;
+  wire        replay_arlock;
+  wire [3:0]  replay_arcache;
+  wire [2:0]  replay_arprot;
+  wire [3:0]  replay_arqos;
+  wire        replay_aruser;
+  wire        replay_rvalid;
+  wire        replay_rready;
+  wire [63:0] replay_rdata;
+  wire [1:0]  replay_rresp;
+  wire        replay_rlast;
+  wire        replay_rid;
+  wire        replay_ruser;
+
+  assign difftest_replay_clock = clock;
+  replay_axi_mem replay_ddr(
+    .clock(difftest_replay_clock),
+    .reset(reset),
+    .awvalid(replay_awvalid),
+    .awready(replay_awready),
+    .awaddr(replay_awaddr),
+    .awid(replay_awid),
+    .awlen(replay_awlen),
+    .awsize(replay_awsize),
+    .awburst(replay_awburst),
+    .awlock(replay_awlock),
+    .awcache(replay_awcache),
+    .awprot(replay_awprot),
+    .awqos(replay_awqos),
+    .awuser(replay_awuser),
+    .wvalid(replay_wvalid),
+    .wready(replay_wready),
+    .wdata(replay_wdata),
+    .wstrb(replay_wstrb),
+    .wlast(replay_wlast),
+    .bvalid(replay_bvalid),
+    .bready(replay_bready),
+    .bresp(replay_bresp),
+    .bid(replay_bid),
+    .buser(replay_buser),
+    .arvalid(replay_arvalid),
+    .arready(replay_arready),
+    .araddr(replay_araddr),
+    .arid(replay_arid),
+    .arlen(replay_arlen),
+    .arsize(replay_arsize),
+    .arburst(replay_arburst),
+    .arlock(replay_arlock),
+    .arcache(replay_arcache),
+    .arprot(replay_arprot),
+    .arqos(replay_arqos),
+    .aruser(replay_aruser),
+    .rvalid(replay_rvalid),
+    .rready(replay_rready),
+    .rdata(replay_rdata),
+    .rresp(replay_rresp),
+    .rlast(replay_rlast),
+    .rid(replay_rid),
+    .ruser(replay_ruser)
+  );
+`endif // CONFIG_DIFFTEST_FPGA_REPLAY
 
   assign difftest_pcie_clock = clock;
 xdma_clock xclk(
@@ -266,6 +358,51 @@ SimTop sim(
   .difftest_cfg_axilite_rdata(cfg_rdata),
   .difftest_cfg_axilite_rresp(cfg_rresp),
   .difftest_cfg_axilite_rready(cfg_rready),
+`ifdef CONFIG_DIFFTEST_FPGA_REPLAY
+  .difftest_replay_stall(difftest_replay_stall),
+  .difftest_replay_clock(difftest_replay_clock),
+  .difftest_replay_axi_awvalid(replay_awvalid),
+  .difftest_replay_axi_awready(replay_awready),
+  .difftest_replay_axi_awaddr(replay_awaddr),
+  .difftest_replay_axi_awid(replay_awid),
+  .difftest_replay_axi_awlen(replay_awlen),
+  .difftest_replay_axi_awsize(replay_awsize),
+  .difftest_replay_axi_awburst(replay_awburst),
+  .difftest_replay_axi_awlock(replay_awlock),
+  .difftest_replay_axi_awcache(replay_awcache),
+  .difftest_replay_axi_awprot(replay_awprot),
+  .difftest_replay_axi_awqos(replay_awqos),
+  .difftest_replay_axi_awuser(replay_awuser),
+  .difftest_replay_axi_wvalid(replay_wvalid),
+  .difftest_replay_axi_wready(replay_wready),
+  .difftest_replay_axi_wdata(replay_wdata),
+  .difftest_replay_axi_wstrb(replay_wstrb),
+  .difftest_replay_axi_wlast(replay_wlast),
+  .difftest_replay_axi_bvalid(replay_bvalid),
+  .difftest_replay_axi_bready(replay_bready),
+  .difftest_replay_axi_bresp(replay_bresp),
+  .difftest_replay_axi_bid(replay_bid),
+  .difftest_replay_axi_buser(replay_buser),
+  .difftest_replay_axi_arvalid(replay_arvalid),
+  .difftest_replay_axi_arready(replay_arready),
+  .difftest_replay_axi_araddr(replay_araddr),
+  .difftest_replay_axi_arid(replay_arid),
+  .difftest_replay_axi_arlen(replay_arlen),
+  .difftest_replay_axi_arsize(replay_arsize),
+  .difftest_replay_axi_arburst(replay_arburst),
+  .difftest_replay_axi_arlock(replay_arlock),
+  .difftest_replay_axi_arcache(replay_arcache),
+  .difftest_replay_axi_arprot(replay_arprot),
+  .difftest_replay_axi_arqos(replay_arqos),
+  .difftest_replay_axi_aruser(replay_aruser),
+  .difftest_replay_axi_rvalid(replay_rvalid),
+  .difftest_replay_axi_rready(replay_rready),
+  .difftest_replay_axi_rdata(replay_rdata),
+  .difftest_replay_axi_rresp(replay_rresp),
+  .difftest_replay_axi_rlast(replay_rlast),
+  .difftest_replay_axi_rid(replay_rid),
+  .difftest_replay_axi_ruser(replay_ruser),
+`endif // CONFIG_DIFFTEST_FPGA_REPLAY
 `endif // FPGA_SIM
 `ifdef CONFIG_DIFFTEST_CLOCKGATE
   .difftest_ref_clock(sim_clock),
@@ -283,6 +420,41 @@ SimTop sim(
   .difftest_exit(difftest_exit),
   .difftest_step(difftest_step)
 );
+
+`ifdef CONFIG_DIFFTEST_FPGA_REPLAY
+// Count DUT pauses caused by extra-DDR replay backpressure on the
+// ungated sim_clock. Gateway itself is clock-gated while stalled.
+reg        replay_stall_d;
+reg [63:0] replay_stall_events;
+reg [63:0] replay_stall_cycles;
+reg [63:0] replay_sim_cycles;
+always @(posedge sim_clock) begin
+  if (reset) begin
+    replay_stall_d <= 1'b0;
+    replay_stall_events <= 64'd0;
+    replay_stall_cycles <= 64'd0;
+    replay_sim_cycles <= 64'd0;
+  end
+  else begin
+    replay_sim_cycles <= replay_sim_cycles + 64'd1;
+    replay_stall_d <= difftest_replay_stall;
+    if (difftest_replay_stall) begin
+      replay_stall_cycles <= replay_stall_cycles + 64'd1;
+      if (!replay_stall_d) begin
+        replay_stall_events <= replay_stall_events + 64'd1;
+      end
+    end
+    if (replay_sim_cycles[19:0] == 20'd0) begin
+      $display("[replay_backpressure] events=%0d cycles=%0d sim_cycles=%0d",
+               replay_stall_events, replay_stall_cycles, replay_sim_cycles);
+    end
+  end
+end
+final begin
+  $display("[replay_backpressure] events=%0d cycles=%0d sim_cycles=%0d",
+           replay_stall_events, replay_stall_cycles, replay_sim_cycles);
+end
+`endif // CONFIG_DIFFTEST_FPGA_REPLAY
 
 DifftestEndpoint difftest(
   .clock(sim_clock),

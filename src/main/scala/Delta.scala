@@ -30,8 +30,11 @@ object Delta {
   def apply(
     bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]],
     config: GatewayConfig,
+    isolated: Boolean = false,
   ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
-    instances ++= bundles.bits.map(_.bits)
+    if (!isolated) {
+      instances ++= bundles.bits.map(_.bits)
+    }
     val module = Module(new DeltaEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
     module.in <> bundles
     module.out

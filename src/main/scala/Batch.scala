@@ -77,9 +77,17 @@ class BatchInfo extends Bundle {
 object Batch {
   private val template = ListBuffer.empty[DifftestBundle]
 
-  def apply(bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]], config: GatewayConfig): DecoupledIO[BatchIO] = {
-    template ++= chiselTypeOf(bundles.bits).map(_.bits).distinctBy(_.desiredCppName)
-    val module = Module(new BatchEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
+  def apply(
+    bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]],
+    config: GatewayConfig,
+    isolated: Boolean = false,
+  ): DecoupledIO[BatchIO] = {
+    val local = chiselTypeOf(bundles.bits).map(_.bits).distinctBy(_.desiredCppName)
+    if (!isolated) {
+      template ++= local
+    }
+    val usedTemplate = if (isolated) local else template.toSeq
+    val module = Module(new BatchEndpoint(chiselTypeOf(bundles.bits).toSeq, config, usedTemplate))
     module.in <> bundles
     module.out
   }
@@ -91,12 +99,13 @@ object Batch {
   }
 }
 
-class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
+class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig, template: Seq[DifftestBundle])
+  extends Module {
   val in = IO(Flipped(Decoupled(MixedVec(bundles))))
   val param = BatchParam(config, in.bits.map(_.bits).toSeq)
 
   // Collect valid bundles of same cycle
-  val collector = Module(new BatchCollector(bundles, param, config))
+  val collector = Module(new BatchCollector(bundles, param, config, template))
   PipelineConnect(in, collector.in, collector.in.fire)
 
   val out = IO(Decoupled(new BatchIO(param, config)))
@@ -104,7 +113,8 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 }
 
 // Cluster Data from same group in same cycle
-class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam) extends Module {
+class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam, template: Seq[DifftestBundle])
+  extends Module {
   val alignWidth = bundleType.getByteAlignWidth
   val elemBytes = alignWidth / 8
   val in = IO(Input(Vec(groupSize, Valid(bundleType))))
@@ -128,7 +138,7 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
   out_data := collect_data.asUInt
 
   val info = Wire(new BatchInfo)
-  info.id := Batch.getBundleID(bundleType).U
+  info.id := template.indexWhere(_.desiredCppName == bundleType.desiredCppName).U
   info.num := v_size
   out_info := Mux(v_size =/= 0.U, info.asUInt, 0.U)
 
@@ -144,7 +154,12 @@ class BatchCluster(bundleType: DifftestBundle, groupSize: Int, param: BatchParam
 }
 
 // Collect Data from different group in same cycle
-class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, config: GatewayConfig) extends Module {
+class BatchCollector(
+  bundles: Seq[Valid[DifftestBundle]],
+  param: BatchParam,
+  config: GatewayConfig,
+  template: Seq[DifftestBundle],
+) extends Module {
   val in = IO(Flipped(Decoupled(MixedVec(bundles))))
   val out = IO(Decoupled(new BatchIO(param, config)))
 
@@ -172,7 +187,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
     val data = MixedVec(groupDataWidths.map(group_w => UInt(group_w.W)))
     val info = Vec(param.StepGroupSize, UInt(param.infoWidth.W))
     val status = Vec(param.StepGroupSize, new BatchStats(param))
-    val trace_info = Option.when(config.hasReplay)(new DiffTraceInfo(config))
+    val trace_info = Option.when(bundles.exists(_.bits.desiredCppName == "trace_info"))(new DiffTraceInfo(config))
   }
   val grouped = Wire(Decoupled(new GroupBundle))
   grouped.valid := in.valid
@@ -182,7 +197,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
     _ := in.bits.map(_.bits).filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
   )
   sorted.zipWithIndex.foreach { case (v_gens, gid) =>
-    val cluster = Module(new BatchCluster(chiselTypeOf(v_gens.head.bits), v_gens.length, param))
+    val cluster = Module(new BatchCluster(chiselTypeOf(v_gens.head.bits), v_gens.length, param, template))
     cluster.in := v_gens
     val status_base = if (gid == 0) 0.U.asTypeOf(new BatchStats(param)) else grouped.bits.status(gid - 1)
     cluster.status_base := status_base
@@ -205,10 +220,10 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val cluster_chunk_count = delay_group_status.map(_.cluster_data_chunks)
 
   val BatchHead = Wire(new BatchInfo)
-  BatchHead.id := Batch.getTemplate.length.U
+  BatchHead.id := template.length.U
   BatchHead.num := info_num
   val BatchStep = Wire(new BatchInfo)
-  BatchStep.id := (Batch.getTemplate.length + 1).U
+  BatchStep.id := (template.length + 1).U
 
   // Collect info as BatchHead, valid bundle infos, BatchStep.
   // C++ scans BatchInfo from low bits to high bits, so append BatchHead at the

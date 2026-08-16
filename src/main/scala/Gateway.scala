@@ -66,7 +66,8 @@ case class GatewayConfig(
   def deltaLimit: Int = 8
   def hasClockGate = isFPGA || isDelta || isBatch
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
-  def needTraceInfo: Boolean = hasReplay
+  def needTraceInfo: Boolean = hasReplay && !isFPGA
+  def hasFpgaReplay: Boolean = hasReplay && isFPGA
   def needEndpoint: Boolean =
     hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring || traceDump || traceLoad || needPreprocess
   def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo || !softArchUpdate
@@ -85,7 +86,8 @@ case class GatewayConfig(
       )
     if (isSquash) macros ++= Seq("CONFIG_DIFFTEST_SQUASH", s"CONFIG_DIFFTEST_SQUASH_STAMPSIZE 4096") // Stamp Width 12
     if (isDelta) macros += "CONFIG_DIFFTEST_DELTA"
-    if (hasReplay) macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
+    if (hasReplay && !isFPGA)
+      macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
@@ -107,6 +109,7 @@ case class GatewayConfig(
         s"CONFIG_DIFFTEST_HOST_AXIS_WIDTH ${hostAxisBytes * 8}",
       )
     if (hasClockGate) macros += "CONFIG_DIFFTEST_CLOCKGATE"
+    if (hasFpgaReplay) macros += "CONFIG_DIFFTEST_FPGA_REPLAY"
     macros.toSeq
   }
   def check(): Unit = {
@@ -137,6 +140,8 @@ case class GatewayResult(
   exit: Option[UInt] = None,
   step: Option[UInt] = None,
   fpgaIO: Option[FpgaDiffIO] = None,
+  fpgaReplayIO: Option[FpgaDiffIO] = None,
+  fpgaReplayStall: Option[Bool] = None,
   fpgaSquashEnable: Option[Bool] = None,
   clockEnable: Option[Bool] = None,
 ) {
@@ -152,6 +157,8 @@ case class GatewayResult(
       exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
       fpgaIO = if (fpgaIO.isDefined) fpgaIO else that.fpgaIO,
+      fpgaReplayIO = if (fpgaReplayIO.isDefined) fpgaReplayIO else that.fpgaReplayIO,
+      fpgaReplayStall = if (fpgaReplayStall.isDefined) fpgaReplayStall else that.fpgaReplayStall,
       fpgaSquashEnable = if (fpgaSquashEnable.isDefined) fpgaSquashEnable else that.fpgaSquashEnable,
       clockEnable = if (clockEnable.isDefined) clockEnable else that.clockEnable,
     )
@@ -237,6 +244,8 @@ object Gateway {
         refClock = Option.when(config.hasClockGate)(endpoint.clock),
         step = Some(endpoint.step),
         fpgaIO = endpoint.fpgaIO,
+        fpgaReplayIO = endpoint.fpgaReplayIO,
+        fpgaReplayStall = endpoint.fpgaReplayStall,
         fpgaSquashEnable = endpoint.fpgaSquashEnable,
         clockEnable = endpoint.clockEnable,
       )
@@ -289,10 +298,44 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     decoupledIn
   }
 
-  val replayed = if (config.hasReplay) {
-    Replay(preprocessed, config)
+  val enableFpgaReplay = config.hasFpgaReplay
+  val fpgaReplayIO = Option.when(enableFpgaReplay && config.isBatch)(IO(new FpgaDiffIO(config.batchBitWidth)))
+  val fpgaReplayStall = Option.when(enableFpgaReplay)(IO(Output(Bool())))
+  val toPathA = Wire(chiselTypeOf(preprocessed))
+  if (enableFpgaReplay) {
+    val toReplay = Wire(chiselTypeOf(preprocessed))
+    toPathA.bits := preprocessed.bits
+    toReplay.bits := preprocessed.bits
+    toPathA.valid := preprocessed.valid && toReplay.ready
+    toReplay.valid := preprocessed.valid && toPathA.ready
+    preprocessed.ready := toPathA.ready && toReplay.ready
+    // Path A can accept this beat, but the write-only replay path cannot.
+    // This is the DUT pause caused by extra-DDR backpressure.
+    fpgaReplayStall.get := preprocessed.valid && toPathA.ready && !toReplay.ready
+
+    val replayed = Replay(toReplay, config)
+    val replayValidated = Validate(replayed, config)
+    val replayDeltas = if (config.isDelta) {
+      Delta(replayValidated, config, isolated = true)
+    } else {
+      replayValidated
+    }
+    if (config.isBatch) {
+      val replayBatch = Batch(replayDeltas, config, isolated = true)
+      fpgaReplayIO.get.bits := replayBatch.bits.payload
+      fpgaReplayIO.get.valid := replayBatch.valid
+      replayBatch.ready := fpgaReplayIO.get.ready
+    } else {
+      replayDeltas.ready := true.B
+    }
   } else {
-    preprocessed
+    toPathA <> preprocessed
+  }
+
+  val replayed = if (config.hasReplay && !config.isFPGA) {
+    Replay(toPathA, config)
+  } else {
+    toPathA
   }
 
   val validated = Validate(replayed, config)
