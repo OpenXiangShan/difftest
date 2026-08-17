@@ -34,6 +34,10 @@ import difftest.common.AXI4LiteBundle
   *   - 0x20: HOST_IO_MEM_CPU
   *   - 0x24: HOST_IO_MEM_H2C
   *   - 0x28: HOST_IO_H2C_SIZE_MB
+  *   - 0x2c: HOST_IO_REPLAY_SIZE_MB
+  *   - 0x30: HOST_IO_REPLAY_BASE
+  *   - 0x34: HOST_IO_REPLAY_WR_PTR
+  *   - 0x38: HOST_IO_REPLAY_WRAP_CNT
   */
 class XDMAHostCtrlIO extends Bundle {
   val reset = Bool()
@@ -52,8 +56,17 @@ class XDMAMemCtrlIO extends Bundle {
   val memStatus = Input(UInt(2.W))
 }
 
+class XDMAReplayCtrlIO extends Bundle {
+  val sizeMB = Output(UInt(32.W))
+  val base = Input(UInt(32.W))
+  val wrPtr = Input(UInt(32.W))
+  val wrapCnt = Input(UInt(32.W))
+  val idle = Input(Bool())
+}
+
 private object XDMAConfigReg extends Enumeration {
-  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, Seed, RamSizeMB, MemInit, MemCPU, MemH2C, H2CSizeMB =
+  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, Seed, RamSizeMB, MemInit, MemCPU, MemH2C, H2CSizeMB,
+    ReplaySizeMB, ReplayBase, ReplayWrPtr, ReplayWrapCnt =
     Value
 }
 
@@ -65,6 +78,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     val cfgReset = Output(Bool())
     val hostCtrl = Output(new XDMAHostCtrlIO)
     val memCtrl = new XDMAMemCtrlIO
+    val replayCtrl = new XDMAReplayCtrlIO
   })
 
   private val numRegs = XDMAConfigReg.maxId
@@ -81,6 +95,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   io.memCtrl.seed := regfile(XDMAConfigReg.Seed.id)
   io.memCtrl.ramSizeMB := regfile(XDMAConfigReg.RamSizeMB.id)
   io.memCtrl.h2cSizeMB := regfile(XDMAConfigReg.H2CSizeMB.id)
+  io.replayCtrl.sizeMB := regfile(XDMAConfigReg.ReplaySizeMB.id)
   io.cfgReset := regfile(XDMAConfigReg.CfgReset.id)(0)
 
   private def mergeByByte(oldData: UInt, newData: UInt, strb: UInt): UInt = {
@@ -109,6 +124,9 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   val doWrite = !bValid && (awValid || awFire) && (wValid || wFire)
   val writeWord = nextAwAddr(addrWidth - 1, 2)
   val writeIdx = writeWord(idxBits - 1, 0)
+  val writeStatus = writeWord === XDMAConfigReg.ReplayBase.id.U ||
+    writeWord === XDMAConfigReg.ReplayWrPtr.id.U ||
+    writeWord === XDMAConfigReg.ReplayWrapCnt.id.U
 
   when(awFire) {
     awaddr := io.axilite.aw.bits.addr
@@ -120,7 +138,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     wValid := true.B
   }
   when(doWrite) {
-    when(writeWord < numRegs.U) {
+    when(writeWord < numRegs.U && !writeStatus) {
       regfile(writeIdx) := mergeByByte(regfile(writeIdx), nextWData, nextWStrb)
     }
     awValid := false.B
@@ -142,7 +160,14 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   when(io.axilite.ar.valid && arReady) {
     val readWord = io.axilite.ar.bits.addr(addrWidth - 1, 2)
     val readIdx = readWord(idxBits - 1, 0)
-    rData := Mux(readWord < numRegs.U, regfile(readIdx), 0.U)
+    val fromReg = Mux(readWord < numRegs.U, regfile(readIdx), 0.U)
+    rData := MuxLookup(readWord, fromReg)(
+      Seq(
+        XDMAConfigReg.ReplayBase.id.U -> io.replayCtrl.base,
+        XDMAConfigReg.ReplayWrPtr.id.U -> io.replayCtrl.wrPtr,
+        XDMAConfigReg.ReplayWrapCnt.id.U -> io.replayCtrl.wrapCnt,
+      )
+    )
     arReady := false.B
     rValid := true.B
   }.elsewhen(rValid && io.axilite.r.ready) {

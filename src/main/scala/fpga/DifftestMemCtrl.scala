@@ -423,6 +423,7 @@ class ReplayH2CAXIs2Mem(
   val idWidth: Int,
   val userWidth: Int,
   val baseAddr: BigInt,
+  val rangeBytes: Int,
 ) extends Module {
   require(axisWidth % 8 == 0, s"AXIS width $axisWidth must be byte-aligned")
   require(dataWidth % 8 == 0, s"AXI data width $dataWidth must be byte-aligned")
@@ -432,12 +433,17 @@ class ReplayH2CAXIs2Mem(
     baseAddr >= 0 && baseAddr < (BigInt(1) << addrWidth),
     s"Replay base address 0x${baseAddr.toString(16)} exceeds $addrWidth-bit AXI address",
   )
+  require(rangeBytes > 0 && rangeBytes % (dataWidth / 8) == 0, s"Replay rangeBytes $rangeBytes must be a positive multiple of AXI beat bytes")
 
   val io = IO(new Bundle {
     val replay_clock = Input(Clock())
     val sizeMB = Input(UInt(32.W))
     val axis = Flipped(new AXI4Stream(axisWidth))
     val axi = new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth)
+    val base = Output(UInt(addrWidth.W))
+    val committedPtr = Output(UInt(addrWidth.W))
+    val wrapCnt = Output(UInt(32.W))
+    val idle = Output(Bool())
   })
 
   import H2CAXIs2MemState._
@@ -455,14 +461,28 @@ class ReplayH2CAXIs2Mem(
 
     val state = RegInit(sIdle)
     val addr = RegInit(baseAddr.U(addrWidth.W))
-    val wrapBeats = (io.sizeMB << (20 - log2Ceil(beatBytes))).asUInt
+    val sizeMBSync = RegNext(RegNext(io.sizeMB, 0.U), 0.U)
+    val wrapBytes = Mux(
+      sizeMBSync === 0.U,
+      0.U,
+      (sizeMBSync << 20).asUInt - ((sizeMBSync << 20).asUInt % rangeBytes.U),
+    )
+    val wrapBeats = (wrapBytes >> log2Ceil(beatBytes)).asUInt
     val beatsLeft = RegInit(0.U((addrWidth + 1).W))
     val payload = Reg(UInt(axisWidth.W))
+    val payloadLast = RegInit(false.B)
+    val committedPtr = RegInit(baseAddr.U(addrWidth.W))
+    val wrapCnt = RegInit(0.U(32.W))
     val chunk = RegInit(0.U(chunkWidth.W))
     val burstBeats = RegInit(0.U(burstWidth.W))
     val burstBeat = RegInit(0.U(burstWidth.W))
     val payloadWords = payload.asTypeOf(Vec(chunksPerAxis, UInt(dataWidth.W)))
     val beatsInPayload = chunksPerAxis.U(burstWidth.W)
+
+    io.base := baseAddr.U(addrWidth.W)
+    io.committedPtr := committedPtr
+    io.wrapCnt := wrapCnt
+    io.idle := state === sIdle && !fifo.io.deq.valid
 
     io.axi.aw.valid := state === sAddr
     io.axi.aw.bits := 0.U.asTypeOf(io.axi.aw.bits)
@@ -496,6 +516,7 @@ class ReplayH2CAXIs2Mem(
       is(sReadPayload) {
         when(fifo.io.deq.fire) {
           payload := fifo.io.deq.bits.data
+          payloadLast := fifo.io.deq.bits.last
           chunk := 0.U
           burstBeat := 0.U
           burstBeats := Mux(beatsLeft > beatsInPayload, beatsInPayload, beatsLeft(burstWidth - 1, 0))
@@ -521,11 +542,16 @@ class ReplayH2CAXIs2Mem(
       is(sResp) {
         when(io.axi.b.fire) {
           val remaining = beatsLeft - burstBeats.asTypeOf(beatsLeft)
+          val nextAddr = Mux(remaining === 0.U, baseAddr.U(addrWidth.W), addr)
           when(remaining === 0.U) {
             addr := baseAddr.U(addrWidth.W)
             beatsLeft := wrapBeats
+            wrapCnt := wrapCnt + 1.U
           }.otherwise {
             beatsLeft := remaining
+          }
+          when(payloadLast) {
+            committedPtr := nextAddr
           }
           state := sIdle
         }

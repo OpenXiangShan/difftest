@@ -26,6 +26,7 @@
 #include "refproxy.h"
 #include "splitview.h"
 #include "xdma.h"
+#include "replay_range.h"
 #include <condition_variable>
 #include <cstdlib>
 #include <getopt.h>
@@ -77,6 +78,15 @@ int main(int argc, const char *argv[]) {
 
   printf("fpga init\n");
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
+  {
+    uint32_t size_mb = xdma_device->fpga_io_read(HOST_IO_REPLAY_SIZE_MB);
+    uint32_t base = xdma_device->fpga_io_read(HOST_IO_REPLAY_BASE);
+    uint32_t wr_ptr = xdma_device->fpga_io_read(HOST_IO_REPLAY_WR_PTR);
+    uint32_t wrap_cnt = xdma_device->fpga_io_read(HOST_IO_REPLAY_WRAP_CNT);
+    ReplayAxiRange range = replay_axi_range(base, wr_ptr, wrap_cnt, size_mb, sizeof(FpgaPackgeHead));
+    printf("[fpga-replay] sizeMB=%u base=0x%x wr_ptr=0x%x wrap=%u start=0x%x len=%u\n", size_mb, base, wr_ptr, wrap_cnt,
+           range.start, range.len);
+  }
   fpga_finish();
   if (signal_num != 0) {
     return 128 + signal_num;
@@ -166,6 +176,11 @@ void fpga_init() {
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
   xdma_device->fpga_io(HOST_IO_MEM_CPU, true);
+#ifdef FPGA_SIM
+  xdma_device->fpga_io(HOST_IO_REPLAY_SIZE_MB, 1u);
+#else
+  xdma_device->fpga_io(HOST_IO_REPLAY_SIZE_MB, 16u);
+#endif
   xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
   xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, true);

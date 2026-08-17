@@ -183,6 +183,10 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         gateway.fpgaSquashEnable.foreach(_ := ctrl.enableSquash)
 
         cfg.io.memCtrl.memStatus := 0.U
+        cfg.io.replayCtrl.base := 0.U
+        cfg.io.replayCtrl.wrPtr := 0.U
+        cfg.io.replayCtrl.wrapCnt := 0.U
+        cfg.io.replayCtrl.idle := true.B
         from_host_axis.viewAs[AXI4Stream].ready := false.B
         cpu.difftestMemIO.foreach { case DifftestMemIO(cpuRecord, memRecord) =>
           val cpuAxi = Wire(AXI4Bundle.typeOf(cpuRecord))
@@ -209,6 +213,11 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
           replayIO.ready := Mux(ctrl.diffEnable, replayHost.io.difftest.ready, true.B)
           replayHost.io.replay_clock := replay_clock
 
+          val replayRangeBytes = {
+            val axisBytes = Gateway.hostAxisWidth / 8
+            val pktBytes = ((replayIO.bits.getWidth + 8 + Gateway.hostAxisWidth - 1) / Gateway.hostAxisWidth) * axisBytes
+            8 * pktBytes
+          }
           val replayMem = Module(
             new ReplayH2CAXIs2Mem(
               Gateway.hostAxisWidth,
@@ -217,13 +226,18 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
               idWidth = 1,
               userWidth = 1,
               baseAddr = 0,
+              rangeBytes = replayRangeBytes,
             )
           )
           replayMem.io.replay_clock := replay_clock
-          replayMem.io.sizeMB := 16.U
+          replayMem.io.sizeMB := cfg.io.replayCtrl.sizeMB
           replayMem.io.axis <> replayHost.io.to_replay_axis
           val replay_axi = IO(VerilogAXI4Record.typeOf(replayMem.io.axi))
           replay_axi.viewAs[AXI4Bundle] <> replayMem.io.axi
+          cfg.io.replayCtrl.base := replayMem.io.base
+          cfg.io.replayCtrl.wrPtr := RegNext(RegNext(replayMem.io.committedPtr))
+          cfg.io.replayCtrl.wrapCnt := RegNext(RegNext(replayMem.io.wrapCnt))
+          cfg.io.replayCtrl.idle := RegNext(RegNext(replayMem.io.idle, true.B), true.B)
         }
       }
     }

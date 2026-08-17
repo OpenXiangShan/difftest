@@ -44,6 +44,10 @@
 #define HOST_IO_MEM_CPU         0x20
 #define HOST_IO_MEM_H2C         0x24
 #define HOST_IO_H2C_SIZE_MB     0x28
+#define HOST_IO_REPLAY_SIZE_MB  0x2c
+#define HOST_IO_REPLAY_BASE     0x30
+#define HOST_IO_REPLAY_WR_PTR   0x34
+#define HOST_IO_REPLAY_WRAP_CNT 0x38
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
