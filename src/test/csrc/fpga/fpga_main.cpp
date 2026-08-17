@@ -27,6 +27,7 @@
 #include "splitview.h"
 #include "xdma.h"
 #include "replay_range.h"
+#include "replay_dump.h"
 #include <condition_variable>
 #include <cstdlib>
 #include <getopt.h>
@@ -79,6 +80,7 @@ int main(int argc, const char *argv[]) {
   printf("fpga init\n");
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
   {
+    xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, false);
     uint32_t size_mb = xdma_device->fpga_io_read(HOST_IO_REPLAY_SIZE_MB);
     uint32_t base = xdma_device->fpga_io_read(HOST_IO_REPLAY_BASE);
     uint32_t wr_ptr = xdma_device->fpga_io_read(HOST_IO_REPLAY_WR_PTR);
@@ -86,6 +88,15 @@ int main(int argc, const char *argv[]) {
     ReplayAxiRange range = replay_axi_range(base, wr_ptr, wrap_cnt, size_mb, sizeof(FpgaPackgeHead));
     printf("[fpga-replay] sizeMB=%u base=0x%x wr_ptr=0x%x wrap=%u start=0x%x len=%u\n", size_mb, base, wr_ptr, wrap_cnt,
            range.start, range.len);
+    xdma_device->fpga_io(HOST_IO_REPLAY_DUMP, true);
+    uint64_t got = xdma_device->dump_replay(range.len);
+    xdma_device->wait_fpga_io_done(HOST_IO_REPLAY_DUMP, "replay dump");
+    if (got != range.len) {
+      fprintf(stderr, "[fpga-replay] dump length mismatch: got %" PRIu64 " expected %u\n", got, range.len);
+      exit(1);
+    }
+    uint32_t heads = replay_dump_head_count(range.len, sizeof(FpgaPackgeHead));
+    printf("[fpga-replay] dump verified heads=%u bytes=%" PRIu64 "\n", heads, got);
   }
   fpga_finish();
   if (signal_num != 0) {

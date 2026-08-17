@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 #include "xdma.h"
+#include "replay_dump.h"
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
@@ -115,6 +116,79 @@ void FpgaXdma::wait_fpga_io_done(uint64_t address, const char *tag) {
   }
   fprintf(stderr, "[fpga-host] timeout waiting for %s\n", tag);
   exit(1);
+}
+
+uint64_t FpgaXdma::dump_replay(uint32_t expected_bytes) {
+  const uint32_t pack_size = static_cast<uint32_t>(sizeof(FpgaPackgeHead));
+  uint32_t heads = replay_dump_head_count(expected_bytes, pack_size);
+  if (expected_bytes != 0 && heads == 0) {
+    fprintf(stderr, "[fpga-replay] dump length %u is not a multiple of %u\n", expected_bytes, pack_size);
+    exit(1);
+  }
+  if (heads == 0) {
+    printf("[fpga-replay] dump empty\n");
+    return 0;
+  }
+
+  void *raw = nullptr;
+  if (posix_memalign(&raw, 4096, sizeof(FpgaPackgeHead)) != 0) {
+    fprintf(stderr, "[fpga-replay] dump alloc failed\n");
+    exit(1);
+  }
+  auto *packge = static_cast<FpgaPackgeHead *>(raw);
+#ifndef FPGA_SIM
+  int dump_fd = xdma_c2h_fd[0];
+  bool opened = false;
+  if (dump_fd < 0) {
+    dump_fd = open("/dev/xdma0_c2h_0", O_RDONLY);
+    if (dump_fd < 0) {
+      perror("[fpga-replay] open C2H for dump");
+      free(raw);
+      exit(1);
+    }
+    opened = true;
+  }
+#endif
+  uint64_t got = 0;
+  uint8_t expect_idx = 0;
+  for (uint32_t i = 0; i < heads; i++) {
+#ifdef FPGA_SIM
+    ssize_t size = static_cast<ssize_t>(xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead)));
+#else
+    ssize_t size = read(dump_fd, packge, sizeof(FpgaPackgeHead));
+#endif
+    if (size != static_cast<ssize_t>(sizeof(FpgaPackgeHead))) {
+      fprintf(stderr, "[fpga-replay] dump C2H short read: got %zd expected %zu at head %u\n", size,
+              sizeof(FpgaPackgeHead), i);
+#ifndef FPGA_SIM
+      if (opened) {
+        close(dump_fd);
+      }
+#endif
+      free(raw);
+      exit(1);
+    }
+    if (replay_dump_check_idx(packge->diff_packge[0].packge_idx, &expect_idx, i == 0) != 0) {
+      fprintf(stderr, "[fpga-replay] dump packge_idx mismatch: got %u at head %u\n", packge->diff_packge[0].packge_idx,
+              i);
+#ifndef FPGA_SIM
+      if (opened) {
+        close(dump_fd);
+      }
+#endif
+      free(raw);
+      exit(1);
+    }
+    got += static_cast<uint64_t>(size);
+  }
+#ifndef FPGA_SIM
+  if (opened) {
+    close(dump_fd);
+  }
+#endif
+  free(raw);
+  printf("[fpga-replay] dump C2H bytes=%" PRIu64 " heads=%u last_idx=%u\n", got, heads, expect_idx);
+  return got;
 }
 
 #ifdef CONFIG_USE_XDMA_H2C

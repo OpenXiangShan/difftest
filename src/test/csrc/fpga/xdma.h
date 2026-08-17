@@ -17,6 +17,7 @@
 #define __XDMA_H__
 
 #include "common.h"
+#include "replay_dump.h"
 #include "diffstate.h"
 #include "mpool.h"
 #include <atomic>
@@ -101,6 +102,7 @@ public:
   }
 
   void wait_fpga_io_done(uint64_t address, const char *tag);
+  uint64_t dump_replay(uint32_t expected_bytes);
 #ifdef CONFIG_USE_XDMA_H2C
   void h2c_load_workload(const void *payload, uint64_t size);
 #endif
