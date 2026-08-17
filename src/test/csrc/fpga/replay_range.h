@@ -35,6 +35,12 @@ static inline uint32_t replay_aligned_window_bytes(uint32_t size_mb, uint32_t pa
   return window - (window % pack_size);
 }
 
+static inline uint32_t replay_c2h_range_bytes(uint32_t batch_bits, uint32_t axis_bits) {
+  uint32_t axis_bytes = axis_bits / 8;
+  uint32_t pkt_axis = (batch_bits + 8 + axis_bits - 1) / axis_bits;
+  return 8u * pkt_axis * axis_bytes;
+}
+
 static inline ReplayAxiRange replay_axi_range(uint32_t base, uint32_t wr_ptr, uint32_t wrap_cnt, uint32_t size_mb,
                                               uint32_t pack_size) {
   ReplayAxiRange range = {base, 0};

@@ -33,21 +33,7 @@
 #include "xdma_sim.h"
 #endif // FPGA_SIM
 
-#define HOST_IO_CFG_RESET       0x0
-#define HOST_IO_RESET           0x4
-#define HOST_IO_DIFFTEST_ENABLE 0x8
-#define HOST_IO_ILA_TRIGGER     0xc
-#define HOST_IO_SQUASH_ENABLE   0x10
-#define HOST_IO_SEED            0x14
-#define HOST_IO_RAM_SIZE_MB     0x18
-#define HOST_IO_MEM_INIT        0x1c
-#define HOST_IO_MEM_CPU         0x20
-#define HOST_IO_MEM_H2C         0x24
-#define HOST_IO_H2C_SIZE_MB     0x28
-#define HOST_IO_REPLAY_SIZE_MB  0x2c
-#define HOST_IO_REPLAY_BASE     0x30
-#define HOST_IO_REPLAY_WR_PTR   0x34
-#define HOST_IO_REPLAY_WRAP_CNT 0x38
+#include "xdma_bar.h"
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up

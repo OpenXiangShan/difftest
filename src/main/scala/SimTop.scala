@@ -29,7 +29,7 @@ import difftest.common.{
   VerilogAXI4Record,
   VerilogAXI4StreamRecord,
 }
-import difftest.fpga.{DifftestMemCtrl, HostEndpoint, ReplayH2CAXIs2Mem, ReplayHostEndpoint, XDMAConfigBar, XDMAHostCtrlIO}
+import difftest.fpga.{DifftestMemCtrl, HostEndpoint, ReplayH2CAXIs2Mem, ReplayHostEndpoint, ReplayMem2C2HAXIs, XDMAConfigBar, XDMAHostCtrlIO}
 import difftest.gateway.Gateway
 
 class DifftestTopIO extends Bundle {
@@ -169,7 +169,14 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
 
         val toHost = host.io.to_host_axis
         val to_host_axis = IO(VerilogAXI4StreamRecord.typeOf(toHost))
-        to_host_axis.viewAs[AXI4Stream] <> toHost
+        val dumpAxis = Wire(chiselTypeOf(toHost))
+        val dumpActive = WireInit(false.B)
+        dumpAxis.valid := false.B
+        dumpAxis.bits := 0.U.asTypeOf(dumpAxis.bits)
+        dumpAxis.ready := dumpActive && to_host_axis.viewAs[AXI4Stream].ready
+        toHost.ready := !dumpActive && to_host_axis.viewAs[AXI4Stream].ready
+        to_host_axis.viewAs[AXI4Stream].valid := Mux(dumpActive, dumpAxis.valid, toHost.valid)
+        to_host_axis.viewAs[AXI4Stream].bits := Mux(dumpActive, dumpAxis.bits, toHost.bits)
 
         val from_host_axis = IO(Flipped(new VerilogAXI4StreamRecord(Gateway.hostAxisWidth)))
 
@@ -183,6 +190,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         gateway.fpgaSquashEnable.foreach(_ := ctrl.enableSquash)
 
         cfg.io.memCtrl.memStatus := 0.U
+        cfg.io.replayCtrl.dumpStatus := 0.U
         cfg.io.replayCtrl.base := 0.U
         cfg.io.replayCtrl.wrPtr := 0.U
         cfg.io.replayCtrl.wrapCnt := 0.U
@@ -232,12 +240,53 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
           replayMem.io.replay_clock := replay_clock
           replayMem.io.sizeMB := cfg.io.replayCtrl.sizeMB
           replayMem.io.axis <> replayHost.io.to_replay_axis
-          val replay_axi = IO(VerilogAXI4Record.typeOf(replayMem.io.axi))
-          replay_axi.viewAs[AXI4Bundle] <> replayMem.io.axi
+
+          val replayDump = Module(
+            new ReplayMem2C2HAXIs(
+              Gateway.hostAxisWidth,
+              addrWidth = 32,
+              dataWidth = 64,
+              idWidth = 1,
+              userWidth = 1,
+              baseAddr = 0,
+              rangeBytes = replayRangeBytes,
+            )
+          )
+          replayDump.io.replay_clock := replay_clock
+          replayDump.io.pcie_clock := pcie_clock
+          replayDump.io.sizeMB := cfg.io.replayCtrl.sizeMB
+          replayDump.io.wrPtr := replayMem.io.committedPtr
+          replayDump.io.wrapCnt := replayMem.io.wrapCnt
+          replayDump.io.go := cfg.io.replayCtrl.dump && replayMem.io.idle
+          dumpActive := cfg.io.replayCtrl.dump
+          dumpAxis.valid := replayDump.io.axis.valid
+          dumpAxis.bits := replayDump.io.axis.bits
+          replayDump.io.axis.ready := dumpAxis.ready
+
+          val replayAxi = Wire(chiselTypeOf(replayMem.io.axi))
+          replayAxi.aw <> replayMem.io.axi.aw
+          replayAxi.w <> replayMem.io.axi.w
+          replayMem.io.axi.b <> replayAxi.b
+          replayAxi.ar <> replayDump.io.axi.ar
+          replayDump.io.axi.r <> replayAxi.r
+          replayDump.io.axi.aw.ready := false.B
+          replayDump.io.axi.w.ready := false.B
+          replayDump.io.axi.b.valid := false.B
+          replayDump.io.axi.b.bits := 0.U.asTypeOf(replayDump.io.axi.b.bits)
+          replayMem.io.axi.ar.ready := false.B
+          replayMem.io.axi.r.valid := false.B
+          replayMem.io.axi.r.bits := 0.U.asTypeOf(replayMem.io.axi.r.bits)
+          val replay_axi = IO(VerilogAXI4Record.typeOf(replayAxi))
+          replay_axi.viewAs[AXI4Bundle] <> replayAxi
           cfg.io.replayCtrl.base := replayMem.io.base
           cfg.io.replayCtrl.wrPtr := RegNext(RegNext(replayMem.io.committedPtr))
           cfg.io.replayCtrl.wrapCnt := RegNext(RegNext(replayMem.io.wrapCnt))
           cfg.io.replayCtrl.idle := RegNext(RegNext(replayMem.io.idle, true.B), true.B)
+          cfg.io.replayCtrl.dumpStatus := Mux(
+            replayDump.io.err,
+            3.U,
+            Mux(replayDump.io.done, 2.U, 0.U),
+          )
         }
       }
     }

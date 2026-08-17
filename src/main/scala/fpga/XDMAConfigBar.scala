@@ -38,6 +38,7 @@ import difftest.common.AXI4LiteBundle
   *   - 0x30: HOST_IO_REPLAY_BASE
   *   - 0x34: HOST_IO_REPLAY_WR_PTR
   *   - 0x38: HOST_IO_REPLAY_WRAP_CNT
+ *   - 0x3c: HOST_IO_REPLAY_DUMP
   */
 class XDMAHostCtrlIO extends Bundle {
   val reset = Bool()
@@ -58,6 +59,8 @@ class XDMAMemCtrlIO extends Bundle {
 
 class XDMAReplayCtrlIO extends Bundle {
   val sizeMB = Output(UInt(32.W))
+  val dump = Output(Bool())
+  val dumpStatus = Input(UInt(2.W))
   val base = Input(UInt(32.W))
   val wrPtr = Input(UInt(32.W))
   val wrapCnt = Input(UInt(32.W))
@@ -66,7 +69,7 @@ class XDMAReplayCtrlIO extends Bundle {
 
 private object XDMAConfigReg extends Enumeration {
   val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, Seed, RamSizeMB, MemInit, MemCPU, MemH2C, H2CSizeMB,
-    ReplaySizeMB, ReplayBase, ReplayWrPtr, ReplayWrapCnt =
+    ReplaySizeMB, ReplayBase, ReplayWrPtr, ReplayWrapCnt, ReplayDump =
     Value
 }
 
@@ -96,6 +99,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   io.memCtrl.ramSizeMB := regfile(XDMAConfigReg.RamSizeMB.id)
   io.memCtrl.h2cSizeMB := regfile(XDMAConfigReg.H2CSizeMB.id)
   io.replayCtrl.sizeMB := regfile(XDMAConfigReg.ReplaySizeMB.id)
+  io.replayCtrl.dump := regfile(XDMAConfigReg.ReplayDump.id)(0)
   io.cfgReset := regfile(XDMAConfigReg.CfgReset.id)(0)
 
   private def mergeByByte(oldData: UInt, newData: UInt, strb: UInt): UInt = {
@@ -180,5 +184,8 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   }
   when(io.memCtrl.memH2C && io.memCtrl.memStatus =/= 0.U) {
     regfile(XDMAConfigReg.MemH2C.id) := io.memCtrl.memStatus
+  }
+  when(io.replayCtrl.dump && io.replayCtrl.dumpStatus =/= 0.U) {
+    regfile(XDMAConfigReg.ReplayDump.id) := io.replayCtrl.dumpStatus
   }
 }

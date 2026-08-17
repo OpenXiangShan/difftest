@@ -560,6 +560,183 @@ class ReplayH2CAXIs2Mem(
   }
 }
 
+
+object ReplayMem2C2HState extends ChiselEnum {
+  val sIdle, sAddr, sData, sPush, sDrain, sDone, sErr = Value
+}
+
+class ReplayMem2C2HAXIs(
+  val axisWidth: Int,
+  val addrWidth: Int,
+  val dataWidth: Int,
+  val idWidth: Int,
+  val userWidth: Int,
+  val baseAddr: BigInt,
+  val rangeBytes: Int,
+) extends Module {
+  require(axisWidth % 8 == 0, s"AXIS width $axisWidth must be byte-aligned")
+  require(dataWidth % 8 == 0, s"AXI data width $dataWidth must be byte-aligned")
+  require(axisWidth % dataWidth == 0, s"AXIS width $axisWidth must be a multiple of AXI data width $dataWidth")
+  require(isPow2(dataWidth / 8), s"AXI data width must be power-of-two bytes, got $dataWidth bits")
+  require(rangeBytes > 0 && rangeBytes % (axisWidth / 8) == 0, s"Replay rangeBytes $rangeBytes must be a positive multiple of AXIS bytes")
+  require(
+    baseAddr >= 0 && baseAddr < (BigInt(1) << addrWidth),
+    s"Replay base address 0x${baseAddr.toString(16)} exceeds $addrWidth-bit AXI address",
+  )
+
+  val io = IO(new Bundle {
+    val replay_clock = Input(Clock())
+    val pcie_clock = Input(Clock())
+    val sizeMB = Input(UInt(32.W))
+    val wrPtr = Input(UInt(addrWidth.W))
+    val wrapCnt = Input(UInt(32.W))
+    val go = Input(Bool())
+    val axi = new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth)
+    val axis = new AXI4Stream(axisWidth)
+    val done = Output(Bool())
+    val err = Output(Bool())
+    val active = Output(Bool())
+  })
+
+  import ReplayMem2C2HState._
+
+  private val fifoDepth = 32
+  private val chunksPerAxis = axisWidth / dataWidth
+  private val chunkWidth = log2Ceil(chunksPerAxis).max(1)
+  private val beatBytes = dataWidth / 8
+  private val axisBytes = axisWidth / 8
+  private val rangeAxisBeats = rangeBytes / axisBytes
+
+  private val fifo = Module(new AsyncClockFIFO(new AXI4StreamBundle(axisWidth), fifoDepth))
+  fifo.io.enqClock := io.replay_clock
+
+  withClockAndReset(io.pcie_clock, reset) {
+    io.axis <> fifo.io.deq
+  }
+
+  withClockAndReset(io.replay_clock, reset) {
+    val state = RegInit(sIdle)
+    val addr = RegInit(baseAddr.U(addrWidth.W))
+    val bytesLeft = RegInit(0.U(32.W))
+    val sizeMBSync = RegNext(RegNext(io.sizeMB, 0.U), 0.U)
+    val wrapBytes = Mux(
+      sizeMBSync === 0.U,
+      0.U,
+      (sizeMBSync << 20).asUInt - ((sizeMBSync << 20).asUInt % rangeBytes.U),
+    )
+    val wrapEnd = baseAddr.U(addrWidth.W) + wrapBytes
+    val chunk = RegInit(0.U(chunkWidth.W))
+    val words = Reg(Vec(chunksPerAxis, UInt(dataWidth.W)))
+    val axisInRange = RegInit(0.U(log2Ceil(rangeAxisBeats + 1).W))
+    val enqCount = RegInit(0.U(16.W))
+    val goSync = RegNext(RegNext(io.go, false.B), false.B)
+    val goPrev = RegNext(goSync, false.B)
+    val goRise = goSync && !goPrev
+    val startSnap = RegInit(baseAddr.U(addrWidth.W))
+    val lenSnap = RegInit(0.U(32.W))
+
+    val deqCountPcie = withClockAndReset(io.pcie_clock, reset) {
+      val cnt = RegInit(0.U(16.W))
+      when(fifo.io.deq.fire) {
+        cnt := cnt + 1.U
+      }
+      cnt
+    }
+    val deqCount = RegNext(RegNext(deqCountPcie, 0.U), 0.U)
+
+    io.axi.aw.valid := false.B
+    io.axi.aw.bits := 0.U.asTypeOf(io.axi.aw.bits)
+    io.axi.w.valid := false.B
+    io.axi.w.bits := 0.U.asTypeOf(io.axi.w.bits)
+    io.axi.b.ready := true.B
+    io.axi.ar.valid := state === sAddr
+    io.axi.ar.bits := 0.U.asTypeOf(io.axi.ar.bits)
+    io.axi.ar.bits.addr := addr
+    io.axi.ar.bits.len := (chunksPerAxis - 1).U
+    io.axi.ar.bits.size := log2Ceil(beatBytes).U
+    io.axi.ar.bits.burst := 1.U
+    io.axi.r.ready := state === sData
+
+    fifo.io.enq.valid := state === sPush
+    fifo.io.enq.bits.data := words.asUInt
+    fifo.io.enq.bits.keep := Fill(axisBytes, 1.U(1.W))
+    fifo.io.enq.bits.last := axisInRange === (rangeAxisBeats - 1).U
+
+    io.done := state === sDone
+    io.err := state === sErr
+    io.active := state =/= sIdle && state =/= sDone && state =/= sErr
+
+    switch(state) {
+      is(sIdle) {
+        enqCount := 0.U
+        when(goRise) {
+          val start = Mux(io.wrapCnt === 0.U, baseAddr.U(addrWidth.W), io.wrPtr)
+          val len = Mux(io.wrapCnt === 0.U, io.wrPtr - baseAddr.U(addrWidth.W), wrapBytes)
+          startSnap := start
+          lenSnap := len
+          when(len === 0.U) {
+            state := sDone
+          }.elsewhen(wrapBytes === 0.U || (len % rangeBytes.U) =/= 0.U || len > wrapBytes) {
+            state := sErr
+          }.otherwise {
+            addr := start
+            bytesLeft := len
+            chunk := 0.U
+            axisInRange := 0.U
+            state := sAddr
+          }
+        }
+      }
+      is(sAddr) {
+        when(io.axi.ar.fire) {
+          chunk := 0.U
+          state := sData
+        }
+      }
+      is(sData) {
+        when(io.axi.r.fire) {
+          words(chunk) := io.axi.r.bits.data
+          val nextAddr = Mux(addr + beatBytes.U === wrapEnd, baseAddr.U(addrWidth.W), addr + beatBytes.U)
+          addr := nextAddr
+          bytesLeft := bytesLeft - beatBytes.U
+          when(chunk === (chunksPerAxis - 1).U) {
+            state := sPush
+          }.otherwise {
+            chunk := chunk + 1.U
+          }
+        }
+      }
+      is(sPush) {
+        when(fifo.io.enq.fire) {
+          enqCount := enqCount + 1.U
+          val nextRange = Mux(axisInRange === (rangeAxisBeats - 1).U, 0.U, axisInRange + 1.U)
+          axisInRange := nextRange
+          when(bytesLeft === 0.U) {
+            state := sDrain
+          }.otherwise {
+            state := sAddr
+          }
+        }
+      }
+      is(sDrain) {
+        when(enqCount === deqCount) {
+          state := sDone
+        }
+      }
+      is(sDone) {
+        when(!goSync) {
+          state := sIdle
+        }
+      }
+      is(sErr) {
+        when(!goSync) {
+          state := sIdle
+        }
+      }
+    }
+  }
+}
+
 object DifftestMemCtrl {
   def exposeIO(cpu: Record, mem: Record, name: String = "bore_"): DifftestMemIO = {
     val cpuPort = IO(AXI4Bundle.typeOf(cpu)).suggestName(s"${name}CpuAXI")
