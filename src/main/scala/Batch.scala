@@ -76,6 +76,7 @@ class BatchInfo extends Bundle {
 
 object Batch {
   private val template = ListBuffer.empty[DifftestBundle]
+  private val replayTemplate = ListBuffer.empty[DifftestBundle]
 
   def apply(
     bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]],
@@ -85,6 +86,9 @@ object Batch {
     val local = chiselTypeOf(bundles.bits).map(_.bits).distinctBy(_.desiredCppName)
     if (!isolated) {
       template ++= local
+    } else {
+      replayTemplate.clear()
+      replayTemplate ++= local
     }
     val usedTemplate = if (isolated) local else template.toSeq
     val module = Module(new BatchEndpoint(chiselTypeOf(bundles.bits).toSeq, config, usedTemplate))
@@ -93,6 +97,8 @@ object Batch {
   }
 
   def getTemplate: Seq[DifftestBundle] = template.toSeq
+
+  def getReplayTemplate: Seq[DifftestBundle] = replayTemplate.toSeq
 
   def getBundleID(bundleType: DifftestBundle): Int = {
     template.indexWhere(_.desiredCppName == bundleType.desiredCppName)

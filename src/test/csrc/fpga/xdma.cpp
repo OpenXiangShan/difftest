@@ -15,6 +15,7 @@
 ***************************************************************************************/
 #include "xdma.h"
 #include "replay_dump.h"
+#include "replay_batch.h"
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
@@ -167,6 +168,19 @@ uint64_t FpgaXdma::dump_replay(uint32_t expected_bytes) {
 #endif
       free(raw);
       exit(1);
+    }
+    for (size_t pkt = 0; pkt < DMA_PACKGE_NUM; pkt++) {
+      ReplayBatchStats st;
+      if (v_difftest_ReplayBatch(packge->diff_packge[pkt].diff_packge, CONFIG_DIFFTEST_BATCH_BYTELEN, &st) != 0) {
+        fprintf(stderr, "[fpga-replay] Replay batch decode failed at head %u packet %zu\n", i, pkt);
+#ifndef FPGA_SIM
+        if (opened) {
+          close(dump_fd);
+        }
+#endif
+        free(raw);
+        exit(1);
+      }
     }
     if (replay_dump_check_idx(packge->diff_packge[0].packge_idx, &expect_idx, i == 0) != 0) {
       fprintf(stderr, "[fpga-replay] dump packge_idx mismatch: got %u at head %u\n", packge->diff_packge[0].packge_idx,

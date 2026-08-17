@@ -509,6 +509,23 @@ object DPIC {
     interfaceCpp += "#endif // __DIFFTEST_DPIC_H__"
     interfaceCpp += ""
     FileControl.write(interfaceCpp, "difftest-dpic.h")
+    val replayTemplate = Batch.getReplayTemplate
+    if (replayTemplate.nonEmpty) {
+      val replayNames = replayTemplate.map(_.desiredModuleName.replace("Difftest", ""))
+      val replayCpp = ListBuffer.empty[String]
+      replayCpp += "#ifndef __DIFFTEST_REPLAY_BATCH_H__"
+      replayCpp += "#define __DIFFTEST_REPLAY_BATCH_H__"
+      replayCpp += s"#define CONFIG_DIFFTEST_REPLAY_BATCH_HEAD ${replayTemplate.length}"
+      replayCpp += s"#define CONFIG_DIFFTEST_REPLAY_BATCH_STEP ${replayTemplate.length + 1}"
+      replayCpp += s"#define CONFIG_DIFFTEST_REPLAY_BATCH_BUNDLES ${replayTemplate.length}"
+      replayCpp += "enum DifftestReplayBundleType {"
+      replayCpp += "  " + (replayNames ++ Seq("ReplayBatchHead", "ReplayBatchStep")).mkString(",
+  ")
+      replayCpp += "};"
+      replayCpp += "#endif // __DIFFTEST_REPLAY_BATCH_H__"
+      replayCpp += ""
+      FileControl.write(replayCpp, "difftest-replay-batch.h")
+    }
 
     interfaceCpp.clear()
     interfaceCpp += "#ifndef CONFIG_NO_DIFFTEST"
