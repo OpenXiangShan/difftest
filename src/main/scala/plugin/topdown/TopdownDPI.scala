@@ -102,6 +102,42 @@ private[topdown] object TopdownDPI {
     }
   }
 
+  def iqDPICWrapper(dpiFuncName: String): String =
+    s"""
+       |extern "C" void topdown_iq_info_dpic(
+       |  unsigned int entries_num,
+       |  const uint32_t *in_bits,
+       |  uint32_t *out_bits
+       |);
+       |
+       |extern "C" void $dpiFuncName(
+       |  unsigned int entries_num,
+       |  const uint32_t *in_bits,
+       |  uint32_t *out_bits
+       |) {
+       |  topdown_iq_info_dpic(entries_num, in_bits, out_bits);
+       |}
+       |""".stripMargin
+
+  def robDPICWrapper(dpiFuncName: String): String =
+    s"""
+       |extern "C" void topdown_rob_info_dpic(
+       |  unsigned int iq_entries_num,
+       |  unsigned int rob_entries_num,
+       |  const uint32_t *in_bits,
+       |  uint32_t *out_bits
+       |);
+       |
+       |extern "C" void $dpiFuncName(
+       |  unsigned int iq_entries_num,
+       |  unsigned int rob_entries_num,
+       |  const uint32_t *in_bits,
+       |  uint32_t *out_bits
+       |) {
+       |  topdown_rob_info_dpic(iq_entries_num, rob_entries_num, in_bits, out_bits);
+       |}
+       |""".stripMargin
+
   def iqHelperVerilog(
     moduleName: String,
     dpiFuncName: String,
@@ -124,6 +160,7 @@ private[topdown] object TopdownDPI {
        |
        |`ifndef SYNTHESIS
        |  import "DPI-C" function void $dpiFuncName(
+       |    input  int unsigned entries_num,
        |    input  bit [ENTRY_NUM*INFO_WIDTH-1:0] in,
        |    output bit [ENTRY_NUM*OUT_WIDTH-1:0] out
        |  );
@@ -136,6 +173,7 @@ private[topdown] object TopdownDPI {
        |    /* verilator lint_on WIDTHCONCAT */
        |`ifndef SYNTHESIS
        |    $dpiFuncName(
+       |      ENTRY_NUM,
        |      in[ENTRY_NUM*INFO_WIDTH-1:0],
        |      dpi_out
        |    );
@@ -166,6 +204,8 @@ private[topdown] object TopdownDPI {
        |
        |`ifndef SYNTHESIS
        |  import "DPI-C" function void $dpiFuncName(
+       |    input  int unsigned iq_entries_num,
+       |    input  int unsigned rob_entries_num,
        |    input  bit [IQ_ENTRY_NUM*INFO_WIDTH-1:0] in,
        |    output bit [ROB_ENTRY_NUM*INFO_WIDTH-1:0] out
        |  );
@@ -178,6 +218,8 @@ private[topdown] object TopdownDPI {
        |    /* verilator lint_on WIDTHCONCAT */
        |`ifndef SYNTHESIS
        |    $dpiFuncName(
+       |      IQ_ENTRY_NUM,
+       |      ROB_ENTRY_NUM,
        |      in[IQ_ENTRY_NUM*INFO_WIDTH-1:0],
        |      dpi_out
        |    );
