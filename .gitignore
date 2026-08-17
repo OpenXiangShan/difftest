@@ -360,5 +360,8 @@ stack.info*
 *.vpd
 *.bin
 
+# python venv
+.venv/
+
 !ready-to-run/*
 
