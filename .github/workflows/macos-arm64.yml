@@ -1,0 +1,72 @@
+name: macOS arm64
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  cross-build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends file xz-utils
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Cross-build standalone emulator
+        run: OUTPUT_DIR=artifact scripts/ci/build-macos-arm64.sh
+
+      - name: Upload emulator
+        uses: actions/upload-artifact@v7
+        with:
+          name: difftest-emu-macos-arm64
+          path: artifact/difftest-emu-*
+          retention-days: 3
+
+  run:
+    needs: cross-build
+    runs-on: macos-15
+    timeout-minutes: 5
+
+    steps:
+      - name: Download emulator
+        uses: actions/download-artifact@v8
+        with:
+          name: difftest-emu-macos-arm64
+          path: artifact
+
+      - name: Verify emulator
+        run: |
+          test "$(uname -m)" = arm64
+          for name in default squash soft-arch-update; do
+            emulator="artifact/difftest-emu-$name"
+            test -f "$emulator"
+            chmod +x "$emulator"
+            file "$emulator" | grep -F "Mach-O 64-bit executable arm64"
+            otool -L "$emulator"
+          done
+
+      - name: Run bounded simulation
+        run: |
+          for name in default squash soft-arch-update; do
+            emulator="artifact/difftest-emu-$name"
+            log="difftest-emu-$name.log"
+            "$emulator" --no-diff --ram-size=128MB -C 0 | tee "$log"
+            grep -Fq "Guest cycle spent: 1" "$log"
+            for core in 0 1 2 3; do
+              grep -Fq "Core-$core instrCnt = 0, cycleCnt = 0" "$log"
+            done
+          done

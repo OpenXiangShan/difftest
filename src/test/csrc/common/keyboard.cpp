@@ -29,14 +29,14 @@
   f(UP) f(DOWN) f(LEFT) f(RIGHT) f(INSERT) f(DELETE) f(HOME) f(END) f(PAGEUP) f(PAGEDOWN)
 /* clang-format on */
 
-#define _KEY_NAME(k) _KEY_##k,
+#define AM_KEY_NAME(k) AM_KEY_##k,
 
 enum {
-  _KEY_NONE = 0,
-  MAP(_KEYS, _KEY_NAME)
+  AM_KEY_NONE = 0,
+  MAP(_KEYS, AM_KEY_NAME)
 };
 
-#define SDL_KEYMAP(k) [concat(SDL_SCANCODE_, k)] = concat(_KEY_, k),
+#define SDL_KEYMAP(k) [concat(SDL_SCANCODE_, k)] = concat(AM_KEY_, k),
 /* clang-format off */
 static const uint32_t keymap[256] = {
 //  MAP(_KEYS, SDL_KEYMAP)
@@ -66,7 +66,7 @@ static int key_f = 0, key_r = 0;
 #define KEYDOWN_MASK 0x8000
 
 void send_key(uint8_t scancode, bool is_keydown) {
-  if (keymap[scancode] != _KEY_NONE) {
+  if (keymap[scancode] != AM_KEY_NONE) {
     uint32_t am_scancode = keymap[scancode] | (is_keydown ? KEYDOWN_MASK : 0);
     key_queue[key_r] = am_scancode;
     key_r = (key_r + 1) % KEY_QUEUE_LEN;
@@ -76,7 +76,7 @@ void send_key(uint8_t scancode, bool is_keydown) {
 }
 
 uint32_t read_key(void) {
-  uint32_t key = _KEY_NONE;
+  uint32_t key = AM_KEY_NONE;
   if (key_f != key_r) {
     key = key_queue[key_f];
     key_f = (key_f + 1) % KEY_QUEUE_LEN;
