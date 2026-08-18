@@ -18,6 +18,7 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "splitview.h"
+#include <cmath>
 #include <getopt.h>
 #ifdef CONFIG_DIFFTEST_IOTRACE
 #include "difftest-iotrace.h"
@@ -26,6 +27,9 @@
 enum {
   OPT_SPLITVIEW_LOG = 1000,
   OPT_DB_PATH,
+  OPT_NO_SQUASH,
+  OPT_SQUASH_SIZE,
+  OPT_NO_SQUASH_AFTER_INSTR,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -34,6 +38,43 @@ static inline long long int atoll_strict(const char *str, const char *arg) {
     exit(EINVAL);
   }
   return atoll(str);
+}
+
+static uint64_t parse_instr_count(const char *str, const char *arg) {
+  char *end = nullptr;
+  long double count = std::strtold(str, &end);
+  if (end == str) {
+    fprintf(stderr, "[ERROR] --%s requires a number followed by an optional K/M/B suffix\n", arg);
+    exit(EINVAL);
+  }
+
+  long double scale = 1.0L;
+  switch (*end) {
+    case '\0': break;
+    case 'K':
+      scale = 1.0e3L;
+      end++;
+      break;
+    case 'M':
+      scale = 1.0e6L;
+      end++;
+      break;
+    case 'B':
+      scale = 1.0e9L;
+      end++;
+      break;
+    default:
+      fprintf(stderr, "[ERROR] --%s requires a number followed by an optional K/M/B suffix\n", arg);
+      exit(EINVAL);
+  }
+
+  long double scaled = count * scale;
+  long double rounded = std::round(scaled);
+  if (*end != '\0' || !std::isfinite(rounded) || scaled < 0 || rounded > static_cast<long double>(UINT64_MAX)) {
+    fprintf(stderr, "[ERROR] --%s is outside the uint64 range\n", arg);
+    exit(EINVAL);
+  }
+  return static_cast<uint64_t>(rounded);
 }
 
 static inline void print_help(const char *file) {
@@ -79,6 +120,9 @@ static inline void print_help(const char *file) {
   printf("      --cst-file=FILE        load constantin from FILE, stdin, or default init values\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
+  printf("      --no-squash            disable squash\n");
+  printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
+  printf("      --no-squash-after-instr=NUM disable squash after NUM committed instructions\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --remote-jtag-port     specify remote bitbang port\n");
@@ -145,6 +189,9 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "random-mem",        0, NULL,  0  },
     { "splitview-log",     1, NULL, OPT_SPLITVIEW_LOG },
     { "db-path",           1, NULL, OPT_DB_PATH },
+    { "no-squash",         0, NULL, OPT_NO_SQUASH },
+    { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
+    { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -270,6 +317,19 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 #else
         printf("[WARN] chisel db is not enabled at compile time, ignore --db-path\n");
 #endif
+        continue;
+      case OPT_NO_SQUASH: args.enable_squash = false; continue;
+      case OPT_SQUASH_SIZE: {
+        long long squash_size = atoll_strict(optarg, "squash-size");
+        if (squash_size < 0 || squash_size > UINT8_MAX) {
+          fprintf(stderr, "[ERROR] --squash-size must be in range [0, 255]\n");
+          exit(EINVAL);
+        }
+        args.squash_size = static_cast<uint8_t>(squash_size);
+        continue;
+      }
+      case OPT_NO_SQUASH_AFTER_INSTR:
+        args.no_squash_after_instr = parse_instr_count(optarg, "no-squash-after-instr");
         continue;
       case 's':
         if (std::string(optarg) != "NO_SEED") {

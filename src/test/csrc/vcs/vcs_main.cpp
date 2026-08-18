@@ -179,6 +179,20 @@ extern "C" void set_no_diff() {
   args.enable_diff = false;
 }
 
+extern "C" void set_no_squash() {
+  printf("disable squash\n");
+  args.enable_squash = false;
+}
+
+extern "C" void set_squash_size(int size) {
+  if (size < 0 || size > UINT8_MAX) {
+    fprintf(stderr, "[ERROR] +squash-size must be in range [0, 255]\n");
+    exit(EINVAL);
+  }
+  printf("set squash size: %d\n", size);
+  args.squash_size = static_cast<uint8_t>(size);
+}
+
 extern "C" void set_seed(uint64_t seed) {
   args.seed = seed;
   Info("Using seed = %d\n", args.seed);
@@ -258,6 +272,10 @@ extern "C" uint8_t simv_init() {
 
 #ifndef CONFIG_NO_DIFFTEST
   difftest_init(args.enable_diff, ram_size);
+#if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
+  difftest_squash_enable(args.enable_squash);
+  difftest_squash_max_fused(args.squash_size);
+#endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
 #endif // CONFIG_NO_DIFFTEST
 
   init_device();

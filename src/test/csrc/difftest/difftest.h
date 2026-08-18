@@ -280,6 +280,7 @@ void difftest_trace_write(int step);
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_scope();
 extern "C" void difftest_squash_enable(int enable);
+extern "C" void difftest_squash_max_fused(int squash_max_fused);
 #endif // CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_REPLAY
 extern "C" void set_replay_scope();

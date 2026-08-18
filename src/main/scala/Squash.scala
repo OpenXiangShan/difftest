@@ -29,6 +29,7 @@ object Squash {
     bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]],
     config: GatewayConfig,
     fpgaEnable: Option[Bool] = None,
+    fpgaMaxFused: Option[UInt] = None,
   ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
     val squashInBits = Stamp(bundles.bits)
     val squashIn = Wire(Decoupled(chiselTypeOf(squashInBits)))
@@ -37,6 +38,7 @@ object Squash {
     bundles.ready := squashIn.ready
     val module = Module(new SquashEndpoint(chiselTypeOf(squashInBits).toSeq, config))
     module.fpgaEnable.foreach(_ := fpgaEnable.getOrElse(true.B))
+    module.fpgaMaxFused.foreach(_ := fpgaMaxFused.getOrElse(255.U(8.W)))
     module.in <> squashIn
     module.out
   }
@@ -113,6 +115,7 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
 class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
   val in = IO(Flipped(Decoupled(MixedVec(bundles))))
   val fpgaEnable = Option.when(config.isFPGA)(IO(Input(Bool())))
+  val fpgaMaxFused = Option.when(config.isFPGA)(IO(Input(UInt(8.W))))
   val numCores = in.bits.count(_.bits.isUniqueIdentifier)
 
   val pipelined = Wire(Decoupled(MixedVec(bundles)))
@@ -129,6 +132,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   val timeout_count = RegInit(0.U(32.W))
   val timeout = timeout_count === 200000.U
   val squash_enable = fpgaEnable.getOrElse(control.enable)
+  val maxFused = fpgaMaxFused.getOrElse(control.maxFused)
   val global_tick = !squash_enable || in_replay || timeout
 
   val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredCppName)
@@ -161,6 +165,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
     squasher.in.valid := pipelined.valid
     squasher.in.bits.zip(s_in).foreach { case (dst, src) => dst := src }
+    squasher.maxFused := maxFused
     wt := squasher.want_tick
     val group_tick =
       group_name_vec
@@ -190,6 +195,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
 // It will help do squash for bundles with same Class, return tick and state
 class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, config: GatewayConfig) extends Module {
   val in = IO(Flipped(Decoupled(Vec(length, bundleType))))
+  val maxFused = IO(Input(UInt(8.W)))
   val want_tick = IO(Output(Bool()))
   val group_tick = IO(Input(Bool()))
   val global_tick = IO(Input(Bool()))
@@ -213,7 +219,7 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
   }
 
   // If one of the bundles cannot be squashed, the others are not squashed as well.
-  val supportsSquashVec = VecInit(in.bits.zip(state).map { case (i, s) => i.supportsSquash(s) }.toSeq)
+  val supportsSquashVec = VecInit(in.bits.zip(state).map { case (i, s) => i.supportsSquash(s, maxFused) }.toSeq)
   val supportsSquash = supportsSquashVec.asUInt.andR
 
   // If one of the bundles cannot be the new base, the others are not as well.
@@ -243,6 +249,7 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
   val clock = IO(Input(Clock()))
   val reset = IO(Input(Reset()))
   val enable = IO(Output(Bool()))
+  val maxFused = IO(Output(UInt(8.W)))
 
   setInline(
     "SquashControl.v",
@@ -255,7 +262,8 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |module SquashControl(
        |  input clock,
        |  input reset,
-       |  output enable
+       |  output enable,
+       |  output [7:0] maxFused
        |);
        |
        |`ifndef SYNTHESIS
@@ -266,13 +274,17 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |
        |`ifndef SQUASH_CTRL
        |  assign enable = 1;
+       |  assign maxFused = 8'd255;
        |`else
        |`ifdef DIFFTEST
        |import "DPI-C" context function void set_squash_scope();
        |  reg _enable;
+       |  reg [7:0] _max_fused;
        |  assign enable = _enable;
+       |  assign maxFused = _max_fused;
        |initial begin
        |  _enable = 1;
+       |  _max_fused = 8'd255;
        |  set_squash_scope();
        |end
        |
@@ -280,6 +292,11 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |export "DPI-C" function set_squash_enable;
        |function void set_squash_enable(int en);
        |  _enable = en;
+       |endfunction
+       |
+       |export "DPI-C" function set_squash_max_fused;
+       |function void set_squash_max_fused(int value);
+       |  _max_fused = value[7:0];
        |endfunction
        |
        |// For the simulation argument +squash_cycles=N

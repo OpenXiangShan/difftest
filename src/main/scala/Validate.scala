@@ -37,7 +37,8 @@ object Validate {
       bundle.bits.asInstanceOf[DiffTestIsInherited].inheritFrom(parent.bits)
     }
     def supportsSquashBase: Bool = bundle.bits.supportsSquashBase
-    def supportsSquash(base: Valid[DifftestBundle]): Bool = bundle.bits.supportsSquash(base.bits)
+    def supportsSquash(base: Valid[DifftestBundle], maxFused: UInt): Bool =
+      bundle.bits.supportsSquash(base.bits, maxFused)
     def squash(base: Valid[DifftestBundle]): Valid[DifftestBundle] = {
       if (!bundle.bits.bits.hasValid) {
         WireInit(Mux(bundle.valid, bundle, base))
