@@ -26,6 +26,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   val io = IO(new Bundle {
     val pcie_clock = Input(Clock()) // Read clock
     val reset = Input(Bool())
+    val enable = Input(Bool())
     val difftest = Flipped(new FpgaDiffIO(difftest_width))
     val axis = new AXI4Stream(axis_width)
   })
@@ -52,8 +53,8 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     val currentPktID = RegInit(0.U(pkt_id_w.W))
     val sendPacketEnd = counter === (numPacketPerRange - 1).U
 
-    val startTransfer = !rangeActive && fifo.io.deq.valid
-    val loadPacket = fifo.io.deq.valid && (!rangeActive || !packetValid)
+    val startTransfer = io.enable && !rangeActive && fifo.io.deq.valid
+    val loadPacket = fifo.io.deq.valid && !packetValid && (rangeActive || io.enable)
 
     val packetPayload =
       if (payload_pad_width > 0) {
@@ -65,16 +66,20 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
     fifo.io.deq.ready := loadPacket
 
-    when(startTransfer) {
+    when(!io.enable) {
+      rangeActive := false.B
+      packetValid := false.B
+      sendCnt := 0.U
+    }.elsewhen(startTransfer) {
       rangeActive := true.B
       counter := 0.U
     }
 
-    when(loadPacket) {
+    when(io.enable && loadPacket) {
       packetBeats := packetPayloadBeats
       packetValid := true.B
       sendCnt := 0.U
-    }.elsewhen(packetValid && io.axis.fire) {
+    }.elsewhen(io.enable && packetValid && io.axis.fire) {
       when(sendLast) {
         packetValid := false.B
         sendCnt := 0.U
@@ -92,7 +97,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     }
 
     // AXI output
-    io.axis.valid := packetValid
+    io.axis.valid := packetValid && io.enable
     io.axis.bits.data := packetBeats(sendCnt)
     io.axis.bits.keep := Fill(axis_width / 8, 1.U(1.W))
     io.axis.bits.last := packetValid && sendLast && sendPacketEnd
@@ -107,6 +112,7 @@ class HostEndpoint(
     val difftest = Flipped(new FpgaDiffIO(diffWidth))
     val to_host_axis = new AXI4Stream(axisWidth)
     val pcie_clock = Input(Clock())
+    val enable = Input(Bool())
   })
 
   // Instantiate the converter module
@@ -115,6 +121,7 @@ class HostEndpoint(
   // Connect clock and reset signals
   diff2axis.io.pcie_clock := io.pcie_clock
   diff2axis.io.reset := reset
+  diff2axis.io.enable := io.enable
   PipelineConnect(io.difftest, diff2axis.io.difftest, diff2axis.io.difftest.fire)
 
   // AXI-Stream output domain (PCIe clock)
@@ -132,6 +139,7 @@ class ReplayDifftest2AXIs(difftest_width: Int, axis_width: Int) extends Module {
   val inner = Module(new Difftest2AXIs(difftest_width, axis_width))
   inner.io.pcie_clock := io.replay_clock
   inner.io.reset := io.reset
+  inner.io.enable := true.B
   inner.io.difftest <> io.difftest
   io.axis <> inner.io.axis
 }

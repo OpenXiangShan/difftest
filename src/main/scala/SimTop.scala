@@ -166,6 +166,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         fpgaIO.ready := Mux(ctrl.diffEnable, host.io.difftest.ready, true.B)
         val pcie_clock = IO(Input(Clock()))
         host.io.pcie_clock := pcie_clock
+        host.io.enable := ctrl.diffEnable
 
         val toHost = host.io.to_host_axis
         val to_host_axis = IO(VerilogAXI4StreamRecord.typeOf(toHost))
@@ -258,7 +259,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
           replayDump.io.wrPtr := replayMem.io.committedPtr
           replayDump.io.wrapCnt := replayMem.io.wrapCnt
           replayDump.io.go := cfg.io.replayCtrl.dump && replayMem.io.idle
-          dumpActive := cfg.io.replayCtrl.dump
+          dumpActive := cfg.io.replayCtrl.dump || replayDump.io.active
           dumpAxis.valid := replayDump.io.axis.valid
           dumpAxis.bits := replayDump.io.axis.bits
           replayDump.io.axis.ready := dumpAxis.ready

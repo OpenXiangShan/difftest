@@ -88,6 +88,10 @@ int main(int argc, const char *argv[]) {
     ReplayAxiRange range = replay_axi_range(base, wr_ptr, wrap_cnt, size_mb, sizeof(FpgaPackgeHead));
     printf("[fpga-replay] sizeMB=%u base=0x%x wr_ptr=0x%x wrap=%u start=0x%x len=%u\n", size_mb, base, wr_ptr, wrap_cnt,
            range.start, range.len);
+    fflush(stdout);
+#ifdef FPGA_SIM
+    xdma_sim_drain(0, 100);
+#endif
     xdma_device->fpga_io(HOST_IO_REPLAY_DUMP, true);
     uint64_t got = xdma_device->dump_replay(range.len);
     xdma_device->wait_fpga_io_done(HOST_IO_REPLAY_DUMP, "replay dump");
@@ -327,6 +331,7 @@ extern "C" void fpga_nstep(uint8_t step) {
     return;
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
+    xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, false);
     fpga_display_result(ret);
     fpga_result = ret;
     xdma_device->stop();

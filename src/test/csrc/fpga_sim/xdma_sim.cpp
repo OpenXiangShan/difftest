@@ -85,6 +85,7 @@ typedef struct {
   uint8_t tlast;
   int read_size;
   int write_size;
+  bool discard;
   char buffer[BUFFER_SIZE];
 } xdma_shm;
 
@@ -151,11 +152,28 @@ public:
     return to_copy;
   }
 
+  int drain(int timeout_ms) {
+    pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->discard = true;
+    pthread_mutex_unlock(&shm_ptr->lock);
+    if (timeout_ms > 0) {
+      usleep(static_cast<useconds_t>(timeout_ms) * 1000);
+    }
+    pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->discard = false;
+    pthread_mutex_unlock(&shm_ptr->lock);
+    return 0;
+  }
+
   int write(const char *buf, unsigned char tlast, size_t size) {
     pthread_mutex_lock(&shm_ptr->lock);
-    while (!shm_ptr->read_waiting) {
+    while (!shm_ptr->read_waiting && !shm_ptr->discard) {
       pthread_mutex_unlock(&shm_ptr->lock);
       pthread_mutex_lock(&shm_ptr->lock);
+    }
+    if (shm_ptr->discard && !shm_ptr->read_waiting) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return static_cast<int>(size);
     }
     size_t space = shm_ptr->read_size - shm_ptr->write_size;
     size_t to_write = size < space ? size : space;
@@ -442,6 +460,13 @@ void xdma_sim_close(int channel) {
 
 int xdma_sim_read(int channel, char *buf, size_t size) {
   return xsim[channel]->read(buf, size);
+}
+
+int xdma_sim_drain(int channel, int timeout_ms) {
+  if (xsim[channel] == nullptr) {
+    return -1;
+  }
+  return xsim[channel]->drain(timeout_ms);
 }
 
 int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size) {

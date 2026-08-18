@@ -607,7 +607,9 @@ class ReplayMem2C2HAXIs(
   private val axisBytes = axisWidth / 8
   private val rangeAxisBeats = rangeBytes / axisBytes
 
-  private val fifo = Module(new AsyncClockFIFO(new AXI4StreamBundle(axisWidth), fifoDepth))
+  private val fifo = withClockAndReset(io.pcie_clock, reset) {
+    Module(new AsyncClockFIFO(new AXI4StreamBundle(axisWidth), fifoDepth))
+  }
   fifo.io.enqClock := io.replay_clock
 
   withClockAndReset(io.pcie_clock, reset) {
