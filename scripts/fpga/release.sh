@@ -137,6 +137,16 @@ for f in "$RELEASE_RTL"/array_*.v; do
 done
 echo "Replacing done."
 
+echo "Replacing Diff RAT state banks with BRAM ..."
+for f in "$RELEASE_RTL"/diff_rat_state_bank_*.sv; do
+    [ -f "$f" ] || continue
+    echo "$f"
+    sed -E -i \
+        's@^([[:space:]]*)reg ([[:space:]]*\[[0-9]+:[0-9]+\]) Memory(\[0:[0-9]+\]);@\1(* ram_style = "block" *) reg \2 Memory\3;@' \
+        "$f"
+done
+echo "Replacing done."
+
 if [ -f "$RELEASE_RTL/ClockGate.sv" ]; then
     echo "Replacing ClockGate.sv ..."
     cat > "$RELEASE_RTL/ClockGate.sv" <<'CLOCKGATE_EOF'
