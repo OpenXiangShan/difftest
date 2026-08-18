@@ -519,8 +519,7 @@ object DPIC {
       replayCpp += s"#define CONFIG_DIFFTEST_REPLAY_BATCH_STEP ${replayTemplate.length + 1}"
       replayCpp += s"#define CONFIG_DIFFTEST_REPLAY_BATCH_BUNDLES ${replayTemplate.length}"
       replayCpp += "enum DifftestReplayBundleType {"
-      replayCpp += "  " + (replayNames ++ Seq("ReplayBatchHead", "ReplayBatchStep")).mkString(",
-  ")
+      replayCpp += "  " + (replayNames ++ Seq("ReplayBatchHead", "ReplayBatchStep")).mkString(",\n  ")
       replayCpp += "};"
       replayCpp += "#endif // __DIFFTEST_REPLAY_BATCH_H__"
       replayCpp += ""
