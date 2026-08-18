@@ -57,7 +57,42 @@
 #define CONFIG_DIFF_AMU_C_REG_SIZE_BYTES 65536
 #endif
 
-static char amu_ctrl_op_str[4][16] = {"MMA", "MLS", "MRELEASE", "MARITH"};
+static inline const char *amu_ctrl_op_name(uint8_t op) {
+  switch (op) {
+    case 0: return "MMA";
+    case 1: return "MLS";
+    case 2: return "MRELEASE";
+    case 3: return "MARITH";
+    default: return "UNKNOWN";
+  }
+}
+
+static void print_amu_ctrl_event(const char *source, const DifftestAmuCtrlEvent &event) {
+  printf("  %s AMU ctrl: pc 0x%016lx, op %s\n", source, event.pc, amu_ctrl_op_name(event.op));
+  switch (event.op) {
+    case 0: // MMA
+      printf(
+          "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
+          "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+          event.md, event.rm, event.sat, event.ms1, event.ms2, event.isfp, event.mtilem, event.mtilen, event.mtilek,
+          event.types1, event.types2, event.typed);
+      break;
+    case 1: // MLS
+      printf(
+          "                md %d, ls %d, transpose %d, isacc %d,\n"
+          "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
+          event.md, event.sat, event.isfp, event.types1, event.base, event.stride, event.mtilem, event.mtilen,
+          event.typed);
+      break;
+    case 2: // MRelease
+      printf("                msyncRd %d\n", event.mtilem);
+      break;
+    case 3: // Arith
+      printf("                md %d, opType %#lx\n", event.md, event.base);
+      break;
+    default: printf("                Unknown amu event op: %d\n", event.op); break;
+  }
+}
 
 static inline size_t get_amu_result_size(const DifftestAmuCtrlEvent &amu_event) {
   const size_t rows = amu_event.mtilem;
@@ -112,6 +147,11 @@ void AmuCtrlRecorder::clear_valid(DifftestAmuCtrlEvent &probe) {
 }
 
 int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
+  if (probe.op > 3) {
+    Info("Invalid AMU ctrl op: core=%d, pc=0x%016lx, op=%d\n", state->coreid, probe.pc, probe.op);
+    return STATE_ERROR;
+  }
+
   if (probe.op == 0 && !is_mma_32bit_result_type(probe.typed)) {
     Info("Unsupported MMA result type: typed=%u is not 32-bit\n", static_cast<unsigned>(probe.typed));
     return STATE_ERROR;
@@ -129,107 +169,24 @@ int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
 int AmuCtrlChecker::do_step() {
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
     if (iter->state == DiffState::WAIT_REF_COMMIT) {
-      DifftestAmuCtrlEvent amu_event = iter->amu_event;
+      const DifftestAmuCtrlEvent dut_event = iter->amu_event;
+      DifftestAmuCtrlEvent ref_event = dut_event;
       // NOTE:
       // AMU ctrl is treated as a non-squashable, ordering-sensitive event.
       // Under squash mode, it still requires one-to-one synchronization with REF.
       // Therefore "no available REF event" (-1) is an error instead of a retriable case.
-      auto rm = amu_event.rm;
-      auto op = amu_event.op;
-      auto md = amu_event.md;
-      auto sat = amu_event.sat;
-      auto ms1 = amu_event.ms1;
-      auto ms2 = amu_event.ms2;
-      auto mtilem = amu_event.mtilem;
-      auto mtilen = amu_event.mtilen;
-      auto mtilek = amu_event.mtilek;
-      auto types1 = amu_event.types1;
-      auto types2 = amu_event.types2;
-      auto typed = amu_event.typed;
-      auto transpose = amu_event.isfp;
-      auto base = amu_event.base;
-      auto stride = amu_event.stride;
-      auto isfp = amu_event.isfp;
-      uint64_t pc = amu_event.pc;
-
-      int check_res = proxy->get_amu_ctrl_event(&amu_event);
+      int check_res = proxy->get_amu_ctrl_event(&ref_event);
 
       if (check_res == 1) {
         printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", state->coreid);
         printf("Mismatch for amu ctrl event \n");
-        printf("  REF AMU ctrl: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_str[amu_event.op]);
-        switch (amu_event.op) {
-          case 0: // MMA
-            printf(
-                "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
-                "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
-                amu_event.md, amu_event.rm, amu_event.sat, amu_event.ms1, amu_event.ms2, amu_event.isfp,
-                amu_event.mtilem, amu_event.mtilen, amu_event.mtilek, amu_event.types1, amu_event.types2,
-                amu_event.typed);
-            break;
-          case 1: // MLS
-            printf(
-                "                md %d, ls %d, transpose %d, isacc %d,\n"
-                "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                amu_event.md, amu_event.sat, amu_event.isfp, amu_event.types1, amu_event.base, amu_event.stride,
-                amu_event.mtilem, amu_event.mtilen, amu_event.typed);
-            break;
-          case 2: // MRelease
-            printf("                msyncRd %d\n", amu_event.mtilem);
-            break;
-          case 3: // Arith
-            printf("                md %d, opType %#lx\n", amu_event.md, amu_event.base);
-            break;
-          default: printf("                Unknown amu event op\n"); break;
-        }
-        printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
-        switch (op) {
-          case 0: // MMA
-            printf(
-                "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
-                "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
-                md, rm, sat, ms1, ms2, isfp, mtilem, mtilen, mtilek, types1, types2, typed);
-            break;
-          case 1: // MLS
-            printf(
-                "                md %d, ls %d, transpose %d, isacc %d,\n"
-                "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
-            break;
-          case 2: // MRelease
-            printf("                msyncRd %d\n", mtilem);
-            break;
-          case 3: // Arith
-            printf("                md %d, opType %#lx\n", md, base);
-            break;
-          default: printf("                Unknown amu event op\n"); break;
-        }
+        print_amu_ctrl_event("REF", ref_event);
+        print_amu_ctrl_event("DUT", dut_event);
         return STATE_ERROR;
       } else if (check_res == -1) {
         printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", state->coreid);
         printf("  No available REF AMU ctrl\n");
-        printf("  DUT AMU ctrl: pc 0x%016lx, op %s\n", pc, amu_ctrl_op_str[op]);
-        switch (op) {
-          case 0: // MMA
-            printf(
-                "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
-                "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
-                md, rm, sat, ms1, ms2, isfp, mtilem, mtilen, mtilek, types1, types2, typed);
-            break;
-          case 1: // MLS
-            printf(
-                "                md %d, ls %d, transpose %d, isacc %d,\n"
-                "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
-                md, sat, transpose, types1, base, stride, mtilem, mtilen, typed);
-            break;
-          case 2: // MRelease
-            printf("                msyncRd %d\n", mtilem);
-            break;
-          case 3: // Arith
-            printf("                md %d, opType %#lx\n", md, base);
-            break;
-          default: printf("                Unknown amu event op\n"); break;
-        }
+        print_amu_ctrl_event("DUT", dut_event);
         return STATE_ERROR;
       } else {
         iter->state = DiffState::WAIT_DUT_EXEC;
@@ -299,10 +256,11 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
       if (probe.finish) {
         entry.state = DiffState::WAIT_SWROB_COMMIT;
       }
-      break;
+      return STATE_OK;
     }
   }
-  return STATE_OK;
+  printf("No matching AMU instruction for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+  return STATE_ERROR;
 }
 
 // 4. Commit ready inst from software ROB: REF re-exec and compare, then release
@@ -341,7 +299,7 @@ int AmuExecChecker::do_step() {
         case 2: // MRelease
         case 3: // Arith
           if (proxy->get_amu_exec(&amu_event, iter->res) == 1) {
-            printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_str[amu_event.op]);
+            printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_name(amu_event.op));
             if (iter->res != nullptr) {
               delete[] iter->res;
               iter->res = nullptr;
@@ -376,20 +334,28 @@ int AmuExecChecker::do_step() {
 
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
 
-static char msync_event_op_str[3][16] = {"msyncregreset", "macquire", "mfence"};
+static void print_msync_event(const char *source, const DifftestMsyncEvent &event) {
+  const char *op_name = "UNKNOWN";
+  switch (event.op) {
+    case 0: op_name = "msyncregreset"; break;
+    case 1: op_name = "macquire"; break;
+    case 2: op_name = "mfence"; break;
+  }
+
+  printf("  %s Msync: pc 0x%016lx, op %s, MsyncRd %d\n", source, event.pc, op_name, event.msyncRd);
+  if (event.op > 2) {
+    printf("               Unknown Msync event op: %d\n", event.op);
+  }
+}
 
 int MsyncChecker::do_step() {
   while (!state->msync_event_queue.empty()) {
-    DifftestMsyncEvent msync_event = state->msync_event_queue.front();
+    const DifftestMsyncEvent dut_event = state->msync_event_queue.front();
+    DifftestMsyncEvent ref_event = dut_event;
 #ifdef CONFIG_DIFFTEST_SQUASH
     // TODO: What is squash? How to squash?
 #endif // CONFIG_DIFFTEST_SQUASH
-    // Save the msync event info.
-    auto op = msync_event.op;
-    auto msyncRd = msync_event.msyncRd;
-    uint64_t pc = msync_event.pc;
-
-    int check_res = proxy->get_msync_event(&msync_event);
+    int check_res = proxy->get_msync_event(&ref_event);
 
     if (check_res == 1) {
       // Compare the msync event info.
@@ -397,15 +363,14 @@ int MsyncChecker::do_step() {
       // Use global difftest pointer to access the owning Difftest instance for this core
       printf("\n==============  Msync Event (Core %d)  ==============\n", state->coreid);
       printf("Mismatch for Msync event\n");
-      printf("  REF Msync: pc 0x%016lx, op %s, MsyncRd %d\n", msync_event.pc, msync_event_op_str[msync_event.op],
-             msync_event.msyncRd);
-      printf("  DUT Msync: pc 0x%016lx, op %s, MsyncRd %d\n", pc, msync_event_op_str[op], msyncRd);
+      print_msync_event("REF", ref_event);
+      print_msync_event("DUT", dut_event);
       state->msync_event_queue.pop();
       return STATE_ERROR;
     } else if (check_res == -1) {
       printf("\n==============  Msync Event (Core %d)  ==============\n", state->coreid);
       printf("  No available REF Msync events\n");
-      printf("  DUT Msync: pc 0x%016lx, op %s, MsyncRd %d\n", pc, msync_event_op_str[op], msyncRd);
+      print_msync_event("DUT", dut_event);
       state->msync_event_queue.pop();
       return STATE_ERROR;
     }
