@@ -40,6 +40,10 @@ int main() {
     fprintf(stderr, "FAIL wrap increment\n");
     return 1;
   }
+  uint8_t mixed[8] = {71, 71, 71, 242, 242, 242, 242, 242};
+  uint8_t same[8] = {243, 243, 243, 243, 243, 243, 243, 243};
+  expect_eq("head.mixed", replay_dump_head_aligned(mixed, 8), 0);
+  expect_eq("head.same", replay_dump_head_aligned(same, 8), 1);
   printf("replay_dump_test PASS heads=%u last=%u\n", replay_dump_head_count(1536, 768), idx);
   return 0;
 }

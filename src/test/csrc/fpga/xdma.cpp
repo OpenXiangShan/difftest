@@ -152,6 +152,10 @@ uint64_t FpgaXdma::dump_replay(uint32_t expected_bytes) {
 #endif
   uint64_t got = 0;
   uint8_t expect_idx = 0;
+  int idx_seeded = 0;
+  uint32_t aligned_heads = 0;
+  ReplayBatchParser parser;
+  replay_batch_parser_init(&parser);
   for (uint32_t i = 0; i < heads; i++) {
 #ifdef FPGA_SIM
     ssize_t size = static_cast<ssize_t>(xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead)));
@@ -169,10 +173,20 @@ uint64_t FpgaXdma::dump_replay(uint32_t expected_bytes) {
       free(raw);
       exit(1);
     }
+    uint8_t idxs[DMA_PACKGE_NUM];
+    for (size_t pkt = 0; pkt < DMA_PACKGE_NUM; pkt++) {
+      idxs[pkt] = packge->diff_packge[pkt].packge_idx;
+    }
+    int aligned = replay_dump_head_aligned(idxs, DMA_PACKGE_NUM);
     for (size_t pkt = 0; pkt < DMA_PACKGE_NUM; pkt++) {
       ReplayBatchStats st;
-      if (v_difftest_ReplayBatch(packge->diff_packge[pkt].diff_packge, CONFIG_DIFFTEST_BATCH_BYTELEN, &st) != 0) {
-        fprintf(stderr, "[fpga-replay] Replay batch decode failed at head %u packet %zu\n", i, pkt);
+      if (v_difftest_ReplayBatch(packge->diff_packge[pkt].diff_packge, CONFIG_DIFFTEST_BATCH_BYTELEN, &st, &parser) !=
+          0) {
+        fprintf(stderr, "[fpga-replay] Replay batch decode failed at head %u packet %zu "
+                        "pkt_id=%u first=%02x %02x %02x %02x\n",
+                i, pkt, packge->diff_packge[pkt].packge_idx, packge->diff_packge[pkt].diff_packge[0],
+                packge->diff_packge[pkt].diff_packge[1], packge->diff_packge[pkt].diff_packge[2],
+                packge->diff_packge[pkt].diff_packge[3]);
 #ifndef FPGA_SIM
         if (opened) {
           close(dump_fd);
@@ -182,16 +196,20 @@ uint64_t FpgaXdma::dump_replay(uint32_t expected_bytes) {
         exit(1);
       }
     }
-    if (replay_dump_check_idx(packge->diff_packge[0].packge_idx, &expect_idx, i == 0) != 0) {
-      fprintf(stderr, "[fpga-replay] dump packge_idx mismatch: got %u at head %u\n", packge->diff_packge[0].packge_idx,
-              i);
+    if (aligned) {
+      if (replay_dump_check_idx(packge->diff_packge[0].packge_idx, &expect_idx, !idx_seeded) != 0) {
+        fprintf(stderr, "[fpga-replay] dump packge_idx mismatch: got %u at head %u\n",
+                packge->diff_packge[0].packge_idx, i);
 #ifndef FPGA_SIM
-      if (opened) {
-        close(dump_fd);
-      }
+        if (opened) {
+          close(dump_fd);
+        }
 #endif
-      free(raw);
-      exit(1);
+        free(raw);
+        exit(1);
+      }
+      idx_seeded = 1;
+      aligned_heads++;
     }
     got += static_cast<uint64_t>(size);
   }
@@ -201,7 +219,8 @@ uint64_t FpgaXdma::dump_replay(uint32_t expected_bytes) {
   }
 #endif
   free(raw);
-  printf("[fpga-replay] dump C2H bytes=%" PRIu64 " heads=%u last_idx=%u\n", got, heads, expect_idx);
+  printf("[fpga-replay] dump C2H bytes=%" PRIu64 " heads=%u aligned=%u last_idx=%u decode_heads=%u decode_steps=%u\n",
+         got, heads, aligned_heads, expect_idx, parser.stats.heads, parser.stats.steps);
   return got;
 }
 

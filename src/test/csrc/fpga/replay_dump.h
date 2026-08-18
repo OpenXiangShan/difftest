@@ -46,6 +46,19 @@ static inline int replay_dump_check_idx(uint8_t got, uint8_t *expect, int first)
   return 0;
 }
 
+/* A complete 8-packet range has one packge_idx on every packet. */
+static inline int replay_dump_head_aligned(const uint8_t *idx, uint32_t n) {
+  if (idx == 0 || n == 0) {
+    return 0;
+  }
+  for (uint32_t i = 1; i < n; i++) {
+    if (idx[i] != idx[0]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 #ifdef __cplusplus
 }
 #endif
