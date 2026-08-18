@@ -187,7 +187,11 @@ void fpga_init() {
 #endif // FPGA_SIM
 
 #ifdef USE_SERIAL_PORT
-  serial_port = new SerialPort("/dev/ttyUSB0");
+  const char *serial_port_device = std::getenv("FPGA_UART_PORT");
+  if (!serial_port_device || !serial_port_device[0]) {
+    serial_port_device = "/dev/ttyUSB0";
+  }
+  serial_port = new SerialPort(serial_port_device);
   serial_port->start();
 #endif // USE_SERIAL_PORT
 
