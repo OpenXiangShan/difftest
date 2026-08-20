@@ -59,6 +59,10 @@ struct CommonArgs {
   const char *trace_name = nullptr;
   const char *footprints_name = nullptr;
   const char *linearized_name = nullptr;
+#ifdef TRACERTL_MODE
+  const char *tracertl_file = nullptr;
+  const char *tracept_file = nullptr;
+#endif
   bool enable_waveform = false;
   bool enable_waveform_full = false;
   bool enable_ref_trace = false;
@@ -77,6 +81,12 @@ struct CommonArgs {
   bool dump_coverage = false;
   bool image_as_footprints = false;
   bool overwrite_nbytes_autoset = false;
+#ifdef TRACERTL_MODE
+  bool enable_gen_paddr = false;
+  bool fast_warmup = false;
+  uint64_t fast_warmup_instr = 0;
+  uint64_t skip_traceinstr = 0;
+#endif
 };
 
 CommonArgs parse_args(int argc, const char *argv[]);

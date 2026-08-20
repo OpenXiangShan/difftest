@@ -22,6 +22,7 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "sdcard.h"
+#include <algorithm>
 #include <getopt.h>
 #include <signal.h>
 #include <sys/resource.h>
@@ -42,6 +43,9 @@
 #ifdef PLUGIN_SIMFRONTEND
 #include "simfrontend.h"
 #endif // PLUGIN_SIMFRONTEND
+#ifdef TRACERTL_MODE
+#include "tracertl.h"
+#endif
 
 extern remote_bitbang_t *jtag;
 
@@ -104,6 +108,25 @@ Emulator::Emulator(int argc, const char *argv[])
 #ifdef PLUGIN_SIMFRONTEND
   init_sim_frontend(args.instr_trace);
 #endif // PLUGIN_SIMFRONTEND
+
+#ifdef TRACERTL_MODE
+  if (args.tracertl_file == nullptr) {
+    throw std::runtime_error("trace file not specified; use --tracertl-file=NAME");
+  }
+  init_tracefastsim(args.fast_warmup, args.fast_warmup_instr);
+  init_traceicache(args.tracept_file);
+  init_tracertl(args.tracertl_file, args.enable_gen_paddr, args.max_instr, args.skip_traceinstr);
+  if (args.fast_warmup) {
+    uint64_t squashed = tracertl_squashed_warmup_instrs();
+    printf("Fast warmup squashed duplicate instructions: %lu\n", squashed);
+    if (args.warmup_instr != static_cast<uint64_t>(-1)) {
+      args.warmup_instr -= std::min(args.warmup_instr, squashed);
+    }
+    if (args.max_instr != static_cast<uint64_t>(-1)) {
+      args.max_instr -= std::min(args.max_instr, squashed);
+    }
+  }
+#endif
 
   // init core
   reset_ncycles(args.reset_cycles);
@@ -240,7 +263,8 @@ Emulator::~Emulator() {
 #endif // ENABLE_RUNAHEAD
 
   if (args.enable_fork && !is_fork_child()) {
-    bool need_wakeup = trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED && trapCode != STATE_SIG;
+    bool need_wakeup = trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED && trapCode != STATE_SIG &&
+                       trapCode != STATE_SIM_EXIT;
     if (need_wakeup) {
       lightsss->wakeup_child(cycles);
     } else {
@@ -472,6 +496,9 @@ int Emulator::tick() {
   // assertions
   if (assert_count > 0) {
     Info("The simulation stopped. There might be some assertion failed.\n");
+#ifdef TRACERTL_MODE
+    tracertl_assert_dump();
+#endif
     trapCode = STATE_ABORT;
     return trapCode;
   }
@@ -538,7 +565,51 @@ int Emulator::tick() {
   }
 #endif // CONFIG_NO_DIFFTEST
 
+#ifdef TRACERTL_MODE
+  tracertl_prepare_read();
+  if (tracertl_over()) {
+    tracertl_success_dump();
+    trapCode = STATE_SIM_EXIT;
+    return trapCode;
+  }
+  tracertl_prepare_fastsim_memaddr();
+#endif
+
   single_cycle();
+
+#ifdef TRACERTL_MODE
+  tracertl_check_commit(cycles);
+  tracertl_check_drive();
+  if (tracertl_stuck()) {
+    eprintf("TraceRTL timed out at cycle %lu\n", cycles);
+    tracertl_error_dump();
+    trapCode = STATE_ABORT;
+    return trapCode;
+  }
+  if (tracertl_error()) {
+    eprintf("TraceRTL commit mismatch\n");
+    tracertl_error_dump();
+    trapCode = STATE_ABORT;
+    return trapCode;
+  }
+  if (tracertl_error_drive()) {
+    eprintf("TraceRTL drive mismatch\n");
+    tracertl_error_drive_dump();
+    trapCode = STATE_ABORT;
+    return trapCode;
+  }
+  if (tracertl_emu_conflict()) {
+    eprintf("TraceRTL detected emulator conflict\n");
+    tracertl_error_drive_dump();
+    trapCode = STATE_ABORT;
+    return trapCode;
+  }
+  if (tracertl_over()) {
+    tracertl_success_dump();
+    trapCode = STATE_SIM_EXIT;
+    return trapCode;
+  }
+#endif
 #ifdef CONFIG_NO_DIFFTEST
   args.max_cycles--;
 #endif // CONFIG_NO_DIFFTEST

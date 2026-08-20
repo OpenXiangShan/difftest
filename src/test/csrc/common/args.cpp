@@ -33,6 +33,11 @@ enum {
   OPT_CPU_AXI_DELAY,
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
+  OPT_TRACERTL_FILE,
+  OPT_TRACEPT_FILE,
+  OPT_GEN_PADDR,
+  OPT_FAST_WARMUP,
+  OPT_SKIP_TRACEINSTR,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -148,6 +153,13 @@ static inline void print_help(const char *file) {
   printf("      --random-mem           initialize memory from --seed\n");
   printf("      --core-clock-half-period=N        core half-period in scheduler ticks\n");
   printf("      --accelerator-clock-half-period=N accelerator half-period in scheduler ticks\n");
+#ifdef TRACERTL_MODE
+  printf("      --tracertl-file=NAME   load TraceRTL stream from NAME\n");
+  printf("      --tracept-file=NAME    load TraceRTL page-table side file from NAME\n");
+  printf("      --gen-paddr            generate physical addresses from virtual addresses\n");
+  printf("      --fast-warmup=NUM      enable TraceRTL fast warmup for NUM instructions\n");
+  printf("      --skip-traceinstr=NUM  skip the first NUM instructions in the trace\n");
+#endif
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -201,6 +213,13 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
+#ifdef TRACERTL_MODE
+    { "tracertl-file",     1, NULL, OPT_TRACERTL_FILE },
+    { "tracept-file",      1, NULL, OPT_TRACEPT_FILE },
+    { "gen-paddr",         0, NULL, OPT_GEN_PADDR },
+    { "fast-warmup",       1, NULL, OPT_FAST_WARMUP },
+    { "skip-traceinstr",   1, NULL, OPT_SKIP_TRACEINSTR },
+#endif
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -368,6 +387,18 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.accelerator_clock_half_period = static_cast<uint32_t>(accelerator_clock_half_period);
         continue;
       }
+#ifdef TRACERTL_MODE
+      case OPT_TRACERTL_FILE: args.tracertl_file = optarg; continue;
+      case OPT_TRACEPT_FILE: args.tracept_file = optarg; continue;
+      case OPT_GEN_PADDR: args.enable_gen_paddr = true; continue;
+      case OPT_FAST_WARMUP:
+        args.fast_warmup = true;
+        args.fast_warmup_instr = atoll_strict(optarg, "fast-warmup");
+        continue;
+      case OPT_SKIP_TRACEINSTR:
+        args.skip_traceinstr = atoll_strict(optarg, "skip-traceinstr");
+        continue;
+#endif
       case 's':
         if (std::string(optarg) != "NO_SEED") {
           args.seed = atoll_strict(optarg, "seed");
@@ -410,6 +441,12 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   }
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
+
+#ifdef TRACERTL_MODE
+  if (args.fast_warmup && args.warmup_instr == static_cast<uint64_t>(-1)) {
+    args.warmup_instr = args.fast_warmup_instr;
+  }
+#endif
 
 #ifdef ENABLE_IPC
   char *ipc_image = (char *)malloc(255);

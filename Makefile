@@ -66,6 +66,13 @@ SIM_CSRC_DIR = $(abspath ./src/test/csrc/common)
 SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp") $(shell find $(SIM_CONFIG_DIR) -name "*.cpp")
 SIM_CXXFLAGS = -I$(SIM_CSRC_DIR) -I$(SIM_CONFIG_DIR)
 
+ifeq ($(TRACERTL_MODE),1)
+TRACERTL_HOME ?= $(abspath $(NOOP_HOME)/TraceRTL)
+TRACERTL_CSRC_DIR ?= $(TRACERTL_HOME)/src/test/csrc/tracertl
+SIM_CXXFILES += $(shell find $(TRACERTL_CSRC_DIR) -name "*.cpp" 2> /dev/null)
+SIM_CXXFLAGS += -I$(TRACERTL_CSRC_DIR) -DTRACERTL_MODE
+endif
+
 SIM_CXXFLAGS += -DNOOP_HOME=\\\"$(NOOP_HOME)\\\"
 ifeq ($(SPLITVIEW),1)
 SIM_CXXFLAGS += -DCONFIG_SPLITVIEW

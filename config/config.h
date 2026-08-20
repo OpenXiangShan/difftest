@@ -50,7 +50,9 @@ extern uint64_t PMEM_BASE;
 extern uint64_t FIRST_INST_ADDRESS;
 
 // first valid instruction's address, difftest starts from this instruction
-#if defined(CPU_NUTSHELL)
+#if defined(TRACERTL_MODE)
+#define _FIRST_INST_ADDRESS 0x80000000UL
+#elif defined(CPU_NUTSHELL)
 #define _FIRST_INST_ADDRESS 0x80000000UL
 #elif defined(CPU_XIANGSHAN_YQH) || defined(CPU_XIANGSHAN_NH) || defined(CPU_XIANGSHAN_KMHV2) || \
     defined(CPU_XIANGSHAN_KMHV3) || defined(CPU_ROCKET_CHIP)
