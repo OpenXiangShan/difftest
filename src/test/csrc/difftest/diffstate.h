@@ -166,6 +166,7 @@ public:
     DifftestAmuCtrlEvent amu_event;
     AmeInstState state;
     uint64_t *res;
+    size_t res_words;
   } AmeInstRobEntry;
 
   std::deque<AmeInstRobEntry> matrix_sw_rob;

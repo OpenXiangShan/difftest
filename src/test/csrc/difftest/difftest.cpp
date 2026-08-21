@@ -23,6 +23,7 @@
 #include "ram.h"
 #include "spikedasm.h"
 #include "splitview.h"
+#include <algorithm>
 #include <csignal>
 #include <cstdlib>
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
@@ -272,10 +273,72 @@ void difftest_replay_head(int head) {
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
+#if defined(CONFIG_DIFFTEST_REPLAY) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+namespace {
+
+/*
+ * DiffState is deliberately not byte-copyable: it owns STL containers and
+ * matrix result buffers.  Replay only needs the checker state below, so copy
+ * it explicitly and deep-copy the matrix software ROB.
+ */
+static void release_matrix_sw_rob(DiffState &state) {
+  for (auto &entry : state.matrix_sw_rob) {
+    delete[] entry.res;
+    entry.res = nullptr;
+  }
+  state.matrix_sw_rob.clear();
+}
+
+static void copy_matrix_sw_rob(DiffState &dst, const DiffState &src) {
+  release_matrix_sw_rob(dst);
+  for (const auto &src_entry : src.matrix_sw_rob) {
+    DiffState::AmeInstRobEntry dst_entry = src_entry;
+    if (src_entry.res != nullptr) {
+      Assert(src_entry.res_words > 0, "Matrix replay entry has a result without a size");
+      dst_entry.res = new uint64_t[src_entry.res_words];
+      std::copy_n(src_entry.res, src_entry.res_words, dst_entry.res);
+    }
+    dst.matrix_sw_rob.push_back(dst_entry);
+  }
+}
+
+static void copy_replay_state(DiffState &dst, const DiffState &src) {
+  // coreid is immutable and belongs to the destination Difftest instance.
+  dst.has_commit = src.has_commit;
+  dst.last_commit_cycle = src.last_commit_cycle;
+  dst.has_trap = src.has_trap;
+  dst.trap_code = src.trap_code;
+#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
+  std::copy(std::begin(src.delayed_int), std::end(src.delayed_int), std::begin(dst.delayed_int));
+#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
+#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
+  std::copy(std::begin(src.delayed_fp), std::end(src.delayed_fp), std::begin(dst.delayed_fp));
+#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+  dst.cmo_inval_event_set = src.cmo_inval_event_set;
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
+#ifdef CONFIG_DIFFTEST_SQUASH
+  dst.commit_stamp = src.commit_stamp;
+#endif // CONFIG_DIFFTEST_SQUASH
+  copy_matrix_sw_rob(dst, src);
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  dst.msync_event_queue = src.msync_event_queue;
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
+}
+
+} // namespace
+#endif // CONFIG_DIFFTEST_REPLAY && CONFIG_DIFFTEST_AMUCTRLEVENT
+
 Difftest::Difftest(int coreid) {
   state = new DiffState(coreid);
 #ifdef CONFIG_DIFFTEST_REPLAY
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  // Construct a real DiffState.  malloc/memcpy would bypass STL constructors
+  // and shallow-copy matrix-owned pointers, leading to UB and double frees.
+  state_ss = new DiffState(coreid);
+#else
   state_ss = (DiffState *)malloc(sizeof(DiffState));
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 #endif // CONFIG_DIFFTEST_REPLAY
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
@@ -328,7 +391,11 @@ Difftest::~Difftest() {
     delete proxy;
   }
 #ifdef CONFIG_DIFFTEST_REPLAY
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  delete state_ss;
+#else
   free(state_ss);
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   if (proxy_reg_ss) {
     free(proxy_reg_ss);
   }
@@ -524,9 +591,18 @@ bool Difftest::in_replay_range() {
 }
 
 void Difftest::replay_snapshot() {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  copy_replay_state(*state_ss, *state);
+#else
   memcpy(state_ss, state, sizeof(DiffState));
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   memcpy(proxy_reg_ss, &proxy->state, sizeof(ref_state_t));
   proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  const size_t ame_replay_state_size = proxy->ame_replay_state_size();
+  ame_replay_state_ss.resize(ame_replay_state_size);
+  proxy->ame_replay_state_save(ame_replay_state_ss.data());
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   proxy->ref_store_log_reset();
   proxy->set_store_log(true);
   goldenmem_store_log_reset();
@@ -543,10 +619,20 @@ void Difftest::do_replay() {
   replay_status.in_replay = true;
   replay_status.trace_head = info.trace_head;
   replay_status.trace_size = info.trace_size;
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  delete mma_verifier;
+  mma_verifier = new MmaVerifier();
+  mma_verifier->start();
+  copy_replay_state(*state, *state_ss);
+#else
   memcpy(state, state_ss, sizeof(DiffState));
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   memcpy(&proxy->state, proxy_reg_ss, sizeof(ref_state_t));
   proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  proxy->ame_replay_state_restore(ame_replay_state_ss.data());
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   proxy->ref_store_log_restore();
   goldenmem_store_log_restore();
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
@@ -564,19 +650,6 @@ void Difftest::do_replay() {
   while (!state->load_event_queue.empty())
     state->load_event_queue.pop();
 #endif
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  for (auto &entry: state->matrix_sw_rob) {
-    if (entry.res != nullptr) {
-      delete[] entry.res;
-      entry.res = nullptr;
-    }
-  }
-  state->matrix_sw_rob.clear();
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
-#ifdef CONFIG_DIFFTEST_MSYNCEVENT
-  while (!state->msync_event_queue.empty())
-    state->msync_event_queue.pop();
-#endif // CONFIG_DIFFTEST_MSYNCEVENT
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
@@ -601,7 +674,21 @@ int Difftest::step() {
     proxy->set_store_log(false);
     goldenmem_set_store_log(false);
   }
+  if (replay_status.in_replay && dut->commit[0].valid) {
+    dut->trap.pc = dut->commit[0].pc;
+  }
   int ret = check_all();
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  if (mma_verifier) {
+    mma_verifier->flush();
+    if (mma_verifier->has_mma_verification_error()) {
+      auto buffer = mma_verifier->get_error_buffer();
+      Info("MMA verification error detected at pc = 0x%lx.\n", buffer->amu_event.pc);
+      dut->trap.pc = buffer->amu_event.pc;
+      ret = DiffTestChecker::STATE_DIFF;
+    }
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   if (ret && canReplay) {
     Info("\n**** Start replay for more accurate error location ****\n");
     do_replay();

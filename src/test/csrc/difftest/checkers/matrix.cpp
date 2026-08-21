@@ -161,6 +161,7 @@ int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
   entry.amu_event = probe;
   entry.state = DiffState::WAIT_REF_COMMIT;
   entry.res = NULL;
+  entry.res_words = 0;
   state->matrix_sw_rob.push_back(entry);
   return STATE_OK;
 }
@@ -171,10 +172,6 @@ int AmuCtrlChecker::do_step() {
     if (iter->state == DiffState::WAIT_REF_COMMIT) {
       const DifftestAmuCtrlEvent dut_event = iter->amu_event;
       DifftestAmuCtrlEvent ref_event = dut_event;
-      // NOTE:
-      // AMU ctrl is treated as a non-squashable, ordering-sensitive event.
-      // Under squash mode, it still requires one-to-one synchronization with REF.
-      // Therefore "no available REF event" (-1) is an error instead of a retriable case.
       int check_res = proxy->get_amu_ctrl_event(&ref_event);
 
       if (check_res == 1) {
@@ -219,6 +216,7 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
       if (entry.res == NULL) {
         // first `valid` for this inst: alloc space for matrix inst
         entry.res = new uint64_t[matrix_u64_size];
+        entry.res_words = matrix_u64_size;
         memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
       }
       uint8_t md = entry.amu_event.md;
@@ -352,9 +350,6 @@ int MsyncChecker::do_step() {
   while (!state->msync_event_queue.empty()) {
     const DifftestMsyncEvent dut_event = state->msync_event_queue.front();
     DifftestMsyncEvent ref_event = dut_event;
-#ifdef CONFIG_DIFFTEST_SQUASH
-    // TODO: What is squash? How to squash?
-#endif // CONFIG_DIFFTEST_SQUASH
     int check_res = proxy->get_msync_event(&ref_event);
 
     if (check_res == 1) {

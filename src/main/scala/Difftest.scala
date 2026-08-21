@@ -555,7 +555,7 @@ class DiffMsyncEvent extends MsyncEvent with DifftestBundle with DifftestWithInd
 private[difftest] class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 
-  override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
+  override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM", "MATRIX")
   override def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = {
     val that = base.asInstanceOf[DiffTraceInfo]
     !valid || !that.valid || (trace_size +& that.trace_size <= config.replaySize.U)

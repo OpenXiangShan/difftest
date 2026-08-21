@@ -246,6 +246,9 @@ protected:
   DiffState *state_ss = NULL;
   uint8_t *proxy_reg_ss = NULL;
   uint64_t squash_csr_buf[4096];
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  std::vector<uint8_t> ame_replay_state_ss;
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   bool can_replay();
   bool in_replay_range();
   void replay_snapshot();

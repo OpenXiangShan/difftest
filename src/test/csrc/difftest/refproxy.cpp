@@ -65,6 +65,12 @@ AbstractRefProxy::AbstractRefProxy(int coreid, size_t ram_size, const char *env,
   REF_ALL(CheckRefFunc)
   REF_OPTIONAL(LoadRefFunc)
 
+#if defined(CONFIG_DIFFTEST_REPLAY) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+  check_and_assert(ref_ame_replay_state_size);
+  check_and_assert(ref_ame_replay_state_save);
+  check_and_assert(ref_ame_replay_state_restore);
+#endif
+
   if (NUM_CORES > 1) {
     check_and_assert(ref_set_mhartid);
     ref_set_mhartid(coreid);

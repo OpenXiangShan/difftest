@@ -175,7 +175,10 @@ public:
   f(ref_msync_event, difftest_msync_event, int, void*)                                                      \
   f(ref_get_msync_event_other_info, difftest_get_msync_event_other_info, void, void*)                       \
   f(ref_amu_exec, difftest_amu_exec, int, void*, void*)                                                     \
-  f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)
+  f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)                               \
+  f(ref_ame_replay_state_size, difftest_ame_replay_state_size, size_t, )                                    \
+  f(ref_ame_replay_state_save, save_ame_replay_state, void, void*)                                         \
+  f(ref_ame_replay_state_restore, restore_ame_replay_state, void, const void*)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -461,6 +464,20 @@ public:
       return 1;
     }
   }
+
+#if defined(CONFIG_DIFFTEST_REPLAY) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+  inline size_t ame_replay_state_size() {
+    return ref_ame_replay_state_size();
+  }
+
+  inline void ame_replay_state_save(void *state) {
+    ref_ame_replay_state_save(state);
+  }
+
+  inline void ame_replay_state_restore(const void *state) {
+    ref_ame_replay_state_restore(state);
+  }
+#endif
 
 #ifdef ENABLE_STORE_LOG
   inline void set_store_log(bool enable = false) {

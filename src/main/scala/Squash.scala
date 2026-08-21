@@ -160,6 +160,9 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .reduce(_ || _)
   })
 
+  // Matrix replay snapshots must describe one transition across all groups.
+  val packet_sync_tick = if (config.hasReplay) group_tick_vec(group_name_vec.indexOf("MATRIX")) else false.B
+
   val squashers = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
     val s_in = pipelined.bits.filter(_.bits.desiredCppName == u.desiredCppName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
@@ -172,7 +175,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
         .collect { case (n, gt) if u.squashGroup.contains(n) => gt }
         .foldLeft(false.B)(_ || _)
     squasher.group_tick := group_tick
-    squasher.global_tick := global_tick
+    squasher.global_tick := global_tick || packet_sync_tick
     squasher
   }
   val s_out_vec = squashers.map(_.out.bits)
