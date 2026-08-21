@@ -91,7 +91,10 @@ MatrixStoreChecker::~MatrixStoreChecker() {
     return;
   }
   eprintf("[DiffTest][MatrixStore] core=%d outstanding_requests=%zu at finalization\n", state->coreid, tracker.size());
-  for (const auto &[encodedSourceId, request]: tracker.entries()) {
+  const MatrixStoreTracker::RequestMap &entries = tracker.entries();
+  for (MatrixStoreTracker::RequestMap::const_iterator entry = entries.begin(); entry != entries.end(); ++entry) {
+    const uint64_t encodedSourceId = entry->first;
+    const MatrixStoreRequest &request = entry->second;
     eprintf("[DiffTest][MatrixStore] core=%d live_id=0x%" PRIx64 " request_lane=%zu request_cycle=%" PRIu64
             " addr=0x%" PRIx64 "\n",
             state->coreid, encodedSourceId, request.requestLane, request.requestCycle, request.addr);
