@@ -81,6 +81,11 @@ static const char *regs_name_matrix_csr[] = {
   "mtilem", "mtilen", "mtilek", "msync"
 };
 
+static const char *regs_name_mcfg[] = {
+  "mcfg0", "mcfg1", "mcfg2", "mcfg3",
+  "mcfg4", "mcfg5", "mcfg6", "mcfg7"
+};
+
 static const char *regs_name_triggercsr[] = {
   "tselect", "tdata1", "tinfo"
 };
@@ -214,6 +219,9 @@ typedef struct __attribute__((packed)) {
 #ifdef CONFIG_DIFFTEST_MATRIXCSRSTATE
   DifftestMatrixCSRState mcsr;
 #endif
+#ifdef CONFIG_DIFFTEST_MCFGSTATE
+  DifftestMcfgState mcfg;
+#endif // CONFIG_DIFFTEST_MCFGSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
   DifftestTriggerCSRState triggercsr;
 #endif // CONFIG_DIFFTEST_TRIGGERCSRSTATE

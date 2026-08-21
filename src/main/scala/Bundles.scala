@@ -248,6 +248,10 @@ class MatrixCSRState extends DifftestBaseBundle {
   val msync = UInt(64.W)
 }
 
+class McfgState extends DifftestBaseBundle {
+  val value = Vec(8, UInt(64.W))
+}
+
 class SbufferEvent extends DifftestBaseBundle with HasValid {
   val addr = UInt(64.W)
   val data = Vec(64, UInt(8.W))
