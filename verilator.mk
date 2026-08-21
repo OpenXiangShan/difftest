@@ -108,7 +108,7 @@ ifeq ($(EMU_COVERAGE),1)
 	@python3 ./scripts/coverage/vtransform.py $(RTL_DIR)
 endif
 	@mkdir -p $(@D)
-	@echo -e "\n[verilator] Generating C++ files..." >> $(TIMELOG)
+	@printf '\n[verilator] Generating C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) $(VERILATOR) $(VERILATOR_FLAGS_ALL) --Mdir $(@D) $^ $(SIM_VSRC) $(VERILATOR_CXXFILES)
 	@sed -i -e 's/$(subst /,\/,$(NOOP_HOME))/$$(NOOP_HOME)/g' \
@@ -146,7 +146,7 @@ endif
 PGO_MAX_CYCLE = 2000000   # Default for Verilator; cmdline can override
 
 $(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILATOR_HEADERS) $(SIM_EXTRA_OBJS)
-	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
+	@printf '\n[c++] Compiling C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 ifdef PGO_WORKLOAD
 	$(MAKE) pgo-build \
