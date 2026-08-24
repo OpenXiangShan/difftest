@@ -29,7 +29,9 @@ GSIM_FLAGS = --supernode-max-size=15 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --
 
 $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir
 	@mkdir -p $(@D)
-	$(GSIM_BIN) $(GSIM_FLAGS) --dir $(@D) $< | tee $(GSIM_EMU_BUILD_DIR)/gsim-gen-cpp.log
+	@printf '\n[gsim] Generating C++ files...\n' >> $(TIMELOG)
+	@date -R | tee -a $(TIMELOG)
+	$(TIME_CMD) $(GSIM_BIN) $(GSIM_FLAGS) --dir $(@D) $< | tee $(GSIM_EMU_BUILD_DIR)/gsim-gen-cpp.log
 
 gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 
@@ -82,14 +84,18 @@ gsim-clean-obj:
 # Profile Guided Optimization
 gsim-gen-emu:
 ifdef PGO_WORKLOAD
-	$(MAKE) pgo-build \
+	@printf '\n[c++] Building emu with PGO...\n' >> $(TIMELOG)
+	@date -R | tee -a $(TIMELOG)
+	$(TIME_CMD) $(MAKE) pgo-build \
 		PGO_CLEAN_OBJ=gsim-clean-obj \
 		PGO_BUILD_TARGET=gsim-build-emu \
 		PGO_TARGET=$(GSIM_EMU_TARGET) \
 		PGO_EMU_DIR=$(GSIM_EMU_BUILD_DIR)
 else
+	@printf '\n[c++] Compiling C++ files...\n' >> $(TIMELOG)
+	@date -R | tee -a $(TIMELOG)
 	@echo "Building emu..."
-	@$(MAKE) gsim-build-emu
+	$(TIME_CMD) $(MAKE) gsim-build-emu
 endif # ifdef PGO_WORKLOAD
 
 gsim-emu:
