@@ -45,7 +45,17 @@ difftest_verilog:
 	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
 
 TIMELOG = $(BUILD_DIR)/time.log
-TIME_CMD = time -avp -o $(TIMELOG)
+# Resolve `time` to a real binary: shells such as bash provide `time` only as a
+# reserved word, which accepts neither -o nor the GNU report flags. `env` looks
+# the binary up on PATH without going through the shell, so it stays usable when
+# no well-known path exists. Then pick the richest report format the available
+# implementation actually supports, and leave TIME_CMD empty if none does, so an
+# unusual host loses the timings instead of failing the build.
+TIME_BIN ?= $(or $(firstword $(wildcard /usr/bin/time /bin/time)),env time)
+TIME_FLAGS := $(shell for f in -av -ap -a; do \
+                        $(TIME_BIN) $$f -o /dev/null true >/dev/null 2>&1 && { echo $$f; break; }; \
+                      done)
+TIME_CMD = $(if $(TIME_FLAGS),$(TIME_BIN) $(TIME_FLAGS) -o $(TIMELOG))
 
 # remote machine with more cores to speedup c++ build
 REMOTE ?= localhost
