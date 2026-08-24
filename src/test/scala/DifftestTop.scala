@@ -30,6 +30,7 @@ class DifftestInterfaces extends Module {
   val csr_state = DifftestModule(new DiffCSRState, dontCare = true)
   val hcsr_state = DifftestModule(new DiffHCSRState, dontCare = true)
   val matrix_csr_state = DifftestModule(new DiffMatrixCSRState, dontCare = true)
+  val mcfg_state = DifftestModule(new DiffMcfgState, dontCare = true)
   val debug_mode = DifftestModule(new DiffDebugMode, dontCare = true)
   val trigger_csr_state = DifftestModule(new DiffTriggerCSRState, dontCare = true)
   val arch_int_delayed_update = DifftestModule(new DiffArchIntDelayedUpdate, dontCare = true)

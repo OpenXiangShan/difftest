@@ -410,6 +410,12 @@ class DiffMatrixCSRState extends MatrixCSRState with DifftestBundle {
   override val updateDependency: Seq[String] = Seq("commit", "event")
 }
 
+class DiffMcfgState extends McfgState with DifftestBundle {
+  override val desiredCppName: String = "mcfg"
+  override val desiredRegOffset: Option[Int] = Some(9)
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+}
+
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
