@@ -8,7 +8,7 @@ set -e
 CPU_DIR="$1"
 RELEASE_DIR="$2"
 RELEASE_SUFFIX="${3:-}"
-if [ $# -ne 2 ] && [ $# -ne 3]; then
+if [ $# -ne 2 ] && [ $# -ne 3 ]; then
     echo "Usage: $0 <CPU_PATH> <RELEASE_FOLDER> [RELEASE_SUFFIX]"
     exit 1
 fi
