@@ -163,7 +163,6 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   val squashers = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
     val s_in = pipelined.bits.filter(_.bits.desiredCppName == u.desiredCppName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
-    squasher.in.valid := pipelined.valid
     squasher.in.bits.zip(s_in).foreach { case (dst, src) => dst := src }
     squasher.maxFused := maxFused
     wt := squasher.want_tick
@@ -189,6 +188,8 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   }
   squashers.foreach(_.out.ready := out.ready)
   pipelined.ready := VecInit(squashers.map(_.in.ready)).asUInt.andR
+  // All squashers must fire synchronously so a held input is consumed only once.
+  squashers.foreach(_.in.valid := pipelined.fire)
   out.valid := VecInit(squashers.map(_.out.valid)).asUInt.orR
 }
 
