@@ -21,7 +21,8 @@ export NOOP_HOME
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 
-BUILD_DIR  = $(DESIGN_DIR)/build
+BUILD_DIR  ?= $(DESIGN_DIR)/build
+GENERATED_DIR ?= $(abspath $(BUILD_DIR))
 
 RTL_DIR = $(BUILD_DIR)/rtl
 RTL_SUFFIX ?= sv
@@ -42,7 +43,7 @@ ifneq ($(CONFIG), )
 MILL_ARGS += --difftest-config $(CONFIG)
 endif
 difftest_verilog:
-	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
+	GENERATED_DIR="$(GENERATED_DIR)" mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
 
 TIMELOG = $(BUILD_DIR)/time.log
 TIME_CMD = time -avp -o $(TIMELOG)
