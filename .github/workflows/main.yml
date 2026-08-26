@@ -453,12 +453,18 @@ jobs:
           sudo apt install -y libgmp-dev clang-19
           cd $GITHUB_WORKSPACE/..
           mkdir -p gsim-bin && cd gsim-bin
-          curl -s https://api.github.com/repos/OpenXiangShan/gsim/releases/latest \
-            | grep "browser_download_url"                                         \
-            | grep "gsim"                                                         \
-            | cut -d '"' -f 4                                                     \
-            | xargs wget -O gsim
+          gsim_urls=$(curl -fsSL https://api.github.com/repos/OpenXiangShan/gsim/releases/latest \
+            | grep "browser_download_url"                                                   \
+            | cut -d '"' -f 4                                                               \
+            | grep "gsim-clang19\\..*-${{ runner.arch }}$" || true)
+          gsim_url_count=$(printf '%s\n' "$gsim_urls" | grep -c '^https://' || true)
+          if [ "$gsim_url_count" -ne 1 ]; then
+            echo "Expected one clang-19 GSIM asset for ${{ runner.arch }}, found $gsim_url_count" >&2
+            exit 1
+          fi
+          wget -O gsim "$gsim_urls"
           chmod +x gsim
+          ./gsim -h >/dev/null
           echo "GSIM_BIN=$(pwd)/gsim" >> $GITHUB_ENV
       - name: Build the REF - Spike
         run: |
