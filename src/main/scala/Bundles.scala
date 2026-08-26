@@ -17,6 +17,7 @@ package difftest
 
 import chisel3._
 import chisel3.util._
+import difftest.util.UArchProbeSchema
 
 sealed trait HasValid {
   val valid = Bool()
@@ -50,6 +51,15 @@ sealed trait DifftestBaseBundle extends Bundle {
 
 private[difftest] class DeltaElem(elemWidth: Int) extends DifftestBaseBundle {
   val data = UInt(elemWidth.W)
+}
+
+private[difftest] class UArchProbe(val schema: String) extends DifftestBaseBundle with HasValid {
+  private[difftest] val probeSchema = UArchProbeSchema.fromJson(schema)
+  val payloadBits: Int = probeSchema.payloadBits
+
+  val uarchId = UInt(16.W)
+  val cycleCnt = UInt(64.W)
+  val data = MixedVec(probeSchema.storageWidths.map(width => UInt(width.W)))
 }
 
 class ArchEvent extends DifftestBaseBundle with HasValid {
