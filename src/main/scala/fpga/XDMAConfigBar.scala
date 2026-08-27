@@ -19,6 +19,7 @@ package difftest.fpga
 import chisel3._
 import chisel3.util._
 import difftest.common.AXI4LiteBundle
+import difftest.gateway.{ReplayTraceRequest, ReplayTraceStatus}
 
 /** XDMA Config BAR for both FPGA/FPGA_SIM
   *
@@ -35,6 +36,16 @@ import difftest.common.AXI4LiteBundle
   *   - 0x24: HOST_IO_MEM_CPU
   *   - 0x28: HOST_IO_MEM_H2C
   *   - 0x2c: HOST_IO_H2C_SIZE_MB
+  *   - 0x30: HOST_IO_REPLAY_TRACE_FREEZE
+  *   - 0x34: HOST_IO_REPLAY_TRACE_HEAD
+  *   - 0x38: HOST_IO_REPLAY_TRACE_SIZE
+  *   - 0x3c: HOST_IO_REPLAY_TRACE_DUMP
+  *   - 0x40: HOST_IO_REPLAY_TRACE_REARM
+  *   - 0x44: HOST_IO_REPLAY_TRACE_STATUS (read-only)
+  *   - 0x48: HOST_IO_REPLAY_TRACE_WRITE_PTR (read-only)
+  *   - 0x4c: HOST_IO_REPLAY_TRACE_WRITE_SEQ (read-only)
+  *   - 0x50: HOST_IO_REPLAY_TRACE_DUMP_START (read-only)
+  *   - 0x54: HOST_IO_REPLAY_TRACE_DUMP_BEATS (read-only)
   */
 class XDMAHostCtrlIO extends Bundle {
   val reset = Bool()
@@ -55,8 +66,9 @@ class XDMAMemCtrlIO extends Bundle {
 }
 
 private object XDMAConfigReg extends Enumeration {
-  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, SquashMaxFused, Seed, RamSizeMB, MemInit, MemCPU,
-    MemH2C, H2CSizeMB = Value
+  val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, SquashMaxFused, Seed, RamSizeMB, MemInit, MemCPU, MemH2C, H2CSizeMB,
+    ReplayTraceFreeze, ReplayTraceHead, ReplayTraceSize, ReplayTraceDump, ReplayTraceRearm, ReplayTraceStatus,
+    ReplayTraceWritePtr, ReplayTraceWriteSeq, ReplayTraceDumpStart, ReplayTraceDumpBeats = Value
 }
 
 class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
@@ -67,6 +79,8 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     val cfgReset = Output(Bool())
     val hostCtrl = Output(new XDMAHostCtrlIO)
     val memCtrl = new XDMAMemCtrlIO
+    val replayTraceRequest = Output(new ReplayTraceRequest)
+    val replayTraceStatus = Input(new ReplayTraceStatus)
   })
 
   private val numRegs = XDMAConfigReg.maxId
@@ -88,6 +102,11 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   io.memCtrl.ramSizeMB := regfile(XDMAConfigReg.RamSizeMB.id)
   io.memCtrl.h2cSizeMB := regfile(XDMAConfigReg.H2CSizeMB.id)
   io.cfgReset := regfile(XDMAConfigReg.CfgReset.id)(0)
+  io.replayTraceRequest.freeze := regfile(XDMAConfigReg.ReplayTraceFreeze.id)(0)
+  io.replayTraceRequest.traceHead := regfile(XDMAConfigReg.ReplayTraceHead.id)(15, 0)
+  io.replayTraceRequest.traceSize := regfile(XDMAConfigReg.ReplayTraceSize.id)(15, 0)
+  io.replayTraceRequest.dump := regfile(XDMAConfigReg.ReplayTraceDump.id)(0)
+  io.replayTraceRequest.rearm := regfile(XDMAConfigReg.ReplayTraceRearm.id)(0)
 
   private def mergeByByte(oldData: UInt, newData: UInt, strb: UInt): UInt = {
     VecInit((0 until dataWidth / 8).map { i =>
@@ -126,7 +145,10 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     wValid := true.B
   }
   when(doWrite) {
-    when(writeWord < numRegs.U) {
+    when(
+      writeWord < XDMAConfigReg.ReplayTraceStatus.id.U ||
+        writeWord === XDMAConfigReg.ReplayTraceRearm.id.U
+    ) {
       regfile(writeIdx) := mergeByByte(regfile(writeIdx), nextWData, nextWStrb)
     }
     awValid := false.B
@@ -145,10 +167,25 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   io.axilite.r.bits.data := rData
   io.axilite.r.bits.resp := 0.U
 
+  val replayTraceStatus = Cat(
+    0.U(28.W),
+    io.replayTraceStatus.rangeLost,
+    io.replayTraceStatus.dumpDone,
+    io.replayTraceStatus.dumpActive,
+    io.replayTraceStatus.frozen,
+  )
   when(io.axilite.ar.valid && arReady) {
     val readWord = io.axilite.ar.bits.addr(addrWidth - 1, 2)
     val readIdx = readWord(idxBits - 1, 0)
-    rData := Mux(readWord < numRegs.U, regfile(readIdx), 0.U)
+    rData := MuxLookup(readWord, Mux(readWord < numRegs.U, regfile(readIdx), 0.U))(
+      Seq(
+        XDMAConfigReg.ReplayTraceStatus.id.U -> replayTraceStatus,
+        XDMAConfigReg.ReplayTraceWritePtr.id.U -> io.replayTraceStatus.writePtr,
+        XDMAConfigReg.ReplayTraceWriteSeq.id.U -> io.replayTraceStatus.writeSeq,
+        XDMAConfigReg.ReplayTraceDumpStart.id.U -> io.replayTraceStatus.dumpStart,
+        XDMAConfigReg.ReplayTraceDumpBeats.id.U -> io.replayTraceStatus.dumpBeats,
+      )
+    )
     arReady := false.B
     rValid := true.B
   }.elsewhen(rValid && io.axilite.r.ready) {

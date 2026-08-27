@@ -22,6 +22,47 @@ import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.util.PipelineConnect
 
+object ReplayInfo {
+  def apply(
+    bundles: DecoupledIO[MixedVec[DifftestBundle]],
+    config: GatewayConfig,
+  ): DecoupledIO[MixedVec[DifftestBundle]] = {
+    val module = Module(new ReplayInfoEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
+    PipelineConnect(bundles, module.in, module.in.fire)
+    module.out
+  }
+}
+
+/** Add replay range metadata without retaining the wide pre-Batch bundle. */
+class ReplayInfoEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
+  val info = WireInit(0.U.asTypeOf(new DiffTraceInfo(config)))
+  val appendIn = WireInit(0.U.asTypeOf(MixedVec(bundles ++ Seq(chiselTypeOf(info)))))
+  in.bits.zipWithIndex.foreach { case (gen, idx) => appendIn(idx) := gen }
+  appendIn.last := info
+  val out = IO(Decoupled(chiselTypeOf(appendIn)))
+
+  val ptr = RegInit(0.U(config.replayWidth.W))
+  val needStore = if (config.hasGlobalEnable) {
+    VecInit(in.bits.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
+  } else {
+    true.B
+  }
+
+  info.valid := needStore
+  info.in_replay := false.B
+  info.trace_head := ptr
+  info.trace_size := 1.U
+
+  in.ready := out.ready
+  out.valid := in.valid
+  out.bits := appendIn
+
+  when(in.fire && needStore) {
+    ptr := Mux(ptr === (config.replaySize - 1).U, 0.U, ptr + 1.U)
+  }
+}
+
 object Replay {
   def apply(
     bundles: DecoupledIO[MixedVec[DifftestBundle]],

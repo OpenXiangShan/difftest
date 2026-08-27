@@ -67,6 +67,10 @@ class BatchStats(param: BatchParam) extends Bundle {
 class BatchIO(val param: BatchParam, config: GatewayConfig) extends Bundle {
   val payload = UInt(param.BeatBitLen.W)
   val step = UInt(config.stepWidth.W)
+  // The trace descriptor is meaningful only on the final beat of one input step.
+  val traceHead = UInt(16.W)
+  val traceSize = UInt(16.W)
+  val traceValid = Bool()
 }
 
 class BatchInfo extends Bundle {
@@ -78,7 +82,8 @@ object Batch {
   private val template = ListBuffer.empty[DifftestBundle]
 
   def apply(bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]], config: GatewayConfig): DecoupledIO[BatchIO] = {
-    template ++= chiselTypeOf(bundles.bits).map(_.bits).distinctBy(_.desiredCppName)
+    val newBundles = chiselTypeOf(bundles.bits).map(_.bits).distinctBy(_.desiredCppName)
+    template ++= newBundles.filterNot(bundle => template.exists(_.desiredCppName == bundle.desiredCppName))
     val module = Module(new BatchEndpoint(chiselTypeOf(bundles.bits).toSeq, config))
     module.in <> bundles
     module.out
@@ -266,6 +271,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val pending_valid_mask = RegInit(0.U(param.BeatChunkSize.W))
   val pending_last = RegInit(false.B)
   val pending_valid = RegInit(false.B)
+  val activeTraceInfo = Option.when(config.hasReplay)(RegInit(0.U.asTypeOf(new DiffTraceInfo(config))))
 
   // Stage 3: scan the payload beat bitmap and register one selected beat as pending.
   // Stage 4: independently merge pending into state and refill pending with the next beat.
@@ -288,9 +294,10 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val merge_full = merged_count >= param.BeatChunkSize.U
   val payload_beat_mask = VecInit(payload_beat_valid.map(_.orR)).asUInt
   val input_step_valid = delay_grouped.valid && info_num =/= 0.U && payload_beat_mask =/= 0.U
+  val start_input_step = !pending_valid && remain_beat_mask === 0.U && state_count === 0.U && input_step_valid
   val select_beat_mask = Mux(
     remain_beat_mask === 0.U,
-    Mux(!pending_valid && state_count === 0.U && input_step_valid, payload_beat_mask, 0.U),
+    Mux(start_input_step, payload_beat_mask, 0.U),
     remain_beat_mask,
   )
   val select_beat_idx = PriorityEncoder(select_beat_mask).pad(beatIdxWidth)
@@ -325,6 +332,14 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   out.valid := should_tick
   out.bits.payload := Mux(state_tick, state_chunks.asUInt, merged_head_chunks.asUInt)
   out.bits.step := Mux(out.valid && is_last_step_beat, 1.U(config.stepWidth.W), 0.U)
+  val traceInfo = activeTraceInfo
+  out.bits.traceHead := traceInfo.map(_.trace_head).getOrElse(0.U)
+  out.bits.traceSize := traceInfo.map(_.trace_size).getOrElse(0.U)
+  out.bits.traceValid := out.valid && is_last_step_beat && traceInfo.map(_.valid).getOrElse(false.B)
+
+  when(start_input_step) {
+    activeTraceInfo.foreach(_ := delay_grouped.bits.trace_info.get)
+  }
 
   when(state_update) {
     when(pending_valid) {

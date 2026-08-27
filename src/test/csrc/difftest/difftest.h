@@ -178,6 +178,19 @@ public:
     state->has_commit = true;
   }
 
+#if defined(CONFIG_DIFFTEST_REPLAY_TRACE) && defined(CONFIG_DIFFTEST_REPLAY)
+  bool get_replay_range(uint16_t *trace_head, uint16_t *trace_size) const {
+    if (!trace_head || !trace_size || !replay_status.in_replay || replay_status.trace_size <= 0 ||
+        replay_status.trace_head < 0 || replay_status.trace_head >= CONFIG_DIFFTEST_REPLAY_SIZE ||
+        replay_status.trace_size > CONFIG_DIFFTEST_REPLAY_SIZE) {
+      return false;
+    }
+    *trace_head = static_cast<uint16_t>(replay_status.trace_head);
+    *trace_size = static_cast<uint16_t>(replay_status.trace_size);
+    return true;
+  }
+#endif // CONFIG_DIFFTEST_REPLAY_TRACE && CONFIG_DIFFTEST_REPLAY
+
 protected:
   DiffState *state = NULL;
   DiffTrace<DiffTestState> *difftrace = nullptr;

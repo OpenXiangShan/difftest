@@ -28,6 +28,9 @@
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
+#if defined(CONFIG_DIFFTEST_REPLAY) && defined(FPGA_SIM) && !defined(FPGA_HOST)
+#include "verilated_dpi.h"
+#endif // CONFIG_DIFFTEST_REPLAY && FPGA_SIM && !FPGA_HOST
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -255,7 +258,7 @@ void difftest_squash_max_fused(int squash_max_fused) {
 }
 #endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
 
-#ifdef CONFIG_DIFFTEST_REPLAY
+#if defined(CONFIG_DIFFTEST_REPLAY) && !defined(CONFIG_DIFFTEST_FPGA)
 svScope replayScope;
 void set_replay_scope() {
   replayScope = svGetScope();
@@ -270,7 +273,7 @@ void difftest_replay_head(int head) {
   svSetScope(replayScope);
   set_replay_head(head);
 }
-#endif // CONFIG_DIFFTEST_REPLAY
+#endif // CONFIG_DIFFTEST_REPLAY && !CONFIG_DIFFTEST_FPGA
 
 Difftest::Difftest(int coreid) {
   state = new DiffState(coreid);
@@ -554,7 +557,9 @@ void Difftest::do_replay() {
     matrix_store_checker->replay_restore();
   }
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
+#ifndef CONFIG_DIFFTEST_FPGA
   difftest_replay_head(info.trace_head);
+#endif // CONFIG_DIFFTEST_FPGA
   // clear buffered queue
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   while (!state->store_event_queue.empty())

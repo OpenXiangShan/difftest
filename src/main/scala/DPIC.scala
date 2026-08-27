@@ -411,7 +411,7 @@ object DPIC {
       val interface = (dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc)
       interfaces += interface
     }
-    if (io.bits.supportsDelta && !deltaInstances.contains(io.bits)) {
+    if (io.bits.supportsDelta && !deltaInstances.exists(_.desiredCppName == io.bits.desiredCppName)) {
       deltaInstances += io.bits
     }
   }
@@ -426,7 +426,11 @@ object DPIC {
     interfaces += ((dpic.dpicFuncName, dpic.dpicFuncProto, dpic.dpicFunc))
     perfs += dpic.dpicFuncName
     perfs ++= template.map("Batch_" + _.desiredModuleName.replace("Difftest", ""))
-    deltaInstances ++= template.filter(_.supportsDelta)
+    template.filter(_.supportsDelta).foreach { bundle =>
+      if (!deltaInstances.exists(_.desiredCppName == bundle.desiredCppName)) {
+        deltaInstances += bundle
+      }
+    }
   }
 
   def collect(config: GatewayConfig, instances: Seq[DifftestBundle]): GatewayResult = {
@@ -450,6 +454,8 @@ object DPIC {
     if (config.isDelta) {
       Delta.collect()
       interfaceCpp += "#include \"difftest-delta.h\""
+      interfaceCpp += "extern \"C\" void difftest_delta_commit();"
+      interfaceCpp += "extern \"C\" void difftest_delta_restore();"
     }
     val phyRegs = instances.distinctBy(_.desiredCppName).collect { case p: DiffPhyRegState => p }
     if (phyRegs.nonEmpty) {
@@ -547,6 +553,8 @@ object DPIC {
            |#include \"difftest-delta.h\"
            |DeltaStats* dStats = nullptr;
            |#define DELTA_BUF(core_id) (dStats->get(core_id))
+           |extern "C" void difftest_delta_commit() { if (dStats) dStats->commit(); }
+           |extern "C" void difftest_delta_restore() { if (dStats) dStats->restore(); }
            |""".stripMargin
     }
     interfaceCpp +=

@@ -25,7 +25,8 @@ import difftest.preprocess.Preprocess
 import difftest.squash.Squash
 import difftest.batch.{Batch, BatchIO}
 import difftest.delta.Delta
-import difftest.replay.Replay
+import difftest.fpga.ReplayTraceBuffer
+import difftest.replay.{Replay, ReplayInfo}
 import difftest.trace.Trace
 import difftest.validate.Validate
 
@@ -53,6 +54,7 @@ case class GatewayConfig(
   softArchUpdate: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
+  replayTraceDepth: Int = 16384,
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -67,6 +69,7 @@ case class GatewayConfig(
   def hasClockGate = isFPGA || isDelta || isBatch
   def hasDeferredResult: Boolean = isNonBlock || hasInternalStep
   def needTraceInfo: Boolean = hasReplay
+  def hasReplayTrace: Boolean = hasReplay && isFPGA
   def needEndpoint: Boolean =
     hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring || traceDump || traceLoad || needPreprocess
   def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo || !softArchUpdate
@@ -85,7 +88,10 @@ case class GatewayConfig(
       )
     if (isSquash) macros ++= Seq("CONFIG_DIFFTEST_SQUASH", s"CONFIG_DIFFTEST_SQUASH_STAMPSIZE 4096") // Stamp Width 12
     if (isDelta) macros += "CONFIG_DIFFTEST_DELTA"
-    if (hasReplay) macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
+    if (hasReplay)
+      macros ++= Seq("CONFIG_DIFFTEST_REPLAY", s"CONFIG_DIFFTEST_REPLAY_SIZE ${replaySize}")
+    if (hasReplayTrace)
+      macros ++= Seq("CONFIG_DIFFTEST_REPLAY_TRACE", s"CONFIG_DIFFTEST_REPLAY_TRACE_DEPTH $replayTraceDepth")
     if (hasDeferredResult) macros += "CONFIG_DIFFTEST_DEFERRED_RESULT"
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
@@ -106,11 +112,17 @@ case class GatewayConfig(
         s"CONFIG_DIFFTEST_HOST_AXIS_BYTES ${hostAxisBytes}",
         s"CONFIG_DIFFTEST_HOST_AXIS_WIDTH ${hostAxisBytes * 8}",
       )
+    if (hasReplayTrace)
+      macros ++= Seq("CONFIG_DIFFTEST_REPLAY_TRACE", s"CONFIG_DIFFTEST_REPLAY_TRACE_DEPTH $replayTraceDepth")
     if (hasClockGate) macros += "CONFIG_DIFFTEST_CLOCKGATE"
     macros.toSeq
   }
   def check(): Unit = {
     if (hasReplay) require(isSquash)
+    if (hasReplayTrace) {
+      require(isPow2(replayTraceDepth), s"Replay trace depth must be a power of two, got $replayTraceDepth")
+      require(isPow2(replaySize), s"Replay size must be a power of two, got $replaySize")
+    }
     if (hasInternalStep) require(isBatch)
     if (isBatch) require(!hasDutZone)
     if (isBatch) require(isPow2(batchChunkBytes))
@@ -126,6 +138,37 @@ case class GatewayConfig(
 
 class FpgaDiffIO(dataWidth: Int) extends DecoupledIO(UInt(dataWidth.W))
 
+class ReplayTraceRequest extends Bundle {
+  val freeze = Bool()
+  val dump = Bool()
+  val rearm = Bool()
+  val traceHead = UInt(16.W)
+  val traceSize = UInt(16.W)
+}
+
+class ReplayTraceStatus extends Bundle {
+  val frozen = Bool()
+  val dumpActive = Bool()
+  val dumpDone = Bool()
+  val rangeLost = Bool()
+  val writePtr = UInt(32.W)
+  val writeSeq = UInt(32.W)
+  val dumpStart = UInt(32.W)
+  val dumpBeats = UInt(32.W)
+}
+
+private class DecoupledBroadcast[T <: Data](gen: T) extends Module {
+  val in = IO(Flipped(Decoupled(gen)))
+  val out0 = IO(Decoupled(gen))
+  val out1 = IO(Decoupled(gen))
+
+  out0.valid := in.valid
+  out0.bits := in.bits
+  out1.valid := in.valid
+  out1.bits := in.bits
+  in.ready := out0.ready && out1.ready
+}
+
 case class GatewayResult(
   cppMacros: Seq[String] = Seq(),
   vMacros: Seq[String] = Seq(),
@@ -137,6 +180,9 @@ case class GatewayResult(
   exit: Option[UInt] = None,
   step: Option[UInt] = None,
   fpgaIO: Option[FpgaDiffIO] = None,
+  replayTraceRequest: Option[ReplayTraceRequest] = None,
+  replayTraceStatus: Option[ReplayTraceStatus] = None,
+  replayTraceDump: Option[FpgaDiffIO] = None,
   fpgaSquashEnable: Option[Bool] = None,
   fpgaSquashMaxFused: Option[UInt] = None,
   clockEnable: Option[Bool] = None,
@@ -153,6 +199,9 @@ case class GatewayResult(
       exit = if (exit.isDefined) exit else that.exit,
       step = if (step.isDefined) step else that.step,
       fpgaIO = if (fpgaIO.isDefined) fpgaIO else that.fpgaIO,
+      replayTraceRequest = if (replayTraceRequest.isDefined) replayTraceRequest else that.replayTraceRequest,
+      replayTraceStatus = if (replayTraceStatus.isDefined) replayTraceStatus else that.replayTraceStatus,
+      replayTraceDump = if (replayTraceDump.isDefined) replayTraceDump else that.replayTraceDump,
       fpgaSquashEnable = if (fpgaSquashEnable.isDefined) fpgaSquashEnable else that.fpgaSquashEnable,
       fpgaSquashMaxFused = if (fpgaSquashMaxFused.isDefined) fpgaSquashMaxFused else that.fpgaSquashMaxFused,
       clockEnable = if (clockEnable.isDefined) clockEnable else that.clockEnable,
@@ -252,6 +301,9 @@ object Gateway {
         refClock = Option.when(config.hasClockGate)(endpoint.clock),
         step = Some(endpoint.step),
         fpgaIO = endpoint.fpgaIO,
+        replayTraceRequest = endpoint.replayTraceRequest,
+        replayTraceStatus = endpoint.replayTraceStatus,
+        replayTraceDump = endpoint.replayTraceDump,
         fpgaSquashEnable = endpoint.fpgaSquashEnable,
         fpgaSquashMaxFused = endpoint.fpgaSquashMaxFused,
         clockEnable = endpoint.clockEnable,
@@ -275,6 +327,9 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val clockEnable = Option.when(config.hasClockGate)(IO(Output(Bool())))
   val fpgaSquashEnable = Option.when(config.isSquash && config.isFPGA)(IO(Input(Bool())))
   val fpgaSquashMaxFused = Option.when(config.isSquash && config.isFPGA)(IO(Input(UInt(8.W))))
+  val replayTraceRequest = Option.when(config.hasReplayTrace)(IO(Input(new ReplayTraceRequest)))
+  val replayTraceStatus = Option.when(config.hasReplayTrace)(IO(Output(new ReplayTraceStatus)))
+  val replayTraceDump = Option.when(config.hasReplayTrace)(IO(new FpgaDiffIO(config.batchBitWidth)))
   // clockEnable should hold with one cycle fire to sample signals
   decoupledIn.valid := !reset.asBool
   clockEnable.foreach { ce =>
@@ -306,15 +361,53 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     decoupledIn
   }
 
-  val replayed = if (config.hasReplay) {
-    Replay(preprocessed, config)
+  val tracePrepared = if (config.hasReplayTrace) {
+    ReplayInfo(preprocessed, config)
   } else {
     preprocessed
   }
 
+  val replayed = if (config.hasReplay && !config.isFPGA) {
+    Replay(tracePrepared, config)
+  } else {
+    tracePrepared
+  }
+
   val validated = Validate(replayed, config)
 
-  val squashed = if (config.isSquash) {
+  val squashed = if (config.hasReplayTrace) {
+    val fork = Module(new DecoupledBroadcast(chiselTypeOf(validated.bits)))
+    fork.in <> validated
+
+    val traceInput = Wire(Decoupled(chiselTypeOf(fork.out1.bits)))
+    traceInput.valid := fork.out1.valid
+    traceInput.bits := fork.out1.bits
+    fork.out1.ready := traceInput.ready
+    traceInput.bits.map(_.bits).filter(_.desiredCppName == "trace_info").foreach { gen =>
+      gen.asInstanceOf[DiffTraceInfo].in_replay := true.B
+    }
+
+    val traceDeltas = if (config.isDelta) {
+      Delta(traceInput, config)
+    } else {
+      traceInput
+    }
+    val traceBatch = Batch(traceDeltas, config)
+    val traceBuffer = Module(new ReplayTraceBuffer(config.batchBitWidth, config.replayTraceDepth, config.replaySize))
+    traceBuffer.io.in.valid := traceBatch.valid
+    traceBuffer.io.in.bits.payload := traceBatch.bits.payload
+    traceBuffer.io.in.bits.traceHead := traceBatch.bits.traceHead
+    traceBuffer.io.in.bits.traceSize := traceBatch.bits.traceSize
+    traceBuffer.io.in.bits.traceValid := traceBatch.bits.traceValid
+    traceBatch.ready := traceBuffer.io.in.ready
+    traceBuffer.io.request := replayTraceRequest.get
+    replayTraceStatus.get := traceBuffer.io.status
+    replayTraceDump.get.bits := traceBuffer.io.dump.bits
+    replayTraceDump.get.valid := traceBuffer.io.dump.valid
+    traceBuffer.io.dump.ready := replayTraceDump.get.ready
+
+    Squash(fork.out0, config, fpgaSquashEnable, fpgaSquashMaxFused)
+  } else if (config.isSquash) {
     Squash(validated, config, fpgaSquashEnable, fpgaSquashMaxFused)
   } else {
     validated

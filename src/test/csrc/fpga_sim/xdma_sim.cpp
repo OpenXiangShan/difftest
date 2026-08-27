@@ -33,6 +33,11 @@
 #define BUFFER_SIZE        65536
 #define WORKLOAD_PATH_SIZE 4096
 
+static bool xdma_sim_debug_c2h() {
+  static const bool enabled = std::getenv("FPGA_DEBUG_C2H") != nullptr;
+  return enabled;
+}
+
 template <typename T> class xdma_shm_device {
 private:
   int shm_fd = -1;
@@ -81,6 +86,8 @@ typedef struct {
   pthread_cond_t write_cond;
   bool read_waiting;
   bool data_valid;
+  bool closed;
+  bool discard;
   uint64_t tkeep;
   uint8_t tlast;
   int read_size;
@@ -130,6 +137,12 @@ public:
       pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
       pthread_cond_init(&shm_ptr->read_cond, &cattr);
       pthread_cond_init(&shm_ptr->write_cond, &cattr);
+      shm_ptr->read_waiting = false;
+      shm_ptr->data_valid = false;
+      shm_ptr->closed = false;
+      shm_ptr->discard = false;
+      shm_ptr->read_size = 0;
+      shm_ptr->write_size = 0;
     }
   }
 
@@ -137,11 +150,21 @@ public:
     assert(size <= BUFFER_SIZE);
     pthread_mutex_lock(&shm_ptr->lock);
 
+    if (shm_ptr->closed) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return -1;
+    }
     shm_ptr->read_waiting = true;
     shm_ptr->write_size = 0;
     shm_ptr->read_size = size;
-    while (shm_ptr->write_size < size) {
+    while (shm_ptr->write_size < size && !shm_ptr->closed) {
       pthread_cond_wait(&shm_ptr->read_cond, &shm_ptr->lock);
+    }
+    if (shm_ptr->closed) {
+      shm_ptr->read_waiting = false;
+      pthread_cond_broadcast(&shm_ptr->write_cond);
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return -1;
     }
     size_t to_copy = size < shm_ptr->write_size ? size : shm_ptr->write_size;
     memcpy(buf, shm_ptr->buffer, to_copy);
@@ -151,11 +174,32 @@ public:
     return to_copy;
   }
 
+  int drain(int timeout_ms) {
+    pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->discard = true;
+    pthread_mutex_unlock(&shm_ptr->lock);
+    if (timeout_ms > 0) {
+      usleep(static_cast<useconds_t>(timeout_ms) * 1000);
+    }
+    pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->discard = false;
+    pthread_mutex_unlock(&shm_ptr->lock);
+    return 0;
+  }
+
   int write(const char *buf, unsigned char tlast, size_t size) {
     pthread_mutex_lock(&shm_ptr->lock);
-    while (!shm_ptr->read_waiting) {
+    while (!shm_ptr->read_waiting && !shm_ptr->discard && !shm_ptr->closed) {
       pthread_mutex_unlock(&shm_ptr->lock);
       pthread_mutex_lock(&shm_ptr->lock);
+    }
+    if (shm_ptr->closed) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return -1;
+    }
+    if (shm_ptr->discard && !shm_ptr->read_waiting) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return static_cast<int>(size);
     }
     size_t space = shm_ptr->read_size - shm_ptr->write_size;
     size_t to_write = size < space ? size : space;
@@ -172,6 +216,15 @@ public:
     pthread_mutex_unlock(&shm_ptr->lock);
 
     return to_write;
+  }
+
+  void cancel() {
+    pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->closed = true;
+    shm_ptr->read_waiting = false;
+    pthread_cond_broadcast(&shm_ptr->read_cond);
+    pthread_cond_broadcast(&shm_ptr->write_cond);
+    pthread_mutex_unlock(&shm_ptr->lock);
   }
 };
 
@@ -441,7 +494,33 @@ void xdma_sim_close(int channel) {
 }
 
 int xdma_sim_read(int channel, char *buf, size_t size) {
-  return xsim[channel]->read(buf, size);
+  static uint64_t read_count = 0;
+  uint64_t seq = ++read_count;
+  if (xdma_sim_debug_c2h() && (seq <= 4 || (seq % 64) == 0)) {
+    fprintf(stderr, "[xdma-sim] C2H read begin seq=%lu size=%zu\n", seq, size);
+    fflush(stderr);
+  }
+  int ret = xsim[channel]->read(buf, size);
+  if (xdma_sim_debug_c2h() && (seq <= 4 || (seq % 64) == 0)) {
+    fprintf(stderr, "[xdma-sim] C2H read done seq=%lu ret=%d\n", seq, ret);
+    fflush(stderr);
+  }
+  return ret;
+}
+
+int xdma_sim_drain(int channel, int timeout_ms) {
+  if (xsim[channel] == nullptr) {
+    return -1;
+  }
+  return xsim[channel]->drain(timeout_ms);
+}
+
+void xdma_sim_cancel(int channel) {
+  pthread_mutex_lock(&xsim_lock);
+  if (xsim[channel] != nullptr) {
+    xsim[channel]->cancel();
+  }
+  pthread_mutex_unlock(&xsim_lock);
 }
 
 int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size) {
@@ -535,6 +614,12 @@ extern "C" void v_xdma_write(uint8_t channel, const char *axi_tdata, uint8_t axi
 }
 
 extern "C" void v_xdma_c2h_write(uint8_t channel, const char *axi_tdata, uint8_t axi_tlast) {
+  static uint64_t beat_count = 0;
+  uint64_t seq = ++beat_count;
+  if (xdma_sim_debug_c2h() && (axi_tlast || seq <= 4)) {
+    fprintf(stderr, "[xdma-sim] C2H beat seq=%lu last=%u\n", seq, axi_tlast);
+    fflush(stderr);
+  }
   xdma_sim_write(channel, axi_tdata, axi_tlast, CONFIG_DIFFTEST_HOST_AXIS_BYTES);
 }
 
