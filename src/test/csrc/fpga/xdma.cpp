@@ -25,6 +25,7 @@
 #include <fstream>
 #include <inttypes.h>
 #include <iostream>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,6 +118,139 @@ void FpgaXdma::wait_fpga_io_done(uint64_t address, const char *tag) {
   exit(1);
 }
 
+#ifdef CONFIG_DIFFTEST_REPLAY_TRACE
+bool FpgaXdma::queue_replay_trace(uint16_t trace_head, uint16_t trace_size) {
+  if (replay_trace_pending || replay_trace_requested) {
+    return true;
+  }
+
+  replay_trace_pending_head = trace_head;
+  replay_trace_pending_size = trace_size;
+  replay_trace_pending = true;
+  return true;
+}
+
+bool FpgaXdma::service_replay_trace_request() {
+  if (!replay_trace_pending || replay_trace_requested) {
+    return true;
+  }
+
+  fpga_io(HOST_IO_DIFFTEST_ENABLE, false);
+#ifdef FPGA_SIM
+  // Let already queued Path-A C2H ranges drain/discard before switching the
+  // shared channel to the replay dump stream.
+  xdma_sim_drain(0, 100);
+#endif
+  fpga_io(HOST_IO_REPLAY_TRACE_HEAD, static_cast<uint32_t>(replay_trace_pending_head));
+  fpga_io(HOST_IO_REPLAY_TRACE_SIZE, static_cast<uint32_t>(replay_trace_pending_size));
+  fpga_io(HOST_IO_REPLAY_TRACE_FREEZE, true);
+
+  const int max_retry = 1000;
+  for (int retry = 0; retry < max_retry; retry++) {
+    if (fpga_io_read(HOST_IO_REPLAY_TRACE_STATUS) & REPLAY_TRACE_STATUS_FROZEN) {
+      break;
+    }
+    usleep(1000);
+    if (retry == max_retry - 1) {
+      fprintf(stderr, "[fpga-host] timeout freezing replay trace buffer\n");
+      return false;
+    }
+  }
+
+  replay_trace_requested = true;
+  replay_trace_header_seen = false;
+  replay_trace_discarded = 0;
+  replay_trace_remaining = 0;
+  replay_trace_packets = 0;
+  const char *path = std::getenv("FPGA_REPLAY_TRACE_DUMP");
+  if (path && path[0]) {
+    replay_trace_file.open(path, std::ios::binary | std::ios::trunc);
+    if (!replay_trace_file.is_open()) {
+      fprintf(stderr, "[fpga-host] failed to open replay trace file %s\n", path);
+      replay_trace_requested = false;
+      return false;
+    }
+  }
+  fpga_io(HOST_IO_REPLAY_TRACE_DUMP, true);
+  printf("[fpga-host] replay trace requested: head=%u size=%u\n", replay_trace_pending_head,
+         replay_trace_pending_size);
+  replay_trace_pending = false;
+  return true;
+}
+
+bool FpgaXdma::consume_replay_trace_packet(const uint8_t *payload) {
+  if ((!replay_trace_pending && !replay_trace_requested) || !payload) {
+    return false;
+  }
+  if (replay_trace_pending) {
+    return true;
+  }
+
+  if (!replay_trace_header_seen) {
+    ReplayTraceDumpHeader header;
+    memcpy(&header, payload, sizeof(header));
+    static bool replay_trace_debug_dumped = false;
+    if (!replay_trace_debug_dumped) {
+      replay_trace_debug_dumped = true;
+      fprintf(stderr, "[fpga-host] replay trace first beat:");
+      for (size_t i = 0; i < sizeof(header); i++) fprintf(stderr, " %02x", payload[i]);
+      fprintf(stderr, "\n");
+    }
+    if (header.magic != UINT64_C(0x5254524143453031)) {
+      replay_trace_discarded++;
+      return true;
+    }
+    if (header.version != 1 || header.trace_head >= CONFIG_DIFFTEST_REPLAY_TRACE_DEPTH ||
+        header.trace_size > CONFIG_DIFFTEST_REPLAY_TRACE_DEPTH ||
+        header.dump_words > CONFIG_DIFFTEST_REPLAY_TRACE_DEPTH ||
+        (header.dump_words != 0 && header.dump_start >= CONFIG_DIFFTEST_REPLAY_TRACE_DEPTH)) {
+      fprintf(stderr, "[fpga-host] invalid replay trace header\n");
+      replay_trace_requested = false;
+      running = false;
+      return true;
+    }
+    replay_trace_header_seen = true;
+    if (replay_trace_discarded != 0) {
+      printf("[fpga-host] discarded %u queued Batch beats before replay trace\n", replay_trace_discarded);
+    }
+    replay_trace_remaining = header.dump_words;
+    replay_trace_packets = 1 + header.dump_words;
+    replay_trace_packets += (8 - (replay_trace_packets & 7)) & 7;
+    if (replay_trace_file.is_open()) {
+      replay_trace_file.write(reinterpret_cast<const char *>(&header), sizeof(header));
+    }
+    if (header.flags & REPLAY_TRACE_HEADER_RANGE_LOST) {
+      fprintf(stderr, "[fpga-host] replay trace range was overwritten before freeze\n");
+      replay_trace_requested = false;
+      running = false;
+      return true;
+    }
+  } else if (replay_trace_remaining != 0) {
+    if (replay_trace_file.is_open()) {
+      replay_trace_file.write(reinterpret_cast<const char *>(payload), CONFIG_DIFFTEST_BATCH_BYTELEN);
+    }
+    replay_trace_remaining--;
+    v_difftest_Batch(const_cast<uint8_t *>(payload));
+  }
+
+  if (replay_trace_packets != 0) {
+    replay_trace_packets--;
+  }
+  if (replay_trace_packets == 0) {
+    if (replay_trace_file.is_open()) {
+      replay_trace_file.flush();
+      replay_trace_file.close();
+    }
+    replay_trace_requested = false;
+    if (running) {
+      fprintf(stderr, "[fpga-host] replay range ended without reproducing the error\n");
+      running = false;
+    }
+  }
+  return true;
+}
+#endif // CONFIG_DIFFTEST_REPLAY_TRACE
+
 #ifdef CONFIG_USE_XDMA_H2C
 void FpgaXdma::h2c_load_workload(const void *payload, uint64_t size) {
   if (payload == nullptr) {
@@ -171,6 +305,11 @@ void FpgaXdma::h2c_load_workload(const void *payload, uint64_t size) {
 void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
   (void)workload;
 #ifdef FPGA_SIM
+  static const bool debug_axilite = std::getenv("FPGA_DEBUG_AXILITE") != nullptr;
+  if (debug_axilite) {
+    fprintf(stderr, "[fpga-host] AXIL write begin addr=0x%lx value=0x%lx\n", addr, value);
+    fflush(stderr);
+  }
   if (is_bypass) {
     fprintf(stderr, "[fpga-host] FPGA_SIM XDMA bypass write is unsupported\n");
     exit(-1);
@@ -178,6 +317,10 @@ void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr,
   if (xdma_sim_axilite_write(static_cast<uint32_t>(addr), static_cast<uint32_t>(value), 0xf) != 0) {
     fprintf(stderr, "[fpga-host] FPGA_SIM AXI-Lite command queue is full, addr=0x%lx value=0x%lx\n", addr, value);
     exit(-1);
+  }
+  if (debug_axilite) {
+    fprintf(stderr, "[fpga-host] AXIL write done addr=0x%lx\n", addr);
+    fflush(stderr);
   }
   return;
 #endif // FPGA_SIM
@@ -227,6 +370,11 @@ void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr,
 
 uint32_t FpgaXdma::device_read(bool is_bypass, uint64_t addr) {
 #ifdef FPGA_SIM
+  static const bool debug_axilite = std::getenv("FPGA_DEBUG_AXILITE") != nullptr;
+  if (debug_axilite) {
+    fprintf(stderr, "[fpga-host] AXIL read begin addr=0x%lx\n", addr);
+    fflush(stderr);
+  }
   if (is_bypass) {
     fprintf(stderr, "[fpga-host] FPGA_SIM XDMA bypass read is unsupported\n");
     exit(-1);
@@ -235,6 +383,10 @@ uint32_t FpgaXdma::device_read(bool is_bypass, uint64_t addr) {
   if (xdma_sim_axilite_read(static_cast<uint32_t>(addr), &data) != 0) {
     fprintf(stderr, "[fpga-host] FPGA_SIM AXI-Lite read failed, addr=0x%lx\n", addr);
     exit(-1);
+  }
+  if (debug_axilite) {
+    fprintf(stderr, "[fpga-host] AXIL read done addr=0x%lx data=0x%x\n", addr, data);
+    fflush(stderr);
   }
   return data;
 #endif // FPGA_SIM
@@ -281,6 +433,11 @@ void FpgaXdma::start_transmit_thread() {
 }
 
 void FpgaXdma::stop_thansmit_thread() {
+#ifdef FPGA_SIM
+  for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
+    xdma_sim_cancel(i);
+  }
+#endif // FPGA_SIM
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     if (receive_thread[i].joinable())
       receive_thread[i].join();
@@ -305,6 +462,20 @@ void FpgaXdma::read_xdma_thread(int channel) {
 #ifdef FPGA_SIM
     ssize_t size = static_cast<ssize_t>(xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead)));
 #else
+    struct pollfd poll_fd = {xdma_c2h_fd[channel], POLLIN, 0};
+    int poll_result;
+    do {
+      poll_result = poll(&poll_fd, 1, 100);
+    } while (poll_result < 0 && errno == EINTR);
+    if (poll_result == 0) {
+      continue;
+    }
+    if (poll_result < 0 || (poll_fd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+      break;
+    }
+    if (!running || signal_num != 0) {
+      break;
+    }
     ssize_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
     if (size <= 0) {
@@ -337,9 +508,20 @@ void FpgaXdma::write_difftest_thread() {
     recv_count++;
     // packge unpack
     for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
+#ifdef CONFIG_DIFFTEST_REPLAY_TRACE
+      if (!consume_replay_trace_packet(packge->diff_packge[i].diff_packge)) {
+        v_difftest_Batch(packge->diff_packge[i].diff_packge);
+      }
+#else
       v_difftest_Batch(packge->diff_packge[i].diff_packge);
+#endif // CONFIG_DIFFTEST_REPLAY_TRACE
     }
     xdma_mempool.set_free_chunk();
+#ifdef CONFIG_DIFFTEST_REPLAY_TRACE
+    if (!service_replay_trace_request()) {
+      running = false;
+    }
+#endif // CONFIG_DIFFTEST_REPLAY_TRACE
   }
 }
 
@@ -371,8 +553,19 @@ void FpgaXdma::read_and_process() {
       continue;
     }
     for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
+#ifdef CONFIG_DIFFTEST_REPLAY_TRACE
+      if (!consume_replay_trace_packet(packge->diff_packge[i].diff_packge)) {
+        v_difftest_Batch(packge->diff_packge[i].diff_packge);
+      }
+#else
       v_difftest_Batch(packge->diff_packge[i].diff_packge);
+#endif // CONFIG_DIFFTEST_REPLAY_TRACE
     }
+#ifdef CONFIG_DIFFTEST_REPLAY_TRACE
+    if (!service_replay_trace_request()) {
+      running = false;
+    }
+#endif // CONFIG_DIFFTEST_REPLAY_TRACE
   }
   free(packge);
 }

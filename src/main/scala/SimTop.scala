@@ -164,6 +164,14 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         host.io.difftest.valid := fpgaIO.valid && ctrl.diffEnable
         host.io.difftest.bits := fpgaIO.bits
         fpgaIO.ready := Mux(ctrl.diffEnable, host.io.difftest.ready, true.B)
+        host.io.enable := ctrl.diffEnable
+        host.io.replayTrace.valid := false.B
+        host.io.replayTrace.bits := 0.U
+        gateway.replayTraceDump.foreach { replayTraceDump =>
+          host.io.replayTrace.valid := replayTraceDump.valid
+          host.io.replayTrace.bits := replayTraceDump.bits
+          replayTraceDump.ready := host.io.replayTrace.ready
+        }
         val pcie_clock = IO(Input(Clock()))
         host.io.pcie_clock := pcie_clock
 
@@ -175,6 +183,11 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
 
         val cfg_axilite = IO(Flipped(new VerilogAXI4LiteRecord(32, 32)))
         cfg.io.axilite <> cfg_axilite.viewAs[AXI4LiteBundle]
+        cfg.io.replayTraceStatus := 0.U.asTypeOf(chiselTypeOf(cfg.io.replayTraceStatus))
+        gateway.replayTraceRequest.foreach(_ := cfg.io.replayTraceRequest)
+        gateway.replayTraceStatus.foreach { replayTraceStatus =>
+          cfg.io.replayTraceStatus := replayTraceStatus
+        }
 
         val hostCtrl = IO(Output(new XDMAHostCtrlIO))
         hostCtrl := ctrl

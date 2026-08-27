@@ -38,7 +38,7 @@ object Delta {
   }
   def collect(): Unit = {
     val deltaCpp = ListBuffer.empty[String]
-    val deltaInsts = instances.filter(_.supportsDelta).distinct
+    val deltaInsts = instances.filter(_.supportsDelta).distinctBy(_.desiredCppName)
     val deltaDecl = deltaInsts.map { inst =>
       val len = inst.dataElements.flatMap(_._3).length
       val elemType = s"uint${inst.deltaElemWidth}_t"
@@ -69,11 +69,13 @@ object Delta {
          |class DeltaStats {
          |private:
          |  DeltaState buffer[NUM_CORES];
+         |  DeltaState checkpoint[NUM_CORES];
          |public:
          |  bool hasProgress = false;
          |
          |  DeltaStats() {
          |    memset(buffer, 0, sizeof(buffer));
+         |    memset(checkpoint, 0, sizeof(checkpoint));
          |  }
          |  DeltaState* get(int coreid){
          |    return buffer + coreid;
@@ -87,6 +89,14 @@ object Delta {
          |      DeltaState* delta = get(i);
          |      ${deltaSync("dut", "delta").mkString("\n      ")}
          |    }
+         |    hasProgress = false;
+         |    get(0)->delta_info.valid = false;
+         |  }
+         |  void commit() {
+         |    memcpy(checkpoint, buffer, sizeof(buffer));
+         |  }
+         |  void restore() {
+         |    memcpy(buffer, checkpoint, sizeof(buffer));
          |    hasProgress = false;
          |    get(0)->delta_info.valid = false;
          |  }

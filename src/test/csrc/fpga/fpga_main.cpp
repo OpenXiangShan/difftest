@@ -18,6 +18,7 @@
 #include "common.h"
 #include "device.h"
 #include "diffstate.h"
+#include "difftest-dpic.h"
 #include "difftest.h"
 #include "flash.h"
 #include "goldenmem.h"
@@ -339,6 +340,29 @@ extern "C" void fpga_nstep(uint8_t step) {
   if (fpga_result != FPGA_RUN)
     return;
   int ret = fpga_get_result(step);
+#ifdef CONFIG_DIFFTEST_REPLAY_TRACE
+  if (ret == FPGA_RUN) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      uint16_t trace_head = 0;
+      uint16_t trace_size = 0;
+      if (difftest[i]->get_replay_range(&trace_head, &trace_size)) {
+        if (!xdma_device->replay_trace_in_progress()) {
+#ifdef CONFIG_DIFFTEST_DELTA
+          difftest_delta_restore();
+#endif // CONFIG_DIFFTEST_DELTA
+        }
+        if (!xdma_device->queue_replay_trace(trace_head, trace_size)) {
+          fpga_result = FPGA_FAIL;
+          xdma_device->stop();
+        }
+        return;
+      }
+    }
+#ifdef CONFIG_DIFFTEST_DELTA
+    difftest_delta_commit();
+#endif // CONFIG_DIFFTEST_DELTA
+  }
+#endif // CONFIG_DIFFTEST_REPLAY_TRACE
   if (ret != FPGA_RUN) {
     fpga_display_result(ret);
     fpga_result = ret;
