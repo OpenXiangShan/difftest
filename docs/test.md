@@ -192,21 +192,35 @@ make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2
 bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO
 bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO WAVE=1   # with waveform
 bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO RAM_SIZE=128MB SEED=1234 RANDOM_MEM=1
+bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO CPU_AXI_DELAY=8
+bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO FLASH=$BOOTROM CPU_AXI_DELAY=8
 ```
 
 | Parameter | Effect |
 |-----------|--------|
 | `WORKLOAD=FILE` | Boot image path (required) |
 | `DIFF=PATH` | Reference SO (required) |
+| `FLASH=FILE` | Load the same boot ROM image into the RTL flash and reference model |
 | `WAVE=1` | Enable waveform dump |
 | `RAM_SIZE=SIZE` | Forward the RAM size to `fpga-host` and `simv`; must be MB-aligned for FPGA_SIM ConfigBar |
 | `SEED=NUM` | Forward the random seed to `fpga-host` and `simv` |
 | `RANDOM_MEM=1` | Enable random memory initialization in `fpga-host` and `simv` |
+| `CPU_AXI_DELAY=NUM` | Delay CPU AXI read/write address requests by at least `NUM` CPU AXI clock cycles (default `0`) |
 
 In FPGA_SIM, `fpga-host` writes seed, RAM size in MB, and random-memory enable
 to the XDMA ConfigBar. `cosim.sh` also passes matching plusargs to `simv`, so
 the software memory image and simulated hardware memory start from the same
 random contents.
+
+Use `FLASH=FILE` when the selected FPGA configuration needs a non-default boot
+ROM. The script passes the image to both `fpga-host -F` and the simulated RTL
+through `+flash=`, keeping the DUT and reference boot instruction streams
+identical.
+
+`CPU_AXI_DELAY` is written through the same XDMA ConfigBar used on hardware.
+The delay is sampled when each CPU `AR` or `AW` request is accepted; `W`, `B`,
+and `R` remain direct. Program the delay while the CPU is held in host reset;
+the standard `fpga-host` startup sequence does this before enabling CPU memory.
 
 #### Precautions
 

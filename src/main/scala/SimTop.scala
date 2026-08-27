@@ -190,6 +190,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
           AXI4Bundle.connectRecord(cpuAxi, cpuRecord)
           val memCtrl = Module(new DifftestMemCtrl(cpuAxi.cloneType, Gateway.hostAxisWidth, baseAddr = 0x80000000L))
           memCtrl.io.ctrl <> cfg.io.memCtrl
+          memCtrl.io.cpu_clock := clock
           memCtrl.io.pcie_clock := pcie_clock
           memCtrl.io.h2c <> from_host_axis.viewAs[AXI4Stream]
           memCtrl.io.cpu <> cpuAxi

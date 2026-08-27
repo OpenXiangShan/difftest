@@ -265,6 +265,7 @@ class DifftestMemCtrl(
 
   val io = IO(new Bundle {
     val ctrl = Flipped(new XDMAMemCtrlIO)
+    val cpu_clock = Input(Clock())
     val pcie_clock = Input(Clock())
     val h2c = Flipped(new AXI4Stream(hostAxisWidth))
     val cpu = Flipped(new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth))
@@ -295,11 +296,18 @@ class DifftestMemCtrl(
   private val memSrcCPU = io.ctrl.memCPU && !memSrcInit && !memSrcH2C
   private val memInitAxi = Wire(new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth))
   private val h2c = Module(new H2CAXIs2Mem(hostAxisWidth, addrWidth, dataWidth, idWidth, userWidth, baseAddr))
+  // The CPU clock can be gated independently, so delay state must follow the AXI channel clock.
+  private val cpuDelay = withClockAndReset(io.cpu_clock, reset) {
+    Module(new AXI4DynamicDelayer(axiType))
+  }
 
   h2c.io.pcie_clock := io.pcie_clock
   h2c.io.enable := io.ctrl.memH2C
   h2c.io.sizeMB := io.ctrl.h2cSizeMB
   h2c.io.axis <> io.h2c
+  cpuDelay.io.enable := memSrcCPU
+  cpuDelay.io.delayCycles := io.ctrl.cpuAXIDelay
+  cpuDelay.io.in <> io.cpu
 
   io.ctrl.memStatus := MuxCase(
     0.U(2.W),
@@ -327,7 +335,7 @@ class DifftestMemCtrl(
   memInitAxi.ar.bits := 0.U.asTypeOf(memInitAxi.ar.bits)
   memInitAxi.r.ready := false.B
 
-  connectMux(Seq(io.cpu -> memSrcCPU, h2c.io.axi -> memSrcH2C, memInitAxi -> memSrcInit))
+  connectMux(Seq(cpuDelay.io.out -> memSrcCPU, h2c.io.axi -> memSrcH2C, memInitAxi -> memSrcInit))
 
   switch(state) {
     is(sIdle) {

@@ -3,10 +3,12 @@ set -o pipefail
 
 WORKLOAD=""
 DIFF=""
+FLASH=""
 WAVE=0
 RAM_SIZE=""
 SEED=""
 RANDOM_MEM=0
+CPU_AXI_DELAY=0
 SPLITVIEW="${SPLITVIEW:-0}"
 SPLITVIEW_LOG="${SPLITVIEW_LOG:-}"
 
@@ -17,6 +19,9 @@ for arg in "$@"; do
       ;;
     DIFF=*)
       DIFF="${arg#DIFF=}"
+      ;;
+    FLASH=*)
+      FLASH="${arg#FLASH=}"
       ;;
     WAVE=*)
       WAVE="${arg#WAVE=}"
@@ -29,6 +34,9 @@ for arg in "$@"; do
       ;;
     RANDOM_MEM=*)
       RANDOM_MEM="${arg#RANDOM_MEM=}"
+      ;;
+    CPU_AXI_DELAY=*)
+      CPU_AXI_DELAY="${arg#CPU_AXI_DELAY=}"
       ;;
     SPLITVIEW=*)
       SPLITVIEW="${arg#SPLITVIEW=}"
@@ -73,6 +81,10 @@ cleanup() {
 trap cleanup INT TERM EXIT
 
 HOST_ARGS=(--diff "${DIFF}" -i "${WORKLOAD}")
+if [[ -n "${FLASH}" ]]; then
+  HOST_ARGS+=(-F "${FLASH}")
+fi
+HOST_ARGS+=(--cpu-axi-delay="${CPU_AXI_DELAY}")
 if [[ -n "${RAM_SIZE}" ]]; then
   HOST_ARGS+=(--ram-size="${RAM_SIZE}")
 fi
@@ -93,6 +105,9 @@ if [[ "${SPLITVIEW}" -eq 1 ]]; then
 fi
 
 SIMV_ARGS=(+e=0 +no-diff)
+if [[ -n "${FLASH}" ]]; then
+  SIMV_ARGS+=(+flash="${FLASH}")
+fi
 if [[ -n "${RAM_SIZE}" ]]; then
   SIMV_ARGS+=(+ram_size="${RAM_SIZE}")
 fi
