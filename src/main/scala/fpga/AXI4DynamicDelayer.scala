@@ -38,16 +38,54 @@ private class AXI4DynamicChannelDelayer(
     val out = Decoupled(UInt(dataWidth.W))
   })
 
-  private val queue = Module(new Queue(UInt(entryWidth.W), depth, pipe = false, flow = true))
-  queue.io.enq.valid := io.enable && io.in.valid
-  queue.io.enq.bits := Cat(io.in.bits, io.releaseCycle)
-  io.in.ready := io.enable && queue.io.enq.ready
+  private val inputEntry = Cat(io.in.bits, io.releaseCycle)
+  private val headEntry = Reg(UInt(entryWidth.W))
+  private val headValid = RegInit(false.B)
+  private val headReleaseCycle = headEntry(cycleWidth - 1, 0)
+  private val released = headValid && io.currentCycle >= headReleaseCycle
+  private val headFire = io.enable && released && io.out.ready
 
-  private val headReleaseCycle = queue.io.deq.bits(cycleWidth - 1, 0)
-  private val released = queue.io.deq.valid && io.currentCycle >= headReleaseCycle
-  queue.io.deq.ready := io.enable && io.out.ready && released
   io.out.valid := io.enable && released
-  io.out.bits := queue.io.deq.bits(entryWidth - 1, cycleWidth)
+  io.out.bits := headEntry(entryWidth - 1, cycleWidth)
+
+  if (depth == 1) {
+    io.in.ready := io.enable && (!headValid || headFire)
+
+    when(io.enable) {
+      when(headFire) {
+        headValid := false.B
+      }
+      when(io.in.fire) {
+        headEntry := inputEntry
+        headValid := true.B
+      }
+    }
+  } else {
+    val tail = Module(new Queue(UInt(entryWidth.W), depth - 1, pipe = true, flow = false))
+    val inputToHead = !headValid || (headFire && !tail.io.deq.valid)
+
+    tail.io.enq.valid := io.enable && io.in.valid && !inputToHead
+    tail.io.enq.bits := inputEntry
+    tail.io.deq.ready := headFire
+    io.in.ready := io.enable && (inputToHead || tail.io.enq.ready)
+
+    when(io.enable) {
+      when(headFire) {
+        when(tail.io.deq.valid) {
+          headEntry := tail.io.deq.bits
+          headValid := true.B
+        }.elsewhen(io.in.fire) {
+          headEntry := inputEntry
+          headValid := true.B
+        }.otherwise {
+          headValid := false.B
+        }
+      }.elsewhen(!headValid && io.in.fire) {
+        headEntry := inputEntry
+        headValid := true.B
+      }
+    }
+  }
 
   private val stalled = RegNext(io.enable && io.out.valid && !io.out.ready, false.B)
   private val stalledBits = RegEnable(io.out.bits, io.enable && io.out.valid && !io.out.ready)

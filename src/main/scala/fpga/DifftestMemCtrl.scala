@@ -249,6 +249,38 @@ class H2CAXIs2Mem(
   }
 }
 
+private[fpga] class StableUIntCDC(width: Int) extends Module {
+  require(width > 0, s"CDC width must be positive, got $width")
+
+  val io = IO(new Bundle {
+    val destinationClock = Input(Clock())
+    val in = Input(UInt(width.W))
+    val out = Output(UInt(width.W))
+  })
+
+  private val sourceValue = RegInit(0.U(width.W))
+  private val request = RegInit(false.B)
+  private val acknowledge = Wire(Bool())
+  private val acknowledgeSync = RegNext(RegNext(acknowledge, false.B), false.B)
+  when(request === acknowledgeSync && io.in =/= sourceValue) {
+    sourceValue := io.in
+    request := ~request
+  }
+
+  // The source value remains stable until the request has crossed and returned.
+  io.out := withClockAndReset(io.destinationClock, reset) {
+    val requestSync = RegNext(RegNext(request, false.B), false.B)
+    val requestSeen = RegInit(false.B)
+    val value = RegInit(0.U(width.W))
+    when(requestSync =/= requestSeen) {
+      value := sourceValue
+      requestSeen := requestSync
+    }
+    acknowledge := requestSeen
+    value
+  }
+}
+
 class DifftestMemCtrl(
   axiType: AXI4Bundle,
   hostAxisWidth: Int,
@@ -296,6 +328,9 @@ class DifftestMemCtrl(
   private val memSrcCPU = io.ctrl.memCPU && !memSrcInit && !memSrcH2C
   private val memInitAxi = Wire(new AXI4Bundle(addrWidth, dataWidth, idWidth, userWidth))
   private val h2c = Module(new H2CAXIs2Mem(hostAxisWidth, addrWidth, dataWidth, idWidth, userWidth, baseAddr))
+  private val cpuDelayConfig = Module(new StableUIntCDC(32))
+  cpuDelayConfig.io.destinationClock := io.cpu_clock
+  cpuDelayConfig.io.in := io.ctrl.cpuAXIDelay
   // The CPU clock can be gated independently, so delay state must follow the AXI channel clock.
   private val cpuDelay = withClockAndReset(io.cpu_clock, reset) {
     Module(new AXI4DynamicDelayer(axiType))
@@ -306,7 +341,7 @@ class DifftestMemCtrl(
   h2c.io.sizeMB := io.ctrl.h2cSizeMB
   h2c.io.axis <> io.h2c
   cpuDelay.io.enable := memSrcCPU
-  cpuDelay.io.delayCycles := io.ctrl.cpuAXIDelay
+  cpuDelay.io.delayCycles := cpuDelayConfig.io.out
   cpuDelay.io.in <> io.cpu
 
   io.ctrl.memStatus := MuxCase(
