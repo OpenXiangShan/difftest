@@ -18,6 +18,7 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "splitview.h"
+#include <cerrno>
 #include <cmath>
 #include <getopt.h>
 #ifdef CONFIG_DIFFTEST_IOTRACE
@@ -30,6 +31,7 @@ enum {
   OPT_NO_SQUASH,
   OPT_SQUASH_SIZE,
   OPT_NO_SQUASH_AFTER_INSTR,
+  OPT_PMEM_BASE,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -77,6 +79,21 @@ static uint64_t parse_instr_count(const char *str, const char *arg) {
   return static_cast<uint64_t>(rounded);
 }
 
+uint64_t parse_address(const char *str, const char *arg) {
+  if (str == nullptr || str[0] == '\0' || str[0] == '-') {
+    fprintf(stderr, "[ERROR] --%s requires a non-negative decimal or 0x-prefixed address\n", arg);
+    exit(EINVAL);
+  }
+  char *end = nullptr;
+  errno = 0;
+  unsigned long long value = strtoull(str, &end, 0);
+  if (errno || end == str || *end != '\0') {
+    fprintf(stderr, "[ERROR] --%s requires a non-negative decimal or 0x-prefixed address\n", arg);
+    exit(EINVAL);
+  }
+  return static_cast<uint64_t>(value);
+}
+
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
   printf("\n");
@@ -117,6 +134,7 @@ static inline void print_help(const char *file) {
   printf("      --sim-run-ahead        let a fork of simulator run ahead of commit for perf analysis\n");
   printf("      --wave-path=FILE       dump waveform to a specified PATH\n");
   printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
+  printf("      --pmem-base=ADDR       guest physical memory base, decimal or 0x-prefixed\n");
   printf("      --cst-file=FILE        load constantin from FILE, stdin, or default init values\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
@@ -192,6 +210,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "no-squash",         0, NULL, OPT_NO_SQUASH },
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
+    { "pmem-base",         1, NULL, OPT_PMEM_BASE },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -317,6 +336,9 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 #else
         printf("[WARN] chisel db is not enabled at compile time, ignore --db-path\n");
 #endif
+        continue;
+      case OPT_PMEM_BASE:
+        args.pmem_base = parse_address(optarg, "pmem-base");
         continue;
       case OPT_NO_SQUASH: args.enable_squash = false; continue;
       case OPT_SQUASH_SIZE: {

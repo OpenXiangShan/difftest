@@ -82,6 +82,11 @@ extern "C" void set_ram_size(char *size) {
   args.ram_size = strdup(size);
 }
 
+extern "C" void set_pmem_base(char *address) {
+  PMEM_BASE = parse_address(address, "pmem-base");
+  printf("pmem base: 0x%lx\n", PMEM_BASE);
+}
+
 extern "C" void set_overwrite_autoset() {
   FILE *fp = fopen(args.gcpt_restore, "rb");
   if (fp == NULL) {

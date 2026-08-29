@@ -45,7 +45,10 @@
 #endif
 
 // physical memory base address
-#define _PMEM_BASE 0x80000000UL
+#ifndef CONFIG_PMEM_BASE
+#define CONFIG_PMEM_BASE 0x80000000UL
+#endif
+#define _PMEM_BASE CONFIG_PMEM_BASE
 extern uint64_t PMEM_BASE;
 extern uint64_t FIRST_INST_ADDRESS;
 

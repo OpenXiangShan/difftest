@@ -73,6 +73,7 @@ int main(int argc, const char *argv[]) {
   fpga_ila_arm_cmd = std::getenv("FPGA_ILA_ARM_CMD");
   fpga_ila_upload_cmd = std::getenv("FPGA_ILA_UPLOAD_CMD");
   args = parse_args(argc, argv);
+  PMEM_BASE = args.pmem_base;
 
   common_init(argv[0]);
 

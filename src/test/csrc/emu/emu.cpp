@@ -64,6 +64,7 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif // VERILATOR
 
   args = parse_args(argc, argv);
+  PMEM_BASE = args.pmem_base;
 #ifdef VERILATOR
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
 #endif

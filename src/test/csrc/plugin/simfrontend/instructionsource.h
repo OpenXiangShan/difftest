@@ -17,6 +17,7 @@
 #ifndef INSTRUCTIONSOURCE_H
 #define INSTRUCTIONSOURCE_H
 
+#include "config.h"
 #include "tracereader.h"
 #include <cstddef>
 #include <cstdint>
@@ -47,7 +48,6 @@ public:
 
 private:
   static constexpr uint64_t FLASH_BASE = 0x10000000ULL;
-  static constexpr uint64_t RAM_BASE = 0x80000000ULL;
 
   bool decode_builtin_flash(const FlashImageView &flash);
   bool skip_legacy_flash_prefix();

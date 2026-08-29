@@ -79,7 +79,7 @@ bool InstructionTraceSource::skip_legacy_flash_prefix() {
       error_message = "invalid instruction trace line while skipping legacy flash prefix";
       return false;
     }
-    if (entry.pc >= RAM_BASE) {
+    if (entry.pc >= PMEM_BASE) {
       break;
     }
     trace_reader.get_next_line(line);

@@ -31,6 +31,7 @@ struct CommonArgs {
   uint64_t overwrite_nbytes = 0xe00;
   const char *dramsim3_ini = nullptr;
   uint64_t copy_ram_offset = 0;
+  uint64_t pmem_base = _PMEM_BASE;
   const char *dramsim3_outdir = nullptr;
   const char *splitview_log_path = nullptr;
   bool random_mem = false;
@@ -77,5 +78,6 @@ struct CommonArgs {
 };
 
 CommonArgs parse_args(int argc, const char *argv[]);
+uint64_t parse_address(const char *str, const char *arg);
 
 #endif // __ARGS_H

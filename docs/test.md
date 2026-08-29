@@ -40,6 +40,7 @@ Optional build flags:
 | `DIFFTEST_QUERY=1` | Enable Query DB (SQLite) support |
 | `DIFFTEST_PERFCNT=1` | Enable performance counters |
 | `MMA_BACKEND=cpu\|cuda` | Select the software MMA reference backend (default: `cpu`) |
+| `PMEM_BASE=<ADDR>` | Set the compile-time default guest physical memory base |
 | `MILL_ARGS="--difftest-config <CONFIG>"` | Set DifftestConfig (see [hw-flow.md](hw-flow.md)) |
 
 Examples:
@@ -82,6 +83,7 @@ Key runtime options:
 | `-e, --log-end=NUM` | Stop logging at cycle N |
 | `-s, --seed=NUM` | Random seed |
 | `--random-mem` | Fill memory from a `--seed`-initialized LFSR stream before loading the image |
+| `--pmem-base=ADDR` | Set the guest physical memory base (decimal or `0x`-prefixed) |
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
 
@@ -141,6 +143,7 @@ Key runtime options:
 | `+max-cycles=NUM` | Maximum simulation cycles |
 | `+max-instrs=NUM` | Maximum instructions |
 | `+ram_size=SIZE` | Simulation memory size, for example `8GB` / `128MB` |
+| `+pmem-base=ADDR` | Set the guest physical memory base (decimal or `0x`-prefixed) |
 | `+seed=NUM` | Random seed |
 | `+random-mem` | Fill memory from a `+seed`-initialized LFSR stream before loading the workload |
 | `+dump-wave` | Dump waveform (requires `EMU_TRACE=fst` at build) |

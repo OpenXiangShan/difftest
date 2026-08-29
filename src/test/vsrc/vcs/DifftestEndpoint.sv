@@ -63,6 +63,7 @@ import "DPI-C" function void set_max_instrs(longint mc);
 import "DPI-C" function longint get_stuck_limit();
 import "DPI-C" function void set_overwrite_nbytes(longint len);
 import "DPI-C" function void set_ram_size(string size);
+import "DPI-C" function void set_pmem_base(string address);
 import "DPI-C" function void set_overwrite_autoset();
 import "DPI-C" function void set_warmup_instr(longint instrs);
 import "DPI-C" function void set_ref_trace();
@@ -100,6 +101,7 @@ string workload_list;
 string iotrace_name;
 longint overwrite_nbytes;
 string ram_size;
+string pmem_base;
 integer squash_size;
 
 reg [63:0] max_instrs;
@@ -157,6 +159,10 @@ initial begin
   if ($test$plusargs("ram_size")) begin
     $value$plusargs("ram_size=%s", ram_size);
     set_ram_size(ram_size);
+  end
+  if ($test$plusargs("pmem-base")) begin
+    $value$plusargs("pmem-base=%s", pmem_base);
+    set_pmem_base(pmem_base);
   end
   // auto set gcpt used size
   if ($test$plusargs("overwrite_autoset")) begin
