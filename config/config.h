@@ -37,8 +37,9 @@
 // -----------------------------------------------------------------------
 
 // emulated memory size (Byte)
-#if defined(CPU_XIANGSHAN_YQH) || defined(CPU_XIANGSHAN_NH) || defined(CPU_XIANGSHAN_KMHV2) || \
-    defined(CPU_XIANGSHAN_KMHV3)
+#if defined(CPU_XIANGSHAN_KMHV2)
+#define DEFAULT_EMU_RAM_SIZE 0x7ff80000UL // from 0x8008_0000 to 0x1_0000_0000, (2047.5)MB memory
+#elif defined(CPU_XIANGSHAN_YQH) || defined(CPU_XIANGSHAN_NH) || defined(CPU_XIANGSHAN_KMHV3)
 #define DEFAULT_EMU_RAM_SIZE 0x7ff80000000UL // from 0x8000_0000 to 0x800_0000_0000, (8192-2)GB memory
 #else
 #define DEFAULT_EMU_RAM_SIZE (8 * 1024 * 1024 * 1024UL) // 8 GB
@@ -46,7 +47,11 @@
 
 // physical memory base address
 #ifndef CONFIG_PMEM_BASE
+#if defined(CPU_XIANGSHAN_KMHV2)
+#define CONFIG_PMEM_BASE 0x80080000UL
+#else
 #define CONFIG_PMEM_BASE 0x80000000UL
+#endif
 #endif
 #define _PMEM_BASE CONFIG_PMEM_BASE
 extern uint64_t PMEM_BASE;
