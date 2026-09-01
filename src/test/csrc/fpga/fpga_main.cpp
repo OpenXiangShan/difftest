@@ -26,12 +26,16 @@
 #include "refproxy.h"
 #include "splitview.h"
 #include "xdma.h"
+#ifdef DIFFTEST_HOSTIF_GBUS
+#include "gbus_transport.h"
+#endif
 #include <condition_variable>
 #include <cstdlib>
 #include <getopt.h>
 #include <inttypes.h>
 #include <mutex>
 #include <stdint.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
@@ -61,17 +65,24 @@ void fpga_step();
 void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
 static bool run_external_cmd(const char *cmd, const char *tag);
+static const char *select_fpga_ddr_load_cmd();
 
-FpgaXdma *xdma_device = NULL;
+FpgaTransport *xdma_device = NULL;
 #ifdef USE_SERIAL_PORT
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
 int main(int argc, const char *argv[]) {
   common_set_locale();
 
-  fpga_ddr_load_cmd = std::getenv("FPGA_DDR_LOAD_CMD");
+  fpga_ddr_load_cmd = select_fpga_ddr_load_cmd();
   fpga_ila_arm_cmd = std::getenv("FPGA_ILA_ARM_CMD");
   fpga_ila_upload_cmd = std::getenv("FPGA_ILA_UPLOAD_CMD");
+  // UVHS uses the arm hook for its trigger-aware capture command. Keep the
+  // established FPGA_ILA_ARM_CMD name for Vivado users and accept the UVHS
+  // spelling without changing the normal flow.
+  if (!fpga_ila_arm_cmd || !fpga_ila_arm_cmd[0]) {
+    fpga_ila_arm_cmd = std::getenv("FPGA_ILA_DUMP_CMD");
+  }
   args = parse_args(argc, argv);
 
   common_init(argv[0]);
@@ -79,12 +90,39 @@ int main(int argc, const char *argv[]) {
   fpga_init();
 
   printf("fpga init\n");
+  dprintf(STDERR_FILENO, "[fpga-host] transport start direct marker\n");
+  fprintf(stderr, "[fpga-host] transport start call begin enable_diff=%d ptr=%p\n",
+          args.enable_diff ? 1 : 0, static_cast<void *>(xdma_device));
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
+  fprintf(stderr, "[fpga-host] transport start call end\n");
   fpga_finish();
   if (signal_num != 0) {
     return 128 + signal_num;
   }
   return !(fpga_result == FPGA_GOODTRAP);
+}
+
+static const char *get_env_nonempty(const char *name) {
+  const char *value = std::getenv(name);
+  return value && value[0] ? value : nullptr;
+}
+
+static const char *select_fpga_ddr_load_cmd() {
+  const char *cmd = get_env_nonempty("FPGA_DDR_LOAD_CMD");
+  if (cmd) {
+    return cmd;
+  }
+
+#ifdef UVHS
+  cmd = get_env_nonempty("UVHS_DDR_LOAD_CMD");
+  if (cmd) {
+    return cmd;
+  }
+
+  return nullptr;
+#else
+  return nullptr;
+#endif
 }
 
 static bool run_external_cmd(const char *cmd, const char *tag) {
@@ -124,7 +162,13 @@ void fpga_init() {
   }
   uint32_t ram_size_mb = ram_size / (1024 * 1024);
 
+#ifdef DIFFTEST_HOSTIF_GBUS
+  auto *gbus_device = new GbusTransport();
+  gbus_device->validate_guest_ram(_PMEM_BASE, ram_size);
+  xdma_device = gbus_device;
+#else
   xdma_device = new FpgaXdma();
+#endif
   xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
   sleep(1);
 
@@ -143,7 +187,7 @@ void fpga_init() {
     printf("[fpga-host] init mem done, elapsed = %ums\n", uptime() - init_mem_start);
   }
 
-#ifdef CONFIG_USE_XDMA_H2C
+#if defined(CONFIG_USE_XDMA_H2C) || defined(DIFFTEST_HOSTIF_GBUS)
   auto *mem = dynamic_cast<MmapMemory *>(simMemory);
   assert(mem);
   uint64_t h2c_size = mem->pad_img_size(1024ull * 1024ull);
@@ -155,17 +199,11 @@ void fpga_init() {
   xdma_device->h2c_load_workload(mem->as_ptr(), h2c_size);
   xdma_device->wait_fpga_io_done(HOST_IO_MEM_H2C, "memory H2C load");
   printf("[fpga-host] H2C load done, elapsed = %ums\n", uptime() - h2c_start);
-#else // CONFIG_USE_XDMA_H2C
+#else // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 #ifdef FPGA_SIM
   xdma_sim_set_workload(args.image);
-#else
-  if (fpga_ddr_load_cmd) {
-    if (!run_external_cmd(fpga_ddr_load_cmd, "DDR load")) {
-      exit(0);
-    }
-  }
 #endif // FPGA_SIM
-#endif // CONFIG_USE_XDMA_H2C
+#endif // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
   xdma_device->fpga_io(HOST_IO_CPU_AXI_DELAY, args.cpu_axi_delay);
@@ -196,12 +234,25 @@ void fpga_init() {
 
 #ifdef USE_SERIAL_PORT
   const char *serial_port_device = std::getenv("FPGA_UART_PORT");
-  if (!serial_port_device || !serial_port_device[0]) {
-    serial_port_device = "/dev/ttyUSB0";
-  }
+  if (!serial_port_device || !serial_port_device[0]) serial_port_device = "/dev/ttyUSB0";
   serial_port = new SerialPort(serial_port_device);
   serial_port->start();
 #endif // USE_SERIAL_PORT
+
+#if !defined(FPGA_SIM) && !defined(CONFIG_USE_XDMA_H2C) && !defined(DIFFTEST_HOSTIF_GBUS)
+  if (fpga_ddr_load_cmd) {
+#ifdef UVHS
+    const char *ddr_load_tag = "UVHS DDR load";
+#else
+    const char *ddr_load_tag = "DDR load";
+#endif
+    if (!run_external_cmd(fpga_ddr_load_cmd, ddr_load_tag)) {
+      exit(0);
+    }
+  }
+#endif // !FPGA_SIM && !CONFIG_USE_XDMA_H2C && !DIFFTEST_HOSTIF_GBUS
+
+  difftest_init(args.enable_diff, ram_size);
 
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
 #ifndef FPGA_SIM
@@ -212,9 +263,6 @@ void fpga_init() {
     }
   }
 #endif // FPGA_SIM
-
-  difftest_init(args.enable_diff, ram_size);
-
   xdma_device->fpga_io(HOST_IO_RESET, false);
 }
 

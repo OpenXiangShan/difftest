@@ -37,10 +37,20 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   val payload_pad_width = payload_width - difftest_width - pkt_id_w
   val fifo_depth = 16
 
-  // Read clock domain
-  withClock(io.pcie_clock) {
+  val cpuClock = clock
+  val cpuReset = withReset(false.B) {
+    val resetSrc = RegInit(true.B)
+    resetSrc := io.reset
+    resetSrc
+  }
+  val pcieReset = DifftestResetSync(io.pcie_clock, cpuReset, init = true)
+
+  // Dequeue and AXI output use the PCIe clock domain. The DiffTest input stays
+  // in the CPU clock domain and crosses only through the async FIFO.
+  withClockAndReset(io.pcie_clock, pcieReset) {
     val fifo = Module(new AsyncClockFIFO(UInt(difftest_width.W), fifo_depth, axis_width))
-    fifo.io.enqClock := clock
+    fifo.io.enqClock := cpuClock
+    fifo.io.enqReset := cpuReset
     fifo.io.enq <> io.difftest
 
     val rangeActive = RegInit(false.B)
@@ -120,3 +130,18 @@ class HostEndpoint(
   // AXI-Stream output domain (PCIe clock)
   io.to_host_axis <> diff2axis.io.axis
 }
+
+/**
+  * Host-side adapter selected for the UVHS GBus build.
+  *
+  * The DiffTest-side contract intentionally remains identical to HostEndpoint:
+  * the UVHS wrapper can therefore connect either adapter without changing the
+  * CPU, DDR, or DiffTest payload format.  The external GBus packet/ring bridge
+  * is supplied by the UVHS shell and is not implemented by this placeholder;
+  * until that shell mapping is available this module preserves the C2H packet
+  * formatter and exposes the same stream boundary for integration checks.
+  */
+class GbusHostAdapter(
+  override val diffWidth: Int,
+  override val axisWidth: Int,
+) extends HostEndpoint(diffWidth, axisWidth)

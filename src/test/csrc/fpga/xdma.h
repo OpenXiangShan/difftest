@@ -17,6 +17,7 @@
 #define __XDMA_H__
 
 #include "common.h"
+#include "fpga_transport.h"
 #include "diffstate.h"
 #include "mpool.h"
 #include <atomic>
@@ -67,12 +68,12 @@ typedef struct __attribute__((packed)) {
   DmaDiffPackge diff_packge[DMA_PACKGE_NUM];
 } FpgaPackgeHead;
 
-class FpgaXdma {
+class FpgaXdma : public FpgaTransport {
 public:
   FpgaXdma();
   ~FpgaXdma();
 
-  void start(bool enable_diff) {
+  void start(bool enable_diff) override {
     running = true;
     if (enable_diff == false) {
       while (signal_num == 0) {
@@ -93,14 +94,14 @@ public:
     }
   }
 
-  void stop() {
+  void stop() override {
     running = false;
 #ifdef USE_THREAD_MEMPOOL
     thread_cv.notify_one();
 #endif // USE_THREAD_MEMPOOL
   }
 
-  void fpga_io(uint64_t address, uint32_t value) {
+  void fpga_io(uint64_t address, uint32_t value) override {
     device_write(false, nullptr, address, value);
   }
 
@@ -108,14 +109,12 @@ public:
     fpga_io(address, enable ? 1u : 0u);
   }
 
-  uint32_t fpga_io_read(uint64_t address) {
+  uint32_t fpga_io_read(uint64_t address) override {
     return device_read(false, address);
   }
 
-  void wait_fpga_io_done(uint64_t address, const char *tag);
-#ifdef CONFIG_USE_XDMA_H2C
-  void h2c_load_workload(const void *payload, uint64_t size);
-#endif
+  void wait_fpga_io_done(uint64_t address, const char *tag) override;
+  void h2c_load_workload(const void *payload, uint64_t size) override;
 
 private:
   bool running = false;

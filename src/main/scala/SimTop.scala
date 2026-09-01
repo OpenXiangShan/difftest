@@ -29,7 +29,7 @@ import difftest.common.{
   VerilogAXI4Record,
   VerilogAXI4StreamRecord,
 }
-import difftest.fpga.{DifftestMemCtrl, HostEndpoint, XDMAConfigBar, XDMAHostCtrlIO}
+import difftest.fpga.{DifftestMemCtrl, GbusHostAdapter, HostEndpoint, XDMAConfigBar, XDMAHostCtrlIO}
 import difftest.gateway.Gateway
 
 class DifftestTopIO extends Bundle {
@@ -159,7 +159,11 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         val cfg = Module(new XDMAConfigBar)
         cfgResetReq := cfg.io.cfgReset
         val ctrl = cfg.io.hostCtrl
-        val host = Module(new HostEndpoint(fpgaIO.bits.getWidth, Gateway.hostAxisWidth))
+        val host = if (Gateway.hostInterface == "GBUS") {
+          Module(new GbusHostAdapter(fpgaIO.bits.getWidth, Gateway.hostAxisWidth))
+        } else {
+          Module(new HostEndpoint(fpgaIO.bits.getWidth, Gateway.hostAxisWidth))
+        }
 
         host.io.difftest.valid := fpgaIO.valid && ctrl.diffEnable
         host.io.difftest.bits := fpgaIO.bits
