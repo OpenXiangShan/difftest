@@ -2,9 +2,8 @@
 #define FPGA_GBUS_TRANSPORT_H
 
 #include "fpga_transport.h"
-
-#include <cstdint>
 #include <atomic>
+#include <cstdint>
 #include <string>
 
 class GbusTransport final : public FpgaTransport {

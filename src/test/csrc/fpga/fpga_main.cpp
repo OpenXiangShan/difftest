@@ -91,8 +91,8 @@ int main(int argc, const char *argv[]) {
 
   printf("fpga init\n");
   dprintf(STDERR_FILENO, "[fpga-host] transport start direct marker\n");
-  fprintf(stderr, "[fpga-host] transport start call begin enable_diff=%d ptr=%p\n",
-          args.enable_diff ? 1 : 0, static_cast<void *>(xdma_device));
+  fprintf(stderr, "[fpga-host] transport start call begin enable_diff=%d ptr=%p\n", args.enable_diff ? 1 : 0,
+          static_cast<void *>(xdma_device));
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
   fprintf(stderr, "[fpga-host] transport start call end\n");
   fpga_finish();
@@ -234,7 +234,8 @@ void fpga_init() {
 
 #ifdef USE_SERIAL_PORT
   const char *serial_port_device = std::getenv("FPGA_UART_PORT");
-  if (!serial_port_device || !serial_port_device[0]) serial_port_device = "/dev/ttyUSB0";
+  if (!serial_port_device || !serial_port_device[0])
+    serial_port_device = "/dev/ttyUSB0";
   serial_port = new SerialPort(serial_port_device);
   serial_port->start();
 #endif // USE_SERIAL_PORT

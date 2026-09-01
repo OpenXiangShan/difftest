@@ -19,12 +19,14 @@ import chisel3._
 import chisel3.experimental.ExtModule
 import chisel3.util.HasExtModuleInline
 
-class DifftestResetSync(init: Int = 0, stages: Int = 3) extends ExtModule(
-  Map(
-    "INIT" -> init,
-    "STAGES" -> stages,
-  ),
-) with HasExtModuleInline {
+class DifftestResetSync(init: Int = 0, stages: Int = 3)
+  extends ExtModule(
+    Map(
+      "INIT" -> init,
+      "STAGES" -> stages,
+    )
+  )
+  with HasExtModuleInline {
   val clk = IO(Input(Clock()))
   val async_in = IO(Input(Bool()))
   val sync_out = IO(Output(Bool()))

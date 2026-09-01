@@ -17,8 +17,8 @@
 #define __XDMA_H__
 
 #include "common.h"
-#include "fpga_transport.h"
 #include "diffstate.h"
+#include "fpga_transport.h"
 #include "mpool.h"
 #include <atomic>
 #include <queue>
