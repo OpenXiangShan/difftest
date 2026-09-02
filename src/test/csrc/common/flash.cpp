@@ -61,33 +61,15 @@ void init_flash(const char *flash_bin) {
   Info("Using simulated %luB flash\n", flash_dev.size);
 
   if (!flash_bin) {
-#if defined(CPU_XIANGSHAN_KMHV2) || defined(CPU_XIANGSHAN_KMHV3)
-    /** no specified flash_path, use the default setup and jump sequence */
-    // csrrsi x0, mnstatus, 8     # 0x74446073 set mnstatus.nmie
-    // addiw  t0, zero, 1         # 0x0010029b
-    // slli   t1, t0, 42          # 0x02a29313
-    // csrrc  x0, mstatus, t1     # 0x30033073 clear mstatus.mdt
+    /** no specified flash_path, use the standard setup and jump sequence */
     // auipc  t0, 0               # 0x00000297
     // ld     t0, 16(t0)          # 0x0102b283 load PMEM_BASE literal
     // jr     t0                  # 0x00028067
     // nop                        # 0x00000013 align literal
-    flash_dev.base[0] = 0x0010029b74446073;
-    flash_dev.base[1] = 0x3003307302a29313;
-    flash_dev.base[2] = 0x0102b28300000297;
-    flash_dev.base[3] = 0x0000001300028067;
-    flash_dev.base[4] = PMEM_BASE;
-    flash_dev.img_size = 5 * sizeof(uint64_t);
-#else
-    /** no specified flash_path, load the configured memory base and jump */
-    // auipc  t0, 0
-    // ld     t0, 16(t0)
-    // jr     t0
-    // nop
     flash_dev.base[0] = 0x0102b28300000297;
     flash_dev.base[1] = 0x0000001300028067;
     flash_dev.base[2] = PMEM_BASE;
     flash_dev.img_size = 3 * sizeof(uint64_t);
-#endif // CPU_XIANGSHAN_KMHV2 || CPU_XIANGSHAN_KMHV3
     return;
   }
 
