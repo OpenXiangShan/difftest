@@ -28,10 +28,22 @@ VCS_CXXFILES  = $(SIM_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
 VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR)
 VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
+# VCS places -LDFLAGS before the generated object files.  Force the static
+# DRAMsim3 archive to be included so its co-simulation implementation is not
+# skipped by the linker's one-pass archive scan.
+ifeq ($(WITH_DRAMSIM3),1)
+VCS_LDFLAGS := $(filter-out -L$(DRAMSIM3_HOME)/build -ldramsim3,$(VCS_LDFLAGS))
+VCS_LDFLAGS += -Wl,--whole-archive $(DRAMSIM3_HOME)/build/libdramsim3.a -Wl,--no-whole-archive
+endif
+
 VCS_VSRC_DIR 	= $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES    = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v" -or -name "*.sv")
 
 VCS_FLAGS 		= $(SIM_VFLAGS)
+
+ifeq ($(WITH_DRAMSIM3),1)
+VCS_FLAGS += +define+WITH_DRAMSIM3
+endif
 
 ifeq ($(RELEASE),1)
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
