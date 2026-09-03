@@ -205,7 +205,7 @@ bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO FLASH=$B
 | `RAM_SIZE=SIZE` | Forward the RAM size to `fpga-host` and `simv`; must be MB-aligned for FPGA_SIM ConfigBar |
 | `SEED=NUM` | Forward the random seed to `fpga-host` and `simv` |
 | `RANDOM_MEM=1` | Enable random memory initialization in `fpga-host` and `simv` |
-| `CPU_AXI_DELAY=NUM` | Delay every CPU AXI request and response channel by at least `NUM` CPU AXI clock cycles (default `0`) |
+| `CPU_AXI_DELAY=NUM` | Set each channel's minimum to `max(1, NUM)` CPU AXI cycles (default `0`) |
 
 In FPGA_SIM, `fpga-host` writes seed, RAM size in MB, and random-memory enable
 to the XDMA ConfigBar. `cosim.sh` also passes matching plusargs to `simv`, so
@@ -221,10 +221,10 @@ identical.
 The delay is sampled when each `AW`, `W`, `B`, `AR`, or `R` beat is accepted by
 the delay module. The five channels use independent 64-entry FIFOs and preserve
 FIFO order, while the DDR may still schedule outstanding IDs before their
-responses enter the `B` or `R` FIFO. An empty FIFO can pass a zero-delay beat in
-the acceptance cycle. For nonzero values, older beats and downstream
-backpressure can extend the sampled minimum delay. A full FIFO does not accept
-a replacement beat in the same cycle that its head dequeues.
+responses enter the `B` or `R` FIFO. Each channel has a registered head, so even
+`CPU_AXI_DELAY=0` incurs one CPU AXI clock cycle; for larger values, older beats
+and downstream backpressure can extend the sampled minimum delay. A full FIFO
+can accept a replacement beat in the same cycle that its head dequeues.
 Program the delay while the CPU is held in host reset; the standard `fpga-host`
 startup sequence does this before enabling CPU memory.
 

@@ -39,6 +39,9 @@ private class AXI4DynamicChannelDelayer(
   })
 
   private val inputEntry = Cat(io.in.bits, io.releaseCycle)
+  // Registered channel heads intentionally add one CPU AXI cycle at delay=0
+  // to improve FPGA cross-chip timing. All five AXI channels are buffered
+  // independently.
   private val headEntry = Reg(UInt(entryWidth.W))
   private val headValid = RegInit(false.B)
   private val headReleaseCycle = headEntry(cycleWidth - 1, 0)
