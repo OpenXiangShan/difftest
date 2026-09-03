@@ -16,6 +16,12 @@
 
 #include "difftest.h"
 
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) || defined(CONFIG_DIFFTEST_MSYNCEVENT)
+static void set_error_pc(int coreid, uint64_t pc) {
+  difftest[coreid]->get_trap_event()->pc = pc;
+}
+#endif
+
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #include <cassert>
@@ -149,11 +155,13 @@ void AmuCtrlRecorder::clear_valid(DifftestAmuCtrlEvent &probe) {
 int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
   if (probe.op > 3) {
     Info("Invalid AMU ctrl op: core=%d, pc=0x%016lx, op=%d\n", state->coreid, probe.pc, probe.op);
+    set_error_pc(state->coreid, probe.pc);
     return STATE_ERROR;
   }
 
   if (probe.op == 0 && !is_mma_32bit_result_type(probe.typed)) {
     Info("Unsupported MMA result type: typed=%u is not 32-bit\n", static_cast<unsigned>(probe.typed));
+    set_error_pc(state->coreid, probe.pc);
     return STATE_ERROR;
   }
 
@@ -182,11 +190,13 @@ int AmuCtrlChecker::do_step() {
         printf("Mismatch for amu ctrl event \n");
         print_amu_ctrl_event("REF", ref_event);
         print_amu_ctrl_event("DUT", dut_event);
+        set_error_pc(state->coreid, dut_event.pc);
         return STATE_ERROR;
       } else if (check_res == -1) {
         printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", state->coreid);
         printf("  No available REF AMU ctrl\n");
         print_amu_ctrl_event("DUT", dut_event);
+        set_error_pc(state->coreid, dut_event.pc);
         return STATE_ERROR;
       } else {
         iter->state = DiffState::WAIT_DUT_EXEC;
@@ -260,6 +270,7 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
     }
   }
   printf("No matching AMU instruction for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+  set_error_pc(state->coreid, probe.pc);
   return STATE_ERROR;
 }
 
@@ -289,6 +300,7 @@ int AmuExecChecker::do_step() {
             mma_verifier->free_buffer(buffer);
             delete[] iter->res;
             iter->res = nullptr;
+            set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
           }
           // Pass buffer to verification thread
@@ -304,6 +316,7 @@ int AmuExecChecker::do_step() {
               delete[] iter->res;
               iter->res = nullptr;
             }
+            set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
           }
           if (iter->res != nullptr) {
@@ -317,6 +330,7 @@ int AmuExecChecker::do_step() {
             delete[] iter->res;
             iter->res = nullptr;
           }
+          set_error_pc(state->coreid, amu_event.pc);
           return STATE_ERROR;
       }
       // Remove the processed event from matrix_sw_rob
@@ -366,12 +380,14 @@ int MsyncChecker::do_step() {
       print_msync_event("REF", ref_event);
       print_msync_event("DUT", dut_event);
       state->msync_event_queue.pop();
+      set_error_pc(state->coreid, dut_event.pc);
       return STATE_ERROR;
     } else if (check_res == -1) {
       printf("\n==============  Msync Event (Core %d)  ==============\n", state->coreid);
       printf("  No available REF Msync events\n");
       print_msync_event("DUT", dut_event);
       state->msync_event_queue.pop();
+      set_error_pc(state->coreid, dut_event.pc);
       return STATE_ERROR;
     }
     state->msync_event_queue.pop();
