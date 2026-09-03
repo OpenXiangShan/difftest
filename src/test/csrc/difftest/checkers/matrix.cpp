@@ -135,7 +135,10 @@ static inline size_t get_amu_result_size(const DifftestAmuCtrlEvent &amu_event) 
 // writeback process and updates the mirrored registers in DiffTest. When the
 // instruction has fully finished and all matrix register writes are
 // complete, the state becomes WAIT_SWROB_COMMIT, waiting for the software
-// ROB to commit the instruction.
+// ROB to commit the instruction. Mrelease is the exception: its finish event
+// marks the point where RTL has already updated msync state, so the recorder
+// immediately applies the REF-side effect and removes it from the software
+// ROB without waiting for preceding matrix instructions.
 // - An instruction in the software ROB can be committed if and only if it
 // has completed and all preceding instructions have also completed.
 // AmuExecChecker commits such ready instructions: the REF side re-executes
@@ -206,7 +209,7 @@ int AmuCtrlChecker::do_step() {
   return STATE_OK;
 }
 
-// 3. Capture DUT matrix writeback, update register copy → on finish set WAIT_SWROB_COMMIT
+// 3. Capture DUT matrix writeback; complete mrelease immediately, otherwise wait for software ROB commit
 bool AmuExecRecorder::get_valid(const DifftestAmuFinishEvent &probe) {
   return probe.valid;
 }
@@ -219,54 +222,75 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
   const static size_t ARLen = CONFIG_DIFF_AMU_ARLEN;
   const static size_t TRLen = CONFIG_DIFF_AMU_TRLEN;
   const static size_t bankWidth = CONFIG_DIFF_AMU_BANK_WIDTH;
-  for (auto &entry: state->matrix_sw_rob) {
-    if (entry.amu_event.pc == probe.pc && entry.state == DiffState::WAIT_DUT_EXEC) {
-      const size_t matrix_size = get_amu_result_size(entry.amu_event);
-      size_t matrix_u64_size = (matrix_size + sizeof(uint64_t) - 1) / sizeof(uint64_t);
-      if (matrix_u64_size == 0) {
-        matrix_u64_size = 1;
-      }
-      if (entry.res == NULL) {
-        // first `valid` for this inst: alloc space for matrix inst
-        entry.res = new uint64_t[matrix_u64_size];
-        memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
-      }
-      uint8_t md = entry.amu_event.md;
-      size_t stride = 0;
-      if (md < 4) {
-        stride = TRLen / bankWidth;
-      } else {
-        stride = ARLen / bankWidth;
-      }
-      const size_t matrix_words_per_bank =
-          (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
-      assert(stride > 0);
-      assert(matrix_words_per_bank > 0);
+  for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
+    if (iter->amu_event.pc == probe.pc && iter->state == DiffState::WAIT_DUT_EXEC) {
+      if (iter->amu_event.op == 2) { // mrelease
+        if (!probe.finish) {
+          printf("Mrelease finish event is incomplete: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+          return STATE_ERROR;
+        }
 
-      for (int j = 0; j < CONFIG_DIFF_AMU_FINISH_BANKS; ++j) { // for each bank
-        if (probe.bankValid[j]) {
-          const size_t addr = probe.bankAddr[j];
-          const size_t matrix_entry =
-              addr / stride * stride * CONFIG_DIFF_AMU_FINISH_BANKS + j * stride + addr % stride;
-          const size_t idx = matrix_entry * matrix_words_per_bank;
-          assert(idx + matrix_words_per_bank <= matrix_u64_size);
+        DifftestAmuCtrlEvent amu_event = iter->amu_event;
+        uint64_t unused_result = 0;
+        if (proxy->get_amu_exec(&amu_event, &unused_result) != 0) {
+          printf("Failed to execute REF mrelease: core %d, pc 0x%016lx\n", state->coreid, amu_event.pc);
+          return STATE_ERROR;
+        }
+        if (iter->res != nullptr) {
+          delete[] iter->res;
+          iter->res = nullptr;
+        }
+        state->matrix_sw_rob.erase(iter);
+        return STATE_OK;
+      } else { // mload/mstore/mma/marith
+        auto &entry = *iter;
+        const size_t matrix_size = get_amu_result_size(entry.amu_event);
+        size_t matrix_u64_size = (matrix_size + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+        if (matrix_u64_size == 0) {
+          matrix_u64_size = 1;
+        }
+        if (entry.res == NULL) {
+          // first `valid` for this inst: alloc space for matrix inst
+          entry.res = new uint64_t[matrix_u64_size];
+          memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
+        }
+        uint8_t md = entry.amu_event.md;
+        size_t stride = 0;
+        if (md < 4) {
+          stride = TRLen / bankWidth;
+        } else {
+          stride = ARLen / bankWidth;
+        }
+        const size_t matrix_words_per_bank =
+            (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
+        assert(stride > 0);
+        assert(matrix_words_per_bank > 0);
 
-          uint8_t *dst = reinterpret_cast<uint8_t *>(&entry.res[idx]);
-          const uint8_t *src =
-              reinterpret_cast<const uint8_t *>(&probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK]);
-          const uint64_t mask = probe.bankMask[j];
-          const size_t bank_bytes = matrix_words_per_bank * sizeof(uint64_t);
-          for (size_t k = 0; k < bank_bytes; ++k) {
-            if ((mask >> k) & 0x1U) {
-              dst[k] = src[k];
+        for (int j = 0; j < CONFIG_DIFF_AMU_FINISH_BANKS; ++j) { // for each bank
+          if (probe.bankValid[j]) {
+            const size_t addr = probe.bankAddr[j];
+            const size_t matrix_entry =
+                addr / stride * stride * CONFIG_DIFF_AMU_FINISH_BANKS + j * stride + addr % stride;
+            const size_t idx = matrix_entry * matrix_words_per_bank;
+            assert(idx + matrix_words_per_bank <= matrix_u64_size);
+
+            uint8_t *dst = reinterpret_cast<uint8_t *>(&entry.res[idx]);
+            const uint8_t *src =
+                reinterpret_cast<const uint8_t *>(&probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK]);
+            const uint64_t mask = probe.bankMask[j];
+            const size_t bank_bytes = matrix_words_per_bank * sizeof(uint64_t);
+            for (size_t k = 0; k < bank_bytes; ++k) {
+              if ((mask >> k) & 0x1U) {
+                dst[k] = src[k];
+              }
             }
           }
         }
+        if (probe.finish) {
+          entry.state = DiffState::WAIT_SWROB_COMMIT;
+        }
+        return STATE_OK;
       }
-      if (probe.finish) {
-        entry.state = DiffState::WAIT_SWROB_COMMIT;
-      }
-      return STATE_OK;
     }
   }
   printf("No matching AMU instruction for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
@@ -308,7 +332,6 @@ int AmuExecChecker::do_step() {
           delete[] iter->res;
           break;
         case 1: // MLS
-        case 2: // MRelease
         case 3: // Arith
           if (proxy->get_amu_exec(&amu_event, iter->res) == 1) {
             printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_name(amu_event.op));
@@ -324,6 +347,14 @@ int AmuExecChecker::do_step() {
             iter->res = nullptr;
           }
           break;
+        case 2: // MRelease
+          printf("Mrelease reached ordered software ROB commit unexpectedly: core %d, pc 0x%016lx\n", state->coreid,
+                 amu_event.pc);
+          if (iter->res != nullptr) {
+            delete[] iter->res;
+            iter->res = nullptr;
+          }
+          return STATE_ERROR;
         default:
           printf("Unknown amu event op: %d\n", op);
           if (iter->res != nullptr) {
