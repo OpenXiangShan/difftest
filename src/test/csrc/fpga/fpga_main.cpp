@@ -168,6 +168,14 @@ void fpga_init() {
 #endif // CONFIG_USE_XDMA_H2C
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
+  xdma_device->fpga_io(HOST_IO_CPU_AXI_DELAY, args.cpu_axi_delay);
+  uint32_t cpu_axi_delay = xdma_device->fpga_io_read(HOST_IO_CPU_AXI_DELAY);
+  if (cpu_axi_delay != args.cpu_axi_delay) {
+    fprintf(stderr, "[fpga-host] CPU AXI delay readback mismatch: wrote %" PRIu32 ", read %" PRIu32 "\n",
+            args.cpu_axi_delay, cpu_axi_delay);
+    exit(1);
+  }
+  printf("[fpga-host] CPU AXI delay = %" PRIu32 " cycles\n", cpu_axi_delay);
   xdma_device->fpga_io(HOST_IO_MEM_CPU, true);
   xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);

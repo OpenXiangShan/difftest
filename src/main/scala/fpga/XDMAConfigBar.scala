@@ -35,6 +35,7 @@ import difftest.common.AXI4LiteBundle
   *   - 0x24: HOST_IO_MEM_CPU
   *   - 0x28: HOST_IO_MEM_H2C
   *   - 0x2c: HOST_IO_H2C_SIZE_MB
+  *   - 0x30: HOST_IO_CPU_AXI_DELAY
   */
 class XDMAHostCtrlIO extends Bundle {
   val reset = Bool()
@@ -51,12 +52,13 @@ class XDMAMemCtrlIO extends Bundle {
   val seed = Output(UInt(32.W))
   val ramSizeMB = Output(UInt(32.W))
   val h2cSizeMB = Output(UInt(32.W))
+  val cpuAXIDelay = Output(UInt(32.W))
   val memStatus = Input(UInt(2.W))
 }
 
 private object XDMAConfigReg extends Enumeration {
   val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, SquashMaxFused, Seed, RamSizeMB, MemInit, MemCPU,
-    MemH2C, H2CSizeMB = Value
+    MemH2C, H2CSizeMB, CpuAXIDelay = Value
 }
 
 class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
@@ -87,6 +89,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   io.memCtrl.seed := regfile(XDMAConfigReg.Seed.id)
   io.memCtrl.ramSizeMB := regfile(XDMAConfigReg.RamSizeMB.id)
   io.memCtrl.h2cSizeMB := regfile(XDMAConfigReg.H2CSizeMB.id)
+  io.memCtrl.cpuAXIDelay := regfile(XDMAConfigReg.CpuAXIDelay.id)
   io.cfgReset := regfile(XDMAConfigReg.CfgReset.id)(0)
 
   private def mergeByByte(oldData: UInt, newData: UInt, strb: UInt): UInt = {

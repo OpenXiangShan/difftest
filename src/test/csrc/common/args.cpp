@@ -30,6 +30,7 @@ enum {
   OPT_NO_SQUASH,
   OPT_SQUASH_SIZE,
   OPT_NO_SQUASH_AFTER_INSTR,
+  OPT_CPU_AXI_DELAY,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -123,6 +124,7 @@ static inline void print_help(const char *file) {
   printf("      --no-squash            disable squash\n");
   printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
   printf("      --no-squash-after-instr=NUM disable squash after NUM committed instructions\n");
+  printf("      --cpu-axi-delay=NUM    delay FPGA CPU AXI requests by NUM cycles, default: 0\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --remote-jtag-port     specify remote bitbang port\n");
@@ -192,6 +194,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "no-squash",         0, NULL, OPT_NO_SQUASH },
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
+    { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -331,6 +334,15 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_NO_SQUASH_AFTER_INSTR:
         args.no_squash_after_instr = parse_instr_count(optarg, "no-squash-after-instr");
         continue;
+      case OPT_CPU_AXI_DELAY: {
+        long long cpu_axi_delay = atoll_strict(optarg, "cpu-axi-delay");
+        if (cpu_axi_delay < 0 || static_cast<unsigned long long>(cpu_axi_delay) > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --cpu-axi-delay must be in range [0, %" PRIu32 "]\n", UINT32_MAX);
+          exit(EINVAL);
+        }
+        args.cpu_axi_delay = static_cast<uint32_t>(cpu_axi_delay);
+        continue;
+      }
       case 's':
         if (std::string(optarg) != "NO_SEED") {
           args.seed = atoll_strict(optarg, "seed");
