@@ -87,6 +87,8 @@ int gbus_read(uint8_t, uint8_t, uint8_t, uint8_t, uint64_t offset, size_t count,
   if (count != 1) return 0;
   uint32_t result = 0;
   switch (offset) {
+    // The control ABI reports the CPU-visible reservation; DMA uses the
+    // corresponding 0x01000000 offset when fetching ring packets.
     case 0x1100: result = 0x81000000U; break;
     case 0x1104: result = 0x00ffff00U; break;
     case 0x1108: result = producer_reads++ == 0 ? 0U : sizeof(FpgaPackgeHead); break;

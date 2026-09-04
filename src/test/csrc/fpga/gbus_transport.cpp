@@ -1,3 +1,4 @@
+#include <cstring>
 #include "gbus_transport.h"
 #include "difftest-dpic.h"
 #include "xdma.h"
@@ -6,7 +7,6 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <thread>
 #include <unistd.h>
 #include <uvaps_gbus_runtime.h>
@@ -134,11 +134,15 @@ void GbusTransport::start(bool enable_diff) {
   const uint32_t hardware_base = fpga_io_read(0x0100);
   const uint32_t hardware_size = fpga_io_read(0x0104);
   const uint32_t hardware_status = fpga_io_read(0x010c);
+  // The control window reports the CPU-visible ring reservation (normally
+  // 0x81000000).  GBus DMA reads use the corresponding DDR offset
+  // (normally 0x01000000), which is intentionally kept separate below.
   if (hardware_base != static_cast<uint32_t>(c2h_ring_base_) ||
       hardware_size != static_cast<uint32_t>(c2h_ring_size_) || (hardware_status & 1U) == 0) {
     dprintf(STDERR_FILENO,
-            "[fpga-host] GBus C2H ABI mismatch hw_base=0x%x sw_base=0x%llx hw_size=0x%x sw_size=0x%llx status=0x%x\n",
-            hardware_base, static_cast<unsigned long long>(c2h_ring_base_), hardware_size,
+            "[fpga-host] GBus C2H ABI mismatch hw_guest_base=0x%x sw_guest_base=0x%llx dma_base=0x%llx hw_size=0x%x sw_size=0x%llx status=0x%x\n",
+            hardware_base, static_cast<unsigned long long>(c2h_ring_base_),
+            static_cast<unsigned long long>(c2h_dma_base_), hardware_size,
             static_cast<unsigned long long>(c2h_ring_size_), hardware_status);
     std::exit(EXIT_FAILURE);
   }
