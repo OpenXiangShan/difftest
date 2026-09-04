@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-runtime_root=${GBUS_RUNTIME_ROOT:-$repo/../env-scripts/fpga_diff/third_party/gbus_runtime}
+runtime_root=${GBUS_RUNTIME_ROOT:-$repo/third_party/gbus_runtime}
 build_dir=${GBUS_TRANSPORT_TEST_BUILD_DIR:-/tmp/difftest-gbus-transport-mock}
 cxx=${CXX:-g++}
 
