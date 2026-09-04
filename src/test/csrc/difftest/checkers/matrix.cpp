@@ -171,7 +171,6 @@ int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
   DiffState::AmeInstRobEntry entry;
   entry.amu_event = probe;
   entry.state = DiffState::WAIT_REF_COMMIT;
-  entry.res = NULL;
   state->matrix_sw_rob.push_back(entry);
   return STATE_OK;
 }
@@ -236,10 +235,6 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
           printf("Failed to execute REF mrelease: core %d, pc 0x%016lx\n", state->coreid, amu_event.pc);
           return STATE_ERROR;
         }
-        if (iter->res != nullptr) {
-          delete[] iter->res;
-          iter->res = nullptr;
-        }
         state->matrix_sw_rob.erase(iter);
         return STATE_OK;
       } else { // mload/mstore/mma/marith
@@ -249,10 +244,9 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
         if (matrix_u64_size == 0) {
           matrix_u64_size = 1;
         }
-        if (entry.res == NULL) {
+        if (entry.res.empty()) {
           // first `valid` for this inst: alloc space for matrix inst
-          entry.res = new uint64_t[matrix_u64_size];
-          memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
+          entry.res.resize(matrix_u64_size, 0);
         }
         uint8_t md = entry.amu_event.md;
         size_t stride = 0;
@@ -313,54 +307,35 @@ int AmuExecChecker::do_step() {
           // Allocate buffer for MMA verification
           buffer = mma_verifier->allocate_buffer(&amu_event);
           // Store DUT result in the buffer
-          memcpy(buffer->dut_result, iter->res,
+          memcpy(buffer->dut_result, iter->res.data(),
                  amu_event.mtilem * amu_event.mtilen * get_element_size(amu_event.typed));
           // Call get_amu_lazy with buffer pointers
           // Store REF's src1/2/3 in the buffer, and copy DUT's result to REF
           // REF will directly take DUT's result instead of executing the MMA instruction
-          if (proxy->get_amu_lazy(&amu_event, iter->res, buffer->src1, buffer->src2, buffer->src3) != 0) {
+          if (proxy->get_amu_lazy(&amu_event, iter->res.data(), buffer->src1, buffer->src2, buffer->src3) != 0) {
             printf("Failed to get REF operands for MMA verification: core %d, pc 0x%016lx\n", state->coreid,
                    amu_event.pc);
             mma_verifier->free_buffer(buffer);
-            delete[] iter->res;
-            iter->res = nullptr;
             set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
           }
           // Pass buffer to verification thread
           mma_verifier->add_to_verification_queue(buffer);
-          delete[] iter->res;
           break;
         case 1: // MLS
         case 3: // Arith
-          if (proxy->get_amu_exec(&amu_event, iter->res) == 1) {
+          if (proxy->get_amu_exec(&amu_event, iter->res.data()) == 1) {
             printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_name(amu_event.op));
-            if (iter->res != nullptr) {
-              delete[] iter->res;
-              iter->res = nullptr;
-            }
             set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
-          }
-          if (iter->res != nullptr) {
-            delete[] iter->res;
-            iter->res = nullptr;
           }
           break;
         case 2: // MRelease
           printf("Mrelease reached ordered software ROB commit unexpectedly: core %d, pc 0x%016lx\n", state->coreid,
                  amu_event.pc);
-          if (iter->res != nullptr) {
-            delete[] iter->res;
-            iter->res = nullptr;
-          }
           return STATE_ERROR;
         default:
           printf("Unknown amu event op: %d\n", op);
-          if (iter->res != nullptr) {
-            delete[] iter->res;
-            iter->res = nullptr;
-          }
           set_error_pc(state->coreid, amu_event.pc);
           return STATE_ERROR;
       }

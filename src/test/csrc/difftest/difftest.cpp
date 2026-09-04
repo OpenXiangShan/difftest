@@ -274,9 +274,6 @@ void difftest_replay_head(int head) {
 
 Difftest::Difftest(int coreid) {
   state = new DiffState(coreid);
-#ifdef CONFIG_DIFFTEST_REPLAY
-  state_ss = (DiffState *)malloc(sizeof(DiffState));
-#endif // CONFIG_DIFFTEST_REPLAY
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   mma_verifier = nullptr;
@@ -328,7 +325,6 @@ Difftest::~Difftest() {
     delete proxy;
   }
 #ifdef CONFIG_DIFFTEST_REPLAY
-  free(state_ss);
   if (proxy_reg_ss) {
     free(proxy_reg_ss);
   }
@@ -524,7 +520,7 @@ bool Difftest::in_replay_range() {
 }
 
 void Difftest::replay_snapshot() {
-  memcpy(state_ss, state, sizeof(DiffState));
+  state->replay_snapshot();
   memcpy(proxy_reg_ss, &proxy->state, sizeof(ref_state_t));
   proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
   proxy->ref_store_log_reset();
@@ -543,7 +539,8 @@ void Difftest::do_replay() {
   replay_status.in_replay = true;
   replay_status.trace_head = info.trace_head;
   replay_status.trace_size = info.trace_size;
-  memcpy(state, state_ss, sizeof(DiffState));
+  state->replay_restore();
+  pc_mismatch = false;
   memcpy(&proxy->state, proxy_reg_ss, sizeof(ref_state_t));
   proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
@@ -555,28 +552,6 @@ void Difftest::do_replay() {
   }
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
   difftest_replay_head(info.trace_head);
-  // clear buffered queue
-#ifdef CONFIG_DIFFTEST_STOREEVENT
-  while (!state->store_event_queue.empty())
-    state->store_event_queue.pop();
-#endif // CONFIG_DIFFTEST_STOREEVENT
-#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
-  while (!state->load_event_queue.empty())
-    state->load_event_queue.pop();
-#endif
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  for (auto &entry: state->matrix_sw_rob) {
-    if (entry.res != nullptr) {
-      delete[] entry.res;
-      entry.res = nullptr;
-    }
-  }
-  state->matrix_sw_rob.clear();
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
-#ifdef CONFIG_DIFFTEST_MSYNCEVENT
-  while (!state->msync_event_queue.empty())
-    state->msync_event_queue.pop();
-#endif // CONFIG_DIFFTEST_MSYNCEVENT
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
