@@ -608,6 +608,9 @@ object DifftestModule {
         case "--difftest-exclude" :: names :: tail =>
           nameExcludes ++= names.split(",").map(_.trim)
           nextOption(args.patch(args.indexOf("--difftest-exclude"), Nil, 2), tail)
+        case "--difftest-hostif" :: hostif :: tail =>
+          Gateway.setHostInterface(hostif)
+          nextOption(args.patch(args.indexOf("--difftest-hostif"), Nil, 2), tail)
         case _ :: tail => nextOption(args, tail)
       }
     }

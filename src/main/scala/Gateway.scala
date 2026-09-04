@@ -53,6 +53,7 @@ case class GatewayConfig(
   softArchUpdate: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
+  hostInterface: String = "XDMA",
 ) {
   def dutZoneSize: Int = if (hasDutZone) 2 else 1
   def dutZoneWidth: Int = log2Ceil(dutZoneSize)
@@ -90,6 +91,7 @@ case class GatewayConfig(
     if (hasInternalStep) macros += "CONFIG_DIFFTEST_INTERNAL_STEP"
     if (traceDump || traceLoad) macros += "CONFIG_DIFFTEST_IOTRACE"
     if (isFPGA) macros ++= Seq("CONFIG_DIFFTEST_FPGA", s"CONFIG_DIFFTEST_HOST_AXIS_BYTES ${hostAxisBytes}")
+    if (isFPGA) macros += s"CONFIG_DIFFTEST_HOSTIF_${hostInterface}"
     macros.toSeq
   }
   def vMacros: Seq[String] = {
@@ -106,6 +108,7 @@ case class GatewayConfig(
         s"CONFIG_DIFFTEST_HOST_AXIS_BYTES ${hostAxisBytes}",
         s"CONFIG_DIFFTEST_HOST_AXIS_WIDTH ${hostAxisBytes * 8}",
       )
+    if (isFPGA) macros += s"CONFIG_DIFFTEST_HOSTIF_${hostInterface}"
     if (hasClockGate) macros += "CONFIG_DIFFTEST_CLOCKGATE"
     macros.toSeq
   }
@@ -167,6 +170,14 @@ object Gateway {
   def isFPGA: Boolean = config.isFPGA
   def hostAxisBytes: Int = config.hostAxisBytes
   def hostAxisWidth: Int = hostAxisBytes * 8
+
+  def hostInterface: String = config.hostInterface
+
+  def setHostInterface(value: String): Unit = {
+    val normalized = value.trim.toUpperCase
+    require(normalized == "XDMA" || normalized == "GBUS", s"Unsupported DiffTest host interface: $value")
+    config = config.copy(hostInterface = normalized)
+  }
 
   def setConfig(cfg: String): Unit = {
     cfg.foreach {

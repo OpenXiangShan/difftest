@@ -35,6 +35,7 @@ class AsyncClockFIFO[T <: Data](gen: T, depth: Int, bankWidth: Int = 0) extends 
 
   val io = IO(new Bundle {
     val enqClock = Input(Clock())
+    val enqReset = Input(Bool())
     val enq = Flipped(Decoupled(gen))
     val deq = Decoupled(gen)
   })
@@ -87,7 +88,7 @@ class AsyncClockFIFO[T <: Data](gen: T, depth: Int, bankWidth: Int = 0) extends 
   private val rdPtrBin = RegInit(0.U(ptrWidth.W))
   private val rdPtrGray = RegInit(0.U(ptrWidth.W))
 
-  private val (wrPtrBin, wrPtrGray) = withClockAndReset(io.enqClock, reset) {
+  private val (wrPtrBin, wrPtrGray) = withClockAndReset(io.enqClock, io.enqReset) {
     val bin = RegInit(0.U(ptrWidth.W))
     val gray = RegInit(0.U(ptrWidth.W))
     (bin, gray)
@@ -104,7 +105,7 @@ class AsyncClockFIFO[T <: Data](gen: T, depth: Int, bankWidth: Int = 0) extends 
     rdPtrGray := binToGray(next)
   }
 
-  withClockAndReset(io.enqClock, reset) {
+  withClockAndReset(io.enqClock, io.enqReset) {
     val rdPtrGraySync = RegNext(RegNext(rdPtrGray, 0.U), 0.U)
     val wrPtrBinNext = wrPtrBin + 1.U
     val wrPtrGrayNext = binToGray(wrPtrBinNext)
@@ -157,11 +158,18 @@ class H2CAXIs2Mem(
   private val beatBytes = dataWidth / 8
 
   private val fifo = Module(new AsyncClockFIFO(new AXI4StreamBundle(axisWidth), fifoDepth))
-  private val enableSync = withClockAndReset(io.pcie_clock, reset) {
+  private val cpuReset = withReset(false.B) {
+    val resetSrc = RegInit(true.B)
+    resetSrc := reset.asBool
+    resetSrc
+  }
+  private val pcieReset = DifftestResetSync(io.pcie_clock, cpuReset, init = true)
+  private val enableSync = withClockAndReset(io.pcie_clock, pcieReset) {
     RegNext(RegNext(io.enable, false.B), false.B)
   }
 
   fifo.io.enqClock := io.pcie_clock
+  fifo.io.enqReset := pcieReset
   fifo.io.enq.valid := io.axis.valid && enableSync
   fifo.io.enq.bits := io.axis.bits
   io.axis.ready := fifo.io.enq.ready && enableSync
