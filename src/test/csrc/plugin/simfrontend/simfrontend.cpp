@@ -41,7 +41,6 @@ std::vector<std::string_view> debug_read_line_vector;
 InstructionTraceSource trace_fetch;
 ContinuityChecker PcChecker;
 FetchTargetQueue ftq;
-uint32_t tick_fetch_count = 0;
 
 bool TryFetchNextLine(uint32_t read_count) {
   if (trace_fetch.is_final())
@@ -98,7 +97,6 @@ void SimFrontFetch(int offset, uint64_t *pc, uint32_t *instr, uint32_t *preDecod
                          << entry.instr << " ftq: 0x" << entry.fetch_group_id << ", " << entry.fetch_group_id_wrap
                          << std::dec << std::endl;)
 
-    tick_fetch_count++;
   } else {
     *pc = 0;
     *instr = 0;
@@ -109,10 +107,11 @@ void SimFrontFetch(int offset, uint64_t *pc, uint32_t *instr, uint32_t *preDecod
 }
 
 void SimFrontUpdatePtr(uint32_t updateCount) {
-  if (updateCount != 0) {
-    ftq.set_read_ptr_offset(tick_fetch_count);
+  if (updateCount != 0 && !ftq.set_read_ptr_offset(updateCount)) {
+    std::cerr << "SimFrontend pointer advance failed: updateCount=" << updateCount
+              << " readable=" << ftq.readable_size() << std::endl;
+    assert(false && "SimFrontend pointer advance exceeds readable FTQ entries");
   }
-  tick_fetch_count = 0;
 }
 
 void SimFrontRedirect(uint32_t redirect_valid, uint32_t redirect_ftq_flag, uint32_t redirect_ftq_value,
