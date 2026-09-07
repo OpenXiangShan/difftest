@@ -540,7 +540,6 @@ void Difftest::do_replay() {
   replay_status.trace_head = info.trace_head;
   replay_status.trace_size = info.trace_size;
   state->replay_restore();
-  pc_mismatch = false;
   memcpy(&proxy->state, proxy_reg_ss, sizeof(ref_state_t));
   proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
@@ -552,6 +551,16 @@ void Difftest::do_replay() {
   }
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
   difftest_replay_head(info.trace_head);
+  // clear buffered queue
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  for (auto &entry: state->matrix_sw_rob) {
+    if (entry.res != nullptr) {
+      delete[] entry.res;
+      entry.res = nullptr;
+    }
+  }
+  state->matrix_sw_rob.clear();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 

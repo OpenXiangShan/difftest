@@ -16,10 +16,10 @@
 
 #include "diffstate.h"
 #include "spikedasm.h"
-#include <algorithm>
 #include <cassert>
+#include <cstring>
 
-void CommitTrace::display(bool use_spike) const {
+void CommitTrace::display(bool use_spike) {
   Info("%s pc %016lx inst %08x", get_type(), pc, inst);
   display_custom();
   if (use_spike) {
@@ -27,7 +27,7 @@ void CommitTrace::display(bool use_spike) const {
   }
 }
 
-void CommitTrace::display_line(int index, bool use_spike, bool is_retire) const {
+void CommitTrace::display_line(int index, bool use_spike, bool is_retire) {
   Info("[%02d] ", index);
   display(use_spike);
   Info("%s\n", is_retire ? " <--" : "");
@@ -49,7 +49,7 @@ void DiffState::display() {
   Info("\n============== Commit Instr Trace ==============\n");
   int commit_index = 0;
   while (!commit_trace.empty()) {
-    auto trace = commit_trace.front();
+    CommitTrace *trace = commit_trace.front();
     commit_trace.pop();
     trace->display_line(commit_index, use_spike, commit_trace.empty());
     commit_index++;
@@ -63,73 +63,79 @@ DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {}
 #ifdef CONFIG_DIFFTEST_REPLAY
 void DiffState::replay_snapshot() {
   replay_state.valid = false;
+  replay_state.coreid = coreid;
+  replay_state.cycle_count = cycle_count;
+  replay_state.has_progress = has_progress;
   replay_state.has_commit = has_commit;
   replay_state.last_commit_cycle = last_commit_cycle;
   replay_state.has_trap = has_trap;
   replay_state.trap_code = trap_code;
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  std::copy(delayed_int, delayed_int + 32, replay_state.delayed_int.begin());
+  memcpy(replay_state.delayed_int, delayed_int, sizeof(delayed_int));
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  std::copy(delayed_fp, delayed_fp + 32, replay_state.delayed_fp.begin());
+  memcpy(replay_state.delayed_fp, delayed_fp, sizeof(delayed_fp));
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_STOREEVENT
-  replay_state.store_event_queue = store_event_queue;
-#endif // CONFIG_DIFFTEST_STOREEVENT
-#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-  replay_state.cmo_inval_event_set = cmo_inval_event_set;
-#endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #ifdef CONFIG_DIFFTEST_SQUASH
   replay_state.commit_stamp = commit_stamp;
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-  replay_state.load_event_queue = load_event_queue;
-#endif // CONFIG_DIFFTEST_LOADEVENT
 #endif // CONFIG_DIFFTEST_SQUASH
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  replay_state.matrix_sw_rob = matrix_sw_rob;
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
-#ifdef CONFIG_DIFFTEST_MSYNCEVENT
-  replay_state.msync_event_queue = msync_event_queue;
-#endif // CONFIG_DIFFTEST_MSYNCEVENT
-  replay_state.retire_group_queue = retire_group_queue;
-  replay_state.commit_trace = commit_trace;
+#ifdef DEBUG_REFILL
+  replay_state.track_instr = track_instr;
+#endif // DEBUG_REFILL
+  replay_state.dump_commit_trace = dump_commit_trace;
   replay_state.commit_counter = commit_counter;
   replay_state.valid = true;
 }
 
 void DiffState::replay_restore() {
   assert(replay_state.valid);
+  coreid = replay_state.coreid;
+  cycle_count = replay_state.cycle_count;
+  has_progress = replay_state.has_progress;
   has_commit = replay_state.has_commit;
   last_commit_cycle = replay_state.last_commit_cycle;
   has_trap = replay_state.has_trap;
   trap_code = replay_state.trap_code;
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  std::copy(replay_state.delayed_int.begin(), replay_state.delayed_int.end(), delayed_int);
+  memcpy(delayed_int, replay_state.delayed_int, sizeof(delayed_int));
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  std::copy(replay_state.delayed_fp.begin(), replay_state.delayed_fp.end(), delayed_fp);
+  memcpy(delayed_fp, replay_state.delayed_fp, sizeof(delayed_fp));
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_STOREEVENT
-  store_event_queue = replay_state.store_event_queue;
-#endif // CONFIG_DIFFTEST_STOREEVENT
-#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-  cmo_inval_event_set = replay_state.cmo_inval_event_set;
-#endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #ifdef CONFIG_DIFFTEST_SQUASH
   commit_stamp = replay_state.commit_stamp;
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-  load_event_queue = replay_state.load_event_queue;
-#endif // CONFIG_DIFFTEST_LOADEVENT
 #endif // CONFIG_DIFFTEST_SQUASH
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  matrix_sw_rob = replay_state.matrix_sw_rob;
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
-#ifdef CONFIG_DIFFTEST_MSYNCEVENT
-  msync_event_queue = replay_state.msync_event_queue;
-#endif // CONFIG_DIFFTEST_MSYNCEVENT
-  retire_group_queue = replay_state.retire_group_queue;
-  commit_trace = replay_state.commit_trace;
+#ifdef DEBUG_REFILL
+  track_instr = replay_state.track_instr;
+#endif // DEBUG_REFILL
+  dump_commit_trace = replay_state.dump_commit_trace;
   commit_counter = replay_state.commit_counter;
+
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  while (!store_event_queue.empty()) {
+    store_event_queue.pop();
+  }
+#endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+  cmo_inval_event_set.clear();
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
+  while (!load_event_queue.empty()) {
+    load_event_queue.pop();
+  }
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  while (!msync_event_queue.empty()) {
+    msync_event_queue.pop();
+  }
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
+  while (!retire_group_queue.empty()) {
+    retire_group_queue.pop();
+  }
+  while (!commit_trace.empty()) {
+    delete commit_trace.front();
+    commit_trace.pop();
+  }
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
