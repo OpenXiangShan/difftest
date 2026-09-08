@@ -17,7 +17,6 @@
 #include "diffstate.h"
 #include "spikedasm.h"
 #include <cassert>
-#include <cstring>
 
 void CommitTrace::display(bool use_spike) {
   Info("%s pc %016lx inst %08x", get_type(), pc, inst);
@@ -58,58 +57,18 @@ void DiffState::display() {
   fflush(stdout);
 }
 
-DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {}
+DiffState::DiffState(int coreid) : DiffStateValues(coreid), use_spike(spike_valid()) {}
 
 #ifdef CONFIG_DIFFTEST_REPLAY
 void DiffState::replay_snapshot() {
-  replay_state.valid = false;
-  replay_state.coreid = coreid;
-  replay_state.cycle_count = cycle_count;
-  replay_state.has_progress = has_progress;
-  replay_state.has_commit = has_commit;
-  replay_state.last_commit_cycle = last_commit_cycle;
-  replay_state.has_trap = has_trap;
-  replay_state.trap_code = trap_code;
-#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  memcpy(replay_state.delayed_int, delayed_int, sizeof(delayed_int));
-#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  memcpy(replay_state.delayed_fp, delayed_fp, sizeof(delayed_fp));
-#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_SQUASH
-  replay_state.commit_stamp = commit_stamp;
-#endif // CONFIG_DIFFTEST_SQUASH
-#ifdef DEBUG_REFILL
-  replay_state.track_instr = track_instr;
-#endif // DEBUG_REFILL
-  replay_state.dump_commit_trace = dump_commit_trace;
-  replay_state.commit_counter = commit_counter;
-  replay_state.valid = true;
+  replay_state_valid = false;
+  replay_state = static_cast<const DiffStateValues &>(*this);
+  replay_state_valid = true;
 }
 
 void DiffState::replay_restore() {
-  assert(replay_state.valid);
-  coreid = replay_state.coreid;
-  cycle_count = replay_state.cycle_count;
-  has_progress = replay_state.has_progress;
-  has_commit = replay_state.has_commit;
-  last_commit_cycle = replay_state.last_commit_cycle;
-  has_trap = replay_state.has_trap;
-  trap_code = replay_state.trap_code;
-#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  memcpy(delayed_int, replay_state.delayed_int, sizeof(delayed_int));
-#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  memcpy(delayed_fp, replay_state.delayed_fp, sizeof(delayed_fp));
-#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_SQUASH
-  commit_stamp = replay_state.commit_stamp;
-#endif // CONFIG_DIFFTEST_SQUASH
-#ifdef DEBUG_REFILL
-  track_instr = replay_state.track_instr;
-#endif // DEBUG_REFILL
-  dump_commit_trace = replay_state.dump_commit_trace;
-  commit_counter = replay_state.commit_counter;
+  assert(replay_state_valid);
+  static_cast<DiffStateValues &>(*this) = replay_state;
 
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   while (!store_event_queue.empty()) {

@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <deque>
 #include <queue>
+#include <type_traits>
 #include <unordered_set>
 
 class CommitTrace {
@@ -106,8 +107,10 @@ public:
   }
 };
 
-class DiffState {
-public:
+// State copied when replay starts. Keep owning or self-referential types out.
+struct DiffStateValues {
+  explicit DiffStateValues(int coreid = 0) : coreid(coreid) {}
+
   int coreid;
   uint64_t cycle_count = 0;
   bool has_progress = false;
@@ -123,6 +126,25 @@ public:
   int delayed_fp[32] = {0};
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
 
+#ifdef CONFIG_DIFFTEST_SQUASH
+  int commit_stamp = 0;
+#endif // CONFIG_DIFFTEST_SQUASH
+
+#ifdef DEBUG_REFILL
+  uint64_t track_instr = 0;
+#endif // DEBUG_REFILL
+
+  bool dump_commit_trace = false;
+
+protected:
+  uint64_t commit_counter = 0;
+};
+
+static_assert(std::is_trivially_copyable<DiffStateValues>::value,
+              "DiffStateValues must contain only trivially copyable state");
+
+class DiffState : public DiffStateValues {
+public:
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   typedef struct {
     uint8_t valid;
@@ -148,7 +170,6 @@ public:
 #endif
 
 #ifdef CONFIG_DIFFTEST_SQUASH
-  int commit_stamp = 0;
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   std::queue<DifftestLoadEvent> load_event_queue;
 #endif // CONFIG_DIFFTEST_LOADEVENT
@@ -174,12 +195,6 @@ public:
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   std::queue<DifftestMsyncEvent> msync_event_queue;
 #endif // CONFIG_DIFFTEST_MSYNCEVENT
-
-#ifdef DEBUG_REFILL
-  uint64_t track_instr = 0;
-#endif // DEBUG_REFILL
-
-  bool dump_commit_trace = false;
 
   DiffState(int coreid);
   ~DiffState() {
@@ -235,7 +250,6 @@ private:
   static const int DEBUG_INST_TRACE_SIZE = 32;
   std::queue<CommitTrace *> commit_trace;
 
-  uint64_t commit_counter = 0;
   void push_back_trace(CommitTrace *trace) {
     if (commit_trace.size() >= DEBUG_INST_TRACE_SIZE) {
       delete commit_trace.front();
@@ -254,33 +268,8 @@ private:
   }
 
 #ifdef CONFIG_DIFFTEST_REPLAY
-  // Keep only mutable value state. Owning containers are cleared when replay starts.
-  struct ReplaySnapshot {
-    bool valid = false;
-    int coreid = 0;
-    uint64_t cycle_count = 0;
-    bool has_progress = false;
-    bool has_commit = false;
-    uint64_t last_commit_cycle = 0;
-    bool has_trap = false;
-    uint64_t trap_code = 0;
-#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-    int delayed_int[32] = {0};
-#endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-    int delayed_fp[32] = {0};
-#endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-#ifdef CONFIG_DIFFTEST_SQUASH
-    int commit_stamp = 0;
-#endif // CONFIG_DIFFTEST_SQUASH
-#ifdef DEBUG_REFILL
-    uint64_t track_instr = 0;
-#endif // DEBUG_REFILL
-    bool dump_commit_trace = false;
-    uint64_t commit_counter = 0;
-  };
-
-  ReplaySnapshot replay_state;
+  DiffStateValues replay_state;
+  bool replay_state_valid = false;
 #endif // CONFIG_DIFFTEST_REPLAY
 };
 
