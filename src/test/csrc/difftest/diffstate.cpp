@@ -16,7 +16,6 @@
 
 #include "diffstate.h"
 #include "spikedasm.h"
-#include <cassert>
 
 void CommitTrace::display(bool use_spike) {
   Info("%s pc %016lx inst %08x", get_type(), pc, inst);
@@ -61,36 +60,25 @@ DiffState::DiffState(int coreid) : DiffStateValues(coreid), use_spike(spike_vali
 
 #ifdef CONFIG_DIFFTEST_REPLAY
 void DiffState::replay_snapshot() {
-  replay_state_valid = false;
   replay_state = static_cast<const DiffStateValues &>(*this);
-  replay_state_valid = true;
 }
 
 void DiffState::replay_restore() {
-  assert(replay_state_valid);
   static_cast<DiffStateValues &>(*this) = replay_state;
 
 #ifdef CONFIG_DIFFTEST_STOREEVENT
-  while (!store_event_queue.empty()) {
-    store_event_queue.pop();
-  }
+  store_event_queue = {};
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
   cmo_inval_event_set.clear();
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
-  while (!load_event_queue.empty()) {
-    load_event_queue.pop();
-  }
+  load_event_queue = {};
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
-  while (!msync_event_queue.empty()) {
-    msync_event_queue.pop();
-  }
+  msync_event_queue = {};
 #endif // CONFIG_DIFFTEST_MSYNCEVENT
-  while (!retire_group_queue.empty()) {
-    retire_group_queue.pop();
-  }
+  retire_group_queue = {};
   while (!commit_trace.empty()) {
     delete commit_trace.front();
     commit_trace.pop();

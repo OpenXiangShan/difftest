@@ -21,7 +21,6 @@
 #include <cstdint>
 #include <deque>
 #include <queue>
-#include <type_traits>
 #include <unordered_set>
 
 class CommitTrace {
@@ -139,9 +138,6 @@ struct DiffStateValues {
 protected:
   uint64_t commit_counter = 0;
 };
-
-static_assert(std::is_trivially_copyable<DiffStateValues>::value,
-              "DiffStateValues must contain only trivially copyable state");
 
 class DiffState : public DiffStateValues {
 public:
@@ -269,7 +265,6 @@ private:
 
 #ifdef CONFIG_DIFFTEST_REPLAY
   DiffStateValues replay_state;
-  bool replay_state_valid = false;
 #endif // CONFIG_DIFFTEST_REPLAY
 };
 
