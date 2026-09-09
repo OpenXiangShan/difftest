@@ -56,7 +56,35 @@ void DiffState::display() {
   fflush(stdout);
 }
 
-DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {}
+DiffState::DiffState(int coreid) : DiffStateValues(coreid), use_spike(spike_valid()) {}
+
+#ifdef CONFIG_DIFFTEST_REPLAY
+void DiffState::replay_snapshot() {
+  replay_state = static_cast<const DiffStateValues &>(*this);
+}
+
+void DiffState::replay_restore() {
+  static_cast<DiffStateValues &>(*this) = replay_state;
+
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  store_event_queue = {};
+#endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+  cmo_inval_event_set.clear();
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
+  load_event_queue = {};
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  msync_event_queue = {};
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
+  retire_group_queue = {};
+  while (!commit_trace.empty()) {
+    delete commit_trace.front();
+    commit_trace.pop();
+  }
+}
+#endif // CONFIG_DIFFTEST_REPLAY
 
 static uint64_t get_int_data(const DiffTestState *state, int index) {
 #ifdef CONFIG_DIFFTEST_PHYINTREGSTATE
