@@ -649,27 +649,42 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
-  if (dut->event.valid) {
-    if (int ret = arch_event_checker->step()) {
-      return ret;
-    }
-    dut->commit[0].valid = 0;
-  } else {
+
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-    if (dut->commit[0].valid) {
-      dut_commit_batch_pc = dut->commit[0].pc;
-      ref_commit_batch_pc = proxy->state.pc;
-      if (dut_commit_batch_pc != ref_commit_batch_pc) {
-        pc_mismatch = true;
+  if (dut->commit[0].valid) {
+    dut_commit_batch_pc = dut->commit[0].pc;
+    ref_commit_batch_pc = proxy->state.pc;
+    if (dut_commit_batch_pc != ref_commit_batch_pc) {
+      pc_mismatch = true;
+    }
+  }
+#endif
+  // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    if (dut->commit[i].valid) {
+      num_commit += 1 + dut->commit[i].nFused;
+      if (int ret = instr_commit_checker[i]->step()) {
+        return ret;
       }
     }
-#endif
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-      if (dut->commit[i].valid) {
-        num_commit += 1 + dut->commit[i].nFused;
-        if (int ret = instr_commit_checker[i]->step()) {
-          return ret;
-        }
+  }
+
+  if (dut->event.valid) {
+    if (dut->event.interrupt || dut->event.isFormer || num_commit > 0) {
+      if (int ret = arch_event_checker->step()) {
+        return ret;
+      }
+    } else {
+      state->waitInstrCommitBeforeException = true;
+      state->pendingArchEvent = dut->event;
+      dut->event.valid = 0;
+    }
+  } else {
+    if (num_commit > 0 && state->waitInstrCommitBeforeException) {
+      state->waitInstrCommitBeforeException = false;
+      dut->event = state->pendingArchEvent;
+      if (int ret = arch_event_checker->step()) {
+        return ret;
       }
     }
   }
@@ -690,6 +705,10 @@ inline int Difftest::check_all() {
 
   if (apply_delayed_writeback()) {
     return DiffTestChecker::STATE_DIFF;
+  }
+
+  if (state->waitInstrCommitBeforeException) {
+    return DiffTestChecker::STATE_OK;
   }
 
   if (proxy->compare(dut) || pc_mismatch) {
