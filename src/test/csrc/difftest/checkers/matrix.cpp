@@ -135,16 +135,17 @@ static inline size_t get_amu_result_size(const DifftestAmuCtrlEvent &amu_event) 
 // writeback process and updates the mirrored registers in DiffTest. When the
 // instruction has fully finished and all matrix register writes are
 // complete, the state becomes WAIT_SWROB_COMMIT, waiting for the software
-// ROB to commit the instruction. Mrelease is the exception: its finish event
-// marks the point where RTL has already updated msync state, so the recorder
-// immediately applies the REF-side effect and removes it from the software
-// ROB without waiting for preceding matrix instructions.
-// - An instruction in the software ROB can be committed if and only if it
-// has completed and all preceding instructions have also completed.
-// AmuExecChecker commits such ready instructions: the REF side re-executes
-// the instruction and compares its result against the DUT result. If they
-// match, the lifecycle of this instruction ends and its resources can be
-// released.
+// ROB to commit the instruction.
+// - An instruction in the software ROB can normally be committed if and only
+// if it has completed and all preceding instructions have also completed.
+// Mrelease is different from other asynchronous matrix operations: its
+// completion directly advances DUT msync, which may unblock a following
+// core-side macquire. CUTE orders mrelease only after preceding mstores, so it
+// may complete while a preceding non-store is still unfinished. The recorder
+// must therefore apply its REF-side effect as soon as the DUT finish event
+// arrives; otherwise macquire could be checked against stale REF msync state.
+// The checker then verifies that no preceding mstore is unfinished and retires
+// the mrelease entry without waiting for preceding non-stores.
 
 // 1. Capture AME commit from DUT ROB → push to software ROB (WAIT_REF_COMMIT)
 bool AmuCtrlRecorder::get_valid(const DifftestAmuCtrlEvent &probe) {
@@ -209,7 +210,7 @@ int AmuCtrlChecker::do_step() {
   return STATE_OK;
 }
 
-// 3. Capture DUT matrix writeback; complete mrelease immediately, otherwise wait for software ROB commit
+// 3. Capture DUT matrix writeback; apply mrelease's REF effect and mark it ready for software ROB retirement
 bool AmuExecRecorder::get_valid(const DifftestAmuFinishEvent &probe) {
   return probe.valid;
 }
@@ -227,6 +228,7 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
       if (iter->amu_event.op == 2) { // mrelease
         if (!probe.finish) {
           printf("Mrelease finish event is incomplete: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+          set_error_pc(state->coreid, probe.pc);
           return STATE_ERROR;
         }
 
@@ -234,14 +236,13 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
         uint64_t unused_result = 0;
         if (proxy->get_amu_exec(&amu_event, &unused_result) != 0) {
           printf("Failed to execute REF mrelease: core %d, pc 0x%016lx\n", state->coreid, amu_event.pc);
+          set_error_pc(state->coreid, amu_event.pc);
           return STATE_ERROR;
         }
         if (iter->res != nullptr) {
           delete[] iter->res;
           iter->res = nullptr;
         }
-        state->matrix_sw_rob.erase(iter);
-        return STATE_OK;
       } else { // mload/mstore/mma/marith
         auto &entry = *iter;
         const size_t matrix_size = get_amu_result_size(entry.amu_event);
@@ -286,11 +287,11 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
             }
           }
         }
-        if (probe.finish) {
-          entry.state = DiffState::WAIT_SWROB_COMMIT;
-        }
-        return STATE_OK;
       }
+      if (probe.finish) {
+        iter->state = DiffState::WAIT_SWROB_COMMIT;
+      }
+      return STATE_OK;
     }
   }
   printf("No matching AMU instruction for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
@@ -298,11 +299,13 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
   return STATE_ERROR;
 }
 
-// 4. Commit ready inst from software ROB: REF re-exec and compare, then release
-int AmuExecChecker::do_step() {
+int AmuExecChecker::commit_ready_prefix() {
   Difftest *dt = difftest[state->coreid];
   MmaVerifier *mma_verifier = dt->get_mma_verifier();
-  // For each amu ctrl in sw_rob, check whether the inst is able to be committed.
+
+  // Retire the ready prefix in software-ROB order. The first non-ready entry
+  // blocks ordinary operations, but not a completed mrelease; check_mreleases()
+  // handles those entries separately.
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end();) {
     if (iter->state == DiffState::WAIT_SWROB_COMMIT) {
       DifftestAmuCtrlEvent amu_event = iter->amu_event;
@@ -348,13 +351,8 @@ int AmuExecChecker::do_step() {
           }
           break;
         case 2: // MRelease
-          printf("Mrelease reached ordered software ROB commit unexpectedly: core %d, pc 0x%016lx\n", state->coreid,
-                 amu_event.pc);
-          if (iter->res != nullptr) {
-            delete[] iter->res;
-            iter->res = nullptr;
-          }
-          return STATE_ERROR;
+          // The REF-side effect was applied when the DUT finish event was recorded.
+          break;
         default:
           printf("Unknown amu event op: %d\n", op);
           if (iter->res != nullptr) {
@@ -373,6 +371,38 @@ int AmuExecChecker::do_step() {
     }
   }
   return STATE_OK;
+}
+
+int AmuExecChecker::check_mreleases() {
+  // Retire completed mrelease entries without waiting for older non-stores.
+  // CUTE makes mrelease depend only on older mstores, so a completed mrelease
+  // with an unfinished older mstore indicates a DUT ordering violation.
+  bool unfinished_store_seen = false;
+  for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end();) {
+    if (iter->state == DiffState::WAIT_SWROB_COMMIT && iter->amu_event.op == 2) {
+      if (unfinished_store_seen) {
+        printf("Mrelease completed before an older mstore: core %d, mrelease pc 0x%016lx\n", state->coreid,
+               iter->amu_event.pc);
+        set_error_pc(state->coreid, iter->amu_event.pc);
+        return STATE_ERROR;
+      }
+      iter = state->matrix_sw_rob.erase(iter);
+    } else {
+      if (iter->state != DiffState::WAIT_SWROB_COMMIT && iter->amu_event.op == 1 && iter->amu_event.sat == 1) {
+        unfinished_store_seen = true;
+      }
+      ++iter;
+    }
+  }
+  return STATE_OK;
+}
+
+// 4. Commit ready inst from software ROB: REF exec and compare
+int AmuExecChecker::do_step() {
+  if (int ret = commit_ready_prefix()) {
+    return ret;
+  }
+  return check_mreleases();
 }
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

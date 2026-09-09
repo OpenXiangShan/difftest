@@ -505,6 +505,10 @@ public:
   AmuExecChecker(DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy) {}
 
   int do_step() override;
+
+private:
+  int commit_ready_prefix();
+  int check_mreleases();
 };
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
