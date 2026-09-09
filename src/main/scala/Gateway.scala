@@ -191,7 +191,7 @@ object Gateway {
   }
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
-    val ret = WireInit(0.U.asTypeOf(gen)).suggestName(gen.desiredCppName)
+    val ret = WireInit(0.U.asTypeOf(gen))
     val bundle = if (config.isFPGA && gen.fpgaFilterElems.nonEmpty) {
       val filtered = WireInit(ret)
       gen.fpgaFilterElems.foreach { name =>
@@ -205,6 +205,8 @@ object Gateway {
     } else {
       ret
     }
+    // Base DUT probe names on desiredCppName instead of automatically enumerated variable indices.
+    bundle.suggestName(gen.desiredCppName)
     dontTouch(bundle)
     if (!config.traceLoad) {
       if (config.needEndpoint) {
