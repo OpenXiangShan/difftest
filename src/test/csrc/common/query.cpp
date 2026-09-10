@@ -21,8 +21,11 @@
 QueryStats *qStats;
 
 void difftest_query_init() {
-  char query_path[128];
-  snprintf(query_path, 128, "%s/build/%s", getenv("NOOP_HOME"), "difftest_query.db");
+  char query_path[PATH_MAX];
+  const char *noop_home = getenv("NOOP_HOME");
+  assert(noop_home != nullptr);
+  int path_length = snprintf(query_path, PATH_MAX, "%s/build/%s", noop_home, "difftest_query.db");
+  assert(path_length >= 0 && path_length < PATH_MAX);
   // remove exist file
   FILE *fp = fopen(query_path, "r");
   if (fp) {

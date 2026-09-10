@@ -73,9 +73,13 @@ object Query {
          |public:
          |  ${tables.map { t => s"Query* ${t.instName};" }.mkString("\n  ")}
          |  ${batchTable.map(_.members).getOrElse("")}
-         |  QueryStats(char *path): QueryStatsBase(path) {
+         |  QueryStats(const char *path): QueryStatsBase(path) {
          |    ${tables.map(_.initInvoke).mkString("\n    ")}
          |    ${batchTable.map(_.initInvoke).getOrElse("")}
+         |  }
+         |  ~QueryStats() {
+         |    ${tables.map(t => s"delete ${t.instName};").mkString("\n    ")}
+         |    ${batchTable.map(_.deleteInvoke).getOrElse("")}
          |  }
          |  ${tables.map(_.initDecl).mkString("")}
          |  ${tables.map(_.writeDecl).mkString("")}
@@ -169,6 +173,7 @@ class BatchQueryTable(template: Seq[DifftestBundle]) {
        |  Query* query_BatchStep;""".stripMargin
 
   val initInvoke: String = "BatchTable_init();"
+  val deleteInvoke: String = "delete query_BatchInfo;\n    delete query_BatchStep;"
 
   val initDecl: String = {
     val bundleNameInserts = bundleNames.zipWithIndex.map { case (name, id) =>

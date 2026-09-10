@@ -22,7 +22,7 @@ import circt.stage.FirtoolOption
 import chisel3.util._
 import difftest.common.FileControl
 import difftest.gateway.{Gateway, GatewayConfig, GatewayResult}
-import difftest.util.Profile
+import difftest.util.{Profile, UArchProbeSchema}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
@@ -97,7 +97,10 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     }
   }
 
-  def elementsInSeqUInt: Seq[(String, Seq[UInt])] = seqUIntHelper(elements.toSeq.reverse)
+  private[difftest] def physicalElementsInSeqUInt: Seq[(String, Seq[UInt])] =
+    seqUIntHelper(elements.toSeq.reverse)
+
+  def elementsInSeqUInt: Seq[(String, Seq[UInt])] = physicalElementsInSeqUInt
 
   // return (name, data_width_aligned, data_seq) for all elements, where width can be 8,16,32,64
   def totalElements: Seq[(String, Int, Seq[UInt])] = {
@@ -239,6 +242,69 @@ class DiffArchEvent extends ArchEvent with DifftestBundle {
   // DiffArchEvent must be instantiated once for each core.
   override def isUniqueIdentifier: Boolean = true
   override val desiredCppName: String = "event"
+}
+
+class DiffUArchProbe[T <: Bundle](override val schema: String)
+  extends UArchProbe(schema)
+  with DifftestBundle
+  with DifftestWithIndex {
+  def this(payload: T) = this(UArchProbeSchema.fromBundle(payload).json)
+
+  override val desiredCppName: String = s"uarch_probe_${probeSchema.instanceSuffix}"
+  override def desiredModuleName: String = s"DifftestUArchProbe${probeSchema.typeSuffix}"
+  override def classArgs: Map[String, Any] = Map("schema" -> schema)
+  override val squashGroup: Seq[String] = Seq("UARCH")
+  override def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = !valid
+
+  override private[difftest] def physicalElementsInSeqUInt: Seq[(String, Seq[UInt])] = Seq(
+    "valid" -> Seq(valid),
+    "uarchId" -> Seq(uarchId),
+    "cycleCnt" -> Seq(cycleCnt),
+    "data" -> data.toSeq,
+    "coreid" -> Seq(coreid),
+    "index" -> Seq(index),
+  )
+
+  override def elementsInSeqUInt: Seq[(String, Seq[UInt])] = {
+    var offset = 0
+    val payloadElements = probeSchema.fields.map { field =>
+      val elements = data.slice(offset, offset + field.storageCount).toSeq
+      offset += field.storageCount
+      (field.name, elements)
+    }
+    Seq(
+      "valid" -> Seq(valid),
+      "uarchId" -> Seq(uarchId),
+      "cycleCnt" -> Seq(cycleCnt),
+    ) ++ payloadElements ++ Seq(
+      "coreid" -> Seq(coreid),
+      "index" -> Seq(index),
+    )
+  }
+
+  def setPayload(payload: T): Unit = {
+    val (payloadSchema, payloadFields) = UArchProbeSchema.payloadData(payload)
+    require(
+      payloadSchema == probeSchema,
+      s"DiffUArchProbe payload schema changed from ${probeSchema.json} to ${payloadSchema.json}",
+    )
+    val encoded = payloadSchema.fields.zip(payloadFields).flatMap { case (field, elements) =>
+      elements.flatMap { element =>
+        if (field.width > 64) {
+          val packed = element.pad(field.wordsPerElement * 64)
+          Seq.tabulate(field.wordsPerElement) { index =>
+            packed((index + 1) * 64 - 1, index * 64)
+          }
+        } else {
+          Seq(element)
+        }
+      }
+    }
+    require(encoded.length == data.length, "DiffUArchProbe encoded payload size does not match its schema")
+    data.zip(encoded).foreach { case (sink, source) =>
+      sink := source
+    }
+  }
 }
 
 class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with DifftestBundle with DifftestWithIndex {
@@ -622,6 +688,13 @@ object DifftestModule {
     delay: Int = 0,
   ): T = {
     val difftest: T = Wire(gen)
+    difftest match {
+      case probe: DiffUArchProbe[_] =>
+        probe.uarchId := 0.U
+        probe.cycleCnt := 0.U
+        probe.index := 0.U
+      case _ =>
+    }
     val isExcluded = nameExcludes.exists(ex => gen.desiredModuleName.contains(ex))
     if (enabled && !isExcluded) {
       Gateway(gen, delay) := difftest
