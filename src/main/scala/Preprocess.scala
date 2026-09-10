@@ -109,11 +109,14 @@ class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) ex
   val pipelined = Wire(Decoupled(MixedVec(bundles)))
   PipelineConnect(in, pipelined, pipelined.fire)
 
-  val replaceReg = if (!config.softArchUpdate && pipelined.bits.exists(_.desiredCppName == "pregs_xrf")) {
+  // An absent observation is an ordinary DUT, not a missing mandatory interface.
+  val renamed = Rename.replaceRenameTables(pipelined.bits.toSeq, pipelined.fire)
+
+  val replaceReg = if (!config.softArchUpdate && renamed.exists(_.desiredCppName == "pregs_xrf")) {
     // extract ArchReg in Hardware
-    Preprocess.replaceRegs(pipelined.bits)
+    Preprocess.replaceRegs(renamed)
   } else {
-    pipelined.bits
+    renamed
   }
 
   // LoadEvent will not be checked when single-core

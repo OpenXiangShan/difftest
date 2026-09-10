@@ -337,8 +337,8 @@ void Difftest::init_checkers() {
   checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
                                                  proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
-  // Each cycle is checked for an store event, and recorded in queue.
-  // It is checked every time an instruction is committed and queue has content.
+  // Record store events each cycle. Without squash, check them after the whole
+  // commit batch; with squash, check them at their instruction commit stamp.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
     checkers.push_back(new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy));
@@ -469,7 +469,9 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_checker = new StoreChecker(state, proxy);
+#ifdef CONFIG_DIFFTEST_SQUASH
   inst_op_checkers.push_back(store_checker);
+#endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   inst_op_checkers.push_back(new MsyncChecker(state, proxy));
@@ -659,6 +661,9 @@ inline int Difftest::check_all() {
     }
   }
 #endif
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+  bool has_non_skip_commit = false;
+#endif
   // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     if (dut->commit[i].valid) {
@@ -666,8 +671,21 @@ inline int Difftest::check_all() {
       if (int ret = instr_commit_checker[i]->step()) {
         return ret;
       }
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+      has_non_skip_commit |= !dut->commit[i].skip;
+#endif
     }
   }
+
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+  // A store event can belong to a later commit lane (e.g. the latter slot of a
+  // compressed ROB entry). Execute the whole batch before checking its stores.
+  if (has_non_skip_commit) {
+    if (int ret = store_checker->step()) {
+      return ret;
+    }
+  }
+#endif // CONFIG_DIFFTEST_STOREEVENT && !CONFIG_DIFFTEST_SQUASH
 
   if (dut->event.valid) {
     if (dut->event.interrupt || dut->event.isFormer || num_commit > 0) {

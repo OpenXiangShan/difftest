@@ -179,6 +179,36 @@ class ArchRenameTable(numRegs: Int, numPhyRegs: Int) extends DifftestBaseBundle 
   val value = Vec(numRegs, UInt(log2Ceil(numPhyRegs).W))
 }
 
+// Optional observations for reconstructing RATs at grouped commit boundaries.
+// Group IDs are opaque. Commit index = retirement lane * slotsPerGroup + member.
+// Every accepted rename lane supplies a boundary, even without a register write.
+class RenameEvent(
+  val renameWidth: Int,
+  val retireWidth: Int,
+  val groupWidth: Int,
+  val slotsPerGroup: Int,
+  val phyRegWidth: Int,
+  val numRegs: Int = 32,
+  val targets: String = "rat_xrf,rat_frf,rat_vrf",
+) extends DifftestBaseBundle {
+  val targetNames: Seq[String] = targets.split(",").toSeq
+
+  val base = Vec(numRegs * targetNames.size, UInt(phyRegWidth.W))
+  val renameValid = UInt(renameWidth.W)
+  val writeEnable = Vec(renameWidth, UInt(targetNames.size.W))
+  val ldest = Vec(renameWidth, UInt(log2Ceil(numRegs).max(1).W))
+  val pdest = Vec(renameWidth, UInt(phyRegWidth.W))
+  val groupId = Vec(renameWidth, UInt(groupWidth.W))
+  val member = Vec(renameWidth, UInt(log2Ceil(slotsPerGroup).max(1).W))
+  val commitValid = Bool()
+  val commitGroupId = UInt(groupWidth.W)
+  val fallbackMember = UInt(log2Ceil(slotsPerGroup).max(1).W)
+  val retireValid = UInt(retireWidth.W)
+  val retireGroupId = Vec(retireWidth, UInt(groupWidth.W))
+
+  override def needUpdate: Option[Bool] = Some(renameValid.orR || retireValid.orR || commitValid)
+}
+
 class PhyRegState(numPhyRegs: Int) extends DifftestBaseBundle {
   val value = Vec(numPhyRegs, UInt(64.W))
 }

@@ -51,6 +51,9 @@ case class GatewayConfig(
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
   softArchUpdate: Boolean = false,
+  // Optional rename observations may be instantiated after other interfaces.
+  // Reserve their preprocessing path before selecting source wiring, also for U.
+  trackRename: Boolean = true,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
 ) {
@@ -69,7 +72,7 @@ case class GatewayConfig(
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
     hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring || traceDump || traceLoad || needPreprocess
-  def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo || !softArchUpdate
+  def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo || !softArchUpdate || trackRename
   def useDPICtype: Boolean = !isFPGA && !isGSIM
   // Macros Generation for Cpp and Verilog
   def cppMacros: Seq[String] = {
@@ -191,6 +194,10 @@ object Gateway {
   }
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
+    require(
+      !gen.isInstanceOf[DiffRenameEvent] || config.needPreprocess,
+      "rename observations require preprocessing; keep trackRename enabled",
+    )
     val ret = WireInit(0.U.asTypeOf(gen))
     val bundle = if (config.isFPGA && gen.fpgaFilterElems.nonEmpty) {
       val filtered = WireInit(ret)
