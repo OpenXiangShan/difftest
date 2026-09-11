@@ -165,6 +165,12 @@ void FpgaXdma::h2c_load_workload(const void *payload, uint64_t size) {
   printf("[fpga-host] XDMA H2C queued %" PRIu64 " bytes\n", size);
 #endif // FPGA_SIM
 }
+#else
+void FpgaXdma::h2c_load_workload(const void *payload, uint64_t size) {
+  (void)payload;
+  (void)size;
+  fprintf(stderr, "[fpga-host] XDMA H2C workload support is disabled (CONFIG_USE_XDMA_H2C=0)\n");
+}
 #endif // CONFIG_USE_XDMA_H2C
 
 // write xdma_bypass memory or xdma_user
