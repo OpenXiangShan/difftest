@@ -51,9 +51,10 @@ case class GatewayConfig(
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
   softArchUpdate: Boolean = false,
-  // Optional rename observations may be instantiated after other interfaces.
-  // Reserve their preprocessing path before selecting source wiring, also for U.
-  trackRename: Boolean = true,
+  // Optional rename observations can request preprocessing explicitly. U-mode
+  // keeps the software-side transport by default, so rename observations do
+  // not force a GatewayEndpoint during post-elaboration collection.
+  trackRename: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
 ) {
@@ -195,8 +196,8 @@ object Gateway {
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
     require(
-      !gen.isInstanceOf[DiffRenameEvent] || config.needPreprocess,
-      "rename observations require preprocessing; keep trackRename enabled",
+      !gen.isInstanceOf[DiffRenameEvent] || config.needPreprocess || config.softArchUpdate,
+      "rename observations require preprocessing or soft-architecture transport",
     )
     val ret = WireInit(0.U.asTypeOf(gen))
     val bundle = if (config.isFPGA && gen.fpgaFilterElems.nonEmpty) {
