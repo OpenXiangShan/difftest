@@ -118,6 +118,11 @@ struct DiffStateValues {
   bool has_trap = false;
   uint64_t trap_code = 0;
 
+  // A latter-slot exception may arrive before the former-slot commit probe.
+  // Keep both fields in the replay snapshot along with the reference state.
+  bool waitInstrCommitBeforeException = false;
+  DifftestArchEvent pendingArchEvent{};
+
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
   int delayed_int[32] = {0};
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE

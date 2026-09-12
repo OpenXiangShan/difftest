@@ -368,6 +368,28 @@ class DiffArchVecRenameTable(numPhyRegs: Int) extends DiffArchRenameTable(64, nu
   override val desiredCppName: String = "rat_vrf"
 }
 
+class DiffRenameEvent(
+  renameWidth: Int,
+  retireWidth: Int,
+  groupWidth: Int,
+  slotsPerGroup: Int,
+  phyRegWidth: Int,
+  numRegs: Int = 32,
+  targets: String = "rat_xrf,rat_frf,rat_vrf",
+) extends RenameEvent(renameWidth, retireWidth, groupWidth, slotsPerGroup, phyRegWidth, numRegs, targets)
+  with DifftestBundle {
+  override val desiredCppName: String = "rename_event"
+  override def classArgs: Map[String, Any] = Map(
+    "renameWidth" -> renameWidth,
+    "retireWidth" -> retireWidth,
+    "groupWidth" -> groupWidth,
+    "slotsPerGroup" -> slotsPerGroup,
+    "phyRegWidth" -> phyRegWidth,
+    "numRegs" -> numRegs,
+    "targets" -> targets,
+  )
+}
+
 abstract class DiffPhyRegState(val numPhyRegs: Int) extends PhyRegState(numPhyRegs) with DifftestBundle {
   override val supportsDelta: Boolean = true
   override def classArgs: Map[String, Any] = Map("numPhyRegs" -> numPhyRegs)
@@ -820,6 +842,8 @@ object DifftestModule {
          |public:
          |  virtual ~DiffStateBuffer() {}
          |  virtual DiffTestState* get(int zone, int index) = 0;
+         |  virtual void mark_dirty(int zone, int index) = 0;
+         |  virtual void prepare(int zone, int index) = 0;
          |  virtual DiffTestState* next() = 0;
          |  virtual void switch_zone() = 0;
          |};

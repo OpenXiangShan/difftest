@@ -337,8 +337,8 @@ void Difftest::init_checkers() {
   checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
                                                  proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
-  // Each cycle is checked for an store event, and recorded in queue.
-  // It is checked every time an instruction is committed and queue has content.
+  // Record store events each cycle. Without squash, check them after the whole
+  // commit batch; with squash, check them at their instruction commit stamp.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
     checkers.push_back(new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy));
@@ -469,7 +469,9 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_checker = new StoreChecker(state, proxy);
+#ifdef CONFIG_DIFFTEST_SQUASH
   inst_op_checkers.push_back(store_checker);
+#endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   inst_op_checkers.push_back(new MsyncChecker(state, proxy));
@@ -649,27 +651,58 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
-  if (dut->event.valid) {
-    if (int ret = arch_event_checker->step()) {
+
+#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
+  if (dut->commit[0].valid) {
+    dut_commit_batch_pc = dut->commit[0].pc;
+    ref_commit_batch_pc = proxy->state.pc;
+    if (dut_commit_batch_pc != ref_commit_batch_pc) {
+      pc_mismatch = true;
+    }
+  }
+#endif
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+  bool has_non_skip_commit = false;
+#endif
+  // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    if (dut->commit[i].valid) {
+      num_commit += 1 + dut->commit[i].nFused;
+      if (int ret = instr_commit_checker[i]->step()) {
+        return ret;
+      }
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+      has_non_skip_commit |= !dut->commit[i].skip;
+#endif
+    }
+  }
+
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+  // A store event can belong to a later commit lane (e.g. the latter slot of a
+  // compressed ROB entry). Execute the whole batch before checking its stores.
+  if (has_non_skip_commit) {
+    if (int ret = store_checker->step()) {
       return ret;
     }
-    dut->commit[0].valid = 0;
-  } else {
-#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-    if (dut->commit[0].valid) {
-      dut_commit_batch_pc = dut->commit[0].pc;
-      ref_commit_batch_pc = proxy->state.pc;
-      if (dut_commit_batch_pc != ref_commit_batch_pc) {
-        pc_mismatch = true;
+  }
+#endif // CONFIG_DIFFTEST_STOREEVENT && !CONFIG_DIFFTEST_SQUASH
+
+  if (dut->event.valid) {
+    if (dut->event.interrupt || dut->event.isFormer || num_commit > 0) {
+      if (int ret = arch_event_checker->step()) {
+        return ret;
       }
+    } else {
+      state->waitInstrCommitBeforeException = true;
+      state->pendingArchEvent = dut->event;
+      dut->event.valid = 0;
     }
-#endif
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-      if (dut->commit[i].valid) {
-        num_commit += 1 + dut->commit[i].nFused;
-        if (int ret = instr_commit_checker[i]->step()) {
-          return ret;
-        }
+  } else {
+    if (num_commit > 0 && state->waitInstrCommitBeforeException) {
+      state->waitInstrCommitBeforeException = false;
+      dut->event = state->pendingArchEvent;
+      if (int ret = arch_event_checker->step()) {
+        return ret;
       }
     }
   }
@@ -690,6 +723,10 @@ inline int Difftest::check_all() {
 
   if (apply_delayed_writeback()) {
     return DiffTestChecker::STATE_DIFF;
+  }
+
+  if (state->waitInstrCommitBeforeException) {
+    return DiffTestChecker::STATE_OK;
   }
 
   if (proxy->compare(dut) || pc_mismatch) {

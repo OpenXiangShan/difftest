@@ -51,6 +51,9 @@ case class GatewayConfig(
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
   softArchUpdate: Boolean = false,
+  // Compatibility flag retained for profiles that used to request rename
+  // tracking. It no longer selects the transport or the preprocessing stage.
+  trackRename: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
 ) {
@@ -69,6 +72,9 @@ case class GatewayConfig(
   def needTraceInfo: Boolean = hasReplay
   def needEndpoint: Boolean =
     hasGlobalEnable || hasDutZone || isBatch || isSquash || hierarchicalWiring || traceDump || traceLoad || needPreprocess
+  // Rename reconstruction and the generic hardware preprocessing pipeline are
+  // separate concerns. In U mode the former is performed by DPIC, while the
+  // latter must stay disabled so TopMain can collect after elaboration.
   def needPreprocess: Boolean = hasDutZone || isBatch || isSquash || needTraceInfo || !softArchUpdate
   def useDPICtype: Boolean = !isFPGA && !isGSIM
   // Macros Generation for Cpp and Verilog
@@ -191,6 +197,10 @@ object Gateway {
   }
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
+    require(
+      !gen.isInstanceOf[DiffRenameEvent] || config.needPreprocess || config.softArchUpdate,
+      "rename observations require preprocessing or soft-architecture transport",
+    )
     val ret = WireInit(0.U.asTypeOf(gen))
     val bundle = if (config.isFPGA && gen.fpgaFilterElems.nonEmpty) {
       val filtered = WireInit(ret)
