@@ -842,6 +842,8 @@ object DifftestModule {
          |public:
          |  virtual ~DiffStateBuffer() {}
          |  virtual DiffTestState* get(int zone, int index) = 0;
+         |  virtual void mark_dirty(int zone, int index) = 0;
+         |  virtual void prepare(int zone, int index) = 0;
          |  virtual DiffTestState* next() = 0;
          |  virtual void switch_zone() = 0;
          |};
