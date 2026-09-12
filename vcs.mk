@@ -40,7 +40,18 @@ VCS_VSRC_DIR 	= $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES    = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v" -or -name "*.sv")
 IOMMU_FILELIST ?= $(abspath ../bosc-iommu-v2/iommu_wrap.f)
 IOMMU_RTL_DIR  ?= $(abspath ../bosc-iommu-v2)
-IOMMU_RTL_FILES = $(shell find $(IOMMU_RTL_DIR) -type f \( -name "*.v" -o -name "*.sv" \))
+# The IOMMU checkout is optional for generic difftest users (for example the
+# NutShell CI job). Only add its file list and sources when the checkout exists.
+IOMMU_ENABLED   := $(if $(wildcard $(IOMMU_FILELIST)),1,0)
+ifeq ($(IOMMU_ENABLED),1)
+IOMMU_RTL_FILES = $(shell find $(IOMMU_RTL_DIR) -type f \( -name "*.v" -o -name "*.sv" \) 2>/dev/null)
+IOMMU_FLAGS     = -F $(IOMMU_FILELIST)
+IOMMU_DEPS      = $(IOMMU_FILELIST) $(IOMMU_RTL_FILES)
+else
+IOMMU_RTL_FILES =
+IOMMU_FLAGS     =
+IOMMU_DEPS      =
+endif
 
 VCS_FLAGS 		= $(SIM_VFLAGS)
 
@@ -119,7 +130,7 @@ VCS_FLAGS += -y $(RTL_DIR) +libext+.v +libext+.sv
 # search generated-src for verilog included files
 VCS_FLAGS += +incdir+$(GEN_VSRC_DIR)
 # bosc-iommu-v2 RTL. iommu_wrap.f paths are relative to the difftest directory.
-VCS_FLAGS += -F $(IOMMU_FILELIST)
+VCS_FLAGS += $(IOMMU_FLAGS)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
@@ -128,7 +139,7 @@ PGO_MAX_CYCLE = 100000   # Default for VCS = verilator; cmdline can override
 VCS_PGO_ARGS ?= +no-diff
 VCS_PGO_RUN_OPT = "+workload=$(PGO_WORKLOAD) +max-cycles=$(PGO_MAX_CYCLE) $(VCS_PGO_ARGS)"
 
-$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES) $(IOMMU_FILELIST) $(IOMMU_RTL_FILES)
+$(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES) $(IOMMU_DEPS)
 ifdef PGO_WORKLOAD
 	$(MAKE) pgo-build \
 		PGO_CLEAN_OBJ=vcs-clean-obj \
