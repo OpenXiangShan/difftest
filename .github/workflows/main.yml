@@ -69,6 +69,8 @@ jobs:
 
       - name: Prepare LLVM profile runtime
         run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libclang-rt-19-dev
           resource_dir=$(clang++ -print-resource-dir)/lib
           runtime_dir="$resource_dir/x86_64-pc-linux-gnu"
           runtime_source="$resource_dir/linux/libclang_rt.profile-x86_64.a"
@@ -236,6 +238,8 @@ jobs:
 
       - name: Prepare LLVM profile runtime
         run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libclang-rt-19-dev
           resource_dir=$(clang++ -print-resource-dir)/lib
           runtime_dir="$resource_dir/x86_64-pc-linux-gnu"
           runtime_source="$resource_dir/linux/libclang_rt.profile-x86_64.a"
