@@ -409,7 +409,7 @@ public:
     }
   }
 
-  inline int get_amu_ctrl_event(void *info) {
+  inline int get_amu_ctrl_event(struct AmuCtrlEvent *info) {
     if (ref_amu_ctrl) {
       return ref_amu_ctrl(info);
     } else {
@@ -426,7 +426,7 @@ public:
     }
   }
 
-  inline int get_msync_event(void *info) {
+  inline int get_msync_event(struct MsyncEvent *info) {
     if (ref_msync_event) {
       return ref_msync_event(info);
     } else {
@@ -443,7 +443,7 @@ public:
     }
   }
 
-  inline int get_amu_exec(void *amu_ctrl, void *matrix) {
+  inline int get_amu_exec(struct AmuCtrlEvent *amu_ctrl, void *matrix) {
     if (ref_amu_exec) {
       return ref_amu_exec(amu_ctrl, matrix);
     } else {
@@ -452,7 +452,7 @@ public:
     }
   }
 
-  inline int get_amu_lazy(void *amu_ctrl, void *res, void *src1, void *src2, void *src3) {
+  inline int get_amu_lazy(struct AmuCtrlEvent *amu_ctrl, void *res, void *src1, void *src2, void *src3) {
     if (ref_amu_lazy) {
       ref_amu_lazy(amu_ctrl, res, src1, src2, src3);
       return 0;
@@ -543,6 +543,36 @@ struct FromAIA {
 struct InterruptDelegate {
   bool irToHS;
   bool irToVS;
+};
+
+// These structures mirror NEMU's naturally aligned AME ABI. The generated
+// Difftest events may be packed in batch mode; conversion is performed by the
+// corresponding checker before invoking RefProxy.
+struct AmuCtrlEvent {
+  uint8_t valid;
+  uint8_t op;
+  uint8_t rm;
+  uint8_t md;
+  uint8_t sat;
+  uint8_t ms1;
+  uint8_t ms2;
+  uint16_t mtilem;
+  uint16_t mtilen;
+  uint16_t mtilek;
+  uint8_t types1;
+  uint8_t types2;
+  uint8_t typed;
+  uint8_t isfp;
+  uint64_t base;
+  uint64_t stride;
+  uint64_t pc;
+};
+
+struct MsyncEvent {
+  uint8_t valid;
+  uint8_t op;
+  uint8_t msyncRd;
+  uint64_t pc;
 };
 
 extern const char *difftest_ref_so;
