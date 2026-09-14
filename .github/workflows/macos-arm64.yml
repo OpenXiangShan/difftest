@@ -10,7 +10,7 @@ on:
 jobs:
   cross-build:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
     timeout-minutes: 10
 
     steps:
