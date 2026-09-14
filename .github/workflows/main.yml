@@ -67,6 +67,23 @@ jobs:
         run: |
           echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
 
+      - name: Prepare LLVM profile runtime
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libclang-rt-19-dev
+          resource_dir=$(clang++ -print-resource-dir)/lib
+          runtime_dir="$resource_dir/x86_64-pc-linux-gnu"
+          runtime_source="$resource_dir/linux/libclang_rt.profile-x86_64.a"
+          runtime_lib="$runtime_dir/libclang_rt.profile.a"
+          if [ ! -f "$runtime_source" ]; then
+            echo "Missing LLVM profile runtime: $runtime_source" >&2
+            exit 1
+          fi
+          if [ ! -e "$runtime_lib" ]; then
+            mkdir -p "$runtime_dir"
+            ln -s "$runtime_source" "$runtime_lib"
+          fi
+
       - name: Prepare NutShell
         run: |
             cd $GITHUB_WORKSPACE/..
@@ -218,6 +235,23 @@ jobs:
       - name: Enable -Werror for EMU Build
         run: |
           echo "CXX_NO_WARNING=1" >> $GITHUB_ENV
+
+      - name: Prepare LLVM profile runtime
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libclang-rt-19-dev
+          resource_dir=$(clang++ -print-resource-dir)/lib
+          runtime_dir="$resource_dir/x86_64-pc-linux-gnu"
+          runtime_source="$resource_dir/linux/libclang_rt.profile-x86_64.a"
+          runtime_lib="$runtime_dir/libclang_rt.profile.a"
+          if [ ! -f "$runtime_source" ]; then
+            echo "Missing LLVM profile runtime: $runtime_source" >&2
+            exit 1
+          fi
+          if [ ! -e "$runtime_lib" ]; then
+            mkdir -p "$runtime_dir"
+            ln -s "$runtime_source" "$runtime_lib"
+          fi
 
       - name: Prepare NutShell
         run: |
