@@ -136,14 +136,89 @@ class TraceDumper(bundles: Seq[DifftestBundle]) extends Module {
 class TraceLoader(bundles: Seq[DifftestBundle]) extends Module {
   val io = IO(Output(MixedVec(bundles)))
   val io_sort = io.sortBy(_.order).toSeq
-  val aligned = WireInit(
-    0.U.asTypeOf(MixedVec(io_sort.map { b => UInt(b.getByteAlignWidth(true).W) }))
-  )
-  val trace = Module(new DifftestTrace(aligned.getWidth, false))
+  val alignedWidth = io_sort.map(_.getByteAlignWidth(true)).sum
+  val alignedType = MixedVec(io_sort.map(b => UInt(b.getByteAlignWidth(true).W)))
+
+  def decode(raw: UInt): MixedVec[DifftestBundle] = {
+    val aligned = raw.asTypeOf(alignedType)
+    MixedVecInit(io_sort.zip(aligned).map { case (o, a) => o.reverseByteAlign(a, true) }.toSeq)
+  }
+  def trapCycleOf(decoded: MixedVec[DifftestBundle]): UInt = {
+    decoded.collectFirst {
+      case bundle if bundle.desiredCppName == "trap" =>
+        bundle.asUInt.asTypeOf(new DiffTrapEvent).cycleCnt
+    }.getOrElse(0.U)
+  }
+  def dropValid(decoded: MixedVec[DifftestBundle]): MixedVec[DifftestBundle] = {
+    MixedVecInit(decoded.zip(io_sort).map { case (bundle, gen) =>
+      if (gen.desiredCppName == "trap") {
+        val trap = WireInit(bundle.asUInt.asTypeOf(new DiffTrapEvent))
+        trap.hasTrap := false.B
+        trap.hasWFI := false.B
+        trap.asUInt.asTypeOf(chiselTypeOf(bundle))
+      } else {
+        val cleared = WireInit(bundle)
+        cleared.bits.getValidOption.foreach(_ := false.B)
+        cleared
+      }
+    }.toSeq)
+  }
+
+  val plusarg = Module(new TracePacePlusArg)
+  val paceCycle = plusarg.enable
+  val trace = Module(new DifftestTrace(alignedWidth, false))
   trace.clock := clock
-  trace.enable := !reset.asBool
-  aligned := trace.io.asTypeOf(aligned)
-  io_sort.zip(aligned).foreach { case (o, a) => o := o.reverseByteAlign(a, true) }
+  val raw = trace.io
+  val peek = trace.q.get
+  val hold = Reg(UInt(alignedWidth.W))
+  val peekValid = RegInit(false.B)
+  val holdValid = RegInit(false.B)
+  val lastCycle = RegInit(0.U(64.W))
+  val peekDec = decode(peek)
+  val holdDec = decode(hold)
+  val peekCycle = trapCycleOf(peekDec)
+  val taking = paceCycle && peekValid && (!holdValid || peekCycle <= lastCycle + 1.U)
+  val bubbling = paceCycle && holdValid && peekValid && peekCycle > lastCycle + 1.U
+
+  trace.enable := !reset.asBool && (!paceCycle || !peekValid || taking)
+  when(trace.enable) {
+    peekValid := true.B
+  }
+  when(taking) {
+    hold := peek
+    holdValid := true.B
+    lastCycle := peekCycle
+  }
+  when(bubbling) {
+    lastCycle := lastCycle + 1.U
+  }
+
+  val idle = WireInit(0.U.asTypeOf(chiselTypeOf(peekDec)))
+  val pacedOut = Mux(taking, peekDec, Mux(bubbling, dropValid(holdDec), idle))
+  io_sort.zip(Mux(paceCycle, pacedOut, decode(raw))).foreach { case (o, b) => o := b }
+}
+
+class TracePacePlusArg extends ExtModule with HasExtModuleInline {
+  val enable = IO(Output(Bool()))
+
+  setInline(
+    "TracePacePlusArg.v",
+    """
+      |module TracePacePlusArg(
+      |  output enable
+      |);
+      |  reg _enable;
+      |  assign enable = _enable;
+      |  initial begin
+      |    _enable = 0;
+      |    if ($test$plusargs("iotrace-pace-cycle")) begin
+      |      _enable = 1;
+      |      $display("iotrace: pace replay by TrapEvent.cycleCnt");
+      |    end
+      |  end
+      |endmodule
+      |""".stripMargin,
+  )
 }
 
 class DifftestTrace(width: Int, isDump: Boolean) extends ExtModule with HasExtModuleInline {
@@ -151,16 +226,35 @@ class DifftestTrace(width: Int, isDump: Boolean) extends ExtModule with HasExtMo
   val clock = IO(Input(Clock()))
   val enable = IO(Input(Bool()))
   val io = IO(do_flip(Input(UInt(width.W))))
+  val q = Option.when(!isDump)(IO(Output(UInt(width.W))))
 
   val io_direction = if (isDump) "input" else "output"
   val io_assign = if (isDump) "assign io_dummy = io;" else "assign io = io_dummy;"
+  val qPort = if (isDump) "" else s",\n  output [${width - 1}:0] q"
+  val qLogic =
+    if (isDump) ""
+    else s"""
+            |  reg [${width - 1}:0] io_q;
+            |  assign q = io_q;
+            |  initial io_q = 0;
+            |""".stripMargin
+  val sample =
+    if (isDump)
+      "always @(posedge clock) begin\n    if (enable) v_difftest_trace(io_dummy);\n  end"
+    else
+      """always @(posedge clock) begin
+        |    if (enable) begin
+        |      v_difftest_trace(io_dummy);
+        |      io_q <= io_dummy;
+        |    end
+        |  end""".stripMargin
   setInline(
     "DifftestTrace.v",
     s"""
        |module DifftestTrace(
        |  input clock,
        |  input enable,
-       |  $io_direction [${width - 1}:0] io
+       |  $io_direction [${width - 1}:0] io$qPort
        |);
        |
        |import "DPI-C" function void v_difftest_trace (
@@ -168,9 +262,8 @@ class DifftestTrace(width: Int, isDump: Boolean) extends ExtModule with HasExtMo
        |);
        |  bit[${width - 1}:0] io_dummy;
        |  $io_assign
-       |  always @(posedge clock) begin
-       |    if (enable) v_difftest_trace(io_dummy);
-       |  end
+       |  $qLogic
+       |  $sample
        |endmodule
        |""".stripMargin,
   )

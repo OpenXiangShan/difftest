@@ -113,6 +113,7 @@ Implementation: [`Trace.scala`](../src/main/scala/Trace.scala), config letters: 
 
 - Trace dump: records the delayed bundle stream before preprocess
 - Trace load: replaces the normal delayed bundle path with loaded trace data
+- Optional `+iotrace-pace-cycle`: replay holds a record until the next `TrapEvent.cycleCnt`, emitting `valid=0` bubbles for the skipped DUT cycles. Default is packed (one record per gated cycle).
 
 ### Global Enable & Dut Zone
 
