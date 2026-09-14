@@ -19,7 +19,6 @@ package difftest.preprocess
 import chisel3._
 import chisel3.util._
 import difftest._
-import difftest.common.DifftestPerf
 import difftest.gateway.GatewayConfig
 import difftest.util.PipelineConnect
 
@@ -129,9 +128,4 @@ class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) ex
   pipelined.ready := out.ready
   out.valid := pipelined.valid
   out.bits := preprocessed
-
-  if (config.hasBuiltInPerf) {
-    DifftestPerf("PreprocessReadyLow", (!in.ready).asUInt)
-    DifftestPerf("PreprocessStall", (in.valid && !in.ready).asUInt)
-  }
 }

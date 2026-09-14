@@ -194,7 +194,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
 
   if (config.hasBuiltInPerf) {
     DifftestPerf("SquashAbsorb", (in.valid && in.ready && !out.ready).asUInt)
-    DifftestPerf("SquashReadyLow", (!in.ready).asUInt)
+    DifftestPerf("SquashNotReady", (!in.ready).asUInt)
     DifftestPerf("SquashStall", (in.valid && !in.ready).asUInt)
   }
 }

@@ -104,7 +104,7 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   out <> collector.out
 
   if (config.hasBuiltInPerf) {
-    DifftestPerf("BatchInReadyLow", (!in.ready).asUInt)
+    DifftestPerf("BatchInNotReady", (!in.ready).asUInt)
     DifftestPerf("BatchInStall", (in.valid && !in.ready).asUInt)
   }
 }
@@ -334,7 +334,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
 
   if (config.hasBuiltInPerf) {
     val batchBusy = delay_grouped.valid && !delay_grouped.ready
-    DifftestPerf("BatchReadyLow", (!in.ready).asUInt)
+    DifftestPerf("BatchNotReady", (!in.ready).asUInt)
     DifftestPerf("BatchStall", (in.valid && !in.ready).asUInt)
     DifftestPerf("BatchMultiCycleStall", (in.valid && !in.ready && batchBusy && (!should_tick || out.ready)).asUInt)
   }

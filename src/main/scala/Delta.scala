@@ -228,7 +228,7 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   splitters.foreach(_.in.valid := pipelined.fire)
 
   if (config.hasBuiltInPerf) {
-    DifftestPerf("DeltaReadyLow", (!in.ready).asUInt)
+    DifftestPerf("DeltaNotReady", (!in.ready).asUInt)
     DifftestPerf("DeltaStall", (in.valid && !in.ready).asUInt)
     DifftestPerf("DeltaMultiCycleStall", (in.valid && !splittersReady && out.ready).asUInt)
   }

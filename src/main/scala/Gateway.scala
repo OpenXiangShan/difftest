@@ -290,7 +290,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
       val ungated = !reset.asBool
       DifftestPerf("ClockEnable", (ungated && ce).asUInt)
       DifftestPerf("ClockDisable", (ungated && !ce).asUInt)
-      DifftestPerf("GatewayReadyLow", (ungated && !ready).asUInt)
+      DifftestPerf("GatewayNotReady", (ungated && !ready).asUInt)
       DifftestPerf("GatewayStall", (ungated && valid && !ready).asUInt)
     }
   }
