@@ -11,7 +11,7 @@ on:
 jobs:
   test-difftest-main:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     steps:
       - uses: actions/checkout@v7
@@ -56,7 +56,7 @@ jobs:
 
   test-verilator-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     needs: test-difftest-main
 
@@ -208,7 +208,7 @@ jobs:
 
   test-vcs-top-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     needs: test-difftest-main
 
@@ -373,7 +373,7 @@ jobs:
 
   test-fpga-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     needs: test-difftest-main
 
@@ -441,31 +441,11 @@ jobs:
 
   test-gsim-rocketchip:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download latest released GSIM
-        run: |
-          # GSIM depends on GMP and clang >= 19
-          sudo apt update
-          sudo apt install -y libgmp-dev clang-19
-          cd $GITHUB_WORKSPACE/..
-          mkdir -p gsim-bin && cd gsim-bin
-          gsim_urls=$(curl -fsSL https://api.github.com/repos/OpenXiangShan/gsim/releases/latest \
-            | grep "browser_download_url"                                                   \
-            | cut -d '"' -f 4                                                               \
-            | grep "gsim-clang19\\..*-${{ runner.arch }}$" || true)
-          gsim_url_count=$(printf '%s\n' "$gsim_urls" | grep -c '^https://' || true)
-          if [ "$gsim_url_count" -ne 1 ]; then
-            echo "Expected one clang-19 GSIM asset for ${{ runner.arch }}, found $gsim_url_count" >&2
-            exit 1
-          fi
-          wget -O gsim "$gsim_urls"
-          chmod +x gsim
-          ./gsim -h >/dev/null
-          echo "GSIM_BIN=$(pwd)/gsim" >> $GITHUB_ENV
       - name: Build the REF - Spike
         run: |
           cd $GITHUB_WORKSPACE/..
@@ -483,5 +463,5 @@ jobs:
       - name: Build and run EMU with GSIM
         run: |
           cd $NOOP_HOME
-          make emu REF=Spike GSIM=1 GSIM_CXX=clang++-19 -j2
+          make emu REF=Spike GSIM=1 -j2
           ./build/emu -i ./bootrom/bootrom.img -C 1000000
