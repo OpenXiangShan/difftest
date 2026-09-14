@@ -149,53 +149,32 @@ class TraceLoader(bundles: Seq[DifftestBundle]) extends Module {
         bundle.asUInt.asTypeOf(new DiffTrapEvent).cycleCnt
     }.getOrElse(0.U)
   }
-  def dropValid(decoded: MixedVec[DifftestBundle]): MixedVec[DifftestBundle] = {
-    MixedVecInit(decoded.zip(io_sort).map { case (bundle, gen) =>
-      if (gen.desiredCppName == "trap") {
-        val trap = WireInit(bundle.asUInt.asTypeOf(new DiffTrapEvent))
-        trap.hasTrap := false.B
-        trap.hasWFI := false.B
-        trap.asUInt.asTypeOf(chiselTypeOf(bundle))
-      } else {
-        val cleared = WireInit(bundle)
-        cleared.bits.getValidOption.foreach(_ := false.B)
-        cleared
-      }
-    }.toSeq)
-  }
 
   val plusarg = Module(new TracePacePlusArg)
   val paceCycle = plusarg.enable
   val trace = Module(new DifftestTrace(alignedWidth, false))
   trace.clock := clock
-  val raw = trace.io
-  val peek = trace.q.get
-  val hold = Reg(UInt(alignedWidth.W))
-  val peekValid = RegInit(false.B)
-  val holdValid = RegInit(false.B)
+  val rec = Mux(paceCycle, trace.q.get, trace.io)
+  val decoded = decode(rec)
+  val recCycle = trapCycleOf(decoded)
+  val loaded = RegInit(false.B)
   val lastCycle = RegInit(0.U(64.W))
-  val peekDec = decode(peek)
-  val holdDec = decode(hold)
-  val peekCycle = trapCycleOf(peekDec)
-  val taking = paceCycle && peekValid && (!holdValid || peekCycle <= lastCycle + 1.U)
-  val bubbling = paceCycle && holdValid && peekValid && peekCycle > lastCycle + 1.U
+  val due = !loaded || recCycle <= lastCycle + 1.U
+  val bubbling = paceCycle && loaded && !due
 
-  trace.enable := !reset.asBool && (!paceCycle || !peekValid || taking)
+  trace.enable := !reset.asBool && (!paceCycle || due)
   when(trace.enable) {
-    peekValid := true.B
+    loaded := true.B
   }
-  when(taking) {
-    hold := peek
-    holdValid := true.B
-    lastCycle := peekCycle
+  when(paceCycle && loaded && due) {
+    lastCycle := recCycle
   }
   when(bubbling) {
     lastCycle := lastCycle + 1.U
   }
 
-  val idle = WireInit(0.U.asTypeOf(chiselTypeOf(peekDec)))
-  val pacedOut = Mux(taking, peekDec, Mux(bubbling, dropValid(holdDec), idle))
-  io_sort.zip(Mux(paceCycle, pacedOut, decode(raw))).foreach { case (o, b) => o := b }
+  val idle = WireInit(0.U.asTypeOf(chiselTypeOf(decoded)))
+  io_sort.zip(Mux(bubbling, idle, decoded)).foreach { case (o, b) => o := b }
 }
 
 class TracePacePlusArg extends ExtModule with HasExtModuleInline {
