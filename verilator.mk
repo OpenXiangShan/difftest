@@ -73,7 +73,7 @@ VERILATOR_FLAGS += --coverage-line --coverage-toggle
 endif
 
 # C optimization
-OPT_FAST ?= -O3
+OPT_FAST ?= -O3 -fno-slp-vectorize
 
 ########## Verilator Build Recipes ##########
 VERILATOR_FLAGS_ALL =               \
@@ -126,7 +126,7 @@ verilator-build-emu: $(SIM_EXTRA_OBJS)
 ifeq ($(REMOTE),localhost)
 	@sync -d $(BUILD_DIR) $(VERILATOR_BUILD_DIR)
 	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
-						OPT_FAST=$(OPT_FAST) \
+						OPT_FAST="$(OPT_FAST)" \
 						PGO_CFLAGS="$(PGO_CFLAGS)" \
 						PGO_LDFLAGS="$(PGO_LDFLAGS)" \
 						OBJCACHE="$(OBJCACHE)" \
