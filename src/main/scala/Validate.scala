@@ -19,6 +19,7 @@ package difftest.validate
 import chisel3._
 import chisel3.util._
 import difftest._
+import difftest.common.DifftestPerf
 import difftest.gateway.GatewayConfig
 
 object Validate {
@@ -78,4 +79,9 @@ class Validator(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mod
   }
   in.ready := out.ready
   out.valid := in.valid && globalEnable
+
+  if (config.hasBuiltInPerf) {
+    DifftestPerf("ValidateReadyLow", (!in.ready).asUInt)
+    DifftestPerf("ValidateStall", (in.valid && !in.ready).asUInt)
+  }
 }

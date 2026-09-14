@@ -114,6 +114,23 @@ Implementation: [`Trace.scala`](../src/main/scala/Trace.scala), config letters: 
 - Trace dump: records the delayed bundle stream before preprocess
 - Trace load: replaces the normal delayed bundle path with loaded trace data
 
+### Built-in Perf Counters
+
+Config letter: `P`. Each `DifftestPerf` increment is one ungated Gateway clock cycle where the condition is true. Dump uses gated `difftest_timer` as the timestamp.
+
+When clock-gate / squash / delta / batch are enabled:
+
+| Counter | Condition |
+|---------|-----------|
+| `ClockEnable` / `ClockDisable` | ungated `clockEnable` / `!clockEnable` |
+| `{Stage}ReadyLow` | stage input `!ready` |
+| `{Stage}Stall` | stage input `valid && !ready` |
+| `SquashAbsorb` | squash `in.valid && in.ready && !out.ready` |
+| `DeltaMultiCycleStall` | delta `in.valid && !splittersReady && out.ready` |
+| `BatchMultiCycleStall` | collector `in.valid && !in.ready && batchBusy && (!should_tick \|\| out.ready)` |
+
+`Stage` is Gateway, Preprocess, Validate, Squash, Delta, BatchIn (`BatchEndpoint.in`), or Batch (`BatchCollector.in`). `SquashTick_*` already counts `want_tick` hold cycles.
+
 ### Global Enable & Dut Zone
 
 Configured in [`Gateway.scala`](../src/main/scala/Gateway.scala):

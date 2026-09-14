@@ -19,7 +19,7 @@ package difftest.delta
 import chisel3._
 import chisel3.util._
 import difftest._
-import difftest.common.FileControl
+import difftest.common.{DifftestPerf, FileControl}
 import difftest.gateway.GatewayConfig
 import difftest.util.{LookupTree, PipelineConnect}
 
@@ -222,7 +222,14 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
   out.bits := withDeltas
 
   splitters.foreach(_.out.ready := out.ready)
-  pipelined.ready := VecInit(splitters.map(_.in.ready)).asUInt.andR && out.ready
+  val splittersReady = VecInit(splitters.map(_.in.ready)).asUInt.andR
+  pipelined.ready := splittersReady && out.ready
   // All splitters must fire synchronously to avoid mixing data from different pipeline stages
   splitters.foreach(_.in.valid := pipelined.fire)
+
+  if (config.hasBuiltInPerf) {
+    DifftestPerf("DeltaReadyLow", (!in.ready).asUInt)
+    DifftestPerf("DeltaStall", (in.valid && !in.ready).asUInt)
+    DifftestPerf("DeltaMultiCycleStall", (in.valid && !splittersReady && out.ready).asUInt)
+  }
 }
