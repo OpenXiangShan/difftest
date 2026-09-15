@@ -112,6 +112,7 @@ public:
     if (difftrace) {
       int zone = 0;
       for (int i = 0; i < step; i++) {
+        diffstate_buffer[state->coreid]->prepare(zone, i);
         difftrace->append(diffstate_buffer[state->coreid]->get(zone, i));
       }
       zone = (zone + 1) % CONFIG_DIFFTEST_ZONESIZE;

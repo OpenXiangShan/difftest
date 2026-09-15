@@ -215,6 +215,11 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
         else r.map(x => x.slice(0, x.lastIndexOf('_')) + s"[${x.split('_').last}]")
       )
     val body = lhs.zip(rhs.flatten).map { case (l, r) => s"packet->$l = $r;" }
+    val markDirty = {
+      val zone = if (config.hasDutZone) "dut_zone" else "0"
+      val index = if (config.isBatch) "dut_index" else "0"
+      s"diffstate_buffer[io_coreid]->mark_dirty($zone, $index);"
+    }
     val packetDecl = Seq(getPacketDecl(gen, "io_", config))
     val validAssign = if (!gen.bits.hasValid || gen.isFlatten) Seq() else Seq("packet->valid = true;")
     val query =
@@ -223,7 +228,7 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
              |  ${Query.writeInvoke(gen)}
              |#endif // CONFIG_DIFFTEST_QUERY
              |""".stripMargin)
-    packetDecl ++ validAssign ++ body ++ query
+    packetDecl ++ validAssign ++ body ++ query ++ Seq(markDirty)
   }
 
   createCppExtModule(desiredName, cppExtModule, Some("\"difftest-dpic.h\""))
@@ -257,6 +262,9 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     unpack += "#ifdef CONFIG_DIFFTEST_QUERY"
     unpack += Query.writeInvoke(gen)
     unpack += "#endif // CONFIG_DIFFTEST_QUERY"
+    val zone = if (config.hasDutZone) "dut_zone" else "0"
+    val index = if (config.isBatch) "dut_index" else "0"
+    unpack += s"diffstate_buffer[coreid]->mark_dirty($zone, $index);"
     unpack.toSeq.mkString("\n")
   }
 
@@ -440,6 +448,7 @@ object DPIC {
     interfaceCpp += "#define __DIFFTEST_DPIC_H__"
     interfaceCpp += ""
     interfaceCpp += "#include <cstdint>"
+    interfaceCpp += "#include <cstring>"
     interfaceCpp += "#include \"difftest-state.h\""
     interfaceCpp += "#ifdef CONFIG_DIFFTEST_QUERY"
     interfaceCpp += "#include \"difftest-query.h\""
@@ -452,6 +461,140 @@ object DPIC {
       interfaceCpp += "#include \"difftest-delta.h\""
     }
     val phyRegs = instances.distinctBy(_.desiredCppName).collect { case p: DiffPhyRegState => p }
+    // In U mode, reconstruct whenever the public observation is present. The
+    // observation itself is the capability signal; trackRename must not force
+    // a Chisel endpoint during TopMain post-elaboration collection.
+    val renameEvent = if (config.softArchUpdate) {
+      instances.collectFirst { case event: DiffRenameEvent => event }
+    } else {
+      None
+    }
+    val renameRats = renameEvent.toSeq.flatMap(event =>
+      event.targetNames.flatMap(name =>
+        instances.collectFirst {
+          case rat: DiffArchRenameTable if rat.desiredCppName == name => rat
+        }
+      )
+    )
+    val renameCommits = renameEvent.toSeq.flatMap(_ => instances.collect { case commit: DiffInstrCommit => commit })
+    val renameCoreCount = instances.count(_.isUniqueIdentifier)
+    val renameReconstruction = renameEvent.exists(event =>
+      renameRats.length == event.targetNames.size && renameCommits.nonEmpty && renameCoreCount > 0
+    )
+    if (renameReconstruction) {
+      val event = renameEvent.get
+      require(
+        event.targetNames.nonEmpty && event.targetNames.distinct.length == event.targetNames.length,
+        "rename observation targets must be nonempty and unique",
+      )
+      require(
+        renameCommits.length % renameCoreCount == 0,
+        "rename reconstruction requires symmetric commit interfaces",
+      )
+      val mapEntries = event.numRegs * event.targetNames.size
+      val slotCount = (BigInt(1) << event.groupWidth) * event.slotsPerGroup
+      require(slotCount.isValidInt, "rename reconstruction slot count is out of range")
+      val commitWidth = renameCommits.length / renameCoreCount
+      require(
+        commitWidth == event.retireWidth * event.slotsPerGroup,
+        "rename reconstruction commit width must cover every group member",
+      )
+      // Use the same generated C++ type name as the protocol declaration.
+      val eventType = event.desiredModuleName
+      interfaceCpp += s"""
+                         |class RenameReconstructor {
+                         |private:
+                         |  static constexpr int kSlots = ${slotCount.toInt};
+                         |  static constexpr int kMapEntries = $mapEntries;
+                         |  static constexpr int kNumRegs = ${event.numRegs};
+                         |  static constexpr int kSlotsPerGroup = ${event.slotsPerGroup};
+                         |  uint64_t snapshots[kSlots][kMapEntries] = {};
+                         |  bool occupied[kSlots] = {};
+                         |  uint64_t committed[kMapEntries] = {};
+                         |  bool have_committed = false;
+                         |
+                         |  inline int slot(uint64_t group, uint64_t member) const {
+                         |    return static_cast<int>(group * kSlotsPerGroup + member) % kSlots;
+                         |  }
+                         |
+                         |  inline void write_rats(DiffTestState* dut) {
+                         |${renameRats.zipWithIndex.map { case (rat, bank) =>
+                          val ratRegs = rat.value.length
+                          require(
+                            ratRegs >= event.numRegs && ratRegs % event.numRegs == 0,
+                            s"rename target ${rat.desiredCppName} has incompatible RAT size $ratRegs",
+                          )
+                          val ratio = ratRegs / event.numRegs
+                          val lines = (0 until event.numRegs).flatMap { reg =>
+                            (0 until ratio).map { slice =>
+                              val source = s"committed[${bank * event.numRegs + reg}]"
+                              val value = if (ratio == 1) source else s"($source * $ratio + $slice)"
+                              s"    dut->${rat.desiredCppName}.value[$reg${if (ratio == 1) "" else s" * $ratio + $slice"}] = $value;"
+                            }
+                          }
+                          lines.mkString("\n")
+                        }.mkString("\n")}
+                         |  }
+                         |
+                         |public:
+                         |  inline void apply(DiffTestState* dut) {
+                         |    const $eventType& info = dut->${event.desiredCppName};
+                         |    uint64_t lane_state[kMapEntries];
+                         |    for (int i = 0; i < kMapEntries; i++) lane_state[i] = info.base[i];
+                         |
+                         |    for (int lane = 0; lane < ${event.renameWidth}; lane++) {
+                         |      if (((info.renameValid >> lane) & 1) == 0) continue;
+                         |      for (int bank = 0; bank < ${event.targetNames.size}; bank++) {
+                         |        if (((info.writeEnable[lane] >> bank) & 1) != 0) {
+                         |          lane_state[bank * kNumRegs + info.ldest[lane]] = info.pdest[lane];
+                         |        }
+                         |      }
+                         |      const int write_slot = slot(info.groupId[lane], info.member[lane]);
+                         |      bool overwritten = false;
+                         |      for (int younger = lane + 1; younger < ${event.renameWidth}; younger++) {
+                         |        if (((info.renameValid >> younger) & 1) != 0 &&
+                         |            slot(info.groupId[younger], info.member[younger]) == write_slot) {
+                         |          overwritten = true;
+                         |          break;
+                         |        }
+                         |      }
+                         |      if (!overwritten) {
+                         |        std::memcpy(snapshots[write_slot], lane_state, sizeof(lane_state));
+                         |        occupied[write_slot] = true;
+                         |      }
+                         |    }
+                         |
+                         |    bool any_commit = false;
+                         |    int last_commit = -1;
+                         |    for (int i = 0; i < $commitWidth; i++) {
+                         |      if (dut->commit[i].valid) {
+                         |        any_commit = true;
+                         |        last_commit = i;
+                         |      }
+                         |    }
+                         |    if (info.commitValid) {
+                         |      const uint64_t member = any_commit ? (last_commit % kSlotsPerGroup) : info.fallbackMember;
+                         |      const int read_slot = slot(info.commitGroupId, member);
+                         |      if (occupied[read_slot]) {
+                         |        std::memcpy(committed, snapshots[read_slot], sizeof(committed));
+                         |        have_committed = true;
+                         |        write_rats(dut);
+                         |      }
+                         |    } else if (have_committed) {
+                         |      write_rats(dut);
+                         |    }
+                         |
+                         |    for (int lane = 0; lane < ${event.retireWidth}; lane++) {
+                         |      if (((info.retireValid >> lane) & 1) != 0) {
+                         |        for (int member = 0; member < kSlotsPerGroup; member++) {
+                         |          occupied[slot(info.retireGroupId[lane], member)] = false;
+                         |        }
+                         |      }
+                         |    }
+                         |  }
+                         |};
+                         |""".stripMargin
+    }
     if (phyRegs.nonEmpty) {
       interfaceCpp += "static inline void diffstate_update_archreg(uint8_t coreid, DiffTestState* dut) {"
       phyRegs.foreach { p =>
@@ -480,6 +623,9 @@ object DPIC {
          |  int zone_ptr = 0;
          |  bool init = true;
          |  uint8_t coreid;
+         |  bool prepared[CONFIG_DIFFTEST_ZONESIZE][CONFIG_DIFFTEST_BUFLEN] = {};
+         |  bool dirty[CONFIG_DIFFTEST_ZONESIZE][CONFIG_DIFFTEST_BUFLEN] = {};
+         |${if (renameReconstruction) "  RenameReconstructor rename_reconstructor;" else ""}
          |public:
          |  DPICBuffer(uint8_t coreid): coreid(coreid) {
          |    memset(buffer, 0, sizeof(buffer));
@@ -487,8 +633,18 @@ object DPIC {
          |  inline DiffTestState* get(int zone, int index) {
          |    return buffer[zone] + index;
          |  }
+         |  inline void mark_dirty(int zone, int index) {
+         |    dirty[zone][index] = true;
+         |    prepared[zone][index] = false;
+         |  }
+         |  inline void prepare(int zone, int index) {
+         |${if (renameReconstruction)
+          "    if (dirty[zone][index] && !prepared[zone][index]) { rename_reconstructor.apply(buffer[zone] + index); prepared[zone][index] = true; }"
+        else "    (void)zone; (void)index;"}
+         |  }
          |  inline DiffTestState* next() {
          |    DiffTestState* ret = buffer[zone_ptr] + read_ptr;
+         |    prepare(zone_ptr, read_ptr);
          |    ${if (phyRegs.nonEmpty) "diffstate_update_archreg(coreid, ret);" else ""}
          |    read_ptr = (read_ptr + 1) % CONFIG_DIFFTEST_BUFLEN;
          |    return ret;
