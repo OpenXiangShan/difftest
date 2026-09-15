@@ -469,6 +469,16 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_checker = new StoreChecker(state, proxy);
+/**
+In non-squash mode, 
+StoreRecorder records all DUT store events before commit lanes are executed, 
+while StoreChecker drains the whole queue. 
+Calling StoreChecker after lane 0 can therefore compare a store from lane 1 before the reference model has executed lane 1. 
+The fix keeps StoreChecker per-instruction in squash mode, 
+where commit stamps provide ordering, 
+but moves non-squash StoreChecker to the end of the complete commit batch. 
+The store comparison itself is unchanged; only its scheduling barrier is changed.
+ */
 #ifdef CONFIG_DIFFTEST_SQUASH
   inst_op_checkers.push_back(store_checker);
 #endif // CONFIG_DIFFTEST_SQUASH
@@ -655,26 +665,31 @@ inline int Difftest::check_all() {
   // The producer aligns the event and architectural state with its commit
   // boundary. A latter-slot exception follows the complete former slot;
   // interrupts and former-slot exceptions precede this batch's commits.
-  const int event_slot = dut->event.interrupt || dut->event.isFormer ? 0 : 1;
+  const int event_slot = dut->event.interrupt ? 0 : dut->event.nextSlot;
 #if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
   bool has_non_skip_commit = false;
 #endif
-  // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
-  // Include the boundary after the final lane for a single-lane producer.
-  for (int i = 0; i <= CONFIG_DIFF_COMMIT_WIDTH; i++) {
-    if (dut->event.valid && i == event_slot) {
-      if (int ret = arch_event_checker->step()) {
-        return ret;
-      }
+  auto step_arch_event = [&]() -> int {
+    if (!dut->event.valid) {
+      return DiffTestChecker::STATE_OK;
+    }
+    if (int ret = arch_event_checker->step()) {
+      return ret;
+    }
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-      if (num_commit == 0) {
-        proxy->sync(); // The first commit may be in the trap handler.
-      }
+    if (num_commit == 0) {
+      proxy->sync(); // The first commit may be in the trap handler.
+    }
 #endif
+    return DiffTestChecker::STATE_OK;
+  };
+  if (event_slot == 0) {
+    if (int ret = step_arch_event()) {
+      return ret;
     }
-    if (i == CONFIG_DIFF_COMMIT_WIDTH) {
-      break;
-    }
+  }
+  // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     if (dut->commit[i].valid) {
       if (num_commit == 0) {
         first_commit_pc = dut->commit[i].pc;
@@ -693,6 +708,12 @@ inline int Difftest::check_all() {
 #if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
       has_non_skip_commit |= !dut->commit[i].skip;
 #endif
+    }
+    // This boundary also exists when the producer has only one commit lane.
+    if (i == 0 && event_slot == 1) {
+      if (int ret = step_arch_event()) {
+        return ret;
+      }
     }
   }
 
