@@ -25,7 +25,7 @@ private:
   void c2h_reg_write(uint64_t offset, uint32_t value);
   bool c2h_probe_multiword_read(uint32_t words, uint64_t *elapsed_us);
   void c2h_drain_sram_fifo();
-  void c2h_drain_dma_window();
+  void c2h_drain_ddr_ring();
   void c2h_dispatch_range(const uint8_t *packet, size_t packet_size);
 
   uint8_t prototyping_ = 0;
@@ -45,9 +45,13 @@ private:
   // unchanged and is reached through this configurable window base.
   uint64_t config_base_ = 0x1000;
   uint64_t ddr_base_ = 0;
-  // GBS1 uses register reads; GBD1 uses a frozen SRAM DMA aperture with ACK.
-  // DMA chunks are 32-byte aligned, default to 256 bytes, and are capped at
-  // 512 bytes per call. Neither interface reserves guest RAM.
+  uint64_t c2h_ring_base_ = 0;
+  uint64_t c2h_dma_base_ = 0;
+  uint64_t c2h_ring_size_ = 0;
+  uint64_t c2h_wptr_offset_ = 0;
+  // The on-chip GBS1 register window is the default C2H interface.
+  // GBUS_C2H_SRAM=0 selects the legacy DDR ring.
+  bool c2h_sram_ = true;
   // Words requested per gbus_read call when draining the staging window.  This
   // is resolved at run time from a read-only probe of the config BAR, because
   // the runtime's contract for count > 1 was never verified on this platform.
@@ -58,7 +62,6 @@ private:
   uint64_t c2h_empty_fills_ = 0;
   uint32_t c2h_poll_us_ = 1000;
   uint32_t c2h_idle_timeout_sec_ = 30;
-  bool config_readback_ = false;
   std::atomic<bool> running_{false};
   uint64_t c2h_reads_ = 0;
   uint64_t c2h_bytes_ = 0;

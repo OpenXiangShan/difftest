@@ -7,7 +7,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <thread>
 #include <unistd.h>
 #include <uvaps_gbus_runtime.h>
 #include <vector>
@@ -24,35 +23,19 @@ namespace {
 constexpr uint64_t GBUS_REG_C2H_STATUS = 0x1200;
 constexpr uint64_t GBUS_REG_C2H_CTRL = 0x1204;
 constexpr uint64_t GBUS_REG_C2H_ID = 0x1208;
-constexpr uint32_t GBUS_C2H_ID_MAGIC = 0x47425331u;     // ASCII "GBS1"
-constexpr uint32_t GBUS_C2H_DMA_ID_MAGIC = 0x47424431u; // ASCII "GBD1"
-constexpr uint64_t GBUS_REG_C2H_SEQ = 0x120c;
-constexpr uint64_t GBUS_REG_C2H_DMA_BASE = 0x1210;
-constexpr uint64_t GBUS_REG_C2H_CAPACITY = 0x1214;
-// GBD1 bring-up diagnostics: what the endpoint actually saw on its AXI read
-// port.  Every window is republished at the same absolute aperture, so an
-// engine that ignored the requested offset would still hand back well-formed
-// data; these registers are what separates that case from a framing bug.
-constexpr uint64_t GBUS_REG_C2H_AR_ADDR = 0x1218;
-constexpr uint64_t GBUS_REG_C2H_AR_ATTRS = 0x121c;
-constexpr uint64_t GBUS_REG_C2H_AR_COUNT = 0x1220;
-constexpr uint32_t GBUS_C2H_STATUS_PROTOCOL_ERROR = 1U << 29; // GBD1 only
-constexpr uint32_t GBUS_C2H_STATUS_FROZEN = 1U << 5;
-constexpr uint32_t GBUS_C2H_STATUS_ACTIVE = 1U << 4;
+constexpr uint32_t GBUS_C2H_ID_MAGIC = 0x47425331u; // ASCII "GBS1"
 constexpr uint64_t GBUS_REG_C2H_DATA = 0x2000;
 constexpr uint32_t GBUS_C2H_STAGE_WORDS = 256;
 constexpr uint32_t GBUS_C2H_DATA_BYTES = GBUS_C2H_STAGE_WORDS * 4;
 
 constexpr uint32_t GBUS_C2H_STATUS_PRESENT = 1U << 31;
 constexpr uint32_t GBUS_C2H_STATUS_FRAME_ERROR = 1U << 30;
-constexpr uint32_t GBUS_C2H_STATUS_DRAINING = 1U << 29;
 constexpr uint32_t GBUS_C2H_STATUS_STAGED_SHIFT = 8;
 constexpr uint32_t GBUS_C2H_STATUS_STAGED_MASK = 0x1ffU;
 constexpr uint32_t GBUS_C2H_STATUS_FILLING = 1U << 7;
 constexpr uint32_t GBUS_C2H_STATUS_HAS_DATA = 1U << 6;
 
 constexpr uint32_t GBUS_C2H_CTRL_START_FILL = 1U << 0;
-constexpr uint32_t GBUS_C2H_CTRL_DRAIN = 1U << 1;
 
 // The config BAR occupies 0x1000..0x1030.  Its words are individually readable
 // through the already-verified single-word path and are known to differ from
@@ -97,23 +80,6 @@ void append_le32(std::vector<uint8_t> &out, uint32_t value) {
   out.push_back(static_cast<uint8_t>(value >> 24));
 }
 
-void dump_gbus_packet(const std::vector<uint8_t> &packet, uint64_t packet_index) {
-  const uint64_t limit = env_u64("GBUS_C2H_DUMP_PACKETS", 0);
-  if (packet_index >= limit)
-    return;
-
-  dprintf(STDERR_FILENO, "[fpga-host] GBus C2H raw packet=%llu bytes=%zu\n",
-          static_cast<unsigned long long>(packet_index), packet.size());
-  for (size_t record = 0; record < DMA_PACKGE_NUM; ++record) {
-    const size_t begin = record * sizeof(DmaDiffPackge);
-    dprintf(STDERR_FILENO, "[fpga-host] GBus C2H raw packet=%llu record=%zu offset=0x%zx id=0x%02x data=",
-            static_cast<unsigned long long>(packet_index), record, begin, begin < packet.size() ? packet[begin] : 0xff);
-    const size_t end = std::min(begin + sizeof(DmaDiffPackge), packet.size());
-    for (size_t i = begin; i < end; ++i)
-      dprintf(STDERR_FILENO, "%02x", packet[i]);
-    dprintf(STDERR_FILENO, "\n");
-  }
-}
 } // namespace
 
 GbusTransport::GbusTransport() {
@@ -133,12 +99,23 @@ GbusTransport::GbusTransport() {
   // map starts at 0x80000000, but passing that CPU address to the runtime is
   // invalid (the verified GBus probe accepts 0x0/0x20 and rejects 0x80000000).
   ddr_base_ = env_u64("GBUS_DDR_BASE", 0x0ULL);
+  c2h_ring_base_ = env_u64("GBUS_C2H_RING_BASE", 0x81000000ULL);
+  c2h_dma_base_ =
+      env_u64("GBUS_C2H_DMA_BASE", c2h_ring_base_ >= 0x80000000ULL ? c2h_ring_base_ - 0x80000000ULL : c2h_ring_base_);
+  // The usable ring is one 256-byte tail shorter than 16 MiB so it is an
+  // exact multiple of a 768-byte FpgaPackgeHead.  No DMA read can straddle the
+  // physical ring boundary.
+  c2h_ring_size_ = env_u64("GBUS_C2H_RING_SIZE", 0x00ffff00ULL);
+  // Legacy DDR-ring parameters.  Only used when GBUS_C2H_SRAM=0; the default
+  // SRAM staging window lives in the same 0x1000 config window as the DiffTest
+  // BAR and reserves no guest address space.
+  c2h_wptr_offset_ = env_u64("GBUS_C2H_WPTR_OFFSET", 0x0108ULL);
+  c2h_sram_ = env_u64("GBUS_C2H_SRAM", 1) != 0;
   // 0 means "use the largest burst the runtime accepts", resolved by the probe
   // below.  Set GBUS_C2H_BURST_WORDS=1 to force one 32-bit read per call.
   c2h_burst_words_ = static_cast<uint32_t>(env_u64("GBUS_C2H_BURST_WORDS", 0));
   c2h_poll_us_ = static_cast<uint32_t>(env_u64("GBUS_C2H_POLL_US", 1000));
   c2h_idle_timeout_sec_ = static_cast<uint32_t>(env_u64("GBUS_C2H_IDLE_TIMEOUT_SEC", 30));
-  config_readback_ = env_u64("GBUS_CONFIG_READBACK", 0) != 0;
   const char *host = std::getenv("GBUS_HOST");
   host_ = host && *host ? host : "localhost";
   initialized_ = gbus_initialize(host_.c_str());
@@ -148,12 +125,10 @@ GbusTransport::GbusTransport() {
   } else {
     std::fprintf(stderr,
                  "[fpga-host] GBus initialized host=%s board=%u fpga=%u config_base=0x%llx ddr_base=0x%llx "
-                 "\n",
+                 "c2h_dma_base=0x%llx\n",
                  host_.c_str(), board_, fpga_, static_cast<unsigned long long>(config_base_),
-                 static_cast<unsigned long long>(ddr_base_));
-    std::fprintf(stderr, "[fpga-host] GBus C2H interface layer=sram-window\n");
-    if (config_readback_)
-      std::fprintf(stderr, "[fpga-host] GBus config readback verification enabled\n");
+                 static_cast<unsigned long long>(ddr_base_), static_cast<unsigned long long>(c2h_dma_base_));
+    std::fprintf(stderr, "[fpga-host] GBus C2H interface layer=%s\n", c2h_sram_ ? "sram-window" : "ddr-ring");
   }
 }
 
@@ -163,11 +138,7 @@ GbusTransport::~GbusTransport() {
 }
 
 void GbusTransport::start(bool enable_diff) {
-  dprintf(STDERR_FILENO, "[fpga-host] GBus start direct marker\n");
-  dprintf(STDERR_FILENO, "[fpga-host] GBus start enter enable_diff=%d t=%llu\n", enable_diff ? 1 : 0,
-          static_cast<unsigned long long>(monotonic_ms()));
   running_.store(true);
-  dprintf(STDERR_FILENO, "[fpga-host] GBus start state initialized\n");
   if (!enable_diff) {
     while (running_.load() && signal_num == 0)
       usleep(10000);
@@ -175,7 +146,11 @@ void GbusTransport::start(bool enable_diff) {
   }
   c2h_last_progress_ns_ =
       std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-  c2h_drain_sram_fifo();
+  if (c2h_sram_) {
+    c2h_drain_sram_fifo();
+    return;
+  }
+  c2h_drain_ddr_ring();
 }
 
 // ---------------------------------------------------------------- register I/O
@@ -252,32 +227,27 @@ bool GbusTransport::c2h_probe_multiword_read(uint32_t words, uint64_t *elapsed_u
 
 void GbusTransport::c2h_dispatch_range(const uint8_t *packet, size_t packet_size) {
   std::vector<uint8_t> range(packet, packet + packet_size);
-  dump_gbus_packet(range, c2h_reads_);
-  auto *head = reinterpret_cast<const FpgaPackgeHead *>(range.data());
-  for (size_t i = 0; i < DMA_PACKGE_NUM; ++i) {
-    auto *payload_ptr = const_cast<uint8_t *>(head->diff_packge[i].diff_packge);
-    v_difftest_Batch(payload_ptr);
+  if (packet_size % sizeof(DmaDiffPackge) != 0) {
+    std::fprintf(stderr, "[fpga-host] GBus C2H incomplete record: bytes=%zu\n", packet_size);
+    std::exit(EXIT_FAILURE);
+  }
+  for (size_t offset = 0; offset < packet_size && running_.load() && signal_num == 0; offset += sizeof(DmaDiffPackge)) {
+    v_difftest_Batch(range.data() + offset + offsetof(DmaDiffPackge, diff_packge));
   }
 }
 
 void GbusTransport::c2h_drain_sram_fifo() {
-  // Identify before any probe or data access: GBS1 reads are destructive,
-  // whereas GBD1 DMA reads must leave the frozen window intact until ACK.
   const uint32_t id = c2h_reg_read(GBUS_REG_C2H_ID);
-  if (id == GBUS_C2H_DMA_ID_MAGIC) {
-    c2h_drain_dma_window();
-    return;
-  }
   if (id != GBUS_C2H_ID_MAGIC) {
-    std::fprintf(stderr, "[fpga-host] GBus C2H unknown ID offset=0x%llx id=0x%08x (expected GBS1/GBD1)\n",
+    std::fprintf(stderr, "[fpga-host] GBus C2H unknown ID offset=0x%llx id=0x%08x (expected GBS1)\n",
                  static_cast<unsigned long long>(config_base_ + GBUS_REG_C2H_ID), id);
     running_.store(false);
     std::exit(EXIT_FAILURE);
   }
-  const size_t packet_size = sizeof(FpgaPackgeHead);
-  // The RTL stages up to GBUS_C2H_STAGE_WORDS words per fill, and a fill may end
-  // when the FIFO runs dry, so a range can span several fills.  Keep the bytes
-  // in a running accumulator and hand out whole 768-byte ranges.
+  const size_t packet_size = sizeof(DmaDiffPackge);
+  // A Delta completion can arrive before the enclosing eight-record range is
+  // full. Dispatch complete records immediately and retain partial records
+  // across register windows; waiting for a full range can strand DeltaInfo.
   std::vector<uint8_t> accumulator;
   accumulator.reserve(2 * packet_size);
   std::vector<uint8_t> block;
@@ -297,7 +267,10 @@ void GbusTransport::c2h_drain_sram_fifo() {
 
   const uint32_t status = c2h_reg_read(GBUS_REG_C2H_STATUS);
   if ((status & GBUS_C2H_STATUS_PRESENT) == 0) {
-    std::fprintf(stderr, "[fpga-host] GBus C2H SRAM staging window is absent status=0x%08x\n", status);
+    std::fprintf(stderr,
+                 "[fpga-host] GBus C2H staging window is absent status=0x%08x; this bitstream has the DDR ring "
+                 "interface, set GBUS_C2H_SRAM=0\n",
+                 status);
     std::exit(EXIT_FAILURE);
   }
   std::fprintf(stderr,
@@ -324,15 +297,6 @@ void GbusTransport::c2h_drain_sram_fifo() {
     // and turn the idle wait into a register-access spin.
     if ((st & GBUS_C2H_STATUS_HAS_DATA) == 0) {
       usleep(c2h_poll_us_);
-      const uint64_t now_ns =
-          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-              .count();
-      if (c2h_idle_timeout_sec_ &&
-          now_ns - c2h_last_progress_ns_ > static_cast<uint64_t>(c2h_idle_timeout_sec_) * 1000000000ULL) {
-        std::fprintf(stderr, "[fpga-host] GBus C2H stalled reads=%llu bytes=%llu status=0x%08x\n",
-                     static_cast<unsigned long long>(c2h_reads_), static_cast<unsigned long long>(c2h_bytes_), st);
-        c2h_last_progress_ns_ = now_ns;
-      }
       continue;
     }
 
@@ -406,218 +370,121 @@ void GbusTransport::c2h_drain_sram_fifo() {
       c2h_last_progress_ns_ =
           std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
               .count();
-      dprintf(STDERR_FILENO, "[fpga-host] GBus C2H progress reads=%llu bytes=%llu staged=%u\n",
-              static_cast<unsigned long long>(c2h_reads_), static_cast<unsigned long long>(c2h_bytes_), words);
+      if (c2h_reads_ <= 2 || (c2h_reads_ & (c2h_reads_ - 1)) == 0) {
+        std::fprintf(stderr, "[fpga-host] GBus C2H progress reads=%llu bytes=%llu staged=%u\n",
+                     static_cast<unsigned long long>(c2h_reads_), static_cast<unsigned long long>(c2h_bytes_), words);
+      }
     }
   }
 }
 
-// -------------------------------------------------------- frozen SRAM DMA
+// --------------------------------------------------------------- DDR ring
 
-void GbusTransport::c2h_drain_dma_window() {
-  using Clock = std::chrono::steady_clock;
-  const auto alive = [&]() { return running_.load() && signal_num == 0; };
-  const auto pause = [&](uint32_t us) {
-    const auto end = Clock::now() + std::chrono::microseconds(us);
-    while (alive() && Clock::now() < end)
-      std::this_thread::sleep_until(std::min(end, Clock::now() + std::chrono::microseconds(1000)));
-  };
-  // Report what the AXI read port was actually asked for.  Capture is by
-  // reference into a caller-provided buffer so it stays usable from both the
-  // progress path and the exit path.
-  const auto ar_trace = [&](char *buf, size_t n) {
-    const uint32_t addr = c2h_reg_read(GBUS_REG_C2H_AR_ADDR);
-    const uint32_t attrs = c2h_reg_read(GBUS_REG_C2H_AR_ATTRS);
-    const uint32_t count = c2h_reg_read(GBUS_REG_C2H_AR_COUNT);
-    std::snprintf(buf, n, "ar_count=%u ar_addr=0x%08x ar_id=0x%02x ar_burst=%u ar_size=%u ar_len=%u", count, addr,
-                  (attrs >> 24) & 0xffU, (attrs >> 22) & 0x3U, (attrs >> 19) & 0x7U, (attrs >> 15) & 0xfU);
-  };
-  const auto fail = [&](const char *reason, uint32_t st, uint32_t seq, size_t progress) {
-    char ar_buf[160];
-    ar_trace(ar_buf, sizeof(ar_buf));
-    std::fprintf(stderr, "[fpga-host] GBus GBD1 %s status=0x%08x seq=%u captured=%zu reads=%llu bytes=%llu t=%llu %s\n",
-                 reason, st, seq, progress, static_cast<unsigned long long>(c2h_reads_),
-                 static_cast<unsigned long long>(c2h_bytes_), static_cast<unsigned long long>(monotonic_us()), ar_buf);
-    running_.store(false);
-    std::exit(EXIT_FAILURE); // Never release an uncertain window.
-  };
-  const auto check_status = [&](uint32_t st) {
-    if (!(st & GBUS_C2H_STATUS_PRESENT) || (st & (GBUS_C2H_STATUS_FRAME_ERROR | GBUS_C2H_STATUS_PROTOCOL_ERROR)))
-      fail("invalid status", st, 0, 0);
-  };
-  const uint64_t aperture = c2h_reg_read(GBUS_REG_C2H_DMA_BASE);
-  const uint32_t capacity = c2h_reg_read(GBUS_REG_C2H_CAPACITY);
-  const uint64_t configured_chunk = env_u64("GBUS_C2H_DMA_CHUNK_BYTES", 256);
-  if (aperture != 0x10000000ULL || capacity != GBUS_C2H_DATA_BYTES || configured_chunk == 0 ||
-      configured_chunk > capacity || configured_chunk % 32 != 0)
-    fail("invalid aperture/capacity/chunk (chunk must be 32..1024, multiple of 32)", 0, 0, 0);
-  // Do not rely on the vendor runtime to split a request into legal AXI3
-  // bursts: each call is at most 16 full 256-bit beats (512 bytes).
-  const size_t chunk_limit = std::min<uint64_t>(configured_chunk, 512);
-  constexpr unsigned attempts = 3;
-  constexpr uint32_t busy = GBUS_C2H_STATUS_FILLING | GBUS_C2H_STATUS_ACTIVE;
-  std::vector<uint8_t> accumulator;
-  accumulator.reserve(2 * sizeof(FpgaPackgeHead));
-  bool have_sequence = false;
-  uint32_t last_sequence = 0;
-  auto idle_report = Clock::now();
-  auto busy_deadline = Clock::now() + std::chrono::seconds(2);
-  std::fprintf(stderr, "[fpga-host] GBus GBD1 frozen SRAM DMA base=0x%llx capacity=%u chunk=%zu attempts=%u\n",
-               static_cast<unsigned long long>(aperture), capacity, chunk_limit, attempts);
-  {
-    char ar_buf[160];
-    ar_trace(ar_buf, sizeof(ar_buf));
-    std::fprintf(stderr, "[fpga-host] GBus GBD1 initial AXI read trace %s\n", ar_buf);
+void GbusTransport::c2h_drain_ddr_ring() {
+  dprintf(STDERR_FILENO, "[fpga-host] GBus start ring parameters base=0x%llx size=%llu wptr=0x%llx packet=%zu\n",
+          static_cast<unsigned long long>(c2h_ring_base_), static_cast<unsigned long long>(c2h_ring_size_),
+          static_cast<unsigned long long>(c2h_wptr_offset_), sizeof(FpgaPackgeHead));
+  if (c2h_ring_base_ == 0 || c2h_ring_size_ < sizeof(FpgaPackgeHead) || c2h_wptr_offset_ == 0) {
+    dprintf(STDERR_FILENO, "[fpga-host] GBus C2H ring is not configured; set GBUS_C2H_RING_BASE/SIZE/WPTR_OFFSET\n");
+    while (running_.load() && signal_num == 0)
+      usleep(10000);
+    return;
   }
-  while (alive()) {
-    uint32_t st = c2h_reg_read(GBUS_REG_C2H_STATUS);
-    check_status(st);
-    if (st & busy) {
-      if (Clock::now() >= busy_deadline)
-        fail("busy deadline exceeded", st, 0, 0);
-      pause(c2h_poll_us_);
-      continue;
+  if (c2h_ring_size_ % sizeof(FpgaPackgeHead) != 0) {
+    dprintf(STDERR_FILENO, "[fpga-host] GBus C2H ring size %llu is not packet aligned (%zu)\n",
+            static_cast<unsigned long long>(c2h_ring_size_), sizeof(FpgaPackgeHead));
+    std::exit(EXIT_FAILURE);
+  }
+  const uint32_t hardware_base = fpga_io_read(0x0100);
+  const uint32_t hardware_size = fpga_io_read(0x0104);
+  const uint32_t hardware_status = fpga_io_read(0x010c);
+  // The control window reports the CPU-visible ring reservation (normally
+  // 0x81000000).  GBus DMA reads use the corresponding DDR offset
+  // (normally 0x01000000), which is intentionally kept separate below.
+  if (hardware_base != static_cast<uint32_t>(c2h_ring_base_) ||
+      hardware_size != static_cast<uint32_t>(c2h_ring_size_) || (hardware_status & 1U) == 0) {
+    dprintf(STDERR_FILENO,
+            "[fpga-host] GBus C2H ABI mismatch hw_guest_base=0x%x sw_guest_base=0x%llx dma_base=0x%llx hw_size=0x%x "
+            "sw_size=0x%llx status=0x%x\n",
+            hardware_base, static_cast<unsigned long long>(c2h_ring_base_),
+            static_cast<unsigned long long>(c2h_dma_base_), hardware_size,
+            static_cast<unsigned long long>(c2h_ring_size_), hardware_status);
+    std::exit(EXIT_FAILURE);
+  }
+  if (hardware_status & 0x80000000U) {
+    dprintf(STDERR_FILENO, "[fpga-host] GBus C2H ring reports a prior DDR write error status=0x%x\n", hardware_status);
+    std::exit(EXIT_FAILURE);
+  }
+  // HOST_IO_RESET already resets the ring writer before CPU release.  The
+  // producer register is read-only in the always-running GENERALBD domain;
+  // do not pretend that a cross-domain producer reset write succeeded.
+  dprintf(STDERR_FILENO, "[fpga-host] GBus C2H polling ring base=0x%llx size=%llu wptr=0x%llx\n",
+          static_cast<unsigned long long>(c2h_ring_base_), static_cast<unsigned long long>(c2h_ring_size_),
+          static_cast<unsigned long long>(c2h_wptr_offset_));
+  uint32_t read_ptr = 0;
+  if (fpga_io_read(c2h_wptr_offset_) != 0) {
+    dprintf(STDERR_FILENO, "[fpga-host] GBus C2H producer is non-zero after HOST_IO_RESET\n");
+    std::exit(EXIT_FAILURE);
+  }
+  const uint64_t packet_size = sizeof(FpgaPackgeHead);
+  while (running_.load() && signal_num == 0) {
+    std::vector<uint8_t> ptr_data;
+    if (gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + c2h_wptr_offset_, 1, ptr_data) != 1) {
+      dprintf(STDERR_FILENO, "[fpga-host] GBus C2H write-pointer read failed\n");
+      std::exit(EXIT_FAILURE);
     }
-    busy_deadline = Clock::now() + std::chrono::seconds(2);
-    if (!(st & GBUS_C2H_STATUS_FROZEN)) {
-      if (!(st & GBUS_C2H_STATUS_HAS_DATA)) {
-        if (c2h_idle_timeout_sec_ && Clock::now() - idle_report >= std::chrono::seconds(c2h_idle_timeout_sec_)) {
-          std::fprintf(stderr, "[fpga-host] GBus GBD1 backpressure/idle status=0x%08x reads=%llu bytes=%llu\n", st,
-                       static_cast<unsigned long long>(c2h_reads_), static_cast<unsigned long long>(c2h_bytes_));
-          idle_report = Clock::now();
-        }
-        pause(c2h_poll_us_);
-        continue;
+    const uint32_t write_ptr = load_le32(ptr_data);
+    const uint32_t ring_status = fpga_io_read(0x010c);
+    if (ring_status & 0x80000000U) {
+      dprintf(STDERR_FILENO, "[fpga-host] GBus C2H DDR write failed status=0x%x producer=0x%x\n", ring_status,
+              write_ptr);
+      std::exit(EXIT_FAILURE);
+    }
+    // Both pointers are byte offsets modulo the ring size.  Keeping the
+    // consumer pointer bounded is required once the producer wraps from the
+    // final packet back to offset zero; a raw unsigned subtraction would look
+    // like a multi-gigabyte overflow at that point.
+    const uint32_t available =
+        write_ptr >= read_ptr ? write_ptr - read_ptr : static_cast<uint32_t>(c2h_ring_size_) - read_ptr + write_ptr;
+    if (available >= c2h_ring_size_ || available % packet_size != 0) {
+      dprintf(STDERR_FILENO, "[fpga-host] GBus C2H overflow producer=0x%x consumer=0x%x available=%u ring=%llu\n",
+              write_ptr, read_ptr, available, static_cast<unsigned long long>(c2h_ring_size_));
+      running_.store(false);
+      std::exit(EXIT_FAILURE);
+    }
+    uint32_t pending = available;
+    while (pending >= packet_size && running_.load() && signal_num == 0) {
+      const uint64_t offset = c2h_dma_base_ + (read_ptr % c2h_ring_size_);
+      std::vector<uint8_t> packet;
+      if (gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, offset, packet_size, channel_, port_, packet) !=
+              1 ||
+          packet.size() < packet_size) {
+        dprintf(STDERR_FILENO, "[fpga-host] GBus C2H packet read failed offset=0x%llx\n",
+                static_cast<unsigned long long>(offset));
+        std::exit(EXIT_FAILURE);
       }
-      if (!alive())
-        return;
-      c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_START_FILL);
-      const auto deadline = Clock::now() + std::chrono::seconds(2);
-      // The write can complete before publication/filling is visible. Wait for
-      // frozen, not merely !filling, without issuing a second fill request.
-      do {
-        if (!alive())
-          return;
-        st = c2h_reg_read(GBUS_REG_C2H_STATUS);
-        check_status(st);
-        if ((st & GBUS_C2H_STATUS_FROZEN) && !(st & busy))
-          break;
-        if (Clock::now() >= deadline)
-          fail("fill deadline exceeded", st, 0, 0);
-        pause(c2h_poll_us_);
-      } while (alive());
-    }
-    if (!alive())
-      return;
-    const uint32_t seq = c2h_reg_read(GBUS_REG_C2H_SEQ);
-    const size_t valid = ((st >> GBUS_C2H_STATUS_STAGED_SHIFT) & GBUS_C2H_STATUS_STAGED_MASK) * 4;
-    if (!valid || valid > capacity || valid % 32 || (have_sequence && seq != last_sequence + 1U))
-      fail("invalid published length/sequence", st, seq, 0);
-    const auto stable = [&](uint32_t state, uint32_t sequence) {
-      check_status(state);
-      return sequence == seq && (state & GBUS_C2H_STATUS_FROZEN) && !(state & busy) &&
-             (((state >> GBUS_C2H_STATUS_STAGED_SHIFT) & GBUS_C2H_STATUS_STAGED_MASK) * 4 == valid);
-    };
-    // Transactional capture: neither dispatch nor the cross-window accumulator
-    // changes until every chunk and the post-read sequence/status are verified.
-    std::vector<uint8_t> window;
-    window.reserve(valid);
-    for (size_t offset = 0; offset < valid && alive();) {
-      const size_t size = std::min(chunk_limit, valid - offset);
-      bool captured = false;
-      const auto deadline = Clock::now() + std::chrono::seconds(10);
-      for (unsigned attempt = 0; attempt < attempts && alive(); ++attempt) {
-        std::vector<uint8_t> block;
-        const uint64_t begin = monotonic_us();
-        const bool trace = c2h_reads_ < 2 || attempt != 0;
-        if (trace)
-          std::fprintf(stderr,
-                       "[fpga-host] GBus GBD1 DMA begin offset=0x%llx size=%zu seq=%u attempt=%u progress=%zu t=%llu\n",
-                       static_cast<unsigned long long>(aperture + offset), size, seq, attempt + 1, offset,
-                       static_cast<unsigned long long>(begin));
-        const int rc = gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, aperture + offset, size, channel_,
-                                     port_, block);
-        const uint64_t end = monotonic_us();
-        if (trace || rc != 1 || block.size() != size)
-          std::fprintf(stderr,
-                       "[fpga-host] GBus GBD1 DMA end rc=%d offset=0x%llx size=%zu actual=%zu seq=%u attempt=%u "
-                       "begin=%llu end=%llu progress=%zu/%zu\n",
-                       rc, static_cast<unsigned long long>(aperture + offset), size, block.size(), seq, attempt + 1,
-                       static_cast<unsigned long long>(begin), static_cast<unsigned long long>(end), offset, valid);
-        if (!alive())
-          return;
-        // Runtime completion may precede the AXI-active flag crossing domains.
-        do {
-          st = c2h_reg_read(GBUS_REG_C2H_STATUS);
-          check_status(st);
-          if (!(st & GBUS_C2H_STATUS_ACTIVE))
-            break;
-          if (Clock::now() >= deadline)
-            fail("DMA active deadline exceeded", st, seq, offset);
-          pause(c2h_poll_us_);
-        } while (alive());
-        if (!alive())
-          return;
-        if (!stable(st, c2h_reg_read(GBUS_REG_C2H_SEQ)))
-          fail("window changed during DMA (no ACK)", st, seq, offset);
-        if (Clock::now() >= deadline)
-          fail("DMA deadline exceeded (no ACK)", st, seq, offset);
-        if (rc == 1 && block.size() == size) {
-          window.insert(window.end(), block.begin(), block.end());
-          captured = true;
-          break;
-        }
-        // Read is nondestructive. Retry the SAME offset and size, never append
-        // a failed/short/oversized vector or advance the byte position.
-        pause(c2h_poll_us_);
-      }
-      if (!alive())
-        return;
-      if (!captured)
-        fail("DMA retries exhausted (no ACK)", st, seq, offset);
-      offset += size;
-    }
-    if (!alive())
-      return;
-    const uint32_t final_seq = c2h_reg_read(GBUS_REG_C2H_SEQ);
-    st = c2h_reg_read(GBUS_REG_C2H_STATUS);
-    if (!stable(st, final_seq))
-      fail("pre-ACK validation failed", st, seq, window.size());
-    if (!alive())
-      return;
-    c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_DRAIN); // GBD1 ACK/release
-    const auto ack_deadline = Clock::now() + std::chrono::seconds(2);
-    do {
-      if (!alive())
-        return;
-      st = c2h_reg_read(GBUS_REG_C2H_STATUS);
-      check_status(st);
-      if (!(st & (GBUS_C2H_STATUS_FROZEN | busy)))
-        break;
-      if (Clock::now() >= ack_deadline)
-        fail("ACK deadline exceeded", st, seq, window.size());
-      pause(c2h_poll_us_);
-    } while (alive());
-    if (!alive())
-      return;
-    last_sequence = seq;
-    have_sequence = true;
-    accumulator.insert(accumulator.end(), window.begin(), window.end());
-    while (accumulator.size() >= sizeof(FpgaPackgeHead) && alive()) {
-      c2h_dispatch_range(accumulator.data(), sizeof(FpgaPackgeHead));
-      accumulator.erase(accumulator.begin(), accumulator.begin() + sizeof(FpgaPackgeHead));
+      c2h_dispatch_range(packet.data(), packet_size);
+      read_ptr += static_cast<uint32_t>(packet_size);
+      if (read_ptr >= c2h_ring_size_)
+        read_ptr -= static_cast<uint32_t>(c2h_ring_size_);
+      pending -= static_cast<uint32_t>(packet_size);
       ++c2h_reads_;
-      c2h_bytes_ += sizeof(FpgaPackgeHead);
-      // Bounded-rate progress rather than one line per production packet.
-      if (c2h_reads_ <= 2 || (c2h_reads_ & (c2h_reads_ - 1)) == 0) {
-        char ar_buf[160];
-        ar_trace(ar_buf, sizeof(ar_buf));
-        std::fprintf(stderr, "[fpga-host] GBus GBD1 progress reads=%llu bytes=%llu seq=%u %s\n",
-                     static_cast<unsigned long long>(c2h_reads_), static_cast<unsigned long long>(c2h_bytes_), seq,
-                     ar_buf);
-      }
+      c2h_bytes_ += packet_size;
+      c2h_last_progress_ns_ =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+              .count();
     }
-    idle_report = Clock::now();
+    usleep(c2h_poll_us_);
+    const uint64_t now_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    if (c2h_idle_timeout_sec_ &&
+        now_ns - c2h_last_progress_ns_ > static_cast<uint64_t>(c2h_idle_timeout_sec_) * 1000000000ULL) {
+      dprintf(STDERR_FILENO, "[fpga-host] GBus C2H stalled reads=%llu bytes=%llu write_ptr=0x%llx\n",
+              static_cast<unsigned long long>(c2h_reads_), static_cast<unsigned long long>(c2h_bytes_),
+              static_cast<unsigned long long>(write_ptr));
+      c2h_last_progress_ns_ = now_ns;
+    }
   }
 }
 
@@ -628,32 +495,12 @@ void GbusTransport::stop() {
 void GbusTransport::fpga_io(uint64_t address, uint32_t value) {
   if (!initialized_)
     std::exit(EXIT_FAILURE);
-  dprintf(STDERR_FILENO, "[fpga-host] GBus config write begin addr=0x%llx value=0x%x t=%llu\n",
-          static_cast<unsigned long long>(config_base_ + address), value,
-          static_cast<unsigned long long>(monotonic_ms()));
   auto data = store_le32(value);
   const int rc = gbus_write(prototyping_, board_, fpga_, config_instance_, config_base_ + address, 1, data);
-  dprintf(STDERR_FILENO, "[fpga-host] GBus config write end addr=0x%llx rc=%d t=%llu\n",
-          static_cast<unsigned long long>(config_base_ + address), rc, static_cast<unsigned long long>(monotonic_ms()));
   if (rc != 1) {
     dprintf(STDERR_FILENO, "[fpga-host] GBus register write failed offset=0x%llx\n",
             static_cast<unsigned long long>(address));
     std::exit(EXIT_FAILURE);
-  }
-  if (config_readback_) {
-    // CFG_RESET is implemented by XDMAConfigBar as a short self-clearing
-    // reset request, so its readback is intentionally informational.  A
-    // successful read through the same GBus window is nevertheless essential:
-    // it proves the GeneralBD -> AXI-Lite bridge and CDC returned data from
-    // the generated register block rather than merely acknowledging a bus
-    // transaction at the transport boundary.
-    usleep(address == HOST_IO_CFG_RESET && value ? 10000 : 1000);
-    const uint32_t readback = fpga_io_read(address);
-    std::fprintf(stderr, "[fpga-host] GBus config readback addr=0x%llx write=0x%08x read=0x%08x%s\n",
-                 static_cast<unsigned long long>(config_base_ + address), value, readback,
-                 (address == HOST_IO_CFG_RESET && value)
-                     ? " (self-clearing reset request)"
-                     : (readback == value ? " (match)" : " (mismatch; register may be status/edge-triggered)"));
   }
 }
 
@@ -712,7 +559,8 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
     std::exit(EXIT_FAILURE);
   }
   const auto *bytes = static_cast<const uint8_t *>(payload);
-  constexpr uint64_t chunk = 64ULL * 1024ULL * 1024ULL;
+  // Keep each request within the transfer size verified by the UVHS GBus runtime.
+  constexpr uint64_t chunk = 256ULL;
   for (uint64_t offset = 0; offset < size; offset += chunk) {
     size_t count = static_cast<size_t>((size - offset) < chunk ? (size - offset) : chunk);
     std::vector<uint8_t> data(bytes + offset, bytes + offset + count);
@@ -726,4 +574,16 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
   std::fprintf(stderr, "[fpga-host] GBus DMA workload queued %llu bytes\n", static_cast<unsigned long long>(size));
 }
 
-void GbusTransport::validate_guest_ram(uint64_t, uint64_t) const {}
+void GbusTransport::validate_guest_ram(uint64_t base, uint64_t size) const {
+  // The SRAM staging window is on-chip, so it reserves no guest address space
+  // and the CPU may use the whole DDR.  Only the legacy DDR ring needs a
+  // reservation carved out of guest RAM.
+  if (c2h_sram_)
+    return;
+  if (size > c2h_ring_base_ - base) {
+    std::fprintf(stderr, "[fpga-host] guest RAM [0x%llx,0x%llx) overlaps reserved GBus C2H ring at 0x%llx\n",
+                 static_cast<unsigned long long>(base), static_cast<unsigned long long>(base + size),
+                 static_cast<unsigned long long>(c2h_ring_base_));
+    std::exit(EXIT_FAILURE);
+  }
+}
