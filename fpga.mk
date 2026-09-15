@@ -25,12 +25,8 @@ endif
 FPGA_CXXFLAGS += -DDIFFTEST_HOSTIF_$(DIFFTEST_HOSTIF)
 
 ifeq ($(DIFFTEST_HOSTIF),GBUS)
-# Prefer the checked-in UVHS runtime so a checkout is reproducible.  Sites may
-# still override this with an approved UVHS installation when the vendor
-# runtime is supplied outside the repository.
-GBUS_RUNTIME_ROOT ?= $(firstword $(wildcard ./third_party/gbus_runtime /nfs/tools/UVHS/runtime_sw_service/export/gbus_runtime))
 ifeq ($(strip $(GBUS_RUNTIME_ROOT)),)
-$(error GBus runtime not found; set GBUS_RUNTIME_ROOT to a UVHS gbus_runtime directory)
+$(error Set GBUS_RUNTIME_ROOT to an approved UVHS gbus_runtime directory)
 endif
 GBUS_HOST ?= localhost
 FPGA_CXXFILES += $(FPGA_CSRC_DIR)/gbus_transport.cpp
