@@ -337,8 +337,8 @@ void Difftest::init_checkers() {
   checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
                                                  proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
-  // Each cycle is checked for an store event, and recorded in queue.
-  // It is checked every time an instruction is committed and queue has content.
+  // Record store events each cycle. Without squash, check them after the whole
+  // commit batch; with squash, check them at their instruction commit stamp.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
     checkers.push_back(new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy));
@@ -469,7 +469,9 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_checker = new StoreChecker(state, proxy);
+#ifdef CONFIG_DIFFTEST_SQUASH
   inst_op_checkers.push_back(store_checker);
+#endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   inst_op_checkers.push_back(new MsyncChecker(state, proxy));
@@ -649,30 +651,60 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
-  if (dut->event.valid) {
-    if (int ret = arch_event_checker->step()) {
-      return ret;
-    }
-    dut->commit[0].valid = 0;
-  } else {
-#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-    if (dut->commit[0].valid) {
-      dut_commit_batch_pc = dut->commit[0].pc;
-      ref_commit_batch_pc = proxy->state.pc;
-      if (dut_commit_batch_pc != ref_commit_batch_pc) {
-        pc_mismatch = true;
-      }
-    }
+  uint64_t first_commit_pc = 0;
+  // The producer aligns the event and architectural state with its commit
+  // boundary. A latter-slot exception follows the complete former slot;
+  // interrupts and former-slot exceptions precede this batch's commits.
+  const int event_slot = dut->event.interrupt || dut->event.isFormer ? 0 : 1;
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+  bool has_non_skip_commit = false;
 #endif
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-      if (dut->commit[i].valid) {
-        num_commit += 1 + dut->commit[i].nFused;
-        if (int ret = instr_commit_checker[i]->step()) {
-          return ret;
-        }
+  // NOTE: DO NOT change CONFIG_DIFF_COMMIT_WIDTH
+  // Include the boundary after the final lane for a single-lane producer.
+  for (int i = 0; i <= CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    if (dut->event.valid && i == event_slot) {
+      if (int ret = arch_event_checker->step()) {
+        return ret;
       }
+#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
+      if (num_commit == 0) {
+        proxy->sync(); // The first commit may be in the trap handler.
+      }
+#endif
+    }
+    if (i == CONFIG_DIFF_COMMIT_WIDTH) {
+      break;
+    }
+    if (dut->commit[i].valid) {
+      if (num_commit == 0) {
+        first_commit_pc = dut->commit[i].pc;
+#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
+        dut_commit_batch_pc = first_commit_pc;
+        ref_commit_batch_pc = proxy->state.pc;
+        if (dut_commit_batch_pc != ref_commit_batch_pc) {
+          pc_mismatch = true;
+        }
+#endif
+      }
+      num_commit += 1 + dut->commit[i].nFused;
+      if (int ret = instr_commit_checker[i]->step()) {
+        return ret;
+      }
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+      has_non_skip_commit |= !dut->commit[i].skip;
+#endif
     }
   }
+
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+  // Stores can belong to later lanes, including commits after an ArchEvent.
+  // Execute the whole ordered batch before checking its stores.
+  if (has_non_skip_commit) {
+    if (int ret = store_checker->step()) {
+      return ret;
+    }
+  }
+#endif // CONFIG_DIFFTEST_STOREEVENT && !CONFIG_DIFFTEST_SQUASH
 
   if (int ret = update_delayed_writeback()) {
     return ret;
@@ -685,7 +717,7 @@ inline int Difftest::check_all() {
   proxy->sync();
 
   if (num_commit > 0) {
-    state->record_group(dut->commit[0].pc, num_commit);
+    state->record_group(first_commit_pc, num_commit);
   }
 
   if (apply_delayed_writeback()) {
