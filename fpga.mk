@@ -25,9 +25,7 @@ endif
 FPGA_CXXFLAGS += -DDIFFTEST_HOSTIF_$(DIFFTEST_HOSTIF)
 
 ifeq ($(DIFFTEST_HOSTIF),GBUS)
-ifeq ($(strip $(GBUS_RUNTIME_ROOT)),)
-$(error Set GBUS_RUNTIME_ROOT to an approved UVHS gbus_runtime directory)
-endif
+GBUS_RUNTIME_ROOT ?= ./third_party/gbus_runtime
 GBUS_HOST ?= localhost
 FPGA_CXXFILES += $(FPGA_CSRC_DIR)/gbus_transport.cpp
 FPGA_CXXFLAGS += -I$(GBUS_RUNTIME_ROOT)/include
