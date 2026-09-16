@@ -25,12 +25,19 @@ endif
 FPGA_CXXFLAGS += -DDIFFTEST_HOSTIF_$(DIFFTEST_HOSTIF)
 
 ifeq ($(DIFFTEST_HOSTIF),GBUS)
-GBUS_RUNTIME_ROOT ?= ./third_party/gbus_runtime
+GBUS_RUNTIME_ROOT ?=
+ifeq ($(strip $(GBUS_RUNTIME_ROOT)),)
+GBUS_INCLUDE_DIR = $(FPGA_CSRC_DIR)
+GBUS_LIB_DIR = $(FPGA_CSRC_DIR)
+else
+GBUS_INCLUDE_DIR = $(abspath $(GBUS_RUNTIME_ROOT)/include)
+GBUS_LIB_DIR = $(abspath $(GBUS_RUNTIME_ROOT)/lib)
+endif
 GBUS_HOST ?= localhost
 FPGA_CXXFILES += $(FPGA_CSRC_DIR)/gbus_transport.cpp
-FPGA_CXXFLAGS += -I$(GBUS_RUNTIME_ROOT)/include
-FPGA_LDFLAGS += -L$(GBUS_RUNTIME_ROOT)/lib \
-                -Wl,-rpath,$(abspath $(GBUS_RUNTIME_ROOT))/lib -luvgbus
+FPGA_CXXFLAGS += -I$(GBUS_INCLUDE_DIR)
+FPGA_LDFLAGS += -L$(GBUS_LIB_DIR) \
+                -Wl,-rpath,$(GBUS_LIB_DIR) -luvgbus
 endif
 
 fpga-build: fpga-clean fpga-host

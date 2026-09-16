@@ -1,6 +1,5 @@
-#ifndef  _UVAPS_GBUS_RUNTIME_H_
+#ifndef _UVAPS_GBUS_RUNTIME_H_
 #define _UVAPS_GBUS_RUNTIME_H_
-
 
 #include <cstdint>
 #include <string>
@@ -11,7 +10,7 @@
  * @param host      The Host name of daemon
  * @return          true for success; false for failed to initialize.
  */
-bool gbus_initialize(const char* host);
+bool gbus_initialize(const char *host);
 
 /**
  * @description:    Finalize function to close socket connection to daemon
@@ -30,8 +29,8 @@ bool gbus_finalize();
  * @param value                 The data value to be read
  * @return                      1 for success; 0 for failed to send message data to target port/function.
  */
-int gbus_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance,
-    uint64_t offset, size_t count, std::vector<uint8_t>& value);
+int gbus_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance, uint64_t offset,
+              size_t count, std::vector<uint8_t> &value);
 
 /**
  * @description:                Send msg data to target port/function.
@@ -45,9 +44,8 @@ int gbus_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, ui
  * @param file_offset           The posion of file to be write start with.
  * @return                      1 for success; 0 for failed to send message data to target port/function.
  */
-int gbus_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance,
-    uint64_t offset, size_t count, const std::string& file, uint64_t file_offset);
-
+int gbus_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance, uint64_t offset,
+              size_t count, const std::string &file, uint64_t file_offset);
 
 /**
  * @description:                Send msg data to target port/function.
@@ -60,8 +58,8 @@ int gbus_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, ui
  * @param value                 The data value to be write
  * @return                      1 for success; 0 for failed to send message data to target port/function.
  */
-int gbus_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance,
-    uint64_t offset, size_t count, std::vector<uint8_t>& value);
+int gbus_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance, uint64_t offset,
+               size_t count, std::vector<uint8_t> &value);
 
 /**
  * @description:                Send msg data to target port/function.
@@ -75,9 +73,8 @@ int gbus_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, u
  * @param file_offset           The posion of file to be read start with.
  * @return                      1 for success; 0 for failed to send message data to target port/function.
  */
-int gbus_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance,
-    uint64_t offset, size_t count, const std::string& file, uint64_t file_offset);
-
+int gbus_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance, uint64_t offset,
+               size_t count, const std::string &file, uint64_t file_offset);
 
 /**
  * @description:                Send msg data to target port/function.
@@ -90,8 +87,8 @@ int gbus_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, u
  * @param value                 The data value to be read
  * @return                      1 for success; 0 for failed to send message data to target port/function.
  */
-int gbus_dma_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance,
-    uint64_t offset, size_t size, uint8_t channel, uint8_t port, std::vector<uint8_t>& value);
+int gbus_dma_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance, uint64_t offset,
+                  size_t size, uint8_t channel, uint8_t port, std::vector<uint8_t> &value);
 
 /**
  * @description:                Send msg data to target port/function.
@@ -105,8 +102,8 @@ int gbus_dma_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx
  * @param file_offset           The posion of file to be write start with.
  * @return                      1 for success; 0 for failed to send message data to target port/function.
  */
-int gbus_dma_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance,
-    uint64_t offset, size_t size, uint8_t channel, uint8_t port, const std::string& file, uint64_t file_offset);
+int gbus_dma_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance, uint64_t offset,
+                  size_t size, uint8_t channel, uint8_t port, const std::string &file, uint64_t file_offset);
 
 /**
  * @description:                Send msg data to target port/function.
@@ -119,8 +116,8 @@ int gbus_dma_read(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx
  * @param value                 The data value to be write
  * @return                      1 for success; 0 for failed to send message data to target port/function.
  */
-int gbus_dma_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance,
-    uint64_t offset, size_t size, uint8_t channel, uint8_t port, std::vector<uint8_t>& value);
+int gbus_dma_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance, uint64_t offset,
+                   size_t size, uint8_t channel, uint8_t port, std::vector<uint8_t> &value);
 
 /**
  * @description:                Send msg data to target port/function.
@@ -134,7 +131,7 @@ int gbus_dma_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaId
  * @param file_offset           The posion of file to be read start with.
  * @return                      1 for success; 0 for failed to send message data to target port/function.
  */
-int gbus_dma_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance,
-    uint64_t offset, size_t size, uint8_t channel, uint8_t port, const std::string& file, uint64_t file_offset);
+int gbus_dma_write(uint8_t prototypingInstance, uint8_t boardIdx, uint8_t fpgaIdx, uint8_t instance, uint64_t offset,
+                   size_t size, uint8_t channel, uint8_t port, const std::string &file, uint64_t file_offset);
 
 #endif /* _UVAPS_GBUS_RUNTIME_H_ */
