@@ -10,14 +10,6 @@ FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DCONFIG_D
 FPGA_CXXFLAGS += -std=c++20 -O3 -flto -march=native -mtune=native
 FPGA_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
-# The kmh FPGA release uses the Kunminghu V2 DiffTest ABI.  Keep this
-# definition local to fpga-host: the generated RTL already carries its own
-# CPU/configuration macros, while the host checkers and default flash image
-# select their implementation from the C++ CPU macro.
-ifeq ($(CPU),kmh)
-FPGA_CXXFLAGS += -DCPU_XIANGSHAN_KMHV2
-endif
-
 DIFFTEST_HOSTIF ?= XDMA
 ifneq ($(filter XDMA GBUS,$(DIFFTEST_HOSTIF)), $(DIFFTEST_HOSTIF))
 $(error DIFFTEST_HOSTIF must be XDMA or GBUS, got $(DIFFTEST_HOSTIF))
