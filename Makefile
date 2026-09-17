@@ -157,6 +157,19 @@ SIM_VFLAGS   += +define+ASYNC_CLK_2N=$(ASYNC_CLK_2N)
 endif
 endif
 
+# External OpenIOMMU RTL shared by Verilator and VCS.
+IOMMU_DIR := $(DESIGN_DIR)/OpenIOMMU/bosc-iommu-v2
+
+ifeq ($(WITH_IOMMU),1)
+ifeq ($(wildcard $(IOMMU_DIR)/OpenIOMMU.mk),)
+$(error WITH_IOMMU=1 but $(IOMMU_DIR)/OpenIOMMU.mk is missing; initialize the OpenIOMMU submodule)
+endif
+IOMMU_ROOT := $(IOMMU_DIR)
+include $(IOMMU_DIR)/OpenIOMMU.mk
+SIM_VSRC   += $(IOMMU_VSRC)
+SIM_VFLAGS += $(IOMMU_VFLAGS) +define+WITH_IOMMU +define+CONFIG_RISCV_IOMMU_BOSC_V2_LITE
+endif
+
 # Third-party RTL include files
 define handle_rtl_include_path
   $(if $(wildcard $1/*), \
