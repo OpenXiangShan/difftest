@@ -56,16 +56,8 @@ private:
   // is resolved at run time from a read-only probe of the config BAR, because
   // the runtime's contract for count > 1 was never verified on this platform.
   uint32_t c2h_burst_words_ = 1;
-  // Consecutive fills that staged nothing while the sender had data.  A short
-  // run of these is a race with the control write; a long one means the write
-  // never lands, and it should be reported rather than spun on.
-  uint64_t c2h_empty_fills_ = 0;
   uint32_t c2h_poll_us_ = 1000;
-  uint32_t c2h_idle_timeout_sec_ = 30;
   std::atomic<bool> running_{false};
-  uint64_t c2h_reads_ = 0;
-  uint64_t c2h_bytes_ = 0;
-  uint64_t c2h_last_progress_ns_ = 0;
   bool initialized_ = false;
   std::string host_;
 };

@@ -115,7 +115,6 @@ GbusTransport::GbusTransport() {
   // below.  Set GBUS_C2H_BURST_WORDS=1 to force one 32-bit read per call.
   c2h_burst_words_ = static_cast<uint32_t>(env_u64("GBUS_C2H_BURST_WORDS", 0));
   c2h_poll_us_ = static_cast<uint32_t>(env_u64("GBUS_C2H_POLL_US", 1000));
-  c2h_idle_timeout_sec_ = static_cast<uint32_t>(env_u64("GBUS_C2H_IDLE_TIMEOUT_SEC", 30));
   const char *host = std::getenv("GBUS_HOST");
   host_ = host && *host ? host : "localhost";
   initialized_ = gbus_initialize(host_.c_str());
@@ -144,8 +143,6 @@ void GbusTransport::start(bool enable_diff) {
       usleep(10000);
     return;
   }
-  c2h_last_progress_ns_ =
-      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
   if (c2h_sram_) {
     c2h_drain_sram_fifo();
     return;
@@ -322,20 +319,11 @@ void GbusTransport::c2h_drain_sram_fifo() {
 
     const uint32_t words = (st >> GBUS_C2H_STATUS_STAGED_SHIFT) & GBUS_C2H_STATUS_STAGED_MASK;
     if (words == 0) {
-      // The sender has data but the fill staged nothing.  One or two of these
-      // are a harmless race against the control write landing; a long run of
-      // them means the fill never actually starts, which used to show up only
-      // as a 30-minute hang with no explanation.
-      if (++c2h_empty_fills_ == 200) {
-        std::fprintf(stderr,
-                     "[fpga-host] GBus C2H staged no words on %llu consecutive fills while the sender has data "
-                     "status=0x%08x; the control write is probably not reaching the FIFO\n",
-                     static_cast<unsigned long long>(c2h_empty_fills_), st);
-      }
+      // The sender has data but the fill staged nothing. Retry after a short
+      // wait; a control-write race can produce a few empty fills.
       usleep(c2h_poll_us_);
       continue;
     }
-    c2h_empty_fills_ = 0;
     if (words > GBUS_C2H_STAGE_WORDS) {
       std::fprintf(stderr, "[fpga-host] GBus C2H staged word count %u exceeds the window\n", words);
       running_.store(false);
@@ -365,15 +353,6 @@ void GbusTransport::c2h_drain_sram_fifo() {
     while (accumulator.size() >= packet_size) {
       c2h_dispatch_range(accumulator.data(), packet_size);
       accumulator.erase(accumulator.begin(), accumulator.begin() + static_cast<ptrdiff_t>(packet_size));
-      ++c2h_reads_;
-      c2h_bytes_ += packet_size;
-      c2h_last_progress_ns_ =
-          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-              .count();
-      if (c2h_reads_ <= 2 || (c2h_reads_ & (c2h_reads_ - 1)) == 0) {
-        std::fprintf(stderr, "[fpga-host] GBus C2H progress reads=%llu bytes=%llu staged=%u\n",
-                     static_cast<unsigned long long>(c2h_reads_), static_cast<unsigned long long>(c2h_bytes_), words);
-      }
     }
   }
 }
@@ -468,23 +447,8 @@ void GbusTransport::c2h_drain_ddr_ring() {
       if (read_ptr >= c2h_ring_size_)
         read_ptr -= static_cast<uint32_t>(c2h_ring_size_);
       pending -= static_cast<uint32_t>(packet_size);
-      ++c2h_reads_;
-      c2h_bytes_ += packet_size;
-      c2h_last_progress_ns_ =
-          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-              .count();
     }
     usleep(c2h_poll_us_);
-    const uint64_t now_ns =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-            .count();
-    if (c2h_idle_timeout_sec_ &&
-        now_ns - c2h_last_progress_ns_ > static_cast<uint64_t>(c2h_idle_timeout_sec_) * 1000000000ULL) {
-      dprintf(STDERR_FILENO, "[fpga-host] GBus C2H stalled reads=%llu bytes=%llu write_ptr=0x%llx\n",
-              static_cast<unsigned long long>(c2h_reads_), static_cast<unsigned long long>(c2h_bytes_),
-              static_cast<unsigned long long>(write_ptr));
-      c2h_last_progress_ns_ = now_ns;
-    }
   }
 }
 
