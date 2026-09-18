@@ -84,12 +84,19 @@ public:
   // Trigger a difftest checking procdure
   int step();
 
+  inline bool is_control_trap(uint64_t code) {
+    // NEMU control markers: 0x100 disables timer interrupts, 0x101 starts profiling
+    return code == 0x100 || code == 0x101;
+  }
+
   inline bool get_trap_valid() {
     return dut->trap.hasTrap || state->has_trap;
   }
   inline int get_trap_code() {
     if (state->has_trap) {
       return state->trap_code;
+    } else if (is_control_trap(dut->trap.code)) {
+      return STATE_RUNNING;
     } else if (dut->trap.code > STATE_FUZZ_COND && dut->trap.code < STATE_RUNNING) {
       return STATE_BADTRAP;
     } else {
