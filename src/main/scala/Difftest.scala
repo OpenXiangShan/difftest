@@ -631,6 +631,12 @@ object DifftestModule {
       difftest := DontCare
       difftest.bits.getValidOption.foreach(_ := false.B)
     }
+    difftest match {
+      // Existing producers have one exception boundary before their commits.
+      // A producer with paired slots explicitly overrides this for the latter.
+      case event: DiffArchEvent => event.nextSlot := false.B
+      case _                    =>
+    }
     difftest
   }
 

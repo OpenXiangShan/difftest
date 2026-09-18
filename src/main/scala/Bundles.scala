@@ -61,6 +61,10 @@ class ArchEvent extends DifftestBaseBundle with HasValid {
   val virtualInterruptIsHvictlInject = Bool()
   val irToHS = Bool()
   val irToVS = Bool()
+  // Event boundary in the aligned commit frame: false precedes lane 0;
+  // true follows lane 0 (including all of its nFused instructions).
+  // Interrupts always precede lane 0. Later lanes may commit trap-handler code.
+  val nextSlot = Bool()
 }
 
 class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasValid {
