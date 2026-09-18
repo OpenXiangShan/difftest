@@ -191,19 +191,9 @@ void fpga_init() {
   printf("[fpga-host] H2C workload size: %" PRIu64 " bytes (%" PRIu64 "MB)\n", h2c_size, h2c_size_mb);
   uint32_t h2c_start = uptime();
   xdma_device->fpga_io(HOST_IO_H2C_SIZE_MB, static_cast<uint32_t>(h2c_size_mb));
-#ifdef DIFFTEST_HOSTIF_GBUS
-  // GBus occupies dma_core_* and reaches DDR through the CPU mem master in
-  // DifftestMemCtrl.  HOST_IO_MEM_H2C would select the idle AXI-stream H2C
-  // engine and stall the first 256-byte dma_core write.  Keep the CPU path
-  // selected for the duration of the GBus DMA load; cores stay halted via
-  // hostCtrl.reset after HOST_IO_RESET is asserted below.
-  xdma_device->fpga_io(HOST_IO_MEM_CPU, true);
-  xdma_device->h2c_load_workload(mem->as_ptr(), h2c_size);
-#else
   xdma_device->fpga_io(HOST_IO_MEM_H2C, true);
   xdma_device->h2c_load_workload(mem->as_ptr(), h2c_size);
   xdma_device->wait_fpga_io_done(HOST_IO_MEM_H2C, "memory H2C load");
-#endif
   printf("[fpga-host] H2C load done, elapsed = %ums\n", uptime() - h2c_start);
 #else // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 #ifdef FPGA_SIM
