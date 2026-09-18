@@ -174,6 +174,27 @@ coherence via RefillTest.
 | `DiffAmuCtrlEvent` | AMU control events for Matrix instructions | No |
 | `DiffAmuFinishEvent` | AMU execution completion and matrix register-bank updates | No |
 | `DiffMsyncEvent` | Synchronization events for msyncregreset, macquire, and mfence instructions | No |
+| `DiffUArchProbe` | Generic microarchitecture state snapshots | No |
+
+### Microarchitecture Probes
+
+`DiffUArchProbe` accepts any Chisel `Bundle` made of bits, nested Bundles, and Vecs. Its
+field paths and widths are preserved in the generated C++ struct and Query table. Fields
+wider than 64 bits are emitted as arrays of 64-bit words. Each instance gets an
+independent `uarchId`, while `cycleCnt` is copied from the `DiffTrapEvent` with the same
+`coreid` during preprocessing.
+
+```scala
+val probe = DifftestModule(new DiffUArchProbe(chiselTypeOf(io.backendState)))
+probe.coreid := coreId
+probe.valid := io.backendStateValid
+probe.setPayload(io.backendState)
+```
+
+The probe handles squash independently from architectural DiffTest interfaces. Its
+`uarchId`, `cycleCnt`, and `index` fields are managed internally and must not be assigned
+by the caller. Probe types are identified by the Bundle name and a stable layout hash, so
+different Bundle layouts with the same total width remain separate software types.
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 They will be automatically created when calling `DifftestModule.finish(cpu: String)`.
