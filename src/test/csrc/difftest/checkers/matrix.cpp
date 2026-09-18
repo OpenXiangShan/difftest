@@ -100,6 +100,50 @@ static void print_amu_ctrl_event(const char *source, const DifftestAmuCtrlEvent 
   }
 }
 
+// Difftest events can be packed by the batch gateway. Convert to the natural
+// layout expected by NEMU before crossing the reference-model ABI boundary.
+static struct AmuCtrlEvent to_nemu_amu_ctrl(const DifftestAmuCtrlEvent &source) {
+  struct AmuCtrlEvent target = {};
+  target.valid = source.valid;
+  target.op = source.op;
+  target.rm = source.rm;
+  target.md = source.md;
+  target.sat = source.sat;
+  target.ms1 = source.ms1;
+  target.ms2 = source.ms2;
+  target.mtilem = source.mtilem;
+  target.mtilen = source.mtilen;
+  target.mtilek = source.mtilek;
+  target.types1 = source.types1;
+  target.types2 = source.types2;
+  target.typed = source.typed;
+  target.isfp = source.isfp;
+  target.base = source.base;
+  target.stride = source.stride;
+  target.pc = source.pc;
+  return target;
+}
+
+static void from_nemu_amu_ctrl(DifftestAmuCtrlEvent &target, const struct AmuCtrlEvent &source) {
+  target.valid = source.valid;
+  target.op = source.op;
+  target.rm = source.rm;
+  target.md = source.md;
+  target.sat = source.sat;
+  target.ms1 = source.ms1;
+  target.ms2 = source.ms2;
+  target.mtilem = source.mtilem;
+  target.mtilen = source.mtilen;
+  target.mtilek = source.mtilek;
+  target.types1 = source.types1;
+  target.types2 = source.types2;
+  target.typed = source.typed;
+  target.isfp = source.isfp;
+  target.base = source.base;
+  target.stride = source.stride;
+  target.pc = source.pc;
+}
+
 static inline size_t get_amu_result_size(const DifftestAmuCtrlEvent &amu_event) {
   const size_t rows = amu_event.mtilem;
   const size_t cols = amu_event.mtilen;
@@ -187,7 +231,9 @@ int AmuCtrlChecker::do_step() {
       // AMU ctrl is treated as a non-squashable, ordering-sensitive event.
       // Under squash mode, it still requires one-to-one synchronization with REF.
       // Therefore "no available REF event" (-1) is an error instead of a retriable case.
-      int check_res = proxy->get_amu_ctrl_event(&ref_event);
+      struct AmuCtrlEvent ref_event_nemu = to_nemu_amu_ctrl(ref_event);
+      int check_res = proxy->get_amu_ctrl_event(&ref_event_nemu);
+      from_nemu_amu_ctrl(ref_event, ref_event_nemu);
 
       if (check_res == 1) {
         printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", state->coreid);
@@ -233,8 +279,9 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
         }
 
         DifftestAmuCtrlEvent amu_event = iter->amu_event;
+        struct AmuCtrlEvent amu_event_nemu = to_nemu_amu_ctrl(amu_event);
         uint64_t unused_result = 0;
-        if (proxy->get_amu_exec(&amu_event, &unused_result) != 0) {
+        if (proxy->get_amu_exec(&amu_event_nemu, &unused_result) != 0) {
           printf("Failed to execute REF mrelease: core %d, pc 0x%016lx\n", state->coreid, amu_event.pc);
           set_error_pc(state->coreid, amu_event.pc);
           return STATE_ERROR;
@@ -311,6 +358,7 @@ int AmuExecChecker::commit_ready_prefix() {
       DifftestAmuCtrlEvent amu_event = iter->amu_event;
       uint8_t op = amu_event.op;
       MmaVerificationBuffer *buffer = nullptr;
+      struct AmuCtrlEvent amu_event_nemu = {};
       switch (op) {
         case 0: // MMA
           // Allocate buffer for MMA verification
@@ -321,7 +369,8 @@ int AmuExecChecker::commit_ready_prefix() {
           // Call get_amu_lazy with buffer pointers
           // Store REF's src1/2/3 in the buffer, and copy DUT's result to REF
           // REF will directly take DUT's result instead of executing the MMA instruction
-          if (proxy->get_amu_lazy(&amu_event, iter->res, buffer->src1, buffer->src2, buffer->src3) != 0) {
+          amu_event_nemu = to_nemu_amu_ctrl(amu_event);
+          if (proxy->get_amu_lazy(&amu_event_nemu, iter->res, buffer->src1, buffer->src2, buffer->src3) != 0) {
             printf("Failed to get REF operands for MMA verification: core %d, pc 0x%016lx\n", state->coreid,
                    amu_event.pc);
             mma_verifier->free_buffer(buffer);
@@ -336,7 +385,8 @@ int AmuExecChecker::commit_ready_prefix() {
           break;
         case 1: // MLS
         case 3: // Arith
-          if (proxy->get_amu_exec(&amu_event, iter->res) == 1) {
+          amu_event_nemu = to_nemu_amu_ctrl(amu_event);
+          if (proxy->get_amu_exec(&amu_event_nemu, iter->res) == 1) {
             printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_name(amu_event.op));
             if (iter->res != nullptr) {
               delete[] iter->res;
@@ -423,14 +473,29 @@ static void print_msync_event(const char *source, const DifftestMsyncEvent &even
   }
 }
 
+static struct MsyncEvent to_nemu_msync(const DifftestMsyncEvent &source) {
+  struct MsyncEvent target = {};
+  target.valid = source.valid;
+  target.op = source.op;
+  target.msyncRd = source.msyncRd;
+  target.pc = source.pc;
+  return target;
+}
+
+static void from_nemu_msync(DifftestMsyncEvent &target, const struct MsyncEvent &source) {
+  target.valid = source.valid;
+  target.op = source.op;
+  target.msyncRd = source.msyncRd;
+  target.pc = source.pc;
+}
+
 int MsyncChecker::do_step() {
   while (!state->msync_event_queue.empty()) {
     const DifftestMsyncEvent dut_event = state->msync_event_queue.front();
     DifftestMsyncEvent ref_event = dut_event;
-#ifdef CONFIG_DIFFTEST_SQUASH
-    // TODO: What is squash? How to squash?
-#endif // CONFIG_DIFFTEST_SQUASH
-    int check_res = proxy->get_msync_event(&ref_event);
+    struct MsyncEvent ref_event_nemu = to_nemu_msync(ref_event);
+    int check_res = proxy->get_msync_event(&ref_event_nemu);
+    from_nemu_msync(ref_event, ref_event_nemu);
 
     if (check_res == 1) {
       // Compare the msync event info.
