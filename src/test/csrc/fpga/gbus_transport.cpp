@@ -489,13 +489,12 @@ void GbusTransport::wait_fpga_io_done(uint64_t address, const char *tag) {
   // debugging a board integration that implements it.
   const char *poll = std::getenv("GBUS_POLL_STATUS");
   if (!poll || std::strtoull(poll, nullptr, 0) == 0) {
-    // GBus writes the workload directly through the UVHS DDR AXI master; it
-    // does not feed DifftestMemCtrl's AXI-stream H2C engine.  Consequently no
-    // hardware completion status changes HOST_IO_MEM_H2C from 1 to 2 as it
-    // does in the XDMA flow.  Clear the request here after the synchronous
-    // gbus_dma_write() has completed so the following HOST_IO_MEM_CPU write
-    // can return DDR ownership to the CPU.  Leaving bit 0 set permanently
-    // selects an idle H2C master over the CPU and prevents instruction fetch.
+    // GBus occupies DifftestMemCtrl's AXI-stream H2C engine.  The engine
+    // reports completion by changing HOST_IO_MEM_H2C from 1 to 2 in the XDMA
+    // flow, but GBus register reads of that status are not guaranteed.  After
+    // the synchronous gbus_dma_write() has finished, clear the request so
+    // HOST_IO_MEM_CPU can return DDR ownership to the CPU.  Leaving bit 0 set
+    // permanently keeps the H2C master selected.
     if (address == HOST_IO_MEM_H2C) {
       fpga_io(HOST_IO_MEM_H2C, 0);
       std::fprintf(stderr, "[fpga-host] GBus direct DMA complete; released H2C DDR ownership to CPU\n");
