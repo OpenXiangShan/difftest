@@ -217,6 +217,12 @@ protected:
 
   int check_all();
 
+#ifdef CONFIG_DIFFTEST_FORK
+  uint32_t fork_window_instr() const;
+  bool fork_window_eligible() const;
+  int fork_step(uint32_t window_instr);
+#endif // CONFIG_DIFFTEST_FORK
+
   inline bool in_disambiguation_state() {
     static bool was_found = false;
 #ifdef FUZZING

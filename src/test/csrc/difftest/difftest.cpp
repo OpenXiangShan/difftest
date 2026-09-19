@@ -23,8 +23,19 @@
 #include "ram.h"
 #include "spikedasm.h"
 #include "splitview.h"
+#ifdef CONFIG_DIFFTEST_FORK
+#include <algorithm>
+#include <numeric>
+#include <vector>
+#endif // CONFIG_DIFFTEST_FORK
 #include <csignal>
 #include <cstdlib>
+#ifdef CONFIG_DIFFTEST_FORK
+#include <cerrno>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif // CONFIG_DIFFTEST_FORK
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
@@ -34,6 +45,47 @@
 #ifdef CONFIG_DIFFTEST_QUERY
 #include "query.h"
 #endif // CONFIG_DIFFTEST_QUERY
+
+#ifdef CONFIG_DIFFTEST_FORK
+namespace {
+struct ForkStepResult {
+  int ret;
+  ref_state_t state;
+};
+
+bool write_full(int fd, const void *data, size_t size) {
+  const auto *ptr = static_cast<const uint8_t *>(data);
+  while (size != 0) {
+    ssize_t written = write(fd, ptr, size);
+    if (written < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    if (written == 0) return false;
+    ptr += written;
+    size -= static_cast<size_t>(written);
+  }
+  return true;
+}
+
+bool read_full(int fd, void *data, size_t size) {
+  auto *ptr = static_cast<uint8_t *>(data);
+  while (size != 0) {
+    ssize_t read_bytes = read(fd, ptr, size);
+    if (read_bytes < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    if (read_bytes == 0) return false;
+    ptr += read_bytes;
+    size -= static_cast<size_t>(read_bytes);
+  }
+  return true;
+}
+} // namespace
+
+std::vector<uint32_t> fork_window_sizes;
+#endif // CONFIG_DIFFTEST_FORK
 
 Difftest **difftest = NULL;
 static volatile sig_atomic_t difftest_signal_handling = 0;
@@ -177,6 +229,21 @@ void difftest_trace_write(int step) {
 }
 
 void difftest_finish() {
+#ifdef CONFIG_DIFFTEST_FORK
+  if (!fork_window_sizes.empty()) {
+    std::sort(fork_window_sizes.begin(), fork_window_sizes.end());
+    const auto percentile = [](const std::vector<uint32_t> &values, double p) {
+      const size_t index = static_cast<size_t>((values.size() - 1) * p);
+      return values[index];
+    };
+    printf("ForkWindowCnt = %zu\n", fork_window_sizes.size());
+    printf("ForkWindowInstr = %lu\n",
+           static_cast<unsigned long>(std::accumulate(fork_window_sizes.begin(), fork_window_sizes.end(), uint64_t{0})));
+    printf("ForkWindowN p50=%u p90=%u p99=%u max=%u\n",
+           percentile(fork_window_sizes, 0.50), percentile(fork_window_sizes, 0.90),
+           percentile(fork_window_sizes, 0.99), fork_window_sizes.back());
+  }
+#endif // CONFIG_DIFFTEST_FORK
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
   Stopwatch::print_stats(CHECKERS);
 #endif
@@ -610,6 +677,14 @@ int Difftest::step() {
     return ret;
   }
 #else
+#ifdef CONFIG_DIFFTEST_FORK
+  if (state->has_commit && fork_window_eligible()) {
+    const uint32_t window_instr = fork_window_instr();
+    if (window_instr != 0) {
+      return fork_step(window_instr);
+    }
+  }
+#endif // CONFIG_DIFFTEST_FORK
   int ret = check_all();
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   if (mma_verifier) {
@@ -643,6 +718,103 @@ int Difftest::step() {
   return ret;
 #endif // CONFIG_DIFFTEST_REPLAY
 }
+
+#ifdef CONFIG_DIFFTEST_FORK
+uint32_t Difftest::fork_window_instr() const {
+  uint32_t count = 0;
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+    if (dut->commit[i].valid) {
+      count += 1 + dut->commit[i].nFused;
+    }
+  }
+  return count;
+}
+
+bool Difftest::fork_window_eligible() const {
+  if (dut->event.valid) return false;
+
+  bool has_commit = false;
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+    const auto &commit = dut->commit[i];
+    if (!commit.valid) continue;
+    has_commit = true;
+    // A skip or special event can change REF state without a one-to-one
+    // architectural execution. Keep those boundaries on the authoritative
+    // synchronous path until the migration protocol covers them.
+    if (commit.skip || commit.special != 0) return false;
+  }
+  return has_commit;
+}
+
+int Difftest::fork_step(uint32_t window_instr) {
+  fork_window_sizes.push_back(window_instr);
+  int result_pipe[2];
+  if (pipe(result_pipe) != 0) {
+    Info("fork DiffTest pipe failed: %s\n", strerror(errno));
+    return DiffTestChecker::STATE_ERROR;
+  }
+
+  const pid_t child = fork();
+  if (child < 0) {
+    Info("fork DiffTest fork failed: %s\n", strerror(errno));
+    close(result_pipe[0]);
+    close(result_pipe[1]);
+    return DiffTestChecker::STATE_ERROR;
+  }
+
+  if (child == 0) {
+    close(result_pipe[0]);
+    ForkStepResult result{};
+    result.ret = check_all();
+    proxy->sync();
+    result.state = proxy->state;
+    const bool sent = write_full(result_pipe[1], &result, sizeof(result));
+    close(result_pipe[1]);
+    _exit(sent ? 0 : 1);
+  }
+
+  close(result_pipe[1]);
+
+  // SHARE_BATCH_EXEC keeps the request exact while amortizing the shared REF
+  // boundary. It still returns early for a trap or other NEMU stop condition.
+  proxy->ref_exec(window_instr);
+  proxy->sync();
+  state->has_progress = true;
+  state->last_commit_cycle = dut->trap.cycleCnt;
+  state->cycle_count = dut->trap.cycleCnt;
+  state->record_group(proxy->state.pc, window_instr);
+
+  ForkStepResult child_result{};
+  const bool received = read_full(result_pipe[0], &child_result, sizeof(child_result));
+  close(result_pipe[0]);
+
+  int child_status = 0;
+  const bool waited = waitpid(child, &child_status, 0) == child;
+  if (!received || !waited || !WIFEXITED(child_status) || WEXITSTATUS(child_status) != 0) {
+    Info("fork DiffTest child failed at window pc = 0x%lx\n", proxy->state.pc);
+    return DiffTestChecker::STATE_ERROR;
+  }
+  if (child_result.ret != DiffTestChecker::STATE_OK) {
+    if (child_result.ret == DiffTestChecker::STATE_DIFF) {
+      proxy->state = child_result.state;
+      proxy->display(dut);
+    }
+    return child_result.ret;
+  }
+
+  if (memcmp(&child_result.state, &proxy->state, sizeof(ref_state_t)) != 0) {
+    Info("fork DiffTest endpoint mismatch at window end pc = 0x%lx\n", proxy->state.pc);
+    proxy->state = child_result.state;
+    // Register/CSR migration is safe for this prototype. Memory migration is
+    // still guarded by the authoritative child result and will be added with
+    // the ordered store-log protocol before asynchronous release.
+    proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
+    return DiffTestChecker::STATE_DIFF;
+  }
+
+  return DiffTestChecker::STATE_OK;
+}
+#endif // CONFIG_DIFFTEST_FORK
 
 inline int Difftest::check_all() {
   state->cycle_count = get_trap_event()->cycleCnt;
