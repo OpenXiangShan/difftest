@@ -97,6 +97,13 @@ enum {
   DUT_TO_REF
 };
 
+struct RefStoreLogEntry {
+  uint64_t addr;
+  uint64_t data;
+  uint64_t mask;
+  uint64_t orig_data;
+};
+
 class RefProxyConfig {
 public:
   bool ignore_illegal_mem_access = false;
@@ -127,7 +134,12 @@ public:
 #ifdef ENABLE_STORE_LOG
 #define REF_STORE_LOG(f)                                                      \
   f(ref_store_log_reset, difftest_store_log_reset, void, )                    \
-  f(ref_store_log_restore, difftest_store_log_restore, void, )
+  f(ref_store_log_restore, difftest_store_log_restore, void, )                \
+  f(ref_store_log_size, difftest_store_log_size, size_t, )                    \
+  f(ref_store_log_copy, difftest_store_log_copy, size_t, void*, size_t)       \
+  f(ref_migration_state_size, difftest_migration_state_size, size_t, )        \
+  f(ref_migration_state_copy, difftest_migration_state_copy, void, void*, bool) \
+  f(ref_state_migrate, difftest_state_migrate, void, )
 #else
 #define REF_STORE_LOG(f)
 #endif

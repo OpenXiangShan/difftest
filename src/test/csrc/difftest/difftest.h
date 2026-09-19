@@ -54,6 +54,13 @@ typedef struct {
   uint64_t cycleCnt;
 } WarmupInfo;
 
+#ifdef CONFIG_DIFFTEST_FORK
+struct DifftestForkWindow {
+  DiffTestState dut;
+  uint32_t instr_count;
+};
+#endif // CONFIG_DIFFTEST_FORK
+
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 #include "mma/mma_verifier.h"
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
@@ -178,6 +185,10 @@ public:
     state->has_commit = true;
   }
 
+#ifdef CONFIG_DIFFTEST_FORK
+  int drain_fork(bool block);
+#endif // CONFIG_DIFFTEST_FORK
+
 protected:
   DiffState *state = NULL;
   DiffTrace<DiffTestState> *difftrace = nullptr;
@@ -218,9 +229,21 @@ protected:
   int check_all();
 
 #ifdef CONFIG_DIFFTEST_FORK
+  static constexpr size_t fork_group_size = 4;
+  std::vector<DifftestForkWindow> fork_group;
+  bool fork_authority_valid = false;
+  uint64_t fork_authority_group = 0;
+  ref_state_t fork_authority_state{};
+  std::vector<uint64_t> fork_authority_csrs;
+  std::vector<uint8_t> fork_authority_migration_state;
   uint32_t fork_window_instr() const;
   bool fork_window_eligible() const;
-  int fork_step(uint32_t window_instr);
+  void capture_fork_authority(uint64_t group_id);
+  void set_fork_authority(uint64_t group_id, const ref_state_t &state, const uint64_t *csrs, size_t csr_count,
+                          const uint8_t *migration_state, size_t migration_state_size);
+  void restore_fork_authority();
+  int fork_group_step();
+  int fork_release_front(bool block, bool &released);
 #endif // CONFIG_DIFFTEST_FORK
 
   inline bool in_disambiguation_state() {

@@ -119,9 +119,9 @@ extern unsigned long EMU_FLASH_SIZE;
 // #define DEBUG_L2TLB
 
 // whether to enable REF/GoldenMemory record origin data of memory and restore
-#ifdef CONFIG_DIFFTEST_REPLAY
+#if defined(CONFIG_DIFFTEST_REPLAY) || defined(CONFIG_DIFFTEST_FORK)
 #define ENABLE_STORE_LOG
-#endif // CONFIG_DIFFTEST_REPLAY
+#endif // CONFIG_DIFFTEST_REPLAY || CONFIG_DIFFTEST_FORK
 
 // -----------------------------------------------------------------------
 // Simulator run ahead config
