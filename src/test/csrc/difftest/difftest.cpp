@@ -1089,6 +1089,8 @@ int Difftest::fork_release_front(bool block, bool &released) {
   }
 
   if (result->ret != DiffTestChecker::STATE_OK) {
+    Info("fork DiffTest child check failed for group %lu (ret=%d failed_index=%d)\n",
+         static_cast<unsigned long>(group.id), result->ret, result->failed_index);
     if (result->ret == DiffTestChecker::STATE_DIFF && result->failed_index >= 0 &&
         static_cast<size_t>(result->failed_index) < group.windows.size()) {
       proxy->state = result->state;
@@ -1108,7 +1110,7 @@ int Difftest::fork_release_front(bool block, bool &released) {
   const bool stores_match = same_store_log(child_stores, group.parent_stores);
   if (state_matches && csrs_match && migration_state_matches && stores_match) {
     set_fork_authority(group.id, result->state, result->csrs, 4096, result->migration_state,
-                        result->migration_state_size);
+                       result->migration_state_size);
     stop_child(group);
     fork_pending_groups.pop_front();
     ++fork_group_release_count;
@@ -1171,7 +1173,7 @@ inline int Difftest::check_all() {
   state->has_progress = false;
 
   // normal checkers
-  for (auto checker: checkers) {
+  for (auto checker : checkers) {
     if (int ret = checker->step()) {
       return ret;
     }
