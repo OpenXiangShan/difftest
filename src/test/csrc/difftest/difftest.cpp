@@ -88,6 +88,14 @@ struct ForkSharedResult {
   uint8_t command_commit_valid;
   uint8_t command_skip;
   uint8_t command_fused;
+  uint64_t command_group_count;
+  uint64_t command_skip_window_count;
+  uint64_t command_rollback_count;
+  uint64_t command_release_count;
+  uint64_t command_promotion_count;
+  uint64_t command_window_count;
+  uint64_t command_window_instr;
+  size_t command_peak_outstanding;
   DiffTestState command_dut;
   int ret;
   int failed_index;
@@ -187,6 +195,8 @@ uint64_t fork_skip_window_count = 0;
 uint64_t fork_rollback_count = 0;
 uint64_t fork_group_release_count = 0;
 size_t fork_peak_outstanding = 0;
+uint64_t fork_window_count = 0;
+uint64_t fork_window_instr_count = 0;
 bool fork_worker_process = false;
 pid_t fork_promoted_pid = -1;
 ForkSharedResult *fork_promoted_result = nullptr;
@@ -359,24 +369,27 @@ void difftest_finish() {
     fork_promoted_result = nullptr;
     fork_promoted_pid = -1;
   }
-  if (!fork_window_sizes.empty()) {
+  if (fork_window_count != 0) {
     std::sort(fork_window_sizes.begin(), fork_window_sizes.end());
     const auto percentile = [](const std::vector<uint32_t> &values, double p) {
       const size_t index = static_cast<size_t>((values.size() - 1) * p);
       return values[index];
     };
-    printf("ForkWindowCnt = %zu\n", fork_window_sizes.size());
+    printf("ForkWindowCnt = %lu\n", static_cast<unsigned long>(fork_window_count));
     printf("ForkGroupCnt = %lu\n", static_cast<unsigned long>(fork_group_count));
     printf("ForkSkipWindowCnt = %lu\n", static_cast<unsigned long>(fork_skip_window_count));
     printf("ForkGroupReleaseCnt = %lu\n", static_cast<unsigned long>(fork_group_release_count));
     printf("ForkRollbackCnt = %lu\n", static_cast<unsigned long>(fork_rollback_count));
     printf("ForkPromotionCnt = %lu\n", static_cast<unsigned long>(fork_promotion_count));
     printf("ForkPeakOutstanding = %zu\n", fork_peak_outstanding);
-    printf("ForkWindowInstr = %lu\n",
-           static_cast<unsigned long>(std::accumulate(fork_window_sizes.begin(), fork_window_sizes.end(), uint64_t{0})));
-    printf("ForkWindowN p50=%u p90=%u p99=%u max=%u\n",
-           percentile(fork_window_sizes, 0.50), percentile(fork_window_sizes, 0.90),
-           percentile(fork_window_sizes, 0.99), fork_window_sizes.back());
+    printf("ForkWindowInstr = %lu\n", static_cast<unsigned long>(fork_window_instr_count));
+    if (fork_promotion_count == 0) {
+      printf("ForkWindowN p50=%u p90=%u p99=%u max=%u\n",
+             percentile(fork_window_sizes, 0.50), percentile(fork_window_sizes, 0.90),
+             percentile(fork_window_sizes, 0.99), fork_window_sizes.back());
+    } else {
+      printf("ForkWindowN unavailable after owner promotion\n");
+    }
   }
 #endif // CONFIG_DIFFTEST_FORK
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
@@ -843,6 +856,8 @@ int Difftest::step() {
         commit.valid = 0;
       }
       fork_window_sizes.push_back(window_instr);
+      ++fork_window_count;
+      fork_window_instr_count += window_instr;
       if (fork_group.size() < fork_group_size) {
         return DiffTestChecker::STATE_OK;
       }
@@ -1124,6 +1139,15 @@ int Difftest::fork_group_step() {
       _exit(0);
     }
 
+    // The owner process starts a fresh fast/slow epoch from the state it just
+    // checked.  It must not retain the parent's pending fork queue, which
+    // belongs to the abandoned fast process.
+    fork_pending_groups.clear();
+    fork_group.clear();
+    fork_promoted_pid = -1;
+    fork_promoted_result = nullptr;
+    capture_fork_authority(fork_group_count);
+
     uint64_t command_seq = 0;
     while (fork_load(&shared_result->action) == FORK_CHILD_PROMOTE) {
       const uint64_t requested = fork_load(&shared_result->command_seq);
@@ -1139,7 +1163,7 @@ int Difftest::fork_group_step() {
       shared_result->command_fused = dut->commit[0].nFused;
       shared_result->command_dut_pc = dut->commit[0].valid ? dut->commit[0].pc : dut->trap.pc;
       shared_result->command_ref_pc_before = proxy->state.pc;
-      shared_result->command_ret = check_all();
+      shared_result->command_ret = step();
       proxy->sync();
       shared_result->command_ref_pc_after = proxy->state.pc;
       shared_result->command_trap = get_trap_code();
@@ -1148,6 +1172,14 @@ int Difftest::fork_group_step() {
         fflush(stdout);
         fflush(stderr);
       }
+      shared_result->command_group_count = fork_group_count;
+      shared_result->command_skip_window_count = fork_skip_window_count;
+      shared_result->command_rollback_count = fork_rollback_count;
+      shared_result->command_release_count = fork_group_release_count;
+      shared_result->command_promotion_count = fork_promotion_count;
+      shared_result->command_window_count = fork_window_count;
+      shared_result->command_window_instr = fork_window_instr_count;
+      shared_result->command_peak_outstanding = fork_peak_outstanding;
       fork_store(&shared_result->command_ack, command_seq);
     }
     _exit(0);
@@ -1379,6 +1411,14 @@ int Difftest::fork_promoted_submit(const DiffTestState &snapshot) {
   }
 
   const int ret = result->command_ret;
+  fork_group_count = result->command_group_count;
+  fork_skip_window_count = result->command_skip_window_count;
+  fork_rollback_count = result->command_rollback_count;
+  fork_group_release_count = result->command_release_count;
+  fork_promotion_count = result->command_promotion_count;
+  fork_window_count = result->command_window_count;
+  fork_window_instr_count = result->command_window_instr;
+  fork_peak_outstanding = result->command_peak_outstanding;
   if (ret == DiffTestChecker::STATE_TRAP) {
     state->has_trap = true;
     state->trap_code = result->command_trap;
