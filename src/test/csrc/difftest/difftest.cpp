@@ -69,6 +69,13 @@ enum ForkChildAction : int {
   FORK_CHILD_WAIT = 0,
   FORK_CHILD_STOP = 1,
   FORK_CHILD_PROMOTE = 2,
+  FORK_CHILD_DUMP_STORES = 3,
+};
+
+struct ForkStoreDigest {
+  uint64_t lo;
+  uint64_t hi;
+  uint64_t count;
 };
 
 struct ForkSharedResult {
@@ -101,6 +108,10 @@ struct ForkSharedResult {
   int failed_index;
   int commit_stamp;
   size_t store_count;
+  uint64_t store_digest_lo;
+  uint64_t store_digest_hi;
+  uint64_t store_digest_count;
+  int store_dump_ready;
   size_t migration_state_size;
   ref_state_t state;
   uint64_t csrs[4096];
@@ -128,9 +139,49 @@ struct PendingForkGroup {
   std::vector<uint64_t> parent_csrs;
   std::vector<uint8_t> parent_migration_state;
   int parent_commit_stamp;
+  ForkStoreDigest parent_store_digest;
   std::vector<RefStoreLogEntry> parent_stores;
   std::vector<DifftestForkWindow> windows;
 };
+
+uint64_t fork_digest_mix(uint64_t value) {
+  value ^= value >> 30;
+  value *= 0xbf58476d1ce4e5b9ull;
+  value ^= value >> 27;
+  value *= 0x94d049bb133111ebull;
+  return value ^ (value >> 31);
+}
+
+uint64_t fork_digest_rotl(uint64_t value, unsigned int shift) {
+  return (value << shift) | (value >> (64 - shift));
+}
+
+ForkStoreDigest hash_store_log(const std::vector<RefStoreLogEntry> &entries) {
+  ForkStoreDigest digest = {
+      0x243f6a8885a308d3ull,
+      0x13198a2e03707344ull,
+      static_cast<uint64_t>(entries.size()),
+  };
+  for (size_t index = 0; index < entries.size(); ++index) {
+    const auto &entry = entries[index];
+    const uint64_t words[] = {entry.addr, entry.data, entry.mask, entry.orig_data};
+    for (size_t field = 0; field < sizeof(words) / sizeof(words[0]); ++field) {
+      const uint64_t tag = 0x9e3779b97f4a7c15ull * (index * 4 + field + 1);
+      const uint64_t value = words[field] ^ tag;
+      digest.lo = fork_digest_rotl(digest.lo ^ fork_digest_mix(value + 0x6a09e667f3bcc909ull), 29);
+      digest.lo = digest.lo * 0x100000001b3ull + 0x3c6ef372fe94f82bull;
+      digest.hi = fork_digest_rotl(digest.hi + fork_digest_mix(value ^ 0xbb67ae8584caa73bull), 31);
+      digest.hi = digest.hi * 0x9e3779b185ebca87ull + 0xa54ff53a5f1d36f1ull;
+    }
+  }
+  digest.lo ^= fork_digest_mix(digest.count + 0x510e527fade682d1ull);
+  digest.hi ^= fork_digest_mix(digest.count ^ 0x1f83d9abfb41bd6bull);
+  return digest;
+}
+
+bool same_store_digest(const ForkStoreDigest &lhs, const ForkStoreDigest &rhs) {
+  return lhs.count == rhs.count && lhs.lo == rhs.lo && lhs.hi == rhs.hi;
+}
 
 std::vector<RefStoreLogEntry> read_store_log(RefProxy *proxy) {
   std::vector<RefStoreLogEntry> entries(proxy->ref_store_log_size());
@@ -145,6 +196,20 @@ bool same_store_log(const std::vector<RefStoreLogEntry> &lhs, const std::vector<
          std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](const auto &a, const auto &b) {
            return a.addr == b.addr && a.data == b.data && a.mask == b.mask && a.orig_data == b.orig_data;
          });
+}
+
+bool dump_child_store_log(pid_t pid, ForkSharedResult *result, std::vector<RefStoreLogEntry> &stores) {
+  fork_store(&result->store_dump_ready, 0);
+  fork_store(&result->action, static_cast<int>(FORK_CHILD_DUMP_STORES));
+  while (!fork_load(&result->store_dump_ready)) {
+    int child_status = 0;
+    if (waitpid(pid, &child_status, WNOHANG) == pid) {
+      return false;
+    }
+    sched_yield();
+  }
+  stores.assign(result->stores, result->stores + result->store_count);
+  return true;
 }
 
 void apply_store_log(RefProxy *proxy, const std::vector<RefStoreLogEntry> &entries) {
@@ -1129,22 +1194,38 @@ int Difftest::fork_group_step() {
       proxy->ref_migration_state_copy(shared_result->migration_state, REF_TO_DUT);
     }
     const auto child_store_log = read_store_log(proxy);
+    const auto child_store_digest = hash_store_log(child_store_log);
     if (child_store_log.size() > fork_max_store_entries) {
       shared_result->ret = DiffTestChecker::STATE_ERROR;
     } else {
       shared_result->store_count = child_store_log.size();
-      std::copy(child_store_log.begin(), child_store_log.end(), shared_result->stores);
+      shared_result->store_digest_lo = child_store_digest.lo;
+      shared_result->store_digest_hi = child_store_digest.hi;
+      shared_result->store_digest_count = child_store_digest.count;
     }
     fork_store(&shared_result->ready, 1);
 
     // Keep the child alive until the parent has compared the endpoints.  On
     // a mismatch the child is promoted in place, so its private COW memory
     // and checker state become the authoritative owner without migration.
-    while (fork_load(&shared_result->action) == FORK_CHILD_WAIT) {
-      sched_yield();
-    }
-    if (fork_load(&shared_result->action) != FORK_CHILD_PROMOTE) {
-      _exit(0);
+    while (true) {
+      const int action = fork_load(&shared_result->action);
+      if (action == FORK_CHILD_WAIT) {
+        sched_yield();
+        continue;
+      }
+      if (action == FORK_CHILD_DUMP_STORES) {
+        std::copy(child_store_log.begin(), child_store_log.end(), shared_result->stores);
+        fork_store(&shared_result->store_dump_ready, 1);
+        while (fork_load(&shared_result->action) == FORK_CHILD_DUMP_STORES) {
+          sched_yield();
+        }
+        continue;
+      }
+      if (action != FORK_CHILD_PROMOTE) {
+        _exit(0);
+      }
+      break;
     }
 
     // The owner process starts a fresh fast/slow epoch from the state it just
@@ -1240,11 +1321,12 @@ int Difftest::fork_group_step() {
     parent_store_log.front().data ^= 1ull << (byte * 8);
     apply_store_log(proxy, {parent_store_log.front()});
   }
+  const auto parent_store_digest = hash_store_log(parent_store_log);
 
   fork_pending_groups.push_back(
       {group_id, child, shared_result, start_state, std::move(start_csrs), std::move(start_migration_state),
        start_commit_stamp, parent_state, std::move(parent_csrs), std::move(parent_migration_state),
-       parent_commit_stamp, std::move(parent_store_log), std::move(fork_group)});
+       parent_commit_stamp, parent_store_digest, std::move(parent_store_log), std::move(fork_group)});
   fork_peak_outstanding = std::max(fork_peak_outstanding, fork_pending_groups.size());
   fork_group.clear();
   return drain_fork(false);
@@ -1269,7 +1351,6 @@ int Difftest::fork_release_front(bool block, bool &released) {
   }
 
   auto *result = group.result;
-  std::vector<RefStoreLogEntry> child_stores(result->stores, result->stores + result->store_count);
 
   const bool start_state_matches =
       fork_authority_valid && memcmp(&group.start_state, &fork_authority_state, sizeof(ref_state_t)) == 0;
@@ -1352,7 +1433,27 @@ int Difftest::fork_release_front(bool block, bool &released) {
       result->migration_state_size == group.parent_migration_state.size() &&
       memcmp(result->migration_state, group.parent_migration_state.data(), result->migration_state_size) == 0;
   const bool stamp_matches = result->commit_stamp == group.parent_commit_stamp;
-  const bool stores_match = same_store_log(child_stores, group.parent_stores);
+  const ForkStoreDigest child_store_digest = {
+      result->store_digest_lo,
+      result->store_digest_hi,
+      result->store_digest_count,
+  };
+  bool stores_match = same_store_digest(child_store_digest, group.parent_store_digest);
+  if (!stores_match) {
+    std::vector<RefStoreLogEntry> child_stores;
+    if (!dump_child_store_log(group.pid, result, child_stores)) {
+      Info("fork DiffTest child exited while dumping store log for group %lu\n",
+           static_cast<unsigned long>(group.id));
+      stop_child(group);
+      fork_pending_groups.pop_front();
+      return DiffTestChecker::STATE_ERROR;
+    }
+    stores_match = same_store_log(child_stores, group.parent_stores);
+    if (stores_match) {
+      Info("fork DiffTest store digest mismatch but exact trace matched for group %lu\n",
+           static_cast<unsigned long>(group.id));
+    }
+  }
   if (state_matches && csrs_match && migration_state_matches && stamp_matches && stores_match) {
     set_fork_authority(group.id, result->state, result->csrs, 4096, result->migration_state,
                        result->migration_state_size, result->commit_stamp);
