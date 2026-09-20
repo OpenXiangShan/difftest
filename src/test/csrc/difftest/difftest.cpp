@@ -1114,9 +1114,34 @@ int Difftest::fork_group_step() {
     _exit(0);
   }
 
-  // SHARE_BATCH_EXEC keeps the request exact while amortizing the shared REF
-  // boundary. It still returns early for a trap or other NEMU stop condition.
-  proxy->ref_exec(total_instr);
+  // Keep the fast owner semantically aligned with the slow checker.  A skip
+  // commit is applied from the DUT writeback state by check_all(); executing
+  // the whole group blindly would execute that instruction a second time in
+  // the fast REF and make the endpoint hashes diverge.
+  for (const auto &window : fork_group) {
+    bool has_skip = false;
+    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+      const auto &commit = window.dut.commit[i];
+      if (commit.valid && commit.skip) {
+        has_skip = true;
+        break;
+      }
+    }
+    if (!has_skip) {
+      proxy->ref_exec(window.instr_count);
+      continue;
+    }
+    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+      const auto &commit = window.dut.commit[i];
+      if (!commit.valid) continue;
+      if (commit.skip) {
+        proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen,
+                        commit.wdest, get_commit_data(&window.dut, i));
+      } else {
+        proxy->ref_exec(1 + commit.nFused);
+      }
+    }
+  }
   proxy->sync();
 #ifdef CONFIG_DIFFTEST_SQUASH
   state->commit_stamp = (state->commit_stamp + checked_instr) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
