@@ -104,6 +104,19 @@ struct RefStoreLogEntry {
   uint64_t orig_data;
 };
 
+struct DifftestStateHash {
+  uint64_t state_lo;
+  uint64_t state_hi;
+  uint64_t store_lo;
+  uint64_t store_hi;
+  uint64_t store_count;
+};
+
+enum RefExecMode {
+  REF_EXEC_FAST = 0,
+  REF_EXEC_SLOW = 1,
+};
+
 class RefProxyConfig {
 public:
   bool ignore_illegal_mem_access = false;
@@ -118,6 +131,8 @@ public:
   f(ref_csrcpy, difftest_csrcpy, void, void*, bool)                           \
   f(ref_memcpy, difftest_memcpy, void, uint64_t, void*, size_t, bool)         \
   f(ref_exec, difftest_exec, void, uint64_t)                                  \
+  f(ref_set_exec_mode, difftest_set_exec_mode, void, int)                      \
+  f(ref_state_hash, difftest_state_hash, void, void*)                         \
   f(ref_reg_display, difftest_display, void, )                                \
   f(update_config, update_dynamic_config, void, void*)                        \
   f(uarchstatus_sync, difftest_uarchstatus_sync, void, void*)                 \
@@ -136,10 +151,7 @@ public:
   f(ref_store_log_reset, difftest_store_log_reset, void, )                    \
   f(ref_store_log_restore, difftest_store_log_restore, void, )                \
   f(ref_store_log_size, difftest_store_log_size, size_t, )                    \
-  f(ref_store_log_copy, difftest_store_log_copy, size_t, void*, size_t)       \
-  f(ref_migration_state_size, difftest_migration_state_size, size_t, )        \
-  f(ref_migration_state_copy, difftest_migration_state_copy, void, void*, bool) \
-  f(ref_state_migrate, difftest_state_migrate, void, )
+  f(ref_store_log_copy, difftest_store_log_copy, size_t, void*, size_t)
 #else
 #define REF_STORE_LOG(f)
 #endif
@@ -263,6 +275,16 @@ public:
 #endif // CONFIG_DIFFTEST_ARCHVECREGSTATE
   inline void sync(bool is_from_dut = false) {
     ref_regcpy(&state.xrf, is_from_dut, is_from_dut);
+  }
+
+  inline void set_exec_mode(int mode) {
+    ref_set_exec_mode(mode);
+  }
+
+  inline DifftestStateHash state_hash() {
+    DifftestStateHash hash{};
+    ref_state_hash(&hash);
+    return hash;
   }
 
   void regcpy(const DiffTestRegState *regs, uint64_t pc);

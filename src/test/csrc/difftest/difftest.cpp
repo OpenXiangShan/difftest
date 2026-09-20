@@ -49,8 +49,6 @@
 
 #ifdef CONFIG_DIFFTEST_FORK
 namespace {
-constexpr size_t fork_max_store_entries = 8192;
-constexpr size_t fork_max_migration_state_size = 4096;
 constexpr size_t fork_default_max_outstanding = 64;
 
 const size_t fork_max_outstanding = []() {
@@ -69,13 +67,6 @@ enum ForkChildAction : int {
   FORK_CHILD_WAIT = 0,
   FORK_CHILD_STOP = 1,
   FORK_CHILD_PROMOTE = 2,
-  FORK_CHILD_DUMP_STORES = 3,
-};
-
-struct ForkStoreDigest {
-  uint64_t lo;
-  uint64_t hi;
-  uint64_t count;
 };
 
 struct ForkSharedResult {
@@ -107,16 +98,7 @@ struct ForkSharedResult {
   int ret;
   int failed_index;
   int commit_stamp;
-  size_t store_count;
-  uint64_t store_digest_lo;
-  uint64_t store_digest_hi;
-  uint64_t store_digest_count;
-  int store_dump_ready;
-  size_t migration_state_size;
-  ref_state_t state;
-  uint64_t csrs[4096];
-  uint8_t migration_state[fork_max_migration_state_size];
-  RefStoreLogEntry stores[fork_max_store_entries];
+  DifftestStateHash state_hash;
 };
 
 template <typename T> T fork_load(const volatile T *value) {
@@ -131,107 +113,10 @@ struct PendingForkGroup {
   uint64_t id;
   pid_t pid;
   ForkSharedResult *result;
-  ref_state_t start_state;
-  std::vector<uint64_t> start_csrs;
-  std::vector<uint8_t> start_migration_state;
-  int start_commit_stamp;
-  ref_state_t parent_state;
-  std::vector<uint64_t> parent_csrs;
-  std::vector<uint8_t> parent_migration_state;
   int parent_commit_stamp;
-  ForkStoreDigest parent_store_digest;
-  std::vector<RefStoreLogEntry> parent_stores;
+  DifftestStateHash parent_hash;
   std::vector<DifftestForkWindow> windows;
 };
-
-uint64_t fork_digest_mix(uint64_t value) {
-  value ^= value >> 30;
-  value *= 0xbf58476d1ce4e5b9ull;
-  value ^= value >> 27;
-  value *= 0x94d049bb133111ebull;
-  return value ^ (value >> 31);
-}
-
-uint64_t fork_digest_rotl(uint64_t value, unsigned int shift) {
-  return (value << shift) | (value >> (64 - shift));
-}
-
-ForkStoreDigest hash_store_log(const std::vector<RefStoreLogEntry> &entries) {
-  ForkStoreDigest digest = {
-      0x243f6a8885a308d3ull,
-      0x13198a2e03707344ull,
-      static_cast<uint64_t>(entries.size()),
-  };
-  for (size_t index = 0; index < entries.size(); ++index) {
-    const auto &entry = entries[index];
-    const uint64_t words[] = {entry.addr, entry.data, entry.mask, entry.orig_data};
-    for (size_t field = 0; field < sizeof(words) / sizeof(words[0]); ++field) {
-      const uint64_t tag = 0x9e3779b97f4a7c15ull * (index * 4 + field + 1);
-      const uint64_t value = words[field] ^ tag;
-      digest.lo = fork_digest_rotl(digest.lo ^ fork_digest_mix(value + 0x6a09e667f3bcc909ull), 29);
-      digest.lo = digest.lo * 0x100000001b3ull + 0x3c6ef372fe94f82bull;
-      digest.hi = fork_digest_rotl(digest.hi + fork_digest_mix(value ^ 0xbb67ae8584caa73bull), 31);
-      digest.hi = digest.hi * 0x9e3779b185ebca87ull + 0xa54ff53a5f1d36f1ull;
-    }
-  }
-  digest.lo ^= fork_digest_mix(digest.count + 0x510e527fade682d1ull);
-  digest.hi ^= fork_digest_mix(digest.count ^ 0x1f83d9abfb41bd6bull);
-  return digest;
-}
-
-bool same_store_digest(const ForkStoreDigest &lhs, const ForkStoreDigest &rhs) {
-  return lhs.count == rhs.count && lhs.lo == rhs.lo && lhs.hi == rhs.hi;
-}
-
-std::vector<RefStoreLogEntry> read_store_log(RefProxy *proxy) {
-  std::vector<RefStoreLogEntry> entries(proxy->ref_store_log_size());
-  if (!entries.empty()) {
-    entries.resize(proxy->ref_store_log_copy(entries.data(), entries.size()));
-  }
-  return entries;
-}
-
-bool same_store_log(const std::vector<RefStoreLogEntry> &lhs, const std::vector<RefStoreLogEntry> &rhs) {
-  return lhs.size() == rhs.size() &&
-         std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](const auto &a, const auto &b) {
-           return a.addr == b.addr && a.data == b.data && a.mask == b.mask && a.orig_data == b.orig_data;
-         });
-}
-
-bool dump_child_store_log(pid_t pid, ForkSharedResult *result, std::vector<RefStoreLogEntry> &stores) {
-  fork_store(&result->store_dump_ready, 0);
-  fork_store(&result->action, static_cast<int>(FORK_CHILD_DUMP_STORES));
-  while (!fork_load(&result->store_dump_ready)) {
-    int child_status = 0;
-    if (waitpid(pid, &child_status, WNOHANG) == pid) {
-      return false;
-    }
-    sched_yield();
-  }
-  stores.assign(result->stores, result->stores + result->store_count);
-  return true;
-}
-
-void apply_store_log(RefProxy *proxy, const std::vector<RefStoreLogEntry> &entries) {
-  for (const auto &entry : entries) {
-    uint64_t value = 0;
-    proxy->ref_memcpy(entry.addr, &value, sizeof(value), REF_TO_DUT);
-    for (int byte = 0; byte < 8; ++byte) {
-      if (entry.mask & (1ull << byte)) {
-        const uint64_t byte_mask = 0xffull << (byte * 8);
-        value = (value & ~byte_mask) | (entry.data & byte_mask);
-      }
-    }
-    proxy->ref_memcpy(entry.addr, &value, sizeof(value), DUT_TO_REF);
-  }
-}
-
-void restore_store_log(RefProxy *proxy, const std::vector<RefStoreLogEntry> &entries) {
-  for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
-    uint64_t value = it->orig_data;
-    proxy->ref_memcpy(it->addr, &value, sizeof(value), DUT_TO_REF);
-  }
-}
 
 void stop_child(PendingForkGroup &group) {
   if (waitpid(group.pid, nullptr, WNOHANG) == 0) {
@@ -780,6 +665,9 @@ void Difftest::init_checkers() {
 
 void Difftest::update_nemuproxy(int coreid, size_t ram_size = 0) {
   proxy = new REF_PROXY(coreid, ram_size);
+#ifdef CONFIG_DIFFTEST_FORK
+  proxy->set_exec_mode(REF_EXEC_FAST);
+#endif
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   mma_verifier = new MmaVerifier();
@@ -952,11 +840,12 @@ int Difftest::step() {
     return fork_promoted_step();
   }
 #endif // CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK
+  proxy->set_exec_mode(REF_EXEC_SLOW);
+#endif
   int ret = check_all();
 #ifdef CONFIG_DIFFTEST_FORK
-  if (ret == DiffTestChecker::STATE_OK) {
-    capture_fork_authority(fork_group_count);
-  }
+  proxy->set_exec_mode(REF_EXEC_FAST);
 #endif // CONFIG_DIFFTEST_FORK
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   if (mma_verifier) {
@@ -997,46 +886,6 @@ int Difftest::fork_commit_stamp() const {
   return state->commit_stamp;
 #else
   return 0;
-#endif
-}
-
-void Difftest::set_fork_authority(uint64_t group_id, const ref_state_t &new_state, const uint64_t *csrs,
-                                   size_t csr_count, const uint8_t *migration_state, size_t migration_state_size,
-                                   int commit_stamp) {
-  assert(csr_count == 4096);
-  assert(migration_state_size <= fork_max_migration_state_size);
-  fork_authority_state = new_state;
-  fork_authority_csrs.assign(csrs, csrs + csr_count);
-  fork_authority_migration_state.assign(migration_state, migration_state + migration_state_size);
-  fork_authority_commit_stamp = commit_stamp;
-  fork_authority_group = group_id;
-  fork_authority_valid = true;
-}
-
-void Difftest::capture_fork_authority(uint64_t group_id) {
-  proxy->sync();
-  std::vector<uint64_t> csrs(4096);
-  proxy->ref_csrcpy(csrs.data(), REF_TO_DUT);
-  std::vector<uint8_t> migration_state(proxy->ref_migration_state_size());
-  if (migration_state.size() > fork_max_migration_state_size) {
-    Info("fork DiffTest migration state is too large: %zu bytes\n", migration_state.size());
-    return;
-  }
-  proxy->ref_migration_state_copy(migration_state.data(), REF_TO_DUT);
-  set_fork_authority(group_id, proxy->state, csrs.data(), csrs.size(), migration_state.data(), migration_state.size(),
-                     fork_commit_stamp());
-}
-
-void Difftest::restore_fork_authority() {
-  assert(fork_authority_valid);
-  proxy->state = fork_authority_state;
-  proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
-  proxy->ref_csrcpy(fork_authority_csrs.data(), DUT_TO_REF);
-  proxy->ref_migration_state_copy(fork_authority_migration_state.data(), DUT_TO_REF);
-  proxy->ref_state_migrate();
-  proxy->ref_migration_state_copy(fork_authority_migration_state.data(), REF_TO_DUT);
-#ifdef CONFIG_DIFFTEST_SQUASH
-  state->commit_stamp = fork_authority_commit_stamp;
 #endif
 }
 
@@ -1125,22 +974,11 @@ int Difftest::fork_group_step() {
     }
   }
 
+  // The parent remains the fast owner.  The child switches the same loaded SO
+  // to the precise checker mode after fork, so no cross-SO state migration is
+  // needed at either boundary.
+  proxy->set_exec_mode(REF_EXEC_FAST);
   proxy->sync();
-  const ref_state_t start_state = proxy->state;
-  const int start_commit_stamp = fork_commit_stamp();
-  std::vector<uint64_t> start_csrs(4096);
-  proxy->ref_csrcpy(start_csrs.data(), REF_TO_DUT);
-  std::vector<uint8_t> start_migration_state(proxy->ref_migration_state_size());
-  if (start_migration_state.size() > fork_max_migration_state_size) {
-    Info("fork DiffTest migration state is too large: %zu bytes\n", start_migration_state.size());
-    return DiffTestChecker::STATE_ERROR;
-  }
-  proxy->ref_migration_state_copy(start_migration_state.data(), REF_TO_DUT);
-  if (!fork_authority_valid) {
-    set_fork_authority(group_id - 1, start_state, start_csrs.data(), start_csrs.size(), start_migration_state.data(),
-                        start_migration_state.size(), start_commit_stamp);
-  }
-
   proxy->ref_store_log_reset();
   proxy->set_store_log(true);
 
@@ -1171,6 +1009,7 @@ int Difftest::fork_group_step() {
 
   if (child == 0) {
     fork_worker_process = true;
+    proxy->set_exec_mode(REF_EXEC_SLOW);
     if (child_delay_us != 0) {
       usleep(child_delay_us);
     }
@@ -1180,29 +1019,15 @@ int Difftest::fork_group_step() {
       shared_result->ret = check_all();
       if (shared_result->ret != DiffTestChecker::STATE_OK) {
         shared_result->failed_index = static_cast<int>(i);
+        proxy->display(dut);
+        fflush(stdout);
+        fflush(stderr);
         break;
       }
     }
     proxy->sync();
-    shared_result->state = proxy->state;
+    shared_result->state_hash = proxy->state_hash();
     shared_result->commit_stamp = fork_commit_stamp();
-    proxy->ref_csrcpy(shared_result->csrs, REF_TO_DUT);
-    shared_result->migration_state_size = proxy->ref_migration_state_size();
-    if (shared_result->migration_state_size > fork_max_migration_state_size) {
-      shared_result->ret = DiffTestChecker::STATE_ERROR;
-    } else {
-      proxy->ref_migration_state_copy(shared_result->migration_state, REF_TO_DUT);
-    }
-    const auto child_store_log = read_store_log(proxy);
-    const auto child_store_digest = hash_store_log(child_store_log);
-    if (child_store_log.size() > fork_max_store_entries) {
-      shared_result->ret = DiffTestChecker::STATE_ERROR;
-    } else {
-      shared_result->store_count = child_store_log.size();
-      shared_result->store_digest_lo = child_store_digest.lo;
-      shared_result->store_digest_hi = child_store_digest.hi;
-      shared_result->store_digest_count = child_store_digest.count;
-    }
     fork_store(&shared_result->ready, 1);
 
     // Keep the child alive until the parent has compared the endpoints.  On
@@ -1212,14 +1037,6 @@ int Difftest::fork_group_step() {
       const int action = fork_load(&shared_result->action);
       if (action == FORK_CHILD_WAIT) {
         sched_yield();
-        continue;
-      }
-      if (action == FORK_CHILD_DUMP_STORES) {
-        std::copy(child_store_log.begin(), child_store_log.end(), shared_result->stores);
-        fork_store(&shared_result->store_dump_ready, 1);
-        while (fork_load(&shared_result->action) == FORK_CHILD_DUMP_STORES) {
-          sched_yield();
-        }
         continue;
       }
       if (action != FORK_CHILD_PROMOTE) {
@@ -1243,7 +1060,7 @@ int Difftest::fork_group_step() {
     fork_window_count = shared_result->command_window_count;
     fork_window_instr_count = shared_result->command_window_instr;
     fork_peak_outstanding = shared_result->command_peak_outstanding;
-    capture_fork_authority(fork_group_count);
+    proxy->set_exec_mode(REF_EXEC_FAST);
 
     uint64_t command_seq = 0;
     while (fork_load(&shared_result->action) == FORK_CHILD_PROMOTE) {
@@ -1290,21 +1107,7 @@ int Difftest::fork_group_step() {
   state->commit_stamp = (state->commit_stamp + checked_instr) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
 #endif
   const int parent_commit_stamp = fork_commit_stamp();
-  auto parent_store_log = read_store_log(proxy);
-  const ref_state_t parent_state = proxy->state;
-  std::vector<uint64_t> parent_csrs(4096);
-  proxy->ref_csrcpy(parent_csrs.data(), REF_TO_DUT);
-  std::vector<uint8_t> parent_migration_state(proxy->ref_migration_state_size());
-  if (parent_migration_state.size() > fork_max_migration_state_size) {
-    Info("fork DiffTest migration state is too large: %zu bytes\n", parent_migration_state.size());
-    kill(child, SIGKILL);
-    waitpid(child, nullptr, 0);
-    munmap(shared_result, sizeof(ForkSharedResult));
-    proxy->set_store_log(false);
-    proxy->ref_store_log_reset();
-    return DiffTestChecker::STATE_ERROR;
-  }
-  proxy->ref_migration_state_copy(parent_migration_state.data(), REF_TO_DUT);
+  DifftestStateHash parent_hash = proxy->state_hash();
   proxy->set_store_log(false);
   proxy->ref_store_log_reset();
   state->has_progress = true;
@@ -1316,17 +1119,14 @@ int Difftest::fork_group_step() {
     const char *value = getenv("DIFFTEST_FORK_CORRUPT_STORE_GROUP");
     return value ? strtol(value, nullptr, 0) : -1;
   }();
-  if (corrupt_store_group == static_cast<long>(group_id) && !parent_store_log.empty()) {
-    const int byte = __builtin_ctzll(parent_store_log.front().mask);
-    parent_store_log.front().data ^= 1ull << (byte * 8);
-    apply_store_log(proxy, {parent_store_log.front()});
+  if (corrupt_store_group == static_cast<long>(group_id)) {
+    // Test the endpoint promotion path without copying or mutating a store
+    // trace in the parent.  The child still owns the authoritative state.
+    parent_hash.state_lo ^= 1;
   }
-  const auto parent_store_digest = hash_store_log(parent_store_log);
 
   fork_pending_groups.push_back(
-      {group_id, child, shared_result, start_state, std::move(start_csrs), std::move(start_migration_state),
-       start_commit_stamp, parent_state, std::move(parent_csrs), std::move(parent_migration_state),
-       parent_commit_stamp, parent_store_digest, std::move(parent_store_log), std::move(fork_group)});
+      {group_id, child, shared_result, parent_commit_stamp, parent_hash, std::move(fork_group)});
   fork_peak_outstanding = std::max(fork_peak_outstanding, fork_pending_groups.size());
   fork_group.clear();
   return drain_fork(false);
@@ -1352,73 +1152,9 @@ int Difftest::fork_release_front(bool block, bool &released) {
 
   auto *result = group.result;
 
-  const bool start_state_matches =
-      fork_authority_valid && memcmp(&group.start_state, &fork_authority_state, sizeof(ref_state_t)) == 0;
-  const bool start_csrs_match =
-      fork_authority_valid && group.start_csrs.size() == fork_authority_csrs.size() &&
-      memcmp(group.start_csrs.data(), fork_authority_csrs.data(), sizeof(uint64_t) * group.start_csrs.size()) == 0;
-  const bool start_migration_state_matches =
-      fork_authority_valid && group.start_migration_state == fork_authority_migration_state;
-  const bool start_stamp_matches = fork_authority_valid && group.start_commit_stamp == fork_authority_commit_stamp;
-  const bool start_matches = start_state_matches && start_csrs_match && start_migration_state_matches &&
-                             start_stamp_matches;
-
-  if (!start_matches) {
-    const uint64_t failed_group_id = group.id;
-    if (!start_migration_state_matches && group.start_migration_state.size() == fork_authority_migration_state.size()) {
-      for (size_t i = 0; i < group.start_migration_state.size(); ++i) {
-        if (group.start_migration_state[i] != fork_authority_migration_state[i]) {
-          Info("fork DiffTest migration differs at byte %zu (start=%02x authority=%02x)\n", i,
-               group.start_migration_state[i], fork_authority_migration_state[i]);
-          break;
-        }
-      }
-    }
-    Info("fork DiffTest start mismatch for group %lu (authority=%lu state=%d csrs=%d migration=%d stamp=%d)\n",
-         static_cast<unsigned long>(group.id), static_cast<unsigned long>(fork_authority_group), start_state_matches,
-         start_csrs_match, start_migration_state_matches, start_stamp_matches);
-
-    std::vector<std::vector<DifftestForkWindow>> replay_groups;
-    for (auto &pending : fork_pending_groups) {
-      replay_groups.push_back(pending.windows);
-    }
-    auto partial_group = std::move(fork_group);
-    fork_group.clear();
-
-    for (auto it = fork_pending_groups.rbegin(); it != fork_pending_groups.rend(); ++it) {
-      restore_store_log(proxy, it->parent_stores);
-    }
-    for (auto &pending : fork_pending_groups) {
-      stop_child(pending);
-    }
-    fork_pending_groups.clear();
-    restore_fork_authority();
-    std::vector<uint8_t> restored_migration_state(fork_authority_migration_state.size());
-    proxy->ref_migration_state_copy(restored_migration_state.data(), REF_TO_DUT);
-    if (restored_migration_state != fork_authority_migration_state) {
-      Info("fork DiffTest migration restoration failed after group %lu\n",
-           static_cast<unsigned long>(failed_group_id));
-      return DiffTestChecker::STATE_ERROR;
-    }
-    ++fork_rollback_count;
-
-    for (auto &windows : replay_groups) {
-      fork_group = std::move(windows);
-      if (int ret = fork_group_step()) return ret;
-    }
-    fork_group = std::move(partial_group);
-    released = true;
-    return DiffTestChecker::STATE_OK;
-  }
-
   if (result->ret != DiffTestChecker::STATE_OK) {
     Info("fork DiffTest child check failed for group %lu (ret=%d failed_index=%d)\n",
          static_cast<unsigned long>(group.id), result->ret, result->failed_index);
-    if (result->ret == DiffTestChecker::STATE_DIFF && result->failed_index >= 0 &&
-        static_cast<size_t>(result->failed_index) < group.windows.size()) {
-      proxy->state = result->state;
-      proxy->display(&group.windows[result->failed_index].dut);
-    }
     fork_store(&result->action, static_cast<int>(FORK_CHILD_STOP));
     waitpid(group.pid, &child_status, 0);
     const int ret = result->ret;
@@ -1427,36 +1163,9 @@ int Difftest::fork_release_front(bool block, bool &released) {
     return ret;
   }
 
-  const bool state_matches = memcmp(&result->state, &group.parent_state, sizeof(ref_state_t)) == 0;
-  const bool csrs_match = memcmp(result->csrs, group.parent_csrs.data(), sizeof(result->csrs)) == 0;
-  const bool migration_state_matches =
-      result->migration_state_size == group.parent_migration_state.size() &&
-      memcmp(result->migration_state, group.parent_migration_state.data(), result->migration_state_size) == 0;
+  const bool state_hash_matches = memcmp(&result->state_hash, &group.parent_hash, sizeof(DifftestStateHash)) == 0;
   const bool stamp_matches = result->commit_stamp == group.parent_commit_stamp;
-  const ForkStoreDigest child_store_digest = {
-      result->store_digest_lo,
-      result->store_digest_hi,
-      result->store_digest_count,
-  };
-  bool stores_match = same_store_digest(child_store_digest, group.parent_store_digest);
-  if (!stores_match) {
-    std::vector<RefStoreLogEntry> child_stores;
-    if (!dump_child_store_log(group.pid, result, child_stores)) {
-      Info("fork DiffTest child exited while dumping store log for group %lu\n",
-           static_cast<unsigned long>(group.id));
-      stop_child(group);
-      fork_pending_groups.pop_front();
-      return DiffTestChecker::STATE_ERROR;
-    }
-    stores_match = same_store_log(child_stores, group.parent_stores);
-    if (stores_match) {
-      Info("fork DiffTest store digest mismatch but exact trace matched for group %lu\n",
-           static_cast<unsigned long>(group.id));
-    }
-  }
-  if (state_matches && csrs_match && migration_state_matches && stamp_matches && stores_match) {
-    set_fork_authority(group.id, result->state, result->csrs, 4096, result->migration_state,
-                       result->migration_state_size, result->commit_stamp);
+  if (state_hash_matches && stamp_matches) {
     fork_store(&result->action, static_cast<int>(FORK_CHILD_STOP));
     waitpid(group.pid, &child_status, 0);
     munmap(result, sizeof(ForkSharedResult));
@@ -1466,9 +1175,8 @@ int Difftest::fork_release_front(bool block, bool &released) {
     return DiffTestChecker::STATE_OK;
   }
 
-  Info("fork DiffTest endpoint mismatch for group %lu (state=%d csrs=%d migration=%d stamp=%d stores=%d)\n",
-       static_cast<unsigned long>(group.id), state_matches, csrs_match, migration_state_matches, stamp_matches,
-       stores_match);
+  Info("fork DiffTest endpoint hash mismatch for group %lu (hash=%d stamp=%d)\n",
+       static_cast<unsigned long>(group.id), state_hash_matches, stamp_matches);
   ++fork_rollback_count;
   const uint64_t promotion_group_id = group.id;
 

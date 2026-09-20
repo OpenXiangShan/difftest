@@ -231,19 +231,9 @@ protected:
 #ifdef CONFIG_DIFFTEST_FORK
   static constexpr size_t fork_group_size = 4;
   std::vector<DifftestForkWindow> fork_group;
-  bool fork_authority_valid = false;
-  uint64_t fork_authority_group = 0;
-  ref_state_t fork_authority_state{};
-  std::vector<uint64_t> fork_authority_csrs;
-  std::vector<uint8_t> fork_authority_migration_state;
-  int fork_authority_commit_stamp = 0;
   int fork_commit_stamp() const;
   uint32_t fork_window_instr() const;
   bool fork_window_eligible() const;
-  void capture_fork_authority(uint64_t group_id);
-  void set_fork_authority(uint64_t group_id, const ref_state_t &state, const uint64_t *csrs, size_t csr_count,
-                          const uint8_t *migration_state, size_t migration_state_size, int commit_stamp);
-  void restore_fork_authority();
   int fork_group_step();
   int fork_release_front(bool block, bool &released);
   int fork_promoted_step();
