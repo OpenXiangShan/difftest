@@ -365,6 +365,14 @@ void difftest_finish() {
   }
   fork_pending_groups.clear();
   if (fork_promoted_result != nullptr) {
+    fork_group_count = fork_promoted_result->command_group_count;
+    fork_skip_window_count = fork_promoted_result->command_skip_window_count;
+    fork_rollback_count = fork_promoted_result->command_rollback_count;
+    fork_group_release_count = fork_promoted_result->command_release_count;
+    fork_promotion_count = fork_promoted_result->command_promotion_count;
+    fork_window_count = fork_promoted_result->command_window_count;
+    fork_window_instr_count = fork_promoted_result->command_window_instr;
+    fork_peak_outstanding = fork_promoted_result->command_peak_outstanding;
     stop_promoted_child(fork_promoted_pid, fork_promoted_result);
     fork_promoted_result = nullptr;
     fork_promoted_pid = -1;
@@ -1146,6 +1154,14 @@ int Difftest::fork_group_step() {
     fork_group.clear();
     fork_promoted_pid = -1;
     fork_promoted_result = nullptr;
+    fork_group_count = shared_result->command_group_count;
+    fork_skip_window_count = shared_result->command_skip_window_count;
+    fork_rollback_count = shared_result->command_rollback_count;
+    fork_group_release_count = shared_result->command_release_count;
+    fork_promotion_count = shared_result->command_promotion_count;
+    fork_window_count = shared_result->command_window_count;
+    fork_window_instr_count = shared_result->command_window_instr;
+    fork_peak_outstanding = shared_result->command_peak_outstanding;
     capture_fork_authority(fork_group_count);
 
     uint64_t command_seq = 0;
@@ -1368,6 +1384,14 @@ int Difftest::fork_release_front(bool block, bool &released) {
   replay_windows.insert(replay_windows.end(), fork_group.begin(), fork_group.end());
 
   fork_store(&result->action, static_cast<int>(FORK_CHILD_PROMOTE));
+  result->command_group_count = fork_group_count;
+  result->command_skip_window_count = fork_skip_window_count;
+  result->command_rollback_count = fork_rollback_count;
+  result->command_release_count = fork_group_release_count;
+  result->command_promotion_count = fork_promotion_count + 1;
+  result->command_window_count = fork_window_count;
+  result->command_window_instr = fork_window_instr_count;
+  result->command_peak_outstanding = fork_peak_outstanding;
   fork_promoted_pid = group.pid;
   fork_promoted_result = result;
   ++fork_promotion_count;
