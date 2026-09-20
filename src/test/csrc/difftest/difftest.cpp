@@ -86,6 +86,8 @@ struct ForkSharedResult {
   uint64_t command_ref_pc_before;
   uint64_t command_ref_pc_after;
   uint8_t command_commit_valid;
+  uint8_t command_skip;
+  uint8_t command_fused;
   DiffTestState command_dut;
   int ret;
   int failed_index;
@@ -1130,12 +1132,19 @@ int Difftest::fork_group_step() {
       dut = &shared_result->command_dut;
       proxy->sync();
       shared_result->command_commit_valid = dut->commit[0].valid;
+      shared_result->command_skip = dut->commit[0].skip;
+      shared_result->command_fused = dut->commit[0].nFused;
       shared_result->command_dut_pc = dut->commit[0].valid ? dut->commit[0].pc : dut->trap.pc;
       shared_result->command_ref_pc_before = proxy->state.pc;
       shared_result->command_ret = check_all();
       proxy->sync();
       shared_result->command_ref_pc_after = proxy->state.pc;
       shared_result->command_trap = get_trap_code();
+      if (shared_result->command_ret == DiffTestChecker::STATE_DIFF) {
+        display();
+        fflush(stdout);
+        fflush(stderr);
+      }
       fork_store(&shared_result->command_ack, command_seq);
     }
     _exit(0);
@@ -1372,10 +1381,10 @@ int Difftest::fork_promoted_submit(const DiffTestState &snapshot) {
     state->trap_code = result->command_trap;
   }
   if (ret == DiffTestChecker::STATE_DIFF || ret == DiffTestChecker::STATE_ERROR) {
-    Info("fork DiffTest promoted child rejected sequence %lu (ret=%d valid=%u dut_pc=0x%lx "
+    Info("fork DiffTest promoted child rejected sequence %lu (ret=%d valid=%u skip=%u fused=%u dut_pc=0x%lx "
          "ref_pc_before=0x%lx ref_pc_after=0x%lx)\n",
-         static_cast<unsigned long>(sequence), ret, result->command_commit_valid, result->command_dut_pc,
-         result->command_ref_pc_before, result->command_ref_pc_after);
+         static_cast<unsigned long>(sequence), ret, result->command_commit_valid, result->command_skip,
+         result->command_fused, result->command_dut_pc, result->command_ref_pc_before, result->command_ref_pc_after);
     return DiffTestChecker::STATE_ERROR;
   }
   return ret;
