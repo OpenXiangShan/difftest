@@ -50,12 +50,20 @@
 #ifdef CONFIG_DIFFTEST_FORK
 namespace {
 constexpr size_t fork_default_max_outstanding = 64;
+constexpr size_t fork_default_group_size = 100;
 
 const size_t fork_max_outstanding = []() {
   const char *value = getenv("DIFFTEST_FORK_MAX_OUTSTANDING");
   if (value == nullptr) return fork_default_max_outstanding;
   const size_t requested = strtoul(value, nullptr, 0);
   return std::max<size_t>(1, std::min(requested, fork_default_max_outstanding));
+}();
+
+const size_t fork_group_size = []() {
+  const char *value = getenv("DIFFTEST_FORK_GROUP_SIZE");
+  if (value == nullptr) return fork_default_group_size;
+  const size_t requested = strtoul(value, nullptr, 0);
+  return std::max<size_t>(1, std::min(requested, static_cast<size_t>(1024)));
 }();
 
 const bool fork_allow_skip = []() {
@@ -89,6 +97,7 @@ struct ForkSharedResult {
   uint64_t command_group_count;
   uint64_t command_skip_window_count;
   uint64_t command_rollback_count;
+  uint64_t command_mismatch_count;
   uint64_t command_release_count;
   uint64_t command_promotion_count;
   uint64_t command_window_count;
@@ -143,6 +152,7 @@ std::deque<PendingForkGroup> fork_pending_groups;
 uint64_t fork_group_count = 0;
 uint64_t fork_skip_window_count = 0;
 uint64_t fork_rollback_count = 0;
+uint64_t fork_mismatch_count = 0;
 uint64_t fork_group_release_count = 0;
 size_t fork_peak_outstanding = 0;
 uint64_t fork_window_count = 0;
@@ -318,6 +328,7 @@ void difftest_finish() {
     fork_group_count = fork_promoted_result->command_group_count;
     fork_skip_window_count = fork_promoted_result->command_skip_window_count;
     fork_rollback_count = fork_promoted_result->command_rollback_count;
+    fork_mismatch_count = fork_promoted_result->command_mismatch_count;
     fork_group_release_count = fork_promoted_result->command_release_count;
     fork_promotion_count = fork_promoted_result->command_promotion_count;
     fork_window_count = fork_promoted_result->command_window_count;
@@ -337,6 +348,8 @@ void difftest_finish() {
     printf("ForkGroupCnt = %lu\n", static_cast<unsigned long>(fork_group_count));
     printf("ForkSkipWindowCnt = %lu\n", static_cast<unsigned long>(fork_skip_window_count));
     printf("ForkGroupReleaseCnt = %lu\n", static_cast<unsigned long>(fork_group_release_count));
+    printf("ForkGroupWindowSize = %zu\n", fork_group_size);
+    printf("ForkMismatchCnt = %lu\n", static_cast<unsigned long>(fork_mismatch_count));
     printf("ForkRollbackCnt = %lu\n", static_cast<unsigned long>(fork_rollback_count));
     printf("ForkPromotionCnt = %lu\n", static_cast<unsigned long>(fork_promotion_count));
     printf("ForkPeakOutstanding = %zu\n", fork_peak_outstanding);
@@ -1055,6 +1068,7 @@ int Difftest::fork_group_step() {
     fork_group_count = shared_result->command_group_count;
     fork_skip_window_count = shared_result->command_skip_window_count;
     fork_rollback_count = shared_result->command_rollback_count;
+    fork_mismatch_count = shared_result->command_mismatch_count;
     fork_group_release_count = shared_result->command_release_count;
     fork_promotion_count = shared_result->command_promotion_count;
     fork_window_count = shared_result->command_window_count;
@@ -1089,6 +1103,7 @@ int Difftest::fork_group_step() {
       shared_result->command_group_count = fork_group_count;
       shared_result->command_skip_window_count = fork_skip_window_count;
       shared_result->command_rollback_count = fork_rollback_count;
+      shared_result->command_mismatch_count = fork_mismatch_count;
       shared_result->command_release_count = fork_group_release_count;
       shared_result->command_promotion_count = fork_promotion_count;
       shared_result->command_window_count = fork_window_count;
@@ -1177,6 +1192,7 @@ int Difftest::fork_release_front(bool block, bool &released) {
 
   Info("fork DiffTest endpoint hash mismatch for group %lu (hash=%d stamp=%d)\n",
        static_cast<unsigned long>(group.id), state_hash_matches, stamp_matches);
+  ++fork_mismatch_count;
   ++fork_rollback_count;
   const uint64_t promotion_group_id = group.id;
 
@@ -1196,6 +1212,7 @@ int Difftest::fork_release_front(bool block, bool &released) {
   result->command_group_count = fork_group_count;
   result->command_skip_window_count = fork_skip_window_count;
   result->command_rollback_count = fork_rollback_count;
+  result->command_mismatch_count = fork_mismatch_count;
   // The current group is released immediately after promotion is scheduled;
   // include it in the counters handed to the promoted owner.
   result->command_release_count = fork_group_release_count + 1;
@@ -1249,6 +1266,7 @@ int Difftest::fork_promoted_submit(const DiffTestState &snapshot) {
   fork_group_count = result->command_group_count;
   fork_skip_window_count = result->command_skip_window_count;
   fork_rollback_count = result->command_rollback_count;
+  fork_mismatch_count = result->command_mismatch_count;
   fork_group_release_count = result->command_release_count;
   fork_promotion_count = result->command_promotion_count;
   fork_window_count = result->command_window_count;

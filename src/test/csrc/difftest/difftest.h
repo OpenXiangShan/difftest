@@ -229,7 +229,6 @@ protected:
   int check_all();
 
 #ifdef CONFIG_DIFFTEST_FORK
-  static constexpr size_t fork_group_size = 4;
   std::vector<DifftestForkWindow> fork_group;
   int fork_commit_stamp() const;
   uint32_t fork_window_instr() const;
