@@ -1387,7 +1387,9 @@ int Difftest::fork_release_front(bool block, bool &released) {
   result->command_group_count = fork_group_count;
   result->command_skip_window_count = fork_skip_window_count;
   result->command_rollback_count = fork_rollback_count;
-  result->command_release_count = fork_group_release_count;
+  // The current group is released immediately after promotion is scheduled;
+  // include it in the counters handed to the promoted owner.
+  result->command_release_count = fork_group_release_count + 1;
   result->command_promotion_count = fork_promotion_count + 1;
   result->command_window_count = fork_window_count;
   result->command_window_instr = fork_window_instr_count;
