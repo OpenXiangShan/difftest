@@ -103,7 +103,7 @@ std::vector<RefStoreLogEntry> read_store_log(RefProxy *proxy) {
 bool same_store_log(const std::vector<RefStoreLogEntry> &lhs, const std::vector<RefStoreLogEntry> &rhs) {
   return lhs.size() == rhs.size() &&
          std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](const auto &a, const auto &b) {
-           return a.addr == b.addr && a.data == b.data && a.mask == b.mask;
+           return a.addr == b.addr && a.data == b.data && a.mask == b.mask && a.orig_data == b.orig_data;
          });
 }
 
@@ -777,6 +777,12 @@ int Difftest::step() {
         }
       }
       fork_group.push_back({*dut, window_instr});
+      // The DPIC ring reuses DiffTestState entries. The child consumes the
+      // snapshot, so retire the live commit probes here just as check_all()
+      // would have done in the synchronous path.
+      for (auto &commit : dut->commit) {
+        commit.valid = 0;
+      }
       fork_window_sizes.push_back(window_instr);
       if (fork_group.size() < fork_group_size) {
         return DiffTestChecker::STATE_OK;
@@ -904,6 +910,9 @@ bool Difftest::fork_window_eligible() const {
 #endif
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
   if (dut->non_reg_interrupt_pending.valid) return false;
+#endif
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  if (dut->mhpmevent_overflow.valid) return false;
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
   if (dut->critical_error.valid) return false;
