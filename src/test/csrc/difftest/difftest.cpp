@@ -59,9 +59,15 @@ const size_t fork_max_outstanding = []() {
   return std::max<size_t>(1, std::min(requested, fork_default_max_outstanding));
 }();
 
+const bool fork_allow_skip = []() {
+  const char *value = getenv("DIFFTEST_FORK_ALLOW_SKIP");
+  return value != nullptr && value[0] == '1';
+}();
+
 struct ForkSharedResult {
   int ret;
   int failed_index;
+  int commit_stamp;
   size_t store_count;
   size_t migration_state_size;
   ref_state_t state;
@@ -77,9 +83,11 @@ struct PendingForkGroup {
   ref_state_t start_state;
   std::vector<uint64_t> start_csrs;
   std::vector<uint8_t> start_migration_state;
+  int start_commit_stamp;
   ref_state_t parent_state;
   std::vector<uint64_t> parent_csrs;
   std::vector<uint8_t> parent_migration_state;
+  int parent_commit_stamp;
   std::vector<RefStoreLogEntry> parent_stores;
   std::vector<DifftestForkWindow> windows;
 };
@@ -132,6 +140,7 @@ void stop_child(PendingForkGroup &group) {
 std::vector<uint32_t> fork_window_sizes;
 std::deque<PendingForkGroup> fork_pending_groups;
 uint64_t fork_group_count = 0;
+uint64_t fork_skip_window_count = 0;
 uint64_t fork_rollback_count = 0;
 uint64_t fork_group_release_count = 0;
 size_t fork_peak_outstanding = 0;
@@ -306,6 +315,7 @@ void difftest_finish() {
     };
     printf("ForkWindowCnt = %zu\n", fork_window_sizes.size());
     printf("ForkGroupCnt = %lu\n", static_cast<unsigned long>(fork_group_count));
+    printf("ForkSkipWindowCnt = %lu\n", static_cast<unsigned long>(fork_skip_window_count));
     printf("ForkGroupReleaseCnt = %lu\n", static_cast<unsigned long>(fork_group_release_count));
     printf("ForkRollbackCnt = %lu\n", static_cast<unsigned long>(fork_rollback_count));
     printf("ForkPeakOutstanding = %zu\n", fork_peak_outstanding);
@@ -758,6 +768,14 @@ int Difftest::step() {
   if (state->has_commit && fork_window_eligible()) {
     const uint32_t window_instr = fork_window_instr();
     if (window_instr != 0) {
+      if (fork_allow_skip) {
+        for (const auto &commit : dut->commit) {
+          if (commit.valid && commit.skip) {
+            ++fork_skip_window_count;
+            break;
+          }
+        }
+      }
       fork_group.push_back({*dut, window_instr});
       fork_window_sizes.push_back(window_instr);
       if (fork_group.size() < fork_group_size) {
@@ -818,13 +836,23 @@ int Difftest::step() {
 }
 
 #ifdef CONFIG_DIFFTEST_FORK
+int Difftest::fork_commit_stamp() const {
+#ifdef CONFIG_DIFFTEST_SQUASH
+  return state->commit_stamp;
+#else
+  return 0;
+#endif
+}
+
 void Difftest::set_fork_authority(uint64_t group_id, const ref_state_t &new_state, const uint64_t *csrs,
-                                   size_t csr_count, const uint8_t *migration_state, size_t migration_state_size) {
+                                   size_t csr_count, const uint8_t *migration_state, size_t migration_state_size,
+                                   int commit_stamp) {
   assert(csr_count == 4096);
   assert(migration_state_size <= fork_max_migration_state_size);
   fork_authority_state = new_state;
   fork_authority_csrs.assign(csrs, csrs + csr_count);
   fork_authority_migration_state.assign(migration_state, migration_state + migration_state_size);
+  fork_authority_commit_stamp = commit_stamp;
   fork_authority_group = group_id;
   fork_authority_valid = true;
 }
@@ -839,7 +867,8 @@ void Difftest::capture_fork_authority(uint64_t group_id) {
     return;
   }
   proxy->ref_migration_state_copy(migration_state.data(), REF_TO_DUT);
-  set_fork_authority(group_id, proxy->state, csrs.data(), csrs.size(), migration_state.data(), migration_state.size());
+  set_fork_authority(group_id, proxy->state, csrs.data(), csrs.size(), migration_state.data(), migration_state.size(),
+                     fork_commit_stamp());
 }
 
 void Difftest::restore_fork_authority() {
@@ -849,6 +878,10 @@ void Difftest::restore_fork_authority() {
   proxy->ref_csrcpy(fork_authority_csrs.data(), DUT_TO_REF);
   proxy->ref_migration_state_copy(fork_authority_migration_state.data(), DUT_TO_REF);
   proxy->ref_state_migrate();
+  proxy->ref_migration_state_copy(fork_authority_migration_state.data(), REF_TO_DUT);
+#ifdef CONFIG_DIFFTEST_SQUASH
+  state->commit_stamp = fork_authority_commit_stamp;
+#endif
 }
 
 uint32_t Difftest::fork_window_instr() const {
@@ -887,10 +920,14 @@ bool Difftest::fork_window_eligible() const {
     const auto &commit = dut->commit[i];
     if (!commit.valid) continue;
     has_commit = true;
-    // A skip or special event can change REF state without a one-to-one
-    // architectural execution. Keep those boundaries on the authoritative
-    // synchronous path until the migration protocol covers them.
-    if (commit.skip || commit.special != 0) return false;
+    if (commit.special != 0) return false;
+    if (commit.skip) {
+#if defined(CONFIG_DIFFTEST_STOREEVENT) || defined(CONFIG_DIFFTEST_LOADEVENT)
+      return false;
+#else
+      if (!fork_allow_skip) return false;
+#endif
+    }
   }
   return has_commit;
 }
@@ -906,12 +943,32 @@ int Difftest::fork_group_step() {
 
   const uint64_t group_id = ++fork_group_count;
   uint64_t total_instr = 0;
+#ifdef CONFIG_DIFFTEST_SQUASH
+  uint64_t checked_instr = 0;
+#endif
   for (const auto &window : fork_group) {
     total_instr += window.instr_count;
+#ifdef CONFIG_DIFFTEST_SQUASH
+    for (const auto &commit : window.dut.commit) {
+      if (commit.valid && !commit.skip) checked_instr += 1 + commit.nFused;
+    }
+#endif
+  }
+  if (fork_allow_skip && fork_skip_window_count != 0 && fork_skip_window_count <= 8) {
+    for (const auto &window : fork_group) {
+      for (const auto &commit : window.dut.commit) {
+        if (commit.valid && commit.skip) {
+          Info("fork DiffTest skip in group %lu (instr=%lu pc=0x%lx)\n",
+               static_cast<unsigned long>(group_id), static_cast<unsigned long>(total_instr), proxy->state.pc);
+          break;
+        }
+      }
+    }
   }
 
   proxy->sync();
   const ref_state_t start_state = proxy->state;
+  const int start_commit_stamp = fork_commit_stamp();
   std::vector<uint64_t> start_csrs(4096);
   proxy->ref_csrcpy(start_csrs.data(), REF_TO_DUT);
   std::vector<uint8_t> start_migration_state(proxy->ref_migration_state_size());
@@ -922,7 +979,7 @@ int Difftest::fork_group_step() {
   proxy->ref_migration_state_copy(start_migration_state.data(), REF_TO_DUT);
   if (!fork_authority_valid) {
     set_fork_authority(group_id - 1, start_state, start_csrs.data(), start_csrs.size(), start_migration_state.data(),
-                        start_migration_state.size());
+                        start_migration_state.size(), start_commit_stamp);
   }
 
   proxy->ref_store_log_reset();
@@ -968,6 +1025,7 @@ int Difftest::fork_group_step() {
     }
     proxy->sync();
     shared_result->state = proxy->state;
+    shared_result->commit_stamp = fork_commit_stamp();
     proxy->ref_csrcpy(shared_result->csrs, REF_TO_DUT);
     shared_result->migration_state_size = proxy->ref_migration_state_size();
     if (shared_result->migration_state_size > fork_max_migration_state_size) {
@@ -989,6 +1047,10 @@ int Difftest::fork_group_step() {
   // boundary. It still returns early for a trap or other NEMU stop condition.
   proxy->ref_exec(total_instr);
   proxy->sync();
+#ifdef CONFIG_DIFFTEST_SQUASH
+  state->commit_stamp = (state->commit_stamp + checked_instr) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+#endif
+  const int parent_commit_stamp = fork_commit_stamp();
   auto parent_store_log = read_store_log(proxy);
   const ref_state_t parent_state = proxy->state;
   std::vector<uint64_t> parent_csrs(4096);
@@ -1022,9 +1084,9 @@ int Difftest::fork_group_step() {
   }
 
   fork_pending_groups.push_back(
-      {group_id, child, shared_result, start_state, std::move(start_csrs), std::move(start_migration_state), parent_state,
-       std::move(parent_csrs),
-       std::move(parent_migration_state), std::move(parent_store_log), std::move(fork_group)});
+      {group_id, child, shared_result, start_state, std::move(start_csrs), std::move(start_migration_state),
+       start_commit_stamp, parent_state, std::move(parent_csrs), std::move(parent_migration_state),
+       parent_commit_stamp, std::move(parent_store_log), std::move(fork_group)});
   fork_peak_outstanding = std::max(fork_peak_outstanding, fork_pending_groups.size());
   fork_group.clear();
   return drain_fork(false);
@@ -1055,12 +1117,24 @@ int Difftest::fork_release_front(bool block, bool &released) {
       memcmp(group.start_csrs.data(), fork_authority_csrs.data(), sizeof(uint64_t) * group.start_csrs.size()) == 0;
   const bool start_migration_state_matches =
       fork_authority_valid && group.start_migration_state == fork_authority_migration_state;
-  const bool start_matches = start_state_matches && start_csrs_match && start_migration_state_matches;
+  const bool start_stamp_matches = fork_authority_valid && group.start_commit_stamp == fork_authority_commit_stamp;
+  const bool start_matches = start_state_matches && start_csrs_match && start_migration_state_matches &&
+                             start_stamp_matches;
 
   if (!start_matches) {
-    Info("fork DiffTest start mismatch for group %lu (authority=%lu state=%d csrs=%d migration=%d)\n",
+    const uint64_t failed_group_id = group.id;
+    if (!start_migration_state_matches && group.start_migration_state.size() == fork_authority_migration_state.size()) {
+      for (size_t i = 0; i < group.start_migration_state.size(); ++i) {
+        if (group.start_migration_state[i] != fork_authority_migration_state[i]) {
+          Info("fork DiffTest migration differs at byte %zu (start=%02x authority=%02x)\n", i,
+               group.start_migration_state[i], fork_authority_migration_state[i]);
+          break;
+        }
+      }
+    }
+    Info("fork DiffTest start mismatch for group %lu (authority=%lu state=%d csrs=%d migration=%d stamp=%d)\n",
          static_cast<unsigned long>(group.id), static_cast<unsigned long>(fork_authority_group), start_state_matches,
-         start_csrs_match, start_migration_state_matches);
+         start_csrs_match, start_migration_state_matches, start_stamp_matches);
 
     std::vector<std::vector<DifftestForkWindow>> replay_groups;
     for (auto &pending : fork_pending_groups) {
@@ -1077,6 +1151,13 @@ int Difftest::fork_release_front(bool block, bool &released) {
     }
     fork_pending_groups.clear();
     restore_fork_authority();
+    std::vector<uint8_t> restored_migration_state(fork_authority_migration_state.size());
+    proxy->ref_migration_state_copy(restored_migration_state.data(), REF_TO_DUT);
+    if (restored_migration_state != fork_authority_migration_state) {
+      Info("fork DiffTest migration restoration failed after group %lu\n",
+           static_cast<unsigned long>(failed_group_id));
+      return DiffTestChecker::STATE_ERROR;
+    }
     ++fork_rollback_count;
 
     for (auto &windows : replay_groups) {
@@ -1107,10 +1188,11 @@ int Difftest::fork_release_front(bool block, bool &released) {
   const bool migration_state_matches =
       result->migration_state_size == group.parent_migration_state.size() &&
       memcmp(result->migration_state, group.parent_migration_state.data(), result->migration_state_size) == 0;
+  const bool stamp_matches = result->commit_stamp == group.parent_commit_stamp;
   const bool stores_match = same_store_log(child_stores, group.parent_stores);
-  if (state_matches && csrs_match && migration_state_matches && stores_match) {
+  if (state_matches && csrs_match && migration_state_matches && stamp_matches && stores_match) {
     set_fork_authority(group.id, result->state, result->csrs, 4096, result->migration_state,
-                       result->migration_state_size);
+                       result->migration_state_size, result->commit_stamp);
     stop_child(group);
     fork_pending_groups.pop_front();
     ++fork_group_release_count;
@@ -1118,8 +1200,9 @@ int Difftest::fork_release_front(bool block, bool &released) {
     return DiffTestChecker::STATE_OK;
   }
 
-  Info("fork DiffTest endpoint mismatch for group %lu (state=%d csrs=%d migration=%d stores=%d)\n",
-       static_cast<unsigned long>(group.id), state_matches, csrs_match, migration_state_matches, stores_match);
+  Info("fork DiffTest endpoint mismatch for group %lu (state=%d csrs=%d migration=%d stamp=%d stores=%d)\n",
+       static_cast<unsigned long>(group.id), state_matches, csrs_match, migration_state_matches, stamp_matches,
+       stores_match);
   ++fork_rollback_count;
 
   std::vector<std::vector<DifftestForkWindow>> replay_groups;
@@ -1138,8 +1221,13 @@ int Difftest::fork_release_front(bool block, bool &released) {
   proxy->ref_csrcpy(result->csrs, DUT_TO_REF);
   proxy->ref_migration_state_copy(result->migration_state, DUT_TO_REF);
   proxy->ref_state_migrate();
-  set_fork_authority(group.id, result->state, result->csrs, 4096, result->migration_state,
-                      result->migration_state_size);
+  std::vector<uint8_t> migrated_state(result->migration_state_size);
+  proxy->ref_migration_state_copy(migrated_state.data(), REF_TO_DUT);
+#ifdef CONFIG_DIFFTEST_SQUASH
+  state->commit_stamp = result->commit_stamp;
+#endif
+  set_fork_authority(group.id, result->state, result->csrs, 4096, migrated_state.data(), migrated_state.size(),
+                     result->commit_stamp);
 
   for (auto &pending : fork_pending_groups) {
     stop_child(pending);
