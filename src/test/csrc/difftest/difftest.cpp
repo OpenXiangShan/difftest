@@ -784,6 +784,9 @@ int Difftest::step() {
   if (int ret = drain_fork(false)) {
     return ret;
   }
+  if (fork_promoted_result != nullptr) {
+    return fork_promoted_step();
+  }
 #endif // CONFIG_DIFFTEST_FORK
 #ifdef CONFIG_DIFFTEST_REPLAY
   static int replay_step = 0;
