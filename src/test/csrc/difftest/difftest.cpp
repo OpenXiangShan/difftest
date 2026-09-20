@@ -32,6 +32,7 @@
 #include <cstdlib>
 #ifdef CONFIG_DIFFTEST_FORK
 #include <cerrno>
+#include <sched.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -64,7 +65,24 @@ const bool fork_allow_skip = []() {
   return value != nullptr && value[0] == '1';
 }();
 
+enum ForkChildAction : int {
+  FORK_CHILD_WAIT = 0,
+  FORK_CHILD_STOP = 1,
+  FORK_CHILD_PROMOTE = 2,
+};
+
 struct ForkSharedResult {
+  // The result is first published by the slow child.  When the endpoint does
+  // not match, the same child can be promoted to the authoritative service;
+  // the command slot then carries future DUT snapshots without copying NEMU
+  // state back to the fast parent.
+  volatile int ready;
+  volatile int action;
+  volatile uint64_t command_seq;
+  volatile uint64_t command_ack;
+  int command_ret;
+  int command_trap;
+  DiffTestState command_dut;
   int ret;
   int failed_index;
   int commit_stamp;
@@ -75,6 +93,14 @@ struct ForkSharedResult {
   uint8_t migration_state[fork_max_migration_state_size];
   RefStoreLogEntry stores[fork_max_store_entries];
 };
+
+template <typename T> T fork_load(const volatile T *value) {
+  return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+}
+
+template <typename T> void fork_store(volatile T *value, T data) {
+  __atomic_store_n(value, data, __ATOMIC_RELEASE);
+}
 
 struct PendingForkGroup {
   uint64_t id;
@@ -135,6 +161,17 @@ void stop_child(PendingForkGroup &group) {
   }
   munmap(group.result, sizeof(ForkSharedResult));
 }
+
+void stop_promoted_child(pid_t pid, ForkSharedResult *result) {
+  if (result == nullptr) return;
+  fork_store(&result->action, static_cast<int>(FORK_CHILD_STOP));
+  int status = 0;
+  if (waitpid(pid, &status, WNOHANG) == 0) {
+    kill(pid, SIGKILL);
+    waitpid(pid, &status, 0);
+  }
+  munmap(result, sizeof(ForkSharedResult));
+}
 } // namespace
 
 std::vector<uint32_t> fork_window_sizes;
@@ -145,6 +182,10 @@ uint64_t fork_rollback_count = 0;
 uint64_t fork_group_release_count = 0;
 size_t fork_peak_outstanding = 0;
 bool fork_worker_process = false;
+pid_t fork_promoted_pid = -1;
+ForkSharedResult *fork_promoted_result = nullptr;
+uint64_t fork_promoted_sequence = 0;
+uint64_t fork_promotion_count = 0;
 #endif // CONFIG_DIFFTEST_FORK
 
 Difftest **difftest = NULL;
@@ -307,6 +348,11 @@ void difftest_finish() {
     stop_child(group);
   }
   fork_pending_groups.clear();
+  if (fork_promoted_result != nullptr) {
+    stop_promoted_child(fork_promoted_pid, fork_promoted_result);
+    fork_promoted_result = nullptr;
+    fork_promoted_pid = -1;
+  }
   if (!fork_window_sizes.empty()) {
     std::sort(fork_window_sizes.begin(), fork_window_sizes.end());
     const auto percentile = [](const std::vector<uint32_t> &values, double p) {
@@ -318,6 +364,7 @@ void difftest_finish() {
     printf("ForkSkipWindowCnt = %lu\n", static_cast<unsigned long>(fork_skip_window_count));
     printf("ForkGroupReleaseCnt = %lu\n", static_cast<unsigned long>(fork_group_release_count));
     printf("ForkRollbackCnt = %lu\n", static_cast<unsigned long>(fork_rollback_count));
+    printf("ForkPromotionCnt = %lu\n", static_cast<unsigned long>(fork_promotion_count));
     printf("ForkPeakOutstanding = %zu\n", fork_peak_outstanding);
     printf("ForkWindowInstr = %lu\n",
            static_cast<unsigned long>(std::accumulate(fork_window_sizes.begin(), fork_window_sizes.end(), uint64_t{0})));
@@ -731,6 +778,9 @@ void Difftest::do_replay() {
 
 int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_FORK
+  if (fork_promoted_result != nullptr) {
+    return fork_promoted_step();
+  }
   if (int ret = drain_fork(false)) {
     return ret;
   }
@@ -1024,6 +1074,7 @@ int Difftest::fork_group_step() {
     if (child_delay_us != 0) {
       usleep(child_delay_us);
     }
+    shared_result->ret = DiffTestChecker::STATE_OK;
     for (size_t i = 0; i < fork_group.size(); ++i) {
       dut = &fork_group[i].dut;
       shared_result->ret = check_all();
@@ -1048,6 +1099,31 @@ int Difftest::fork_group_step() {
     } else {
       shared_result->store_count = child_store_log.size();
       std::copy(child_store_log.begin(), child_store_log.end(), shared_result->stores);
+    }
+    fork_store(&shared_result->ready, 1);
+
+    // Keep the child alive until the parent has compared the endpoints.  On
+    // a mismatch the child is promoted in place, so its private COW memory
+    // and checker state become the authoritative owner without migration.
+    while (fork_load(&shared_result->action) == FORK_CHILD_WAIT) {
+      sched_yield();
+    }
+    if (fork_load(&shared_result->action) != FORK_CHILD_PROMOTE) {
+      _exit(0);
+    }
+
+    uint64_t command_seq = 0;
+    while (fork_load(&shared_result->action) == FORK_CHILD_PROMOTE) {
+      const uint64_t requested = fork_load(&shared_result->command_seq);
+      if (requested == command_seq) {
+        sched_yield();
+        continue;
+      }
+      command_seq = requested;
+      dut = &shared_result->command_dut;
+      shared_result->command_ret = check_all();
+      shared_result->command_trap = get_trap_code();
+      fork_store(&shared_result->command_ack, command_seq);
     }
     _exit(0);
   }
@@ -1107,13 +1183,16 @@ int Difftest::fork_release_front(bool block, bool &released) {
 
   auto &group = fork_pending_groups.front();
   int child_status = 0;
-  const pid_t waited = waitpid(group.pid, &child_status, block ? 0 : WNOHANG);
-  if (waited == 0) return DiffTestChecker::STATE_OK;
-  if (waited != group.pid || !WIFEXITED(child_status) || WEXITSTATUS(child_status) != 0) {
-    Info("fork DiffTest child failed for group %lu\n", static_cast<unsigned long>(group.id));
-    stop_child(group);
-    fork_pending_groups.pop_front();
-    return DiffTestChecker::STATE_ERROR;
+  while (!fork_load(&group.result->ready)) {
+    const pid_t waited = waitpid(group.pid, &child_status, WNOHANG);
+    if (waited == group.pid) {
+      Info("fork DiffTest child failed for group %lu\n", static_cast<unsigned long>(group.id));
+      stop_child(group);
+      fork_pending_groups.pop_front();
+      return DiffTestChecker::STATE_ERROR;
+    }
+    if (!block) return DiffTestChecker::STATE_OK;
+    usleep(1000);
   }
 
   auto *result = group.result;
@@ -1186,8 +1265,10 @@ int Difftest::fork_release_front(bool block, bool &released) {
       proxy->state = result->state;
       proxy->display(&group.windows[result->failed_index].dut);
     }
+    fork_store(&result->action, static_cast<int>(FORK_CHILD_STOP));
+    waitpid(group.pid, &child_status, 0);
     const int ret = result->ret;
-    stop_child(group);
+    munmap(result, sizeof(ForkSharedResult));
     fork_pending_groups.pop_front();
     return ret;
   }
@@ -1202,7 +1283,9 @@ int Difftest::fork_release_front(bool block, bool &released) {
   if (state_matches && csrs_match && migration_state_matches && stamp_matches && stores_match) {
     set_fork_authority(group.id, result->state, result->csrs, 4096, result->migration_state,
                        result->migration_state_size, result->commit_stamp);
-    stop_child(group);
+    fork_store(&result->action, static_cast<int>(FORK_CHILD_STOP));
+    waitpid(group.pid, &child_status, 0);
+    munmap(result, sizeof(ForkSharedResult));
     fork_pending_groups.pop_front();
     ++fork_group_release_count;
     released = true;
@@ -1213,44 +1296,81 @@ int Difftest::fork_release_front(bool block, bool &released) {
        static_cast<unsigned long>(group.id), state_matches, csrs_match, migration_state_matches, stamp_matches,
        stores_match);
   ++fork_rollback_count;
+  const uint64_t promotion_group_id = group.id;
 
-  std::vector<std::vector<DifftestForkWindow>> replay_groups;
+  // The slow child already contains the complete authoritative NEMU state at
+  // this endpoint.  Promote that process instead of copying registers or
+  // memory back into the speculative parent.  Windows that the fast parent
+  // had already submitted are replayed through a shared command slot so the
+  // promoted child catches up before serving new DUT steps.
+  std::vector<DifftestForkWindow> replay_windows;
   for (size_t i = 1; i < fork_pending_groups.size(); ++i) {
-    replay_groups.push_back(fork_pending_groups[i].windows);
+    replay_windows.insert(replay_windows.end(), fork_pending_groups[i].windows.begin(),
+                          fork_pending_groups[i].windows.end());
   }
-  auto partial_group = std::move(fork_group);
-  fork_group.clear();
+  replay_windows.insert(replay_windows.end(), fork_group.begin(), fork_group.end());
 
-  for (auto it = fork_pending_groups.rbegin(); it != fork_pending_groups.rend(); ++it) {
-    restore_store_log(proxy, it->parent_stores);
-  }
-  apply_store_log(proxy, child_stores);
-  proxy->state = result->state;
-  proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
-  proxy->ref_csrcpy(result->csrs, DUT_TO_REF);
-  proxy->ref_migration_state_copy(result->migration_state, DUT_TO_REF);
-  proxy->ref_state_migrate();
-  std::vector<uint8_t> migrated_state(result->migration_state_size);
-  proxy->ref_migration_state_copy(migrated_state.data(), REF_TO_DUT);
-#ifdef CONFIG_DIFFTEST_SQUASH
-  state->commit_stamp = result->commit_stamp;
-#endif
-  set_fork_authority(group.id, result->state, result->csrs, 4096, migrated_state.data(), migrated_state.size(),
-                     result->commit_stamp);
+  fork_store(&result->action, static_cast<int>(FORK_CHILD_PROMOTE));
+  fork_promoted_pid = group.pid;
+  fork_promoted_result = result;
+  ++fork_promotion_count;
 
-  for (auto &pending : fork_pending_groups) {
-    stop_child(pending);
+  for (size_t i = 1; i < fork_pending_groups.size(); ++i) {
+    stop_child(fork_pending_groups[i]);
   }
   fork_pending_groups.clear();
+  fork_group.clear();
   ++fork_group_release_count;
 
-  for (auto &windows : replay_groups) {
-    fork_group = std::move(windows);
-    if (int ret = fork_group_step()) return ret;
+  for (const auto &window : replay_windows) {
+    if (int ret = fork_promoted_submit(window.dut)) {
+      Info("fork DiffTest promoted child rejected replay window in group %lu\n",
+           static_cast<unsigned long>(promotion_group_id));
+      return ret;
+    }
   }
-  fork_group = std::move(partial_group);
   released = true;
   return DiffTestChecker::STATE_OK;
+}
+
+int Difftest::fork_promoted_submit(const DiffTestState &snapshot) {
+  if (fork_promoted_result == nullptr || fork_promoted_pid <= 0) {
+    Info("fork DiffTest promoted child is unavailable\n");
+    return DiffTestChecker::STATE_ERROR;
+  }
+
+  auto *result = fork_promoted_result;
+  const uint64_t sequence = ++fork_promoted_sequence;
+  result->command_dut = snapshot;
+  fork_store(&result->command_seq, sequence);
+  while (fork_load(&result->command_ack) != sequence) {
+    int status = 0;
+    if (waitpid(fork_promoted_pid, &status, WNOHANG) == fork_promoted_pid) {
+      Info("fork DiffTest promoted child exited while processing sequence %lu\n",
+           static_cast<unsigned long>(sequence));
+      return DiffTestChecker::STATE_ERROR;
+    }
+    sched_yield();
+  }
+
+  const int ret = result->command_ret;
+  if (ret == DiffTestChecker::STATE_TRAP) {
+    state->has_trap = true;
+    state->trap_code = result->command_trap;
+  }
+  if (ret == DiffTestChecker::STATE_DIFF || ret == DiffTestChecker::STATE_ERROR) {
+    Info("fork DiffTest promoted child rejected sequence %lu (ret=%d)\n",
+         static_cast<unsigned long>(sequence), ret);
+    return DiffTestChecker::STATE_ERROR;
+  }
+  return ret;
+}
+
+int Difftest::fork_promoted_step() {
+  // The parent still receives the DUT snapshot from the simulator.  The
+  // promoted child owns the REF and all checker state, so only the plain DUT
+  // record crosses the process boundary.
+  return fork_promoted_submit(*dut);
 }
 
 int Difftest::drain_fork(bool block) {

@@ -246,6 +246,8 @@ protected:
   void restore_fork_authority();
   int fork_group_step();
   int fork_release_front(bool block, bool &released);
+  int fork_promoted_step();
+  int fork_promoted_submit(const DiffTestState &snapshot);
 #endif // CONFIG_DIFFTEST_FORK
 
   inline bool in_disambiguation_state() {
