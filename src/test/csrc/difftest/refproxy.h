@@ -132,6 +132,7 @@ public:
   f(ref_memcpy, difftest_memcpy, void, uint64_t, void*, size_t, bool)         \
   f(ref_exec, difftest_exec, void, uint64_t)                                  \
   f(ref_set_exec_mode, difftest_set_exec_mode, void, int)                      \
+  f(ref_flush_state, difftest_flush_state, void, )                             \
   f(ref_state_hash, difftest_state_hash, void, void*)                         \
   f(ref_reg_display, difftest_display, void, )                                \
   f(update_config, update_dynamic_config, void, void*)                        \

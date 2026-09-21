@@ -187,6 +187,7 @@ public:
 
 #ifdef CONFIG_DIFFTEST_FORK
   int drain_fork(bool block);
+  int finish_fork();
 #endif // CONFIG_DIFFTEST_FORK
 
 protected:
@@ -261,6 +262,7 @@ protected:
   int fork_promoted_submit(const DiffTestState &snapshot, bool fast_catchup);
   int fork_promoted_fast_catchup_step();
   int fork_promoted_owner_step();
+  bool fast_only_initialized = false;
 #endif // CONFIG_DIFFTEST_FORK
 
   inline bool in_disambiguation_state() {

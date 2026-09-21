@@ -53,9 +53,14 @@ const bool fast_only = []() {
   const char *value = getenv("DIFFTEST_FAST_ONLY");
   return value != nullptr && value[0] == '1';
 }();
+const bool fast_only_debug = []() {
+  const char *value = getenv("DIFFTEST_FAST_ONLY_DEBUG");
+  return value != nullptr && value[0] == '1';
+}();
 uint64_t fast_only_ref_exec_instr = 0;
 uint64_t fast_only_skip_count = 0;
 uint64_t fast_only_event_count = 0;
+uint64_t fast_only_debug_events = 0;
 }
 
 #ifdef CONFIG_DIFFTEST_FORK
@@ -83,6 +88,10 @@ const uint64_t fork_interval_ms = []() {
   const char *value = getenv("DIFFTEST_FORK_INTERVAL_MS");
   if (value == nullptr) return fork_default_interval_ms;
   return std::max<uint64_t>(1, strtoull(value, nullptr, 0));
+}();
+const bool fork_interval_debug = []() {
+  const char *value = getenv("DIFFTEST_FORK_INTERVAL_DEBUG");
+  return value != nullptr && value[0] == '1';
 }();
 
 const bool fork_allow_skip = []() {
@@ -189,6 +198,7 @@ pid_t fork_promoted_pid = -1;
 ForkSharedResult *fork_promoted_result = nullptr;
 uint64_t fork_promoted_sequence = 0;
 uint64_t fork_promotion_count = 0;
+uint64_t fork_interval_debug_count = 0;
 bool fork_interval_started = false;
 std::chrono::steady_clock::time_point fork_interval_start;
 
@@ -360,6 +370,13 @@ void difftest_finish() {
     printf("FastOnlyRefExecInstr = %lu\n", static_cast<unsigned long>(fast_only_ref_exec_instr));
     printf("FastOnlySkipCnt = %lu\n", static_cast<unsigned long>(fast_only_skip_count));
     printf("FastOnlyEventCnt = %lu\n", static_cast<unsigned long>(fast_only_event_count));
+  }
+  if (!fast_only) {
+    for (int i = 0; i < NUM_CORES; ++i) {
+      if (int ret = difftest[i]->finish_fork()) {
+        Info("fork DiffTest final group check failed on core %d (ret=%d)\n", i, ret);
+      }
+    }
   }
 #endif // CONFIG_DIFFTEST_FORK
 #ifdef CONFIG_DIFFTEST_FORK
@@ -834,6 +851,10 @@ void Difftest::do_replay() {
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
+#ifdef CONFIG_DIFFTEST_FORK
+static void fork_clear_event_valids(DiffTestState &window);
+#endif
+
 int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_FORK
   if (fast_only) {
@@ -902,14 +923,25 @@ int Difftest::step() {
       for (auto &commit : dut->commit) {
         commit.valid = 0;
       }
+      fork_clear_event_valids(*dut);
       fork_window_sizes.push_back(window_instr);
       ++fork_window_count;
       fork_window_instr_count += window_instr;
       if (!fork_interval_started) {
         fork_interval_started = true;
         fork_interval_start = std::chrono::steady_clock::now();
+        if (fork_interval_debug) {
+          fprintf(stderr, "fork interval started at instr=%lu windows=%lu\n",
+                  static_cast<unsigned long>(dut->trap.instrCnt),
+                  static_cast<unsigned long>(fork_window_count));
+        }
       }
-      if (!fork_interval_reached()) {
+      const bool interval_reached = fork_interval_reached();
+      if (interval_reached && fork_interval_debug && fork_interval_debug_count++ < 8) {
+        fprintf(stderr, "fork interval reached at instr=%lu windows=%lu\n",
+                static_cast<unsigned long>(dut->trap.instrCnt), static_cast<unsigned long>(fork_window_count));
+      }
+      if (!interval_reached) {
         return DiffTestChecker::STATE_OK;
       }
       return fork_group_step();
@@ -1016,6 +1048,28 @@ bool Difftest::fork_window_has_event(const DiffTestState &window) const {
   return false;
 }
 
+static void fork_clear_event_valids(DiffTestState &window) {
+  window.event.valid = 0;
+#ifdef CONFIG_DIFFTEST_LRSCEVENT
+  window.lrsc.valid = 0;
+#endif
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+  window.sync_aia.valid = 0;
+#endif
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+  window.non_reg_interrupt_pending.valid = 0;
+#endif
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  window.mhpmevent_overflow.valid = 0;
+#endif
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  window.critical_error.valid = 0;
+#endif
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+  window.sync_custom_mflushpwr.valid = 0;
+#endif
+}
+
 bool Difftest::fork_window_eligible() const {
 #ifdef CONFIG_DIFFTEST_DEBUGMODE
   if (dut->dmregs.debugMode != 0) return false;
@@ -1084,16 +1138,92 @@ int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_con
 
 int Difftest::fast_only_step() {
   proxy->set_exec_mode(REF_EXEC_FAST);
+  state->cycle_count = dut->trap.cycleCnt;
+  state->has_progress = false;
 
-  bool arch_event_consumes_commit = false;
-  if (fork_window_has_event(*dut)) {
-    ++fast_only_event_count;
-    if (int ret = fork_fast_apply_events(*dut, arch_event_consumes_commit, false)) {
-      return ret;
+  // Fast-only mode bypasses check_all(), including FirstInstrCommitChecker.
+  // Initialize the REF from the first transport snapshot before any event
+  // handler or ref_exec() can make NEMU fetch from its reset-only state.  Do
+  // not initialize on an event-only transport step: the regular checker path
+  // enables DiffTest at the first architectural commit, and event-only steps
+  // before that point must not establish a speculative REF starting point.
+  if (!fast_only_initialized) {
+    bool has_commit = false;
+    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+      if (dut->commit[i].valid) {
+        has_commit = true;
+        break;
+      }
+    }
+    if (has_commit) {
+      proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
+      simMemory->clone_on_demand(
+          [this](uint64_t offset, void *src, size_t n) {
+            uint64_t dest_addr = PMEM_BASE + offset;
+            proxy->mem_init(dest_addr, src, n, DUT_TO_REF);
+          },
+          true);
+      proxy->regcpy(&dut->regs, FIRST_INST_ADDRESS);
+      state->has_commit = true;
+      fast_only_initialized = true;
     }
   }
 
-  if (!arch_event_consumes_commit) {
+  bool arch_event_consumes_commit = false;
+  if (fast_only_initialized && fork_window_has_event(*dut)) {
+    ++fast_only_event_count;
+    const bool print_event = fast_only_debug && fast_only_debug_events++ < 8;
+    if (print_event) {
+      fprintf(stderr,
+              "fast-only event #%lu: dut=%p instr=%lu cycle=%lu arch=%u lrsc=%u aia=%u nonreg=%u mhpm=%u "
+              "critical=%u mflush=%u debug=%lu commit0=%u\n",
+              static_cast<unsigned long>(fast_only_event_count), static_cast<void *>(dut),
+              static_cast<unsigned long>(dut->trap.instrCnt),
+              static_cast<unsigned long>(dut->trap.cycleCnt), dut->event.valid, dut->lrsc.valid,
+              dut->sync_aia.valid, dut->non_reg_interrupt_pending.valid, dut->mhpmevent_overflow.valid,
+              dut->critical_error.valid,
+              dut->sync_custom_mflushpwr.valid, static_cast<unsigned long>(dut->dmregs.debugMode),
+              dut->commit[0].valid);
+      if (dut->non_reg_interrupt_pending.valid) {
+        fprintf(stderr,
+                "fast-only nonreg: meip=%u mtip=%u msip=%u seip=%u stip=%u vseip=%u vstip=%u aia_meip=%u "
+                "aia_seip=%u lcofi=%u\n",
+                dut->non_reg_interrupt_pending.platformIRPMeip, dut->non_reg_interrupt_pending.platformIRPMtip,
+                dut->non_reg_interrupt_pending.platformIRPMsip, dut->non_reg_interrupt_pending.platformIRPSeip,
+                dut->non_reg_interrupt_pending.platformIRPStip, dut->non_reg_interrupt_pending.platformIRPVseip,
+                dut->non_reg_interrupt_pending.platformIRPVstip, dut->non_reg_interrupt_pending.fromAIAMeip,
+                dut->non_reg_interrupt_pending.fromAIASeip,
+                dut->non_reg_interrupt_pending.localCounterOverflowInterruptReq);
+      }
+      if (dut->event.valid) {
+        fprintf(stderr,
+                "fast-only arch event: interrupt=%u exception=%u pc=0x%lx inst=0x%x nmi=%u hvictl=%u\n",
+                dut->event.interrupt, dut->event.exception, static_cast<unsigned long>(dut->event.exceptionPC),
+                dut->event.exceptionInst, dut->event.hasNMI, dut->event.virtualInterruptIsHvictlInject);
+      }
+      fflush(stderr);
+    }
+    if (int ret = fork_fast_apply_events(*dut, arch_event_consumes_commit, false)) {
+      return ret;
+    }
+    if (print_event) {
+      fprintf(stderr,
+              "fast-only event #%lu applied: arch=%u lrsc=%u aia=%u nonreg=%u mhpm=%u critical=%u mflush=%u\n",
+              static_cast<unsigned long>(fast_only_event_count), dut->event.valid, dut->lrsc.valid,
+              dut->sync_aia.valid, dut->non_reg_interrupt_pending.valid, dut->mhpmevent_overflow.valid,
+              dut->critical_error.valid, dut->sync_custom_mflushpwr.valid);
+      fflush(stderr);
+    }
+  }
+
+  if (!fast_only_initialized) {
+    // Before the first commit, DiffTest has not established a REF starting
+    // point.  Consume transport probes without applying them to NEMU so the
+    // ring entry cannot replay stale valid bits when it is reused.
+    fork_clear_event_valids(*dut);
+  }
+
+  if (fast_only_initialized && !arch_event_consumes_commit) {
     uint64_t pending_instr = 0;
     uint32_t committed_instr = 0;
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
@@ -1202,6 +1332,9 @@ int Difftest::fork_group_step() {
   if (child == 0) {
     fork_worker_process = true;
     proxy->set_exec_mode(REF_EXEC_SLOW);
+    if (proxy->ref_flush_state) {
+      proxy->ref_flush_state();
+    }
     if (child_delay_us != 0) {
       usleep(child_delay_us);
     }
@@ -1620,6 +1753,7 @@ int Difftest::fork_promoted_owner_step() {
       for (auto &commit : dut->commit) {
         commit.valid = 0;
       }
+      fork_clear_event_valids(*dut);
       fork_window_sizes.push_back(window_instr);
       ++fork_window_count;
       fork_window_instr_count += window_instr;
@@ -1657,6 +1791,15 @@ int Difftest::drain_fork(bool block) {
     if (!released && !block) break;
   } while (!fork_pending_groups.empty());
   return DiffTestChecker::STATE_OK;
+}
+
+int Difftest::finish_fork() {
+  if (!fork_group.empty()) {
+    if (int ret = fork_group_step()) {
+      return ret;
+    }
+  }
+  return drain_fork(true);
 }
 #endif // CONFIG_DIFFTEST_FORK
 
