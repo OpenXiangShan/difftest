@@ -22,6 +22,7 @@
 #include "matrix_store_tracker.h"
 #include "refproxy.h"
 #include "stopwatch.h"
+#include "store_hash.h"
 
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
 #include <cxxabi.h>
@@ -465,10 +466,26 @@ private:
 
 class StoreChecker : public SimpleChecker {
 public:
-  StoreChecker(DiffState *state, RefProxy *proxy) : SimpleChecker(state, proxy) {}
+  StoreChecker(DiffState *state, RefProxy *proxy);
+  void finish();
 
 private:
+  static constexpr uint64_t stores_per_group = 64;
+
+  bool hash_enabled = false;
+  bool hash_started = false;
+  uint64_t hash_group_id = 0;
+  uint64_t hash_instr_begin = 0;
+  uint64_t hash_instr_end = 0;
+  uint64_t hash_instr_count = 0;
+  uint64_t hash_record_count = 0;
+  uint64_t mutate_group = UINT64_MAX;
+  uint64_t mutate_record = UINT64_MAX;
+  DifftestStoreHashState hash_state{};
+
   int check() override;
+  int check_hash_record(const DiffState::StoreCommit &probe);
+  int flush_hash();
 };
 #endif // CONFIG_DIFFTEST_STOREEVENT
 

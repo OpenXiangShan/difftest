@@ -146,6 +146,8 @@ public:
   REF_DEBUG_MODE(f)
 
 #define REF_OPTIONAL(f)                                                                                     \
+  f(ref_store_commit_hash, difftest_store_commit_hash, int, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,    \
+    uint64_t)                                                                                                  \
   f(ref_init_v2, difftest_init_v2, void, unsigned)                                                          \
   f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
   f(load_flash_bin_v2, difftest_load_flash_v2, void, const uint8_t*, size_t)                                \
@@ -407,6 +409,15 @@ public:
     } else {
       report_unsupported_ref("the 'PC' value of store commit event");
     }
+  }
+
+  inline int store_commit_hash(uint64_t count, uint64_t hash_lo, uint64_t hash_hi, uint64_t group_id,
+                               uint64_t instr_begin, uint64_t instr_end) {
+    if (ref_store_commit_hash) {
+      return ref_store_commit_hash(count, hash_lo, hash_hi, group_id, instr_begin, instr_end);
+    }
+    report_unsupported_ref("store commit hash checking");
+    return 1;
   }
 
   inline int get_amu_ctrl_event(struct AmuCtrlEvent *info) {

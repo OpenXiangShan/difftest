@@ -18,6 +18,9 @@
 #include "common.h"
 #include "diffstate.h"
 #include <cstdint>
+#include <cstdlib>
+#include <limits>
+#include <string>
 #include <sys/types.h>
 
 #ifdef CONFIG_DIFFTEST_STOREEVENT
@@ -37,6 +40,44 @@ static uint64_t MaskExpand(uint8_t mask) {
 
 bool StoreRecorder::get_valid(const DifftestStoreEvent &probe) {
   return probe.valid;
+}
+
+static bool parse_store_hash_mutation(const char *text, uint64_t *group, uint64_t *record) {
+  if (text == nullptr || *text == '\0') {
+    return false;
+  }
+  char *end = nullptr;
+  const uint64_t parsed_group = strtoull(text, &end, 0);
+  if (end == text || *end != ':') {
+    return false;
+  }
+  const char *record_text = end + 1;
+  const uint64_t parsed_record = strtoull(record_text, &end, 0);
+  if (end == record_text || *end != '\0') {
+    return false;
+  }
+  *group = parsed_group;
+  *record = parsed_record;
+  return true;
+}
+
+StoreChecker::StoreChecker(DiffState *state, RefProxy *proxy) : SimpleChecker(state, proxy) {
+  const char *enabled = getenv("DIFFTEST_STORE_HASH");
+  hash_enabled = enabled != nullptr && *enabled != '\0' && *enabled != '0';
+  if (!hash_enabled) {
+    return;
+  }
+
+  difftest_store_hash_init(&hash_state);
+  const char *mutation = getenv("DIFFTEST_STORE_HASH_MUTATE");
+  if (mutation != nullptr && !parse_store_hash_mutation(mutation, &mutate_group, &mutate_record)) {
+    Info("[StoreHash] ignoring malformed DIFFTEST_STORE_HASH_MUTATE='%s' (expected group:record)\n", mutation);
+  }
+  Info("[StoreHash] enabled: version=%d stores_per_group=%lu\n", DIFFTEST_STORE_HASH_VERSION,
+       stores_per_group);
+  if (mutate_group != UINT64_MAX) {
+    Info("[StoreHash] injecting DUT hash mutation at group=%lu record=%lu\n", mutate_group, mutate_record);
+  }
 }
 void StoreRecorder::clear_valid(DifftestStoreEvent &probe) {
   probe.valid = 0;
@@ -61,6 +102,13 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
   auto robIdx = probe.robidx;
   auto vecNeedSplit = probe.vecNeedSplit;
   auto wLine = probe.wLine;
+  const uint64_t storeInstrSeq = state->next_store_instr_seq++;
+  bool emitted = false;
+  auto enqueue = [this, storeInstrSeq, &emitted](DiffState::StoreCommit storeCommit) {
+    storeCommit.store_instr_seq = storeInstrSeq;
+    state->store_event_queue.push(storeCommit);
+    emitted = true;
+  };
 
   if (vecNeedSplit) {
     // 1. separate a store event into multiple eew-width elements.
@@ -94,7 +142,7 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                                  probe.stamp
 #endif // CONFIG_DIFFTEST_SQUASH
         };
-        state->store_event_queue.push(storeCommitLow);
+        enqueue(storeCommitLow);
       }
 
       uint8_t commitHighMask = (flowMask >> 8) & 0xFF;
@@ -118,7 +166,7 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                                   probe.stamp
 #endif // CONFIG_DIFFTEST_SQUASH
         };
-        state->store_event_queue.push(storeCommitHigh);
+        enqueue(storeCommitHigh);
       }
     }
   } else if (wLine) {
@@ -143,7 +191,7 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                             probe.stamp
 #endif // CONFIG_DIFFTEST_SQUASH
       };
-      state->store_event_queue.push(storeCommit);
+      enqueue(storeCommit);
     }
   } else {
     // 1. check whether the store event crosses a 8B boundary.
@@ -169,7 +217,7 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                                probe.stamp
 #endif // CONFIG_DIFFTEST_SQUASH
       };
-      state->store_event_queue.push(storeCommitLow);
+      enqueue(storeCommitLow);
     }
 
     uint8_t commitHighMask = (mask >> 8) & 0XFF;
@@ -192,14 +240,85 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
                                                 probe.stamp
 #endif // CONFIG_DIFFTEST_SQUASH
       };
-      state->store_event_queue.push(storeCommitHigh);
+      enqueue(storeCommitHigh);
     }
+  }
+
+  if (emitted) {
+    state->store_event_queue.back().is_last_record = true;
   }
 
   return STATE_OK;
 }
 
+int StoreChecker::check_hash_record(const DiffState::StoreCommit &probe) {
+  if (!hash_started) {
+    hash_started = true;
+    hash_instr_begin = probe.store_instr_seq;
+    hash_instr_end = probe.store_instr_seq;
+    hash_instr_count = 1;
+    hash_record_count = 0;
+    difftest_store_hash_init(&hash_state);
+  } else if (probe.store_instr_seq != hash_instr_end) {
+    hash_instr_count += probe.store_instr_seq - hash_instr_end;
+    hash_instr_end = probe.store_instr_seq;
+  }
+
+  uint64_t data = probe.data;
+  if (hash_group_id == mutate_group && hash_record_count == mutate_record) {
+    data ^= 1;
+    Info("[StoreHash] injected DUT mutation at group=%lu record=%lu pc=0x%016lx\n", hash_group_id,
+         hash_record_count, probe.pc);
+  }
+  difftest_store_hash_update(&hash_state, probe.addr, data, probe.mask);
+  hash_record_count++;
+
+  if (probe.is_last_record && hash_instr_count >= stores_per_group) {
+    return flush_hash();
+  }
+  return STATE_OK;
+}
+
+int StoreChecker::flush_hash() {
+  if (!hash_started) {
+    return STATE_OK;
+  }
+
+  Info("[StoreHash] checking group=%lu instr=[%lu,%lu] stores=%lu records=%lu hash=(0x%016lx,0x%016lx)\n",
+       hash_group_id, hash_instr_begin, hash_instr_end, hash_instr_count, hash_record_count, hash_state.h0,
+       hash_state.h1);
+  const int ret = proxy->store_commit_hash(hash_state.count, hash_state.h0, hash_state.h1, hash_group_id,
+                                           hash_instr_begin, hash_instr_end);
+  if (ret) {
+    Info("[StoreHash] mismatch in group=%lu instr=[%lu,%lu], records=%lu\n", hash_group_id, hash_instr_begin,
+         hash_instr_end, hash_record_count);
+    return STATE_ERROR;
+  }
+
+  hash_started = false;
+  hash_instr_count = 0;
+  hash_record_count = 0;
+  hash_group_id++;
+  return STATE_OK;
+}
+
 int StoreChecker::check() {
+  if (hash_enabled) {
+    while (!state->store_event_queue.empty()) {
+      auto &front = state->store_event_queue.front();
+#ifdef CONFIG_DIFFTEST_SQUASH
+      if (front.stamp != state->commit_stamp)
+        return STATE_OK;
+#endif // CONFIG_DIFFTEST_SQUASH
+      const auto probe = front;
+      state->store_event_queue.pop();
+      if (int ret = check_hash_record(probe)) {
+        return ret;
+      }
+    }
+    return STATE_OK;
+  }
+
   while (!state->store_event_queue.empty()) {
     auto &probe = state->store_event_queue.front();
 #ifdef CONFIG_DIFFTEST_SQUASH
@@ -235,5 +354,19 @@ int StoreChecker::check() {
   }
 
   return STATE_OK;
+}
+
+void StoreChecker::finish() {
+  if (!hash_enabled) {
+    return;
+  }
+  while (!state->store_event_queue.empty()) {
+    const auto probe = state->store_event_queue.front();
+    state->store_event_queue.pop();
+    if (check_hash_record(probe)) {
+      return;
+    }
+  }
+  flush_hash();
 }
 #endif // CONFIG_DIFFTEST_STOREEVENT

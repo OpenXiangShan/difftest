@@ -221,7 +221,7 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
   // Decompress the data
   size_t ret = ZSTD_decompressStream(trace_dctx, &output, &input);
 
-  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.end());
+  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.begin() + output.pos);
 
   return 0;
 }

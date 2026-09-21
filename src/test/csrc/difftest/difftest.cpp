@@ -299,6 +299,12 @@ Difftest::~Difftest() {
   }
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  if (store_checker) {
+    store_checker->finish();
+  }
+#endif // CONFIG_DIFFTEST_STOREEVENT
+
   for (auto checker: checkers) {
     delete checker;
   }
