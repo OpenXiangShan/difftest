@@ -25,6 +25,7 @@
 #include "splitview.h"
 #ifdef CONFIG_DIFFTEST_FORK
 #include <algorithm>
+#include <chrono>
 #include <numeric>
 #include <vector>
 #endif // CONFIG_DIFFTEST_FORK
@@ -47,11 +48,22 @@
 #include "query.h"
 #endif // CONFIG_DIFFTEST_QUERY
 
+namespace {
+const bool fast_only = []() {
+  const char *value = getenv("DIFFTEST_FAST_ONLY");
+  return value != nullptr && value[0] == '1';
+}();
+uint64_t fast_only_ref_exec_instr = 0;
+uint64_t fast_only_skip_count = 0;
+uint64_t fast_only_event_count = 0;
+}
+
 #ifdef CONFIG_DIFFTEST_FORK
 namespace {
 constexpr size_t fork_default_max_outstanding = 64;
 constexpr size_t fork_default_group_size = 100;
 constexpr size_t fork_max_group_size = 65536;
+constexpr uint64_t fork_default_interval_ms = 10000;
 
 const size_t fork_max_outstanding = []() {
   const char *value = getenv("DIFFTEST_FORK_MAX_OUTSTANDING");
@@ -65,6 +77,12 @@ const size_t fork_group_size = []() {
   if (value == nullptr) return fork_default_group_size;
   const size_t requested = strtoul(value, nullptr, 0);
   return std::max<size_t>(1, std::min(requested, fork_max_group_size));
+}();
+
+const uint64_t fork_interval_ms = []() {
+  const char *value = getenv("DIFFTEST_FORK_INTERVAL_MS");
+  if (value == nullptr) return fork_default_interval_ms;
+  return std::max<uint64_t>(1, strtoull(value, nullptr, 0));
 }();
 
 const bool fork_allow_skip = []() {
@@ -153,6 +171,7 @@ void stop_promoted_child(pid_t pid, ForkSharedResult *result) {
 } // namespace
 
 std::vector<uint32_t> fork_window_sizes;
+std::vector<uint64_t> fork_intervals_ms;
 std::deque<PendingForkGroup> fork_pending_groups;
 uint64_t fork_group_count = 0;
 uint64_t fork_skip_window_count = 0;
@@ -170,6 +189,15 @@ pid_t fork_promoted_pid = -1;
 ForkSharedResult *fork_promoted_result = nullptr;
 uint64_t fork_promoted_sequence = 0;
 uint64_t fork_promotion_count = 0;
+bool fork_interval_started = false;
+std::chrono::steady_clock::time_point fork_interval_start;
+
+bool fork_interval_reached() {
+  if (!fork_interval_started) return false;
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - fork_interval_start);
+  return static_cast<uint64_t>(elapsed.count()) >= fork_interval_ms;
+}
 #endif // CONFIG_DIFFTEST_FORK
 
 Difftest **difftest = NULL;
@@ -328,6 +356,13 @@ void difftest_trace_write(int step) {
 
 void difftest_finish() {
 #ifdef CONFIG_DIFFTEST_FORK
+  if (fast_only) {
+    printf("FastOnlyRefExecInstr = %lu\n", static_cast<unsigned long>(fast_only_ref_exec_instr));
+    printf("FastOnlySkipCnt = %lu\n", static_cast<unsigned long>(fast_only_skip_count));
+    printf("FastOnlyEventCnt = %lu\n", static_cast<unsigned long>(fast_only_event_count));
+  }
+#endif // CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK
   for (auto &group : fork_pending_groups) {
     stop_child(group);
   }
@@ -363,11 +398,21 @@ void difftest_finish() {
     printf("ForkSkipBlockedWindowCnt = %lu\n", static_cast<unsigned long>(fork_skip_blocked_window_count));
     printf("ForkGroupReleaseCnt = %lu\n", static_cast<unsigned long>(fork_group_release_count));
     printf("ForkGroupWindowSize = %zu\n", fork_group_size);
+    printf("ForkIntervalMs = %lu\n", static_cast<unsigned long>(fork_interval_ms));
     printf("ForkMismatchCnt = %lu\n", static_cast<unsigned long>(fork_mismatch_count));
     printf("ForkRollbackCnt = %lu\n", static_cast<unsigned long>(fork_rollback_count));
     printf("ForkPromotionCnt = %lu\n", static_cast<unsigned long>(fork_promotion_count));
     printf("ForkPeakOutstanding = %zu\n", fork_peak_outstanding);
     printf("ForkWindowInstr = %lu\n", static_cast<unsigned long>(fork_window_instr_count));
+    if (!fork_intervals_ms.empty()) {
+      const auto minmax = std::minmax_element(fork_intervals_ms.begin(), fork_intervals_ms.end());
+      uint64_t total = 0;
+      for (const auto interval : fork_intervals_ms) total += interval;
+      printf("ForkActualIntervalMs min=%lu avg=%lu max=%lu\n",
+             static_cast<unsigned long>(*minmax.first),
+             static_cast<unsigned long>(total / fork_intervals_ms.size()),
+             static_cast<unsigned long>(*minmax.second));
+    }
     if (fork_promotion_count == 0) {
       printf("ForkWindowN p50=%u p90=%u p99=%u max=%u\n",
              percentile(fork_window_sizes, 0.50), percentile(fork_window_sizes, 0.90),
@@ -791,6 +836,9 @@ void Difftest::do_replay() {
 
 int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_FORK
+  if (fast_only) {
+    return fast_only_step();
+  }
   bool has_skip_window = false;
   for (const auto &commit : dut->commit) {
     if (!commit.valid || !commit.skip) continue;
@@ -857,13 +905,17 @@ int Difftest::step() {
       fork_window_sizes.push_back(window_instr);
       ++fork_window_count;
       fork_window_instr_count += window_instr;
-      if (fork_group.size() < fork_group_size) {
+      if (!fork_interval_started) {
+        fork_interval_started = true;
+        fork_interval_start = std::chrono::steady_clock::now();
+      }
+      if (!fork_interval_reached()) {
         return DiffTestChecker::STATE_OK;
       }
       return fork_group_step();
     }
   }
-  if (!fork_group.empty()) {
+  if (!fork_group.empty() && fork_interval_reached()) {
     if (int ret = fork_group_step()) {
       return ret;
     }
@@ -986,7 +1038,8 @@ bool Difftest::fork_window_eligible() const {
   return has_commit || fork_window_has_event(*dut);
 }
 
-int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_consumes_commit) {
+int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_consumes_commit,
+                                     bool check_critical_error) {
   DiffTestState *saved_dut = dut;
   dut = &window;
   arch_event_consumes_commit = window.event.valid;
@@ -1009,7 +1062,13 @@ int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_con
   apply(mhpmevent_overflow_checker);
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  apply(critical_error_checker);
+  if (check_critical_error) {
+    apply(critical_error_checker);
+  } else if (window.critical_error.valid) {
+    // Preserve the REF-side event without making fast-only mode a checker.
+    proxy->raise_critical_error();
+    window.critical_error.valid = 0;
+  }
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
   apply(aia_checker);
@@ -1021,6 +1080,56 @@ int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_con
 
   dut = saved_dut;
   return ret;
+}
+
+int Difftest::fast_only_step() {
+  proxy->set_exec_mode(REF_EXEC_FAST);
+
+  bool arch_event_consumes_commit = false;
+  if (fork_window_has_event(*dut)) {
+    ++fast_only_event_count;
+    if (int ret = fork_fast_apply_events(*dut, arch_event_consumes_commit, false)) {
+      return ret;
+    }
+  }
+
+  if (!arch_event_consumes_commit) {
+    uint64_t pending_instr = 0;
+    uint32_t committed_instr = 0;
+    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+      const auto &commit = dut->commit[i];
+      if (!commit.valid) continue;
+      const uint32_t instr_count = 1 + commit.nFused;
+      committed_instr += instr_count;
+      if (commit.skip) {
+        if (pending_instr != 0) {
+          proxy->ref_exec(pending_instr);
+          fast_only_ref_exec_instr += pending_instr;
+          pending_instr = 0;
+        }
+        proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen,
+                        commit.wdest, get_commit_data(dut, i));
+        ++fast_only_skip_count;
+      } else {
+        pending_instr += instr_count;
+      }
+    }
+    if (pending_instr != 0) {
+      proxy->ref_exec(pending_instr);
+      fast_only_ref_exec_instr += pending_instr;
+    }
+    if (committed_instr != 0) {
+      state->has_progress = true;
+      state->record_group(dut->commit[0].pc, committed_instr);
+      state->last_commit_cycle = dut->trap.cycleCnt;
+    }
+  }
+
+  state->cycle_count = dut->trap.cycleCnt;
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+    dut->commit[i].valid = 0;
+  }
+  return DiffTestChecker::STATE_OK;
 }
 
 int Difftest::fork_group_step() {
@@ -1278,6 +1387,13 @@ int Difftest::fork_group_step() {
       {group_id, child, shared_result, parent_commit_stamp, parent_hash, std::move(fork_group)});
   fork_peak_outstanding = std::max(fork_peak_outstanding, fork_pending_groups.size());
   fork_group.clear();
+  const auto now = std::chrono::steady_clock::now();
+  if (fork_interval_started) {
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - fork_interval_start);
+    fork_intervals_ms.push_back(static_cast<uint64_t>(elapsed.count()));
+  }
+  fork_interval_start = now;
+  fork_interval_started = true;
   return drain_fork(false);
 }
 

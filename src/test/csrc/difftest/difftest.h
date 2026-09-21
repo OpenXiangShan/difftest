@@ -252,7 +252,9 @@ protected:
   uint32_t fork_window_instr() const;
   bool fork_window_has_event(const DiffTestState &window) const;
   bool fork_window_eligible() const;
-  int fork_fast_apply_events(DiffTestState &window, bool &arch_event_consumes_commit);
+  int fork_fast_apply_events(DiffTestState &window, bool &arch_event_consumes_commit,
+                             bool check_critical_error = true);
+  int fast_only_step();
   int fork_group_step();
   int fork_release_front(bool block, bool &released);
   int fork_promoted_step();
