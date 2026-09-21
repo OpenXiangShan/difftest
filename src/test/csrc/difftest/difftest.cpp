@@ -51,7 +51,7 @@
 namespace {
 constexpr size_t fork_default_max_outstanding = 64;
 constexpr size_t fork_default_group_size = 100;
-constexpr size_t fork_max_group_size = 8192;
+constexpr size_t fork_max_group_size = 65536;
 
 const size_t fork_max_outstanding = []() {
   const char *value = getenv("DIFFTEST_FORK_MAX_OUTSTANDING");
@@ -620,28 +620,34 @@ void Difftest::init_checkers() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-  checkers.push_back(new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy));
+  lrsc_checker = new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy);
+  checkers.push_back(lrsc_checker);
 #endif
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  checkers.push_back(new NonRegInterruptPendingChecker(
-      [this]() -> DifftestNonRegInterruptPendingEvent & { return dut->non_reg_interrupt_pending; }, state, proxy));
+  non_reg_interrupt_pending_checker = new NonRegInterruptPendingChecker(
+      [this]() -> DifftestNonRegInterruptPendingEvent & { return dut->non_reg_interrupt_pending; }, state, proxy);
+  checkers.push_back(non_reg_interrupt_pending_checker);
 #endif
 
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  checkers.push_back(new MhpmeventOverflowChecker(
-      [this]() -> DifftestMhpmeventOverflowEvent & { return dut->mhpmevent_overflow; }, state, proxy));
+  mhpmevent_overflow_checker = new MhpmeventOverflowChecker(
+      [this]() -> DifftestMhpmeventOverflowEvent & { return dut->mhpmevent_overflow; }, state, proxy);
+  checkers.push_back(mhpmevent_overflow_checker);
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  checkers.push_back(
-      new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy));
+  critical_error_checker =
+      new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy);
+  checkers.push_back(critical_error_checker);
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  checkers.push_back(new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy));
+  aia_checker = new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy);
+  checkers.push_back(aia_checker);
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  checkers.push_back(new CustomMflushpwrChecker(
-      [this]() -> DifftestSyncCustomMflushpwrEvent & { return dut->sync_custom_mflushpwr; }, state, proxy));
+  custom_mflushpwr_checker = new CustomMflushpwrChecker(
+      [this]() -> DifftestSyncCustomMflushpwrEvent & { return dut->sync_custom_mflushpwr; }, state, proxy);
+  checkers.push_back(custom_mflushpwr_checker);
 #endif
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
@@ -840,7 +846,7 @@ int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_FORK
   if (state->has_commit && fork_window_eligible()) {
     const uint32_t window_instr = fork_window_instr();
-    if (window_instr != 0) {
+    if (window_instr != 0 || fork_window_has_event(*dut)) {
       fork_group.push_back({*dut, window_instr});
       // The DPIC ring reuses DiffTestState entries. The child consumes the
       // snapshot, so retire the live commit probes here just as check_all()
@@ -922,6 +928,7 @@ int Difftest::fork_commit_stamp() const {
 }
 
 uint32_t Difftest::fork_window_instr() const {
+  if (dut->event.valid) return 0;
   uint32_t count = 0;
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
     if (dut->commit[i].valid) {
@@ -931,26 +938,33 @@ uint32_t Difftest::fork_window_instr() const {
   return count;
 }
 
-bool Difftest::fork_window_eligible() const {
-  if (dut->event.valid) return false;
+bool Difftest::fork_window_has_event(const DiffTestState &window) const {
+  if (window.event.valid) return true;
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-  if (dut->lrsc.valid) return false;
+  if (window.lrsc.valid) return true;
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  if (dut->sync_aia.valid) return false;
+  if (window.sync_aia.valid) return true;
 #endif
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  if (dut->non_reg_interrupt_pending.valid) return false;
+  if (window.non_reg_interrupt_pending.valid) return true;
 #endif
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  if (dut->mhpmevent_overflow.valid) return false;
+  if (window.mhpmevent_overflow.valid) return true;
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  if (dut->critical_error.valid) return false;
+  if (window.critical_error.valid) return true;
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  if (dut->sync_custom_mflushpwr.valid) return false;
+  if (window.sync_custom_mflushpwr.valid) return true;
 #endif
+#ifdef CONFIG_DIFFTEST_DEBUGMODE
+  if (window.dmregs.debugMode != 0) return true;
+#endif
+  return false;
+}
+
+bool Difftest::fork_window_eligible() const {
 #ifdef CONFIG_DIFFTEST_DEBUGMODE
   if (dut->dmregs.debugMode != 0) return false;
 #endif
@@ -969,7 +983,44 @@ bool Difftest::fork_window_eligible() const {
 #endif
     }
   }
-  return has_commit;
+  return has_commit || fork_window_has_event(*dut);
+}
+
+int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_consumes_commit) {
+  DiffTestState *saved_dut = dut;
+  dut = &window;
+  arch_event_consumes_commit = window.event.valid;
+  int ret = DiffTestChecker::STATE_OK;
+
+  // Keep the same ordering as check_all(): synchronization probes are applied
+  // before ArchEvent, and ArchEvent takes precedence over instruction commits.
+  auto apply = [&ret](DiffTestChecker *checker) {
+    if (ret == DiffTestChecker::STATE_OK && checker != nullptr) {
+      ret = checker->step();
+    }
+  };
+#ifdef CONFIG_DIFFTEST_LRSCEVENT
+  apply(lrsc_checker);
+#endif
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+  apply(non_reg_interrupt_pending_checker);
+#endif
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  apply(mhpmevent_overflow_checker);
+#endif
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  apply(critical_error_checker);
+#endif
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+  apply(aia_checker);
+#endif
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+  apply(custom_mflushpwr_checker);
+#endif
+  apply(arch_event_checker);
+
+  dut = saved_dut;
+  return ret;
 }
 
 int Difftest::fork_group_step() {
@@ -990,7 +1041,7 @@ int Difftest::fork_group_step() {
     total_instr += window.instr_count;
 #ifdef CONFIG_DIFFTEST_SQUASH
     for (const auto &commit : window.dut.commit) {
-      if (commit.valid && !commit.skip) checked_instr += 1 + commit.nFused;
+      if (!window.dut.event.valid && commit.valid && !commit.skip) checked_instr += 1 + commit.nFused;
     }
 #endif
   }
@@ -1152,6 +1203,24 @@ int Difftest::fork_group_step() {
   // authoritative child.
   uint64_t pending_instr = 0;
   for (const auto &window : fork_group) {
+    bool arch_event_consumes_commit = false;
+    if (fork_window_has_event(window.dut)) {
+      if (pending_instr != 0) {
+        proxy->ref_exec(pending_instr);
+        pending_instr = 0;
+      }
+      // Keep the original snapshot intact.  The child already owns its own
+      // copy, and a later promotion may need this parent-side copy to replay
+      // the exact event while catching up abandoned groups.
+      DiffTestState fast_window = window.dut;
+      if (int ret = fork_fast_apply_events(fast_window, arch_event_consumes_commit)) {
+        proxy->set_store_log(false);
+        proxy->ref_store_log_reset();
+        return ret;
+      }
+      if (arch_event_consumes_commit) continue;
+    }
+
     bool has_skip = false;
     for (const auto &commit : window.dut.commit) {
       if (commit.valid && commit.skip) {
@@ -1366,23 +1435,54 @@ int Difftest::fork_promoted_step() {
 }
 
 int Difftest::fork_promoted_fast_catchup_step() {
+  // Catch-up windows use the same fast event path as the original parent.
+  // This matters after promotion: replaying only ref_exec(window_instr) would
+  // silently drop LR/SC, interrupt-pending, AIA, PMU-overflow, and custom
+  // synchronization probes that were present in the cached DUT window.
+  const bool has_event = fork_window_has_event(*dut);
+  bool arch_event_consumes_commit = false;
+  if (has_event) {
+    if (int ret = fork_fast_apply_events(*dut, arch_event_consumes_commit)) {
+      return ret;
+    }
+  }
+
   const uint32_t window_instr = fork_window_instr();
-  if (window_instr == 0) {
-    proxy->set_exec_mode(REF_EXEC_SLOW);
-    const int ret = check_all();
-    proxy->set_exec_mode(REF_EXEC_FAST);
-    return ret;
+  if (!arch_event_consumes_commit && window_instr != 0) {
+    bool has_skip = false;
+    for (const auto &commit : dut->commit) {
+      if (commit.valid && commit.skip) {
+        has_skip = true;
+        break;
+      }
+    }
+
+    if (!has_skip) {
+      proxy->ref_exec(window_instr);
+    } else {
+      // Keep skipped MMIO/debug instructions out of the fast replay while
+      // preserving their architectural writeback at the original position.
+      for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+        const auto &commit = dut->commit[i];
+        if (!commit.valid) continue;
+        if (commit.skip) {
+          proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen,
+                          commit.wdest, get_commit_data(dut, i));
+        } else {
+          proxy->ref_exec(1 + commit.nFused);
+        }
+      }
+    }
   }
 
 #ifdef CONFIG_DIFFTEST_SQUASH
   uint64_t checked_instr = 0;
   for (const auto &commit : dut->commit) {
-    if (commit.valid && !commit.skip) checked_instr += 1 + commit.nFused;
+    if (!arch_event_consumes_commit && commit.valid && !commit.skip) checked_instr += 1 + commit.nFused;
   }
   state->commit_stamp = (state->commit_stamp + checked_instr) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
 #endif
 
-  proxy->ref_exec(window_instr);
   proxy->sync();
   state->has_progress = true;
   state->last_commit_cycle = dut->trap.cycleCnt;
@@ -1399,7 +1499,7 @@ int Difftest::fork_promoted_owner_step() {
 
   if (fork_window_eligible()) {
     const uint32_t window_instr = fork_window_instr();
-    if (window_instr != 0) {
+    if (window_instr != 0 || fork_window_has_event(*dut)) {
       fork_group.push_back({*dut, window_instr});
       for (auto &commit : dut->commit) {
         commit.valid = 0;

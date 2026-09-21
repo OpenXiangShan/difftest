@@ -207,6 +207,24 @@ protected:
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   StoreChecker *store_checker = nullptr;
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_LRSCEVENT
+  LrScChecker *lrsc_checker = nullptr;
+#endif // CONFIG_DIFFTEST_LRSCEVENT
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+  NonRegInterruptPendingChecker *non_reg_interrupt_pending_checker = nullptr;
+#endif // CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  MhpmeventOverflowChecker *mhpmevent_overflow_checker = nullptr;
+#endif // CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  CriticalErrorChecker *critical_error_checker = nullptr;
+#endif // CONFIG_DIFFTEST_CRITICALERROREVENT
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+  AiaChecker *aia_checker = nullptr;
+#endif // CONFIG_DIFFTEST_SYNCAIAEVENT
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+  CustomMflushpwrChecker *custom_mflushpwr_checker = nullptr;
+#endif // CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   LoadChecker *load_checker[CONFIG_DIFF_LOAD_WIDTH] = {nullptr};
 #ifdef CONFIG_DIFFTEST_SQUASH
@@ -232,7 +250,9 @@ protected:
   std::vector<DifftestForkWindow> fork_group;
   int fork_commit_stamp() const;
   uint32_t fork_window_instr() const;
+  bool fork_window_has_event(const DiffTestState &window) const;
   bool fork_window_eligible() const;
+  int fork_fast_apply_events(DiffTestState &window, bool &arch_event_consumes_commit);
   int fork_group_step();
   int fork_release_front(bool block, bool &released);
   int fork_promoted_step();
