@@ -51,6 +51,7 @@
 namespace {
 constexpr size_t fork_default_max_outstanding = 64;
 constexpr size_t fork_default_group_size = 100;
+constexpr size_t fork_max_group_size = 8192;
 
 const size_t fork_max_outstanding = []() {
   const char *value = getenv("DIFFTEST_FORK_MAX_OUTSTANDING");
@@ -63,7 +64,7 @@ const size_t fork_group_size = []() {
   const char *value = getenv("DIFFTEST_FORK_GROUP_SIZE");
   if (value == nullptr) return fork_default_group_size;
   const size_t requested = strtoul(value, nullptr, 0);
-  return std::max<size_t>(1, std::min(requested, static_cast<size_t>(1024)));
+  return std::max<size_t>(1, std::min(requested, fork_max_group_size));
 }();
 
 const bool fork_allow_skip = []() {
@@ -94,8 +95,12 @@ struct ForkSharedResult {
   uint8_t command_commit_valid;
   uint8_t command_skip;
   uint8_t command_fused;
+  uint8_t command_fast_catchup;
   uint64_t command_group_count;
   uint64_t command_skip_window_count;
+  uint64_t command_skip_commit_count;
+  uint64_t command_skip_instr_count;
+  uint64_t command_skip_blocked_window_count;
   uint64_t command_rollback_count;
   uint64_t command_mismatch_count;
   uint64_t command_release_count;
@@ -151,6 +156,9 @@ std::vector<uint32_t> fork_window_sizes;
 std::deque<PendingForkGroup> fork_pending_groups;
 uint64_t fork_group_count = 0;
 uint64_t fork_skip_window_count = 0;
+uint64_t fork_skip_commit_count = 0;
+uint64_t fork_skip_instr_count = 0;
+uint64_t fork_skip_blocked_window_count = 0;
 uint64_t fork_rollback_count = 0;
 uint64_t fork_mismatch_count = 0;
 uint64_t fork_group_release_count = 0;
@@ -327,6 +335,9 @@ void difftest_finish() {
   if (fork_promoted_result != nullptr) {
     fork_group_count = fork_promoted_result->command_group_count;
     fork_skip_window_count = fork_promoted_result->command_skip_window_count;
+    fork_skip_commit_count = fork_promoted_result->command_skip_commit_count;
+    fork_skip_instr_count = fork_promoted_result->command_skip_instr_count;
+    fork_skip_blocked_window_count = fork_promoted_result->command_skip_blocked_window_count;
     fork_rollback_count = fork_promoted_result->command_rollback_count;
     fork_mismatch_count = fork_promoted_result->command_mismatch_count;
     fork_group_release_count = fork_promoted_result->command_release_count;
@@ -347,6 +358,9 @@ void difftest_finish() {
     printf("ForkWindowCnt = %lu\n", static_cast<unsigned long>(fork_window_count));
     printf("ForkGroupCnt = %lu\n", static_cast<unsigned long>(fork_group_count));
     printf("ForkSkipWindowCnt = %lu\n", static_cast<unsigned long>(fork_skip_window_count));
+    printf("ForkSkipCommitCnt = %lu\n", static_cast<unsigned long>(fork_skip_commit_count));
+    printf("ForkSkipInstrCnt = %lu\n", static_cast<unsigned long>(fork_skip_instr_count));
+    printf("ForkSkipBlockedWindowCnt = %lu\n", static_cast<unsigned long>(fork_skip_blocked_window_count));
     printf("ForkGroupReleaseCnt = %lu\n", static_cast<unsigned long>(fork_group_release_count));
     printf("ForkGroupWindowSize = %zu\n", fork_group_size);
     printf("ForkMismatchCnt = %lu\n", static_cast<unsigned long>(fork_mismatch_count));
@@ -771,6 +785,19 @@ void Difftest::do_replay() {
 
 int Difftest::step() {
 #ifdef CONFIG_DIFFTEST_FORK
+  bool has_skip_window = false;
+  for (const auto &commit : dut->commit) {
+    if (!commit.valid || !commit.skip) continue;
+    has_skip_window = true;
+    ++fork_skip_commit_count;
+    fork_skip_instr_count += 1 + commit.nFused;
+  }
+  if (has_skip_window) {
+    ++fork_skip_window_count;
+    if (!fork_allow_skip) {
+      ++fork_skip_blocked_window_count;
+    }
+  }
   if (fork_promoted_result != nullptr) {
     return fork_promoted_step();
   }
@@ -814,14 +841,6 @@ int Difftest::step() {
   if (state->has_commit && fork_window_eligible()) {
     const uint32_t window_instr = fork_window_instr();
     if (window_instr != 0) {
-      if (fork_allow_skip) {
-        for (const auto &commit : dut->commit) {
-          if (commit.valid && commit.skip) {
-            ++fork_skip_window_count;
-            break;
-          }
-        }
-      }
       fork_group.push_back({*dut, window_instr});
       // The DPIC ring reuses DiffTestState entries. The child consumes the
       // snapshot, so retire the live commit probes here just as check_all()
@@ -1067,6 +1086,9 @@ int Difftest::fork_group_step() {
     fork_promoted_result = nullptr;
     fork_group_count = shared_result->command_group_count;
     fork_skip_window_count = shared_result->command_skip_window_count;
+    fork_skip_commit_count = shared_result->command_skip_commit_count;
+    fork_skip_instr_count = shared_result->command_skip_instr_count;
+    fork_skip_blocked_window_count = shared_result->command_skip_blocked_window_count;
     fork_rollback_count = shared_result->command_rollback_count;
     fork_mismatch_count = shared_result->command_mismatch_count;
     fork_group_release_count = shared_result->command_release_count;
@@ -1091,7 +1113,14 @@ int Difftest::fork_group_step() {
       shared_result->command_fused = dut->commit[0].nFused;
       shared_result->command_dut_pc = dut->commit[0].valid ? dut->commit[0].pc : dut->trap.pc;
       shared_result->command_ref_pc_before = proxy->state.pc;
-      shared_result->command_ret = step();
+      if (shared_result->command_fast_catchup) {
+        proxy->set_exec_mode(REF_EXEC_FAST);
+        proxy->set_store_log(false);
+        proxy->ref_store_log_reset();
+        shared_result->command_ret = fork_promoted_fast_catchup_step();
+      } else {
+        shared_result->command_ret = fork_promoted_owner_step();
+      }
       proxy->sync();
       shared_result->command_ref_pc_after = proxy->state.pc;
       shared_result->command_trap = get_trap_code();
@@ -1102,6 +1131,9 @@ int Difftest::fork_group_step() {
       }
       shared_result->command_group_count = fork_group_count;
       shared_result->command_skip_window_count = fork_skip_window_count;
+      shared_result->command_skip_commit_count = fork_skip_commit_count;
+      shared_result->command_skip_instr_count = fork_skip_instr_count;
+      shared_result->command_skip_blocked_window_count = fork_skip_blocked_window_count;
       shared_result->command_rollback_count = fork_rollback_count;
       shared_result->command_mismatch_count = fork_mismatch_count;
       shared_result->command_release_count = fork_group_release_count;
@@ -1114,22 +1146,27 @@ int Difftest::fork_group_step() {
     _exit(0);
   }
 
-  // Keep the fast owner semantically aligned with the slow checker.  A skip
-  // commit is applied from the DUT writeback state by check_all(); executing
-  // the whole group blindly would execute that instruction a second time in
-  // the fast REF and make the endpoint hashes diverge.
+  // Execute ordinary stretches in one batch, but apply skip commits at their
+  // exact instruction positions.  A blind ref_exec(total_instr) would execute
+  // a skipped MMIO instruction again and make the endpoint diverge from the
+  // authoritative child.
+  uint64_t pending_instr = 0;
   for (const auto &window : fork_group) {
     bool has_skip = false;
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
-      const auto &commit = window.dut.commit[i];
+    for (const auto &commit : window.dut.commit) {
       if (commit.valid && commit.skip) {
         has_skip = true;
         break;
       }
     }
     if (!has_skip) {
-      proxy->ref_exec(window.instr_count);
+      pending_instr += window.instr_count;
       continue;
+    }
+
+    if (pending_instr != 0) {
+      proxy->ref_exec(pending_instr);
+      pending_instr = 0;
     }
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
       const auto &commit = window.dut.commit[i];
@@ -1141,6 +1178,9 @@ int Difftest::fork_group_step() {
         proxy->ref_exec(1 + commit.nFused);
       }
     }
+  }
+  if (pending_instr != 0) {
+    proxy->ref_exec(pending_instr);
   }
   proxy->sync();
 #ifdef CONFIG_DIFFTEST_SQUASH
@@ -1226,16 +1266,19 @@ int Difftest::fork_release_front(bool block, bool &released) {
   // memory back into the speculative parent.  Windows that the fast parent
   // had already submitted are replayed through a shared command slot so the
   // promoted child catches up before serving new DUT steps.
-  std::vector<DifftestForkWindow> replay_windows;
+  std::vector<DifftestForkWindow> catchup_windows;
   for (size_t i = 1; i < fork_pending_groups.size(); ++i) {
-    replay_windows.insert(replay_windows.end(), fork_pending_groups[i].windows.begin(),
-                          fork_pending_groups[i].windows.end());
+    catchup_windows.insert(catchup_windows.end(), fork_pending_groups[i].windows.begin(),
+                           fork_pending_groups[i].windows.end());
   }
-  replay_windows.insert(replay_windows.end(), fork_group.begin(), fork_group.end());
+  catchup_windows.insert(catchup_windows.end(), fork_group.begin(), fork_group.end());
 
   fork_store(&result->action, static_cast<int>(FORK_CHILD_PROMOTE));
   result->command_group_count = fork_group_count;
   result->command_skip_window_count = fork_skip_window_count;
+  result->command_skip_commit_count = fork_skip_commit_count;
+  result->command_skip_instr_count = fork_skip_instr_count;
+  result->command_skip_blocked_window_count = fork_skip_blocked_window_count;
   result->command_rollback_count = fork_rollback_count;
   result->command_mismatch_count = fork_mismatch_count;
   // The current group is released immediately after promotion is scheduled;
@@ -1256,9 +1299,9 @@ int Difftest::fork_release_front(bool block, bool &released) {
   fork_group.clear();
   ++fork_group_release_count;
 
-  for (const auto &window : replay_windows) {
-    if (int ret = fork_promoted_submit(window.dut)) {
-      Info("fork DiffTest promoted child rejected replay window in group %lu\n",
+  for (const auto &window : catchup_windows) {
+    if (int ret = fork_promoted_submit(window.dut, true)) {
+      Info("fork DiffTest promoted child rejected fast catch-up window in group %lu\n",
            static_cast<unsigned long>(promotion_group_id));
       return ret;
     }
@@ -1267,7 +1310,7 @@ int Difftest::fork_release_front(bool block, bool &released) {
   return DiffTestChecker::STATE_OK;
 }
 
-int Difftest::fork_promoted_submit(const DiffTestState &snapshot) {
+int Difftest::fork_promoted_submit(const DiffTestState &snapshot, bool fast_catchup) {
   if (fork_promoted_result == nullptr || fork_promoted_pid <= 0) {
     Info("fork DiffTest promoted child is unavailable\n");
     return DiffTestChecker::STATE_ERROR;
@@ -1276,6 +1319,7 @@ int Difftest::fork_promoted_submit(const DiffTestState &snapshot) {
   auto *result = fork_promoted_result;
   const uint64_t sequence = ++fork_promoted_sequence;
   result->command_dut = snapshot;
+  result->command_fast_catchup = fast_catchup;
   fork_store(&result->command_seq, sequence);
   while (fork_load(&result->command_ack) != sequence) {
     int status = 0;
@@ -1290,6 +1334,9 @@ int Difftest::fork_promoted_submit(const DiffTestState &snapshot) {
   const int ret = result->command_ret;
   fork_group_count = result->command_group_count;
   fork_skip_window_count = result->command_skip_window_count;
+  fork_skip_commit_count = result->command_skip_commit_count;
+  fork_skip_instr_count = result->command_skip_instr_count;
+  fork_skip_blocked_window_count = result->command_skip_blocked_window_count;
   fork_rollback_count = result->command_rollback_count;
   fork_mismatch_count = result->command_mismatch_count;
   fork_group_release_count = result->command_release_count;
@@ -1315,7 +1362,74 @@ int Difftest::fork_promoted_step() {
   // The parent still receives the DUT snapshot from the simulator.  The
   // promoted child owns the REF and all checker state, so only the plain DUT
   // record crosses the process boundary.
-  return fork_promoted_submit(*dut);
+  return fork_promoted_submit(*dut, false);
+}
+
+int Difftest::fork_promoted_fast_catchup_step() {
+  const uint32_t window_instr = fork_window_instr();
+  if (window_instr == 0) {
+    proxy->set_exec_mode(REF_EXEC_SLOW);
+    const int ret = check_all();
+    proxy->set_exec_mode(REF_EXEC_FAST);
+    return ret;
+  }
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+  uint64_t checked_instr = 0;
+  for (const auto &commit : dut->commit) {
+    if (commit.valid && !commit.skip) checked_instr += 1 + commit.nFused;
+  }
+  state->commit_stamp = (state->commit_stamp + checked_instr) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+#endif
+
+  proxy->ref_exec(window_instr);
+  proxy->sync();
+  state->has_progress = true;
+  state->last_commit_cycle = dut->trap.cycleCnt;
+  state->cycle_count = dut->trap.cycleCnt;
+  state->record_group(proxy->state.pc, window_instr);
+
+  return DiffTestChecker::STATE_OK;
+}
+
+int Difftest::fork_promoted_owner_step() {
+  if (fork_promoted_result != nullptr) {
+    return fork_promoted_submit(*dut, true);
+  }
+
+  if (fork_window_eligible()) {
+    const uint32_t window_instr = fork_window_instr();
+    if (window_instr != 0) {
+      fork_group.push_back({*dut, window_instr});
+      for (auto &commit : dut->commit) {
+        commit.valid = 0;
+      }
+      fork_window_sizes.push_back(window_instr);
+      ++fork_window_count;
+      fork_window_instr_count += window_instr;
+      if (fork_group.size() < fork_group_size) {
+        return DiffTestChecker::STATE_OK;
+      }
+      return fork_group_step();
+    }
+  }
+
+  if (!fork_group.empty()) {
+    if (int ret = fork_group_step()) {
+      return ret;
+    }
+  }
+  if (int ret = drain_fork(true)) {
+    return ret;
+  }
+  if (fork_promoted_result != nullptr) {
+    return fork_promoted_submit(*dut, true);
+  }
+
+  proxy->set_exec_mode(REF_EXEC_SLOW);
+  const int ret = check_all();
+  proxy->set_exec_mode(REF_EXEC_FAST);
+  return ret;
 }
 
 int Difftest::drain_fork(bool block) {

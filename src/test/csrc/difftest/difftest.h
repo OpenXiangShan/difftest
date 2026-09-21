@@ -236,7 +236,9 @@ protected:
   int fork_group_step();
   int fork_release_front(bool block, bool &released);
   int fork_promoted_step();
-  int fork_promoted_submit(const DiffTestState &snapshot);
+  int fork_promoted_submit(const DiffTestState &snapshot, bool fast_catchup);
+  int fork_promoted_fast_catchup_step();
+  int fork_promoted_owner_step();
 #endif // CONFIG_DIFFTEST_FORK
 
   inline bool in_disambiguation_state() {
