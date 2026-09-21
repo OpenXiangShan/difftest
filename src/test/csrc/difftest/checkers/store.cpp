@@ -370,3 +370,26 @@ void StoreChecker::finish() {
   flush_hash();
 }
 #endif // CONFIG_DIFFTEST_STOREEVENT
+
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+bool StoreHashChecker::get_valid(const DifftestStoreHashEvent &probe) {
+#ifdef CONFIG_DIFFTEST_SQUASH
+  return probe.valid && probe.stamp == state->commit_stamp;
+#else
+  return probe.valid;
+#endif // CONFIG_DIFFTEST_SQUASH
+}
+
+void StoreHashChecker::clear_valid(DifftestStoreHashEvent &probe) {
+  probe.valid = 0;
+}
+
+int StoreHashChecker::check(const DifftestStoreHashEvent &probe) {
+  Info("[StoreHash] checking hardware group=%lu instr=[%lu,%lu] records=%u hash=(0x%016lx,0x%016lx)\n",
+       probe.group_id, probe.instr_begin, probe.instr_end, probe.record_count, probe.hash_lo, probe.hash_hi);
+  return proxy->store_commit_hash(probe.record_count, probe.hash_lo, probe.hash_hi, probe.group_id,
+                                  probe.instr_begin, probe.instr_end)
+             ? STATE_ERROR
+             : STATE_OK;
+}
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT

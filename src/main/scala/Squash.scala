@@ -31,7 +31,7 @@ object Squash {
     fpgaEnable: Option[Bool] = None,
     fpgaMaxFused: Option[UInt] = None,
   ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
-    val squashInBits = Stamp(bundles.bits)
+    val squashInBits = Stamp(bundles.bits, config)
     val squashIn = Wire(Decoupled(chiselTypeOf(squashInBits)))
     squashIn.bits := squashInBits
     squashIn.valid := bundles.valid
@@ -45,14 +45,17 @@ object Squash {
 }
 
 object Stamp {
-  def apply(bundles: MixedVec[Valid[DifftestBundle]]): MixedVec[Valid[DifftestBundle]] = {
-    val module = Module(new Stamper(chiselTypeOf(bundles).toSeq))
+  def apply(
+    bundles: MixedVec[Valid[DifftestBundle]],
+    config: GatewayConfig,
+  ): MixedVec[Valid[DifftestBundle]] = {
+    val module = Module(new Stamper(chiselTypeOf(bundles).toSeq, config))
     module.in := bundles
     module.out
   }
 }
 
-class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
+class Stamper(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
   val in = IO(Input(MixedVec(bundles)))
   val numCores = in.count(_.bits.isUniqueIdentifier)
   val stamp = RegInit(0.U.asTypeOf(Vec(numCores, UInt(12.W)))) // StampSize corresponds to Cpp Macros
@@ -95,18 +98,52 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
     }
 
   val stores = in.filter(_.bits.desiredCppName == "store").map(_.asInstanceOf[Valid[DiffStoreEvent]])
-  val storeQueues = stores.map { st =>
-    val sq = WireInit(0.U.asTypeOf(Valid(new DiffStoreEventQueue)))
-    sq.inheritFrom(st)
-    val base = stamp(sq.bits.coreid)
-    val inc = commitSum(sq.bits.coreid).last
-    // If no instr committed in the same cycle, store event will be checked in next commit
-    sq.bits.stamp := Mux(inc === 0.U, base + 1.U, base + inc)
-    sq
+  val storeQueues: Seq[Valid[DiffStoreEventQueue]] = if (!config.isFPGA) {
+    stores.map { st =>
+      val sq = WireInit(0.U.asTypeOf(Valid(new DiffStoreEventQueue)))
+      sq.inheritFrom(st)
+      val base = stamp(sq.bits.coreid)
+      val inc = commitSum(sq.bits.coreid).last
+      // If no instr committed in the same cycle, store event will be checked in next commit
+      sq.bits.stamp := Mux(inc === 0.U, base + 1.U, base + inc)
+      sq
+    }
+  } else {
+    Seq.empty
+  }
+
+  val storeHashQueues = if (config.isFPGA && stores.nonEmpty) {
+    require(stores.length % numCores == 0, "Store lanes must be evenly distributed across cores")
+    val laneCount = stores.length / numCores
+    stores
+      .grouped(laneCount)
+      .map { coreStores =>
+        val hash = Module(new StoreHash(laneCount))
+        hash.in.zip(coreStores).foreach { case (dst, src) => dst := src }
+        val sq = WireInit(0.U.asTypeOf(Valid(new DiffStoreHashEventQueue)))
+        sq.valid := hash.out.valid
+        sq.bits.valid := hash.out.bits.valid
+        sq.bits.coreid := hash.out.bits.coreid
+        sq.bits.index := hash.out.bits.index
+        sq.bits.hash_lo := hash.out.bits.hash_lo
+        sq.bits.hash_hi := hash.out.bits.hash_hi
+        sq.bits.record_count := hash.out.bits.record_count
+        sq.bits.group_id := hash.out.bits.group_id
+        sq.bits.instr_begin := hash.out.bits.instr_begin
+        sq.bits.instr_end := hash.out.bits.instr_end
+        val base = stamp(sq.bits.coreid)
+        val inc = commitSum(sq.bits.coreid).last
+        sq.bits.stamp := Mux(inc === 0.U, base + 1.U, base + inc)
+        sq
+      }
+      .toSeq
+  } else {
+    Seq.empty
   }
 
   val withStamp = MixedVecInit(
-    (in.filterNot(b => Seq("load", "store").contains(b.bits.desiredCppName)) ++ loadQueues ++ storeQueues).toSeq
+    (in.filterNot(b => Seq("load", "store").contains(b.bits.desiredCppName)) ++ loadQueues ++
+      (if (config.isFPGA) storeHashQueues else storeQueues)).toSeq
   )
   val out = IO(Output(chiselTypeOf(withStamp)))
   out := withStamp

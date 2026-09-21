@@ -287,6 +287,15 @@ class StoreEvent extends DifftestBaseBundle with HasValid {
   val robidx = UInt(10.W)
 }
 
+class StoreHashEvent extends DifftestBaseBundle with HasValid {
+  val hash_lo = UInt(64.W)
+  val hash_hi = UInt(64.W)
+  val record_count = UInt(16.W)
+  val group_id = UInt(64.W)
+  val instr_begin = UInt(64.W)
+  val instr_end = UInt(64.W)
+}
+
 class LoadEvent extends DifftestBaseBundle with HasValid {
   val paddr = UInt(64.W)
   val opType = UInt(8.W)
