@@ -18,7 +18,8 @@
 PGO_MAX_CYCLE ?= 100000
 PGO_EMU_ARGS ?= --no-diff
 
-LLVM_BOLT ?= $(shell readlink -f `command -v llvm-bolt 2> /dev/null`)
+LLVM_BOLT ?= $(shell path=$$(command -v llvm-bolt 2> /dev/null); \
+	if [ -n "$$path" ]; then readlink -f "$$path"; fi)
 # We use readlink -f to get the absolute path of llvm-bolt, it's
 # needed since we use argv[0]/../lib/libbolt_rt_instr.a as the path
 # to find the runtime library inside llvm-bolt. It's a workaround
