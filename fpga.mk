@@ -5,7 +5,7 @@ FPGA_CONFIG_DIR = $(abspath ./config) # Reserve storage for xdma configuration
 DMA_CHANNELS ?= 1
 USE_SERIAL_PORT ?= 1
 
-FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp" ! -name "gbus_transport.cpp")
+FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp")
 FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DCONFIG_DMA_CHANNELS=$(DMA_CHANNELS) -DFPGA_HOST
 FPGA_CXXFLAGS += -std=c++20 -O3 -flto -march=native -mtune=native
 FPGA_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
@@ -17,19 +17,22 @@ endif
 FPGA_CXXFLAGS += -DDIFFTEST_HOSTIF_$(DIFFTEST_HOSTIF)
 
 ifeq ($(DIFFTEST_HOSTIF),GBUS)
+# libuvgbus.so is a vendor runtime and is not shipped in this tree. Point
+# GBUS_LIBUVGBUS at the library, or set GBUS_RUNTIME_ROOT to a UVHS
+# gbus_runtime directory (include/ + lib/libuvgbus.so).
+GBUS_PLUGIN_DIR = $(abspath ./src/test/csrc/plugin/uvhs-gbus)
 GBUS_RUNTIME_ROOT ?=
-ifeq ($(strip $(GBUS_RUNTIME_ROOT)),)
-GBUS_INCLUDE_DIR = $(FPGA_CSRC_DIR)
-GBUS_LIB_DIR = $(FPGA_CSRC_DIR)
-else
-GBUS_INCLUDE_DIR = $(abspath $(GBUS_RUNTIME_ROOT)/include)
+ifneq ($(strip $(GBUS_LIBUVGBUS)),)
+GBUS_LIB_DIR = $(abspath $(dir $(GBUS_LIBUVGBUS)))
+else ifneq ($(strip $(GBUS_RUNTIME_ROOT)),)
 GBUS_LIB_DIR = $(abspath $(GBUS_RUNTIME_ROOT)/lib)
+else
+$(error GBus runtime not found; set GBUS_LIBUVGBUS to libuvgbus.so or GBUS_RUNTIME_ROOT to a UVHS gbus_runtime directory)
 endif
 GBUS_HOST ?= localhost
-FPGA_CXXFILES += $(FPGA_CSRC_DIR)/gbus_transport.cpp
-FPGA_CXXFLAGS += -I$(GBUS_INCLUDE_DIR)
-FPGA_LDFLAGS += -L$(GBUS_LIB_DIR) \
-                -Wl,-rpath,$(GBUS_LIB_DIR) -luvgbus
+FPGA_CXXFILES += $(GBUS_PLUGIN_DIR)/gbus_transport.cpp
+FPGA_CXXFLAGS += -I$(GBUS_PLUGIN_DIR)
+FPGA_LDFLAGS += -L$(GBUS_LIB_DIR) -Wl,-rpath,$(GBUS_LIB_DIR) -luvgbus
 endif
 
 fpga-build: fpga-clean fpga-host
