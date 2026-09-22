@@ -29,6 +29,7 @@ void FirstInstrCommitChecker::clear_valid(DifftestInstrCommit &probe) {
 
 int FirstInstrCommitChecker::check(const DifftestInstrCommit &probe) {
   Info("The first instruction of core %d has commited. Difftest enabled. \n", state->coreid);
+  fflush(stdout);
   proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
   simMemory->clone_on_demand(
       [this](uint64_t offset, void *src, size_t n) {
