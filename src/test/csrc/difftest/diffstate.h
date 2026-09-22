@@ -156,9 +156,12 @@ public:
 #ifdef CONFIG_DIFFTEST_SQUASH
     uint32_t stamp;
 #endif
+    uint64_t store_instr_seq;
+    bool is_last_record;
   } StoreCommit;
 
   std::queue<StoreCommit> store_event_queue;
+  uint64_t next_store_instr_seq = 0;
 #endif // CONFIG_DIFFTEST_STOREEVENT
 
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
