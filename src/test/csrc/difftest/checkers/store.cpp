@@ -144,6 +144,33 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
       state->store_event_queue.push(storeCommit);
     }
   } else {
+#ifdef CPU_ROCKET_CHIP
+    // Rocket reports scalar stores as an unaligned byte address with data and
+    // mask starting at bit zero. Reference store queues use aligned 8-byte
+    // beats, so normalize and split a crossing store before comparison.
+    const unsigned byteOffset = probe.addr & 0x7;
+    const uint64_t alignedAddr = probe.addr & ~0x7ULL;
+    const uint16_t shiftedMask = static_cast<uint16_t>(probe.mask << byteOffset);
+    const unsigned __int128 shiftedData = static_cast<unsigned __int128>(lowData) << (byteOffset * 8);
+    for (unsigned beat = 0; beat < 2; beat++) {
+      const uint8_t beatMask = static_cast<uint8_t>(shiftedMask >> (beat * 8));
+      if (beatMask == 0) {
+        continue;
+      }
+      DiffState::StoreCommit storeCommit = {probe.valid,
+                                            alignedAddr + beat * 8,
+                                            static_cast<uint64_t>(shiftedData >> (beat * 64)),
+                                            beatMask,
+                                            pc,
+                                            robIdx
+#ifdef CONFIG_DIFFTEST_SQUASH
+                                            ,
+                                            probe.stamp
+#endif // CONFIG_DIFFTEST_SQUASH
+      };
+      state->store_event_queue.push(storeCommit);
+    }
+#else
     DiffState::StoreCommit storeCommit = {probe.valid,
                                           probe.addr,
                                           lowData,
@@ -156,6 +183,7 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
 #endif // CONFIG_DIFFTEST_SQUASH
     };
     state->store_event_queue.push(storeCommit);
+#endif // CPU_ROCKET_CHIP
   }
 
   return STATE_OK;
