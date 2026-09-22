@@ -224,6 +224,15 @@ You may want to redirect the stderr to a file to capture the REF logs output by 
 Please avoid using `--enable-fork` together with other debugging options, such as `-b`, `-e`, `--dump-wave`, `--dump-ref-trace`, etc.
 The behavior when they are enabled simultaneously is undefined.
 
+`--dump-ref-trace` prints one aligned line per instruction from the selected
+reference model, including its privilege mode, PC, encoding, disassembly, and
+architectural side effects. Use `-b` and `-e` to limit the trace to the cycle
+range around a failure. A reference can be selected at build time with
+`REF=Spike` or `REF=NEMU`, or overridden at runtime with `--diff <ref.so>`.
+Runtime selection takes precedence and the resolved library path is printed at
+startup. New reference libraries implement `difftest_set_ref_trace`; older
+libraries remain supported through the legacy debug switch.
+
 ### spike-dasm: a disassembly engine for RISC-V instructions
 
 When the simulation aborts, DiffTest gives a report on the current architectural states and a list of recently commited instructions.
