@@ -202,27 +202,24 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
     io_trace_file.read(inputBuffer.data(), inbufferSize);
     input.size = io_trace_file.gcount();
     input.pos = 0;
-    // A short final read means the current zstd file is exhausted, not that
-    // the stream is broken.  Hand control back so the next file is opened;
-    // treating this as an error drops the last (partial) chunk of every file.
-    if (input.size == 0) {
-      ZSTD_freeDCtx(trace_dctx);
-      trace_dctx = NULL;
-      return 1;
-    }
-  } else if (input.size == 0) {
+  }
+
+  // Always call the decoder, even when no new input was read: a previous call
+  // may have filled outputBuffer while leaving output pending inside the
+  // decoder, which has to be drained before the file can be considered
+  // exhausted.  `ret == 0` marks the end of a frame.
+  size_t ret = ZSTD_decompressStream(trace_dctx, &output, &input);
+  (void)ret;
+
+  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(),
+                         outputBuffer.begin() + output.pos);
+
+  // No input left and nothing produced: the current file is fully consumed.
+  if (input.size == 0 && output.pos == 0) {
     ZSTD_freeDCtx(trace_dctx);
     trace_dctx = NULL;
     return 1;
-  } else {
-    input.size = input.size;
-    input.pos = input.pos;
   }
-
-  // Decompress the data
-  size_t ret = ZSTD_decompressStream(trace_dctx, &output, &input);
-
-  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.begin() + output.pos);
 
   return 0;
 }
