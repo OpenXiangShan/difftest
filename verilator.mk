@@ -15,7 +15,7 @@
 # See the Mulan PSL v2 for more details.
 #***************************************************************************************
 
-VERILATOR_BUILD_DIR = $(BUILD_DIR)/verilator-compile
+VERILATOR_BUILD_DIR = $(BUILD_DIR)/verilator-compile$(if $(REF_BUILD_TAG),-$(REF_BUILD_TAG))
 VERILATOR_TARGET = $(VERILATOR_BUILD_DIR)/$(EMU_ELF_NAME)
 
 ########## Verilator Configuration Options ##########

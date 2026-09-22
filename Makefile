@@ -188,13 +188,15 @@ endif
 
 # REF SELECTION
 REF ?= Nemu
+REF_CANONICAL = $(if $(filter NEMU Nemu nemu,$(REF)),Nemu,$(if $(filter SPIKE Spike spike,$(REF)),Spike,$(REF)))
+REF_BUILD_TAG = $(if $(wildcard $(REF)),Linked,$(REF_CANONICAL))
 ifneq ($(REF),)
 ifneq ($(wildcard $(REF)),)
 SIM_CXXFLAGS += -DREF_PROXY=LinkedProxy -DLINKED_REFPROXY_LIB=\\\"$(REF)\\\"
 SIM_LDFLAGS  += $(REF)
 else
-SIM_CXXFLAGS += -DREF_PROXY=$(REF)Proxy
-REF_HOME_VAR = $(shell echo $(REF)_HOME | tr a-z A-Z)
+SIM_CXXFLAGS += -DREF_PROXY=$(REF_CANONICAL)Proxy
+REF_HOME_VAR = $(shell echo $(REF_CANONICAL)_HOME | tr a-z A-Z)
 ifneq ($(origin $(REF_HOME_VAR)), undefined)
 SIM_CXXFLAGS += -DREF_HOME=\\\"$(shell echo $$$(REF_HOME_VAR))\\\"
 endif
