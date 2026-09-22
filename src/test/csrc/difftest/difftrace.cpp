@@ -202,12 +202,13 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
     io_trace_file.read(inputBuffer.data(), inbufferSize);
     input.size = io_trace_file.gcount();
     input.pos = 0;
-
-    // Outputs the current file pointer location
-    std::streampos currentPos = io_trace_file.tellg();
-    if (currentPos == -1) {
-      std::cout << "Decompress read zstd file error" << std::endl;
-      return 2;
+    // A short final read means the current zstd file is exhausted, not that
+    // the stream is broken.  Hand control back so the next file is opened;
+    // treating this as an error drops the last (partial) chunk of every file.
+    if (input.size == 0) {
+      ZSTD_freeDCtx(trace_dctx);
+      trace_dctx = NULL;
+      return 1;
     }
   } else if (input.size == 0) {
     ZSTD_freeDCtx(trace_dctx);
@@ -221,7 +222,7 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
   // Decompress the data
   size_t ret = ZSTD_decompressStream(trace_dctx, &output, &input);
 
-  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.end());
+  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.begin() + output.pos);
 
   return 0;
 }
