@@ -26,12 +26,16 @@
 #include "refproxy.h"
 #include "splitview.h"
 #include "xdma.h"
+#ifdef DIFFTEST_HOSTIF_GBUS
+#include "gbus_transport.h"
+#endif
 #include <condition_variable>
 #include <cstdlib>
 #include <getopt.h>
 #include <inttypes.h>
 #include <mutex>
 #include <stdint.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
@@ -62,7 +66,7 @@ void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
 static bool run_external_cmd(const char *cmd, const char *tag);
 
-FpgaXdma *xdma_device = NULL;
+FpgaTransport *xdma_device = NULL;
 #ifdef USE_SERIAL_PORT
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
@@ -124,7 +128,13 @@ void fpga_init() {
   }
   uint32_t ram_size_mb = ram_size / (1024 * 1024);
 
+#ifdef DIFFTEST_HOSTIF_GBUS
+  auto *gbus_device = new GbusTransport();
+  gbus_device->validate_guest_ram(_PMEM_BASE, ram_size);
+  xdma_device = gbus_device;
+#else
   xdma_device = new FpgaXdma();
+#endif
   xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
   sleep(1);
 
@@ -143,7 +153,7 @@ void fpga_init() {
     printf("[fpga-host] init mem done, elapsed = %ums\n", uptime() - init_mem_start);
   }
 
-#ifdef CONFIG_USE_XDMA_H2C
+#if defined(CONFIG_USE_XDMA_H2C) || defined(DIFFTEST_HOSTIF_GBUS)
   auto *mem = dynamic_cast<MmapMemory *>(simMemory);
   assert(mem);
   uint64_t h2c_size = mem->pad_img_size(1024ull * 1024ull);
@@ -155,7 +165,7 @@ void fpga_init() {
   xdma_device->h2c_load_workload(mem->as_ptr(), h2c_size);
   xdma_device->wait_fpga_io_done(HOST_IO_MEM_H2C, "memory H2C load");
   printf("[fpga-host] H2C load done, elapsed = %ums\n", uptime() - h2c_start);
-#else // CONFIG_USE_XDMA_H2C
+#else // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 #ifdef FPGA_SIM
   xdma_sim_set_workload(args.image);
 #else
@@ -165,7 +175,7 @@ void fpga_init() {
     }
   }
 #endif // FPGA_SIM
-#endif // CONFIG_USE_XDMA_H2C
+#endif // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
   xdma_device->fpga_io(HOST_IO_CPU_AXI_DELAY, args.cpu_axi_delay);
