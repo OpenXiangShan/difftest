@@ -157,6 +157,11 @@ SIM_VFLAGS   += +define+ASYNC_CLK_2N=$(ASYNC_CLK_2N)
 endif
 endif
 
+# OpenIOMMU owns its RTL filelist. Include it only for explicitly enabled builds.
+ifeq ($(WITH_IOMMU),1)
+override RTL_INCLUDE += $(abspath $(DESIGN_DIR)/OpenIOMMU/iommu_wrap.f)
+endif
+
 # Third-party RTL include files
 define handle_rtl_include_path
   $(if $(wildcard $1/*), \
