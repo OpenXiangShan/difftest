@@ -233,6 +233,19 @@ void fpga_display_result(int ret) {
 }
 
 int fpga_get_result(uint8_t step) {
+  // Trace Debug Support
+  if (args.enable_ref_trace) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      bool is_debug = difftest[i]->proxy->get_debug();
+      if (trap->cycleCnt >= args.log_begin && !is_debug) {
+        difftest[i]->proxy->set_debug(true);
+      }
+      if (trap->cycleCnt >= args.log_end && is_debug) {
+        difftest[i]->proxy->set_debug(false);
+      }
+    }
+  }
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
@@ -265,19 +278,6 @@ int fpga_get_result(uint8_t step) {
       // Record Instr/Cycle for soft warmup
       for (int i = 0; i < NUM_CORES; i++) {
         difftest[i]->warmup_record();
-      }
-    }
-  }
-  // Trace Debug Support
-  if (args.enable_ref_trace) {
-    for (int i = 0; i < NUM_CORES; i++) {
-      auto trap = difftest[i]->get_trap_event();
-      bool is_debug = difftest[i]->proxy->get_debug();
-      if (trap->cycleCnt >= args.log_begin && !is_debug) {
-        difftest[i]->proxy->set_debug(true);
-      }
-      if (trap->cycleCnt >= args.log_end && is_debug) {
-        difftest[i]->proxy->set_debug(false);
       }
     }
   }

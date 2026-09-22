@@ -171,6 +171,13 @@ Emulator::Emulator(int argc, const char *argv[])
   auto ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
   difftest_init(args.enable_diff, ref_ramsize);
 
+  // Enable before the first reference step so a cycle-zero mismatch still has a trace.
+  if (args.enable_ref_trace && args.log_begin == 0) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      difftest[i]->proxy->set_debug(true);
+    }
+  }
+
   // init difftest traces
   if (args.trace_name) {
     for (int i = 0; i < NUM_CORES; i++) {

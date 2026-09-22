@@ -148,6 +148,7 @@ public:
   f(ref_close, difftest_close, void, )                                                                      \
   f(ref_set_ramsize, difftest_set_ramsize, void, size_t)                                                    \
   f(ref_set_mhartid, difftest_set_mhartid, void, int)                                                       \
+  f(ref_set_trace, difftest_set_ref_trace, void, bool)                                                      \
   f(ref_put_gmaddr, difftest_put_gmaddr, void, void *)                                                      \
   f(ref_skip_one, difftest_skip_one, void, bool, bool, uint32_t, uint64_t)                                  \
   f(ref_guided_exec, difftest_guided_exec, void, void*)                                                     \
@@ -366,12 +367,18 @@ public:
   }
 
   inline void set_debug(bool enabled = false) {
-    config.debug_difftest = enabled;
-    sync_config();
+    ref_trace_enabled = enabled;
+    if (ref_set_trace) {
+      ref_set_trace(enabled);
+    } else {
+      // Older reference libraries use the dynamic debug switch for tracing.
+      config.debug_difftest = enabled;
+      sync_config();
+    }
   }
 
   inline bool get_debug() {
-    return config.debug_difftest;
+    return ref_trace_enabled;
   }
 
   inline void set_illegal_mem_access(bool ignored = false) {
@@ -467,6 +474,7 @@ public:
 
 private:
   RefProxyConfig config;
+  bool ref_trace_enabled = false;
 
   inline void sync_config() {
     update_config(&config);

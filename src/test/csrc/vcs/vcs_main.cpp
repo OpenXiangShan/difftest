@@ -344,6 +344,19 @@ int simv_get_result(uint8_t step) {
     return SIMV_FAIL;
   }
 #ifndef CONFIG_NO_DIFFTEST
+  // Trace Debug Support
+  if (args.enable_ref_trace) {
+    for (int i = 0; i < NUM_CORES; i++) {
+      auto trap = difftest[i]->get_trap_event();
+      bool is_debug = difftest[i]->proxy->get_debug();
+      if (trap->cycleCnt >= args.log_begin && !is_debug) {
+        difftest[i]->proxy->set_debug(true);
+      }
+      if (trap->cycleCnt >= args.log_end && is_debug) {
+        difftest[i]->proxy->set_debug(false);
+      }
+    }
+  }
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
   if (trapCode != STATE_RUNNING) {
@@ -379,19 +392,6 @@ int simv_get_result(uint8_t step) {
       }
       // perfCtrl_clean/dump will set according to SIMV_WARMUP
       return SIMV_WARMUP;
-    }
-  }
-  // Trace Debug Support
-  if (args.enable_ref_trace) {
-    for (int i = 0; i < NUM_CORES; i++) {
-      auto trap = difftest[i]->get_trap_event();
-      bool is_debug = difftest[i]->proxy->get_debug();
-      if (trap->cycleCnt >= args.log_begin && !is_debug) {
-        difftest[i]->proxy->set_debug(true);
-      }
-      if (trap->cycleCnt >= args.log_end && is_debug) {
-        difftest[i]->proxy->set_debug(false);
-      }
     }
   }
   if (args.enable_commit_trace) {
