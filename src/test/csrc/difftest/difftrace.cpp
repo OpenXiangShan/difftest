@@ -211,8 +211,7 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
   size_t ret = ZSTD_decompressStream(trace_dctx, &output, &input);
   (void)ret;
 
-  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(),
-                         outputBuffer.begin() + output.pos);
+  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.begin() + output.pos);
 
   // No input left and nothing produced: the current file is fully consumed.
   if (input.size == 0 && output.pos == 0) {
