@@ -89,6 +89,10 @@ bool InstrCommitChecker::get_valid(const DifftestInstrCommit &probe) {
   return probe.valid;
 }
 
+bool InstrCommitChecker::will_ref_exec(const DifftestInstrCommit &probe) const {
+  return !probe.skip && !DEBUG_MODE_SKIP(probe.valid, probe.pc, probe.instr);
+}
+
 void InstrCommitChecker::clear_valid(DifftestInstrCommit &probe) {
   probe.valid = 0;
   state->has_progress = true;
@@ -151,7 +155,7 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
 
   // MMIO accessing should not be a branch or jump, just +2/+4 to get the next pc
   // to skip the checking of an instruction, just copy the reg state to reference design
-  if (probe.skip || (DEBUG_MODE_SKIP(probe.valid, probe.pc, probe.inst))) {
+  if (!will_ref_exec(probe)) {
     // We use the physical register file to get wdata
     proxy->skip_one(probe.isRVC, (probe.rfwen && probe.wdest != 0), probe.fpwen, probe.vecwen, probe.wdest,
                     commit_data);

@@ -337,8 +337,7 @@ void Difftest::init_checkers() {
   checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
                                                  proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
-  // Each cycle is checked for an store event, and recorded in queue.
-  // It is checked every time an instruction is committed and queue has content.
+  // Record store events each cycle; check them after the commit batch unless squash stamps require per-instruction checks.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
     checkers.push_back(new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy));
@@ -469,7 +468,9 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_checker = new StoreChecker(state, proxy);
+#ifdef CONFIG_DIFFTEST_SQUASH
   inst_op_checkers.push_back(store_checker);
+#endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   inst_op_checkers.push_back(new MsyncChecker(state, proxy));
@@ -649,28 +650,40 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+  bool has_ref_exec_commit = false;
+#endif
+#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
+  if (dut->commit[0].valid) {
+    dut_commit_batch_pc = dut->commit[0].pc;
+    ref_commit_batch_pc = proxy->state.pc;
+    if (dut_commit_batch_pc != ref_commit_batch_pc) {
+      pc_mismatch = true;
+    }
+  }
+#endif
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    if (dut->commit[i].valid) {
+      num_commit += 1 + dut->commit[i].nFused;
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+      has_ref_exec_commit |= instr_commit_checker[i]->will_ref_exec(dut->commit[i]);
+#endif
+      if (int ret = instr_commit_checker[i]->step()) {
+        return ret;
+      }
+    }
+  }
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
+  if (has_ref_exec_commit) {
+    if (int ret = store_checker->step()) {
+      return ret;
+    }
+  }
+#endif
+
   if (dut->event.valid) {
     if (int ret = arch_event_checker->step()) {
       return ret;
-    }
-    dut->commit[0].valid = 0;
-  } else {
-#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-    if (dut->commit[0].valid) {
-      dut_commit_batch_pc = dut->commit[0].pc;
-      ref_commit_batch_pc = proxy->state.pc;
-      if (dut_commit_batch_pc != ref_commit_batch_pc) {
-        pc_mismatch = true;
-      }
-    }
-#endif
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-      if (dut->commit[i].valid) {
-        num_commit += 1 + dut->commit[i].nFused;
-        if (int ret = instr_commit_checker[i]->step()) {
-          return ret;
-        }
-      }
     }
   }
 

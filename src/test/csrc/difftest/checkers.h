@@ -163,6 +163,8 @@ public:
       : ProbeChecker<DifftestInstrCommit>(get_probe, state, proxy), index(index),
         get_dut_state(std::move(get_dut_state)), op_checkers(std::move(op_checkers)) {}
 
+  bool will_ref_exec(const DifftestInstrCommit &probe) const;
+
 private:
   uint64_t index;
   std::function<const DiffTestState &()> get_dut_state;
