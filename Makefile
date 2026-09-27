@@ -323,6 +323,12 @@ ifeq ($(CXX_NO_WARNING),1)
 SIM_CXXFLAGS += -Werror
 endif
 
+# User-provided extra simulation sources/flags (e.g. external DPI models).
+# Pass on the make command line; they propagate to sub-makes via MAKEFLAGS.
+SIM_CXXFILES += $(USER_CXXFILES)
+SIM_CXXFLAGS += $(USER_CXXFLAGS)
+SIM_LDFLAGS  += $(USER_LDFLAGS)
+
 include pgo.mk
 include cuda.mk
 include emu.mk
