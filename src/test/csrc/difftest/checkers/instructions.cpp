@@ -164,7 +164,7 @@ int InstrCommitChecker::check(const DifftestInstrCommit &probe) {
     proxy->ref_exec(1);
 #ifdef CONFIG_DIFFTEST_SQUASH
     state->commit_stamp = (state->commit_stamp + 1) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
-    for (auto checker: op_checkers) { // checker squashed ld/st after each instr
+    for (auto checker: op_checkers) { // check stamp-aligned operations after each instruction
       if (int ret = checker->step()) {
         return ret;
       }

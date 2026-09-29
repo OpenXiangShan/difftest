@@ -337,8 +337,7 @@ void Difftest::init_checkers() {
   checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
                                                  proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
-  // Each cycle is checked for an store event, and recorded in queue.
-  // It is checked every time an instruction is committed and queue has content.
+  // Record stores each cycle; check them after the complete instruction batch.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
     checkers.push_back(new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy));
@@ -469,7 +468,6 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_checker = new StoreChecker(state, proxy);
-  inst_op_checkers.push_back(store_checker);
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   inst_op_checkers.push_back(new MsyncChecker(state, proxy));
@@ -649,14 +647,21 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
-  if (dut->event.valid) {
+  // InstrCommit::setSpecial reserves bit 2 for the position of ArchEvent.
+  constexpr uint8_t arch_event_mask = 1 << 2;
+  bool has_event_slot = false;
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    has_event_slot |= dut->commit[i].valid && (dut->commit[i].special & arch_event_mask);
+  }
+  // Preserve the event-only convention for DUTs which do not emit a slot marker.
+  if (dut->event.valid && !has_event_slot) {
     if (int ret = arch_event_checker->step()) {
       return ret;
     }
     dut->commit[0].valid = 0;
   } else {
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-    if (dut->commit[0].valid) {
+    if (dut->commit[0].valid && !(dut->commit[0].special & arch_event_mask)) {
       dut_commit_batch_pc = dut->commit[0].pc;
       ref_commit_batch_pc = proxy->state.pc;
       if (dut_commit_batch_pc != ref_commit_batch_pc) {
@@ -666,13 +671,35 @@ inline int Difftest::check_all() {
 #endif
     for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
       if (dut->commit[i].valid) {
-        num_commit += 1 + dut->commit[i].nFused;
-        if (int ret = instr_commit_checker[i]->step()) {
-          return ret;
+        if (dut->commit[i].special & arch_event_mask) {
+          if (!dut->event.valid) {
+            Info("Architectural event slot %d has no event (core %d).\n", i, state->coreid);
+            return DiffTestChecker::STATE_ERROR;
+          }
+          if (int ret = arch_event_checker->step()) {
+            return ret;
+          }
+          dut->commit[i].valid = 0;
+        } else {
+          num_commit += 1 + dut->commit[i].nFused;
+          if (int ret = instr_commit_checker[i]->step()) {
+            return ret;
+          }
         }
       }
     }
   }
+
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  // A preCommit store can arrive before its own slot executes. Wait for the
+  // entire batch, including any fused instructions, in both squash modes.
+  // An empty batch may precede the store's retirement, so retain its queue.
+  if (num_commit > 0) {
+    if (int ret = store_checker->step()) {
+      return ret;
+    }
+  }
+#endif // CONFIG_DIFFTEST_STOREEVENT
 
   if (int ret = update_delayed_writeback()) {
     return ret;

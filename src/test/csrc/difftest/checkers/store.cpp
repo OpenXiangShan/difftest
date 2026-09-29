@@ -79,21 +79,8 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
       uint64_t commitLowData = lowData & MaskExpand(commitLowMask);
 
       if (commitLowValid) {
-        DiffState::StoreCommit storeCommitLow = {commitLowValid,
-                                                 commitLowAddr,
-                                                 commitLowData,
-                                                 commitLowMask,
-                                                 pc,
-                                                 robIdx,
-                                                 addr,
-                                                 lowData,
-                                                 highData,
-                                                 mask
-#ifdef CONFIG_DIFFTEST_SQUASH
-                                                 ,
-                                                 probe.stamp
-#endif // CONFIG_DIFFTEST_SQUASH
-        };
+        DiffState::StoreCommit storeCommitLow = {commitLowValid, commitLowAddr, commitLowData, commitLowMask, pc,
+                                                 robIdx,         addr,          lowData,       highData,      mask};
         state->store_event_queue.push(storeCommitLow);
       }
 
@@ -103,21 +90,8 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
       uint64_t commitHighData = highData & MaskExpand(commitHighMask);
 
       if (commitHighValid) {
-        DiffState::StoreCommit storeCommitHigh = {commitHighValid,
-                                                  commitHighAddr,
-                                                  commitHighData,
-                                                  commitHighMask,
-                                                  pc,
-                                                  robIdx,
-                                                  addr,
-                                                  lowData,
-                                                  highData,
-                                                  mask
-#ifdef CONFIG_DIFFTEST_SQUASH
-                                                  ,
-                                                  probe.stamp
-#endif // CONFIG_DIFFTEST_SQUASH
-        };
+        DiffState::StoreCommit storeCommitHigh = {
+          commitHighValid, commitHighAddr, commitHighData, commitHighMask, pc, robIdx, addr, lowData, highData, mask};
         state->store_event_queue.push(storeCommitHigh);
       }
     }
@@ -128,21 +102,9 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
       uint64_t refStoreCommitData = 0;
       uint8_t refStoreCommitMask = 0xff;
 
-      DiffState::StoreCommit storeCommit = {probe.valid,
-                                            refStoreCommitAddr,
-                                            refStoreCommitData,
-                                            refStoreCommitMask,
-                                            pc,
-                                            robIdx,
-                                            addr,
-                                            lowData,
-                                            highData,
-                                            mask
-#ifdef CONFIG_DIFFTEST_SQUASH
-                                            ,
-                                            probe.stamp
-#endif // CONFIG_DIFFTEST_SQUASH
-      };
+      DiffState::StoreCommit storeCommit = {
+        probe.valid, refStoreCommitAddr, refStoreCommitData, refStoreCommitMask, pc, robIdx, addr, lowData, highData,
+        mask};
       state->store_event_queue.push(storeCommit);
     }
   } else {
@@ -154,21 +116,8 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
     uint64_t commitLowAddr = addr;
     uint64_t commitLowData = lowData & MaskExpand(commitLowMask);
     if (commitLowValid) {
-      DiffState::StoreCommit storeCommitLow = {commitLowValid,
-                                               commitLowAddr,
-                                               commitLowData,
-                                               commitLowMask,
-                                               pc,
-                                               robIdx,
-                                               addr,
-                                               lowData,
-                                               highData,
-                                               mask
-#ifdef CONFIG_DIFFTEST_SQUASH
-                                               ,
-                                               probe.stamp
-#endif // CONFIG_DIFFTEST_SQUASH
-      };
+      DiffState::StoreCommit storeCommitLow = {commitLowValid, commitLowAddr, commitLowData, commitLowMask, pc,
+                                               robIdx,         addr,          lowData,       highData,      mask};
       state->store_event_queue.push(storeCommitLow);
     }
 
@@ -177,21 +126,8 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
     uint64_t commitHighAddr = addr + 8;
     uint64_t commitHighData = highData & MaskExpand(commitHighMask);
     if (commitHighValid) {
-      DiffState::StoreCommit storeCommitHigh = {commitHighValid,
-                                                commitHighAddr,
-                                                commitHighData,
-                                                commitHighMask,
-                                                pc,
-                                                robIdx,
-                                                addr,
-                                                lowData,
-                                                highData,
-                                                mask
-#ifdef CONFIG_DIFFTEST_SQUASH
-                                                ,
-                                                probe.stamp
-#endif // CONFIG_DIFFTEST_SQUASH
-      };
+      DiffState::StoreCommit storeCommitHigh = {commitHighValid, commitHighAddr, commitHighData, commitHighMask, pc,
+                                                robIdx,          addr,           lowData,        highData,       mask};
       state->store_event_queue.push(storeCommitHigh);
     }
   }
@@ -202,10 +138,6 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
 int StoreChecker::check() {
   while (!state->store_event_queue.empty()) {
     auto &probe = state->store_event_queue.front();
-#ifdef CONFIG_DIFFTEST_SQUASH
-    if (probe.stamp != state->commit_stamp)
-      return STATE_OK;
-#endif // CONFIG_DIFFTEST_SQUASH
     auto addr = probe.addr;
     auto data = probe.data;
     auto mask = probe.mask;
