@@ -79,7 +79,27 @@ SIM_CXXFLAGS += -I$(GEN_CSRC_DIR)
 PLUGIN_CSRC_DIR = $(abspath ./src/test/csrc/plugin)
 PLUGIN_INC_DIR  = $(abspath $(PLUGIN_CSRC_DIR)/include)
 SIM_CXXFILES   += $(shell find $(PLUGIN_CSRC_DIR)/topdown -name "*.cpp" 2> /dev/null)
+SIM_CXXFILES   += $(shell find $(PLUGIN_CSRC_DIR)/fdivsqrt -name "*.cpp" 2> /dev/null)
 SIM_CXXFLAGS   += -I$(PLUGIN_INC_DIR)
+
+# The fdiv/sqrt DPI model reuses the RISCV-specialized Berkeley SoftFloat
+# library used by Yunsuan's golden model. Keep the checkout and build output
+# under build/ so they never become repository changes.
+SOFTFLOAT_REPO_PATH  ?= $(BUILD_DIR)/softfloat/berkeley-softfloat-3
+SOFTFLOAT_BUILD_PATH ?= $(SOFTFLOAT_REPO_PATH)/build/Linux-x86_64-GCC
+SOFTFLOAT             ?= $(SOFTFLOAT_BUILD_PATH)/softfloat.a
+SOFTFLOAT_TYPE_PATH   ?= $(SOFTFLOAT_REPO_PATH)/source/RISCV
+SOFTFLOAT_HEADER      ?= -I$(SOFTFLOAT_REPO_PATH)/source/include -I$(SOFTFLOAT_BUILD_PATH) -I$(SOFTFLOAT_TYPE_PATH)
+
+SIM_CXXFLAGS += $(SOFTFLOAT_HEADER)
+SIM_LDFLAGS  += $(SOFTFLOAT)
+
+$(SOFTFLOAT_REPO_PATH)/COPYING.txt:
+	@mkdir -p $(dir $@)
+	git clone --depth=1 https://github.com/ucb-bar/berkeley-softfloat-3 $(SOFTFLOAT_REPO_PATH)
+
+$(SOFTFLOAT): $(SOFTFLOAT_REPO_PATH)/COPYING.txt
+	SPECIALIZE_TYPE=RISCV $(MAKE) -s -C $(SOFTFLOAT_BUILD_PATH) all
 
 GEN_VSRC_DIR = $(BUILD_DIR)/generated-src
 VSRC_DIR   = $(abspath ./src/test/vsrc/common)

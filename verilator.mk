@@ -145,7 +145,7 @@ endif
 # Profile Guided Optimization
 PGO_MAX_CYCLE = 2000000   # Default for Verilator; cmdline can override
 
-$(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILATOR_HEADERS) $(SIM_EXTRA_OBJS)
+$(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILATOR_HEADERS) $(SIM_EXTRA_OBJS) $(SOFTFLOAT)
 	@printf '\n[c++] Compiling C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 ifdef PGO_WORKLOAD
