@@ -268,7 +268,6 @@ void AmuExecRecorder::clear_valid(DifftestAmuFinishEvent &probe) {
 int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
   const static size_t ARLen = CONFIG_DIFF_AMU_ARLEN;
   const static size_t TRLen = CONFIG_DIFF_AMU_TRLEN;
-  const static size_t bankWidth = CONFIG_DIFF_AMU_BANK_WIDTH;
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
     if (iter->amu_event.pc == probe.pc && iter->state == DiffState::WAIT_DUT_EXEC) {
       if (iter->amu_event.op == 2) { // mrelease
@@ -303,14 +302,18 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
           memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
         }
         uint8_t md = entry.amu_event.md;
-        size_t stride = 0;
-        if (md < 4) {
-          stride = TRLen / bankWidth;
-        } else {
-          stride = ARLen / bankWidth;
-        }
         const size_t matrix_words_per_bank =
             (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
+        // bankAddr is an entry index in the selected matrix register. The
+        // finish event may carry a wider, shared payload than that entry
+        // (e.g. C is 128 bits in MinimalMatrixConfig, while the event is
+        // still 256 bits for the A/B path). Derive the interleave stride from
+        // the selected register's physical entry width, not the event width.
+        const size_t row_bits = (md < 4) ? TRLen : ARLen;
+        const size_t entry_bits = matrix_words_per_bank * sizeof(uint64_t) * 8;
+        assert(entry_bits > 0);
+        assert(row_bits % entry_bits == 0);
+        const size_t stride = row_bits / entry_bits;
         assert(stride > 0);
         assert(matrix_words_per_bank > 0);
 
