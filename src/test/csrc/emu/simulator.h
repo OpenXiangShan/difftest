@@ -46,6 +46,9 @@ public:
   /******* mandatory methods for child classes *******/
   // Set the clock signal, 0 or 1.
   virtual void set_clock(unsigned clock) = 0;
+  // Optional independent accelerator clock. Simulators without this port may ignore it.
+  virtual void set_accelerator_clock(unsigned) {}
+  virtual unsigned get_accelerator_clock() const { return 0; }
   // Set the reset signal, 0 or 1.
   virtual void set_reset(unsigned reset) = 0;
   // Tick one step. Note this method may have various implementations.

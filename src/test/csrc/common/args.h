@@ -21,6 +21,8 @@
 
 struct CommonArgs {
   uint32_t reset_cycles = 50;
+  uint32_t core_clock_half_period = 1;
+  uint32_t accelerator_clock_half_period = 1;
   uint32_t seed = 0;
   uint64_t max_cycles = -1;
   uint64_t fork_interval = 10000; // default: 10 seconds
