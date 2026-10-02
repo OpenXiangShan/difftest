@@ -42,8 +42,13 @@ private:
   uint64_t core_max_instr[NUM_CORES];
   uint32_t lasttime_poll = 0;
   uint32_t elapsed_time;
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  uint64_t accelerator_clock_phase = 0;
+  unsigned accelerator_clock_level = 0;
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 
   inline void reset_ncycles(size_t cycles);
+  inline void verilator_half_cycle(unsigned core_clock_level);
   inline void single_cycle();
   void trigger_stat_dump();
   void display_stats();

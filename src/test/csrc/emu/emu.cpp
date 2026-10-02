@@ -78,6 +78,11 @@ Emulator::Emulator(int argc, const char *argv[])
   srand48(args.seed);
   Verilated::randSeed(args.seed);
   Verilated::randReset(2);
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  dut_ptr->set_clock(0);
+  dut_ptr->set_accelerator_clock(0);
+  dut_ptr->step();
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 #endif // VERILATOR
 
   // init remote-bitbang
@@ -298,8 +303,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     dut_ptr->set_reset(1);
 
 #ifdef VERILATOR
-    dut_ptr->set_clock(1);
-    dut_ptr->step();
+    verilator_half_cycle(1);
 #endif // VERILATOR
 
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
@@ -307,8 +311,7 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     }
 
 #ifdef VERILATOR
-    dut_ptr->set_clock(0);
-    dut_ptr->step();
+    verilator_half_cycle(0);
 #endif // VERILATOR
 
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
@@ -327,14 +330,29 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   }
 }
 
+inline void Emulator::verilator_half_cycle(unsigned core_clock_level) {
+#ifdef VERILATOR
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  accelerator_clock_phase += args.core_clock_half_period;
+  while (accelerator_clock_phase >= args.accelerator_clock_half_period) {
+    accelerator_clock_phase -= args.accelerator_clock_half_period;
+    accelerator_clock_level ^= 1;
+    dut_ptr->set_accelerator_clock(accelerator_clock_level);
+    dut_ptr->step();
+  }
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
+  dut_ptr->set_clock(core_clock_level);
+  dut_ptr->step();
+#endif // VERILATOR
+}
+
 inline void Emulator::single_cycle() {
   if (args.trace_name && args.trace_is_read) {
     goto end_single_cycle;
   }
 
 #ifdef VERILATOR
-  dut_ptr->set_clock(1);
-  dut_ptr->step();
+  verilator_half_cycle(1);
 #endif // VERILATOR
 
   if (args.enable_waveform) {
@@ -361,8 +379,7 @@ inline void Emulator::single_cycle() {
   dut_ptr->step_uart();
 
 #ifdef VERILATOR
-  dut_ptr->set_clock(0);
-  dut_ptr->step();
+  verilator_half_cycle(0);
 #endif // VERILATOR
 
   if (args.enable_waveform && args.enable_waveform_full) {
@@ -716,6 +733,10 @@ void Emulator::snapshot_save() {
 
 void Emulator::snapshot_load(const char *filename) {
   auto snapshot_read = dut_ptr->snapshot_load(filename);
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  accelerator_clock_level = dut_ptr->get_accelerator_clock();
+  accelerator_clock_phase = 0;
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 
   long size;
   snapshot_read(&size, sizeof(size));
