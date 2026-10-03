@@ -498,7 +498,23 @@ public:
   bool get_valid(const DifftestAmuFinishEvent &probe) override;
   void clear_valid(DifftestAmuFinishEvent &probe) override;
   int check(const DifftestAmuFinishEvent &probe) override;
+
+private:
+  void record_writeback(DiffState::AmeInstRobEntry &entry, const DifftestAmuFinishEvent &probe);
+  int execute_mrelease(const DifftestAmuCtrlEvent &event, const DifftestAmuFinishEvent &probe);
 };
+
+#ifdef CONFIG_DIFFTEST_AMUHASHEVENT
+class AmuHashExecRecorder : public ProbeChecker<DifftestAmuHashEvent> {
+public:
+  AmuHashExecRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuHashEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestAmuHashEvent &probe) override;
+  void clear_valid(DifftestAmuHashEvent &probe) override;
+  int check(const DifftestAmuHashEvent &probe) override;
+};
+#endif
 
 class AmuExecChecker : public DiffTestChecker {
 public:
