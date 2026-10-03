@@ -546,6 +546,12 @@ class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
 
+class DiffAmuHashEvent extends AmuHashFinishEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "amu_hash_finish"
+
+  override val squashGroup: Seq[String] = Seq("MATRIX")
+}
+
 class DiffMsyncEvent extends MsyncEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "msync"
 

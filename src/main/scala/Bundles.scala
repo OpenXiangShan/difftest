@@ -451,6 +451,16 @@ class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends Dif
   val finish = Bool()
 }
 
+// Compact completion record used by load/zero instructions.  The full
+// AmuFinishEvent is intentionally retained for MMA, whose result is consumed
+// by the asynchronous numerical verifier.
+class AmuHashFinishEvent extends DifftestBaseBundle with HasValid {
+  val pc = UInt(64.W)
+  val hashLo = UInt(64.W)
+  val hashHi = UInt(64.W)
+  val byteCount = UInt(32.W)
+}
+
 class MsyncEvent extends DifftestBaseBundle with HasValid {
   val op = UInt(2.W) // 0: msyncregreset, 1: macquire, 2: mfence
   val msyncRd = UInt(5.W)
