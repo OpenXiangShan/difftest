@@ -1,7 +1,8 @@
-package difftest
+package difftest.common
 
 import chisel3._
 import chisel3.util._
+import difftest.{DiffAmuFinishEvent, DiffAmuHashEvent, DifftestModule}
 
 /** A position-bound fingerprint of accepted matrix-register writes, before Gateway/FPGA transport.
   *
