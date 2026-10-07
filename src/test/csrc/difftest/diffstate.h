@@ -153,9 +153,6 @@ public:
     uint64_t origin_lowdata;
     uint64_t origin_highdata;
     uint16_t origin_mask;
-#ifdef CONFIG_DIFFTEST_SQUASH
-    uint32_t stamp;
-#endif
   } StoreCommit;
 
   std::queue<StoreCommit> store_event_queue;

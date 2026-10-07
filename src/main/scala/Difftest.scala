@@ -440,7 +440,7 @@ class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithInd
   override val desiredCppName: String = "store"
 }
 
-private[difftest] class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
+private[difftest] class DiffStoreEventQueue extends DiffStoreEvent with DiffTestIsInherited {
   override val squashQueue: Boolean = true
 }
 

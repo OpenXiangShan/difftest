@@ -61,7 +61,7 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
   val commitSum = VecInit.tabulate(numCores) { id =>
     val commitCnt =
       commits.slice(id * commitLen, (id + 1) * commitLen).map { c =>
-        Mux(c.valid && !c.bits.skip, 1.U + c.bits.nFused, 0.U)
+        Mux(c.valid && !c.bits.skip && !c.bits.isLatterArchEvent, 1.U + c.bits.nFused, 0.U)
       }
     VecInit.tabulate(commitLen) { idx =>
       commitCnt.take(idx + 1).reduce(_ + _)
@@ -98,10 +98,7 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
   val storeQueues = stores.map { st =>
     val sq = WireInit(0.U.asTypeOf(Valid(new DiffStoreEventQueue)))
     sq.inheritFrom(st)
-    val base = stamp(sq.bits.coreid)
-    val inc = commitSum(sq.bits.coreid).last
-    // If no instr committed in the same cycle, store event will be checked in next commit
-    sq.bits.stamp := Mux(inc === 0.U, base + 1.U, base + inc)
+    // Stores are checked after the whole commit batch, without per-instruction stamps.
     sq
   }
 
