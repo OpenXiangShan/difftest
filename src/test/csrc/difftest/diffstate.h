@@ -162,6 +162,10 @@ public:
   std::queue<StoreCommit> store_event_queue;
 #endif // CONFIG_DIFFTEST_STOREEVENT
 
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  std::queue<DifftestStoreHashEvent> store_hash_queue;
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
+
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
   std::unordered_set<uint64_t> cmo_inval_event_set;
 #endif
