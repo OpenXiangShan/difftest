@@ -18,6 +18,7 @@
 #define __DIFFSTATE_H__
 
 #include "common.h"
+#include "matrix_hash.h"
 #include <cstdint>
 #include <deque>
 #include <queue>
@@ -179,11 +180,16 @@ public:
     WAIT_SWROB_COMMIT // Waiting for the software ROB to commit the result.
   };
 
-  typedef struct {
+  struct AmeInstRobEntry {
+    explicit AmeInstRobEntry(const DifftestAmuCtrlEvent &event)
+        : amu_event(event), state(WAIT_REF_COMMIT), res(nullptr), res_words(0) {}
+
     DifftestAmuCtrlEvent amu_event;
     AmeInstState state;
     uint64_t *res;
-  } AmeInstRobEntry;
+    size_t res_words;
+    MatrixHash128 hash{};
+  };
 
   std::deque<AmeInstRobEntry> matrix_sw_rob;
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

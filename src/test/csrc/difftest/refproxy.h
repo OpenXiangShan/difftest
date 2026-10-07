@@ -175,6 +175,7 @@ public:
   f(ref_msync_event, difftest_msync_event, int, void*)                                                      \
   f(ref_get_msync_event_other_info, difftest_get_msync_event_other_info, void, void*)                       \
   f(ref_amu_exec, difftest_amu_exec, int, void*, void*)                                                     \
+  f(ref_amu_exec_hash, difftest_amu_exec_hash, int, void*, void*)                                           \
   f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
@@ -443,7 +444,7 @@ public:
     }
   }
 
-  inline int get_amu_exec(struct AmuCtrlEvent *amu_ctrl, void *matrix) {
+  inline int exec_amu(struct AmuCtrlEvent *amu_ctrl, void *matrix = nullptr) {
     if (ref_amu_exec) {
       return ref_amu_exec(amu_ctrl, matrix);
     } else {
@@ -452,7 +453,16 @@ public:
     }
   }
 
-  inline int get_amu_lazy(struct AmuCtrlEvent *amu_ctrl, void *res, void *src1, void *src2, void *src3) {
+  inline int exec_amu_hash(struct AmuCtrlEvent *amu_ctrl, struct MatrixHash128 *result) {
+    if (ref_amu_exec_hash) {
+      return ref_amu_exec_hash(amu_ctrl, result);
+    } else {
+      report_unsupported_ref("AME result hash");
+      return 1;
+    }
+  }
+
+  inline int exec_amu_lazy(struct AmuCtrlEvent *amu_ctrl, void *res, void *src1, void *src2, void *src3) {
     if (ref_amu_lazy) {
       ref_amu_lazy(amu_ctrl, res, src1, src2, src3);
       return 0;

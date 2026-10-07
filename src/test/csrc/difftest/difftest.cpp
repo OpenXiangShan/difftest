@@ -450,6 +450,12 @@ void Difftest::init_checkers() {
     checkers.push_back(
         new AmuExecRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
   }
+#ifdef CONFIG_DIFFTEST_AMUHASHEVENT
+  for (int i = 0; i < CONFIG_DIFF_AMU_HASH_FINISH_WIDTH; ++i) {
+    checkers.push_back(new AmuHashExecRecorder(
+        [this, i]() -> DifftestAmuHashEvent & { return dut->amu_hash_finish[i]; }, state, proxy));
+  }
+#endif
   checkers.push_back(new AmuExecChecker(state, proxy));
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
