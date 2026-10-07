@@ -28,11 +28,16 @@
 #include <xmmintrin.h>
 #endif
 
-#define MEMPOOL_SIZE    16384 * 1024 // 16M memory
+#ifndef MEMPOOL_SIZE
+#define MEMPOOL_SIZE 16384 * 1024 // Nominal size; MemoryIdxPool allocates packet-sized slots.
+#endif
 #define MEMBLOCK_SIZE   4096         // 4K packge
 #define NUM_BLOCKS      (MEMPOOL_SIZE / MEMBLOCK_SIZE)
 #define REM_NUM_BLOCKS  (NUM_BLOCKS - 1)
 #define MAX_WINDOW_SIZE 256
+
+static_assert(NUM_BLOCKS >= 2048 && (NUM_BLOCKS & (NUM_BLOCKS - 1)) == 0,
+              "Memory pool slot count must be a power of two with at least eight groups");
 
 class MemoryChunk {
 public:
@@ -196,6 +201,10 @@ public:
   bool check_group();
   // Wait mempool have data
   void wait_mempool_start();
+  // Terminal cancellation for the one-shot receive/process pipeline.
+  void stop_waiting() {
+    stopped.store(true, std::memory_order_release);
+  }
 
 private:
   char *memory_base = nullptr;
@@ -203,6 +212,7 @@ private:
   std::atomic<bool> memory_pool_is_free[NUM_BLOCKS]; // Mempool free status
   MemoryChunk memory_order_ptr[NUM_BLOCKS];
   std::atomic<bool> chunk_semaphore{false};
+  std::atomic<bool> stopped{false};
 
   size_t group_r_offset = 0; // The offset used by the current consumer
 

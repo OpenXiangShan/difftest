@@ -355,3 +355,20 @@ LinkedProxy::LinkedProxy(int coreid, size_t ram_size) : RefProxy(coreid, ram_siz
     assert(0);
   }
 }
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+bool RefProxy::require_fast_interfaces(bool with_store_hash) {
+  const bool execution = ref_set_exec_mode && ref_get_instr_count && ref_get_pc && ref_skip_one;
+  const bool boundary =
+      !with_store_hash || (ref_flush_state && ref_state_hash && ref_store_hash_version && ref_store_hash_enabled);
+  if (!execution || !boundary) {
+    fprintf(stderr, "FAST/fork requires a NEMU FAST_REF build with progress and boundary APIs\n");
+    return false;
+  }
+  if (with_store_hash && (ref_store_hash_version() != 1 || !ref_store_hash_enabled())) {
+    fprintf(stderr, "Fork checking requires enabled store-hash protocol version 1\n");
+    return false;
+  }
+  return true;
+}
+#endif

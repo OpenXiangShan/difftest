@@ -215,6 +215,39 @@ protected:
   uint8_t *amu_finish_buffers[CONFIG_DIFF_AMU_FINISH_WIDTH];
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+public:
+  int fast_only_finish() {
+    return fast_only_error;
+  }
+  int fork_once_check() {
+    return check_all();
+  }
+  int fork_commit_stamp() const {
+#ifdef CONFIG_DIFFTEST_SQUASH
+    return state->commit_stamp;
+#else
+    return 0;
+#endif
+  }
+
+private:
+  bool fork_window_has_event(const DiffTestState &window) const;
+  int fork_fast_apply_events(DiffTestState &window, bool &consumes_commit, bool check_critical_error = true);
+  int fast_only_step();
+  bool fast_only_initialized = false;
+  bool fast_interfaces_checked = false;
+  int fast_only_error = 0;
+#endif
+  void add_sync_checker(DiffTestChecker *checker, bool critical = false) {
+    checkers.push_back(checker);
+#ifdef CONFIG_DIFFTEST_FAST_REF
+    fast_sync_checkers.emplace_back(checker, critical);
+#endif
+  }
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  std::vector<std::pair<DiffTestChecker *, bool>> fast_sync_checkers;
+#endif
   int check_all();
 
   inline bool in_disambiguation_state() {

@@ -20,7 +20,9 @@
 #include "diffstate.h"
 #include "fpga_transport.h"
 #include "mpool.h"
+#include "rawpool.h"
 #include <atomic>
+#include <memory>
 #include <queue>
 #include <signal.h>
 #include <stdbool.h>
@@ -97,6 +99,8 @@ public:
   void stop() override {
     running = false;
 #ifdef USE_THREAD_MEMPOOL
+    if (xdma_mempool)
+      xdma_mempool->stop_waiting();
     thread_cv.notify_one();
 #endif // USE_THREAD_MEMPOOL
   }
@@ -117,7 +121,7 @@ public:
   void h2c_load_workload(const void *payload, uint64_t size) override;
 
 private:
-  bool running = false;
+  std::atomic<bool> running{false};
   int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
 #ifdef CONFIG_USE_XDMA_H2C
   int xdma_h2c_fd;
@@ -129,7 +133,9 @@ private:
 #ifdef USE_THREAD_MEMPOOL
   std::mutex thread_mtx;
   std::condition_variable thread_cv;
-  MemoryIdxPool xdma_mempool;
+  std::unique_ptr<MemoryIdxPool> xdma_mempool;
+  std::unique_ptr<RawPacketPool> raw_pool;
+  std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;
   // thread api

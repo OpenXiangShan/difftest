@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 #include "mpool.h"
+#include <algorithm>
 #include <thread>
 
 void MemoryPool::init_memory_pool() {
@@ -113,7 +114,11 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, size_t mem_idx) {
 }
 
 char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
+  if (stopped.load(std::memory_order_acquire))
+    return nullptr;
   while (chunk_semaphore.exchange(true, std::memory_order_acquire)) {
+    if (stopped.load(std::memory_order_acquire))
+      return nullptr;
     std::this_thread::yield(); // sleep_for
   }
 
@@ -126,11 +131,12 @@ char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
     *mem_idx = page_w_idx;
     return memory_pool[page_w_idx];
   }
+  chunk_semaphore.store(false, std::memory_order_release);
   return nullptr;
 }
 
 void MemoryIdxPool::wait_mempool_start() {
-  while (check_group() == false) {}
+  while (!stopped.load(std::memory_order_acquire) && check_group() == false) {}
 }
 
 char *MemoryIdxPool::read_busy_chunk() {
@@ -161,7 +167,7 @@ size_t MemoryIdxPool::wait_next_free_group() {
   size_t free_num = empty_blocks.fetch_sub(1, std::memory_order_relaxed) - 1;
   //Reserve at least two free blocks
   if (free_num <= 2) {
-    while (empty_blocks.load(std::memory_order_acquire) <= 1) {
+    while (!stopped.load(std::memory_order_acquire) && empty_blocks.load(std::memory_order_acquire) <= 1) {
       std::this_thread::sleep_for(std::chrono::nanoseconds(10));
     }
   }
@@ -172,7 +178,7 @@ size_t MemoryIdxPool::wait_next_full_group() {
   size_t free_num = empty_blocks.fetch_add(1, std::memory_order_relaxed) + 1;
 
   if (free_num >= MAX_GROUP_READ) {
-    while (empty_blocks.load(std::memory_order_acquire) >= MAX_GROUP_READ) {
+    while (!stopped.load(std::memory_order_acquire) && empty_blocks.load(std::memory_order_acquire) >= MAX_GROUP_READ) {
       std::this_thread::sleep_for(std::chrono::nanoseconds(10));
     }
   }

@@ -23,6 +23,7 @@
 #include "goldenmem.h"
 #include "mpool.h"
 #include "ram.h"
+#include "rawfork.h"
 #include "refproxy.h"
 #include "splitview.h"
 #include "xdma.h"
@@ -53,7 +54,7 @@ enum {
   FPGA_FAIL,
 } fpga_state;
 
-static uint8_t fpga_result = FPGA_RUN;
+static std::atomic<uint8_t> fpga_result{FPGA_RUN};
 static CommonArgs args;
 static const char *fpga_ddr_load_cmd = nullptr;
 static const char *fpga_ila_arm_cmd = nullptr;
@@ -229,6 +230,13 @@ void fpga_init() {
 }
 
 void fpga_finish() {
+  if (difftest_raw_fork_enabled()) {
+    if (signal_num || fpga_result != FPGA_GOODTRAP)
+      g_raw_packet_pool->fail();
+    if (difftest_raw_fork_finish())
+      fpga_result = FPGA_FAIL;
+  }
+
   delete xdma_device;
 
   if (signal_num == 0) {
@@ -278,6 +286,8 @@ void fpga_display_result(int ret) {
 int fpga_get_result(uint8_t step) {
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
+  if (difftest_raw_fork_is_child())
+    return FPGA_RUN;
   if (trapCode != STATE_RUNNING) {
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
     fpga_ila_triggered = true;
@@ -358,8 +368,23 @@ extern "C" void fpga_nstep(uint8_t step) {
     return;
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
+    if (difftest_raw_fork_enabled())
+      printf("FastEndpoint Result=%d\n", ret);
+    if (ret != FPGA_GOODTRAP && g_raw_packet_pool)
+      g_raw_packet_pool->fail();
+    if (difftest_raw_fork_finish())
+      ret = FPGA_FAIL;
     fpga_display_result(ret);
     fpga_result = ret;
     xdma_device->stop();
   }
+}
+
+void fpga_raw_fork_abort() {
+  fpga_result = FPGA_FAIL;
+  if (g_raw_packet_pool)
+    g_raw_packet_pool->fail();
+  difftest_raw_fork_finish();
+  fpga_display_result(FPGA_FAIL);
+  xdma_device->stop();
 }

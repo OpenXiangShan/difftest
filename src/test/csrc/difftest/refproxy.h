@@ -97,6 +97,15 @@ enum {
   DUT_TO_REF
 };
 
+struct DifftestStateHash {
+  uint64_t state_lo, state_hi;
+  uint64_t store_lo, store_hi, store_count;
+};
+enum RefExecMode {
+  REF_EXEC_FAST = 0,
+  REF_EXEC_SLOW = 1
+};
+
 class RefProxyConfig {
 public:
   bool ignore_illegal_mem_access = false;
@@ -145,7 +154,22 @@ public:
   REF_STORE_LOG(f)  \
   REF_DEBUG_MODE(f)
 
-#define REF_OPTIONAL(f)                                                                                     \
+// Resolve this group optionally; require it once only when FAST/fork is selected.
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#define REF_FAST(f) \
+  f(ref_set_exec_mode, difftest_set_exec_mode, void, int) \
+  f(ref_get_instr_count, difftest_get_instr_count, uint64_t, ) \
+  f(ref_get_pc, difftest_get_pc, uint64_t, ) \
+  f(ref_flush_state, difftest_flush_state, void, ) \
+  f(ref_state_hash, difftest_state_hash, void, void*) \
+  f(ref_store_hash_version, difftest_store_hash_version, uint32_t, ) \
+  f(ref_store_hash_enabled, difftest_store_hash_enabled, bool, )
+#else
+#define REF_FAST(f)
+#endif
+
+#define REF_OPTIONAL(f) \
+  REF_FAST(f)                                                                                     \
   f(ref_init_v2, difftest_init_v2, void, unsigned)                                                          \
   f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
   f(load_flash_bin_v2, difftest_load_flash_v2, void, const uint8_t*, size_t)                                \
@@ -254,13 +278,34 @@ public:
     ref_regcpy(&state.xrf, is_from_dut, is_from_dut);
   }
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  bool require_fast_interfaces(bool with_store_hash);
+  inline void set_exec_mode(int mode) {
+    ref_set_exec_mode(mode);
+  }
+  inline uint64_t get_instr_count() {
+    return ref_get_instr_count();
+  }
+  inline void flush_state() {
+    ref_flush_state();
+  }
+  inline uint64_t get_pc() {
+    return ref_get_pc();
+  }
+  inline DifftestStateHash state_hash() {
+    DifftestStateHash hash{};
+    ref_state_hash(&hash);
+    return hash;
+  }
+#endif
+
   void regcpy(const DiffTestRegState *regs, uint64_t pc);
   int compare(DiffTestState *dut);
   void display(DiffTestState *dut = nullptr);
 
   inline void skip_one(bool isRVC, bool rfwen, bool fpwen, bool vecwen, uint32_t wdest, uint64_t wdata) {
     bool wen = rfwen | fpwen;
-    if (ref_skip_one) {
+    if (ref_skip_one && !fpwen && !vecwen) {
       ref_skip_one(isRVC, wen, wdest, wdata);
     } else {
       sync();

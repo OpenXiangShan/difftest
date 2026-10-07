@@ -15,6 +15,9 @@
 ***************************************************************************************/
 
 #include "difftest.h"
+#ifdef FPGA_HOST
+#include "rawfork.h"
+#endif
 #include "common.h"
 #include "difftrace.h"
 #include "dut.h"
@@ -39,6 +42,10 @@ Difftest **difftest = NULL;
 static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
+#ifdef FPGA_HOST
+  if (difftest_raw_fork_is_child())
+    _Exit(128 + signo);
+#endif
   if (signo != SIGINT) {
     common_splitview_force_cleanup();
     if (difftest != NULL) {
@@ -415,27 +422,28 @@ void Difftest::init_checkers() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-  checkers.push_back(new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy));
+  add_sync_checker(new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy));
 #endif
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  checkers.push_back(new NonRegInterruptPendingChecker(
+  add_sync_checker(new NonRegInterruptPendingChecker(
       [this]() -> DifftestNonRegInterruptPendingEvent & { return dut->non_reg_interrupt_pending; }, state, proxy));
 #endif
 
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  checkers.push_back(new MhpmeventOverflowChecker(
+  add_sync_checker(new MhpmeventOverflowChecker(
       [this]() -> DifftestMhpmeventOverflowEvent & { return dut->mhpmevent_overflow; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  checkers.push_back(
-      new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy));
+  add_sync_checker(
+      new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy),
+      true);
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  checkers.push_back(new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy));
+  add_sync_checker(new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  checkers.push_back(new CustomMflushpwrChecker(
+  add_sync_checker(new CustomMflushpwrChecker(
       [this]() -> DifftestSyncCustomMflushpwrEvent & { return dut->sync_custom_mflushpwr; }, state, proxy));
 #endif
 
@@ -572,6 +580,20 @@ void Difftest::do_replay() {
 #endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
+#ifdef FPGA_HOST
+  if (difftest_raw_fork_is_child())
+    return difftest_raw_fork_check(this);
+#endif
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  static const char *fast = getenv("DIFFTEST_FAST_ONLY");
+  if ((fast && strcmp(fast, "1") == 0)
+#ifdef FPGA_HOST
+      || difftest_raw_fork_enabled()
+#endif
+  )
+    return fast_only_step();
+#endif
+
 #ifdef CONFIG_DIFFTEST_REPLAY
   static int replay_step = 0;
   if (replay_status.in_replay) {
