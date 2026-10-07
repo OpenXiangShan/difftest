@@ -20,6 +20,15 @@
 #include <cstdint>
 #include <sys/types.h>
 
+#ifdef CONFIG_DIFFTEST_SQUASH
+static inline bool store_stamp_pending(uint32_t stamp, uint32_t commit_stamp) {
+  // Wait only on the forward half of the ring; a reached or passed stamp is ready.
+  const uint32_t distance =
+      (stamp + CONFIG_DIFFTEST_SQUASH_STAMPSIZE - commit_stamp) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+  return distance != 0 && distance < CONFIG_DIFFTEST_SQUASH_STAMPSIZE / 2;
+}
+#endif // CONFIG_DIFFTEST_SQUASH
+
 #ifdef CONFIG_DIFFTEST_STOREEVENT
 
 // Expand an 8-bit mask to a 64-bit wide data mask, like from 0x99 to 0xFF0000FF'FF0000FF
@@ -38,6 +47,7 @@ static uint64_t MaskExpand(uint8_t mask) {
 bool StoreRecorder::get_valid(const DifftestStoreEvent &probe) {
   return probe.valid;
 }
+
 void StoreRecorder::clear_valid(DifftestStoreEvent &probe) {
   probe.valid = 0;
 }
@@ -63,6 +73,10 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
   auto wLine = probe.wLine;
 
   if (vecNeedSplit) {
+    if (eew != 1 && eew != 2 && eew != 4 && eew != 8) {
+      printf("[Store] invalid vector EEW: %u at pc=0x%016lx\n", static_cast<unsigned>(eew), pc);
+      return STATE_ERROR;
+    }
     // 1. separate a store event into multiple eew-width elements.
     // 2. for each element, check whether it crosses a 8B boundary.
     // 3. if it crosses a 8B boundary, split it into two sub commits,
@@ -203,13 +217,7 @@ int StoreChecker::check() {
   while (!state->store_event_queue.empty()) {
     auto &probe = state->store_event_queue.front();
 #ifdef CONFIG_DIFFTEST_SQUASH
-    // Stamps are modulo CONFIG_DIFFTEST_SQUASH_STAMPSIZE. Wait only when the
-    // store is ahead of NEMU on the forward half of the stamp ring; once NEMU
-    // has reached or passed it, the non-precise checkpoint may be consumed.
-    const uint32_t stampDistance =
-        (probe.stamp + CONFIG_DIFFTEST_SQUASH_STAMPSIZE - static_cast<uint32_t>(state->commit_stamp)) %
-        CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
-    if (stampDistance != 0 && stampDistance < CONFIG_DIFFTEST_SQUASH_STAMPSIZE / 2) {
+    if (store_stamp_pending(probe.stamp, state->commit_stamp)) {
       return STATE_OK;
     }
 #endif // CONFIG_DIFFTEST_SQUASH
@@ -243,4 +251,37 @@ int StoreChecker::check() {
 
   return STATE_OK;
 }
+
 #endif // CONFIG_DIFFTEST_STOREEVENT
+
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+bool StoreHashRecorder::get_valid(const DifftestStoreHashEvent &probe) {
+  return probe.valid;
+}
+
+void StoreHashRecorder::clear_valid(DifftestStoreHashEvent &probe) {
+  probe.valid = 0;
+}
+
+int StoreHashRecorder::check(const DifftestStoreHashEvent &probe) {
+  state->store_hash_queue.push(probe);
+  return STATE_OK;
+}
+
+int StoreHashChecker::check() {
+  while (!state->store_hash_queue.empty()) {
+    const auto &probe = state->store_hash_queue.front();
+#ifdef CONFIG_DIFFTEST_SQUASH
+    if (store_stamp_pending(probe.stamp, state->commit_stamp)) {
+      return STATE_OK;
+    }
+#endif // CONFIG_DIFFTEST_SQUASH
+    if (proxy->store_commit_hash(probe.record_count, probe.hash_lo, probe.hash_hi, probe.instr_begin,
+                                 probe.instr_end)) {
+      return STATE_ERROR;
+    }
+    state->store_hash_queue.pop();
+  }
+  return STATE_OK;
+}
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT

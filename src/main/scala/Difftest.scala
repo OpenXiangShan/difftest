@@ -20,6 +20,7 @@ import chisel3._
 import chisel3.reflect.DataMirror
 import circt.stage.FirtoolOption
 import chisel3.util._
+import difftest.util.StoreHash
 import difftest.common.FileControl
 import difftest.gateway.{Gateway, GatewayConfig, GatewayResult}
 import difftest.util.Profile
@@ -39,6 +40,8 @@ trait DifftestWithIndex {
 trait DifftestWithStamp {
   val stamp = UInt(16.W)
 }
+
+trait DifftestHash
 
 trait DiffTestIsInherited { this: DifftestBundle =>
   def inheritFrom[T <: DifftestBundle](parent: T): Unit = {
@@ -442,6 +445,37 @@ class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithInd
 
 private[difftest] class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
   override val squashQueue: Boolean = true
+}
+
+// Internal queue event for accumulating store hashes during squash.
+private[difftest] class DiffStoreHashEventQueue
+  extends StoreHashEvent
+  with DifftestBundle
+  with DifftestWithStamp
+  with DifftestHash {
+  override val desiredCppName: String = "store_hash"
+  override val squashQueue: Boolean = true
+
+  override def supportsSquashBase: Bool = true.B
+  override def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = {
+    val that = base.asInstanceOf[DiffStoreHashEventQueue]
+    !valid || !that.valid || !(record_count +& that.record_count)(record_count.getWidth)
+  }
+
+  override def squash(base: DifftestBundle): DifftestBundle = {
+    val that = base.asInstanceOf[DiffStoreHashEventQueue]
+    val squashed = WireInit(Mux(valid, this, that))
+    squashed.valid := valid || that.valid
+    when(valid) {
+      val seed = Mux(that.valid, that.hash_lo, StoreHash.crc.seed)
+      squashed.hash_lo := StoreHash.crc
+        .advance(seed, record_count, StoreHash.MaxLanes * StoreHash.MaxRecords) ^ hash_lo
+      squashed.record_count := Mux(that.valid, that.record_count, 0.U) + record_count
+      squashed.instr_begin := Mux(that.valid, that.instr_begin, instr_begin)
+      squashed.stamp := Mux(that.valid, StoreHash.latestStamp(that.stamp, stamp), stamp)
+    }
+    squashed
+  }
 }
 
 class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex {
