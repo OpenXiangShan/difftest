@@ -349,20 +349,25 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.cpu_axi_delay = static_cast<uint32_t>(cpu_axi_delay);
         continue;
       }
-      case OPT_CORE_CLOCK_HALF_PERIOD:
-        args.core_clock_half_period = atoll_strict(optarg, "core-clock-half-period");
-        if (args.core_clock_half_period == 0) {
-          printf("[ERROR] --core-clock-half-period must be greater than zero\n");
+      case OPT_CORE_CLOCK_HALF_PERIOD: {
+        long long core_clock_half_period = atoll_strict(optarg, "core-clock-half-period");
+        if (core_clock_half_period < 1 || static_cast<unsigned long long>(core_clock_half_period) > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --core-clock-half-period must be in range [1, %" PRIu32 "]\n", UINT32_MAX);
           exit(EINVAL);
         }
+        args.core_clock_half_period = static_cast<uint32_t>(core_clock_half_period);
         continue;
-      case OPT_ACCELERATOR_CLOCK_HALF_PERIOD:
-        args.accelerator_clock_half_period = atoll_strict(optarg, "accelerator-clock-half-period");
-        if (args.accelerator_clock_half_period == 0) {
-          printf("[ERROR] --accelerator-clock-half-period must be greater than zero\n");
+      }
+      case OPT_ACCELERATOR_CLOCK_HALF_PERIOD: {
+        long long accelerator_clock_half_period = atoll_strict(optarg, "accelerator-clock-half-period");
+        if (accelerator_clock_half_period < 1 ||
+            static_cast<unsigned long long>(accelerator_clock_half_period) > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --accelerator-clock-half-period must be in range [1, %" PRIu32 "]\n", UINT32_MAX);
           exit(EINVAL);
         }
+        args.accelerator_clock_half_period = static_cast<uint32_t>(accelerator_clock_half_period);
         continue;
+      }
       case 's':
         if (std::string(optarg) != "NO_SEED") {
           args.seed = atoll_strict(optarg, "seed");

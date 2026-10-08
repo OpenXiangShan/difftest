@@ -333,16 +333,32 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 inline void Emulator::verilator_half_cycle(unsigned core_clock_level) {
 #ifdef VERILATOR
 #ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  bool accelerator_edge_at_core_edge = false;
   accelerator_clock_phase += args.core_clock_half_period;
   while (accelerator_clock_phase >= args.accelerator_clock_half_period) {
     accelerator_clock_phase -= args.accelerator_clock_half_period;
     accelerator_clock_level ^= 1;
     dut_ptr->set_accelerator_clock(accelerator_clock_level);
+
+    if (accelerator_clock_phase == 0) {
+      // Both clock edges occur at the same simulated time. Update both inputs
+      // before a single evaluation to avoid imposing an accelerator-first order.
+      dut_ptr->set_clock(core_clock_level);
+      dut_ptr->step();
+      accelerator_edge_at_core_edge = true;
+    } else {
+      dut_ptr->step();
+    }
+  }
+
+  if (!accelerator_edge_at_core_edge) {
+    dut_ptr->set_clock(core_clock_level);
     dut_ptr->step();
   }
-#endif // CONFIG_HAS_ACCELERATOR_CLOCK
+#else
   dut_ptr->set_clock(core_clock_level);
   dut_ptr->step();
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 #endif // VERILATOR
 }
 
