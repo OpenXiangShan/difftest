@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.

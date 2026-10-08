@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -16,14 +16,13 @@
 #include "difftest.h"
 #include "flash.h"
 #include "ram.h"
-#include <algorithm>
 #include <cstdlib>
 #ifdef FPGA_HOST
-#include "rawfork.h"
+#include "ref_fork.h"
 #endif
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
-bool Difftest::fork_window_has_event(const DiffTestState &window) const {
+bool Difftest::fast_window_has_event(const DiffTestState &window) const {
   if (window.event.valid)
     return true;
   // WFI and the final trap are architectural boundaries: a large ref_exec(n)
@@ -63,7 +62,7 @@ bool Difftest::fork_window_has_event(const DiffTestState &window) const {
   return false;
 }
 
-static void fork_clear_event_valids(DiffTestState &window) {
+static void clear_fast_events(DiffTestState &window) {
   window.event.valid = 0;
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
   window.lrsc.valid = 0;
@@ -85,11 +84,7 @@ static void fork_clear_event_valids(DiffTestState &window) {
 #endif
 }
 
-int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_consumes_commit,
-                                     bool check_critical_error) {
-  DiffTestState *saved_dut = dut;
-  dut = &window;
-  arch_event_consumes_commit = window.event.valid;
+int Difftest::fast_apply_events() {
   int ret = DiffTestChecker::STATE_OK;
 
   // Keep the same ordering as check_all(): synchronization probes are applied
@@ -101,10 +96,10 @@ int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_con
   };
   for (const auto &[checker, critical]: fast_sync_checkers) {
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-    if (critical && !check_critical_error) {
-      if (window.critical_error.valid) {
+    if (critical) {
+      if (dut->critical_error.valid) {
         proxy->raise_critical_error();
-        window.critical_error.valid = 0;
+        dut->critical_error.valid = 0;
       }
       continue;
     }
@@ -113,7 +108,6 @@ int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_con
   }
   apply(arch_event_checker);
 
-  dut = saved_dut;
   return ret;
 }
 
@@ -123,7 +117,7 @@ int Difftest::fork_fast_apply_events(DiffTestState &window, bool &arch_event_con
 int Difftest::fast_only_step() {
   bool fork_check = false;
 #ifdef FPGA_HOST
-  fork_check = difftest_raw_fork_enabled();
+  fork_check = difftest_ref_fork_enabled();
 #endif
   if (!fast_interfaces_checked) {
     if (!proxy->require_fast_interfaces(fork_check))
@@ -138,7 +132,7 @@ int Difftest::fast_only_step() {
     for (const auto &commit: dut->commit)
       has_commit |= commit.valid;
     if (!has_commit) {
-      fork_clear_event_valids(*dut);
+      clear_fast_events(*dut);
       return DiffTestChecker::STATE_OK;
     }
     // Establish the same initial state as FirstInstrCommitChecker before fork.
@@ -152,17 +146,17 @@ int Difftest::fast_only_step() {
   }
 #ifdef FPGA_HOST
   if (fork_check) {
-    const int ret = difftest_raw_fork_prepare(this);
+    const int ret = difftest_ref_fork_prepare(this);
     if (ret == 1)
-      return difftest_raw_fork_check(this);
+      return difftest_ref_fork_check(this);
     if (ret)
       return DiffTestChecker::STATE_ERROR;
   }
 #endif
 
-  bool consumes_commit = false;
-  if (fork_window_has_event(*dut)) {
-    const int ret = fork_fast_apply_events(*dut, consumes_commit, false);
+  const bool consumes_commit = dut->event.valid;
+  if (fast_window_has_event(*dut)) {
+    const int ret = fast_apply_events();
     if (ret)
       return ret;
   }
@@ -213,7 +207,7 @@ int Difftest::fast_only_step() {
     }
   }
 #ifdef FPGA_HOST
-  difftest_raw_fork_publish(this);
+  difftest_ref_fork_publish(this);
 #endif
   for (auto &commit: dut->commit)
     commit.valid = 0;

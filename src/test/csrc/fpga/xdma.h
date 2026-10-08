@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -20,7 +20,7 @@
 #include "diffstate.h"
 #include "fpga_transport.h"
 #include "mpool.h"
-#include "rawpool.h"
+#include "shared_packet_pool.h"
 #include <atomic>
 #include <memory>
 #include <queue>
@@ -99,8 +99,8 @@ public:
   void stop() override {
     running = false;
 #ifdef USE_THREAD_MEMPOOL
-    if (xdma_mempool)
-      xdma_mempool->stop_waiting();
+    if (indexed_packet_pool)
+      indexed_packet_pool->stop_waiting();
     thread_cv.notify_one();
 #endif // USE_THREAD_MEMPOOL
   }
@@ -133,8 +133,8 @@ private:
 #ifdef USE_THREAD_MEMPOOL
   std::mutex thread_mtx;
   std::condition_variable thread_cv;
-  std::unique_ptr<MemoryIdxPool> xdma_mempool;
-  std::unique_ptr<RawPacketPool> raw_pool;
+  std::unique_ptr<MemoryIdxPool> indexed_packet_pool;
+  std::unique_ptr<SharedPacketPool> shared_packet_pool;
   std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;

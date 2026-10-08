@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -23,7 +23,7 @@
 #include "goldenmem.h"
 #include "mpool.h"
 #include "ram.h"
-#include "rawfork.h"
+#include "ref_fork.h"
 #include "refproxy.h"
 #include "splitview.h"
 #include "xdma.h"
@@ -230,10 +230,10 @@ void fpga_init() {
 }
 
 void fpga_finish() {
-  if (difftest_raw_fork_enabled()) {
+  if (difftest_ref_fork_enabled()) {
     if (signal_num || fpga_result != FPGA_GOODTRAP)
-      g_raw_packet_pool->fail();
-    if (difftest_raw_fork_finish())
+      g_shared_packet_pool->fail();
+    if (difftest_ref_fork_finish())
       fpga_result = FPGA_FAIL;
   }
 
@@ -286,7 +286,7 @@ void fpga_display_result(int ret) {
 int fpga_get_result(uint8_t step) {
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
-  if (difftest_raw_fork_is_child())
+  if (difftest_ref_fork_is_child())
     return FPGA_RUN;
   if (trapCode != STATE_RUNNING) {
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
@@ -368,11 +368,11 @@ extern "C" void fpga_nstep(uint8_t step) {
     return;
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
-    if (difftest_raw_fork_enabled())
+    if (difftest_ref_fork_enabled())
       printf("FastEndpoint Result=%d\n", ret);
-    if (ret != FPGA_GOODTRAP && g_raw_packet_pool)
-      g_raw_packet_pool->fail();
-    if (difftest_raw_fork_finish())
+    if (ret != FPGA_GOODTRAP && g_shared_packet_pool)
+      g_shared_packet_pool->fail();
+    if (difftest_ref_fork_finish())
       ret = FPGA_FAIL;
     fpga_display_result(ret);
     fpga_result = ret;
@@ -380,11 +380,11 @@ extern "C" void fpga_nstep(uint8_t step) {
   }
 }
 
-void fpga_raw_fork_abort() {
+void fpga_ref_fork_abort() {
   fpga_result = FPGA_FAIL;
-  if (g_raw_packet_pool)
-    g_raw_packet_pool->fail();
-  difftest_raw_fork_finish();
+  if (g_shared_packet_pool)
+    g_shared_packet_pool->fail();
+  difftest_ref_fork_finish();
   fpga_display_result(FPGA_FAIL);
   xdma_device->stop();
 }

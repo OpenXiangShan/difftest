@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -13,15 +13,13 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-#ifndef DIFFTEST_RAWPOOL_H
-#define DIFFTEST_RAWPOOL_H
+#ifndef DIFFTEST_SHARED_PACKET_POOL_H
+#define DIFFTEST_SHARED_PACKET_POOL_H
 
 #include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 #include <limits>
 #include <new>
 #include <stdexcept>
@@ -29,11 +27,13 @@
 
 // One producer, one fast reader and forked readers. Cursors name the first
 // packet still in use; publishing a cursor releases every preceding packet.
-class RawPacketPool {
+// Slow segments have disjoint windows, but can share a boundary packet.
+// Out-of-order completion can leave holes, so only a contiguous prefix is reusable.
+class SharedPacketPool {
 public:
   static constexpr unsigned MAX_READERS = 128;
   static_assert(std::atomic<uint64_t>::is_always_lock_free && std::atomic<bool>::is_always_lock_free,
-                "Shared raw cursors require lock-free atomics");
+                "Shared packet cursors require lock-free atomics");
   struct alignas(64) Reader {
     std::atomic<uint64_t> cursor{0};
     std::atomic<bool> active{false};
@@ -44,9 +44,9 @@ public:
     Reader readers[MAX_READERS];
   };
 
-  RawPacketPool(size_t count, size_t bytes) : capacity(count), packet_bytes(bytes) {
+  SharedPacketPool(size_t count, size_t bytes) : capacity(count), packet_bytes(bytes) {
     if (count < 2 || (count & (count - 1)) != 0 || bytes == 0 || count > std::numeric_limits<size_t>::max() / bytes) {
-      throw std::runtime_error("Invalid shared raw pool dimensions");
+      throw std::runtime_error("Invalid shared packet pool dimensions");
     }
     shared = static_cast<Shared *>(map(sizeof(Shared)));
     new (shared) Shared();
@@ -60,12 +60,12 @@ public:
     shared->readers[0].active.store(true);
     safe_until = capacity;
   }
-  ~RawPacketPool() {
+  ~SharedPacketPool() {
     munmap(data, capacity * packet_bytes);
     munmap(shared, sizeof(Shared));
   }
-  RawPacketPool(const RawPacketPool &) = delete;
-  RawPacketPool &operator=(const RawPacketPool &) = delete;
+  SharedPacketPool(const SharedPacketPool &) = delete;
+  SharedPacketPool &operator=(const SharedPacketPool &) = delete;
 
   char *get_free() {
     if (aborted())
@@ -88,6 +88,12 @@ public:
   void release() {
     shared->readers[reader_id].cursor.store(++consumer, std::memory_order_release);
   }
+  void finish_reader() {
+    assert(reader_id != 0);
+    // No further payload access. Reserve the ID until the parent reaps us,
+    // but stop retaining the final packet when exiting from inside its parser.
+    shared->readers[reader_id].cursor.store(UINT64_MAX, std::memory_order_release);
+  }
   unsigned add_reader() {
     for (unsigned i = 1; i < MAX_READERS; ++i) {
       if (!shared->readers[i].active.load(std::memory_order_acquire)) {
@@ -105,6 +111,7 @@ public:
   void retire_reader(unsigned id) {
     shared->readers[id].active.store(false, std::memory_order_release);
   }
+  // Includes the fast reader: new fork readers start at its retained packet.
   uint64_t retained_from() const {
     uint64_t oldest = shared->readers[0].cursor.load(std::memory_order_acquire);
     for (unsigned i = 1; i < MAX_READERS; ++i) {
@@ -114,19 +121,8 @@ public:
     }
     return oldest;
   }
-  uint64_t retained_packets() const {
-    const uint64_t oldest = retained_from();
-    const uint64_t head = shared->head.load(std::memory_order_acquire);
-    return head > oldest ? head - oldest : 0;
-  }
   uint64_t cursor() const {
     return consumer;
-  }
-  uint64_t published() const {
-    return shared->head.load(std::memory_order_acquire);
-  }
-  bool is_child() const {
-    return reader_id != 0;
   }
   bool aborted() const {
     return shared->abort.load(std::memory_order_acquire);
@@ -142,7 +138,7 @@ private:
   static void *map(size_t size) {
     void *p = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (p == MAP_FAILED)
-      throw std::runtime_error("Shared raw mmap failed");
+      throw std::runtime_error("Shared packet mmap failed");
     return p;
   }
   Shared *shared;
@@ -153,6 +149,6 @@ private:
   unsigned reader_id = 0;
 };
 
-extern RawPacketPool *g_raw_packet_pool;
+extern SharedPacketPool *g_shared_packet_pool;
 
 #endif

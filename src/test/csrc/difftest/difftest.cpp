@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -16,7 +16,7 @@
 
 #include "difftest.h"
 #ifdef FPGA_HOST
-#include "rawfork.h"
+#include "ref_fork.h"
 #endif
 #include "common.h"
 #include "difftrace.h"
@@ -43,7 +43,7 @@ static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
 #ifdef FPGA_HOST
-  if (difftest_raw_fork_is_child())
+  if (difftest_ref_fork_is_child())
     _Exit(128 + signo);
 #endif
   if (signo != SIGINT) {
@@ -581,14 +581,14 @@ void Difftest::do_replay() {
 
 int Difftest::step() {
 #ifdef FPGA_HOST
-  if (difftest_raw_fork_is_child())
-    return difftest_raw_fork_check(this);
+  if (difftest_ref_fork_is_child())
+    return difftest_ref_fork_check(this);
 #endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
   static const char *fast = getenv("DIFFTEST_FAST_ONLY");
   if ((fast && strcmp(fast, "1") == 0)
 #ifdef FPGA_HOST
-      || difftest_raw_fork_enabled()
+      || difftest_ref_fork_enabled()
 #endif
   )
     return fast_only_step();
