@@ -745,14 +745,17 @@ void Emulator::snapshot_save() {
   else
     sdcard_offset = 0;
   snapshot_write(&sdcard_offset, sizeof(sdcard_offset));
+
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  // The DUT snapshot restores the accelerator clock pin, but not this scheduler
+  // remainder. Persist it so the next half-cycle keeps the saved edge alignment.
+  snapshot_write(&accelerator_clock_phase, sizeof(accelerator_clock_phase));
+  snapshot_write(&accelerator_clock_level, sizeof(accelerator_clock_level));
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 }
 
 void Emulator::snapshot_load(const char *filename) {
   auto snapshot_read = dut_ptr->snapshot_load(filename);
-#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
-  accelerator_clock_level = dut_ptr->get_accelerator_clock();
-  accelerator_clock_phase = 0;
-#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 
   long size;
   snapshot_read(&size, sizeof(size));
@@ -787,6 +790,20 @@ void Emulator::snapshot_load(const char *filename) {
 
   long sdcard_offset = 0;
   snapshot_read(&sdcard_offset, sizeof(sdcard_offset));
+
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  snapshot_read(&accelerator_clock_phase, sizeof(accelerator_clock_phase));
+  unsigned saved_accelerator_clock_level = 0;
+  snapshot_read(&saved_accelerator_clock_level, sizeof(saved_accelerator_clock_level));
+  accelerator_clock_level = dut_ptr->get_accelerator_clock();
+  if (accelerator_clock_phase >= args.accelerator_clock_half_period ||
+      saved_accelerator_clock_level != accelerator_clock_level) {
+    printf("Invalid accelerator clock snapshot: phase=%" PRIu64 " level=%u, DUT level=%u, half-period=%" PRIu32 "\n",
+           accelerator_clock_phase, saved_accelerator_clock_level, accelerator_clock_level,
+           args.accelerator_clock_half_period);
+    assert(0);
+  }
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 
   if (fp)
     fseek(fp, sdcard_offset, SEEK_SET);
