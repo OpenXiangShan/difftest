@@ -288,6 +288,9 @@ class StoreEvent extends DifftestBaseBundle with HasValid {
   val vecNeedSplit = Bool()
   val eew = UInt(8.W)
   val offset = UInt(16.W)
+  // Entry instruction count minus one. Older DUT producers may omit this connection;
+  // DifftestModule supplies zero, which retains the legacy fallback.
+  val storeOffset = UInt(8.W)
   val pc = UInt(64.W)
   val robidx = UInt(10.W)
 }

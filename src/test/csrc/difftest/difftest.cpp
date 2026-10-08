@@ -337,7 +337,7 @@ void Difftest::init_checkers() {
   checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
                                                  proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
-  // Record stores each cycle; check them after the complete instruction batch.
+  // Record stores each cycle; checking waits for their stamps or the complete non-squash batch.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   for (int i = 0; i < CONFIG_DIFF_STORE_WIDTH; i++) {
     checkers.push_back(new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy));
@@ -468,6 +468,9 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_checker = new StoreChecker(state, proxy);
+#ifdef CONFIG_DIFFTEST_SQUASH
+  inst_op_checkers.push_back(store_checker);
+#endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_STOREEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   inst_op_checkers.push_back(new MsyncChecker(state, proxy));
@@ -690,16 +693,16 @@ inline int Difftest::check_all() {
     }
   }
 
-#ifdef CONFIG_DIFFTEST_STOREEVENT
+#if defined(CONFIG_DIFFTEST_STOREEVENT) && !defined(CONFIG_DIFFTEST_SQUASH)
   // A preCommit store can arrive before its own slot executes. Wait for the
-  // entire batch, including any fused instructions, in both squash modes.
+  // entire batch, including any fused instructions, when stamps are unavailable.
   // An empty batch may precede the store's retirement, so retain its queue.
   if (num_commit > 0) {
     if (int ret = store_checker->step()) {
       return ret;
     }
   }
-#endif // CONFIG_DIFFTEST_STOREEVENT
+#endif // CONFIG_DIFFTEST_STOREEVENT && !CONFIG_DIFFTEST_SQUASH
 
   if (int ret = update_delayed_writeback()) {
     return ret;

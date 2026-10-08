@@ -440,7 +440,7 @@ class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithInd
   override val desiredCppName: String = "store"
 }
 
-private[difftest] class DiffStoreEventQueue extends DiffStoreEvent with DiffTestIsInherited {
+private[difftest] class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
   override val squashQueue: Boolean = true
 }
 
@@ -630,6 +630,12 @@ object DifftestModule {
     if (dontCare) {
       difftest := DontCare
       difftest.bits.getValidOption.foreach(_ := false.B)
+    }
+    // Default count-minus-one to zero for DUTs without a storeOffset connection.
+    // A producer can override it after DifftestModule returns.
+    difftest match {
+      case store: StoreEvent => store.storeOffset := 0.U
+      case _                 =>
     }
     difftest
   }
