@@ -305,8 +305,9 @@ void FpgaXdma::start_transmit_thread() {
     receive_thread[i] = std::thread(thread_wrapper<decltype(&FpgaXdma::read_xdma_thread), FpgaXdma *, int>,
                                     &FpgaXdma::read_xdma_thread, this, i);
   }
-  process_thread = std::thread(thread_wrapper<decltype(&FpgaXdma::write_difftest_thread), FpgaXdma *>,
-                               &FpgaXdma::write_difftest_thread, this);
+  if (!shared_packet_pool)
+    process_thread = std::thread(thread_wrapper<decltype(&FpgaXdma::write_difftest_thread), FpgaXdma *>,
+                                 &FpgaXdma::write_difftest_thread, this);
 }
 
 void FpgaXdma::stop_thansmit_thread() {
@@ -377,6 +378,11 @@ void FpgaXdma::read_xdma_thread(int channel) {
   receive_finished[channel].store(true, std::memory_order_release);
 }
 
+void FpgaXdma::run_ref() {
+  running = true;
+  write_difftest_thread();
+}
+
 void FpgaXdma::write_difftest_thread() {
   auto abort = [] {
     difftest_ref_fork_abort_child();
@@ -421,6 +427,11 @@ void FpgaXdma::write_difftest_thread() {
 }
 
 #else // !USE_THREAD_MEMPOOL
+
+void FpgaXdma::run_ref() {
+  running = true;
+  read_and_process();
+}
 
 void *posix_memalignd_malloc(size_t size) {
   void *ptr = nullptr;

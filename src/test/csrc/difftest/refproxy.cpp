@@ -363,7 +363,8 @@ bool RefProxy::require_exec_mode_interfaces(bool with_fork) {
     return false;
   }
 #ifdef CONFIG_DIFFTEST_FORK
-  if (with_fork && (!ref_state_hash || !ref_store_hash_enabled || !ref_store_hash_enabled())) {
+  DifftestStateHash hash{};
+  if (with_fork && !state_hash(hash)) {
     fprintf(stderr, "Fork checking requires state hash and enabled store hashing\n");
     return false;
   }

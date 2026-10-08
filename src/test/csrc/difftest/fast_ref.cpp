@@ -29,6 +29,9 @@ int Difftest::fast_apply_events() {
       if (dut->critical_error.valid) {
         proxy->raise_critical_error();
         dut->critical_error.valid = 0;
+        // A speculative endpoint; fork children still validate CriticalError.
+        state->raise_trap(STATE_GOODTRAP);
+        return DiffTestChecker::STATE_TRAP;
       }
       continue;
     }
@@ -81,8 +84,13 @@ int Difftest::fast_ref_step() {
 #endif
 
   const bool consumes_commit = dut->event.valid;
-  if (const int ret = fast_apply_events())
+  if (const int ret = fast_apply_events()) {
+#ifdef CONFIG_DIFFTEST_FORK
+    if (fork_check && ret == DiffTestChecker::STATE_TRAP && get_trap_code() == STATE_GOODTRAP)
+      difftest_ref_fork_publish(this);
+#endif
     return ret;
+  }
   uint64_t pending = 0;
   uint32_t committed = 0;
   auto execute = [&]() {

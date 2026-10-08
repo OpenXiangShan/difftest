@@ -100,6 +100,21 @@ int main(int argc, const char *argv[]) {
   fpga_init();
 
   printf("fpga init\n");
+#ifdef CONFIG_DIFFTEST_FORK
+  if (args.ref_mode == RefMode::FORK) {
+    const int role = difftest_ref_fork_start();
+    if (role < 0)
+      return 1;
+    if (role == 1) {
+      xdma_device->run_ref();
+      fflush(nullptr);
+      difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP);
+    }
+  }
+#endif
+#ifdef USE_SERIAL_PORT
+  serial_port->start();
+#endif
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
   fpga_finish();
   if (signal_num != 0) {
@@ -151,7 +166,12 @@ void fpga_init() {
   xdma_device = gbus_device;
 #else
 #ifdef CONFIG_DIFFTEST_FORK
-  xdma_device = new FpgaXdma(args.ref_mode == RefMode::FORK, args.packet_pool_slots);
+  try {
+    xdma_device = new FpgaXdma(args.ref_mode == RefMode::FORK, size_t{1} << args.packet_pool_log2);
+  } catch (const std::exception &error) {
+    fprintf(stderr, "[fpga-host] packet pool initialization failed: %s\n", error.what());
+    exit(1);
+  }
 #else
   xdma_device = new FpgaXdma();
 #endif
@@ -231,7 +251,6 @@ void fpga_init() {
     serial_port_device = "/dev/ttyUSB0";
   }
   serial_port = new SerialPort(serial_port_device);
-  serial_port->start();
 #endif // USE_SERIAL_PORT
 
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
@@ -258,10 +277,9 @@ void fpga_init() {
 
 void fpga_finish() {
   if (difftest_ref_fork_enabled()) {
-    if (signal_num || fpga_result != FPGA_GOODTRAP)
+    if (signal_num)
       g_shared_packet_pool->fail();
-    if (difftest_ref_fork_finish())
-      fpga_result = FPGA_FAIL;
+    fpga_result = difftest_ref_fork_finish() ? FPGA_FAIL : FPGA_GOODTRAP;
   }
 
   delete xdma_device;

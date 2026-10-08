@@ -164,8 +164,7 @@ public:
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
 #define REF_FORK(f) \
-  f(ref_state_hash, difftest_state_hash, void, void*) \
-  f(ref_store_hash_enabled, difftest_store_hash_enabled, bool, )
+  f(ref_state_hash, difftest_state_hash, int, void*)
 #else
 #define REF_FORK(f)
 #endif
@@ -287,10 +286,8 @@ public:
   bool require_exec_mode_interfaces(bool with_fork);
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
-  inline DifftestStateHash state_hash() {
-    DifftestStateHash hash{};
-    ref_state_hash(&hash);
-    return hash;
+  inline bool state_hash(DifftestStateHash &hash) {
+    return ref_state_hash && ref_state_hash(&hash) == 0;
   }
 #endif
 

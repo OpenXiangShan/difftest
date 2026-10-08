@@ -20,6 +20,7 @@
 #include "diffstate.h"
 #include "fpga_transport.h"
 #include "mpool.h"
+#include "ref_fork.h"
 #include "shared_packet_pool.h"
 #include <atomic>
 #include <memory>
@@ -75,6 +76,9 @@ public:
   FpgaXdma(bool shared_packets = false, size_t pool_slots = NUM_BLOCKS);
   ~FpgaXdma();
 
+  // Run the parser in the single-thread leader, without receive threads.
+  void run_ref();
+
   void start(bool enable_diff) override {
     running = true;
     if (enable_diff == false) {
@@ -86,7 +90,9 @@ public:
 #ifdef USE_THREAD_MEMPOOL
       start_transmit_thread();
       while (running && signal_num == 0) {
-        usleep(10000);
+        if (shared_packet_pool && difftest_ref_fork_idle())
+          break;
+        usleep(1000);
       }
       running = false;
       stop_thansmit_thread();

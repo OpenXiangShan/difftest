@@ -91,13 +91,12 @@ public:
     shared->readers[reader_id].cursor.store(++consumer, std::memory_order_release);
   }
   void finish_reader() {
-    assert(reader_id != 0);
     // No further payload access. Reserve the ID until the parent reaps us,
     // but stop retaining the final packet when exiting from inside its parser.
     shared->readers[reader_id].cursor.store(UINT64_MAX, std::memory_order_release);
   }
   unsigned add_reader() {
-    for (unsigned i = 1; i < MAX_READERS; ++i) {
+    for (unsigned i = 0; i < MAX_READERS; ++i) {
       if (!shared->readers[i].active.load(std::memory_order_acquire)) {
         shared->readers[i].cursor.store(consumer, std::memory_order_relaxed);
         shared->readers[i].active.store(true, std::memory_order_release);
@@ -113,10 +112,10 @@ public:
   void retire_reader(unsigned id) {
     shared->readers[id].active.store(false, std::memory_order_release);
   }
-  // Includes the fast reader: new fork readers start at its retained packet.
+  // Every active parser, including the current leader, retains its packet.
   uint64_t retained_from() const {
-    uint64_t oldest = shared->readers[0].cursor.load(std::memory_order_acquire);
-    for (unsigned i = 1; i < MAX_READERS; ++i) {
+    uint64_t oldest = shared->head.load(std::memory_order_acquire);
+    for (unsigned i = 0; i < MAX_READERS; ++i) {
       if (shared->readers[i].active.load(std::memory_order_acquire)) {
         oldest = std::min(oldest, shared->readers[i].cursor.load(std::memory_order_acquire));
       }

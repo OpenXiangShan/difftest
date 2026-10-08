@@ -20,6 +20,7 @@
 #include "splitview.h"
 #include <cmath>
 #include <getopt.h>
+#include <limits>
 #ifdef CONFIG_DIFFTEST_IOTRACE
 #include "difftest-iotrace.h"
 #endif // CONFIG_DIFFTEST_IOTRACE
@@ -38,7 +39,7 @@ enum {
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
   OPT_REF_FORK_INTERVAL,
-  OPT_PACKET_POOL_SLOTS,
+  OPT_PACKET_POOL_LOG2,
 #endif
 };
 
@@ -95,7 +96,7 @@ static inline void print_help(const char *file) {
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
   printf("      --ref-fork-interval=N  REF segment interval in seconds, default: 10\n");
-  printf("      --packet-pool-slots=N  fork packet slots, power of two >=2\n");
+  printf("      --packet-pool-log2=N  log2 of fork packet slots (default: 20)\n");
 #endif
   printf("  -s, --seed=NUM             use this seed\n");
   printf("  -C, --max-cycles=NUM       execute at most NUM cycles\n");
@@ -220,7 +221,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
     { "ref-fork-interval",  1, NULL, OPT_REF_FORK_INTERVAL },
-    { "packet-pool-slots",  1, NULL, OPT_PACKET_POOL_SLOTS },
+    { "packet-pool-log2",  1, NULL, OPT_PACKET_POOL_LOG2 },
 #endif
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
@@ -386,13 +387,13 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.ref_fork_interval = seconds * 1000;
         continue;
       }
-      case OPT_PACKET_POOL_SLOTS: {
-        const auto slots = atoll_strict(optarg, "packet-pool-slots");
-        if (slots < 2 || (slots & (slots - 1))) {
-          fprintf(stderr, "[ERROR] --packet-pool-slots must be a power of two >=2\n");
+      case OPT_PACKET_POOL_LOG2: {
+        const auto order = atoll_strict(optarg, "packet-pool-log2");
+        if (order < 1 || order >= std::numeric_limits<size_t>::digits - 1) {
+          fprintf(stderr, "[ERROR] --packet-pool-log2 must be between 1 and 62\n");
           exit(EINVAL);
         }
-        args.packet_pool_slots = slots;
+        args.packet_pool_log2 = order;
         continue;
       }
 #endif
