@@ -19,8 +19,8 @@
 
 #include "common.h"
 
-#ifdef FPGA_HOST
-enum class FpgaRefMode {
+#ifdef CONFIG_DIFFTEST_FAST_REF
+enum class RefMode {
   SLOW,
   FAST,
   FORK
@@ -28,12 +28,11 @@ enum class FpgaRefMode {
 #endif
 
 struct CommonArgs {
-#ifdef FPGA_HOST
-  FpgaRefMode ref_mode = FpgaRefMode::SLOW;
-  uint64_t ref_fork_interval_ms = 0;
-  uint64_t ref_fork_drain_timeout_ms = 300000;
-  uint64_t packet_pool_slots = 0; // Zero selects the compiled NUM_BLOCKS default.
-  bool shared_packet_pool = false;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  RefMode ref_mode = RefMode::SLOW;
+#endif
+#ifdef CONFIG_DIFFTEST_FORK
+  uint64_t packet_pool_slots = 0; // Zero selects NUM_BLOCKS.
 #endif
   uint32_t reset_cycles = 50;
   uint32_t core_clock_half_period = 1;

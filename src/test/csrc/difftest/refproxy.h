@@ -154,22 +154,26 @@ public:
   REF_STORE_LOG(f)  \
   REF_DEBUG_MODE(f)
 
-// Resolve this group optionally; require it once only when FAST/fork is selected.
+// Optional for old SLOW REFs; validate when the corresponding mode is selected.
 #ifdef CONFIG_DIFFTEST_FAST_REF
-#define REF_FAST(f) \
+#define REF_EXEC_MODE(f) \
   f(ref_set_exec_mode, difftest_set_exec_mode, void, int) \
-  f(ref_get_instr_count, difftest_get_instr_count, uint64_t, ) \
-  f(ref_get_pc, difftest_get_pc, uint64_t, ) \
-  f(ref_flush_state, difftest_flush_state, void, ) \
+  f(ref_get_instr_count, difftest_get_instr_count, uint64_t, )
+#else
+#define REF_EXEC_MODE(f)
+#endif
+#ifdef CONFIG_DIFFTEST_FORK
+#define REF_FORK(f) \
   f(ref_state_hash, difftest_state_hash, void, void*) \
   f(ref_store_hash_version, difftest_store_hash_version, uint32_t, ) \
   f(ref_store_hash_enabled, difftest_store_hash_enabled, bool, )
 #else
-#define REF_FAST(f)
+#define REF_FORK(f)
 #endif
 
 #define REF_OPTIONAL(f) \
-  REF_FAST(f)                                                                                     \
+  REF_EXEC_MODE(f) \
+  REF_FORK(f)                                                                                     \
   f(ref_init_v2, difftest_init_v2, void, unsigned)                                                          \
   f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
   f(load_flash_bin_v2, difftest_load_flash_v2, void, const uint8_t*, size_t)                                \
@@ -279,19 +283,11 @@ public:
   }
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
-  bool require_fast_interfaces(bool with_store_hash);
-  inline void set_exec_mode(int mode) {
-    ref_set_exec_mode(mode);
-  }
-  inline uint64_t get_instr_count() {
-    return ref_get_instr_count();
-  }
-  inline void flush_state() {
-    ref_flush_state();
-  }
-  inline uint64_t get_pc() {
-    return ref_get_pc();
-  }
+  using AbstractRefProxy::ref_set_exec_mode;
+  using AbstractRefProxy::ref_get_instr_count;
+  bool require_exec_mode_interfaces(bool with_fork);
+#endif
+#ifdef CONFIG_DIFFTEST_FORK
   inline DifftestStateHash state_hash() {
     DifftestStateHash hash{};
     ref_state_hash(&hash);

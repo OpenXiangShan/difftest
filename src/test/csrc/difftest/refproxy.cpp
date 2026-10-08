@@ -357,18 +357,18 @@ LinkedProxy::LinkedProxy(int coreid, size_t ram_size) : RefProxy(coreid, ram_siz
 }
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
-bool RefProxy::require_fast_interfaces(bool with_store_hash) {
-  const bool execution = ref_set_exec_mode && ref_get_instr_count && ref_get_pc && ref_skip_one;
-  const bool boundary =
-      !with_store_hash || (ref_flush_state && ref_state_hash && ref_store_hash_version && ref_store_hash_enabled);
-  if (!execution || !boundary) {
-    fprintf(stderr, "FAST/fork requires a NEMU FAST_REF build with progress and boundary APIs\n");
+bool RefProxy::require_exec_mode_interfaces(bool with_fork) {
+  if (!ref_set_exec_mode || !ref_get_instr_count) {
+    fprintf(stderr, "FAST requires REF mode switching and instruction count interfaces\n");
     return false;
   }
-  if (with_store_hash && (ref_store_hash_version() != 1 || !ref_store_hash_enabled())) {
-    fprintf(stderr, "Fork checking requires enabled store-hash protocol version 1\n");
+#ifdef CONFIG_DIFFTEST_FORK
+  if (with_fork && (!ref_state_hash || !ref_store_hash_version || !ref_store_hash_enabled ||
+                    ref_store_hash_version() != 1 || !ref_store_hash_enabled())) {
+    fprintf(stderr, "Fork checking requires state hash and enabled store-hash protocol version 1\n");
     return false;
   }
+#endif
   return true;
 }
 #endif

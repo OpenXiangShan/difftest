@@ -36,7 +36,8 @@ uint64_t now_ns() {
       .count();
 }
 bool enabled = false;
-uint64_t interval_ns = 0, drain_timeout_ns = 0;
+uint64_t interval_ns = 0;
+constexpr uint64_t DRAIN_TIMEOUT_NS = 300ULL * 1000000000;
 
 enum class SegmentStatus {
   EMPTY,
@@ -98,7 +99,7 @@ void close_segment(Difftest *self) {
   Segment &s = control->segments[segment_count - 1];
   if (s.end_window.load(std::memory_order_acquire) != OPEN_END)
     return;
-  if (self->fast_only_finish())
+  if (self->fast_ref_status())
     g_shared_packet_pool->fail();
   self->proxy->sync();
   s.fast_hash = self->proxy->state_hash();
@@ -114,14 +115,13 @@ void close_segment(Difftest *self) {
 }
 } // namespace
 
-bool difftest_ref_fork_init(uint64_t interval_ms, uint64_t timeout_ms) {
-  if (enabled || (interval_ms != 0 && interval_ms < 3000) || timeout_ms == 0 || interval_ms > UINT64_MAX / 1000000 ||
-      timeout_ms > UINT64_MAX / 1000000) {
-    fprintf(stderr, "Invalid REF fork configuration: interval must be 0 or >=3000 ms; timeout must be positive\n");
+bool difftest_ref_fork_init(uint64_t interval_ms) {
+  if (enabled || (interval_ms != 0 && interval_ms < 3000) || interval_ms > UINT64_MAX / 1000000 ||
+      NUM_CORES != 1 || CONFIG_DMA_CHANNELS != 1) {
+    fprintf(stderr, "REF fork requires one core/channel and interval 0 or >=3 seconds\n");
     return false;
   }
   interval_ns = interval_ms * 1000000;
-  drain_timeout_ns = timeout_ms * 1000000;
   enabled = true;
   return true;
 }
@@ -171,8 +171,8 @@ int difftest_ref_fork_prepare(Difftest *self) {
   fprintf(stderr, "REF fork checkpoints do not yet preserve history-dependent checker queues\n");
   return 2;
 #endif
-  if (!g_shared_packet_pool || NUM_CORES != 1 || (interval_ns != 0 && interval_ns < 3000000000ULL)) {
-    fprintf(stderr, "REF fork requires shared packets, one core and interval >=3000 ms (or zero)\n");
+  if (!g_shared_packet_pool) {
+    fprintf(stderr, "REF fork requires shared packets\n");
     return 2;
   }
   if (!control) {
@@ -222,8 +222,8 @@ int difftest_ref_fork_prepare(Difftest *self) {
     if (getppid() != parent_pid)
       _exit(2);
     s.child_start_ns = now_ns();
-    self->proxy->set_exec_mode(REF_EXEC_SLOW);
-    self->proxy->flush_state();
+    // NEMU's mode switch also refreshes MMU and permission caches.
+    self->set_ref_mode(REF_EXEC_SLOW);
     self->proxy->sync();
     return 1;
   }
@@ -253,9 +253,10 @@ int difftest_ref_fork_check(Difftest *self) {
     child_exit(self, true);
   const int ret = self->fork_check_step();
   if (ret != DiffTestChecker::STATE_OK) {
+    self->proxy->sync();
     fprintf(stderr, "RefFork child check failed Segment=%u Window=%lu Ret=%d Instr=%lu RefPC=0x%lx\n", child_segment,
             (unsigned long)child_window, ret, (unsigned long)self->dut->trap.instrCnt,
-            (unsigned long)self->proxy->get_pc());
+            (unsigned long)self->proxy->state.pc);
     self->proxy->display(self->dut);
     fflush(stdout);
     child_exit(self, false);
@@ -308,7 +309,7 @@ int difftest_ref_fork_finish() {
   bool killed = false;
   while (true) {
     const bool failed = poll_children() != 0;
-    if (!killed && (failed || now_ns() - begin >= drain_timeout_ns)) {
+    if (!killed && (failed || now_ns() - begin >= DRAIN_TIMEOUT_NS)) {
       fprintf(stderr, "REF fork failed or exceeded final drain timeout\n");
       g_shared_packet_pool->fail();
       ret = 2;
@@ -360,7 +361,7 @@ int difftest_ref_fork_finish() {
   return ret;
 }
 #else
-bool difftest_ref_fork_init(uint64_t, uint64_t) {
+bool difftest_ref_fork_init(uint64_t) {
   return false;
 }
 bool difftest_ref_fork_enabled() {

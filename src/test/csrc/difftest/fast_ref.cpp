@@ -114,22 +114,28 @@ int Difftest::fast_apply_events() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
-bool Difftest::enable_fast_ref(bool with_store_hash) {
-  if (!proxy->require_fast_interfaces(with_store_hash))
+bool Difftest::set_ref_mode(RefExecMode mode) {
+  bool with_fork = false;
+#ifdef CONFIG_DIFFTEST_FORK
+  with_fork = difftest_ref_fork_enabled();
+#endif
+  if (mode == REF_EXEC_FAST && !proxy->require_exec_mode_interfaces(with_fork))
     return false;
-  proxy->set_exec_mode(REF_EXEC_FAST);
-  fast_ref_enabled = true;
+  // Old REFs support only SLOW and need no mode-switch export.
+  if (proxy->ref_set_exec_mode)
+    proxy->ref_set_exec_mode(mode);
+  fast_ref_enabled = mode == REF_EXEC_FAST;
   return true;
 }
 
-int Difftest::fast_only_step() {
+int Difftest::fast_ref_step() {
   bool fork_check = false;
 #ifdef FPGA_HOST
   fork_check = difftest_ref_fork_enabled();
 #endif
   state->cycle_count = dut->trap.cycleCnt;
   state->has_progress = false;
-  if (!fast_only_initialized) {
+  if (!fast_ref_initialized) {
     bool has_commit = false;
     for (const auto &commit: dut->commit)
       has_commit |= commit.valid;
@@ -144,7 +150,7 @@ int Difftest::fast_only_step() {
         true);
     proxy->regcpy(&dut->regs, FIRST_INST_ADDRESS);
     state->has_commit = true;
-    fast_only_initialized = true;
+    fast_ref_initialized = true;
   }
 #ifdef FPGA_HOST
   if (fork_check) {
@@ -167,13 +173,14 @@ int Difftest::fast_only_step() {
   auto execute = [&]() {
     if (!pending)
       return true;
-    const uint64_t before = proxy->get_instr_count();
+    const uint64_t before = proxy->ref_get_instr_count();
     proxy->ref_exec(pending);
-    const uint64_t completed = proxy->get_instr_count() - before;
+    const uint64_t completed = proxy->ref_get_instr_count() - before;
     if (completed != pending) {
+      proxy->sync();
       fprintf(stderr, "FAST short execution: requested=%lu completed=%lu PC=0x%lx\n", (unsigned long)pending,
-              (unsigned long)completed, (unsigned long)proxy->get_pc());
-      fast_only_error = DiffTestChecker::STATE_ERROR;
+              (unsigned long)completed, (unsigned long)proxy->state.pc);
+      fast_ref_error = DiffTestChecker::STATE_ERROR;
       return false;
     }
 #ifdef CONFIG_DIFFTEST_SQUASH
@@ -190,7 +197,7 @@ int Difftest::fast_only_step() {
       committed += 1 + commit.nFused;
       if (commit.skip) {
         if (!execute())
-          return fast_only_error;
+          return fast_ref_error;
         // The NEMU skip API writes integer registers. FP/vector skips use
         // the existing regcpy fallback rather than corrupting an integer GPR.
         proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen, commit.wdest,
@@ -201,7 +208,7 @@ int Difftest::fast_only_step() {
     }
     // Retain the board-validated per-window boundary, batching commits within it.
     if (!execute())
-      return fast_only_error;
+      return fast_ref_error;
     if (committed) {
       state->has_progress = true;
       state->last_commit_cycle = dut->trap.cycleCnt;

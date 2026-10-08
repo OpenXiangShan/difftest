@@ -36,9 +36,6 @@
 #define REM_NUM_BLOCKS  (NUM_BLOCKS - 1)
 #define MAX_WINDOW_SIZE 256
 
-static_assert(NUM_BLOCKS >= 2048 && (NUM_BLOCKS & (NUM_BLOCKS - 1)) == 0,
-              "Memory pool slot count must be a power of two with at least eight groups");
-
 class MemoryChunk {
 public:
   std::atomic<size_t> memblock_idx;
@@ -163,6 +160,8 @@ private:
 
 public:
   MemoryIdxPool(uint64_t block_size) : mem_block_size(block_size) {
+    if (NUM_BLOCKS < 2048 || (NUM_BLOCKS & (NUM_BLOCKS - 1)))
+      throw std::runtime_error("Indexed pool requires a power of two >=2048 slots");
     size_t total_size = NUM_BLOCKS * mem_block_size;
     void *base = nullptr;
     if (posix_memalign(&base, 4096, total_size) != 0) {

@@ -217,9 +217,10 @@ protected:
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
 public:
-  bool enable_fast_ref(bool with_store_hash);
-  int fast_only_finish() {
-    return fast_only_error;
+  // Select at startup or an established fork boundary.
+  bool set_ref_mode(RefExecMode mode);
+  int fast_ref_status() {
+    return fast_ref_error;
   }
   int fork_check_step() {
     return check_all();
@@ -235,10 +236,10 @@ public:
 private:
   bool fast_window_has_event(const DiffTestState &window) const;
   int fast_apply_events();
-  int fast_only_step();
-  bool fast_only_initialized = false;
+  int fast_ref_step();
+  bool fast_ref_initialized = false;
   bool fast_ref_enabled = false;
-  int fast_only_error = 0;
+  int fast_ref_error = 0;
 #endif
   void add_sync_checker(DiffTestChecker *checker, bool critical = false) {
     checkers.push_back(checker);

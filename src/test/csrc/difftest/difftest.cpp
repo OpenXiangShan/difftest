@@ -586,7 +586,7 @@ int Difftest::step() {
 #endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
   if (fast_ref_enabled)
-    return fast_only_step();
+    return fast_ref_step();
 #endif
 
 #ifdef CONFIG_DIFFTEST_REPLAY

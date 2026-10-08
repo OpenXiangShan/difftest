@@ -33,12 +33,11 @@ enum {
   OPT_CPU_AXI_DELAY,
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FAST_REF
   OPT_REF_MODE,
-  OPT_REF_FORK_INTERVAL_MS,
-  OPT_REF_FORK_DRAIN_TIMEOUT_MS,
+#endif
+#ifdef CONFIG_DIFFTEST_FORK
   OPT_PACKET_POOL_SLOTS,
-  OPT_SHARED_PACKET_POOL,
 #endif
 };
 
@@ -49,22 +48,6 @@ static inline long long int atoll_strict(const char *str, const char *arg) {
   }
   return atoll(str);
 }
-
-#ifdef FPGA_HOST
-static uint64_t parse_ref_option(const char *str, const char *option) {
-  if (!*str || strspn(str, "0123456789") != strlen(str)) {
-    fprintf(stderr, "[ERROR] --%s requires an unsigned integer\n", option);
-    exit(EINVAL);
-  }
-  errno = 0;
-  const uint64_t value = strtoull(str, nullptr, 10);
-  if (errno) {
-    fprintf(stderr, "[ERROR] --%s is out of range\n", option);
-    exit(EINVAL);
-  }
-  return value;
-}
-#endif
 
 static uint64_t parse_instr_count(const char *str, const char *arg) {
   char *end = nullptr;
@@ -106,12 +89,11 @@ static uint64_t parse_instr_count(const char *str, const char *arg) {
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
   printf("\n");
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FAST_REF
   printf("      --ref-mode=MODE        slow (default), fast, or fork\n");
-  printf("      --ref-fork-interval-ms=N  segment interval; 0 means one segment\n");
-  printf("      --ref-fork-drain-timeout-ms=N  final check timeout; default 300000\n");
-  printf("      --packet-pool-slots=N  shared packet slots, power of two >=2\n");
-  printf("      --shared-packet-pool   use shared packets without fork\n");
+#endif
+#ifdef CONFIG_DIFFTEST_FORK
+  printf("      --packet-pool-slots=N  fork packet slots, power of two >=2\n");
 #endif
   printf("  -s, --seed=NUM             use this seed\n");
   printf("  -C, --max-cycles=NUM       execute at most NUM cycles\n");
@@ -128,7 +110,7 @@ static inline void print_help(const char *file) {
 #ifdef ENABLE_IPC
   printf("  -R, --ipc-interval=NUM     the interval insts of drawing IPC curve\n");
 #endif
-  printf("  -X, --fork-interval=NUM    LightSSS snapshot interval (in seconds), default: 10\n");
+  printf("  -X, --fork-interval=NUM    fork interval (in seconds), default: 10\n");
   printf("      --overwrite-nbytes=N   set valid bytes, but less than 0xf00, default: 0xe00\n");
   printf("      --overwrite-auto       overwrite size is automatically set of the new gcpt\n");
 #ifdef PLUGIN_SIMFRONTEND
@@ -231,12 +213,11 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FAST_REF
     { "ref-mode",          1, NULL, OPT_REF_MODE },
-    { "ref-fork-interval-ms", 1, NULL, OPT_REF_FORK_INTERVAL_MS },
-    { "ref-fork-drain-timeout-ms", 1, NULL, OPT_REF_FORK_DRAIN_TIMEOUT_MS },
+#endif
+#ifdef CONFIG_DIFFTEST_FORK
     { "packet-pool-slots",  1, NULL, OPT_PACKET_POOL_SLOTS },
-    { "shared-packet-pool", 0, NULL, OPT_SHARED_PACKET_POOL },
 #endif
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
@@ -352,6 +333,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           case 31: args.random_mem = true; continue;
         }
         // fall through
+      case '?': print_help(argv[0]); exit(EINVAL);
       default: print_help(argv[0]); exit(0);
       case OPT_SPLITVIEW_LOG:
         args.splitview_log_path = optarg;
@@ -377,33 +359,30 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_NO_SQUASH_AFTER_INSTR:
         args.no_squash_after_instr = parse_instr_count(optarg, "no-squash-after-instr");
         continue;
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FAST_REF
       case OPT_REF_MODE:
         if (!strcmp(optarg, "slow"))
-          args.ref_mode = FpgaRefMode::SLOW;
+          args.ref_mode = RefMode::SLOW;
         else if (!strcmp(optarg, "fast"))
-          args.ref_mode = FpgaRefMode::FAST;
+          args.ref_mode = RefMode::FAST;
         else if (!strcmp(optarg, "fork"))
-          args.ref_mode = FpgaRefMode::FORK;
+          args.ref_mode = RefMode::FORK;
         else {
           fprintf(stderr, "[ERROR] --ref-mode must be slow, fast or fork\n");
           exit(EINVAL);
         }
         continue;
-      case OPT_REF_FORK_INTERVAL_MS:
-        args.ref_fork_interval_ms = parse_ref_option(optarg, "ref-fork-interval-ms");
-        continue;
-      case OPT_REF_FORK_DRAIN_TIMEOUT_MS:
-        args.ref_fork_drain_timeout_ms = parse_ref_option(optarg, "ref-fork-drain-timeout-ms");
-        continue;
-      case OPT_PACKET_POOL_SLOTS:
-        args.packet_pool_slots = parse_ref_option(optarg, "packet-pool-slots");
-        if (args.packet_pool_slots < 2 || (args.packet_pool_slots & (args.packet_pool_slots - 1))) {
+#endif
+#ifdef CONFIG_DIFFTEST_FORK
+      case OPT_PACKET_POOL_SLOTS: {
+        const auto slots = atoll_strict(optarg, "packet-pool-slots");
+        if (slots < 2 || (slots & (slots - 1))) {
           fprintf(stderr, "[ERROR] --packet-pool-slots must be a power of two >=2\n");
           exit(EINVAL);
         }
+        args.packet_pool_slots = slots;
         continue;
-      case OPT_SHARED_PACKET_POOL: args.shared_packet_pool = true; continue;
+      }
 #endif
       case OPT_CPU_AXI_DELAY: {
         long long cpu_axi_delay = atoll_strict(optarg, "cpu-axi-delay");
@@ -440,7 +419,15 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         }
         break;
       case 'C': args.max_cycles = atoll_strict(optarg, "max-cycles"); break;
-      case 'X': args.fork_interval = 1000 * atoll_strict(optarg, "fork-interval"); break;
+      case 'X': {
+        const auto interval = atoll_strict(optarg, "fork-interval");
+        if (interval < 0 || static_cast<uint64_t>(interval) > UINT64_MAX / 1000000000) {
+          fprintf(stderr, "[ERROR] --fork-interval is out of range\n");
+          exit(EINVAL);
+        }
+        args.fork_interval = 1000 * interval;
+        break;
+      }
       case 'I': args.max_instr = atoll_strict(optarg, "max-instr"); break;
 #ifdef DEBUG_REFILL
       case 'T':

@@ -32,8 +32,6 @@
 class SharedPacketPool {
 public:
   static constexpr unsigned MAX_READERS = 128;
-  static_assert(std::atomic<uint64_t>::is_always_lock_free && std::atomic<bool>::is_always_lock_free,
-                "Shared packet cursors require lock-free atomics");
   struct alignas(64) Reader {
     std::atomic<uint64_t> cursor{0};
     std::atomic<bool> active{false};
@@ -50,6 +48,10 @@ public:
     }
     shared = static_cast<Shared *>(map(sizeof(Shared)));
     new (shared) Shared();
+    if (!shared->head.is_lock_free() || !shared->abort.is_lock_free()) {
+      munmap(shared, sizeof(Shared));
+      throw std::runtime_error("Shared packet cursors require lock-free atomics");
+    }
     try {
       data = static_cast<char *>(map(capacity * packet_bytes));
     } catch (...) {
