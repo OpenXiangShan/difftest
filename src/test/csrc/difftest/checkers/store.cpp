@@ -203,7 +203,13 @@ int StoreChecker::check() {
   while (!state->store_event_queue.empty()) {
     auto &probe = state->store_event_queue.front();
 #ifdef CONFIG_DIFFTEST_SQUASH
-    if (probe.stamp != state->commit_stamp) {
+    // Stamps are modulo CONFIG_DIFFTEST_SQUASH_STAMPSIZE. Wait only when the
+    // store is ahead of NEMU on the forward half of the stamp ring; once NEMU
+    // has reached or passed it, the non-precise checkpoint may be consumed.
+    const uint32_t stampDistance =
+        (probe.stamp + CONFIG_DIFFTEST_SQUASH_STAMPSIZE - static_cast<uint32_t>(state->commit_stamp)) %
+        CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+    if (stampDistance != 0 && stampDistance < CONFIG_DIFFTEST_SQUASH_STAMPSIZE / 2) {
       return STATE_OK;
     }
 #endif // CONFIG_DIFFTEST_SQUASH
