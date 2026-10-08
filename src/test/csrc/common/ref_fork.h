@@ -17,6 +17,10 @@
 #define DIFFTEST_REF_FORK_H
 
 class Difftest;
+#include <cstdint>
+
+// Configure once in main before receive threads or forked readers exist.
+bool difftest_ref_fork_init(uint64_t interval_ms, uint64_t drain_timeout_ms);
 bool difftest_ref_fork_enabled();
 bool difftest_ref_fork_is_child();
 int difftest_ref_fork_prepare(Difftest *self);

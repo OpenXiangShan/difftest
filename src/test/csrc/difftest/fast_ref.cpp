@@ -114,17 +114,19 @@ int Difftest::fast_apply_events() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
+bool Difftest::enable_fast_ref(bool with_store_hash) {
+  if (!proxy->require_fast_interfaces(with_store_hash))
+    return false;
+  proxy->set_exec_mode(REF_EXEC_FAST);
+  fast_ref_enabled = true;
+  return true;
+}
+
 int Difftest::fast_only_step() {
   bool fork_check = false;
 #ifdef FPGA_HOST
   fork_check = difftest_ref_fork_enabled();
 #endif
-  if (!fast_interfaces_checked) {
-    if (!proxy->require_fast_interfaces(fork_check))
-      return DiffTestChecker::STATE_ERROR;
-    proxy->set_exec_mode(REF_EXEC_FAST);
-    fast_interfaces_checked = true;
-  }
   state->cycle_count = dut->trap.cycleCnt;
   state->has_progress = false;
   if (!fast_only_initialized) {

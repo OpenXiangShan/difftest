@@ -79,6 +79,37 @@ int main(int argc, const char *argv[]) {
   fpga_ila_upload_cmd = std::getenv("FPGA_ILA_UPLOAD_CMD");
   args = parse_args(argc, argv);
 
+  if (args.ref_mode != FpgaRefMode::SLOW && !args.enable_diff) {
+    fprintf(stderr, "[fpga-host] FAST/fork requires DiffTest enabled\n");
+    return 1;
+  }
+#ifndef CONFIG_DIFFTEST_FAST_REF
+  if (args.ref_mode != FpgaRefMode::SLOW) {
+    fprintf(stderr, "[fpga-host] --ref-mode fast/fork requires DIFFTEST_FAST_REF=1\n");
+    return 1;
+  }
+#endif
+#ifndef CONFIG_DIFFTEST_FORK
+  if (args.ref_mode == FpgaRefMode::FORK) {
+    fprintf(stderr, "[fpga-host] --ref-mode fork requires DIFFTEST_FORK=1\n");
+    return 1;
+  }
+#endif
+  const bool shared_packets = args.shared_packet_pool || args.ref_mode == FpgaRefMode::FORK;
+#ifndef USE_THREAD_MEMPOOL
+  if (shared_packets) {
+    fprintf(stderr, "[fpga-host] shared packets require USE_THREAD_MEMPOOL=1\n");
+    return 1;
+  }
+#endif
+  if (shared_packets && CONFIG_DMA_CHANNELS != 1) {
+    fprintf(stderr, "[fpga-host] shared packets require one DMA channel\n");
+    return 1;
+  }
+  if (args.ref_mode == FpgaRefMode::FORK &&
+      !difftest_ref_fork_init(args.ref_fork_interval_ms, args.ref_fork_drain_timeout_ms))
+    return 1;
+
   common_init(argv[0]);
 
   fpga_init();
@@ -134,7 +165,8 @@ void fpga_init() {
   gbus_device->validate_guest_ram(_PMEM_BASE, ram_size);
   xdma_device = gbus_device;
 #else
-  xdma_device = new FpgaXdma();
+  xdma_device = new FpgaXdma(args.shared_packet_pool || args.ref_mode == FpgaRefMode::FORK,
+                             args.packet_pool_slots ? args.packet_pool_slots : NUM_BLOCKS);
 #endif
   xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
   sleep(1);
@@ -225,6 +257,14 @@ void fpga_init() {
 #endif // FPGA_SIM
 
   difftest_init(args.enable_diff, ram_size);
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  if (args.ref_mode != FpgaRefMode::SLOW) {
+    for (int i = 0; i < NUM_CORES; ++i) {
+      if (!difftest[i]->enable_fast_ref(args.ref_mode == FpgaRefMode::FORK))
+        exit(1);
+    }
+  }
+#endif
 
   xdma_device->fpga_io(HOST_IO_RESET, false);
 }

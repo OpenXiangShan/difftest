@@ -20,24 +20,25 @@ NEMU needs `CONFIG_FAST_REF`; fork also needs enabled store-hash protocol 1
 
 ```bash
 make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 USE_THREAD_MEMPOOL=1
-DIFFTEST_FAST_ONLY=1 ./build/fpga-host <normal arguments>
+./build/fpga-host --ref-mode fast <normal arguments>
 
-make fpga-build FPGA=1 DIFFTEST_FORK=1 USE_THREAD_MEMPOOL=1
-DIFFTEST_REF_FORK=1 DIFFTEST_REF_FORK_INTERVAL_MS=5000 \
-  DIFFTEST_PACKET_POOL_SLOTS=1048576 ./build/fpga-host <normal arguments>
+make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK=1 USE_THREAD_MEMPOOL=1
+./build/fpga-host --ref-mode fork --ref-fork-interval-ms 5000 \
+  --packet-pool-slots 1048576 <normal arguments>
 ```
 
-`DIFFTEST_FORK=1` includes FAST support. With both runtime selectors off, the
-host uses SLOW and can load an older REF. FAST interfaces are checked once.
+`DIFFTEST_FORK=1` requires explicit `DIFFTEST_FAST_REF=1`. FAST_REF alone
+supports SLOW and FAST-only. Main selects the mode; the default is SLOW and
+can load an older REF. FAST interfaces are checked during initialization.
 
-| Environment variable | Default | Meaning |
+| Command-line option | Default | Meaning |
 | --- | --- | --- |
-| `DIFFTEST_FAST_ONLY` | off | FAST without SLOW checking |
-| `DIFFTEST_REF_FORK` | off | FAST with forked SLOW checking |
-| `DIFFTEST_SHARED_PACKET_POOL` | off | Shared packet pool without fork |
-| `DIFFTEST_PACKET_POOL_SLOTS` | 4096 normally | Power of two, at least 2 slots |
-| `DIFFTEST_REF_FORK_INTERVAL_MS` | 0 | One segment; nonzero values must be >=3000 |
-| `DIFFTEST_REF_FORK_DRAIN_TIMEOUT_MS` | 300000 | Positive final drain timeout |
+| `--ref-mode slow|fast|fork` | slow | Execution/checking mode |
+| `--shared-packet-pool` | off | Shared packet pool without fork |
+| `--packet-pool-slots N` | 4096 normally | Power of two, at least 2 slots |
+| `--ref-fork-interval-ms N` | 0 | One segment; nonzero values must be >=3000 |
+| `--ref-fork-drain-timeout-ms N` | 300000 | Positive final drain timeout |
+
 
 ## Packet ownership and limits
 

@@ -35,19 +35,8 @@ uint64_t now_ns() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
       .count();
 }
-const bool enabled = [] {
-  const char *p = getenv("DIFFTEST_REF_FORK");
-  return p != nullptr && strcmp(p, "1") == 0;
-}();
-const uint64_t interval_ns = [] {
-  const char *p = getenv("DIFFTEST_REF_FORK_INTERVAL_MS");
-  char *end = nullptr;
-  errno = 0;
-  const uint64_t ms = p ? strtoull(p, &end, 0) : 0;
-  if (errno || (p && (end == p || *end)) || ms > UINT64_MAX / 1000000)
-    throw std::runtime_error("Invalid REF fork interval");
-  return ms * 1000000;
-}();
+bool enabled = false;
+uint64_t interval_ns = 0, drain_timeout_ns = 0;
 
 enum class SegmentStatus {
   EMPTY,
@@ -124,6 +113,18 @@ void close_segment(Difftest *self) {
   fflush(stdout);
 }
 } // namespace
+
+bool difftest_ref_fork_init(uint64_t interval_ms, uint64_t timeout_ms) {
+  if (enabled || (interval_ms != 0 && interval_ms < 3000) || timeout_ms == 0 || interval_ms > UINT64_MAX / 1000000 ||
+      timeout_ms > UINT64_MAX / 1000000) {
+    fprintf(stderr, "Invalid REF fork configuration: interval must be 0 or >=3000 ms; timeout must be positive\n");
+    return false;
+  }
+  interval_ns = interval_ms * 1000000;
+  drain_timeout_ns = timeout_ms * 1000000;
+  enabled = true;
+  return true;
+}
 
 bool difftest_ref_fork_enabled() {
   return enabled;
@@ -304,15 +305,6 @@ int difftest_ref_fork_finish() {
   int ret = 0;
   uint64_t expected = 0, checked = 0, trusted = 0;
   bool prefix_ok = true;
-  static const uint64_t drain_timeout_ns = [] {
-    const char *value = getenv("DIFFTEST_REF_FORK_DRAIN_TIMEOUT_MS");
-    char *end = nullptr;
-    errno = 0;
-    const uint64_t ms = value ? strtoull(value, &end, 0) : 300000;
-    if (errno || (value && (end == value || *end)) || ms == 0 || ms > UINT64_MAX / 1000000)
-      throw std::runtime_error("Invalid fork drain timeout");
-    return ms * 1000000;
-  }();
   bool killed = false;
   while (true) {
     const bool failed = poll_children() != 0;
@@ -368,6 +360,9 @@ int difftest_ref_fork_finish() {
   return ret;
 }
 #else
+bool difftest_ref_fork_init(uint64_t, uint64_t) {
+  return false;
+}
 bool difftest_ref_fork_enabled() {
   return false;
 }

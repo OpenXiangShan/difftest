@@ -585,12 +585,7 @@ int Difftest::step() {
     return difftest_ref_fork_check(this);
 #endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
-  static const char *fast = getenv("DIFFTEST_FAST_ONLY");
-  if ((fast && strcmp(fast, "1") == 0)
-#ifdef FPGA_HOST
-      || difftest_ref_fork_enabled()
-#endif
-  )
+  if (fast_ref_enabled)
     return fast_only_step();
 #endif
 

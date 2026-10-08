@@ -217,6 +217,7 @@ protected:
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
 public:
+  bool enable_fast_ref(bool with_store_hash);
   int fast_only_finish() {
     return fast_only_error;
   }
@@ -236,7 +237,7 @@ private:
   int fast_apply_events();
   int fast_only_step();
   bool fast_only_initialized = false;
-  bool fast_interfaces_checked = false;
+  bool fast_ref_enabled = false;
   int fast_only_error = 0;
 #endif
   void add_sync_checker(DiffTestChecker *checker, bool critical = false) {

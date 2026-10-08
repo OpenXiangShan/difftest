@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -19,7 +19,22 @@
 
 #include "common.h"
 
+#ifdef FPGA_HOST
+enum class FpgaRefMode {
+  SLOW,
+  FAST,
+  FORK
+};
+#endif
+
 struct CommonArgs {
+#ifdef FPGA_HOST
+  FpgaRefMode ref_mode = FpgaRefMode::SLOW;
+  uint64_t ref_fork_interval_ms = 0;
+  uint64_t ref_fork_drain_timeout_ms = 300000;
+  uint64_t packet_pool_slots = 0; // Zero selects the compiled NUM_BLOCKS default.
+  bool shared_packet_pool = false;
+#endif
   uint32_t reset_cycles = 50;
   uint32_t core_clock_half_period = 1;
   uint32_t accelerator_clock_half_period = 1;

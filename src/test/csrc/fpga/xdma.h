@@ -72,7 +72,7 @@ typedef struct __attribute__((packed)) {
 
 class FpgaXdma : public FpgaTransport {
 public:
-  FpgaXdma();
+  FpgaXdma(bool shared_packets = false, size_t pool_slots = NUM_BLOCKS);
   ~FpgaXdma();
 
   void start(bool enable_diff) override {

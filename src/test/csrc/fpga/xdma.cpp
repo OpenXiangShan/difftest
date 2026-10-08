@@ -60,25 +60,14 @@ template <typename Func, typename Obj, typename... Args> void thread_wrapper(Fun
   (obj->*func)(args...);
 }
 
-FpgaXdma::FpgaXdma()
-{
+FpgaXdma::FpgaXdma(bool shared_packets, size_t pool_slots) {
 #ifdef USE_THREAD_MEMPOOL
-  const char *shared = getenv("DIFFTEST_SHARED_PACKET_POOL");
-  if ((shared && strcmp(shared, "1") == 0) || difftest_ref_fork_enabled()) {
+  if (shared_packets) {
     if (CONFIG_DMA_CHANNELS != 1)
       throw std::runtime_error("Shared packet pool requires one DMA channel");
-    size_t packets = NUM_BLOCKS;
-    const char *value = getenv("DIFFTEST_PACKET_POOL_SLOTS");
-    if (value) {
-      char *end = nullptr;
-      errno = 0;
-      packets = strtoull(value, &end, 0);
-      if (errno || end == value || *end)
-        throw std::runtime_error("Invalid shared packet pool packet count");
-    }
-    shared_packet_pool = std::make_unique<SharedPacketPool>(packets, sizeof(FpgaPackgeHead));
+    shared_packet_pool = std::make_unique<SharedPacketPool>(pool_slots, sizeof(FpgaPackgeHead));
     g_shared_packet_pool = shared_packet_pool.get();
-    printf("SharedPacketPool Slots=%zu PacketBytes=%zu Mapping=MAP_SHARED\n", packets, sizeof(FpgaPackgeHead));
+    printf("SharedPacketPool Slots=%zu PacketBytes=%zu Mapping=MAP_SHARED\n", pool_slots, sizeof(FpgaPackgeHead));
   } else
     indexed_packet_pool = std::make_unique<MemoryIdxPool>(sizeof(FpgaPackgeHead));
 #endif

@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -33,6 +33,13 @@ enum {
   OPT_CPU_AXI_DELAY,
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
+#ifdef FPGA_HOST
+  OPT_REF_MODE,
+  OPT_REF_FORK_INTERVAL_MS,
+  OPT_REF_FORK_DRAIN_TIMEOUT_MS,
+  OPT_PACKET_POOL_SLOTS,
+  OPT_SHARED_PACKET_POOL,
+#endif
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -42,6 +49,22 @@ static inline long long int atoll_strict(const char *str, const char *arg) {
   }
   return atoll(str);
 }
+
+#ifdef FPGA_HOST
+static uint64_t parse_ref_option(const char *str, const char *option) {
+  if (!*str || strspn(str, "0123456789") != strlen(str)) {
+    fprintf(stderr, "[ERROR] --%s requires an unsigned integer\n", option);
+    exit(EINVAL);
+  }
+  errno = 0;
+  const uint64_t value = strtoull(str, nullptr, 10);
+  if (errno) {
+    fprintf(stderr, "[ERROR] --%s is out of range\n", option);
+    exit(EINVAL);
+  }
+  return value;
+}
+#endif
 
 static uint64_t parse_instr_count(const char *str, const char *arg) {
   char *end = nullptr;
@@ -83,6 +106,13 @@ static uint64_t parse_instr_count(const char *str, const char *arg) {
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
   printf("\n");
+#ifdef FPGA_HOST
+  printf("      --ref-mode=MODE        slow (default), fast, or fork\n");
+  printf("      --ref-fork-interval-ms=N  segment interval; 0 means one segment\n");
+  printf("      --ref-fork-drain-timeout-ms=N  final check timeout; default 300000\n");
+  printf("      --packet-pool-slots=N  shared packet slots, power of two >=2\n");
+  printf("      --shared-packet-pool   use shared packets without fork\n");
+#endif
   printf("  -s, --seed=NUM             use this seed\n");
   printf("  -C, --max-cycles=NUM       execute at most NUM cycles\n");
   printf("  -I, --max-instr=NUM        execute at most NUM instructions\n");
@@ -201,6 +231,13 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
+#ifdef FPGA_HOST
+    { "ref-mode",          1, NULL, OPT_REF_MODE },
+    { "ref-fork-interval-ms", 1, NULL, OPT_REF_FORK_INTERVAL_MS },
+    { "ref-fork-drain-timeout-ms", 1, NULL, OPT_REF_FORK_DRAIN_TIMEOUT_MS },
+    { "packet-pool-slots",  1, NULL, OPT_PACKET_POOL_SLOTS },
+    { "shared-packet-pool", 0, NULL, OPT_SHARED_PACKET_POOL },
+#endif
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -340,6 +377,34 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_NO_SQUASH_AFTER_INSTR:
         args.no_squash_after_instr = parse_instr_count(optarg, "no-squash-after-instr");
         continue;
+#ifdef FPGA_HOST
+      case OPT_REF_MODE:
+        if (!strcmp(optarg, "slow"))
+          args.ref_mode = FpgaRefMode::SLOW;
+        else if (!strcmp(optarg, "fast"))
+          args.ref_mode = FpgaRefMode::FAST;
+        else if (!strcmp(optarg, "fork"))
+          args.ref_mode = FpgaRefMode::FORK;
+        else {
+          fprintf(stderr, "[ERROR] --ref-mode must be slow, fast or fork\n");
+          exit(EINVAL);
+        }
+        continue;
+      case OPT_REF_FORK_INTERVAL_MS:
+        args.ref_fork_interval_ms = parse_ref_option(optarg, "ref-fork-interval-ms");
+        continue;
+      case OPT_REF_FORK_DRAIN_TIMEOUT_MS:
+        args.ref_fork_drain_timeout_ms = parse_ref_option(optarg, "ref-fork-drain-timeout-ms");
+        continue;
+      case OPT_PACKET_POOL_SLOTS:
+        args.packet_pool_slots = parse_ref_option(optarg, "packet-pool-slots");
+        if (args.packet_pool_slots < 2 || (args.packet_pool_slots & (args.packet_pool_slots - 1))) {
+          fprintf(stderr, "[ERROR] --packet-pool-slots must be a power of two >=2\n");
+          exit(EINVAL);
+        }
+        continue;
+      case OPT_SHARED_PACKET_POOL: args.shared_packet_pool = true; continue;
+#endif
       case OPT_CPU_AXI_DELAY: {
         long long cpu_axi_delay = atoll_strict(optarg, "cpu-axi-delay");
         if (cpu_axi_delay < 0 || static_cast<unsigned long long>(cpu_axi_delay) > UINT32_MAX) {
