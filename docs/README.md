@@ -9,7 +9,7 @@
 | [sw-check.md](./sw-check.md) | Software checking flow: difftest_step, checkers, reference model, DPI-C |
 | [test.md](./test.md) | Build / run / debug commands: EMU, simv, FPGA Sim, reference DB comparison, phased verification |
 | [workflow.md](./workflow.md) | Task workflow: plan/progress specs, execution practices, sub-agent delegation, debugging escalation |
-| [fast-ref.md](./fast-ref.md) | FPGA FAST/fork configuration, boundaries and software validation |
+| [fast-ref.md](./fast-ref.md) | FPGA FAST/fork configuration, boundaries and completion |
 
 ## Recommended Reading Order
 

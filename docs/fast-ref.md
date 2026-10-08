@@ -4,7 +4,10 @@ FAST advances the reference without comparing each DUT register snapshot.
 It batches ordinary commits within one squash window, flushes at skips and
 architectural events, and requires exactly the requested number of executed
 instructions. FAST-only therefore measures speculative execution throughput;
-it does not establish DiffTest correctness.
+it does not establish DiffTest correctness. It still receives and parses the
+FPGA stream, advances NEMU according to the DUT commits, and reports the usual
+`HIT GOOD TRAP` when the DUT trap packet indicates successful completion and
+FAST execution has not failed. It does not wait for any SLOW checker.
 
 With segmented fork checking, each child inherits the reference and checker
 state at a window boundary, switches NEMU to SLOW, and runs the original
@@ -57,7 +60,7 @@ ordinary `read(fd, buffer, count)`. No registration ioctl or read-time pool
 configuration is added. The receiver accumulates short reads into a complete
 packet before publication. Driver descriptor pool settings remain independent.
 
-## Validation and limits
+## Completion and limits
 
 Each child checks its segment independently. Only consecutive successful
 segments beginning at window zero establish a trusted prefix. A locally
@@ -75,8 +78,4 @@ incomplete checkpoints. There are 127 child reader slots and 256 total
 segments per run. Completed child readers are released by the parent after
 `waitpid`. Segment capacity exhaustion fails the run explicitly.
 
-The tests in [tests/fast-ref](../tests/fast-ref/README.md) exercise real REF
-execution, fork checking, failure propagation and the receive loop through
-pipes without opening FPGA devices. They do not replace an FPGA/Linux
-integration run or establish new performance measurements. Cross-machine
-compression/transport is a separate change.
+Cross-machine compression/transport is a separate change.
