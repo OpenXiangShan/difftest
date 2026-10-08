@@ -90,7 +90,7 @@ int main(int argc, const char *argv[]) {
     return 1;
   }
 #else
-  if (args.ref_mode == RefMode::FORK && !difftest_ref_fork_init(args.fork_interval))
+  if (args.ref_mode == RefMode::FORK && !difftest_ref_fork_init(args.ref_fork_interval))
     return 1;
 #endif
 #endif
@@ -151,8 +151,7 @@ void fpga_init() {
   xdma_device = gbus_device;
 #else
 #ifdef CONFIG_DIFFTEST_FORK
-  xdma_device = new FpgaXdma(args.ref_mode == RefMode::FORK,
-                            args.packet_pool_slots ? args.packet_pool_slots : NUM_BLOCKS);
+  xdma_device = new FpgaXdma(args.ref_mode == RefMode::FORK, args.packet_pool_slots);
 #else
   xdma_device = new FpgaXdma();
 #endif

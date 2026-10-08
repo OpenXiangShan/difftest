@@ -74,7 +74,7 @@ bool hashes_match(const DifftestStateHash &a, const DifftestStateHash &b) {
          a.store_count == b.store_count;
 }
 
-[[noreturn]] void child_exit(Difftest *self, bool ok) {
+void child_exit(Difftest *self, bool ok) {
   Segment &s = control->segments[child_segment];
   s.checked_windows = child_window - s.start_window;
   s.end_packet = g_shared_packet_pool->cursor();
@@ -356,6 +356,8 @@ int difftest_ref_fork_finish() {
       ret == 0 ? "MATCH" : "MISMATCH", segment_count, (unsigned long)windows, (unsigned long)checked,
       double(fork_ns) / 1e6, double(now_ns() - begin) / 1e6, (unsigned long)trusted);
   fflush(stdout);
+  munmap(control, sizeof(Shared));
+  control = nullptr;
   finished = true;
   final_result = ret;
   return ret;

@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2025 Beijing Institute of Open Source Chip
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -106,6 +106,12 @@ public:
   ProbeChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
       : DiffTestChecker(state, proxy), get_probe(std::move(get_probe)) {}
   virtual ~ProbeChecker() = default;
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  void discard() {
+    clear_valid(get_probe());
+  }
+#endif
 
   virtual int do_step() override {
     Probe &probe = get_probe();

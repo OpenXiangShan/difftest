@@ -15,7 +15,7 @@
 ***************************************************************************************/
 
 #include "difftest.h"
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FORK
 #include "ref_fork.h"
 #endif
 #include "common.h"
@@ -42,7 +42,7 @@ Difftest **difftest = NULL;
 static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FORK
   if (difftest_ref_fork_is_child())
     _Exit(128 + signo);
 #endif
@@ -341,8 +341,12 @@ Difftest::~Difftest() {
 void Difftest::init_checkers() {
   checkers.push_back(new TimeoutChecker([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy));
 
-  checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
-                                                 proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
+  auto *first = new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
+                                            proxy, [this]() -> const DiffTestRegState & { return dut->regs; });
+  checkers.push_back(first);
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  first_commit_checker = first;
+#endif
 
   // Record stores each cycle; checking waits for their stamps or the complete non-squash batch.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
@@ -580,7 +584,7 @@ void Difftest::do_replay() {
 #endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FORK
   if (difftest_ref_fork_is_child())
     return difftest_ref_fork_check(this);
 #endif

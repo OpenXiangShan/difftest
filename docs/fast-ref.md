@@ -8,21 +8,22 @@ Final Good Trap waits for all segments to match state/store hashes, store count
 and squash stamp. Only consecutive matches are trusted; failure terminates.
 
 Generate normal FPGA headers first; rebuild when changing build flags.
-NEMU requires `CONFIG_FAST_REF`; fork also requires enabled store-hash protocol 1.
+NEMU requires `CONFIG_FAST_REF`; fork also requires enabled store hashing.
 
 ```bash
 make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 USE_THREAD_MEMPOOL=1
 ./build/fpga-host --ref-mode fast <normal arguments>
 
 make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK=1 USE_THREAD_MEMPOOL=1
-./build/fpga-host --ref-mode fork --fork-interval 5 \
+./build/fpga-host --ref-mode fork --ref-fork-interval 5 \
   --packet-pool-slots 1048576 <normal arguments>
 ```
 
 FORK requires explicit FAST_REF. FAST_REF alone supports SLOW and FAST-only.
-`--fork-interval` reuses the existing seconds option (default 10; 0 means one
-segment; nonzero values must be >=3). `--packet-pool-slots` is fork-only: a power
-of two >=2, default `NUM_BLOCKS` (normally 4096). Final check timeout is 300 seconds.
+`--ref-fork-interval` sets seconds (default 10; 0 means one segment; nonzero
+values must be >=3). The existing LightSSS `--fork-interval` is independent.
+`--packet-pool-slots` is fork-only: a power of two >=2, default 1048576 packets.
+Final check timeout is 300 seconds.
 
 Parent and children independently parse shared XDMA packets. Each reader releases
 consumed packets; completed children also release their final partial packet.

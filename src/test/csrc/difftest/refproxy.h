@@ -165,7 +165,6 @@ public:
 #ifdef CONFIG_DIFFTEST_FORK
 #define REF_FORK(f) \
   f(ref_state_hash, difftest_state_hash, void, void*) \
-  f(ref_store_hash_version, difftest_store_hash_version, uint32_t, ) \
   f(ref_store_hash_enabled, difftest_store_hash_enabled, bool, )
 #else
 #define REF_FORK(f)

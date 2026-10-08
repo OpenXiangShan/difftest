@@ -234,21 +234,26 @@ public:
   }
 
 private:
-  bool fast_window_has_event(const DiffTestState &window) const;
   int fast_apply_events();
   int fast_ref_step();
-  bool fast_ref_initialized = false;
   bool fast_ref_enabled = false;
   int fast_ref_error = 0;
 #endif
-  void add_sync_checker(DiffTestChecker *checker, bool critical = false) {
+  template <typename Checker> void add_sync_checker(Checker *checker, bool critical = false) {
     checkers.push_back(checker);
 #ifdef CONFIG_DIFFTEST_FAST_REF
-    fast_sync_checkers.emplace_back(checker, critical);
+    fast_sync_checkers.push_back({checker, [checker] { checker->discard(); }, critical});
 #endif
   }
 #ifdef CONFIG_DIFFTEST_FAST_REF
-  std::vector<std::pair<DiffTestChecker *, bool>> fast_sync_checkers;
+  struct SyncChecker {
+    DiffTestChecker *checker;
+    std::function<void()> discard;
+    bool critical;
+  };
+  std::vector<SyncChecker> fast_sync_checkers;
+  FirstInstrCommitChecker *first_commit_checker = nullptr; // Owned by checkers.
+
 #endif
   int check_all();
 

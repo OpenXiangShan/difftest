@@ -121,6 +121,7 @@ public:
   void h2c_load_workload(const void *payload, uint64_t size) override;
 
 private:
+  // Main and parser stop this pipeline; receivers observe the same flag.
   std::atomic<bool> running{false};
   int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
 #ifdef CONFIG_USE_XDMA_H2C

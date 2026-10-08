@@ -211,6 +211,7 @@ private:
   std::atomic<bool> memory_pool_is_free[NUM_BLOCKS]; // Mempool free status
   MemoryChunk memory_order_ptr[NUM_BLOCKS];
   std::atomic<bool> chunk_semaphore{false};
+  // Cancellation crosses receive/process threads, like the existing counters.
   std::atomic<bool> stopped{false};
 
   size_t group_r_offset = 0; // The offset used by the current consumer

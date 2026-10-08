@@ -14,89 +14,18 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 #include "difftest.h"
-#include "flash.h"
-#include "ram.h"
 #include <cstdlib>
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FORK
 #include "ref_fork.h"
 #endif
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
-bool Difftest::fast_window_has_event(const DiffTestState &window) const {
-  if (window.event.valid)
-    return true;
-  // WFI and the final trap are architectural boundaries: a large ref_exec(n)
-  // can execute past them, so force the fast parent to flush its batch here.
-  if (window.trap.hasWFI)
-    return true;
-  if (window.trap.hasTrap)
-    return true;
-#ifdef CONFIG_DIFFTEST_LRSCEVENT
-  if (window.lrsc.valid)
-    return true;
-#endif
-#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  if (window.sync_aia.valid)
-    return true;
-#endif
-#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  if (window.non_reg_interrupt_pending.valid)
-    return true;
-#endif
-#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  if (window.mhpmevent_overflow.valid)
-    return true;
-#endif
-#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  if (window.critical_error.valid)
-    return true;
-#endif
-#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  if (window.sync_custom_mflushpwr.valid)
-    return true;
-#endif
-#ifdef CONFIG_DIFFTEST_DEBUGMODE
-  if (window.dmregs.debugMode != 0)
-    return true;
-#endif
-  return false;
-}
-
-static void clear_fast_events(DiffTestState &window) {
-  window.event.valid = 0;
-#ifdef CONFIG_DIFFTEST_LRSCEVENT
-  window.lrsc.valid = 0;
-#endif
-#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  window.sync_aia.valid = 0;
-#endif
-#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  window.non_reg_interrupt_pending.valid = 0;
-#endif
-#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  window.mhpmevent_overflow.valid = 0;
-#endif
-#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  window.critical_error.valid = 0;
-#endif
-#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  window.sync_custom_mflushpwr.valid = 0;
-#endif
-}
-
 int Difftest::fast_apply_events() {
-  int ret = DiffTestChecker::STATE_OK;
-
-  // Keep the same ordering as check_all(): synchronization probes are applied
-  // before ArchEvent, and ArchEvent takes precedence over instruction commits.
-  auto apply = [&ret](DiffTestChecker *checker) {
-    if (ret == DiffTestChecker::STATE_OK && checker != nullptr) {
-      ret = checker->step();
-    }
-  };
-  for (const auto &[checker, critical]: fast_sync_checkers) {
+  // Match check_all(): synchronization first, then interrupt/exception handling.
+  // Each registered checker owns its valid test and consumes its probe.
+  for (const auto &sync: fast_sync_checkers) {
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-    if (critical) {
+    if (sync.critical) {
       if (dut->critical_error.valid) {
         proxy->raise_critical_error();
         dut->critical_error.valid = 0;
@@ -104,16 +33,12 @@ int Difftest::fast_apply_events() {
       continue;
     }
 #endif
-    apply(checker);
+    if (int ret = sync.checker->step())
+      return ret;
   }
-  apply(arch_event_checker);
-
-  return ret;
+  return arch_event_checker->step();
 }
 
-#endif
-
-#ifdef CONFIG_DIFFTEST_FAST_REF
 bool Difftest::set_ref_mode(RefExecMode mode) {
   bool with_fork = false;
 #ifdef CONFIG_DIFFTEST_FORK
@@ -130,29 +55,22 @@ bool Difftest::set_ref_mode(RefExecMode mode) {
 
 int Difftest::fast_ref_step() {
   bool fork_check = false;
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FORK
   fork_check = difftest_ref_fork_enabled();
 #endif
   state->cycle_count = dut->trap.cycleCnt;
   state->has_progress = false;
-  if (!fast_ref_initialized) {
-    bool has_commit = false;
-    for (const auto &commit: dut->commit)
-      has_commit |= commit.valid;
-    if (!has_commit) {
-      clear_fast_events(*dut);
+  if (!state->has_commit) {
+    if (int ret = first_commit_checker->step())
+      return ret;
+    if (!state->has_commit) {
+      for (const auto &sync: fast_sync_checkers)
+        sync.discard();
+      dut->event.valid = 0;
       return DiffTestChecker::STATE_OK;
     }
-    // Establish the same initial state as FirstInstrCommitChecker before fork.
-    proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
-    simMemory->clone_on_demand(
-        [this](uint64_t offset, void *src, size_t n) { proxy->mem_init(PMEM_BASE + offset, src, n, DUT_TO_REF); },
-        true);
-    proxy->regcpy(&dut->regs, FIRST_INST_ADDRESS);
-    state->has_commit = true;
-    fast_ref_initialized = true;
   }
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FORK
   if (fork_check) {
     const int ret = difftest_ref_fork_prepare(this);
     if (ret == 1)
@@ -163,11 +81,8 @@ int Difftest::fast_ref_step() {
 #endif
 
   const bool consumes_commit = dut->event.valid;
-  if (fast_window_has_event(*dut)) {
-    const int ret = fast_apply_events();
-    if (ret)
-      return ret;
-  }
+  if (const int ret = fast_apply_events())
+    return ret;
   uint64_t pending = 0;
   uint32_t committed = 0;
   auto execute = [&]() {
@@ -215,7 +130,7 @@ int Difftest::fast_ref_step() {
       state->record_group(dut->commit[0].pc, committed);
     }
   }
-#ifdef FPGA_HOST
+#ifdef CONFIG_DIFFTEST_FORK
   difftest_ref_fork_publish(this);
 #endif
   for (auto &commit: dut->commit)

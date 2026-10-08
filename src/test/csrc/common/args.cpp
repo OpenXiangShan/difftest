@@ -37,6 +37,7 @@ enum {
   OPT_REF_MODE,
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
+  OPT_REF_FORK_INTERVAL,
   OPT_PACKET_POOL_SLOTS,
 #endif
 };
@@ -93,6 +94,7 @@ static inline void print_help(const char *file) {
   printf("      --ref-mode=MODE        slow (default), fast, or fork\n");
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
+  printf("      --ref-fork-interval=N  REF segment interval in seconds, default: 10\n");
   printf("      --packet-pool-slots=N  fork packet slots, power of two >=2\n");
 #endif
   printf("  -s, --seed=NUM             use this seed\n");
@@ -110,7 +112,7 @@ static inline void print_help(const char *file) {
 #ifdef ENABLE_IPC
   printf("  -R, --ipc-interval=NUM     the interval insts of drawing IPC curve\n");
 #endif
-  printf("  -X, --fork-interval=NUM    fork interval (in seconds), default: 10\n");
+  printf("  -X, --fork-interval=NUM    LightSSS snapshot interval (in seconds), default: 10\n");
   printf("      --overwrite-nbytes=N   set valid bytes, but less than 0xf00, default: 0xe00\n");
   printf("      --overwrite-auto       overwrite size is automatically set of the new gcpt\n");
 #ifdef PLUGIN_SIMFRONTEND
@@ -217,6 +219,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "ref-mode",          1, NULL, OPT_REF_MODE },
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
+    { "ref-fork-interval",  1, NULL, OPT_REF_FORK_INTERVAL },
     { "packet-pool-slots",  1, NULL, OPT_PACKET_POOL_SLOTS },
 #endif
     { "seed",              1, NULL, 's' },
@@ -374,6 +377,15 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         continue;
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
+      case OPT_REF_FORK_INTERVAL: {
+        const auto seconds = atoll_strict(optarg, "ref-fork-interval");
+        if (seconds < 0 || static_cast<uint64_t>(seconds) > UINT64_MAX / 1000000000) {
+          fprintf(stderr, "[ERROR] --ref-fork-interval is out of range\n");
+          exit(EINVAL);
+        }
+        args.ref_fork_interval = seconds * 1000;
+        continue;
+      }
       case OPT_PACKET_POOL_SLOTS: {
         const auto slots = atoll_strict(optarg, "packet-pool-slots");
         if (slots < 2 || (slots & (slots - 1))) {
@@ -419,15 +431,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         }
         break;
       case 'C': args.max_cycles = atoll_strict(optarg, "max-cycles"); break;
-      case 'X': {
-        const auto interval = atoll_strict(optarg, "fork-interval");
-        if (interval < 0 || static_cast<uint64_t>(interval) > UINT64_MAX / 1000000000) {
-          fprintf(stderr, "[ERROR] --fork-interval is out of range\n");
-          exit(EINVAL);
-        }
-        args.fork_interval = 1000 * interval;
-        break;
-      }
+      case 'X': args.fork_interval = 1000 * atoll_strict(optarg, "fork-interval"); break;
       case 'I': args.max_instr = atoll_strict(optarg, "max-instr"); break;
 #ifdef DEBUG_REFILL
       case 'T':
