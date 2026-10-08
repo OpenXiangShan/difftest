@@ -31,6 +31,8 @@ enum {
   OPT_SQUASH_SIZE,
   OPT_NO_SQUASH_AFTER_INSTR,
   OPT_CPU_AXI_DELAY,
+  OPT_CORE_CLOCK_HALF_PERIOD,
+  OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -144,6 +146,8 @@ static inline void print_help(const char *file) {
   printf("      --copy-ram=OFFSET      duplicate the memory at OFFSET\n");
   printf("      --splitview-log=PATH   write splitview uart.log, host.log, and all.log under PATH\n");
   printf("      --random-mem           initialize memory from --seed\n");
+  printf("      --core-clock-half-period=N        core half-period in scheduler ticks\n");
+  printf("      --accelerator-clock-half-period=N accelerator half-period in scheduler ticks\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -189,6 +193,8 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "copy-ram",          1, NULL,  0  },
     { "cst-file",          1, NULL,  0  },
     { "random-mem",        0, NULL,  0  },
+    { "core-clock-half-period",        1, NULL, OPT_CORE_CLOCK_HALF_PERIOD },
+    { "accelerator-clock-half-period", 1, NULL, OPT_ACCELERATOR_CLOCK_HALF_PERIOD },
     { "splitview-log",     1, NULL, OPT_SPLITVIEW_LOG },
     { "db-path",           1, NULL, OPT_DB_PATH },
     { "no-squash",         0, NULL, OPT_NO_SQUASH },
@@ -341,6 +347,25 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           exit(EINVAL);
         }
         args.cpu_axi_delay = static_cast<uint32_t>(cpu_axi_delay);
+        continue;
+      }
+      case OPT_CORE_CLOCK_HALF_PERIOD: {
+        long long core_clock_half_period = atoll_strict(optarg, "core-clock-half-period");
+        if (core_clock_half_period < 1 || static_cast<unsigned long long>(core_clock_half_period) > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --core-clock-half-period must be in range [1, %" PRIu32 "]\n", UINT32_MAX);
+          exit(EINVAL);
+        }
+        args.core_clock_half_period = static_cast<uint32_t>(core_clock_half_period);
+        continue;
+      }
+      case OPT_ACCELERATOR_CLOCK_HALF_PERIOD: {
+        long long accelerator_clock_half_period = atoll_strict(optarg, "accelerator-clock-half-period");
+        if (accelerator_clock_half_period < 1 ||
+            static_cast<unsigned long long>(accelerator_clock_half_period) > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --accelerator-clock-half-period must be in range [1, %" PRIu32 "]\n", UINT32_MAX);
+          exit(EINVAL);
+        }
+        args.accelerator_clock_half_period = static_cast<uint32_t>(accelerator_clock_half_period);
         continue;
       }
       case 's':
