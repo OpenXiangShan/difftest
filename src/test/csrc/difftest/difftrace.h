@@ -2,6 +2,7 @@
 #define __DIFFTRACE_H__
 
 #include "common.h"
+#include <limits.h>
 #ifdef CONFIG_DIFFTEST_IOTRACE
 #include "difftest-iotrace.h"
 #endif // CONFIG_DIFFTEST_IOTRACE
@@ -50,7 +51,7 @@ private:
 
 template <typename T> class DiffTrace {
 public:
-  char trace_name[32];
+  char trace_name[PATH_MAX];
   bool is_read;
 #ifdef CONFIG_IOTRACE_ZSTD
   DiffTraceZstd *trace_zstd = NULL;
@@ -75,6 +76,7 @@ public:
 private:
   uint64_t buffer_size;
   uint64_t buffer_count = 0;
+  uint64_t trace_index = 0;
   T *buffer = nullptr;
 
   bool trace_file_next();

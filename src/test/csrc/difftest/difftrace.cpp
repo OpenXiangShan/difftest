@@ -9,10 +9,10 @@ DiffTrace<T>::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_
   if (!is_read) {
     buffer = (T *)calloc(buffer_size, sizeof(T));
   }
-  if (strlen(trace_name) > 31) {
-    printf("Length of trace_name %s is more than 31 characters.\n", trace_name);
+  if (strlen(_trace_name) >= sizeof(trace_name)) {
+    printf("Length of trace_name %s exceeds the path limit.\n", _trace_name);
     printf("Please use a shorter name.\n");
-    exit(0);
+    exit(1);
   }
   strcpy(trace_name, _trace_name);
 #ifdef CONFIG_IOTRACE_ZSTD
@@ -45,7 +45,6 @@ template <typename T> bool DiffTrace<T>::read_next(T *trace) {
 
 template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
   memset(file_name, 0, PATH_MAX);
-  static uint64_t trace_index = 0;
   char dirname[PATH_MAX];
   int ret = 0;
   if (strchr(trace_name, '/')) {
@@ -73,6 +72,8 @@ template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
 }
 
 template <typename T> bool DiffTrace<T>::trace_file_next() {
+  if (!is_read && !buffer_count)
+    return false;
   static char *filename = (char *)malloc(PATH_MAX);
 #ifdef CONFIG_IOTRACE_ZSTD
   if (trace_zstd->need_load_new_file == true && is_read) {
@@ -131,6 +132,7 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
 }
 
 template class DiffTrace<DiffTestState>;
+template class DiffTrace<uint64_t>;
 
 #ifdef CONFIG_IOTRACE_ZSTD
 void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
