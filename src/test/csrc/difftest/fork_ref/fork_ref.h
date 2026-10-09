@@ -13,8 +13,8 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-#ifndef DIFFTEST_REF_FORK_H
-#define DIFFTEST_REF_FORK_H
+#ifndef DIFFTEST_FORK_REF_H
+#define DIFFTEST_FORK_REF_H
 
 class Difftest;
 #include <cstdint>

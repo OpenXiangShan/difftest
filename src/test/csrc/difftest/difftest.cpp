@@ -16,7 +16,7 @@
 
 #include "difftest.h"
 #ifdef CONFIG_DIFFTEST_FORK_REF
-#include "ref_fork.h"
+#include "fork_ref/fork_ref.h"
 #endif
 #include "common.h"
 #include "difftrace.h"

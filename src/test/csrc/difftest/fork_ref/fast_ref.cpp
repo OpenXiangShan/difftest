@@ -16,7 +16,7 @@
 #include "difftest.h"
 #include <cstdlib>
 #ifdef CONFIG_DIFFTEST_FORK_REF
-#include "ref_fork.h"
+#include "fork_ref.h"
 #endif
 
 #ifdef CONFIG_DIFFTEST_FAST_REF

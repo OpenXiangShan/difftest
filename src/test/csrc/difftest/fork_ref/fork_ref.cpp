@@ -13,8 +13,10 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-#include "ref_fork.h"
+#include "fork_ref.h"
 #include "difftest.h"
+
+#ifdef CONFIG_DIFFTEST_FORK_REF
 #include "shared_packet_pool.h"
 #include <atomic>
 #include <cerrno>
@@ -27,7 +29,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#ifdef CONFIG_DIFFTEST_FORK_REF
 namespace {
 // Bound outstanding checkpoints, not the lifetime number of segments.
 constexpr unsigned MAX_SEGMENTS = SharedPacketPool::MAX_READERS;
