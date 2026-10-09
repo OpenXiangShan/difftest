@@ -337,7 +337,6 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           case 31: args.random_mem = true; continue;
         }
         // fall through
-      case '?': print_help(argv[0]); exit(EINVAL);
       default: print_help(argv[0]); exit(0);
       case OPT_SPLITVIEW_LOG:
         args.splitview_log_path = optarg;
