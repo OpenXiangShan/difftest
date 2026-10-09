@@ -39,6 +39,7 @@ public:
   struct Shared {
     alignas(64) std::atomic<uint64_t> head{0};
     std::atomic<bool> abort{false};
+    std::atomic<uint64_t> reader_epoch{0};
     Reader readers[MAX_READERS];
   };
 
@@ -100,6 +101,7 @@ public:
       if (!shared->readers[i].active.load(std::memory_order_acquire)) {
         shared->readers[i].cursor.store(consumer, std::memory_order_relaxed);
         shared->readers[i].active.store(true, std::memory_order_release);
+        shared->reader_epoch.fetch_add(1, std::memory_order_release);
         return i;
       }
     }
@@ -114,13 +116,19 @@ public:
   }
   // Every active parser, including the current leader, retains its packet.
   uint64_t retained_from() const {
-    uint64_t oldest = shared->head.load(std::memory_order_acquire);
-    for (unsigned i = 0; i < MAX_READERS; ++i) {
-      if (shared->readers[i].active.load(std::memory_order_acquire)) {
-        oldest = std::min(oldest, shared->readers[i].cursor.load(std::memory_order_acquire));
+    // Registration precedes leader advancement; retry if that advancement
+    // could hide a new reader in an already-scanned, reused ID.
+    while (true) {
+      const uint64_t epoch = shared->reader_epoch.load(std::memory_order_acquire);
+      uint64_t oldest = shared->head.load(std::memory_order_acquire);
+      for (unsigned i = 0; i < MAX_READERS; ++i) {
+        if (shared->readers[i].active.load(std::memory_order_acquire)) {
+          oldest = std::min(oldest, shared->readers[i].cursor.load(std::memory_order_acquire));
+        }
       }
+      if (epoch == shared->reader_epoch.load(std::memory_order_acquire))
+        return oldest;
     }
-    return oldest;
   }
   uint64_t cursor() const {
     return consumer;
