@@ -63,25 +63,31 @@ object MatrixHash {
   }
 
   // Callers drive the returned accepted-write bundle; only the compact hash enters the gateway.
-  def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int): DiffAmuFinishEvent = {
-    val module = Module(new MatrixHash(banks, bankBytes, regBytes, rowBytes))
-    val writes = Wire(new DiffAmuFinishEvent(banks, bankBytes / 8))
+  def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int): DiffAmuFinishEvent =
+    apply(banks, bankBytes, regBytes, rowBytes, ports = 1).head
+
+  // Port zero owns instruction metadata and finish. Other ports only contribute
+  // accepted writes to that same instruction; they never complete independently.
+  def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports: Int): Vec[DiffAmuFinishEvent] = {
+    val module = Module(new MatrixHash(banks, bankBytes, regBytes, rowBytes, ports))
+    val writes = Wire(Vec(ports, new DiffAmuFinishEvent(banks, bankBytes / 8)))
     module.io.in := writes
     DifftestModule(new DiffAmuHashEvent) := module.io.out
     writes
   }
 }
 
-/** One instruction's write stream per instance, with one beat accepted per cycle and no backpressure.
+/** One instruction's write stream per instance, with concurrent write beats accepted per cycle and no backpressure.
   * A beat may write several banks. `valid && finish` closes the instruction, including that beat's writes.
   * Instructions may be back-to-back, but their write streams must not interleave within this instance.
   *
   * Pipeline: fragment/coefficient -> partial products -> bank contribution -> accumulation/completion.
   * Output valid and metadata are delayed by four registers from the input finish beat.
   */
-class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int) extends Module {
+class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports: Int = 1) extends Module {
   import MatrixHash._
 
+  require(ports > 0)
   require(bankBytes % 8 == 0 && rowBytes % bankBytes == 0)
   require(regBytes % (banks * rowBytes) == 0)
   private val entriesPerBank = regBytes / (banks * bankBytes)
@@ -91,7 +97,7 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int) exten
   require(entriesPerBank > 1 && entriesPerBank <= 256 && isPow2(entriesPerBank))
 
   val io = IO(new Bundle {
-    val in = Input(new DiffAmuFinishEvent(banks, bankBytes / 8))
+    val in = Input(Vec(ports, new DiffAmuFinishEvent(banks, bankBytes / 8)))
     val out = Output(new DiffAmuHashEvent)
   })
 
@@ -104,55 +110,80 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int) exten
     .take(regBytes / bankBytes)
     .toVector
 
-  val contributions = (0 until banks).map { bank =>
-    val active = io.in.valid && io.in.bankValid(bank)
+  val contributions = (0 until ports).flatMap { port =>
+    val writes = io.in(port)
+    (0 until banks).map { bank =>
+      val active = writes.valid && writes.bankValid(bank)
 
-    // Stage 1: encode this beat's bytes and select their logical position coefficient.
-    // Reverse before Cat so word 0, then byte 0, occupies the least-significant bits.
-    val data = io.in.data
-      .slice(bank * bankBytes / 8, (bank + 1) * bankBytes / 8)
-      .reverse
-      .reduce(Cat(_, _))
-    val bytes = (0 until bankBytes).map { byte =>
-      Mux(
-        active && io.in.bankMask(bank)(byte),
-        Cat(1.U(1.W), data(byte * 8 + 7, byte * 8)),
-        0.U(symbolWidth.W),
-      )
+      // Stage 1: encode this beat's bytes and select their logical position coefficient.
+      // Reverse before Cat so word 0, then byte 0, occupies the least-significant bits.
+      val data = writes.data
+        .slice(bank * bankBytes / 8, (bank + 1) * bankBytes / 8)
+        .reverse
+        .reduce(Cat(_, _))
+      val bytes = (0 until bankBytes).map { byte =>
+        Mux(
+          active && writes.bankMask(bank)(byte),
+          Cat(1.U(1.W), data(byte * 8 + 7, byte * 8)),
+          0.U(symbolWidth.W),
+        )
+      }
+      val fragment = RegNext(reducePolynomial(bytes.reverse.reduce(Cat(_, _)), symbolWidth * bankBytes))
+
+      // Banks interleave logical rows; consecutive chunks of a row stay in the same bank.
+      // All address arithmetic here uses Scala Ints to build constants, not hardware dividers.
+      val coefficients = VecInit((0 until entriesPerBank).map { addr =>
+        val row = (addr / chunksPerRow) * banks + bank
+        val chunkInRow = addr % chunksPerRow
+        val offset = row * rowBytes + chunkInRow * bankBytes
+        positions(offset / bankBytes).U(hashWidth.W)
+      })
+      val coefficient = RegNext(coefficients(writes.bankAddr(bank)(log2Ceil(entriesPerBank) - 1, 0)))
+      when(active) {
+        assert(writes.bankAddr(bank) < entriesPerBank.U, "Matrix hash address exceeds register capacity")
+      }
+
+      // Stage 2: three 64x64 carry-less products form a 128x128 Karatsuba multiplication.
+      val lo = RegNext(carrylessMultiply(fragment(63, 0), coefficient(63, 0)))
+      val hi = RegNext(carrylessMultiply(fragment(127, 64), coefficient(127, 64)))
+      val mid =
+        RegNext(carrylessMultiply(fragment(63, 0) ^ fragment(127, 64), coefficient(63, 0) ^ coefficient(127, 64)))
+
+      // Stage 3: recombine the 256-bit product and reduce modulo P.
+      // (fragment * x^(9*offset)) mod P binds the local bytes to their register positions.
+      RegNext(reducePolynomial(lo.pad(256) ^ ((mid ^ lo ^ hi) << 64).pad(256) ^ (hi << 128), 256))
     }
-    val fragment = RegNext(reducePolynomial(bytes.reverse.reduce(Cat(_, _)), symbolWidth * bankBytes))
-
-    // Banks interleave logical rows; consecutive chunks of a row stay in the same bank.
-    // All address arithmetic here uses Scala Ints to build constants, not hardware dividers.
-    val coefficients = VecInit((0 until entriesPerBank).map { addr =>
-      val row = (addr / chunksPerRow) * banks + bank
-      val chunkInRow = addr % chunksPerRow
-      val offset = row * rowBytes + chunkInRow * bankBytes
-      positions(offset / bankBytes).U(hashWidth.W)
-    })
-    val coefficient = RegNext(coefficients(io.in.bankAddr(bank)(log2Ceil(entriesPerBank) - 1, 0)))
-    when(active) {
-      assert(io.in.bankAddr(bank) < entriesPerBank.U, "Matrix hash address exceeds register capacity")
-    }
-
-    // Stage 2: three 64x64 carry-less products form a 128x128 Karatsuba multiplication.
-    val lo = RegNext(carrylessMultiply(fragment(63, 0), coefficient(63, 0)))
-    val hi = RegNext(carrylessMultiply(fragment(127, 64), coefficient(127, 64)))
-    val mid = RegNext(carrylessMultiply(fragment(63, 0) ^ fragment(127, 64), coefficient(63, 0) ^ coefficient(127, 64)))
-
-    // Stage 3: recombine the 256-bit product and reduce modulo P.
-    // (fragment * x^(9*offset)) mod P binds the local bytes to their register positions.
-    RegNext(reducePolynomial(lo.pad(256) ^ ((mid ^ lo ^ hi) << 64).pad(256) ^ (hi << 128), 256))
   }
 
   // Count accepted byte writes (not unique addresses) and align with the stage-3 contributions.
   // This catches extra writes even when identical polynomial contributions cancel under XOR.
-  val count = PopCount(VecInit((0 until banks).flatMap { bank =>
-    (0 until bankBytes).map(byte => io.in.valid && io.in.bankValid(bank) && io.in.bankMask(bank)(byte))
+  for (port <- 1 until ports) {
+    assert(!io.in(port).finish, "Matrix hash finish belongs to port zero")
+  }
+  for {
+    left <- 0 until ports
+    right <- left + 1 until ports
+    bank <- 0 until banks
+  } {
+    val a = io.in(left)
+    val b = io.in(right)
+    when(
+      a.valid && b.valid && a.bankValid(bank) && b.bankValid(bank) &&
+        a.bankAddr(bank) === b.bankAddr(bank)
+    ) {
+      assert(!(a.bankMask(bank) & b.bankMask(bank)).orR, "Concurrent matrix hash writes must not overlap bytes")
+    }
+  }
+  val count = PopCount(VecInit((0 until ports).flatMap { port =>
+    (0 until banks).flatMap { bank =>
+      (0 until bankBytes).map { byte =>
+        io.in(port).valid && io.in(port).bankValid(bank) && io.in(port).bankMask(bank)(byte)
+      }
+    }
   }))
   val beatCount = ShiftRegister(count, contributionLatency)
-  val valid = ShiftRegister(io.in.valid, contributionLatency, false.B, true.B)
-  val finish = ShiftRegister(io.in.valid && io.in.finish, contributionLatency, false.B, true.B)
+  val valid = ShiftRegister(io.in.map(_.valid).reduce(_ || _), contributionLatency, false.B, true.B)
+  val finish = ShiftRegister(io.in(0).valid && io.in(0).finish, contributionLatency, false.B, true.B)
 
   // Stage 4: accumulate this instruction's contributions. Resetting valid/finish flushes the
   // pipeline; fragment/product registers need no reset because invalid beats cannot update state.
@@ -168,9 +199,9 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int) exten
     byteCount := Mux(finish, 0.U, nextCount)
   }
   io.out.valid := RegNext(finish, false.B)
-  io.out.pc := ShiftRegister(io.in.pc, completionLatency)
-  io.out.coreid := ShiftRegister(io.in.coreid, completionLatency)
-  io.out.index := ShiftRegister(io.in.index, completionLatency)
+  io.out.pc := ShiftRegister(io.in(0).pc, completionLatency)
+  io.out.coreid := ShiftRegister(io.in(0).coreid, completionLatency)
+  io.out.index := ShiftRegister(io.in(0).index, completionLatency)
   io.out.hashLo := RegEnable(nextHash(63, 0), finish)
   io.out.hashHi := RegEnable(nextHash(127, 64), finish)
   io.out.byteCount := RegEnable(nextCount, finish)

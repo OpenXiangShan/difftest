@@ -56,6 +56,8 @@ class MatrixStoreTracker {
 public:
   using RequestMap = std::map<uint64_t, MatrixStoreRequest>;
 
+  MatrixStoreTracker(uint64_t sourceTag, uint64_t sourceTagMask) : cWriteTag(sourceTag), sourceTagMask(sourceTagMask) {}
+
   MatrixStoreTrackerStatus insert(uint64_t encodedSourceId, const MatrixStoreRequest &request) {
     if (!has_cwrite_tag(encodedSourceId)) {
       return MatrixStoreTrackerStatus::MalformedTag;
@@ -145,11 +147,11 @@ public:
   }
 
 private:
-  static constexpr uint64_t CWriteTag = 3;
-  static constexpr uint64_t SourceTagMask = 7;
+  const uint64_t cWriteTag;
+  const uint64_t sourceTagMask;
 
-  static bool has_cwrite_tag(uint64_t encodedSourceId) {
-    return (encodedSourceId & SourceTagMask) == CWriteTag;
+  bool has_cwrite_tag(uint64_t encodedSourceId) const {
+    return (encodedSourceId & sourceTagMask) == cWriteTag;
   }
 
   static void set_failure(MatrixStoreFailure *failure, MatrixStoreTrackerStatus status, bool isRequest, size_t lane,

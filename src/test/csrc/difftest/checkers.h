@@ -356,6 +356,14 @@ private:
 #endif // CONFIG_DIFFTEST_SBUFFEREVENT
 
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+#if !defined(CONFIG_DIFF_MATRIX_STORE_SOURCE_TAG) || !defined(CONFIG_DIFF_MATRIX_SOURCE_TAG_MASK)
+#error "MatrixStore requires generated source tag and mask configuration"
+#else
+static_assert(CONFIG_DIFF_MATRIX_SOURCE_TAG_MASK != 0, "MatrixStore source tag mask must be nonzero");
+static_assert((CONFIG_DIFF_MATRIX_STORE_SOURCE_TAG & CONFIG_DIFF_MATRIX_SOURCE_TAG_MASK) ==
+                  CONFIG_DIFF_MATRIX_STORE_SOURCE_TAG,
+              "MatrixStore source tag must fit the configured mask");
+#endif
 class MatrixStoreChecker : public DiffTestChecker {
 public:
   using GetProbesFn = std::function<DifftestMatrixStoreEvent *()>;
@@ -371,7 +379,7 @@ private:
   int do_step() override;
 
   GetProbesFn get_probes;
-  MatrixStoreTracker tracker;
+  MatrixStoreTracker tracker{CONFIG_DIFF_MATRIX_STORE_SOURCE_TAG, CONFIG_DIFF_MATRIX_SOURCE_TAG_MASK};
 };
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 
