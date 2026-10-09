@@ -20,7 +20,6 @@
 #include "diffstate.h"
 #include "fpga_transport.h"
 #include "mpool.h"
-#include "shared_packet_pool.h"
 #include <atomic>
 #include <memory>
 #include <queue>
@@ -72,7 +71,7 @@ typedef struct __attribute__((packed)) {
 
 class FpgaXdma : public FpgaTransport {
 public:
-  FpgaXdma(bool shared_packets = false, size_t pool_slots = NUM_BLOCKS);
+  FpgaXdma(bool fork_readers = false, size_t pool_slots = NUM_BLOCKS);
   ~FpgaXdma();
 
 #ifdef USE_THREAD_MEMPOOL
@@ -110,8 +109,8 @@ public:
   void stop() override {
     running = false;
 #ifdef USE_THREAD_MEMPOOL
-    if (indexed_packet_pool)
-      indexed_packet_pool->stop_waiting();
+    if (packet_pool)
+      packet_pool->stop_waiting();
 #endif // USE_THREAD_MEMPOOL
   }
 
@@ -144,8 +143,8 @@ private:
 #ifdef USE_THREAD_MEMPOOL
   bool (*packet_idle)() = nullptr;
   void (*packet_abort)() = nullptr;
-  std::unique_ptr<MemoryIdxPool> indexed_packet_pool;
-  std::unique_ptr<SharedPacketPool> shared_packet_pool;
+  std::unique_ptr<MemoryIdxPool> packet_pool;
+  bool fork_readers = false;
   std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;

@@ -17,7 +17,7 @@
 #include "difftest.h"
 
 #ifdef CONFIG_DIFFTEST_FORK_REF
-#include "shared_packet_pool.h"
+#include "mpool.h"
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -31,7 +31,7 @@
 
 namespace {
 // Bound outstanding checkpoints, not the lifetime number of segments.
-constexpr unsigned MAX_SEGMENTS = SharedPacketPool::MAX_READERS;
+constexpr unsigned MAX_SEGMENTS = MemoryIdxPool::MAX_READERS;
 constexpr uint64_t OPEN_END = UINT64_MAX;
 constexpr uint64_t TIMEOUT_NS = 300ULL * 1000000000;
 enum class Role {
@@ -95,7 +95,7 @@ bool hashes_match(const DifftestStateHash &a, const DifftestStateHash &b) {
          a.store_count == b.store_count;
 }
 void fail() {
-  g_shared_packet_pool->fail();
+  g_packet_pool->fail();
   control->complete.store(2, std::memory_order_release);
 }
 // Called only at parser boundaries, outside checkpoint construction/publication.
@@ -109,7 +109,7 @@ void pause_leader() {
 }
 void discard_checker() {
   segment(current_segment).status.store(Status::DISCARDED, std::memory_order_release);
-  g_shared_packet_pool->finish_reader();
+  g_packet_pool->finish_reader();
   _exit(0);
 }
 void complete_checker(Difftest *self, bool checks_ok) {
@@ -117,7 +117,7 @@ void complete_checker(Difftest *self, bool checks_ok) {
   if (s.command.load(std::memory_order_acquire) == Command::DISCARD)
     discard_checker();
   s.checked_windows = child_window - s.start_window;
-  s.end_packet = g_shared_packet_pool->cursor();
+  s.end_packet = g_packet_pool->cursor();
   s.child_end_ns = now_ns();
   self->proxy->sync();
   checks_ok =
@@ -127,19 +127,19 @@ void complete_checker(Difftest *self, bool checks_ok) {
   s.status.store(!checks_ok ? Status::FAILED : (match ? Status::MATCH : Status::DIVERGED), std::memory_order_release);
   if (!checks_ok) {
     // Its starting snapshot is authoritative only after preceding segments pass.
-    g_shared_packet_pool->finish_reader();
+    g_packet_pool->finish_reader();
     fflush(nullptr);
     _exit(2);
   }
   if (match) {
-    g_shared_packet_pool->finish_reader();
+    g_packet_pool->finish_reader();
     _exit(0);
   }
   // A locally valid slow endpoint remains alive and pins its boundary packet.
   // Only the supervisor, after trusting all predecessors, can promote it.
   while (true) {
     const Command cmd = s.command.load(std::memory_order_acquire);
-    if (cmd == Command::DISCARD || g_shared_packet_pool->aborted())
+    if (cmd == Command::DISCARD || g_packet_pool->aborted())
       discard_checker();
     if (cmd == Command::PROMOTE) {
       windows = child_window;
@@ -154,7 +154,7 @@ void complete_checker(Difftest *self, bool checks_ok) {
       deadline_ns = now_ns() + interval_ns;
       s.status.store(Status::PROMOTED, std::memory_order_release);
       printf("RefLeaderPromoted PID=%d Generation=%lu Window=%lu Packet=%lu\n", int(getpid()),
-             (unsigned long)generation, (unsigned long)windows, (unsigned long)g_shared_packet_pool->cursor());
+             (unsigned long)generation, (unsigned long)windows, (unsigned long)g_packet_pool->cursor());
       fflush(stdout);
       return;
     }
@@ -198,7 +198,7 @@ void poll_checkers() {
       continue;
     const bool ok = reap(pid, s.reaped, s.command.load(std::memory_order_acquire) == Command::DISCARD);
     if (s.reaped) {
-      g_shared_packet_pool->retire_reader(s.reader);
+      g_packet_pool->retire_reader(s.reader);
       const auto status = s.status.load(std::memory_order_acquire);
       if (!ok || (status != Status::MATCH && status != Status::DISCARDED))
         s.status.store(Status::FAILED, std::memory_order_release);
@@ -236,7 +236,7 @@ bool recover(uint64_t seq) {
   control->pause.store(true, std::memory_order_release);
   const uint64_t begin = now_ns();
   while (!control->paused.load(std::memory_order_acquire)) {
-    if (g_shared_packet_pool->aborted() || now_ns() - begin >= TIMEOUT_NS)
+    if (g_packet_pool->aborted() || now_ns() - begin >= TIMEOUT_NS)
       return false;
     if (!reap(leader_pid, leader_reaped) || leader_reaped)
       return false;
@@ -268,9 +268,9 @@ bool recover(uint64_t seq) {
       return false;
     usleep(1000);
   }
-  g_shared_packet_pool->retire_reader(leader_reader);
+  g_packet_pool->retire_reader(leader_reader);
   for (uint64_t i = seq + 1; i < end; ++i)
-    g_shared_packet_pool->retire_reader(segment(i).reader);
+    g_packet_pool->retire_reader(segment(i).reader);
   leader_pid = candidate.pid.load(std::memory_order_acquire);
   leader_reader = candidate.reader;
   leader_reaped = false;
@@ -287,8 +287,7 @@ bool recover(uint64_t seq) {
   fflush(stdout);
   candidate.command.store(Command::PROMOTE, std::memory_order_release);
   while (candidate.status.load(std::memory_order_acquire) != Status::PROMOTED) {
-    if (g_shared_packet_pool->aborted() || now_ns() - begin >= TIMEOUT_NS || !reap(leader_pid, leader_reaped) ||
-        leader_reaped)
+    if (g_packet_pool->aborted() || now_ns() - begin >= TIMEOUT_NS || !reap(leader_pid, leader_reaped) || leader_reaped)
       return false;
     usleep(50);
   }
@@ -322,7 +321,7 @@ bool difftest_ref_fork_is_child() {
   return role == Role::CHECKER;
 }
 int difftest_ref_fork_start() {
-  if (!enabled || !g_shared_packet_pool || control)
+  if (!enabled || !g_packet_pool || control)
     return -1;
 #if defined(CONFIG_DIFFTEST_LOADEVENT) || defined(CONFIG_DIFFTEST_STOREEVENT) ||                     \
     defined(CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE) || defined(CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE) || \
@@ -348,7 +347,7 @@ int difftest_ref_fork_start() {
     return 1;
   }
   printf("RefSupervisor PID=%d Leader=%d PoolSlots=%zu\n", int(supervisor_pid), int(leader_pid),
-         g_shared_packet_pool->capacity);
+         g_packet_pool->capacity);
   fflush(stdout);
   return 0;
 }
@@ -358,7 +357,7 @@ int difftest_ref_fork_prepare(Difftest *self) {
   if (!control || role != Role::LEADER)
     return 2;
   pause_leader();
-  if (g_shared_packet_pool->aborted())
+  if (g_packet_pool->aborted())
     return 2;
   const bool next = current_segment == OPEN_END || (interval_ns && now_ns() >= deadline_ns && !self->dut->trap.hasTrap);
   if (!next)
@@ -367,21 +366,21 @@ int difftest_ref_fork_prepare(Difftest *self) {
   uint64_t seq = control->head.load(std::memory_order_relaxed);
   while (seq - control->retired.load(std::memory_order_acquire) >= MAX_SEGMENTS) {
     pause_leader();
-    if (g_shared_packet_pool->aborted())
+    if (g_packet_pool->aborted())
       return 2;
     usleep(50);
   }
   unsigned reader;
-  while ((reader = g_shared_packet_pool->add_reader()) == SharedPacketPool::MAX_READERS) {
+  while ((reader = g_packet_pool->add_reader()) == MemoryIdxPool::MAX_READERS) {
     pause_leader();
-    if (g_shared_packet_pool->aborted())
+    if (g_packet_pool->aborted())
       return 2;
     usleep(50);
   }
   Segment &s = segment(seq);
   s.generation = generation;
   s.start_window = windows;
-  s.start_packet = g_shared_packet_pool->cursor();
+  s.start_packet = g_packet_pool->cursor();
   s.start_ns = now_ns();
   s.reader = reader;
   s.pid.store(0, std::memory_order_relaxed);
@@ -395,14 +394,14 @@ int difftest_ref_fork_prepare(Difftest *self) {
   fflush(nullptr);
   const pid_t pid = syscall(SYS_clone, CLONE_PARENT | SIGCHLD, nullptr, nullptr, nullptr, 0);
   if (pid < 0) {
-    g_shared_packet_pool->retire_reader(reader);
+    g_packet_pool->retire_reader(reader);
     fail();
     return 2;
   }
   if (pid == 0) {
     role = Role::CHECKER;
     child_window = s.start_window;
-    g_shared_packet_pool->enter_reader(reader);
+    g_packet_pool->enter_reader(reader);
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() != supervisor_pid)
       _exit(2);
     s.child_start_ns = now_ns();
@@ -427,7 +426,7 @@ int difftest_ref_fork_check(Difftest *self) {
   while (control->published_windows.load(std::memory_order_acquire) <= child_window) {
     if (s.command.load(std::memory_order_acquire) == Command::DISCARD)
       discard_checker();
-    if (g_shared_packet_pool->aborted())
+    if (g_packet_pool->aborted())
       complete_checker(self, false);
     if (s.end_window.load(std::memory_order_acquire) == child_window)
       break;
@@ -449,7 +448,7 @@ int difftest_ref_fork_check(Difftest *self) {
   // CriticalError is a legitimate terminal window when the checker agrees.
   // Wait for FAST to close it rather than rejecting STATE_TRAP as an error.
   while (terminal && s.end_window.load(std::memory_order_acquire) == OPEN_END) {
-    if (g_shared_packet_pool->aborted())
+    if (g_packet_pool->aborted())
       complete_checker(self, false);
     usleep(50);
   }
@@ -474,7 +473,7 @@ int difftest_ref_fork_idle() {
     Segment &s = segment(current_segment);
     if (s.command.load(std::memory_order_acquire) == Command::DISCARD)
       discard_checker();
-    if (g_shared_packet_pool->aborted())
+    if (g_packet_pool->aborted())
       complete_checker(difftest[0], false);
     if (s.end_window.load(std::memory_order_acquire) == child_window)
       complete_checker(difftest[0], true);
@@ -482,17 +481,17 @@ int difftest_ref_fork_idle() {
   }
   if (role == Role::LEADER) {
     pause_leader();
-    return g_shared_packet_pool->aborted() ? 2 : 0;
+    return g_packet_pool->aborted() ? 2 : 0;
   }
   poll_checkers();
   if (!reap(leader_pid, leader_reaped))
     fail();
   if (leader_reaped) {
-    g_shared_packet_pool->retire_reader(leader_reader);
+    g_packet_pool->retire_reader(leader_reader);
     if (control->complete.load(std::memory_order_acquire) != 1)
       fail();
   }
-  if (!g_shared_packet_pool->aborted()) {
+  if (!g_packet_pool->aborted()) {
     const uint64_t end = control->head.load(std::memory_order_acquire);
     while (trusted_segment < end) {
       Segment &s = segment(trusted_segment);
@@ -528,7 +527,7 @@ int difftest_ref_fork_idle() {
         control->complete.store(1, std::memory_order_release);
     }
   }
-  if (g_shared_packet_pool->aborted()) {
+  if (g_packet_pool->aborted()) {
     fail();
     if (!leader_reaped)
       kill(leader_pid, SIGKILL);

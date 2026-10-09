@@ -159,7 +159,7 @@ void fpga_init() {
   try {
     if (args.packet_pool_log2 == 0 || args.packet_pool_log2 >= sizeof(size_t) * 8)
       throw std::invalid_argument("Packet pool order is outside the supported range");
-    xdma_device = new FpgaXdma(/*shared_packets=*/args.ref_mode == RefMode::FORK,
+    xdma_device = new FpgaXdma(/*fork_readers=*/args.ref_mode == RefMode::FORK,
                                /*pool_slots=*/size_t{1} << args.packet_pool_log2);
   } catch (const std::exception &error) {
     fprintf(stderr, "[fpga-host] packet pool initialization failed: %s\n", error.what());
@@ -279,7 +279,7 @@ void fpga_init() {
 void fpga_finish() {
   if (difftest_ref_fork_enabled()) {
     if (signal_num)
-      g_shared_packet_pool->fail();
+      g_packet_pool->fail();
     fpga_result = difftest_ref_fork_finish() ? FPGA_FAIL : FPGA_GOODTRAP;
   }
 
@@ -416,8 +416,8 @@ extern "C" void fpga_nstep(uint8_t step) {
   if (ret != FPGA_RUN) {
     if (difftest_ref_fork_enabled())
       printf("FastEndpoint Result=%d\n", ret);
-    if (ret != FPGA_GOODTRAP && g_shared_packet_pool)
-      g_shared_packet_pool->fail();
+    if (ret != FPGA_GOODTRAP && g_packet_pool)
+      g_packet_pool->fail();
     if (difftest_ref_fork_finish())
       ret = FPGA_FAIL;
     fpga_display_result(ret);
@@ -428,8 +428,8 @@ extern "C" void fpga_nstep(uint8_t step) {
 
 void fpga_ref_fork_abort() {
   fpga_result = FPGA_FAIL;
-  if (g_shared_packet_pool)
-    g_shared_packet_pool->fail();
+  if (g_packet_pool)
+    g_packet_pool->fail();
   difftest_ref_fork_finish();
   fpga_display_result(FPGA_FAIL);
   xdma_device->stop();

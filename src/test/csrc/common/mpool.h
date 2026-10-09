@@ -147,85 +147,68 @@ private:
   size_t page_end = 0;
 };
 
-// Split the memory pool into sliding Windows based on the index width
-// Support multi-thread out-of-order write sequential read
+// Shared packet storage with serialized idx sorting and local parser cursors.
 class MemoryIdxPool {
-private:
-  const size_t MAX_IDX = 256;
-  const size_t MAX_GROUPING_IDX = NUM_BLOCKS / MAX_IDX;
-  const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2; //The window needs to reserve two free Spaces
-  const size_t REM_MAX_IDX = (MAX_IDX - 1);
-  const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
-  uint64_t mem_block_size = MEMBLOCK_SIZE;
-
 public:
-  MemoryIdxPool(uint64_t block_size) : mem_block_size(block_size) {
-    if (NUM_BLOCKS < 2048 || (NUM_BLOCKS & (NUM_BLOCKS - 1)))
-      throw std::runtime_error("Indexed pool requires a power of two >=2048 slots");
-    size_t total_size = NUM_BLOCKS * mem_block_size;
-    void *base = nullptr;
-    if (posix_memalign(&base, 4096, total_size) != 0) {
-      throw std::runtime_error("Failed to allocate large aligned memory block");
-    }
-    memset(base, 0, total_size);
-    memory_base = static_cast<char *>(base);
-    for (size_t i = 0; i < NUM_BLOCKS; ++i) {
-      memory_pool[i] = (memory_base + i * mem_block_size);
-      memory_order_ptr[i].is_free.store(true);
-      memory_pool_is_free[i].store(true);
-    }
+  static constexpr unsigned MAX_READERS = 128;
+  MemoryIdxPool(uint64_t block_size, size_t count = NUM_BLOCKS);
+  ~MemoryIdxPool();
+  MemoryIdxPool(const MemoryIdxPool &) = delete;
+  MemoryIdxPool &operator=(const MemoryIdxPool &) = delete;
 
-    printf("MemoryIdxPool using contiguous memory block\n");
-  }
-  ~MemoryIdxPool() {}
-
-  // Get free block pointer increment is returned from the heap
   char *get_free_chunk(size_t *mem_idx);
-  // Write a specified free block of a free window
   bool write_free_chunk(uint8_t idx, size_t mem_idx);
-
-  // Get the head memory
   char *read_busy_chunk();
-
-  // Set the block data valid and locked
   void set_free_chunk();
-
-  // Wait for the data to be free
   size_t wait_next_free_group();
 
-  // Wait for the data to be readable
-  size_t wait_next_full_group();
+  unsigned add_reader();
+  void enter_reader(unsigned id);
+  void finish_reader();
+  void retire_reader(unsigned id);
+  uint64_t cursor() const;
+  uint64_t retained_from() const;
+  bool aborted() const;
+  void fail();
+  void stop_waiting();
 
-  // Check if there is a window to read
-  bool check_group();
-  // Wait mempool have data
-  void wait_mempool_start();
-  // Terminal cancellation for the one-shot receive/process pipeline.
-  void stop_waiting() {
-    stopped.store(true, std::memory_order_release);
-  }
+  const size_t capacity;
+  const size_t packet_bytes;
 
 private:
+  static constexpr size_t MAX_IDX = 256;
+  struct alignas(64) Reader {
+    std::atomic<uint64_t> cursor{0};
+    std::atomic<bool> active{false};
+  };
+  struct Shared {
+    std::atomic<bool> chunk_semaphore{false};
+    std::atomic<bool> stopped{false};
+    std::atomic<bool> failed{false};
+    std::atomic<uint64_t> head{0};
+    std::atomic<uint64_t> reader_epoch{0};
+    Reader readers[MAX_READERS];
+    // Only the serialized producer changes sorting and reclamation state.
+    size_t mem_chunk_idx = 0;
+    size_t group_w_offset = 0;
+    size_t write_count = 0;
+    size_t write_next_count = 0;
+    size_t empty_blocks = 0;
+    uint64_t group_w_idx = 1;
+    uint64_t reclaimed = 0;
+  };
+  static void *map(size_t bytes);
+  void reclaim();
+  void cleanup();
+
+  Shared *shared = nullptr;
   char *memory_base = nullptr;
-  char *memory_pool[NUM_BLOCKS];                     // Mempool
-  std::atomic<bool> memory_pool_is_free[NUM_BLOCKS]; // Mempool free status
-  MemoryChunk memory_order_ptr[NUM_BLOCKS];
-  std::atomic<bool> chunk_semaphore{false};
-  // Cancellation crosses receive/process threads, like the existing counters.
-  std::atomic<bool> stopped{false};
-
-  size_t group_r_offset = 0; // The offset used by the current consumer
-
-  std::atomic<size_t> wait_setfree_mem_idx{0};
-  std::atomic<size_t> wait_setfree_ptr_idx{0};
-  std::atomic<size_t> read_count{0};
-  std::atomic<size_t> mem_chunk_idx{0};
-  std::atomic<size_t> group_w_offset{0}; // The offset used by the current producer
-  std::atomic<size_t> write_count{0};
-  std::atomic<size_t> write_next_count{0};
-  std::atomic<size_t> empty_blocks{MAX_GROUP_READ};
-  std::atomic<size_t> group_w_idx{1};
-  std::atomic<size_t> group_r_idx{1};
+  std::atomic<bool> *memory_pool_is_free = nullptr;
+  MemoryChunk *memory_order_ptr = nullptr;
+  uint64_t consumer = 0;
+  unsigned reader_id = 0;
 };
+
+extern MemoryIdxPool *g_packet_pool;
 
 #endif
