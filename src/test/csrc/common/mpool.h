@@ -20,8 +20,10 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <stdexcept>
 #include <vector>
 #if defined(__x86_64__) || defined(__i386__)
@@ -147,68 +149,95 @@ private:
   size_t page_end = 0;
 };
 
-// Shared packet storage with serialized idx sorting and local parser cursors.
 class MemoryIdxPool {
+private:
+  const size_t MAX_IDX = 256;
+  uint64_t mem_block_size = MEMBLOCK_SIZE;
+
 public:
   static constexpr unsigned MAX_READERS = 128;
-  MemoryIdxPool(uint64_t block_size, size_t count = NUM_BLOCKS);
-  ~MemoryIdxPool();
+  MemoryIdxPool(uint64_t block_size, size_t count = NUM_BLOCKS) : mem_block_size(block_size), capacity(count) {
+    const size_t limit = std::numeric_limits<size_t>::max();
+    if (count < 2048 || (count & (count - 1)) || block_size == 0 || block_size > limit || count > limit / block_size)
+      throw std::runtime_error("Indexed pool requires valid packet size and power of two >=2048 slots");
+    try {
+      shared = new (map(sizeof(Shared))) Shared();
+      if (!shared->head.is_lock_free() || !shared->reader_epoch.is_lock_free() ||
+          !shared->readers[0].cursor.is_lock_free())
+        throw std::runtime_error("Indexed pool requires lock-free shared atomics");
+      memory_base = static_cast<char *>(map(capacity * mem_block_size));
+#if (CONFIG_DMA_CHANNELS > 1)
+      if (count > limit / sizeof(MemoryChunk))
+        throw std::runtime_error("Indexed pool metadata size overflow");
+      memory_pool_is_free = std::make_unique<std::atomic<bool>[]>(capacity);
+      memory_order_ptr = std::make_unique<MemoryChunk[]>(capacity);
+      for (size_t i = 0; i < capacity; ++i)
+        memory_pool_is_free[i].store(true);
+#endif
+      shared->readers[0].active.store(true, std::memory_order_release);
+    } catch (...) {
+      cleanup();
+      throw;
+    }
+  }
+  ~MemoryIdxPool() { cleanup(); }
   MemoryIdxPool(const MemoryIdxPool &) = delete;
   MemoryIdxPool &operator=(const MemoryIdxPool &) = delete;
-
   char *get_free_chunk(size_t *mem_idx);
   bool write_free_chunk(uint8_t idx, size_t mem_idx);
   char *read_busy_chunk();
-  void set_free_chunk();
-  size_t wait_next_free_group();
-
+  void set_free_chunk() { shared->readers[reader_id].cursor.store(++consumer, std::memory_order_release); }
   unsigned add_reader();
   void enter_reader(unsigned id);
-  void finish_reader();
+  void finish_reader() { shared->readers[reader_id].cursor.store(UINT64_MAX, std::memory_order_release); }
   void retire_reader(unsigned id);
-  uint64_t cursor() const;
+  uint64_t cursor() const { return consumer; }
   uint64_t retained_from() const;
-  bool aborted() const;
-  void fail();
-  void stop_waiting();
-
+  bool aborted() const { return shared->failed.load(std::memory_order_acquire); }
+  void fail() { shared->failed.store(true, std::memory_order_release); stop_waiting(); }
+  void stop_waiting() { shared->stopped.store(true, std::memory_order_release); }
   const size_t capacity;
-  const size_t packet_bytes;
 
 private:
-  static constexpr size_t MAX_IDX = 256;
   struct alignas(64) Reader {
     std::atomic<uint64_t> cursor{0};
     std::atomic<bool> active{false};
   };
   struct Shared {
-    std::atomic<bool> chunk_semaphore{false};
     std::atomic<bool> stopped{false};
     std::atomic<bool> failed{false};
     std::atomic<uint64_t> head{0};
     std::atomic<uint64_t> reader_epoch{0};
     Reader readers[MAX_READERS];
-    // Only the serialized producer changes sorting and reclamation state.
-    size_t mem_chunk_idx = 0;
-    size_t group_w_offset = 0;
-    size_t write_count = 0;
-    size_t write_next_count = 0;
-    size_t empty_blocks = 0;
-    uint64_t group_w_idx = 1;
-    uint64_t reclaimed = 0;
   };
   static void *map(size_t bytes);
+#if (CONFIG_DMA_CHANNELS > 1)
+  size_t wait_next_free_group();
   void reclaim();
+#endif
   void cleanup();
-
   Shared *shared = nullptr;
   char *memory_base = nullptr;
-  std::atomic<bool> *memory_pool_is_free = nullptr;
-  MemoryChunk *memory_order_ptr = nullptr;
+#if (CONFIG_DMA_CHANNELS > 1)
+  const size_t MAX_GROUPING_IDX = capacity / MAX_IDX;
+  const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2;
+  const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
+  std::unique_ptr<std::atomic<bool>[]> memory_pool_is_free;
+  std::unique_ptr<MemoryChunk[]> memory_order_ptr;
+  std::atomic<bool> chunk_semaphore{false};
+  std::atomic<size_t> mem_chunk_idx{0};
+  std::atomic<size_t> group_w_offset{0};
+  std::atomic<size_t> write_count{0};
+  std::atomic<size_t> write_next_count{0};
+  std::atomic<size_t> empty_blocks{MAX_GROUP_READ};
+  std::atomic<size_t> group_w_idx{1};
+  uint64_t reclaimed = 0;
+#else
+  uint64_t producer = 0;
+  uint64_t safe_until = capacity;
+#endif
   uint64_t consumer = 0;
   unsigned reader_id = 0;
 };
-
 extern MemoryIdxPool *g_packet_pool;
-
 #endif
