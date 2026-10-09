@@ -36,7 +36,7 @@ recycles reader IDs after `waitpid`. Only the prefix below all reader
 cursors is reusable; a full pool applies backpressure. Pool bytes = slots *
 `sizeof(FpgaPackgeHead)`; driver configuration is independent.
 
-Fork supports one core/channel and 128 active readers including the leader.
+Fork requires XDMA and supports one core/channel and 128 active readers including the leader.
 Checkpoint records are recycled after trust and reap, without a lifetime segment
 limit. Checker queues requiring history migration are rejected. `FastEndpoint` marks speculative leader
 completion; recovery may produce another endpoint. State/store hashes do not guarantee collision-free memory comparison.

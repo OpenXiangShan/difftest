@@ -90,6 +90,12 @@ int main(int argc, const char *argv[]) {
     return 1;
   }
 #else
+#ifdef DIFFTEST_HOSTIF_GBUS
+  if (args.ref_mode == RefMode::FORK) {
+    fprintf(stderr, "[fpga-host] --ref-mode fork requires the XDMA transport\n");
+    return 1;
+  }
+#endif
   if (args.ref_mode == RefMode::FORK && !difftest_ref_fork_init(args.ref_fork_interval))
     return 1;
 #endif
@@ -106,7 +112,7 @@ int main(int argc, const char *argv[]) {
     if (role < 0)
       return 1;
     if (role == 1) {
-      xdma_device->run_ref();
+      static_cast<FpgaXdma *>(xdma_device)->run_ref();
       fflush(nullptr);
       difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP);
     }

@@ -305,8 +305,8 @@ bool all_reaped() {
 } // namespace
 
 bool difftest_ref_fork_init(uint64_t interval_ms) {
-  if (enabled || (interval_ms != 0 && interval_ms < 3000) || interval_ms > UINT64_MAX / 1000000 ||
-      NUM_CORES != 1 || CONFIG_DMA_CHANNELS != 1) {
+  if (enabled || (interval_ms != 0 && interval_ms < 3000) || interval_ms > UINT64_MAX / 1000000 || NUM_CORES != 1 ||
+      CONFIG_DMA_CHANNELS != 1) {
     fprintf(stderr, "REF fork requires one core/channel and interval 0 or >=3 seconds\n");
     return false;
   }

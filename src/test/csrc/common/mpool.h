@@ -31,7 +31,7 @@
 #ifndef MEMPOOL_SIZE
 #define MEMPOOL_SIZE 16384 * 1024 // Nominal size; MemoryIdxPool allocates packet-sized slots.
 #endif
-#define MEMBLOCK_SIZE   4096         // 4K packge
+#define MEMBLOCK_SIZE   4096 // 4K packge
 #define NUM_BLOCKS      (MEMPOOL_SIZE / MEMBLOCK_SIZE)
 #define REM_NUM_BLOCKS  (NUM_BLOCKS - 1)
 #define MAX_WINDOW_SIZE 256

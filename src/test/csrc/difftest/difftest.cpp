@@ -341,8 +341,8 @@ Difftest::~Difftest() {
 void Difftest::init_checkers() {
   checkers.push_back(new TimeoutChecker([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy));
 
-  auto *first = new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
-                                            proxy, [this]() -> const DiffTestRegState & { return dut->regs; });
+  auto *first = new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state, proxy,
+                                            [this]() -> const DiffTestRegState & { return dut->regs; });
   checkers.push_back(first);
 #ifdef CONFIG_DIFFTEST_FAST_REF
   first_commit_checker = first;

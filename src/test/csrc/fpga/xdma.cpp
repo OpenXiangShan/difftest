@@ -396,8 +396,8 @@ void FpgaXdma::write_difftest_thread() {
       abort();
       return;
     }
-    auto *packet =
-        reinterpret_cast<FpgaPackgeHead *>(shared_packet_pool ? shared_packet_pool->get_busy() : indexed_packet_pool->read_busy_chunk());
+    auto *packet = reinterpret_cast<FpgaPackgeHead *>(shared_packet_pool ? shared_packet_pool->get_busy()
+                                                                         : indexed_packet_pool->read_busy_chunk());
     if (!packet) {
       if (shared_packet_pool && difftest_ref_fork_idle()) {
         abort();

@@ -281,8 +281,8 @@ public:
   }
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
-  using AbstractRefProxy::ref_set_exec_mode;
   using AbstractRefProxy::ref_get_instr_count;
+  using AbstractRefProxy::ref_set_exec_mode;
   bool require_exec_mode_interfaces(bool with_fork);
 #endif
 #ifdef CONFIG_DIFFTEST_FORK
