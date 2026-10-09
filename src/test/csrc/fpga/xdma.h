@@ -112,7 +112,6 @@ public:
 #ifdef USE_THREAD_MEMPOOL
     if (indexed_packet_pool)
       indexed_packet_pool->stop_waiting();
-    thread_cv.notify_one();
 #endif // USE_THREAD_MEMPOOL
   }
 
@@ -145,8 +144,6 @@ private:
 #ifdef USE_THREAD_MEMPOOL
   bool (*packet_idle)() = nullptr;
   void (*packet_abort)() = nullptr;
-  std::mutex thread_mtx;
-  std::condition_variable thread_cv;
   std::unique_ptr<MemoryIdxPool> indexed_packet_pool;
   std::unique_ptr<SharedPacketPool> shared_packet_pool;
   std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};

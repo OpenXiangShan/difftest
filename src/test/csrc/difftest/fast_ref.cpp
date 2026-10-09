@@ -99,7 +99,6 @@ int FastRefChecker::do_step() {
       proxy->sync();
       fprintf(stderr, "FAST short execution: requested=%lu completed=%lu PC=0x%lx\n", (unsigned long)pending,
               (unsigned long)completed, (unsigned long)proxy->state.pc);
-      self->fast_ref_error = DiffTestChecker::STATE_ERROR;
       return false;
     }
 #ifdef CONFIG_DIFFTEST_SQUASH
@@ -116,7 +115,7 @@ int FastRefChecker::do_step() {
       committed += 1 + commit.nFused;
       if (commit.skip) {
         if (!execute())
-          return self->fast_ref_error;
+          return DiffTestChecker::STATE_ERROR;
         // The NEMU skip API writes integer registers. FP/vector skips use
         // the existing regcpy fallback rather than corrupting an integer GPR.
         proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen, commit.wdest,
@@ -127,7 +126,7 @@ int FastRefChecker::do_step() {
     }
     // Retain the board-validated per-window boundary, batching commits within it.
     if (!execute())
-      return self->fast_ref_error;
+      return DiffTestChecker::STATE_ERROR;
     if (committed) {
       state->has_progress = true;
       state->last_commit_cycle = dut->trap.cycleCnt;

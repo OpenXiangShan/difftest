@@ -219,9 +219,6 @@ protected:
 public:
   // Select at startup or an established fork boundary.
   bool set_ref_mode(RefExecMode mode);
-  int fast_ref_status() {
-    return fast_ref_error;
-  }
   int fork_check_step() {
     return check_all();
   }
@@ -237,7 +234,6 @@ private:
   friend class FastRefChecker;
   int fast_ref_step();
   bool fast_ref_enabled = false;
-  int fast_ref_error = 0;
 #endif
   void add_sync_checker(DiffTestChecker *checker) {
     checkers.push_back(checker);

@@ -53,7 +53,7 @@ enum class Command {
   PROMOTE
 };
 struct Segment {
-  uint64_t generation, start_window, start_instr, start_packet, start_ns;
+  uint64_t generation, start_window, start_packet, start_ns;
   unsigned reader;
   std::atomic<pid_t> pid{0};
   std::atomic<uint64_t> end_window{OPEN_END};
@@ -111,7 +111,7 @@ void discard_checker() {
   g_shared_packet_pool->finish_reader();
   _exit(0);
 }
-bool complete_checker(Difftest *self, bool checks_ok) {
+void complete_checker(Difftest *self, bool checks_ok) {
   Segment &s = segment(current_segment);
   if (s.command.load(std::memory_order_acquire) == Command::DISCARD)
     discard_checker();
@@ -155,7 +155,7 @@ bool complete_checker(Difftest *self, bool checks_ok) {
       printf("RefLeaderPromoted PID=%d Generation=%lu Window=%lu Packet=%lu\n", int(getpid()),
              (unsigned long)generation, (unsigned long)windows, (unsigned long)g_shared_packet_pool->cursor());
       fflush(stdout);
-      return true;
+      return;
     }
     usleep(50);
   }
@@ -167,7 +167,7 @@ void close_segment(Difftest *self) {
   if (s.end_window.load(std::memory_order_acquire) != OPEN_END)
     return;
   self->proxy->sync();
-  if (self->fast_ref_status() || !self->proxy->state_hash(s.fast_hash))
+  if (!self->proxy->state_hash(s.fast_hash))
     fail();
   s.fast_stamp = self->fork_commit_stamp();
   s.end_instr = last_instr;
@@ -380,7 +380,6 @@ int difftest_ref_fork_prepare(Difftest *self) {
   Segment &s = segment(seq);
   s.generation = generation;
   s.start_window = windows;
-  s.start_instr = last_instr;
   s.start_packet = g_shared_packet_pool->cursor();
   s.start_ns = now_ns();
   s.reader = reader;
@@ -429,17 +428,13 @@ int difftest_ref_fork_check(Difftest *self) {
       discard_checker();
     if (g_shared_packet_pool->aborted())
       complete_checker(self, false);
-    if (s.end_window.load(std::memory_order_acquire) == child_window) {
-      if (complete_checker(self, true))
-        return self->step();
-      return DiffTestChecker::STATE_OK;
-    }
+    if (s.end_window.load(std::memory_order_acquire) == child_window)
+      break;
     usleep(50);
   }
   if (s.end_window.load(std::memory_order_acquire) == child_window) {
-    if (complete_checker(self, true))
-      return self->step();
-    return DiffTestChecker::STATE_OK;
+    complete_checker(self, true);
+    return self->step();
   }
   const int ret = self->fork_check_step();
   const bool terminal = ret == DiffTestChecker::STATE_TRAP && self->get_trap_code() == STATE_GOODTRAP;
