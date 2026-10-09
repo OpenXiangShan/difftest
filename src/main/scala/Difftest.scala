@@ -631,14 +631,6 @@ object DifftestModule {
       difftest := DontCare
       difftest.bits.getValidOption.foreach(_ := false.B)
     }
-    // Defaults preserve the legacy store stamp when the DUT omits these fields.
-    // A producer can override them after DifftestModule returns.
-    difftest match {
-      case store: StoreEvent =>
-        store.storeOffset := 0.U
-        store.preCommit := false.B
-      case _ =>
-    }
     difftest
   }
 

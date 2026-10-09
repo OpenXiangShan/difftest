@@ -61,7 +61,7 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
   val commitSum = VecInit.tabulate(numCores) { id =>
     val commitCnt =
       commits.slice(id * commitLen, (id + 1) * commitLen).map { c =>
-        Mux(c.valid && !c.bits.skip && !c.bits.isLatterArchEvent, 1.U + c.bits.nFused, 0.U)
+        Mux(c.valid && !c.bits.skip, 1.U + c.bits.nFused, 0.U)
       }
     VecInit.tabulate(commitLen) { idx =>
       commitCnt.take(idx + 1).reduce(_ + _)

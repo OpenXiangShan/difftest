@@ -650,45 +650,29 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
-  // InstrCommit::setSpecial reserves bit 2 for the position of a latter ArchEvent.
-  constexpr uint8_t latter_arch_event_mask = 1 << 2;
-  bool has_latter_event_slot = false;
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-    has_latter_event_slot |= dut->commit[i].valid && (dut->commit[i].special & latter_arch_event_mask);
-  }
-  // Preserve the event-only convention for DUTs which do not emit a slot marker.
-  if (dut->event.valid && !has_latter_event_slot) {
-    if (int ret = arch_event_checker->step()) {
-      return ret;
-    }
-    dut->commit[0].valid = 0;
-  } else {
-#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
-    if (dut->commit[0].valid && !(dut->commit[0].special & latter_arch_event_mask)) {
-      dut_commit_batch_pc = dut->commit[0].pc;
-      ref_commit_batch_pc = proxy->state.pc;
-      if (dut_commit_batch_pc != ref_commit_batch_pc) {
-        pc_mismatch = true;
+    // isLatter selects the former (0) or latter (1) event position.
+    if (dut->event.valid && i == dut->event.isLatter) {
+      if (int ret = arch_event_checker->step()) {
+        return ret;
       }
-    }
-#endif
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-      if (dut->commit[i].valid) {
-        if (dut->commit[i].special & latter_arch_event_mask) {
-          if (!dut->event.valid) {
-            Info("Architectural event slot %d has no event (core %d).\n", i, state->coreid);
-            return DiffTestChecker::STATE_ERROR;
-          }
-          if (int ret = arch_event_checker->step()) {
-            return ret;
-          }
-          dut->commit[i].valid = 0;
-        } else {
-          num_commit += 1 + dut->commit[i].nFused;
-          if (int ret = instr_commit_checker[i]->step()) {
-            return ret;
-          }
+      // RTL already deasserts the exception lane's valid. Keep the explicit
+      // cleanup symmetric for former and latter events.
+      dut->commit[i].valid = 0;
+      break;
+    } else if (dut->commit[i].valid) {
+#if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
+      if (i == 0) {
+        dut_commit_batch_pc = dut->commit[i].pc;
+        ref_commit_batch_pc = proxy->state.pc;
+        if (dut_commit_batch_pc != ref_commit_batch_pc) {
+          pc_mismatch = true;
         }
+      }
+#endif
+      num_commit += 1 + dut->commit[i].nFused;
+      if (int ret = instr_commit_checker[i]->step()) {
+        return ret;
       }
     }
   }

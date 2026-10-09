@@ -53,6 +53,8 @@ private[difftest] class DeltaElem(elemWidth: Int) extends DifftestBaseBundle {
 }
 
 class ArchEvent extends DifftestBaseBundle with HasValid {
+  // A latter event follows the surviving former's ordinary commit.
+  val isLatter = Bool()
   val interrupt = UInt(32.W)
   val exception = UInt(32.W)
   val exceptionPC = UInt(64.W)
@@ -84,16 +86,11 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
   val nFused = UInt(8.W)
   val special = UInt(8.W)
 
-  // A valid latter-event slot locates the core's ArchEvent among ordinary commits.
-  // It does not retire an instruction or advance the squash stamp.
-  def isLatterArchEvent: Bool = special(2)
-
   def setSpecial(
     isDelayedWb: Bool = false.B,
     isExit: Bool = false.B,
-    isLatterArchEvent: Bool = false.B,
   ): Unit = {
-    special := Cat(isLatterArchEvent, isExit, isDelayedWb)
+    special := Cat(isExit, isDelayedWb)
   }
 }
 
