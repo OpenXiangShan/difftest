@@ -100,8 +100,9 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
     sq.inheritFrom(st)
     val base = stamp(sq.bits.coreid)
     val inc = commitSum(sq.bits.coreid).last
-    // If no instr committed in the same cycle, store event will be checked in next commit
-    sq.bits.stamp := Mux(inc === 0.U, base + 1.U, base + inc)
+    // Decode count-minus-one only for events that may precede retirement.
+    val offset = Mux(sq.bits.preCommit, sq.bits.storeOffset, 0.U) + 1.U
+    sq.bits.stamp := Mux(inc === 0.U, base + offset, base + inc)
     sq
   }
 

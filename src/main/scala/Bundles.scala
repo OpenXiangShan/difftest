@@ -53,6 +53,8 @@ private[difftest] class DeltaElem(elemWidth: Int) extends DifftestBaseBundle {
 }
 
 class ArchEvent extends DifftestBaseBundle with HasValid {
+  // A latter event follows the surviving former's ordinary commit.
+  val isLatter = Bool()
   val interrupt = UInt(32.W)
   val exception = UInt(32.W)
   val exceptionPC = UInt(64.W)
@@ -283,6 +285,10 @@ class StoreEvent extends DifftestBaseBundle with HasValid {
   val vecNeedSplit = Bool()
   val eew = UInt(8.W)
   val offset = UInt(16.W)
+  // Entry instruction count minus one. Older DUT producers may omit this connection;
+  // DifftestModule supplies zero, which retains the legacy fallback.
+  val storeOffset = UInt(8.W)
+  val preCommit = Bool()
   val pc = UInt(64.W)
   val robidx = UInt(10.W)
 }
