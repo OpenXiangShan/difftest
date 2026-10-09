@@ -95,28 +95,14 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
     }
 
   val stores = in.filter(_.bits.desiredCppName == "store").map(_.asInstanceOf[Valid[DiffStoreEvent]])
-  val storeStamps = VecInit.tabulate(numCores) { id =>
-    val base = stamp(id)
-    val inc = commitSum(id).last
-    val pendingOffset = RegInit(0.U.asTypeOf(inc))
-    val validStores = stores.map(st => st.valid && st.bits.coreid === id.U)
-    val offsets = stores.zip(validStores).map { case (st, valid) =>
-      Mux(valid, st.bits.storeOffset, 0.U)
-    }
-    // Decode count-minus-one after taking the maximum; legacy producers leave zero.
-    val entryOffset = offsets.foldLeft(0.U) { (a, b) => Mux(a > b, a, b) } + 1.U
-    val hasStore = validStores.foldLeft(false.B)(_ || _)
-    val candidate = Mux(inc === 0.U, entryOffset, inc)
-    // Keep later events behind an already assigned future FIFO checking point.
-    val distance = Mux(candidate > pendingOffset, candidate, pendingOffset)
-    val allocated = Mux(hasStore, distance, pendingOffset)
-    pendingOffset := Mux(allocated > inc, allocated - inc, 0.U)
-    base + distance
-  }
   val storeQueues = stores.map { st =>
     val sq = WireInit(0.U.asTypeOf(Valid(new DiffStoreEventQueue)))
     sq.inheritFrom(st)
-    sq.bits.stamp := storeStamps(sq.bits.coreid)
+    val base = stamp(sq.bits.coreid)
+    val inc = commitSum(sq.bits.coreid).last
+    // Decode count-minus-one only for events that may precede retirement.
+    val offset = Mux(sq.bits.preCommit, sq.bits.storeOffset, 0.U) + 1.U
+    sq.bits.stamp := Mux(inc === 0.U, base + offset, base + inc)
     sq
   }
 

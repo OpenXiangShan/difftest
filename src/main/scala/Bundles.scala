@@ -291,6 +291,7 @@ class StoreEvent extends DifftestBaseBundle with HasValid {
   // Entry instruction count minus one. Older DUT producers may omit this connection;
   // DifftestModule supplies zero, which retains the legacy fallback.
   val storeOffset = UInt(8.W)
+  val preCommit = Bool()
   val pc = UInt(64.W)
   val robidx = UInt(10.W)
 }

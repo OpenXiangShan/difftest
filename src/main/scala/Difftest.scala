@@ -631,11 +631,13 @@ object DifftestModule {
       difftest := DontCare
       difftest.bits.getValidOption.foreach(_ := false.B)
     }
-    // Default count-minus-one to zero for DUTs without a storeOffset connection.
-    // A producer can override it after DifftestModule returns.
+    // Defaults preserve the legacy store stamp when the DUT omits these fields.
+    // A producer can override them after DifftestModule returns.
     difftest match {
-      case store: StoreEvent => store.storeOffset := 0.U
-      case _                 =>
+      case store: StoreEvent =>
+        store.storeOffset := 0.U
+        store.preCommit := false.B
+      case _ =>
     }
     difftest
   }
