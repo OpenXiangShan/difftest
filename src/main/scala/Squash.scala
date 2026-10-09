@@ -191,6 +191,12 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   // All squashers must fire synchronously so a held input is consumed only once.
   squashers.foreach(_.in.valid := pipelined.fire)
   out.valid := VecInit(squashers.map(_.out.valid)).asUInt.orR
+
+  if (config.hasBuiltInPerf) {
+    DifftestPerf("SquashAbsorb", (in.valid && in.ready && !out.ready).asUInt)
+    DifftestPerf("SquashNotReady", (!in.ready).asUInt)
+    DifftestPerf("SquashStall", (in.valid && !in.ready).asUInt)
+  }
 }
 
 // It will help do squash for bundles with same Class, return tick and state
