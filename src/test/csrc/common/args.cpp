@@ -20,7 +20,6 @@
 #include "splitview.h"
 #include <cmath>
 #include <getopt.h>
-#include <limits>
 #ifdef CONFIG_DIFFTEST_IOTRACE
 #include "difftest-iotrace.h"
 #endif // CONFIG_DIFFTEST_IOTRACE
@@ -37,7 +36,7 @@ enum {
 #ifdef CONFIG_DIFFTEST_FAST_REF
   OPT_REF_MODE,
 #endif
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   OPT_REF_FORK_INTERVAL,
   OPT_PACKET_POOL_LOG2,
 #endif
@@ -92,10 +91,14 @@ static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
   printf("\n");
 #ifdef CONFIG_DIFFTEST_FAST_REF
-  printf("      --ref-mode=MODE        slow (default), fast, or fork\n");
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  printf("      --ref-mode=MODE        slow, fast, or fork (default: fork)\n");
+#else
+  printf("      --ref-mode=MODE        slow or fast (default: slow)\n");
 #endif
-#ifdef CONFIG_DIFFTEST_FORK
-  printf("      --ref-fork-interval=N  REF segment interval in seconds, default: 10\n");
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  printf("      --ref-fork-interval=N  REF segment interval in seconds, default: 5\n");
   printf("      --packet-pool-log2=N  log2 of fork packet slots (default: 20)\n");
 #endif
   printf("  -s, --seed=NUM             use this seed\n");
@@ -219,7 +222,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 #ifdef CONFIG_DIFFTEST_FAST_REF
     { "ref-mode",          1, NULL, OPT_REF_MODE },
 #endif
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
     { "ref-fork-interval",  1, NULL, OPT_REF_FORK_INTERVAL },
     { "packet-pool-log2",  1, NULL, OPT_PACKET_POOL_LOG2 },
 #endif
@@ -368,33 +371,21 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           args.ref_mode = RefMode::SLOW;
         else if (!strcmp(optarg, "fast"))
           args.ref_mode = RefMode::FAST;
+#ifdef CONFIG_DIFFTEST_FORK_REF
         else if (!strcmp(optarg, "fork"))
           args.ref_mode = RefMode::FORK;
+#endif
         else {
-          fprintf(stderr, "[ERROR] --ref-mode must be slow, fast or fork\n");
+          fprintf(stderr, "[ERROR] invalid --ref-mode '%s' for this build\n", optarg);
           exit(EINVAL);
         }
         continue;
 #endif
-#ifdef CONFIG_DIFFTEST_FORK
-      case OPT_REF_FORK_INTERVAL: {
-        const auto seconds = atoll_strict(optarg, "ref-fork-interval");
-        if (seconds < 0 || static_cast<uint64_t>(seconds) > UINT64_MAX / 1000000000) {
-          fprintf(stderr, "[ERROR] --ref-fork-interval is out of range\n");
-          exit(EINVAL);
-        }
-        args.ref_fork_interval = seconds * 1000;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+      case OPT_REF_FORK_INTERVAL:
+        args.ref_fork_interval = 1000ULL * atoll_strict(optarg, "ref-fork-interval");
         continue;
-      }
-      case OPT_PACKET_POOL_LOG2: {
-        const auto order = atoll_strict(optarg, "packet-pool-log2");
-        if (order < 1 || order >= std::numeric_limits<size_t>::digits - 1) {
-          fprintf(stderr, "[ERROR] --packet-pool-log2 must be between 1 and 62\n");
-          exit(EINVAL);
-        }
-        args.packet_pool_log2 = order;
-        continue;
-      }
+      case OPT_PACKET_POOL_LOG2: args.packet_pool_log2 = atoll_strict(optarg, "packet-pool-log2"); continue;
 #endif
       case OPT_CPU_AXI_DELAY: {
         long long cpu_axi_delay = atoll_strict(optarg, "cpu-axi-delay");

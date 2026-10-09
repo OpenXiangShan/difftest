@@ -15,7 +15,7 @@
 ***************************************************************************************/
 
 #include "difftest.h"
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
 #include "ref_fork.h"
 #endif
 #include "common.h"
@@ -42,7 +42,7 @@ Difftest **difftest = NULL;
 static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_is_child())
     _Exit(128 + signo);
 #endif
@@ -310,6 +310,9 @@ Difftest::~Difftest() {
     delete checker;
   }
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  delete fast_ref_checker;
+#endif
   delete arch_event_checker;
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     delete instr_commit_checker[i];
@@ -341,12 +344,8 @@ Difftest::~Difftest() {
 void Difftest::init_checkers() {
   checkers.push_back(new TimeoutChecker([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy));
 
-  auto *first = new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state, proxy,
-                                            [this]() -> const DiffTestRegState & { return dut->regs; });
-  checkers.push_back(first);
-#ifdef CONFIG_DIFFTEST_FAST_REF
-  first_commit_checker = first;
-#endif
+  add_sync_checker(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
+                                               proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
   // Record stores each cycle; checking waits for their stamps or the complete non-squash batch.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
@@ -439,9 +438,12 @@ void Difftest::init_checkers() {
       [this]() -> DifftestMhpmeventOverflowEvent & { return dut->mhpmevent_overflow; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  add_sync_checker(
-      new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy),
-      true);
+  auto *critical =
+      new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy);
+  add_sync_checker(critical);
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  critical_error_checker = critical;
+#endif
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
   add_sync_checker(new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy));
@@ -478,6 +480,11 @@ void Difftest::init_checkers() {
 
   arch_event_checker = new ArchEventChecker([this]() -> DifftestArchEvent & { return dut->event; }, state, proxy,
                                             [this]() -> const DiffTestRegState & { return dut->regs; });
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  fast_ref_checker = new FastRefChecker(this, state, proxy);
+  fast_checkers.push_back(fast_ref_checker);
+#endif
 
   std::vector<DiffTestChecker *> inst_op_checkers;
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
@@ -584,7 +591,7 @@ void Difftest::do_replay() {
 #endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_is_child())
     return difftest_ref_fork_check(this);
 #endif

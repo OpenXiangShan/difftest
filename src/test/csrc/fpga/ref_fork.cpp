@@ -27,7 +27,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
 namespace {
 // Bound outstanding checkpoints, not the lifetime number of segments.
 constexpr unsigned MAX_SEGMENTS = SharedPacketPool::MAX_READERS;

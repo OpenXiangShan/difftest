@@ -162,7 +162,7 @@ public:
 #else
 #define REF_EXEC_MODE(f)
 #endif
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
 #define REF_FORK(f) \
   f(ref_state_hash, difftest_state_hash, int, void*)
 #else
@@ -285,7 +285,7 @@ public:
   using AbstractRefProxy::ref_set_exec_mode;
   bool require_exec_mode_interfaces(bool with_fork);
 #endif
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   inline bool state_hash(DifftestStateHash &hash) {
     return ref_state_hash && ref_state_hash(&hash) == 0;
   }

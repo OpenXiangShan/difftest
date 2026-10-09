@@ -55,9 +55,9 @@ ifeq ($(USE_XDMA_H2C), 1)
 FPGA_CXXFLAGS += -DCONFIG_USE_XDMA_H2C
 endif
 
-ifeq ($(DIFFTEST_FORK), 1)
+ifeq ($(DIFFTEST_FORK_REF), 1)
 ifneq ($(USE_THREAD_MEMPOOL), 1)
-$(error DIFFTEST_FORK requires USE_THREAD_MEMPOOL=1)
+$(error DIFFTEST_FORK_REF requires USE_THREAD_MEMPOOL=1)
 endif
 endif
 

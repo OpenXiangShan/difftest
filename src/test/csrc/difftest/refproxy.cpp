@@ -362,7 +362,7 @@ bool RefProxy::require_exec_mode_interfaces(bool with_fork) {
     fprintf(stderr, "FAST requires REF mode switching and instruction count interfaces\n");
     return false;
   }
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   DifftestStateHash hash{};
   if (with_fork && !state_hash(hash)) {
     fprintf(stderr, "Fork checking requires state hash and enabled store hashing\n");

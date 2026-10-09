@@ -46,6 +46,7 @@
 #endif // USE_SERIAL_PORT
 
 void fpga_finish();
+void fpga_ref_fork_abort();
 
 enum {
   FPGA_RUN,
@@ -79,26 +80,9 @@ int main(int argc, const char *argv[]) {
   fpga_ila_upload_cmd = std::getenv("FPGA_ILA_UPLOAD_CMD");
   args = parse_args(argc, argv);
 
-#ifdef CONFIG_DIFFTEST_FAST_REF
-  if (args.ref_mode != RefMode::SLOW && !args.enable_diff) {
-    fprintf(stderr, "[fpga-host] FAST/fork requires DiffTest enabled\n");
-    return 1;
-  }
-#ifndef CONFIG_DIFFTEST_FORK
-  if (args.ref_mode == RefMode::FORK) {
-    fprintf(stderr, "[fpga-host] --ref-mode fork requires DIFFTEST_FORK=1\n");
-    return 1;
-  }
-#else
-#ifdef DIFFTEST_HOSTIF_GBUS
-  if (args.ref_mode == RefMode::FORK) {
-    fprintf(stderr, "[fpga-host] --ref-mode fork requires the XDMA transport\n");
-    return 1;
-  }
-#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
   if (args.ref_mode == RefMode::FORK && !difftest_ref_fork_init(args.ref_fork_interval))
     return 1;
-#endif
 #endif
 
   common_init(argv[0]);
@@ -106,13 +90,13 @@ int main(int argc, const char *argv[]) {
   fpga_init();
 
   printf("fpga init\n");
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   if (args.ref_mode == RefMode::FORK) {
     const int role = difftest_ref_fork_start();
     if (role < 0)
       return 1;
     if (role == 1) {
-      static_cast<FpgaXdma *>(xdma_device)->run_ref();
+      static_cast<FpgaXdma *>(xdma_device)->process_packets();
       fflush(nullptr);
       difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP);
     }
@@ -171,9 +155,12 @@ void fpga_init() {
   gbus_device->validate_guest_ram(_PMEM_BASE, ram_size);
   xdma_device = gbus_device;
 #else
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   try {
-    xdma_device = new FpgaXdma(args.ref_mode == RefMode::FORK, size_t{1} << args.packet_pool_log2);
+    if (args.packet_pool_log2 == 0 || args.packet_pool_log2 >= sizeof(size_t) * 8)
+      throw std::invalid_argument("Packet pool order is outside the supported range");
+    xdma_device = new FpgaXdma(/*shared_packets=*/args.ref_mode == RefMode::FORK,
+                               /*pool_slots=*/size_t{1} << args.packet_pool_log2);
   } catch (const std::exception &error) {
     fprintf(stderr, "[fpga-host] packet pool initialization failed: %s\n", error.what());
     exit(1);
@@ -181,6 +168,14 @@ void fpga_init() {
 #else
   xdma_device = new FpgaXdma();
 #endif
+#endif
+#if defined(USE_THREAD_MEMPOOL) && !defined(DIFFTEST_HOSTIF_GBUS)
+  static_cast<FpgaXdma *>(xdma_device)
+      ->set_packet_callbacks([] { return difftest_ref_fork_idle() != 0; },
+                             [] {
+                               difftest_ref_fork_abort_child();
+                               fpga_ref_fork_abort();
+                             });
 #endif
   xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
   sleep(1);

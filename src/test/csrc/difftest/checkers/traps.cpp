@@ -139,6 +139,8 @@ void CriticalErrorChecker::clear_valid(DifftestCriticalErrorEvent &probe) {
 
 int CriticalErrorChecker::check(const DifftestCriticalErrorEvent &probe) {
   bool ref_critical_error = proxy->raise_critical_error();
+  if (!ref_critical_error && !probe.criticalError)
+    return STATE_OK;
   if (ref_critical_error == probe.criticalError) {
     Info("Core %d dump: " ANSI_COLOR_RED
          "HIT CRITICAL ERROR: please check if software cause a double trap. \n" ANSI_COLOR_RESET,

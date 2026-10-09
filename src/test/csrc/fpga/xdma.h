@@ -20,7 +20,6 @@
 #include "diffstate.h"
 #include "fpga_transport.h"
 #include "mpool.h"
-#include "ref_fork.h"
 #include "shared_packet_pool.h"
 #include <atomic>
 #include <memory>
@@ -76,8 +75,14 @@ public:
   FpgaXdma(bool shared_packets = false, size_t pool_slots = NUM_BLOCKS);
   ~FpgaXdma();
 
-  // Run the parser in the single-thread leader, without receive threads.
-  void run_ref();
+#ifdef USE_THREAD_MEMPOOL
+  // Consume published packets and deliver decoded batches through v_difftest_Batch.
+  void process_packets();
+  void set_packet_callbacks(bool (*idle)(), void (*abort)()) {
+    packet_idle = idle;
+    packet_abort = abort;
+  }
+#endif
 
   void start(bool enable_diff) override {
     running = true;
@@ -90,7 +95,7 @@ public:
 #ifdef USE_THREAD_MEMPOOL
       start_transmit_thread();
       while (running && signal_num == 0) {
-        if (shared_packet_pool && difftest_ref_fork_idle())
+        if (packet_idle && packet_idle())
           break;
         usleep(1000);
       }
@@ -138,6 +143,8 @@ private:
   uint32_t device_read(bool is_bypass, uint64_t addr);
 
 #ifdef USE_THREAD_MEMPOOL
+  bool (*packet_idle)() = nullptr;
+  void (*packet_abort)() = nullptr;
   std::mutex thread_mtx;
   std::condition_variable thread_cv;
   std::unique_ptr<MemoryIdxPool> indexed_packet_pool;
@@ -149,7 +156,6 @@ private:
   void start_transmit_thread();
   void stop_thansmit_thread();
   void read_xdma_thread(int channel);
-  void write_difftest_thread();
 #else
   void read_and_process();
 #endif // USE_THREAD_MEMPOOL

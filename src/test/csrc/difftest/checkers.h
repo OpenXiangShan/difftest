@@ -64,6 +64,9 @@ public:
   }
 
   virtual int do_step() = 0;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  virtual void discard() {}
+#endif
 
   static const int STATE_OK = 0;
   static const int STATE_DIFF = 1;
@@ -108,7 +111,7 @@ public:
   virtual ~ProbeChecker() = default;
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
-  void discard() {
+  void discard() override {
     clear_valid(get_probe());
   }
 #endif
@@ -161,6 +164,18 @@ private:
   void clear_valid(DifftestInstrCommit &probe) override;
   int check(const DifftestInstrCommit &probe) override;
 };
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+class Difftest;
+class FastRefChecker : public DiffTestChecker {
+public:
+  FastRefChecker(Difftest *self, DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy), self(self) {}
+  int do_step() override;
+
+private:
+  Difftest *self;
+};
+#endif
 
 class InstrCommitChecker : public ProbeChecker<DifftestInstrCommit> {
 public:

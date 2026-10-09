@@ -234,25 +234,23 @@ public:
   }
 
 private:
-  int fast_apply_events();
+  friend class FastRefChecker;
   int fast_ref_step();
   bool fast_ref_enabled = false;
   int fast_ref_error = 0;
 #endif
-  template <typename Checker> void add_sync_checker(Checker *checker, bool critical = false) {
+  void add_sync_checker(DiffTestChecker *checker) {
     checkers.push_back(checker);
 #ifdef CONFIG_DIFFTEST_FAST_REF
-    fast_sync_checkers.push_back({checker, [checker] { checker->discard(); }, critical});
+    fast_checkers.push_back(checker);
 #endif
   }
 #ifdef CONFIG_DIFFTEST_FAST_REF
-  struct SyncChecker {
-    DiffTestChecker *checker;
-    std::function<void()> discard;
-    bool critical;
-  };
-  std::vector<SyncChecker> fast_sync_checkers;
-  FirstInstrCommitChecker *first_commit_checker = nullptr; // Owned by checkers.
+  std::vector<DiffTestChecker *> fast_checkers; // First/sync checkers are owned by checkers.
+  FastRefChecker *fast_ref_checker = nullptr;
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  CriticalErrorChecker *critical_error_checker = nullptr;
+#endif
 
 #endif
   int check_all();

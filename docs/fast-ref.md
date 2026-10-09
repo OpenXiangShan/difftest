@@ -1,7 +1,7 @@
 # FAST reference and fork checking
 
 Build flags enable capabilities; main selects `--ref-mode slow|fast|fork`
-(default `slow`). FAST parses DUT commits and advances NEMU without full
+(default `fork` with FORK_REF, otherwise `slow`). FAST parses DUT commits and advances NEMU without full
 register comparison. FAST-only can report DUT Good Trap, but does not establish
 checked equivalence. Fork children switch to SLOW and run the existing checkers.
 Final Good Trap requires a trusted prefix covering the endpoint. Checkpoints
@@ -16,13 +16,13 @@ NEMU requires `CONFIG_FAST_REF`; fork also requires enabled store hashing.
 make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 USE_THREAD_MEMPOOL=1
 ./build/fpga-host --ref-mode fast <normal arguments>
 
-make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK=1 USE_THREAD_MEMPOOL=1
+make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK_REF=1 USE_THREAD_MEMPOOL=1
 ./build/fpga-host --ref-mode fork --ref-fork-interval 5 \
   --packet-pool-log2 20 <normal arguments>
 ```
 
 FORK requires explicit FAST_REF. FAST_REF alone supports SLOW and FAST-only.
-`--ref-fork-interval` sets seconds (default 10; 0 means one segment; nonzero
+`--ref-fork-interval` sets seconds (default 5; 0 means one segment; nonzero
 values must be >=3). The existing LightSSS `--fork-interval` is independent.
 `--packet-pool-log2` is fork-only: slots = 2^N, default N=20 (1048576 packets).
 Final check timeout is 300 seconds.

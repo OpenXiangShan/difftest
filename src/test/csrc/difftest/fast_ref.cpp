@@ -15,36 +15,14 @@
 ***************************************************************************************/
 #include "difftest.h"
 #include <cstdlib>
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
 #include "ref_fork.h"
 #endif
 
 #ifdef CONFIG_DIFFTEST_FAST_REF
-int Difftest::fast_apply_events() {
-  // Match check_all(): synchronization first, then interrupt/exception handling.
-  // Each registered checker owns its valid test and consumes its probe.
-  for (const auto &sync: fast_sync_checkers) {
-#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-    if (sync.critical) {
-      if (dut->critical_error.valid) {
-        proxy->raise_critical_error();
-        dut->critical_error.valid = 0;
-        // A speculative endpoint; fork children still validate CriticalError.
-        state->raise_trap(STATE_GOODTRAP);
-        return DiffTestChecker::STATE_TRAP;
-      }
-      continue;
-    }
-#endif
-    if (int ret = sync.checker->step())
-      return ret;
-  }
-  return arch_event_checker->step();
-}
-
 bool Difftest::set_ref_mode(RefExecMode mode) {
   bool with_fork = false;
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   with_fork = difftest_ref_fork_enabled();
 #endif
   if (mode == REF_EXEC_FAST && !proxy->require_exec_mode_interfaces(with_fork))
@@ -57,23 +35,22 @@ bool Difftest::set_ref_mode(RefExecMode mode) {
 }
 
 int Difftest::fast_ref_step() {
-  bool fork_check = false;
-#ifdef CONFIG_DIFFTEST_FORK
-  fork_check = difftest_ref_fork_enabled();
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  const bool fork_check = difftest_ref_fork_enabled();
 #endif
   state->cycle_count = dut->trap.cycleCnt;
   state->has_progress = false;
   if (!state->has_commit) {
-    if (int ret = first_commit_checker->step())
+    if (int ret = fast_checkers.front()->step())
       return ret;
     if (!state->has_commit) {
-      for (const auto &sync: fast_sync_checkers)
-        sync.discard();
+      for (size_t i = 1; i < fast_checkers.size(); ++i)
+        fast_checkers[i]->discard();
       dut->event.valid = 0;
       return DiffTestChecker::STATE_OK;
     }
   }
-#ifdef CONFIG_DIFFTEST_FORK
+#ifdef CONFIG_DIFFTEST_FORK_REF
   if (fork_check) {
     const int ret = difftest_ref_fork_prepare(this);
     if (ret == 1)
@@ -83,14 +60,33 @@ int Difftest::fast_ref_step() {
   }
 #endif
 
-  const bool consumes_commit = dut->event.valid;
-  if (const int ret = fast_apply_events()) {
-#ifdef CONFIG_DIFFTEST_FORK
-    if (fork_check && ret == DiffTestChecker::STATE_TRAP && get_trap_code() == STATE_GOODTRAP)
-      difftest_ref_fork_publish(this);
+  // First commit initialization must precede the snapshot; sync and execution follow it.
+  for (size_t i = 1; i < fast_checkers.size(); ++i) {
+    auto *checker = fast_checkers[i];
+    if (const int ret = checker->step()) {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+      if (fork_check && checker == critical_error_checker && ret == DiffTestChecker::STATE_TRAP)
+        // A provisional endpoint: the trusted SLOW checker decides success or failure.
+        state->raise_trap(STATE_GOODTRAP);
 #endif
-    return ret;
+      if (fork_check && ret == DiffTestChecker::STATE_TRAP && get_trap_code() == STATE_GOODTRAP)
+        difftest_ref_fork_publish(this);
+#endif
+      return ret;
+    }
   }
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  difftest_ref_fork_publish(this);
+#endif
+  return DiffTestChecker::STATE_OK;
+}
+
+int FastRefChecker::do_step() {
+  auto *dut = self->dut;
+  const bool consumes_commit = dut->event.valid;
+  if (int ret = self->arch_event_checker->step())
+    return ret;
   uint64_t pending = 0;
   uint32_t committed = 0;
   auto execute = [&]() {
@@ -103,7 +99,7 @@ int Difftest::fast_ref_step() {
       proxy->sync();
       fprintf(stderr, "FAST short execution: requested=%lu completed=%lu PC=0x%lx\n", (unsigned long)pending,
               (unsigned long)completed, (unsigned long)proxy->state.pc);
-      fast_ref_error = DiffTestChecker::STATE_ERROR;
+      self->fast_ref_error = DiffTestChecker::STATE_ERROR;
       return false;
     }
 #ifdef CONFIG_DIFFTEST_SQUASH
@@ -120,7 +116,7 @@ int Difftest::fast_ref_step() {
       committed += 1 + commit.nFused;
       if (commit.skip) {
         if (!execute())
-          return fast_ref_error;
+          return self->fast_ref_error;
         // The NEMU skip API writes integer registers. FP/vector skips use
         // the existing regcpy fallback rather than corrupting an integer GPR.
         proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen, commit.wdest,
@@ -131,16 +127,13 @@ int Difftest::fast_ref_step() {
     }
     // Retain the board-validated per-window boundary, batching commits within it.
     if (!execute())
-      return fast_ref_error;
+      return self->fast_ref_error;
     if (committed) {
       state->has_progress = true;
       state->last_commit_cycle = dut->trap.cycleCnt;
       state->record_group(dut->commit[0].pc, committed);
     }
   }
-#ifdef CONFIG_DIFFTEST_FORK
-  difftest_ref_fork_publish(this);
-#endif
   for (auto &commit: dut->commit)
     commit.valid = 0;
   return DiffTestChecker::STATE_OK;

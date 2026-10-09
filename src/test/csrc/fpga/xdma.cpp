@@ -17,7 +17,6 @@
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
-#include "ref_fork.h"
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -44,8 +43,6 @@ SharedPacketPool *g_shared_packet_pool = nullptr;
 static const size_t H2C_AXIS_BYTES = CONFIG_DIFFTEST_HOST_AXIS_BYTES;
 
 void signal_handler(int sig) {
-  if (difftest_ref_fork_is_child())
-    _Exit(128 + sig);
   void *array[20];
   size_t size;
   size = backtrace(array, 20);
@@ -290,8 +287,6 @@ uint32_t FpgaXdma::device_read(bool is_bypass, uint64_t addr) {
 }
 
 #ifdef USE_THREAD_MEMPOOL
-extern void fpga_ref_fork_abort();
-
 static void xdma_wakeup_handler(int) {}
 void FpgaXdma::start_transmit_thread() {
   struct sigaction sa {};
@@ -306,8 +301,8 @@ void FpgaXdma::start_transmit_thread() {
                                     &FpgaXdma::read_xdma_thread, this, i);
   }
   if (!shared_packet_pool)
-    process_thread = std::thread(thread_wrapper<decltype(&FpgaXdma::write_difftest_thread), FpgaXdma *>,
-                                 &FpgaXdma::write_difftest_thread, this);
+    process_thread =
+        std::thread(thread_wrapper<decltype(&FpgaXdma::process_packets), FpgaXdma *>, &FpgaXdma::process_packets, this);
 }
 
 void FpgaXdma::stop_thansmit_thread() {
@@ -378,15 +373,11 @@ void FpgaXdma::read_xdma_thread(int channel) {
   receive_finished[channel].store(true, std::memory_order_release);
 }
 
-void FpgaXdma::run_ref() {
+void FpgaXdma::process_packets() {
   running = true;
-  write_difftest_thread();
-}
-
-void FpgaXdma::write_difftest_thread() {
-  auto abort = [] {
-    difftest_ref_fork_abort_child();
-    fpga_ref_fork_abort();
+  auto abort = [this] {
+    if (packet_abort)
+      packet_abort();
   };
   uint8_t recv_count = 0;
   if (indexed_packet_pool)
@@ -399,7 +390,7 @@ void FpgaXdma::write_difftest_thread() {
     auto *packet = reinterpret_cast<FpgaPackgeHead *>(shared_packet_pool ? shared_packet_pool->get_busy()
                                                                          : indexed_packet_pool->read_busy_chunk());
     if (!packet) {
-      if (shared_packet_pool && difftest_ref_fork_idle()) {
+      if (shared_packet_pool && packet_idle && packet_idle()) {
         abort();
         return;
       }
@@ -417,7 +408,7 @@ void FpgaXdma::write_difftest_thread() {
       v_difftest_Batch(packet->diff_packge[i].diff_packge);
     if (shared_packet_pool) {
       shared_packet_pool->release();
-      if (difftest_ref_fork_idle()) {
+      if (packet_idle && packet_idle()) {
         abort();
         return;
       }
@@ -427,11 +418,6 @@ void FpgaXdma::write_difftest_thread() {
 }
 
 #else // !USE_THREAD_MEMPOOL
-
-void FpgaXdma::run_ref() {
-  running = true;
-  read_and_process();
-}
 
 void *posix_memalignd_malloc(size_t size) {
   void *ptr = nullptr;

@@ -29,11 +29,15 @@ enum class RefMode {
 
 struct CommonArgs {
 #ifdef CONFIG_DIFFTEST_FAST_REF
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  RefMode ref_mode = RefMode::FORK;
+#else
   RefMode ref_mode = RefMode::SLOW;
 #endif
-#ifdef CONFIG_DIFFTEST_FORK
-  uint64_t ref_fork_interval = 10000; // Milliseconds; CLI accepts seconds.
-  unsigned packet_pool_log2 = 20;     // Shared packet slots = 2^packet_pool_log2.
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  uint64_t ref_fork_interval = 5000; // Milliseconds; CLI accepts seconds.
+  unsigned packet_pool_log2 = 20;    // Shared packet slots = 2^packet_pool_log2.
 #endif
   uint32_t reset_cycles = 50;
   uint32_t core_clock_half_period = 1;
