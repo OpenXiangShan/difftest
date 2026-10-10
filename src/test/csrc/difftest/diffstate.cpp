@@ -69,6 +69,9 @@ void DiffState::replay_restore() {
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_event_queue = {};
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  store_hash_queue = {};
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
   cmo_inval_event_set.clear();
 #endif // CONFIG_DIFFTEST_CMOINVALEVENT

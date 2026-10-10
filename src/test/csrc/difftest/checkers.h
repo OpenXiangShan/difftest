@@ -472,6 +472,27 @@ private:
 };
 #endif // CONFIG_DIFFTEST_STOREEVENT
 
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+class StoreHashRecorder : public ProbeChecker<DifftestStoreHashEvent> {
+public:
+  StoreHashRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestStoreHashEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestStoreHashEvent &probe) override;
+  void clear_valid(DifftestStoreHashEvent &probe) override;
+  int check(const DifftestStoreHashEvent &probe) override;
+};
+
+class StoreHashChecker : public SimpleChecker {
+public:
+  StoreHashChecker(DiffState *state, RefProxy *proxy) : SimpleChecker(state, proxy) {}
+
+private:
+  int check() override;
+};
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
+
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 class AmuCtrlRecorder : public ProbeChecker<DifftestAmuCtrlEvent> {
 public:

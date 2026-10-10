@@ -310,6 +310,9 @@ Difftest::~Difftest() {
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   delete store_checker;
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  delete store_hash_checker;
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
     delete load_checker[i];
@@ -343,6 +346,13 @@ void Difftest::init_checkers() {
     checkers.push_back(new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy));
   }
 #endif
+
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  for (int i = 0; i < CONFIG_DIFF_STORE_HASH_WIDTH; i++) {
+    checkers.push_back(
+        new StoreHashRecorder([this, i]() -> DifftestStoreHashEvent & { return dut->store_hash[i]; }, state, proxy));
+  }
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
@@ -478,6 +488,10 @@ void Difftest::init_checkers() {
   inst_op_checkers.push_back(store_checker);
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  store_hash_checker = new StoreHashChecker(state, proxy);
+  inst_op_checkers.push_back(store_hash_checker);
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   inst_op_checkers.push_back(new MsyncChecker(state, proxy));
 #endif // CONFIG_DIFFTEST_MSYNCEVENT
