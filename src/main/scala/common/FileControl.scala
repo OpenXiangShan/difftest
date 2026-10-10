@@ -19,10 +19,13 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths, StandardOpenOption}
 
 object FileControl {
+  private def generatedDir: String =
+    sys.env.getOrElse("GENERATED_DIR", Paths.get(sys.env("NOOP_HOME"), "build").toString)
+
   def write(fileStream: Iterable[String], fileName: String): Unit = write(fileStream, fileName, append = false)
 
   def write(fileStream: Iterable[String], fileName: String, append: Boolean): Unit = {
-    val outputDir = Paths.get(sys.env("NOOP_HOME"), "build", "generated-src")
+    val outputDir = Paths.get(generatedDir, "generated-src")
     write(fileStream, fileName, outputDir.toString, append)
   }
 
