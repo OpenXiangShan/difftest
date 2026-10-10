@@ -57,6 +57,8 @@ struct CommonArgs {
   const char *select_db = nullptr;
   const char *db_path = nullptr;
   const char *trace_name = nullptr;
+  const char *refdrive_trace_name = nullptr;
+  bool refdrive_trace_is_read = false;
   const char *footprints_name = nullptr;
   const char *linearized_name = nullptr;
   bool enable_waveform = false;

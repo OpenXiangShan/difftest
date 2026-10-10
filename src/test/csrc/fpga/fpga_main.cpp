@@ -24,6 +24,7 @@
 #include "mpool.h"
 #include "ram.h"
 #include "refproxy.h"
+#include "reftrace/refdrive_trace.h"
 #include "splitview.h"
 #include "xdma.h"
 #ifdef DIFFTEST_HOSTIF_GBUS
@@ -231,6 +232,7 @@ void fpga_init() {
 void fpga_finish() {
   delete xdma_device;
 
+  difftest_refdrive_trace_finish();
   if (signal_num == 0) {
     difftest_finish();
     goldenmem_finish();

@@ -18,8 +18,12 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "splitview.h"
+#ifndef CONFIG_NO_DIFFTEST
+#include "reftrace/refdrive_trace.h"
+#endif
 #include <cmath>
 #include <getopt.h>
+#include <stdexcept>
 #ifdef CONFIG_DIFFTEST_IOTRACE
 #include "difftest-iotrace.h"
 #endif // CONFIG_DIFFTEST_IOTRACE
@@ -33,6 +37,8 @@ enum {
   OPT_CPU_AXI_DELAY,
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
+  OPT_DUMP_REFDRIVE_TRACE,
+  OPT_LOAD_REFDRIVE_TRACE,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -139,6 +145,8 @@ static inline void print_help(const char *file) {
 #endif // VM_COVERAGE
   printf("      --load-difftrace=NAME  load from trace NAME\n");
   printf("      --dump-difftrace=NAME  dump to trace NAME\n");
+  printf("      --dump-refdrive-trace=DIR record REF driving commands\n");
+  printf("      --load-refdrive-trace=DIR drive REF with ref-drive (no DUT)\n");
   printf("      --iotrace-name=NAME    load from/dump to iotrace NAME\n");
   printf("      --dump-footprints=NAME dump memory access footprints to NAME\n");
   printf("      --as-footprints        load the image as memory access footprints\n");
@@ -217,6 +225,8 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "log-end",           1, NULL, 'e' },
     { "flash",             1, NULL, 'F' },
     { "help",              0, NULL, 'h' },
+    { "dump-refdrive-trace", 1, NULL, OPT_DUMP_REFDRIVE_TRACE },
+    { "load-refdrive-trace", 1, NULL, OPT_LOAD_REFDRIVE_TRACE },
     { 0,                   0, NULL,  0  }
   };
   /* clang-format on */
@@ -225,6 +235,18 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   while ((o = getopt_long(argc, const_cast<char *const *>(argv), "-s:C:X:I:T:R:W:D:hi:r:m:b:e:F:", long_options,
                           &long_index)) != -1) {
     switch (o) {
+      case OPT_DUMP_REFDRIVE_TRACE:
+        if (args.refdrive_trace_name)
+          throw std::runtime_error("Specify only one RefDriveTrace input/output option");
+        args.refdrive_trace_name = optarg;
+        args.refdrive_trace_is_read = false;
+        break;
+      case OPT_LOAD_REFDRIVE_TRACE:
+        if (args.refdrive_trace_name)
+          throw std::runtime_error("Specify only one RefDriveTrace input/output option");
+        args.refdrive_trace_name = optarg;
+        args.refdrive_trace_is_read = true;
+        break;
       case 0:
         switch (long_index) {
           case 0: args.snapshot_path = optarg; continue;
@@ -428,5 +450,11 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   args.ipc_file = fopen(ipc_file, "w");
 #endif
 
+#ifndef CONFIG_NO_DIFFTEST
+  difftest_refdrive_trace_configure(args);
+#else
+  if (args.refdrive_trace_name)
+    throw std::runtime_error("RefDriveTrace requires a DiffTest-enabled executable");
+#endif
   return args;
 }

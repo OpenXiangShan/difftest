@@ -98,7 +98,7 @@ WITH_CHISELDB = 0
 WITH_CONSTANTIN = 0
 endif
 
-DIFFTEST_CXXFILES = $(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp")
+DIFFTEST_CXXFILES = $(filter-out $(DIFFTEST_CSRC_DIR)/reftrace/ref_drive_main.cpp,$(shell find $(DIFFTEST_CSRC_DIR) -name "*.cpp"))
 ifeq ($(NO_DIFF), 1)
 SIM_CXXFLAGS += -DCONFIG_NO_DIFFTEST
 else
@@ -337,6 +337,7 @@ include galaxsim.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
+include reftrace.mk
 include pdb.mk
 
 clean: vcs-clean pldm-clean fpga-clean
