@@ -33,7 +33,7 @@ namespace {
 // Bound outstanding checkpoints, not the lifetime number of segments.
 constexpr unsigned MAX_SEGMENTS = MemoryIdxPool::MAX_READERS;
 constexpr uint64_t OPEN_END = UINT64_MAX;
-constexpr uint64_t TIMEOUT_NS = 300ULL * 1000000000;
+constexpr uint64_t TIMEOUT_MS = 300 * 1000;
 enum class Role {
   SUPERVISOR,
   LEADER,
@@ -54,14 +54,14 @@ enum class Command {
   PROMOTE
 };
 struct Segment {
-  uint64_t generation, start_window, start_packet, start_ns;
+  uint64_t generation, start_window, start_packet, start_ms;
   unsigned reader;
   std::atomic<pid_t> pid{0};
   std::atomic<uint64_t> end_window{OPEN_END};
-  uint64_t end_instr, fast_end_ns;
+  uint64_t end_instr, fast_end_ms;
   int fast_stamp, slow_stamp;
   DifftestStateHash fast_hash{}, slow_hash{};
-  uint64_t checked_windows, child_start_ns, child_end_ns, end_packet;
+  uint64_t checked_windows, child_start_ms, child_end_ms, end_packet;
   std::atomic<Status> status{Status::EMPTY};
   std::atomic<Command> command{Command::WAIT};
   bool reaped = false; // Written only by the supervisor.
@@ -73,18 +73,17 @@ struct Shared {
   Segment segments[MAX_SEGMENTS];
 };
 Shared *control = nullptr;
-bool enabled = false;
 Role role = Role::SUPERVISOR;
-uint64_t interval_ns = 0, generation = 0, current_segment = OPEN_END;
-uint64_t windows = 0, last_instr = 0, deadline_ns = 0, child_window = 0;
+uint64_t interval_ms = 0, generation = 0, current_segment = OPEN_END;
+uint64_t windows = 0, last_instr = 0, last_fork_ms = 0, child_window = 0;
 uint64_t trusted_segment = 0, trusted_windows = 0, checked_windows = 0;
-uint64_t accepted_segments = 0, recoveries = 0, drain_start_ns = 0;
+uint64_t accepted_segments = 0, recoveries = 0, drain_start_ms = 0;
 pid_t supervisor_pid = 0, leader_pid = 0;
 unsigned leader_reader = 0;
 bool leader_reaped = false, summary_printed = false;
 
-uint64_t now_ns() {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+uint64_t now_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
       .count();
 }
 Segment &segment(uint64_t seq) {
@@ -118,7 +117,7 @@ void complete_checker(Difftest *self, bool checks_ok) {
     discard_checker();
   s.checked_windows = child_window - s.start_window;
   s.end_packet = g_packet_pool->cursor();
-  s.child_end_ns = now_ns();
+  s.child_end_ms = now_ms();
   self->proxy->sync();
   checks_ok =
       checks_ok && child_window == s.end_window.load(std::memory_order_acquire) && self->proxy->state_hash(s.slow_hash);
@@ -151,7 +150,7 @@ void complete_checker(Difftest *self, bool checks_ok) {
         fail();
         _exit(2);
       }
-      deadline_ns = now_ns() + interval_ns;
+      last_fork_ms = now_ms();
       s.status.store(Status::PROMOTED, std::memory_order_release);
       printf("RefLeaderPromoted PID=%d Generation=%lu Window=%lu Packet=%lu\n", int(getpid()),
              (unsigned long)generation, (unsigned long)windows, (unsigned long)g_packet_pool->cursor());
@@ -172,11 +171,11 @@ void close_segment(Difftest *self) {
     fail();
   s.fast_stamp = self->fork_commit_stamp();
   s.end_instr = last_instr;
-  s.fast_end_ns = now_ns();
+  s.fast_end_ms = now_ms();
   s.end_window.store(windows, std::memory_order_release);
-  printf("RefForkClose Generation=%lu Segment=%lu StartWindow=%lu EndWindow=%lu EndInstr=%lu FastSpanMs=%.3f\n",
+  printf("RefForkClose Generation=%lu Segment=%lu StartWindow=%lu EndWindow=%lu EndInstr=%lu FastSpanMs=%lu\n",
          (unsigned long)generation, (unsigned long)current_segment, (unsigned long)s.start_window,
-         (unsigned long)windows, (unsigned long)last_instr, double(s.fast_end_ns - s.start_ns) / 1e6);
+         (unsigned long)windows, (unsigned long)last_instr, (unsigned long)(s.fast_end_ms - s.start_ms));
   fflush(stdout);
 }
 bool reap(pid_t pid, bool &done, bool expected_kill = false) {
@@ -223,20 +222,20 @@ void accept(uint64_t seq, bool recovered) {
   ++accepted_segments;
   printf(
       "RefForkResult Generation=%lu Segment=%lu %s StartWindow=%lu EndWindow=%lu Checked=%lu "
-      "FastMs=%.3f SlowMs=%.3f LagMs=%.3f StartPacket=%lu EndPacket=%lu Stores=%lu\n",
+      "FastMs=%lu SlowMs=%lu LagMs=%lu StartPacket=%lu EndPacket=%lu Stores=%lu\n",
       (unsigned long)s.generation, (unsigned long)seq, recovered ? "RECOVERED" : "MATCH", (unsigned long)s.start_window,
-      (unsigned long)trusted_windows, (unsigned long)s.checked_windows, double(s.fast_end_ns - s.start_ns) / 1e6,
-      double(s.child_end_ns - s.child_start_ns) / 1e6,
-      s.child_end_ns > s.fast_end_ns ? double(s.child_end_ns - s.fast_end_ns) / 1e6 : 0.0,
+      (unsigned long)trusted_windows, (unsigned long)s.checked_windows, (unsigned long)(s.fast_end_ms - s.start_ms),
+      (unsigned long)(s.child_end_ms - s.child_start_ms),
+      (unsigned long)(s.child_end_ms > s.fast_end_ms ? s.child_end_ms - s.fast_end_ms : 0),
       (unsigned long)s.start_packet, (unsigned long)s.end_packet, (unsigned long)s.slow_hash.store_count);
   fflush(stdout);
 }
 bool recover(uint64_t seq) {
   Segment &candidate = segment(seq);
   control->pause.store(true, std::memory_order_release);
-  const uint64_t begin = now_ns();
+  const uint64_t begin = now_ms();
   while (!control->paused.load(std::memory_order_acquire)) {
-    if (g_packet_pool->aborted() || now_ns() - begin >= TIMEOUT_NS)
+    if (g_packet_pool->aborted() || now_ms() - begin >= TIMEOUT_MS)
       return false;
     if (!reap(leader_pid, leader_reaped) || leader_reaped)
       return false;
@@ -264,7 +263,7 @@ bool recover(uint64_t seq) {
     }
     if (done)
       break;
-    if (now_ns() - begin >= TIMEOUT_NS)
+    if (now_ms() - begin >= TIMEOUT_MS)
       return false;
     usleep(1000);
   }
@@ -277,7 +276,7 @@ bool recover(uint64_t seq) {
   control->head.store(seq + 1, std::memory_order_release);
   control->published_windows.store(candidate.end_window.load(std::memory_order_acquire), std::memory_order_release);
   control->endpoint.store(false, std::memory_order_release);
-  drain_start_ns = 0;
+  drain_start_ms = 0;
   control->generation.fetch_add(1, std::memory_order_release);
   control->pause.store(false, std::memory_order_release);
   control->paused.store(false, std::memory_order_release);
@@ -287,7 +286,7 @@ bool recover(uint64_t seq) {
   fflush(stdout);
   candidate.command.store(Command::PROMOTE, std::memory_order_release);
   while (candidate.status.load(std::memory_order_acquire) != Status::PROMOTED) {
-    if (g_packet_pool->aborted() || now_ns() - begin >= TIMEOUT_NS || !reap(leader_pid, leader_reaped) || leader_reaped)
+    if (g_packet_pool->aborted() || now_ms() - begin >= TIMEOUT_MS || !reap(leader_pid, leader_reaped) || leader_reaped)
       return false;
     usleep(50);
   }
@@ -304,25 +303,22 @@ bool all_reaped() {
 }
 } // namespace
 
-bool difftest_ref_fork_init(uint64_t interval_ms) {
-  if (enabled || (interval_ms != 0 && interval_ms < 3000) || interval_ms > UINT64_MAX / 1000000 || NUM_CORES != 1 ||
-      CONFIG_DMA_CHANNELS != 1) {
-    fprintf(stderr, "REF fork requires one core/channel and interval 0 or >=3 seconds\n");
-    return false;
-  }
-  interval_ns = interval_ms * 1000000;
-  enabled = true;
-  return true;
-}
 bool difftest_ref_fork_enabled() {
-  return enabled;
+  return control != nullptr;
 }
 bool difftest_ref_fork_is_child() {
   return role == Role::CHECKER;
 }
-int difftest_ref_fork_start() {
-  if (!enabled || !g_packet_pool || control)
+int difftest_ref_fork_start(uint64_t fork_interval_ms) {
+  if (!g_packet_pool || control)
     return -1;
+  if (NUM_CORES != 1 || CONFIG_DMA_CHANNELS != 1) {
+    fprintf(stderr, "REF fork requires one core and shared single-channel packet indexing\n");
+    return -1;
+  }
+  if (!difftest[0]->proxy->require_exec_mode_interfaces(true))
+    return -1;
+  interval_ms = fork_interval_ms;
 #if defined(CONFIG_DIFFTEST_LOADEVENT) || defined(CONFIG_DIFFTEST_STOREEVENT) ||                     \
     defined(CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE) || defined(CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE) || \
     defined(CONFIG_DIFFTEST_AMUCTRLEVENT) || defined(CONFIG_DIFFTEST_CMOINVALEVENT) ||               \
@@ -352,14 +348,15 @@ int difftest_ref_fork_start() {
   return 0;
 }
 int difftest_ref_fork_prepare(Difftest *self) {
-  if (!enabled)
+  if (!control)
     return 0;
-  if (!control || role != Role::LEADER)
+  if (role != Role::LEADER)
     return 2;
   pause_leader();
   if (g_packet_pool->aborted())
     return 2;
-  const bool next = current_segment == OPEN_END || (interval_ns && now_ns() >= deadline_ns && !self->dut->trap.hasTrap);
+  const bool next = current_segment == OPEN_END ||
+                    (interval_ms && now_ms() - last_fork_ms >= interval_ms && !self->dut->trap.hasTrap);
   if (!next)
     return 0;
   close_segment(self);
@@ -381,7 +378,7 @@ int difftest_ref_fork_prepare(Difftest *self) {
   s.generation = generation;
   s.start_window = windows;
   s.start_packet = g_packet_pool->cursor();
-  s.start_ns = now_ns();
+  s.start_ms = now_ms();
   s.reader = reader;
   s.pid.store(0, std::memory_order_relaxed);
   s.end_window.store(OPEN_END, std::memory_order_relaxed);
@@ -404,7 +401,7 @@ int difftest_ref_fork_prepare(Difftest *self) {
     g_packet_pool->enter_reader(reader);
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() != supervisor_pid)
       _exit(2);
-    s.child_start_ns = now_ns();
+    s.child_start_ms = now_ms();
     if (!self->set_ref_mode(REF_EXEC_SLOW)) {
       fail();
       _exit(2);
@@ -414,10 +411,10 @@ int difftest_ref_fork_prepare(Difftest *self) {
   }
   s.pid.store(pid, std::memory_order_release);
   control->head.store(seq + 1, std::memory_order_release);
-  deadline_ns = now_ns() + interval_ns;
-  printf("RefForkStart Generation=%lu Segment=%lu Child=%d StartWindow=%lu StartInstr=%lu Packet=%lu InitMs=%.3f\n",
+  last_fork_ms = now_ms();
+  printf("RefForkStart Generation=%lu Segment=%lu Child=%d StartWindow=%lu StartInstr=%lu Packet=%lu InitMs=%lu\n",
          (unsigned long)generation, (unsigned long)seq, int(pid), (unsigned long)windows, (unsigned long)last_instr,
-         (unsigned long)s.start_packet, double(now_ns() - s.start_ns) / 1e6);
+         (unsigned long)s.start_packet, (unsigned long)(now_ms() - s.start_ms));
   fflush(stdout);
   return 0;
 }
@@ -457,7 +454,7 @@ int difftest_ref_fork_check(Difftest *self) {
   return ret;
 }
 void difftest_ref_fork_publish(Difftest *self) {
-  if (!enabled || role != Role::LEADER)
+  if (!control || role != Role::LEADER)
     return;
   last_instr = self->dut->trap.instrCnt;
   control->published_windows.store(++windows, std::memory_order_release);
@@ -518,9 +515,9 @@ int difftest_ref_fork_idle() {
     }
     retire_prefix();
     if (control->endpoint.load(std::memory_order_acquire)) {
-      if (!drain_start_ns)
-        drain_start_ns = now_ns();
-      if (now_ns() - drain_start_ns >= TIMEOUT_NS)
+      if (!drain_start_ms)
+        drain_start_ms = now_ms();
+      if (now_ms() - drain_start_ms >= TIMEOUT_MS)
         fail();
       if (trusted_segment == control->head.load(std::memory_order_acquire) &&
           trusted_windows == control->published_windows.load(std::memory_order_acquire))
@@ -585,32 +582,4 @@ void difftest_ref_fork_leader_exit(int result) {
     fail();
   _exit(result ? 2 : 0);
 }
-#else
-bool difftest_ref_fork_init(uint64_t) {
-  return false;
-}
-bool difftest_ref_fork_enabled() {
-  return false;
-}
-bool difftest_ref_fork_is_child() {
-  return false;
-}
-int difftest_ref_fork_start() {
-  return -1;
-}
-int difftest_ref_fork_prepare(Difftest *) {
-  return 0;
-}
-int difftest_ref_fork_check(Difftest *) {
-  return 0;
-}
-void difftest_ref_fork_publish(Difftest *) {}
-int difftest_ref_fork_finish() {
-  return 0;
-}
-int difftest_ref_fork_idle() {
-  return 0;
-}
-void difftest_ref_fork_abort_child() {}
-void difftest_ref_fork_leader_exit(int) {}
 #endif

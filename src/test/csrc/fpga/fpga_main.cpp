@@ -80,19 +80,15 @@ int main(int argc, const char *argv[]) {
   fpga_ila_upload_cmd = std::getenv("FPGA_ILA_UPLOAD_CMD");
   args = parse_args(argc, argv);
 
-#ifdef CONFIG_DIFFTEST_FORK_REF
-  if (args.ref_mode == RefMode::FORK && !difftest_ref_fork_init(args.ref_fork_interval))
-    return 1;
-#endif
-
   common_init(argv[0]);
 
   fpga_init();
 
   printf("fpga init\n");
 #ifdef CONFIG_DIFFTEST_FORK_REF
-  if (args.ref_mode == RefMode::FORK) {
-    const int role = difftest_ref_fork_start();
+  if (args.enable_diff && args.ref_mode == RefMode::FORK) {
+    // Fork here: the parent receives XDMA packets; the child runs FAST REF.
+    const int role = difftest_ref_fork_start(args.ref_fork_interval);
     if (role < 0)
       return 1;
     if (role == 1) {
@@ -159,8 +155,9 @@ void fpga_init() {
   try {
     if (args.packet_pool_log2 == 0 || args.packet_pool_log2 >= sizeof(size_t) * 8)
       throw std::invalid_argument("Packet pool order is outside the supported range");
-    xdma_device = new FpgaXdma(/*fork_readers=*/args.ref_mode == RefMode::FORK,
-                               /*pool_slots=*/size_t{1} << args.packet_pool_log2);
+    const bool fork_readers = args.enable_diff && args.ref_mode == RefMode::FORK;
+    const size_t pool_slots = size_t{1} << args.packet_pool_log2;
+    xdma_device = new FpgaXdma(fork_readers, pool_slots);
   } catch (const std::exception &error) {
     fprintf(stderr, "[fpga-host] packet pool initialization failed: %s\n", error.what());
     exit(1);
@@ -170,12 +167,16 @@ void fpga_init() {
 #endif
 #endif
 #if defined(USE_THREAD_MEMPOOL) && !defined(DIFFTEST_HOSTIF_GBUS)
+#ifdef CONFIG_DIFFTEST_FORK_REF
   static_cast<FpgaXdma *>(xdma_device)
       ->set_packet_callbacks([] { return difftest_ref_fork_idle() != 0; },
                              [] {
                                difftest_ref_fork_abort_child();
                                fpga_ref_fork_abort();
                              });
+#else
+  static_cast<FpgaXdma *>(xdma_device)->set_packet_callbacks(nullptr, fpga_ref_fork_abort);
+#endif
 #endif
   xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
   sleep(1);
@@ -266,10 +267,12 @@ void fpga_init() {
 
   difftest_init(args.enable_diff, ram_size);
 #ifdef CONFIG_DIFFTEST_FAST_REF
-  for (int i = 0; args.enable_diff && i < NUM_CORES; ++i) {
+  if (args.enable_diff) {
     const auto mode = args.ref_mode == RefMode::SLOW ? REF_EXEC_SLOW : REF_EXEC_FAST;
-    if (!difftest[i]->set_ref_mode(mode))
-      exit(1);
+    for (int i = 0; i < NUM_CORES; ++i) {
+      if (!difftest[i]->set_ref_mode(mode))
+        exit(1);
+    }
   }
 #endif
 
@@ -277,11 +280,13 @@ void fpga_init() {
 }
 
 void fpga_finish() {
+#ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_enabled()) {
     if (signal_num)
       g_packet_pool->fail();
     fpga_result = difftest_ref_fork_finish() ? FPGA_FAIL : FPGA_GOODTRAP;
   }
+#endif
 
   delete xdma_device;
 
@@ -332,8 +337,10 @@ void fpga_display_result(int ret) {
 int fpga_get_result(uint8_t step) {
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
+#ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_is_child())
     return FPGA_RUN;
+#endif
   if (trapCode != STATE_RUNNING) {
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
     fpga_ila_triggered = true;
@@ -414,12 +421,16 @@ extern "C" void fpga_nstep(uint8_t step) {
     return;
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
+#ifdef CONFIG_DIFFTEST_FORK_REF
     if (difftest_ref_fork_enabled())
       printf("FastEndpoint Result=%d\n", ret);
+#endif
     if (ret != FPGA_GOODTRAP && g_packet_pool)
       g_packet_pool->fail();
+#ifdef CONFIG_DIFFTEST_FORK_REF
     if (difftest_ref_fork_finish())
       ret = FPGA_FAIL;
+#endif
     fpga_display_result(ret);
     fpga_result = ret;
     xdma_device->stop();
@@ -430,7 +441,9 @@ void fpga_ref_fork_abort() {
   fpga_result = FPGA_FAIL;
   if (g_packet_pool)
     g_packet_pool->fail();
+#ifdef CONFIG_DIFFTEST_FORK_REF
   difftest_ref_fork_finish();
+#endif
   fpga_display_result(FPGA_FAIL);
   xdma_device->stop();
 }

@@ -16,15 +16,14 @@
 #ifndef DIFFTEST_FORK_REF_H
 #define DIFFTEST_FORK_REF_H
 
+#ifdef CONFIG_DIFFTEST_FORK_REF
 class Difftest;
 #include <cstdint>
 
-// Configure once in main before receive threads or forked readers exist.
-bool difftest_ref_fork_init(uint64_t interval_ms);
 bool difftest_ref_fork_enabled();
 bool difftest_ref_fork_is_child();
 // Start before threads: 0 supervisor, 1 leader, -1 failure.
-int difftest_ref_fork_start();
+int difftest_ref_fork_start(uint64_t interval_ms);
 void difftest_ref_fork_leader_exit(int result);
 int difftest_ref_fork_prepare(Difftest *self);
 int difftest_ref_fork_check(Difftest *self);
@@ -33,4 +32,5 @@ int difftest_ref_fork_finish();
 int difftest_ref_fork_idle();
 void difftest_ref_fork_abort_child();
 
+#endif
 #endif

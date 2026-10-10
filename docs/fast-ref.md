@@ -22,8 +22,8 @@ make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK_REF=1 USE_THREAD_MEMPOO
 ```
 
 FORK requires explicit FAST_REF. FAST_REF alone supports SLOW and FAST-only.
-`--ref-fork-interval` sets seconds (default 5; 0 means one segment; nonzero
-values must be >=3). The existing LightSSS `--fork-interval` is independent.
+`--ref-fork-interval` sets seconds (default 5; 0 means one segment), with
+millisecond timing. The existing LightSSS `--fork-interval` is independent.
 `--packet-pool-log2` is fork-only: slots = 2^N, default N=20 (1048576 packets).
 Final check timeout is 300 seconds.
 
