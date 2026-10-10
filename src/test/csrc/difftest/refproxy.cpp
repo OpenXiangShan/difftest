@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -355,3 +355,20 @@ LinkedProxy::LinkedProxy(int coreid, size_t ram_size) : RefProxy(coreid, ram_siz
     assert(0);
   }
 }
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+bool RefProxy::require_exec_mode_interfaces(bool with_fork) {
+  if (!ref_set_exec_mode || !ref_get_instr_count) {
+    fprintf(stderr, "FAST requires REF mode switching and instruction count interfaces\n");
+    return false;
+  }
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  DifftestStateHash hash{};
+  if (with_fork && !state_hash(hash)) {
+    fprintf(stderr, "Fork checking requires state hash and enabled store hashing\n");
+    return false;
+  }
+#endif
+  return true;
+}
+#endif

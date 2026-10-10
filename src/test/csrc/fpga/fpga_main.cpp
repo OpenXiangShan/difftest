@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -20,6 +20,7 @@
 #include "diffstate.h"
 #include "difftest.h"
 #include "flash.h"
+#include "fork_ref/fork_ref.h"
 #include "goldenmem.h"
 #include "mpool.h"
 #include "ram.h"
@@ -45,6 +46,7 @@
 #endif // USE_SERIAL_PORT
 
 void fpga_finish();
+void fpga_ref_fork_abort();
 
 enum {
   FPGA_RUN,
@@ -53,7 +55,7 @@ enum {
   FPGA_FAIL,
 } fpga_state;
 
-static uint8_t fpga_result = FPGA_RUN;
+static std::atomic<uint8_t> fpga_result{FPGA_RUN};
 static CommonArgs args;
 static const char *fpga_ddr_load_cmd = nullptr;
 static const char *fpga_ila_arm_cmd = nullptr;
@@ -83,6 +85,22 @@ int main(int argc, const char *argv[]) {
   fpga_init();
 
   printf("fpga init\n");
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (args.enable_diff && args.ref_mode == RefMode::FORK) {
+    // Fork here: the parent receives XDMA packets; the child runs FAST REF.
+    const int role = difftest_ref_fork_start(args.ref_fork_interval);
+    if (role < 0)
+      return 1;
+    if (role == 1) {
+      static_cast<FpgaXdma *>(xdma_device)->process_packets();
+      fflush(nullptr);
+      difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP);
+    }
+  }
+#endif
+#ifdef USE_SERIAL_PORT
+  serial_port->start();
+#endif
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
   fpga_finish();
   if (signal_num != 0) {
@@ -133,7 +151,32 @@ void fpga_init() {
   gbus_device->validate_guest_ram(_PMEM_BASE, ram_size);
   xdma_device = gbus_device;
 #else
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  try {
+    if (args.packet_pool_log2 == 0 || args.packet_pool_log2 >= sizeof(size_t) * 8)
+      throw std::invalid_argument("Packet pool order is outside the supported range");
+    const bool fork_readers = args.enable_diff && args.ref_mode == RefMode::FORK;
+    const size_t pool_slots = size_t{1} << args.packet_pool_log2;
+    xdma_device = new FpgaXdma(fork_readers, pool_slots);
+  } catch (const std::exception &error) {
+    fprintf(stderr, "[fpga-host] packet pool initialization failed: %s\n", error.what());
+    exit(1);
+  }
+#else
   xdma_device = new FpgaXdma();
+#endif
+#endif
+#if defined(USE_THREAD_MEMPOOL) && !defined(DIFFTEST_HOSTIF_GBUS)
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  static_cast<FpgaXdma *>(xdma_device)
+      ->set_packet_callbacks([] { return difftest_ref_fork_idle() != 0; },
+                             [] {
+                               difftest_ref_fork_abort_child();
+                               fpga_ref_fork_abort();
+                             });
+#else
+  static_cast<FpgaXdma *>(xdma_device)->set_packet_callbacks(nullptr, fpga_ref_fork_abort);
+#endif
 #endif
   xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
   sleep(1);
@@ -210,7 +253,6 @@ void fpga_init() {
     serial_port_device = "/dev/ttyUSB0";
   }
   serial_port = new SerialPort(serial_port_device);
-  serial_port->start();
 #endif // USE_SERIAL_PORT
 
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
@@ -224,11 +266,28 @@ void fpga_init() {
 #endif // FPGA_SIM
 
   difftest_init(args.enable_diff, ram_size);
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  if (args.enable_diff) {
+    const auto mode = args.ref_mode == RefMode::SLOW ? REF_EXEC_SLOW : REF_EXEC_FAST;
+    for (int i = 0; i < NUM_CORES; ++i) {
+      if (!difftest[i]->set_ref_mode(mode))
+        exit(1);
+    }
+  }
+#endif
 
   xdma_device->fpga_io(HOST_IO_RESET, false);
 }
 
 void fpga_finish() {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_enabled()) {
+    if (signal_num)
+      g_packet_pool->fail();
+    fpga_result = difftest_ref_fork_finish() ? FPGA_FAIL : FPGA_GOODTRAP;
+  }
+#endif
+
   delete xdma_device;
 
   if (signal_num == 0) {
@@ -278,6 +337,10 @@ void fpga_display_result(int ret) {
 int fpga_get_result(uint8_t step) {
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_is_child())
+    return FPGA_RUN;
+#endif
   if (trapCode != STATE_RUNNING) {
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
     fpga_ila_triggered = true;
@@ -358,8 +421,29 @@ extern "C" void fpga_nstep(uint8_t step) {
     return;
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    if (difftest_ref_fork_enabled())
+      printf("FastEndpoint Result=%d\n", ret);
+#endif
+    if (ret != FPGA_GOODTRAP && g_packet_pool)
+      g_packet_pool->fail();
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    if (difftest_ref_fork_finish())
+      ret = FPGA_FAIL;
+#endif
     fpga_display_result(ret);
     fpga_result = ret;
     xdma_device->stop();
   }
+}
+
+void fpga_ref_fork_abort() {
+  fpga_result = FPGA_FAIL;
+  if (g_packet_pool)
+    g_packet_pool->fail();
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  difftest_ref_fork_finish();
+#endif
+  fpga_display_result(FPGA_FAIL);
+  xdma_device->stop();
 }

@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -215,6 +215,43 @@ protected:
   uint8_t *amu_finish_buffers[CONFIG_DIFF_AMU_FINISH_WIDTH];
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+public:
+  // Select at startup or an established fork boundary.
+  bool set_ref_mode(RefExecMode mode);
+  int flush_fast_ref() {
+    return fast_ref_enabled ? fast_ref_checker->flush() : DiffTestChecker::STATE_OK;
+  }
+  int fork_check_step() {
+    return check_all();
+  }
+  int fork_commit_stamp() const {
+#ifdef CONFIG_DIFFTEST_SQUASH
+    return state->commit_stamp;
+#else
+    return 0;
+#endif
+  }
+
+private:
+  friend class FastRefChecker;
+  int fast_ref_step();
+  bool fast_ref_enabled = false;
+#endif
+  void add_sync_checker(DiffTestChecker *checker) {
+    checkers.push_back(checker);
+#ifdef CONFIG_DIFFTEST_FAST_REF
+    fast_checkers.push_back(checker);
+#endif
+  }
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  std::vector<DiffTestChecker *> fast_checkers; // First/sync checkers are owned by checkers.
+  FastRefChecker *fast_ref_checker = nullptr;
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  CriticalErrorChecker *critical_error_checker = nullptr;
+#endif
+
+#endif
   int check_all();
 
   inline bool in_disambiguation_state() {

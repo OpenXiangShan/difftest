@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2025 Beijing Institute of Open Source Chip
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -22,6 +22,9 @@
 #include "matrix_store_tracker.h"
 #include "refproxy.h"
 #include "stopwatch.h"
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#include "refdrive/refdrive.h"
+#endif
 
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
 #include <cxxabi.h>
@@ -64,6 +67,9 @@ public:
   }
 
   virtual int do_step() = 0;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  virtual void discard() {}
+#endif
 
   static const int STATE_OK = 0;
   static const int STATE_DIFF = 1;
@@ -106,6 +112,12 @@ public:
   ProbeChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
       : DiffTestChecker(state, proxy), get_probe(std::move(get_probe)) {}
   virtual ~ProbeChecker() = default;
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  void discard() override {
+    clear_valid(get_probe());
+  }
+#endif
 
   virtual int do_step() override {
     Probe &probe = get_probe();
@@ -155,6 +167,21 @@ private:
   void clear_valid(DifftestInstrCommit &probe) override;
   int check(const DifftestInstrCommit &probe) override;
 };
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+class Difftest;
+class FastRefChecker : public DiffTestChecker {
+public:
+  FastRefChecker(Difftest *self, DiffState *state, RefProxy *proxy)
+      : DiffTestChecker(state, proxy), self(self), driver(proxy) {}
+  int do_step() override;
+  int flush();
+
+private:
+  Difftest *self;
+  RefDriveExecutor driver;
+};
+#endif
 
 class InstrCommitChecker : public ProbeChecker<DifftestInstrCommit> {
 public:

@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -97,6 +97,15 @@ enum {
   DUT_TO_REF
 };
 
+struct DifftestStateHash {
+  uint64_t state_lo, state_hi;
+  uint64_t store_lo, store_hi, store_count;
+};
+enum RefExecMode {
+  REF_EXEC_FAST = 0,
+  REF_EXEC_SLOW = 1
+};
+
 class RefProxyConfig {
 public:
   bool ignore_illegal_mem_access = false;
@@ -145,7 +154,24 @@ public:
   REF_STORE_LOG(f)  \
   REF_DEBUG_MODE(f)
 
-#define REF_OPTIONAL(f)                                                                                     \
+// Optional for old SLOW REFs; validate when the corresponding mode is selected.
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#define REF_EXEC_MODE(f) \
+  f(ref_set_exec_mode, difftest_set_exec_mode, void, int) \
+  f(ref_get_instr_count, difftest_get_instr_count, uint64_t, )
+#else
+#define REF_EXEC_MODE(f)
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+#define REF_FORK(f) \
+  f(ref_state_hash, difftest_state_hash, int, void*)
+#else
+#define REF_FORK(f)
+#endif
+
+#define REF_OPTIONAL(f) \
+  REF_EXEC_MODE(f) \
+  REF_FORK(f)                                                                                     \
   f(ref_init_v2, difftest_init_v2, void, unsigned)                                                          \
   f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
   f(load_flash_bin_v2, difftest_load_flash_v2, void, const uint8_t*, size_t)                                \
@@ -254,13 +280,24 @@ public:
     ref_regcpy(&state.xrf, is_from_dut, is_from_dut);
   }
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  using AbstractRefProxy::ref_get_instr_count;
+  using AbstractRefProxy::ref_set_exec_mode;
+  bool require_exec_mode_interfaces(bool with_fork);
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  inline bool state_hash(DifftestStateHash &hash) {
+    return ref_state_hash && ref_state_hash(&hash) == 0;
+  }
+#endif
+
   void regcpy(const DiffTestRegState *regs, uint64_t pc);
   int compare(DiffTestState *dut);
   void display(DiffTestState *dut = nullptr);
 
   inline void skip_one(bool isRVC, bool rfwen, bool fpwen, bool vecwen, uint32_t wdest, uint64_t wdata) {
     bool wen = rfwen | fpwen;
-    if (ref_skip_one) {
+    if (ref_skip_one && !fpwen && !vecwen) {
       ref_skip_one(isRVC, wen, wdest, wdata);
     } else {
       sync();
