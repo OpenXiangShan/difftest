@@ -84,9 +84,6 @@ int Difftest::fast_ref_step() {
 
 int FastRefChecker::do_step() {
   auto *dut = self->dut;
-  const bool consumes_commit = dut->event.valid;
-  if (int ret = self->arch_event_checker->step())
-    return ret;
   uint64_t pending = 0;
   uint32_t committed = 0;
   auto execute = [&]() {
@@ -107,31 +104,36 @@ int FastRefChecker::do_step() {
     pending = 0;
     return true;
   };
-  if (!consumes_commit) {
-    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
-      const auto &commit = dut->commit[i];
-      if (!commit.valid)
-        continue;
-      committed += 1 + commit.nFused;
-      if (commit.skip) {
-        if (!execute())
-          return DiffTestChecker::STATE_ERROR;
-        // The NEMU skip API writes integer registers. FP/vector skips use
-        // the existing regcpy fallback rather than corrupting an integer GPR.
-        proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen, commit.wdest,
-                        get_commit_data(dut, i));
-      } else {
-        pending += 1 + commit.nFused;
-      }
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+    if (dut->event.valid && i == dut->event.isLatter) {
+      if (!execute())
+        return DiffTestChecker::STATE_ERROR;
+      if (int ret = self->arch_event_checker->step())
+        return ret;
+      break;
     }
-    // Retain the board-validated per-window boundary, batching commits within it.
-    if (!execute())
-      return DiffTestChecker::STATE_ERROR;
-    if (committed) {
-      state->has_progress = true;
-      state->last_commit_cycle = dut->trap.cycleCnt;
-      state->record_group(dut->commit[0].pc, committed);
+    const auto &commit = dut->commit[i];
+    if (!commit.valid)
+      continue;
+    committed += 1 + commit.nFused;
+    if (commit.skip) {
+      if (!execute())
+        return DiffTestChecker::STATE_ERROR;
+      // NEMU's skip API writes only integer GPRs; FP skips use regcpy.
+      // Vector skips retain the existing unsupported-case check.
+      proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen, commit.wdest,
+                      get_commit_data(dut, i));
+    } else {
+      pending += 1 + commit.nFused;
     }
+  }
+  // Retain the board-validated per-window boundary, batching commits within it.
+  if (!execute())
+    return DiffTestChecker::STATE_ERROR;
+  if (committed) {
+    state->has_progress = true;
+    state->last_commit_cycle = dut->trap.cycleCnt;
+    state->record_group(dut->commit[0].pc, committed);
   }
   for (auto &commit: dut->commit)
     commit.valid = 0;
