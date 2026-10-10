@@ -49,7 +49,11 @@ template <typename T> static void payload(const T &data) {
 }
 
 void difftest_refdrive_trace_configure(const CommonArgs &args) {
-  if (!args.refdrive_trace_name)
+#ifndef CONFIG_REF_DRIVE
+  if (args.refdrive_trace_is_read)
+    throw std::runtime_error("Use ref-drive to load RefDriveTrace");
+#endif
+  if (!args.refdrive_trace_name || args.refdrive_trace_is_read)
     return;
   if (!args.enable_diff)
     throw std::runtime_error("RefDriveTrace requires differential testing");

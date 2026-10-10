@@ -38,6 +38,7 @@ enum {
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
   OPT_DUMP_REFDRIVE_TRACE,
+  OPT_LOAD_REFDRIVE_TRACE,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -145,6 +146,7 @@ static inline void print_help(const char *file) {
   printf("      --load-difftrace=NAME  load from trace NAME\n");
   printf("      --dump-difftrace=NAME  dump to trace NAME\n");
   printf("      --dump-refdrive-trace=DIR record REF driving commands\n");
+  printf("      --load-refdrive-trace=DIR drive REF with ref-drive (no DUT)\n");
   printf("      --iotrace-name=NAME    load from/dump to iotrace NAME\n");
   printf("      --dump-footprints=NAME dump memory access footprints to NAME\n");
   printf("      --as-footprints        load the image as memory access footprints\n");
@@ -224,6 +226,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "flash",             1, NULL, 'F' },
     { "help",              0, NULL, 'h' },
     { "dump-refdrive-trace", 1, NULL, OPT_DUMP_REFDRIVE_TRACE },
+    { "load-refdrive-trace", 1, NULL, OPT_LOAD_REFDRIVE_TRACE },
     { 0,                   0, NULL,  0  }
   };
   /* clang-format on */
@@ -234,8 +237,15 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     switch (o) {
       case OPT_DUMP_REFDRIVE_TRACE:
         if (args.refdrive_trace_name)
-          throw std::runtime_error("Specify only one RefDriveTrace output option");
+          throw std::runtime_error("Specify only one RefDriveTrace input/output option");
         args.refdrive_trace_name = optarg;
+        args.refdrive_trace_is_read = false;
+        break;
+      case OPT_LOAD_REFDRIVE_TRACE:
+        if (args.refdrive_trace_name)
+          throw std::runtime_error("Specify only one RefDriveTrace input/output option");
+        args.refdrive_trace_name = optarg;
+        args.refdrive_trace_is_read = true;
         break;
       case 0:
         switch (long_index) {

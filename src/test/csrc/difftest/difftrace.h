@@ -71,11 +71,14 @@ public:
   }
   bool append(const T *trace);
   bool read_next(T *trace);
+  // Checked reader; false means EOF after at least one file.
+  bool try_read_next(T *trace);
   void next_file_name(char *file_name);
 
 private:
   uint64_t buffer_size;
   uint64_t buffer_count = 0;
+  uint64_t loaded_count = 0;
   uint64_t trace_index = 0;
   T *buffer = nullptr;
 

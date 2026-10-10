@@ -97,6 +97,11 @@ enum {
   DUT_TO_REF
 };
 
+enum RefExecMode {
+  REF_EXEC_FAST = 0,
+  REF_EXEC_SLOW = 1
+};
+
 class RefProxyConfig {
 public:
   bool ignore_illegal_mem_access = false;
@@ -146,6 +151,8 @@ public:
   REF_DEBUG_MODE(f)
 
 #define REF_OPTIONAL(f)                                                                                     \
+  f(ref_set_exec_mode, difftest_set_exec_mode, void, int)                                                  \
+  f(ref_get_instr_count, difftest_get_instr_count, uint64_t, )                                             \
   f(ref_init_v2, difftest_init_v2, void, unsigned)                                                          \
   f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
   f(load_flash_bin_v2, difftest_load_flash_v2, void, const uint8_t*, size_t)                                \
@@ -237,6 +244,9 @@ public:
 
   ref_state_t state;
 
+  using AbstractRefProxy::ref_get_instr_count;
+  using AbstractRefProxy::ref_set_exec_mode;
+
   inline uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
@@ -260,7 +270,7 @@ public:
 
   inline void skip_one(bool isRVC, bool rfwen, bool fpwen, bool vecwen, uint32_t wdest, uint64_t wdata) {
     bool wen = rfwen | fpwen;
-    if (ref_skip_one) {
+    if (ref_skip_one && !fpwen && !vecwen) {
       ref_skip_one(isRVC, wen, wdest, wdata);
     } else {
       sync();

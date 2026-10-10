@@ -1,10 +1,14 @@
 #include "difftrace.h"
+#include <fstream>
 #include <limits.h>
+#include <stdexcept>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 template <typename T>
 DiffTrace<T>::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_size) : is_read(is_read) {
+  if (!_buffer_size || _buffer_size > SIZE_MAX / sizeof(T) || !_trace_name[0])
+    throw std::runtime_error("Invalid trace name or buffer size");
   buffer_size = _buffer_size;
   if (!is_read) {
     buffer = (T *)calloc(buffer_size, sizeof(T));
@@ -43,6 +47,55 @@ template <typename T> bool DiffTrace<T>::read_next(T *trace) {
   return 0;
 }
 
+template <typename T> bool DiffTrace<T>::try_read_next(T *trace) {
+  if (!is_read)
+    throw std::runtime_error("Cannot read from a trace writer");
+  if (buffer_count == loaded_count) {
+    char filename[PATH_MAX];
+    next_file_name(filename);
+    struct stat entry {};
+    if (stat(filename, &entry)) {
+      if (errno == ENOENT && trace_index > 1)
+        return false;
+      throw std::runtime_error(std::string("Cannot read trace: ") + filename);
+    }
+    if (!S_ISREG(entry.st_mode) || entry.st_size <= 0)
+      throw std::runtime_error(std::string("Invalid trace file: ") + filename);
+    std::ifstream file(filename, std::ios::binary);
+#ifdef CONFIG_IOTRACE_ZSTD
+    if (uint64_t(entry.st_size) > ZSTD_compressBound(buffer_size * sizeof(T)))
+      throw std::runtime_error(std::string("Oversized compressed trace: ") + filename);
+    std::vector<char> compressed(entry.st_size);
+    file.read(compressed.data(), compressed.size());
+    const auto bytes = ZSTD_getFrameContentSize(compressed.data(), compressed.size());
+    if (!file || bytes == ZSTD_CONTENTSIZE_ERROR || bytes == ZSTD_CONTENTSIZE_UNKNOWN || !bytes ||
+        bytes > buffer_size * sizeof(T) || bytes % sizeof(T))
+      throw std::runtime_error(std::string("Invalid compressed trace: ") + filename);
+#else
+    const auto bytes = uint64_t(entry.st_size);
+    if (bytes > buffer_size * sizeof(T) || bytes % sizeof(T))
+      throw std::runtime_error(std::string("Invalid trace record size: ") + filename);
+#endif
+    free(buffer);
+    buffer = (T *)calloc(bytes / sizeof(T), sizeof(T));
+    if (!buffer)
+      throw std::runtime_error("Cannot allocate trace buffer");
+#ifdef CONFIG_IOTRACE_ZSTD
+    const size_t size = ZSTD_decompress(buffer, bytes, compressed.data(), compressed.size());
+    if (ZSTD_isError(size) || size != bytes)
+      throw std::runtime_error(std::string("Trace decompression failed: ") + filename);
+#else
+    file.read(reinterpret_cast<char *>(buffer), bytes);
+    if (!file)
+      throw std::runtime_error(std::string("Truncated trace: ") + filename);
+#endif
+    buffer_count = 0;
+    loaded_count = bytes / sizeof(T);
+  }
+  memcpy(trace, buffer + buffer_count++, sizeof(T));
+  return true;
+}
+
 template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
   memset(file_name, 0, PATH_MAX);
   char dirname[PATH_MAX];
@@ -51,13 +104,15 @@ template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
     ret = snprintf(dirname, sizeof(dirname), "%s", trace_name);
   } else {
     char *noop_home = getenv("NOOP_HOME");
+    if (!noop_home)
+      throw std::runtime_error("NOOP_HOME is required for a relative trace name");
     ret = snprintf(dirname, sizeof(dirname), "%s/%s", noop_home, trace_name);
   }
   if (ret < 0 || ret >= (int)sizeof(dirname)) {
-    printf("Directory name is too long: %s\n", trace_name);
-    exit(0);
+    throw std::runtime_error("Trace directory name is too long");
   }
-  mkdir(dirname, 0755);
+  if (!is_read && mkdir(dirname, 0755) && errno != EEXIST)
+    throw std::runtime_error(std::string("Cannot create trace directory: ") + dirname);
 #ifndef CONFIG_IOTRACE_ZSTD
   const char *suffix = "bin";
 #else
@@ -65,8 +120,7 @@ template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
 #endif // CONFIG_IOTRACE_ZSTD
   ret = snprintf(file_name, PATH_MAX, "%s/%lu.%s", dirname, trace_index, suffix);
   if (ret < 0 || ret >= PATH_MAX) {
-    printf("File name is too long: %s/%lu.%s\n", dirname, trace_index, suffix);
-    exit(0);
+    throw std::runtime_error("Trace filename is too long");
   }
   trace_index++;
 }
@@ -74,7 +128,7 @@ template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
 template <typename T> bool DiffTrace<T>::trace_file_next() {
   if (!is_read && !buffer_count)
     return false;
-  static char *filename = (char *)malloc(PATH_MAX);
+  char filename[PATH_MAX];
 #ifdef CONFIG_IOTRACE_ZSTD
   if (trace_zstd->need_load_new_file == true && is_read) {
     next_file_name(filename);
@@ -87,10 +141,6 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
   }
 #else
   next_file_name(filename);
-  static FILE *file = nullptr;
-  if (file) {
-    fclose(file);
-  }
 #endif
 
   if (is_read) {
@@ -121,8 +171,12 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
     Info("Writing %lu traces to %s ...\n", buffer_count, filename);
 #ifndef CONFIG_IOTRACE_ZSTD
     FILE *file = fopen(filename, "wb");
-    fwrite(buffer, sizeof(T), buffer_count, file);
-    fclose(file);
+    if (!file)
+      throw std::runtime_error(std::string("Cannot write trace: ") + filename);
+    const auto written = fwrite(buffer, sizeof(T), buffer_count, file);
+    const auto closed = fclose(file);
+    if (written != buffer_count || closed)
+      throw std::runtime_error(std::string("Trace write failed: ") + filename);
 #else
     trace_zstd->diff_IOtrace_dump((char *)buffer, sizeof(T) * buffer_count);
 #endif
@@ -147,26 +201,30 @@ void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
     }
   } else {
     io_trace_file.open(file_name, std::ios::binary | std::ios::out);
+    if (!io_trace_file)
+      throw std::runtime_error(std::string("Cannot write trace: ") + file_name);
   }
 }
 
 void DiffTraceZstd::diff_IOtrace_dump(const char *str, uint64_t len) {
   static const size_t cLevel = 1; // compression level
 
-  std::vector<char> outputBuffer(max_compress_size);
+  std::vector<char> outputBuffer(ZSTD_compressBound(len));
   trace_cctx = ZSTD_createCCtx();
 
   size_t compressedSize = ZSTD_compressCCtx(trace_cctx, outputBuffer.data(), outputBuffer.size(), str, len, cLevel);
   if (ZSTD_isError(compressedSize)) {
-    std::cerr << "Zstd Compress error: " << ZSTD_getErrorName(compressedSize) << std::endl;
     ZSTD_freeCCtx(trace_cctx);
-    assert(0);
-    return;
+    trace_cctx = NULL;
+    throw std::runtime_error(ZSTD_getErrorName(compressedSize));
   }
 
   io_trace_file.write(outputBuffer.data(), compressedSize);
+  io_trace_file.flush();
   ZSTD_freeCCtx(trace_cctx);
   trace_cctx = NULL;
+  if (!io_trace_file)
+    throw std::runtime_error("Compressed trace write failed");
 }
 
 bool DiffTraceZstd::diff_IOtrace_load(char *buffer, uint64_t len) {
