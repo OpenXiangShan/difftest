@@ -9,6 +9,12 @@ compare state/store hashes, store count and squash stamp. A SLOW checker with
 a valid starting prefix and successful DUT checks can replace a divergent FAST
 leader using its existing REF/parser state; authoritative checker failure terminates.
 
+`RefDriveState` extracts REF actions from each DUT window; `RefDriveExecutor`
+retains only the pending instruction count across windows, up to 65536.
+Sync, skip, architectural events, terminal traps and fork checkpoints flush
+pending execution first. First-commit initialization and fork trust remain in
+DiffTest; the action executor has no dependency on its checker lifecycle.
+
 Generate normal FPGA headers first; rebuild when changing build flags.
 NEMU requires `CONFIG_FAST_REF`; fork also requires enabled store hashing.
 

@@ -27,6 +27,8 @@ bool Difftest::set_ref_mode(RefExecMode mode) {
 #endif
   if (mode == REF_EXEC_FAST && !proxy->require_exec_mode_interfaces(with_fork))
     return false;
+  if (mode == REF_EXEC_SLOW && flush_fast_ref())
+    return false;
   // Old REFs support only SLOW and need no mode-switch export.
   if (proxy->ref_set_exec_mode)
     proxy->ref_set_exec_mode(mode);
@@ -61,20 +63,12 @@ int Difftest::fast_ref_step() {
 #endif
 
   // First commit initialization must precede the snapshot; sync and execution follow it.
-  for (size_t i = 1; i < fast_checkers.size(); ++i) {
-    auto *checker = fast_checkers[i];
-    if (const int ret = checker->step()) {
+  if (const int ret = fast_ref_checker->step()) {
 #ifdef CONFIG_DIFFTEST_FORK_REF
-#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-      if (fork_check && checker == critical_error_checker && ret == DiffTestChecker::STATE_TRAP)
-        // A provisional endpoint: the trusted SLOW checker decides success or failure.
-        state->raise_trap(STATE_GOODTRAP);
+    if (fork_check && ret == DiffTestChecker::STATE_TRAP && get_trap_code() == STATE_GOODTRAP)
+      difftest_ref_fork_publish(this);
 #endif
-      if (fork_check && ret == DiffTestChecker::STATE_TRAP && get_trap_code() == STATE_GOODTRAP)
-        difftest_ref_fork_publish(this);
-#endif
-      return ret;
-    }
+    return ret;
   }
 #ifdef CONFIG_DIFFTEST_FORK_REF
   difftest_ref_fork_publish(this);
@@ -82,58 +76,60 @@ int Difftest::fast_ref_step() {
   return DiffTestChecker::STATE_OK;
 }
 
+int FastRefChecker::flush() {
+  const uint64_t before = driver.completed();
+  const bool ok = driver.flush();
+#ifdef CONFIG_DIFFTEST_SQUASH
+  state->commit_stamp = (state->commit_stamp + driver.completed() - before) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+#endif
+  return ok ? DiffTestChecker::STATE_OK : DiffTestChecker::STATE_ERROR;
+}
+
 int FastRefChecker::do_step() {
   auto *dut = self->dut;
-  uint64_t pending = 0;
-  uint32_t committed = 0;
-  auto execute = [&]() {
-    if (!pending)
-      return true;
-    const uint64_t before = proxy->ref_get_instr_count();
-    proxy->ref_exec(pending);
-    const uint64_t completed = proxy->ref_get_instr_count() - before;
-    if (completed != pending) {
-      proxy->sync();
-      fprintf(stderr, "FAST short execution: requested=%lu completed=%lu PC=0x%lx\n", (unsigned long)pending,
-              (unsigned long)completed, (unsigned long)proxy->state.pc);
-      return false;
-    }
+  const RefDriveState drive(*dut);
+  const uint64_t before = driver.completed();
+  const auto result = driver.run(drive);
 #ifdef CONFIG_DIFFTEST_SQUASH
-    state->commit_stamp = (state->commit_stamp + completed) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
+  state->commit_stamp = (state->commit_stamp + driver.completed() - before) % CONFIG_DIFFTEST_SQUASH_STAMPSIZE;
 #endif
-    pending = 0;
-    return true;
-  };
-  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
-    if (dut->event.valid && i == dut->event.isLatter) {
-      if (!execute())
-        return DiffTestChecker::STATE_ERROR;
-      if (int ret = self->arch_event_checker->step())
-        return ret;
-      break;
-    }
-    const auto &commit = dut->commit[i];
-    if (!commit.valid)
-      continue;
-    committed += 1 + commit.nFused;
-    if (commit.skip) {
-      if (!execute())
-        return DiffTestChecker::STATE_ERROR;
-      // NEMU's skip API writes only integer GPRs; FP skips use regcpy.
-      // Vector skips retain the existing unsupported-case check.
-      proxy->skip_one(commit.isRVC, commit.rfwen && commit.wdest != 0, commit.fpwen, commit.vecwen, commit.wdest,
-                      get_commit_data(dut, i));
-    } else {
-      pending += 1 + commit.nFused;
-    }
-  }
-  // Retain the board-validated per-window boundary, batching commits within it.
-  if (!execute())
+  if (result == RefDriveExecutor::ERROR)
     return DiffTestChecker::STATE_ERROR;
-  if (committed) {
+  // Consume the same sync probes as the SLOW checker chain, without executing them twice.
+  for (size_t i = 1; i < self->fast_checkers.size() - 1; ++i) {
+    auto *checker = self->fast_checkers[i];
+    checker->discard();
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+    if (checker == self->critical_error_checker && result != RefDriveExecutor::OK)
+      break;
+#endif
+  }
+  if (result == RefDriveExecutor::CRITICAL_MATCH || result == RefDriveExecutor::CRITICAL_MISMATCH) {
+    const bool match = result == RefDriveExecutor::CRITICAL_MATCH;
+    if (match)
+      Info("Core %d dump: HIT CRITICAL ERROR: please check if software cause a double trap.\n", state->coreid);
+    else
+      Info("Core %d dump: DUT critical_error diff REF\n", state->coreid);
+    bool provisional = false;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    provisional = difftest_ref_fork_enabled();
+#endif
+    // The trusted SLOW checker decides whether a fork endpoint is valid.
+    state->raise_trap(match || provisional ? STATE_GOODTRAP : STATE_ABORT);
+    return DiffTestChecker::STATE_TRAP;
+  }
+  if (drive.arch_event) {
+    const auto &event = dut->event;
+    if (event.interrupt)
+      state->record_interrupt(event.exceptionPC, event.exceptionInst, event.interrupt);
+    else
+      state->record_exception(event.exceptionPC, event.exceptionInst, event.exception);
+    self->arch_event_checker->discard();
+  }
+  if (drive.committed) {
     state->has_progress = true;
     state->last_commit_cycle = dut->trap.cycleCnt;
-    state->record_group(dut->commit[0].pc, committed);
+    state->record_group(dut->commit[0].pc, drive.committed);
   }
   for (auto &commit: dut->commit)
     commit.valid = 0;

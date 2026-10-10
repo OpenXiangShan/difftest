@@ -22,6 +22,9 @@
 #include "matrix_store_tracker.h"
 #include "refproxy.h"
 #include "stopwatch.h"
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#include "refdrive/refdrive.h"
+#endif
 
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
 #include <cxxabi.h>
@@ -169,11 +172,14 @@ private:
 class Difftest;
 class FastRefChecker : public DiffTestChecker {
 public:
-  FastRefChecker(Difftest *self, DiffState *state, RefProxy *proxy) : DiffTestChecker(state, proxy), self(self) {}
+  FastRefChecker(Difftest *self, DiffState *state, RefProxy *proxy)
+      : DiffTestChecker(state, proxy), self(self), driver(proxy) {}
   int do_step() override;
+  int flush();
 
 private:
   Difftest *self;
+  RefDriveExecutor driver;
 };
 #endif
 

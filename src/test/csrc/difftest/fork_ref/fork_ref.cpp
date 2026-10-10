@@ -161,6 +161,11 @@ void complete_checker(Difftest *self, bool checks_ok) {
   }
 }
 void close_segment(Difftest *self) {
+  // Snapshot and digest only an executed prefix, never deferred RefDrive instructions.
+  if (self->flush_fast_ref()) {
+    fail();
+    return;
+  }
   if (current_segment == OPEN_END)
     return;
   Segment &s = segment(current_segment);
@@ -360,6 +365,8 @@ int difftest_ref_fork_prepare(Difftest *self) {
   if (!next)
     return 0;
   close_segment(self);
+  if (g_packet_pool->aborted())
+    return 2;
   uint64_t seq = control->head.load(std::memory_order_relaxed);
   while (seq - control->retired.load(std::memory_order_acquire) >= MAX_SEGMENTS) {
     pause_leader();
@@ -559,6 +566,8 @@ int difftest_ref_fork_finish() {
   if (role == Role::LEADER) {
     pause_leader();
     close_segment(difftest[0]);
+    if (g_packet_pool->aborted())
+      return 2;
     control->endpoint.store(true, std::memory_order_release);
     while (!control->complete.load(std::memory_order_acquire)) {
       pause_leader();

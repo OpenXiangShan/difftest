@@ -219,6 +219,9 @@ protected:
 public:
   // Select at startup or an established fork boundary.
   bool set_ref_mode(RefExecMode mode);
+  int flush_fast_ref() {
+    return fast_ref_enabled ? fast_ref_checker->flush() : DiffTestChecker::STATE_OK;
+  }
   int fork_check_step() {
     return check_all();
   }
