@@ -81,6 +81,10 @@ void *MemoryIdxPool::map(size_t bytes) {
 }
 
 void MemoryIdxPool::cleanup() {
+#if (CONFIG_DMA_CHANNELS > 1)
+  if (memory_order_ptr)
+    munmap(memory_order_ptr, capacity * sizeof(MemoryChunk));
+#endif
   if (memory_base)
     munmap(memory_base, capacity * mem_block_size);
   if (shared)
@@ -88,12 +92,13 @@ void MemoryIdxPool::cleanup() {
 }
 
 bool MemoryIdxPool::write_free_chunk(uint8_t idx, size_t mem_idx) {
-  if (shared->stopped.load(std::memory_order_acquire)) {
 #if (CONFIG_DMA_CHANNELS > 1)
-    chunk_semaphore.store(false, std::memory_order_release);
-#endif
+  if (!lock_pool())
     return !aborted();
-  }
+#else
+  if (shared->stopped.load(std::memory_order_acquire))
+    return !aborted();
+#endif
 #if (CONFIG_DMA_CHANNELS <= 1)
   (void)mem_idx;
   if (idx != uint8_t(producer)) {
@@ -147,18 +152,14 @@ char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
   }
   *mem_idx = producer & (capacity - 1);
 #else
-  while (chunk_semaphore.exchange(true, std::memory_order_acquire)) {
-    if (shared->stopped.load(std::memory_order_acquire))
-      return nullptr;
-    std::this_thread::yield();
-  }
-  if (shared->stopped.load(std::memory_order_acquire)) {
-    chunk_semaphore.store(false, std::memory_order_release);
+  if (!lock_pool())
     return nullptr;
-  }
   size_t page_w_idx = mem_chunk_idx.load(std::memory_order_relaxed);
   if (memory_pool_is_free[page_w_idx].load(std::memory_order_relaxed) == false)
     reclaim();
+  // An idle channel can retain a reserved slot while other slots are reusable.
+  for (size_t i = 0; i < capacity && !memory_pool_is_free[page_w_idx].load(std::memory_order_relaxed); ++i)
+    page_w_idx = (page_w_idx + 1) & (capacity - 1);
   if (memory_pool_is_free[page_w_idx].load(std::memory_order_relaxed) == false) {
     chunk_semaphore.store(false, std::memory_order_release);
     return nullptr;
@@ -166,6 +167,7 @@ char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
   memory_pool_is_free[page_w_idx].store(false);
   mem_chunk_idx.store((page_w_idx + 1) & (capacity - 1), std::memory_order_relaxed);
   *mem_idx = page_w_idx;
+  chunk_semaphore.store(false, std::memory_order_release);
 #endif
   return memory_base + *mem_idx * mem_block_size;
 }
@@ -183,6 +185,18 @@ char *MemoryIdxPool::read_busy_chunk() {
 }
 
 #if (CONFIG_DMA_CHANNELS > 1)
+bool MemoryIdxPool::lock_pool() {
+  while (chunk_semaphore.exchange(true, std::memory_order_acquire)) {
+    if (shared->stopped.load(std::memory_order_acquire))
+      return false;
+    std::this_thread::yield();
+  }
+  if (!shared->stopped.load(std::memory_order_acquire))
+    return true;
+  chunk_semaphore.store(false, std::memory_order_release);
+  return false;
+}
+
 void MemoryIdxPool::reclaim() {
   const uint64_t retained = retained_from();
   while (reclaimed < retained) {

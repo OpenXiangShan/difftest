@@ -312,8 +312,8 @@ bool difftest_ref_fork_is_child() {
 int difftest_ref_fork_start(uint64_t fork_interval_ms) {
   if (!g_packet_pool || control)
     return -1;
-  if (NUM_CORES != 1 || CONFIG_DMA_CHANNELS != 1) {
-    fprintf(stderr, "REF fork requires one core and shared single-channel packet indexing\n");
+  if (NUM_CORES != 1) {
+    fprintf(stderr, "REF fork requires one core\n");
     return -1;
   }
   if (!difftest[0]->proxy->require_exec_mode_interfaces(true))

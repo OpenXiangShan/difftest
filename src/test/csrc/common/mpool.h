@@ -170,9 +170,12 @@ public:
       if (count > limit / sizeof(MemoryChunk))
         throw std::runtime_error("Indexed pool metadata size overflow");
       memory_pool_is_free = std::make_unique<std::atomic<bool>[]>(capacity);
-      memory_order_ptr = std::make_unique<MemoryChunk[]>(capacity);
-      for (size_t i = 0; i < capacity; ++i)
+      // Forked readers need the receiver's logical-to-physical packet mapping.
+      memory_order_ptr = static_cast<MemoryChunk *>(map(capacity * sizeof(MemoryChunk)));
+      for (size_t i = 0; i < capacity; ++i) {
+        new (memory_order_ptr + i) MemoryChunk();
         memory_pool_is_free[i].store(true);
+      }
 #endif
       shared->readers[0].active.store(true, std::memory_order_release);
     } catch (...) {
@@ -180,22 +183,37 @@ public:
       throw;
     }
   }
-  ~MemoryIdxPool() { cleanup(); }
+  ~MemoryIdxPool() {
+    cleanup();
+  }
   MemoryIdxPool(const MemoryIdxPool &) = delete;
   MemoryIdxPool &operator=(const MemoryIdxPool &) = delete;
   char *get_free_chunk(size_t *mem_idx);
   bool write_free_chunk(uint8_t idx, size_t mem_idx);
   char *read_busy_chunk();
-  void set_free_chunk() { shared->readers[reader_id].cursor.store(++consumer, std::memory_order_release); }
+  void set_free_chunk() {
+    shared->readers[reader_id].cursor.store(++consumer, std::memory_order_release);
+  }
   unsigned add_reader();
   void enter_reader(unsigned id);
-  void finish_reader() { shared->readers[reader_id].cursor.store(UINT64_MAX, std::memory_order_release); }
+  void finish_reader() {
+    shared->readers[reader_id].cursor.store(UINT64_MAX, std::memory_order_release);
+  }
   void retire_reader(unsigned id);
-  uint64_t cursor() const { return consumer; }
+  uint64_t cursor() const {
+    return consumer;
+  }
   uint64_t retained_from() const;
-  bool aborted() const { return shared->failed.load(std::memory_order_acquire); }
-  void fail() { shared->failed.store(true, std::memory_order_release); stop_waiting(); }
-  void stop_waiting() { shared->stopped.store(true, std::memory_order_release); }
+  bool aborted() const {
+    return shared->failed.load(std::memory_order_acquire);
+  }
+  void fail() {
+    shared->failed.store(true, std::memory_order_release);
+    stop_waiting();
+  }
+  void stop_waiting() {
+    shared->stopped.store(true, std::memory_order_release);
+  }
   const size_t capacity;
 
 private:
@@ -212,6 +230,7 @@ private:
   };
   static void *map(size_t bytes);
 #if (CONFIG_DMA_CHANNELS > 1)
+  bool lock_pool();
   size_t wait_next_free_group();
   void reclaim();
 #endif
@@ -223,7 +242,7 @@ private:
   const size_t MAX_GROUP_READ = MAX_GROUPING_IDX - 2;
   const size_t REM_MAX_GROUPING_IDX = (MAX_GROUPING_IDX - 1);
   std::unique_ptr<std::atomic<bool>[]> memory_pool_is_free;
-  std::unique_ptr<MemoryChunk[]> memory_order_ptr;
+  MemoryChunk *memory_order_ptr = nullptr;
   std::atomic<bool> chunk_semaphore{false};
   std::atomic<size_t> mem_chunk_idx{0};
   std::atomic<size_t> group_w_offset{0};
