@@ -24,6 +24,7 @@
 #include "flash.h"
 #include "goldenmem.h"
 #include "ram.h"
+#include "reftrace/refdrive_trace.h"
 #include "spikedasm.h"
 #include "splitview.h"
 #include <csignal>
@@ -184,6 +185,7 @@ void difftest_trace_write(int step) {
 }
 
 void difftest_finish(bool report_perfcnt) {
+  difftest_refdrive_trace_finish();
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
   Stopwatch::print_stats(CHECKERS);
 #endif
@@ -601,6 +603,7 @@ void Difftest::do_replay() {
 #endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
+  difftest_refdrive_trace_record(*dut);
 #ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_is_child())
     return difftest_ref_fork_check(this);

@@ -26,6 +26,7 @@
 #include "perf.h"
 #include "ram.h"
 #include "refproxy.h"
+#include "reftrace/refdrive_trace.h"
 #include "splitview.h"
 #include "xdma.h"
 #ifdef DIFFTEST_HOSTIF_GBUS
@@ -291,6 +292,7 @@ void fpga_finish() {
 
   delete xdma_device;
 
+  difftest_refdrive_trace_finish();
   if (signal_num == 0) {
     bool report_perfcnt = true;
 #ifdef CONFIG_DIFFTEST_FAST_REF
