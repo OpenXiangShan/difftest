@@ -52,6 +52,10 @@ IXCOM_FLAGS 	+= +tfconfig+$(PLDM_SCRIPTS_DIR)/argConfigs.qel
 # Verilog Files
 PLDM_VSRC_DIR  	 = $(RTL_DIR) $(GEN_VSRC_DIR) $(abspath ./src/test/vsrc/vcs) $(abspath ./src/test/vsrc/common)
 PLDM_VFILELIST 	 = $(PLDM_BUILD_DIR)/vfiles.f
+PLDM_VFILES      = $(sort $(shell find $(PLDM_VSRC_DIR) -name "*.v" -or -name "*.sv"))
+ifneq ($(wildcard $(RTL_DIR)/DifftestClockGate.v),)
+PLDM_VFILES     := $(filter-out $(abspath ./src/test/vsrc/common/DifftestClockGate.v),$(PLDM_VFILES))
+endif
 IXCOM_FLAGS   	+= -F $(PLDM_VFILELIST)
 
 # VLAN Flags
@@ -69,12 +73,10 @@ PLDM_IXCOM 	 = $(shell cds_root ixcom)/share/uxe/etc/ixcom
 DPILIB_EMU    	 = $(PLDM_BUILD_DIR)/libdpi_emu.so
 PLDM_CSRC_DIR 	 = $(abspath ./src/test/csrc/vcs)
 PLDM_CXXFILES 	 = $(SIM_CXXFILES) $(shell find $(PLDM_CSRC_DIR) -name "*.cpp")
+PLDM_CXXOBJS    = $(addprefix $(PLDM_CC_OBJ_DIR)/,$(patsubst /%,%,$(PLDM_CXXFILES:.cpp=.o)))
 PLDM_CXXFLAGS 	 = -O3 -m64 -c -fPIC -g -std=c++11 -I$(PLDM_IXCOM) -I$(PLDM_SIMTOOL)
-PLDM_CXXFLAGS 	+= $(subst \\\",\", $(SIM_CXXFLAGS)) $(SIM_LDFLAGS) -I$(PLDM_CSRC_DIR)
-
-ifeq ($(WITH_DRAMSIM3),1)
-PLDM_LD_LIB  	 = -L $(DRAMSIM3_HOME)/ -ldramsim3 -Wl,-rpath-link=$(DRAMSIM3_HOME)/libdramsim3.so
-endif
+PLDM_CXXFLAGS 	+= $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(PLDM_CSRC_DIR)
+PLDM_LDFLAGS     = $(SIM_LDFLAGS) -ldl -lpthread $(PLDM_LD_LIB)
 
 # XMSIM Flags
 XMSIM_FLAGS 	 = --xmsim -64 +xcprof -profile -PROFTHREAD
@@ -87,11 +89,8 @@ XMSIM_FLAGS 	+= --
 $(PLDM_BUILD_DIR):
 	mkdir -p $(PLDM_BUILD_DIR)
 
-$(PLDM_CC_OBJ_DIR):
-	mkdir -p $(PLDM_CC_OBJ_DIR)
-
-$(PLDM_VFILELIST):
-	find $(PLDM_VSRC_DIR) -name "*.v" -or -name "*.sv" >> $(PLDM_VFILELIST)
+$(PLDM_VFILELIST): $(PLDM_VFILES) | $(PLDM_BUILD_DIR)
+	printf '%s\n' $(PLDM_VFILES) > $@
 
 $(PLDM_CLOCK_SRC): $(PLDM_CLOCK_DEF)
 	ixclkgen -input $(PLDM_CLOCK_DEF) -output $(PLDM_CLOCK_SRC) -module $(PLDM_CLOCK) -hierarchy "$(PLDM_TB_TOP)."
@@ -107,10 +106,16 @@ pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(DPILIB_EMU)
 	vlan $(VLAN_FLAGS) -l $(PLDM_BUILD_DIR)/vlan.log	&& \
 	ixcom $(IXCOM_FLAGS) -l $(PLDM_BUILD_DIR)/ixcom.log
 
-$(DPILIB_EMU): $(PLDM_CC_OBJ_DIR)
-	cd $(PLDM_CC_OBJ_DIR) 					&& \
-	$(CC) $(PLDM_CXXFLAGS) $(PLDM_CXXFILES)			&& \
-	$(CC) -o $@ -m64 -shared *.o $(PLDM_LD_LIB)
+$(PLDM_CC_OBJ_DIR)/%.o: /%.cpp
+	mkdir -p $(@D)
+	$(CXX) $(PLDM_CXXFLAGS) -MMD -MP -o $@ $<
+
+$(DPILIB_EMU): $(PLDM_CXXOBJS) | $(PLDM_BUILD_DIR)
+	$(CXX) -o $@ -m64 -shared $(PLDM_CXXOBJS) $(PLDM_LDFLAGS)
+
+pldm-lib: $(DPILIB_EMU)
+
+-include $(PLDM_CXXOBJS:.o=.d)
 endif
 
 pldm-run: $(PLDM_BUILD_DIR)
@@ -123,3 +128,5 @@ pldm-debug: $(PLDM_BUILD_DIR)
 
 pldm-clean:
 	rm -rf $(PLDM_BUILD_DIR)
+
+.PHONY: pldm-build pldm-lib pldm-run pldm-debug pldm-clean $(PLDM_VFILELIST)

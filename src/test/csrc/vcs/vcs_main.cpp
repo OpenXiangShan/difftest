@@ -453,8 +453,12 @@ void simv_display_result(int ret) {
 static uint8_t simv_result = SIMV_RUN;
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 extern "C" void simv_nstep(uint8_t step) {
-  if (simv_result == SIMV_GOODTRAP || simv_result == SIMV_EXCEED || simv_result == SIMV_FAIL || difftest == NULL)
+  if (simv_result == SIMV_GOODTRAP || simv_result == SIMV_EXCEED || simv_result == SIMV_FAIL)
     return;
+#ifndef CONFIG_NO_DIFFTEST
+  if (difftest == NULL)
+    return;
+#endif // CONFIG_NO_DIFFTEST
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {
 #ifndef CONFIG_NO_DIFFTEST

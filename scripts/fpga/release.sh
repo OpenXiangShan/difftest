@@ -25,7 +25,7 @@ fi
 # 2. Extract cpu and cmdConfigs from JSON
 # ----------------------------------------------------------
 
-if [ command -v jq >/dev/null 2>&1 ]; then
+if command -v jq >/dev/null 2>&1; then
     CPU_NAME=$(jq -r '.cpu' "$PROFILE_JSON")
     CMDS=$(jq -r '.cmdConfigs[]?' "$PROFILE_JSON")
 else
@@ -106,13 +106,22 @@ echo "CPU Build copied."
 echo "Copying $DIFF_HOME into $RELEASE_HOME ..."
 if command -v rsync >/dev/null 2>&1; then
     rsync -av \
+        --exclude='.git' \
+        --exclude='worktrees/' \
         --exclude='build/***' \
         --exclude='build/' \
         "$DIFF_HOME/" "$RELEASE_HOME/difftest/"
 else
     copy_with_tar "$DIFF_HOME" "$RELEASE_HOME/difftest" \
+        --exclude='.git' \
+        --exclude='worktrees' \
         --exclude='build'
 fi
+
+if [ -f "$CPU_DIR/Makefile" ]; then
+    cp "$CPU_DIR/Makefile" "$RELEASE_HOME/Makefile.cpu"
+fi
+cp "$DIFF_HOME/scripts/palladium/Makefile" "$RELEASE_HOME/Makefile"
 
 RELEASE_RTL="$RELEASE_HOME/build/rtl"
 echo "Copying $DIFF_HOME/src/test/vsrc/common/DifftestClockGate.v into $RELEASE_RTL ..."
