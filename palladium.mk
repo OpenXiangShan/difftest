@@ -53,6 +53,7 @@ IXCOM_FLAGS 	+= +tfconfig+$(PLDM_SCRIPTS_DIR)/argConfigs.qel
 PLDM_VSRC_DIR  	 = $(RTL_DIR) $(GEN_VSRC_DIR) $(abspath ./src/test/vsrc/vcs) $(abspath ./src/test/vsrc/common)
 PLDM_VFILELIST 	 = $(PLDM_BUILD_DIR)/vfiles.f
 PLDM_VFILES      = $(sort $(shell find $(PLDM_VSRC_DIR) -name "*.v" -or -name "*.sv"))
+# release.sh overlays the common clock gate in RTL; keep one module definition.
 ifneq ($(wildcard $(RTL_DIR)/DifftestClockGate.v),)
 PLDM_VFILES     := $(filter-out $(abspath ./src/test/vsrc/common/DifftestClockGate.v),$(PLDM_VFILES))
 endif

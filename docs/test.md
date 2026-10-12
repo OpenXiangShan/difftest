@@ -250,22 +250,33 @@ make -C difftest fpga-clean vcs-clean
 
 ### 2.4 Palladium (PLDM)
 
-先生成 RTL，再执行 `make -C difftest fpga-release`。release 内保留
-`difftest/Makefile`、`palladium.mk` 和运行脚本；进入 release 根目录后，
-每次新 shell 先加载站点环境，再进入 `difftest`。
+Generate the RTL first, then create the release package:
 
-**Build**：
+```bash
+make -C difftest fpga-release
+```
+
+The release contains the CPU top-level `Makefile` at its root and the existing
+DiffTest makefiles and Palladium scripts under `difftest/`. In a new shell, load
+the site environment and enter that directory:
 
 ```bash
 source ~/workspace/pldm-env.sh
 cd difftest
+```
+
+**Build**
+
+```bash
 make pldm-build NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
   WITH_CHISELDB=0 WITH_CONSTANTIN=0 DISABLE_DIFFTEST_RAM_DPIC=1
 ```
 
-`NUM_CORES` 必须匹配生成的设计。`DIFFTEST_PERFCNT=1` 打印 DPI 调用和字节数；
-`DISABLE_DIFFTEST_RAM_DPIC=1` 关闭 RAM DPI，保留传输和检查。
-需要无传输或综合版本时，分别重新执行：
+`NUM_CORES` must match the generated design. `DIFFTEST_PERFCNT=1` enables the
+performance-counter report. `DISABLE_DIFFTEST_RAM_DPIC=1` removes RAM DPI calls
+while keeping DiffTest transport and checking.
+
+Build the other hardware variants separately:
 
 ```bash
 make pldm-build NUM_CORES=1 NO_DIFF=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
@@ -274,11 +285,11 @@ make pldm-build NUM_CORES=1 NO_DIFF=0 SYNTHESIS=1 DIFFTEST_PERFCNT=1 \
   WITH_CHISELDB=0 WITH_CONSTANTIN=0
 ```
 
-`NO_DIFF=1` 是硬件编译选项，会去掉 DiffTest 传输；`SYNTHESIS=1` 使用综合时钟
-入口并去掉 testbench DPI。每次切换硬件模式前清理 `pldm-compile`，或使用独立
-的生成目录。
+`NO_DIFF=1` is a build-time option that removes DiffTest transport. `SYNTHESIS=1`
+uses the synthesis clock entry and removes testbench DPI. Clean `pldm-compile`
+before switching hardware modes, or use separate generated-design directories.
 
-**Run**：
+**Run**
 
 ```bash
 make pldm-run SYNTHESIS=0 \
@@ -287,10 +298,13 @@ make pldm-run SYNTHESIS=0 \
   PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
 ```
 
-`+diff` 开启 REF 检查；`+no-diff` 只关闭检查，仍保留硬件传输。`+max-cycles=N`
-只适合没有自然退出信号时的窗口测速，不能当作 workload 完成。
+`+workload=FILE` selects the Linux image and `+ram_size=SIZE` sets the simulated
+memory size. `+diff=FILE` enables REF checking. `+no-diff` disables checking but
+keeps the hardware transport, so it is the transport-only mode. `+max-cycles=N`
+is a bounded measurement window for workloads without a natural exit; report it
+as a window rather than as a completed workload.
 
-`NO_DIFF=1` 和 `SYNTHESIS=1` 版本运行时都使用 `+no-diff`：
+Run the no-transport and synthesis builds with `+no-diff`:
 
 ```bash
 make pldm-run NO_DIFF=1 SYNTHESIS=0 \
@@ -299,16 +313,41 @@ make pldm-run NO_DIFF=0 SYNTHESIS=1 \
   PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
 ```
 
-硬件接口不变、只改 C++ 或头文件时，只重编 DPI 库，不重新执行 `vlan/ixcom`：
+**Debug and waveforms**
+
+`pldm-debug` uses the same runtime arguments as `pldm-run`, but adds FSDB
+waveform probing through `scripts/palladium/run_debug.tcl`:
+
+```bash
+make pldm-debug SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
+```
+
+It writes `debug-*.log` and `pldm_db` under `build/pldm-compile`. The normal
+`pldm-run` path does not create a waveform database. `traceMemSize` in
+`run_debug.tcl` is measured in ns, so at a 50 MHz clock (20 ns per cycle):
+
+```text
+traceMemSize(ns) = cycles * 20
+cycles = traceMemSize(ns) / 20
+```
+
+For example, `traceMemSize 2000000` records 2 ms, or 100,000 cycles (0.1M
+cycles). A larger value increases waveform storage; it does not change the
+workload or the DUT clock.
+
+When only C++ or headers change and the hardware interface is unchanged, rebuild
+the DPI library without running `vlan` or `ixcom`:
 
 ```bash
 make pldm-lib NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
   WITH_CHISELDB=0 WITH_CONSTANTIN=0
 ```
 
-只更换 REF SO 时无需重编，下一次 run 传入新的 `+diff` 路径即可。最终
-`build/pldm-compile/run-*.log` 中的 `eval/sec / 2` 是 cycles/s；它与软件 PerfCnt
-的 KHz/KIPS 不同。
+Replacing only the REF SO does not require a rebuild; pass the new path with
+`+diff` on the next run. The final `build/pldm-compile/run-*.log` contains
+`eval/sec`; divide it by two for cycles/s with this testbench clock. This is
+separate from the software PerfCnt KHz/KIPS report.
 
 ## 3. Debugging Artifacts
 
