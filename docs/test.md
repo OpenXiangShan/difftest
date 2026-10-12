@@ -256,9 +256,8 @@ Generate the RTL first, then create the release package:
 make -C difftest fpga-release
 ```
 
-The release contains the CPU top-level `Makefile` at its root and the existing
-DiffTest makefiles and Palladium scripts under `difftest/`. In a new shell, load
-the site environment and enter that directory:
+The release contains the CPU top-level `Makefile` at its root and the DiffTest
+makefiles and Palladium scripts under `difftest/`. In a new shell:
 
 ```bash
 source ~/workspace/pldm-env.sh
@@ -272,46 +271,51 @@ make pldm-build NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
   WITH_CHISELDB=0 WITH_CONSTANTIN=0 DISABLE_DIFFTEST_RAM_DPIC=1
 ```
 
-`NUM_CORES` must match the generated design. `DIFFTEST_PERFCNT=1` enables the
-performance-counter report. `DISABLE_DIFFTEST_RAM_DPIC=1` removes RAM DPI calls
-while keeping DiffTest transport and checking.
-For non-synthesis builds, `pldm-build` resolves the `pldm-lib` prerequisite before
-running `vlan` and `ixcom`; synthesis builds do not need the DPI library.
+Build parameters:
 
-Build the other hardware variants separately:
+| Parameter | Meaning |
+|-----------|---------|
+| `NUM_CORES=N` | Must match the generated design |
+| `DIFFTEST_PERFCNT=1` | Enable DPI/performance-counter statistics |
+| `DISABLE_DIFFTEST_RAM_DPIC=1` | Use the RTL RAM path instead of RAM DPI calls |
+| `NO_DIFF=1` | Remove DiffTest transport at hardware compile time |
+| `SYNTHESIS=1` | Use the synthesis clock entry and omit testbench DPI |
+| `WITH_CHISELDB=0` / `WITH_CONSTANTIN=0` | Disable optional ChiselDB/ConstantIn paths |
 
-```bash
-make pldm-build NUM_CORES=1 NO_DIFF=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
-  WITH_CHISELDB=0 WITH_CONSTANTIN=0 DISABLE_DIFFTEST_RAM_DPIC=1
-make pldm-build NUM_CORES=1 NO_DIFF=0 SYNTHESIS=1 DIFFTEST_PERFCNT=1 \
-  WITH_CHISELDB=0 WITH_CONSTANTIN=0
-```
-
-`NO_DIFF=1` is a build-time option that removes DiffTest transport. `SYNTHESIS=1`
-uses the synthesis clock entry and removes testbench DPI. Clean `pldm-compile`
-before switching hardware modes, or use separate generated-design directories.
+For non-synthesis builds, `pldm-build` first resolves `pldm-lib`, then runs
+`vlan` and `ixcom`. Clean `pldm-compile` before switching hardware modes.
 
 **Run**
 
 ```bash
 make pldm-run SYNTHESIS=0 \
   PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
-make pldm-run SYNTHESIS=0 \
-  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
 ```
 
-`+workload=FILE` selects the Linux image and `+ram_size=SIZE` sets the simulated
-memory size. `+diff=FILE` enables REF checking. `+no-diff` disables checking but
-keeps the hardware transport, so it is the transport-only mode. `+max-cycles=N`
-is a bounded measurement window for workloads without a natural exit; report it
-as a window rather than as a completed workload.
+Run parameters:
 
-Run the no-transport and synthesis builds with `+no-diff`:
+| Parameter | Meaning |
+|-----------|---------|
+| `+workload=FILE` | Linux image |
+| `+ram_size=SIZE` | Simulated memory size, for example `8GB` |
+| `+diff=FILE` | Enable REF checking |
+| `+no-diff` | Disable checking but keep hardware transport |
+| `+max-cycles=N` | Bounded cycle window; report it as a window, not completed workload |
+
+The four modes are selected as follows:
 
 ```bash
+# full checking: build with NO_DIFF=0, run with +diff
+make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
+# transport only: build with NO_DIFF=0, run with +no-diff
+make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+# no transport: build with NO_DIFF=1, run with +no-diff
 make pldm-run NO_DIFF=1 SYNTHESIS=0 \
   PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
-make pldm-run NO_DIFF=0 SYNTHESIS=1 \
+# synthesis: build with SYNTHESIS=1, run with +no-diff
+make pldm-run SYNTHESIS=1 \
   PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
 ```
 
@@ -338,11 +342,11 @@ For example, `traceMemSize 2000000` records 2 ms, or 100,000 cycles (0.1M
 cycles). A larger value increases waveform storage; it does not change the
 workload or the DUT clock.
 
-When only C++ or headers change and the hardware interface is unchanged, rebuild
-the DPI library without running `vlan` or `ixcom`:
+When only C++ or headers change and the hardware interface is unchanged, force
+the original whole-library build without running `vlan` or `ixcom`:
 
 ```bash
-make pldm-lib NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
+make -B pldm-lib NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
   WITH_CHISELDB=0 WITH_CONSTANTIN=0
 ```
 

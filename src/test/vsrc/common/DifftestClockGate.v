@@ -42,10 +42,5 @@ module DifftestClockGate(
 	assign Q = CK & EN;
 `endif // CLOCKGATE_BUFGCE
 
-`ifdef SYNTHESIS
-`ifndef PALLADIUM
-`undef CLOCKGATE_BUFGCE
-`endif
-`endif
 endmodule
 `endif // CONFIG_DIFFTEST_CLOCKGATE
