@@ -250,29 +250,25 @@ make -C difftest fpga-clean vcs-clean
 
 ### 2.4 Palladium (PLDM)
 
-Generate RTL with a nonblocking DiffTest configuration, such as `ESBIDUN`.
-`N` emits the Palladium GFIFO registrations as well as a configuration macro;
-adding only the macro to previously generated RTL does not enable GFIFO.
-`F` selects the FPGA transport and is not used for the PLDM DPI transport.
+先生成 RTL，再执行 `make -C difftest fpga-release`。release 内保留
+`difftest/Makefile`、`palladium.mk` 和运行脚本；进入 release 根目录后，
+每次新 shell 先加载站点环境，再进入 `difftest`。
 
-After RTL generation, `make -C difftest fpga-release` packages the generated
-interfaces, DiffTest sources, makefiles and Palladium scripts. The extracted
-release has a root Makefile for the commands below; the CPU Makefile is retained
-as `Makefile.cpu`. Set `NUM_CORES` to match the generated design.
-
-Initialize the site-specific tool environment in every new shell, then build:
+**Build**：
 
 ```bash
+source ~/workspace/pldm-env.sh
+cd difftest
 make pldm-build NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
   WITH_CHISELDB=0 WITH_CONSTANTIN=0 DISABLE_DIFFTEST_RAM_DPIC=1
 ```
 
-`DISABLE_DIFFTEST_RAM_DPIC=1` uses the existing RTL RAM array while keeping
-DiffTest transport and checking enabled. `DIFFTEST_PERFCNT=1` reports DPI calls
-and bytes, including RAM read/write counts. The linker includes the common
-simulation dependencies; `PLDM_LD_LIB` can add site-specific libraries.
+`NUM_CORES` 必须匹配生成的设计。`DIFFTEST_PERFCNT=1` 打印 DPI 调用和字节数；
+`DISABLE_DIFFTEST_RAM_DPIC=1` 关闭 RAM DPI，保留传输和检查。
+`NO_DIFF=1` 是硬件编译选项，会去掉 DiffTest 传输；`SYNTHESIS=1` 进一步使用
+综合时钟入口、去掉 testbench DPI。三者应使用独立的 build 目录。
 
-Run the same compiled design with checking or with transport only:
+**Run**：
 
 ```bash
 make pldm-run SYNTHESIS=0 \
@@ -281,30 +277,19 @@ make pldm-run SYNTHESIS=0 \
   PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
 ```
 
-`+no-diff` skips reference checking but keeps DPI transport. Compile separate
-hardware with `NO_DIFF=1` to disable DiffTest transport, or with `SYNTHESIS=1`
-to remove testbench DPI calls as well. PLDM synthesis uses portable clock gating;
-FPGA synthesis retains `BUFGCE`. Use separate build directories for these modes.
-Without a hardware completion signal, use a bounded `+max-cycles=N` window and
-report it as a window measurement, rather than a completed workload.
+`+diff` 开启 REF 检查；`+no-diff` 只关闭检查，仍保留硬件传输。`+max-cycles=N`
+只适合没有自然退出信号时的窗口测速，不能当作 workload 完成。
 
-For C++ or header edits with unchanged hardware/interfaces, rebuild only the DPI
-library; this target never runs `vlan` or `ixcom`:
+硬件接口不变、只改 C++ 或头文件时，只重编 DPI 库，不重新执行 `vlan/ixcom`：
 
 ```bash
-make pldm-lib SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
+make pldm-lib NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
   WITH_CHISELDB=0 WITH_CONSTANTIN=0
 ```
 
-Keep the original software build options. If those options change, use
-`make -B pldm-lib` to rebuild all objects. Replacing only the reference SO needs
-no rebuild: pass the new path with `+diff` on the next run.
-
-The final `build/pldm-compile/run-*.log` contains `eval/sec`. For a testbench
-clock that toggles twice per cycle, cycles/s is `eval/sec / 2`; this is distinct
-from the software PerfCnt KHz/KIPS. Check normal completion and the final report
-before accepting a measurement. License-free build regressions can be run with
-`python3 difftest/scripts/palladium/test_build.py` from the project root.
+只更换 REF SO 时无需重编，下一次 run 传入新的 `+diff` 路径即可。最终
+`build/pldm-compile/run-*.log` 中的 `eval/sec / 2` 是 cycles/s；它与软件 PerfCnt
+的 KHz/KIPS 不同。
 
 ## 3. Debugging Artifacts
 

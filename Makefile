@@ -334,8 +334,8 @@ include emu.mk
 include vcs.mk
 include uvs.mk
 include galaxsim.mk
-include palladium.mk
 include libso.mk
+include palladium.mk
 include fpga.mk
 include pdb.mk
 

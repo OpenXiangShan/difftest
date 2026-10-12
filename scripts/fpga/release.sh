@@ -118,11 +118,6 @@ else
         --exclude='build'
 fi
 
-if [ -f "$CPU_DIR/Makefile" ]; then
-    cp "$CPU_DIR/Makefile" "$RELEASE_HOME/Makefile.cpu"
-fi
-cp "$DIFF_HOME/scripts/palladium/Makefile" "$RELEASE_HOME/Makefile"
-
 RELEASE_RTL="$RELEASE_HOME/build/rtl"
 echo "Copying $DIFF_HOME/src/test/vsrc/common/DifftestClockGate.v into $RELEASE_RTL ..."
 cp $DIFF_HOME/src/test/vsrc/common/DifftestClockGate.v $RELEASE_RTL

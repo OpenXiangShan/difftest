@@ -72,7 +72,7 @@ PLDM_SIMTOOL  	 = $(shell cds_root xrun)/tools/include
 PLDM_IXCOM 	 = $(shell cds_root ixcom)/share/uxe/etc/ixcom
 DPILIB_EMU    	 = $(PLDM_BUILD_DIR)/libdpi_emu.so
 PLDM_CSRC_DIR 	 = $(abspath ./src/test/csrc/vcs)
-PLDM_CXXFILES 	 = $(SIM_CXXFILES) $(shell find $(PLDM_CSRC_DIR) -name "*.cpp")
+PLDM_CXXFILES 	 = $(LIB_CXXFILES)
 PLDM_CXXOBJS    = $(addprefix $(PLDM_CC_OBJ_DIR)/,$(patsubst /%,%,$(PLDM_CXXFILES:.cpp=.o)))
 PLDM_CXXFLAGS 	 = -O3 -m64 -c -fPIC -g -std=c++11 -I$(PLDM_IXCOM) -I$(PLDM_SIMTOOL)
 PLDM_CXXFLAGS 	+= $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(PLDM_CSRC_DIR)

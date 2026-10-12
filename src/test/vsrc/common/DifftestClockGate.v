@@ -22,12 +22,15 @@ module DifftestClockGate(
 	output    Q
 );
 
+`define DIFFTEST_CLOCKGATE_LATCH \
+reg EN; \
+always_latch begin \
+  if (!CK) EN = E; \
+end \
+assign Q = CK & EN;
+
 `ifdef PALLADIUM
-	reg EN;
-	always_latch begin
-		if (!CK) EN = E;
-	end
-	assign Q = CK & EN;
+`DIFFTEST_CLOCKGATE_LATCH
 `elsif SYNTHESIS
 	BUFGCE bufgce_1 (
 		.O(Q),
@@ -35,11 +38,9 @@ module DifftestClockGate(
 		.CE(E)
 	);
 `else
-	reg EN;
-	always_latch begin
-		if (!CK) EN = E;
-	end
-	assign Q = CK & EN;
+`DIFFTEST_CLOCKGATE_LATCH
 `endif // PALLADIUM / SYNTHESIS
+
+`undef DIFFTEST_CLOCKGATE_LATCH
 endmodule
 `endif // CONFIG_DIFFTEST_CLOCKGATE
