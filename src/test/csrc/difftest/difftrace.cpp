@@ -1,4 +1,5 @@
 #include "difftrace.h"
+#include "reftrace/refdrive_trace.h"
 #include <fstream>
 #include <limits.h>
 #include <stdexcept>
@@ -186,7 +187,7 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
 }
 
 template class DiffTrace<DiffTestState>;
-template class DiffTrace<uint64_t>;
+template class DiffTrace<RefDriveTraceEntry>;
 
 #ifdef CONFIG_IOTRACE_ZSTD
 void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {

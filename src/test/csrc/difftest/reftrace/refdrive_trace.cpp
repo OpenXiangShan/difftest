@@ -15,50 +15,116 @@
 ***************************************************************************************/
 
 #include "refdrive_trace.h"
-#include "fork_ref/ref_drive.h"
-#include "refproxy.h"
-#include <algorithm>
-#include <array>
+#include "diffstate.h"
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 
-static std::unique_ptr<DiffTrace<uint64_t>> recorder;
-static uint64_t pending = 0;
-static bool initialized = false, finished = false;
+static void refdrive_check_flag(uint64_t value) {
+  if (value > 1)
+    throw std::runtime_error("Invalid RefDriveTrace boolean field");
+}
 
-static void flush_exec() {
-  while (pending) {
-    const auto count = std::min(pending, REFDRIVE_BATCH_LIMIT);
-    const uint64_t word = (count << 8) | uint8_t(RefDriveTraceOp::Exec);
-    recorder->append(&word);
-    pending -= count;
+void refdrive_validate_entry(const RefDriveTraceEntry &entry) {
+  const auto terminal = entry.terminal;
+  refdrive_check_flag(terminal);
+  const auto &state = entry.state;
+  for (const auto &c: state.commit) {
+    refdrive_check_flag(c.valid);
+    refdrive_check_flag(c.skip);
+    refdrive_check_flag(c.isRVC);
+    refdrive_check_flag(c.rfwen);
+    refdrive_check_flag(c.fpwen);
+    refdrive_check_flag(c.vecwen);
+    if (!c.valid || !c.skip)
+      continue;
+    if (c.vecwen)
+      throw std::runtime_error("RefDriveTrace does not support vector skips");
+    if (c.nFused)
+      throw std::runtime_error("RefDriveTrace does not support fused skips");
+    if (c.rfwen && c.wdest >= std::extent_v<decltype(DifftestArchIntRegState::value)>)
+      throw std::runtime_error("Invalid scalar skip destination");
+#ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
+    if (c.fpwen && c.wdest >= std::extent_v<decltype(DifftestArchFpRegState::value)>)
+      throw std::runtime_error("Invalid scalar skip destination");
+#else
+    if (c.fpwen)
+      throw std::runtime_error("RefDriveTrace profile does not support FP skips");
+#endif
+  }
+#ifdef CONFIG_DIFFTEST_ARCHEVENT
+  refdrive_check_flag(state.event.valid);
+  refdrive_check_flag(state.event.isLatter);
+  refdrive_check_flag(state.event.hasNMI);
+  refdrive_check_flag(state.event.virtualInterruptIsHvictlInject);
+  refdrive_check_flag(state.event.irToHS);
+  refdrive_check_flag(state.event.irToVS);
+#endif
+#ifdef CONFIG_DIFFTEST_LRSCEVENT
+  refdrive_check_flag(state.lrsc.valid);
+  refdrive_check_flag(state.lrsc.success);
+#endif
+#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
+  const auto &p = state.non_reg_interrupt_pending;
+  refdrive_check_flag(p.valid);
+  refdrive_check_flag(p.platformIRPMeip);
+  refdrive_check_flag(p.platformIRPMtip);
+  refdrive_check_flag(p.platformIRPMsip);
+  refdrive_check_flag(p.platformIRPSeip);
+  refdrive_check_flag(p.platformIRPStip);
+  refdrive_check_flag(p.platformIRPVseip);
+  refdrive_check_flag(p.platformIRPVstip);
+  refdrive_check_flag(p.fromAIAMeip);
+  refdrive_check_flag(p.fromAIASeip);
+  refdrive_check_flag(p.localCounterOverflowInterruptReq);
+#endif
+#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
+  refdrive_check_flag(state.mhpmevent_overflow.valid);
+#endif
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  refdrive_check_flag(state.critical_error.valid);
+  refdrive_check_flag(state.critical_error.criticalError);
+#endif
+#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
+  refdrive_check_flag(state.sync_aia.valid);
+#endif
+#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
+  refdrive_check_flag(state.sync_custom_mflushpwr.valid);
+  refdrive_check_flag(state.sync_custom_mflushpwr.l2FlushDone);
+#endif
+  refdrive_check_flag(state.trap.hasTrap);
+  refdrive_check_flag(state.trap.hasWFI);
+  bool terminal_event = state.trap.hasTrap;
+#ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
+  terminal_event |= bool(state.critical_error.valid);
+#endif
+  if (!terminal && terminal_event)
+    throw std::runtime_error("Missing terminal marker on RefDriveTrace terminal event");
+  if (terminal && !terminal_event) {
+    const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&state);
+    for (size_t i = 0; i < sizeof(state); ++i)
+      if (bytes[i])
+        throw std::runtime_error("Invalid RefDriveTrace terminal record");
+    for (auto data: entry.commit_data)
+      if (data)
+        throw std::runtime_error("Invalid RefDriveTrace terminal writeback data");
   }
 }
 
-static void emit(RefDriveTraceOp op, uint64_t arg = 0) {
-  flush_exec();
-  const uint64_t word = (arg << 8) | uint8_t(op);
-  recorder->append(&word);
-}
-
-template <typename T> static void payload(const T &data) {
-  std::array<uint64_t, (sizeof(T) + 7) / 8> words{};
-  memcpy(words.data(), &data, sizeof(T));
-  for (const auto &word: words)
-    recorder->append(&word);
-}
+static std::unique_ptr<DiffTrace<RefDriveTraceEntry>> recorder;
+static bool initialized = false, finished = false;
 
 void difftest_refdrive_trace_configure(const CommonArgs &args) {
+  if (!args.refdrive_trace_name)
+    return;
 #ifndef CONFIG_REF_DRIVE
   if (args.refdrive_trace_is_read)
     throw std::runtime_error("Use ref-drive to load RefDriveTrace");
 #endif
-  if (!args.refdrive_trace_name || args.refdrive_trace_is_read)
-    return;
 #ifndef CONFIG_DIFFTEST_FAST_REF
   throw std::runtime_error("RefDriveTrace requires DIFFTEST_FAST_REF=1");
 #else
-  if (args.ref_mode == RefMode::FORK)
+  if (!args.refdrive_trace_is_read && args.ref_mode == RefMode::FORK)
     throw std::runtime_error("RefDriveTrace does not support --ref-mode=fork");
 #endif
   if (!args.enable_diff)
@@ -72,8 +138,9 @@ void difftest_refdrive_trace_configure(const CommonArgs &args) {
 #ifdef CONFIG_DIFFTEST_REPLAY
   throw std::runtime_error("RefDriveTrace does not support RTL replay/REF rollback");
 #endif
-  recorder = std::make_unique<DiffTrace<uint64_t>>(args.refdrive_trace_name, false, 4096);
-  pending = 0;
+  if (args.refdrive_trace_is_read)
+    return;
+  recorder = std::make_unique<DiffTrace<RefDriveTraceEntry>>(args.refdrive_trace_name, false, 4096);
   initialized = finished = false;
 }
 
@@ -90,106 +157,29 @@ void difftest_refdrive_trace_record(const DiffTestState &dut) {
     if (event.valid)
       throw std::runtime_error("RefDriveTrace does not support msync");
 #endif
-#ifdef CONFIG_DIFFTEST_FAST_REF
-  if (!initialized) {
-    emit(RefDriveTraceOp::Init);
-    payload(dut.regs);
-    initialized = true;
-  }
-  const RefDriveState state(dut);
-  for (unsigned i = 0; i < state.num_commands; ++i) {
-    const auto &c = state.commands[i];
-    switch (c.op) {
-      case RefDriveOp::EXEC:
-        pending += c.instr_count;
-        if (pending >= REFDRIVE_BATCH_LIMIT)
-          flush_exec();
-        break;
-      case RefDriveOp::SKIP: {
-        const auto &s = c.skip;
-        if (s.vector)
-          throw std::runtime_error("RefDriveTrace does not support vector skips");
-        const bool wen = s.integer || s.floating;
-        const uint64_t arg = s.rvc | (s.integer << 1) | (s.floating << 2) | (uint64_t(wen ? s.dest : 0) << 3);
-        if (!refdrive_valid_skip(arg))
-          throw std::runtime_error("Invalid scalar skip destination");
-        emit(RefDriveTraceOp::Skip, arg);
-        if (wen)
-          payload(s.data);
-        break;
-      }
-#ifdef CONFIG_DIFFTEST_LRSCEVENT
-      case RefDriveOp::LRSC: emit(RefDriveTraceOp::LrSc, c.lrsc.sc_fail); break;
-#endif
-#ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-      case RefDriveOp::PENDING: {
-        const auto &p = c.pending;
-        emit(RefDriveTraceOp::InterruptPending,
-             p.platformIRPMeip | (p.platformIRPMtip << 1) | (p.platformIRPMsip << 2) | (p.platformIRPSeip << 3) |
-                 (p.platformIRPStip << 4) | (p.platformIRPVseip << 5) | (p.platformIRPVstip << 6) |
-                 (p.fromAIAMeip << 7) | (p.fromAIASeip << 8) | (p.localCounterOverflowInterruptReq << 9));
-        break;
-      }
-#endif
-#ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-      case RefDriveOp::OVERFLOW:
-        emit(RefDriveTraceOp::Overflow);
-        payload(c.overflow);
-        break;
-#endif
-#ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-      case RefDriveOp::AIA:
-        emit(RefDriveTraceOp::Aia);
-        payload(c.aia);
-        break;
-#endif
-#ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-      case RefDriveOp::MFLUSH: emit(RefDriveTraceOp::Mflush, c.mflush); break;
-#endif
+  RefDriveTraceEntry entry;
+  entry.state = DiffRefDriveState(dut);
+  entry.terminal = dut.trap.hasTrap;
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-      case RefDriveOp::CRITICAL:
-        emit(RefDriveTraceOp::CriticalError, c.critical);
-        emit(RefDriveTraceOp::End);
-        finished = true;
-        return;
+  entry.terminal |= bool(dut.critical_error.valid);
 #endif
-#ifdef CONFIG_DIFFTEST_ARCHEVENT
-      case RefDriveOp::ARCH_EVENT: {
-        const auto &e = c.event;
-        if (e.interrupt) {
-          const uint64_t flags =
-              e.nmi | (e.virtual_inject << 1) | (e.delegation.irToHS << 2) | (e.delegation.irToVS << 3);
-          emit(RefDriveTraceOp::Interrupt, e.interrupt | (flags << REFDRIVE_INTERRUPT_BITS));
-        } else {
-          emit(RefDriveTraceOp::Exception, dut.event.exception);
-          if (e.guided) {
-            const uint64_t values[] = {
-              e.guide.mtval,  e.guide.stval,
-#ifdef CONFIG_DIFFTEST_HCSRSTATE
-              e.guide.mtval2, e.guide.htval, e.guide.vstval,
-#endif
-            };
-            payload(values);
-          }
-        }
-        break;
-      }
-#endif
-      case RefDriveOp::END:
-        emit(RefDriveTraceOp::End);
-        finished = true;
-        return;
-      default: throw std::runtime_error("Unsupported native REF drive operation");
-    }
-  }
-#endif
+  refdrive_validate_entry(entry);
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i)
+    if (dut.commit[i].valid && dut.commit[i].skip && (dut.commit[i].rfwen || dut.commit[i].fpwen))
+      entry.commit_data[i] = get_commit_data(&dut, i);
+  recorder->append(&entry);
+  initialized = true;
+  finished = entry.terminal;
 }
 
 void difftest_refdrive_trace_finish() {
   if (!recorder)
     return;
-  if (!finished)
-    emit(RefDriveTraceOp::End);
+  if (!finished) {
+    RefDriveTraceEntry entry;
+    entry.terminal = true;
+    recorder->append(&entry);
+  }
   recorder.reset();
 }
 
