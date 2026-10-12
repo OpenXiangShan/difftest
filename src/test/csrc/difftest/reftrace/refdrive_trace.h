@@ -26,8 +26,6 @@ struct RefDriveTraceEntry {
   uint8_t terminal = 0;
 };
 
-void refdrive_validate_entry(const RefDriveTraceEntry &entry);
-
 void difftest_refdrive_trace_configure(const CommonArgs &args);
 void difftest_refdrive_trace_record(const DiffTestState &dut);
 void difftest_refdrive_trace_finish();

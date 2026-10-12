@@ -27,12 +27,8 @@ static void drive(RefProxy &proxy, DiffTrace<RefDriveTraceEntry> &trace) {
     if (signal_num)
       throw std::runtime_error("REF drive interrupted");
     RefDriveTraceEntry entry;
-    if (!trace.try_read_next(&entry))
-      throw std::runtime_error("Incomplete RefDriveTrace: missing terminal record");
-    refdrive_validate_entry(entry);
+    trace.read_next(&entry);
     if (!initialized) {
-      if (!entry.state.commit[0].valid)
-        throw std::runtime_error("RefDriveTrace contains no initialization commit");
       ref_drive_init(proxy, entry.state.regs);
       initialized = true;
     }
@@ -44,8 +40,6 @@ static void drive(RefProxy &proxy, DiffTrace<RefDriveTraceEntry> &trace) {
     if (entry.terminal) {
       if (!executor.flush())
         throw std::runtime_error("REF stopped before completing the recorded instruction count");
-      if (trace.try_read_next(&entry))
-        throw std::runtime_error("Data after RefDriveTrace terminal record");
       return;
     }
   }

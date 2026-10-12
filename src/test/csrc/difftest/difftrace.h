@@ -28,6 +28,7 @@ public:
 
   ~DiffTraceZstd() {
     ZSTD_freeCCtx(trace_cctx);
+    ZSTD_freeDCtx(trace_dctx);
   }
 
   void diff_zstd_next(const char *file_name, bool is_read);
@@ -42,6 +43,8 @@ private:
   uint64_t max_compress_size = 0; // The number of bytes in a single compression
   uint64_t max_dcompress_size = 0;
   std::vector<char> io_trace_buffer;
+  std::vector<char> inputBuffer;
+  ZSTD_inBuffer input = {nullptr, 0, 0};
 
   ZSTD_CCtx *trace_cctx = NULL;
   ZSTD_DCtx *trace_dctx = NULL;
@@ -71,14 +74,11 @@ public:
   }
   bool append(const T *trace);
   bool read_next(T *trace);
-  // Checked reader; false means EOF after at least one file.
-  bool try_read_next(T *trace);
   void next_file_name(char *file_name);
 
 private:
   uint64_t buffer_size;
   uint64_t buffer_count = 0;
-  uint64_t loaded_count = 0;
   uint64_t trace_index = 0;
   T *buffer = nullptr;
 
