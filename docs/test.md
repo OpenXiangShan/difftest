@@ -265,8 +265,18 @@ make pldm-build NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
 
 `NUM_CORES` 必须匹配生成的设计。`DIFFTEST_PERFCNT=1` 打印 DPI 调用和字节数；
 `DISABLE_DIFFTEST_RAM_DPIC=1` 关闭 RAM DPI，保留传输和检查。
-`NO_DIFF=1` 是硬件编译选项，会去掉 DiffTest 传输；`SYNTHESIS=1` 进一步使用
-综合时钟入口、去掉 testbench DPI。三者应使用独立的 build 目录。
+需要无传输或综合版本时，分别重新执行：
+
+```bash
+make pldm-build NUM_CORES=1 NO_DIFF=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
+  WITH_CHISELDB=0 WITH_CONSTANTIN=0 DISABLE_DIFFTEST_RAM_DPIC=1
+make pldm-build NUM_CORES=1 NO_DIFF=0 SYNTHESIS=1 DIFFTEST_PERFCNT=1 \
+  WITH_CHISELDB=0 WITH_CONSTANTIN=0
+```
+
+`NO_DIFF=1` 是硬件编译选项，会去掉 DiffTest 传输；`SYNTHESIS=1` 使用综合时钟
+入口并去掉 testbench DPI。每次切换硬件模式前清理 `pldm-compile`，或使用独立
+的生成目录。
 
 **Run**：
 
@@ -279,6 +289,15 @@ make pldm-run SYNTHESIS=0 \
 
 `+diff` 开启 REF 检查；`+no-diff` 只关闭检查，仍保留硬件传输。`+max-cycles=N`
 只适合没有自然退出信号时的窗口测速，不能当作 workload 完成。
+
+`NO_DIFF=1` 和 `SYNTHESIS=1` 版本运行时都使用 `+no-diff`：
+
+```bash
+make pldm-run NO_DIFF=1 SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+make pldm-run NO_DIFF=0 SYNTHESIS=1 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+```
 
 硬件接口不变、只改 C++ 或头文件时，只重编 DPI 库，不重新执行 `vlan/ixcom`：
 
