@@ -8,10 +8,10 @@ This document defines the standard workflow for complex difftest tasks — those
 Task received
   │
   ▼
-Create Plan (.github/<task>-plan.md)
+Create a plan when useful (location is flexible)
   │
   ▼
-Create Progress (.github/<task>-progress.md)
+Track progress when useful (location is flexible)
   │
   ▼
 ┌─ Per Phase ──────────────────────────┐
@@ -31,16 +31,16 @@ Create Progress (.github/<task>-progress.md)
 Final verification (10-min linux)
   │
   ▼
-askQuestions: confirm completion / next steps
+Report completion / next steps when relevant
 ```
 
 ---
 
 ## 1. Plan Document
 
-Every non-trivial task must start with a plan stored at `.github/<task>-plan.md`.
+For a complex or iterative task, a written plan is recommended when it improves coordination or recovery. It is not required for every non-trivial task, and no particular repository path is required. An issue, PR description, conversation note, or local untracked file may be used instead. Do not add a plan file to `.github/` unless it is useful to reviewers or maintainers.
 
-### Required Sections
+### Suggested Sections
 
 | Section | Contents |
 |---------|----------|
@@ -59,15 +59,15 @@ Every non-trivial task must start with a plan stored at `.github/<task>-plan.md`
 
 ### Versioning
 
-If a plan needs significant revision (not minor fixes), create a new version: `<task>-plan-v2.md`, `<task>-plan-v3.md`, etc. Keep old versions for reference.
+If a written plan needs significant revision, update it in place or create a new version where the notes live. Keep old versions only when they provide useful review or debugging context.
 
 ---
 
 ## 2. Progress Document
 
-Every task with a plan must have a corresponding progress file at `.github/<task>-progress.md` (versioned to match the plan).
+When a plan is used, progress tracking is recommended for long-running or iterative work. It may be kept in the same note, issue/PR, conversation, or another suitable location; a separate progress file and a fixed `.github/` path are not required.
 
-### Required Sections Per Phase
+### Suggested Sections Per Phase
 
 | Section | Contents |
 |---------|----------|
@@ -90,7 +90,7 @@ Use a summary table at the top for quick overview:
 ### Guidelines
 
 - **Record failed attempts.** When a fix fails, document the attempt, the failure mode, and why it was wrong. This prevents repeating the same mistake and preserves debugging context.
-- **Update immediately.** Write progress entries as each phase completes, not at the end. If a conversation is interrupted, the progress file is the recovery point.
+- **Update immediately.** Write progress entries as each phase completes, not at the end. If a conversation is interrupted, the available notes or issue/PR should provide recovery context.
 - **Include quantitative data.** Log exact instrCnt, cycleCnt, step numbers, error messages — not just "passed" or "failed".
 
 ---
@@ -101,26 +101,25 @@ Use a summary table at the top for quick overview:
 
 At the start of each conversation or after a context reset:
 
-1. **Re-read the plan** (`.github/<task>-plan.md`) to restore the task definition and Phase structure.
-2. **Re-read the progress** (`.github/<task>-progress.md`) to determine which Phase is current and what has already been tried.
+1. **Re-read the plan, if one exists to restore the task definition and Phase structure.
+2. **Re-read the progress notes, if they exist to determine which Phase is current and what has already been tried.
 3. **Re-read relevant docs** (`difftest/docs/`) if the task involves unfamiliar modules.
 
-Do not rely on memory or assumptions about prior state. The plan and progress files are the source of truth.
+Use the available task notes and repository state as the source of truth; do not invent missing progress.
 
 ### Confirming Ambiguities
 
 When encountering unclear requirements, design choices, or unexpected test results:
 
-- Use `askQuestions` to confirm details with the user before proceeding.
+- Ask the user only when a decision cannot be resolved from the repository, issue, or task context.
 - Prefer asking early (before implementing a speculative fix) over asking late (after a failed debugging cycle).
 - Typical situations: scope clarification, which approach to take when multiple are viable, whether a failing test is a known issue, whether to proceed to next Phase despite a partial result.
 
 ### End-of-Conversation Check
 
-At the end of every conversation:
+At the end of a task, report open questions and next steps in the issue/PR or conversation when relevant. No follow-up document or prompt is required.
 
-- Use `askQuestions` to confirm whether there are further requirements, open questions, or next steps.
-- This ensures nothing is left implicit and gives the user a chance to redirect before the context is lost.
+
 
 ### Sub-Agent Delegation
 
