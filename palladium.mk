@@ -76,6 +76,11 @@ PLDM_CXXFILES 	 = $(LIB_CXXFILES)
 PLDM_CXXOBJS    = $(addprefix $(PLDM_CC_OBJ_DIR)/,$(patsubst /%,%,$(PLDM_CXXFILES:.cpp=.o)))
 PLDM_CXXFLAGS 	 = -O3 -m64 -c -fPIC -g -std=c++11 -I$(PLDM_IXCOM) -I$(PLDM_SIMTOOL)
 PLDM_CXXFLAGS 	+= $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(PLDM_CSRC_DIR)
+
+ifeq ($(WITH_DRAMSIM3),1)
+PLDM_LD_LIB  	 = -L $(DRAMSIM3_HOME)/ -ldramsim3 -Wl,-rpath-link=$(DRAMSIM3_HOME)/libdramsim3.so
+endif
+
 PLDM_LDFLAGS     = $(SIM_LDFLAGS) -ldl -lpthread $(PLDM_LD_LIB)
 
 # XMSIM Flags
