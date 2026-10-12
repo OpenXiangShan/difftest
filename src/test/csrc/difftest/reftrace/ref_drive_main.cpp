@@ -23,8 +23,8 @@
 
 static void drive(RefProxy &proxy, DiffTrace<RefDriveTraceEntry> &trace) {
   bool initialized = false;
-  RefDriveExecutor executor(&proxy);
-  DiffTestState state{};
+  DiffState state(0);
+  RefDriveExecutor executor(&proxy, &state);
   for (;;) {
     if (signal_num)
       throw std::runtime_error("REF drive interrupted");
@@ -34,10 +34,11 @@ static void drive(RefProxy &proxy, DiffTrace<RefDriveTraceEntry> &trace) {
       FirstInstrCommitChecker::init_ref(proxy, entry.state.regs);
       initialized = true;
     }
-    entry.state.copy_to(state);
-    const auto result = executor.run(state, entry.commit_data);
+    const auto result = executor.run(entry.state);
     if (result.status == RefDriveExecutor::ERROR)
       throw std::runtime_error("REF stopped before completing the recorded instruction count");
+    if (result.status == RefDriveExecutor::TRAP)
+      throw std::runtime_error("REF checker terminated before the trace endpoint");
     if (result.status == RefDriveExecutor::CRITICAL_MISMATCH)
       throw std::runtime_error("REF critical-error mismatch");
     if (entry.terminal) {

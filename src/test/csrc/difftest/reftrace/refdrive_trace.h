@@ -19,10 +19,10 @@
 
 #include "args.h"
 #include "difftrace.h"
+#include "fork_ref/ref_drive.h"
 
 struct RefDriveTraceEntry {
-  DiffRefDriveState state{};
-  uint64_t commit_data[CONFIG_DIFF_COMMIT_WIDTH] = {};
+  RefDriveState state{};
   uint8_t terminal = 0;
 };
 

@@ -66,7 +66,7 @@ void difftest_refdrive_trace_record(const DiffTestState &dut) {
       throw std::runtime_error("RefDriveTrace does not support msync");
 #endif
   RefDriveTraceEntry entry;
-  entry.state = DiffRefDriveState(dut);
+  entry.state = RefDriveState(dut);
   entry.terminal = dut.trap.hasTrap;
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
   entry.terminal |= bool(dut.critical_error.valid);
@@ -77,8 +77,6 @@ void difftest_refdrive_trace_record(const DiffTestState &dut) {
       continue;
     if (c.vecwen || c.nFused)
       throw std::runtime_error("RefDriveTrace does not support vector or fused skips");
-    if (c.rfwen || c.fpwen)
-      entry.commit_data[i] = get_commit_data(&dut, i);
   }
   recorder->append(&entry);
   initialized = true;
