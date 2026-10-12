@@ -60,6 +60,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   // A desired offset for registers to be compared with the REF in the C++ struct can be specified.
   // Since currently we cannot check the semantic correctness, this should strictly match the REF.
   val desiredRegOffset: Option[Int] = None
+  // State used to drive REF execution or initialization.
+  def drivesRef: Boolean = desiredRegOffset.isDefined
 
   val desiredCppName: String
   def actualCppName: String = if (desiredRegOffset.isDefined) s"regs.$desiredCppName" else desiredCppName
@@ -239,12 +241,14 @@ private[difftest] class DiffDeltaElem(gen: DifftestBundle)
 }
 
 class DiffArchEvent extends ArchEvent with DifftestBundle {
+  override def drivesRef: Boolean = true
   // DiffArchEvent must be instantiated once for each core.
   override def isUniqueIdentifier: Boolean = true
   override val desiredCppName: String = "event"
 }
 
 class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with DifftestBundle with DifftestWithIndex {
+  override def drivesRef: Boolean = true
   override val desiredCppName: String = "commit"
   override def fpgaFilterElems: Seq[String] =
     Seq("robIdx", "lqIdx", "sqIdx", "isLoad", "isStore")
@@ -281,6 +285,7 @@ private[difftest] class DiffVecCommitData extends VecCommitData with DifftestBun
 }
 
 class DiffTrapEvent extends TrapEvent with DifftestBundle {
+  override def drivesRef: Boolean = true
   override val desiredCppName: String = "trap"
   override def fpgaFilterElems: Seq[String] = Seq("code")
   override def supportsSquashBase: Bool = !hasTrap && !hasWFI
@@ -530,6 +535,7 @@ class DiffRefillEvent extends RefillEvent with DifftestBundle with DifftestWithI
 }
 
 class DiffLrScEvent extends ScEvent with DifftestBundle {
+  override def drivesRef: Boolean = true
   override val desiredCppName: String = "lrsc"
 }
 
@@ -546,22 +552,27 @@ class DiffRunaheadRedirectEvent extends RunaheadRedirectEvent with DifftestBundl
 }
 
 class DiffNonRegInterruptPendingEvent extends NonRegInterruptPendingEvent with DifftestBundle {
+  override def drivesRef: Boolean = true
   override val desiredCppName: String = "non_reg_interrupt_pending"
 }
 
 class DiffMhpmeventOverflowEvent extends MhpmeventOverflowEvent with DifftestBundle {
+  override def drivesRef: Boolean = true
   override val desiredCppName: String = "mhpmevent_overflow"
 }
 
 class DiffCriticalErrorEvent extends CriticalErrorEvent with DifftestBundle {
+  override def drivesRef: Boolean = true
   override val desiredCppName: String = "critical_error"
 }
 
 class DiffSyncAIAEvent extends AIAEvent with DifftestBundle {
+  override def drivesRef: Boolean = true
   override val desiredCppName: String = "sync_aia"
 }
 
 class DiffSyncCustomMflushpwrEvent extends SyncCustomMflushpwrEvent with DifftestBundle {
+  override def drivesRef: Boolean = true
   override val desiredCppName: String = "sync_custom_mflushpwr"
 }
 
@@ -777,6 +788,7 @@ object DifftestModule {
     difftestCpp += "#define __DIFFTEST_STATE_H__"
     difftestCpp += ""
     difftestCpp += "#include <cstdint>"
+    difftestCpp += "#include <cstring>"
     difftestCpp += ""
 
     (macros ++ extraCppMacros.toSeq).distinct.foreach(m => difftestCpp += s"#define $m")
@@ -854,6 +866,30 @@ object DifftestModule {
       difftestCpp += f"  ${toCppField(className, cppInstances)};"
     }
     difftestCpp += "} DiffTestState;"
+    difftestCpp += ""
+
+    val refBundles = eventBundles.filter(_._2.head.drivesRef).sortBy(_._2.head.desiredModuleName)
+    difftestCpp += "struct DiffRefDriveState {"
+    difftestCpp += "  DiffTestRegState regs;"
+    for ((className, cppInstances) <- refBundles) {
+      difftestCpp += f"  ${toCppField(className, cppInstances)};"
+    }
+    difftestCpp += ""
+    difftestCpp += "  DiffRefDriveState() = default;"
+    difftestCpp += "  explicit DiffRefDriveState(const DiffTestState& state) : regs(state.regs) {"
+    for ((_, cppInstances) <- refBundles) {
+      val name = cppInstances.head.desiredCppName
+      difftestCpp += s"    std::memcpy(&$name, &state.$name, sizeof($name));"
+    }
+    difftestCpp += "  }"
+    difftestCpp += "  void copy_to(DiffTestState& state) const {"
+    difftestCpp += "    state.regs = regs;"
+    for ((_, cppInstances) <- refBundles) {
+      val name = cppInstances.head.desiredCppName
+      difftestCpp += s"    std::memcpy(&state.$name, &$name, sizeof($name));"
+    }
+    difftestCpp += "  }"
+    difftestCpp += "};"
     difftestCpp += ""
 
     difftestCpp +=
