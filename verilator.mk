@@ -122,6 +122,9 @@ WOLVRIX_PARTITIONED_CXXFLAGS := \
 	-DWOLVRIX_PARTITIONED_VERILATOR \
 	--std=c++17
 
+# Generated scheduling and port-copy wrappers bypass Verilator's compile rules.
+WOLVRIX_PARTITIONED_WRAPPER_OPT ?= $(OPT_FAST)
+
 partitioned-obj = $(VERILATOR_BUILD_DIR)/obj$(1).o
 
 WOLVRIX_PARTITIONED_RUNTIME_SRCS := \
@@ -135,7 +138,7 @@ WOLVRIX_PARTITIONED_RUNTIME_OBJS := \
 define make-partitioned-object-rule
 $(call partitioned-obj,$(1)): $(1) $(UNIT_ARCHIVES)
 	@mkdir -p $$(@D)
-	$(CXX) $(WOLVRIX_PARTITIONED_CPPFLAGS) $(WOLVRIX_PARTITIONED_CXXFLAGS) -c -o $$@ $$<
+	$(CXX) $(WOLVRIX_PARTITIONED_CPPFLAGS) $(WOLVRIX_PARTITIONED_CXXFLAGS) $(if $(filter $(1),$(WOLVRIX_PARTITIONED_WRAPPER_SRCS)),$(WOLVRIX_PARTITIONED_WRAPPER_OPT)) -c -o $$@ $$<
 endef
 
 $(foreach src,$(WOLVRIX_PARTITIONED_RUNTIME_SRCS),$(eval $(call make-partitioned-object-rule,$(src))))
