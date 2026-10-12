@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "checkers.h"
 #include "flash.h"
 #include "fork_ref/ref_drive.h"
 #include "ram.h"
@@ -29,7 +30,7 @@ static void drive(RefProxy &proxy, DiffTrace<RefDriveTraceEntry> &trace) {
     RefDriveTraceEntry entry;
     trace.read_next(&entry);
     if (!initialized) {
-      ref_drive_init(proxy, entry.state.regs);
+      FirstInstrCommitChecker::init_ref(proxy, entry.state.regs);
       initialized = true;
     }
     const auto result = executor.run(entry.state, entry.commit_data);
