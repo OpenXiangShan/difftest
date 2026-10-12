@@ -275,6 +275,8 @@ make pldm-build NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
 `NUM_CORES` must match the generated design. `DIFFTEST_PERFCNT=1` enables the
 performance-counter report. `DISABLE_DIFFTEST_RAM_DPIC=1` removes RAM DPI calls
 while keeping DiffTest transport and checking.
+For non-synthesis builds, `pldm-build` resolves the `pldm-lib` prerequisite before
+running `vlan` and `ixcom`; synthesis builds do not need the DPI library.
 
 Build the other hardware variants separately:
 
