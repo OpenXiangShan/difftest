@@ -31,7 +31,7 @@ Create Progress
 Final verification (10-min linux)
   │
   ▼
-askQuestions: confirm completion / next steps
+Report completion / next steps
 ```
 
 ---
@@ -111,16 +111,13 @@ Do not rely on memory or assumptions about prior state. The plan and progress fi
 
 When encountering unclear requirements, design choices, or unexpected test results:
 
-- Use `askQuestions` to confirm details with the user before proceeding.
+- Confirm details with the user when necessary before proceeding.
 - Prefer asking early (before implementing a speculative fix) over asking late (after a failed debugging cycle).
 - Typical situations: scope clarification, which approach to take when multiple are viable, whether a failing test is a known issue, whether to proceed to next Phase despite a partial result.
 
 ### End-of-Conversation Check
 
-At the end of every conversation:
-
-- Use `askQuestions` to confirm whether there are further requirements, open questions, or next steps.
-- This ensures nothing is left implicit and gives the user a chance to redirect before the context is lost.
+At the end of a task, report the result and next steps. Confirm open questions with the user when necessary.
 
 ### Sub-Agent Delegation
 
