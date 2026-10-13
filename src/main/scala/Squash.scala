@@ -22,7 +22,7 @@ import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.common.DifftestPerf
 import difftest.validate.Validate._
-import difftest.util.PipelineConnect
+import difftest.util.{PipelineConnect, StoreHash}
 
 object Squash {
   def apply(
@@ -31,7 +31,8 @@ object Squash {
     fpgaEnable: Option[Bool] = None,
     fpgaMaxFused: Option[UInt] = None,
   ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
-    val squashInBits = Stamp(bundles.bits)
+    val stamped = Stamp(bundles.bits)
+    val squashInBits = if (config.isFPGA) StoreHash(stamped, bundles.fire) else stamped
     val squashIn = Wire(Decoupled(chiselTypeOf(squashInBits)))
     squashIn.bits := squashInBits
     squashIn.valid := bundles.valid
@@ -151,7 +152,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .zip(want_tick_vec)
       .filter(_._1.squashGroup.contains(g))
       .map { case (u, wt) =>
-        if (u.squashQueue) {
+        if (u.squashQueue && !u.isInstanceOf[DifftestHash]) {
           false.B
         } else {
           if (config.hasBuiltInPerf) DifftestPerf(s"SquashTick_${g}_${u.desiredCppName}", wt)

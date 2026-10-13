@@ -196,6 +196,9 @@ protected:
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   StoreChecker *store_checker = nullptr;
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  StoreHashChecker *store_hash_checker = nullptr;
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   LoadChecker *load_checker[CONFIG_DIFF_LOAD_WIDTH] = {nullptr};
 #ifdef CONFIG_DIFFTEST_SQUASH
