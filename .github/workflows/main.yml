@@ -450,15 +450,14 @@ jobs:
         run: |
           # GSIM depends on GMP and clang >= 19
           sudo apt update
-          sudo apt install -y libgmp-dev clang-19 zlib1g-dev wget
+          sudo apt install -y libgmp-dev clang-19 zlib1g-dev wget jq
           cd $GITHUB_WORKSPACE/..
           mkdir -p gsim-bin && cd gsim-bin
-          curl -s https://api.github.com/repos/OpenXiangShan/gsim/releases/latest \
-            | grep "browser_download_url"                                         \
-            | grep "gsim"                                                         \
-            | cut -d '"' -f 4                                                     \
-            | xargs wget -O gsim
+          gsim_url=$(curl -fsSL https://api.github.com/repos/OpenXiangShan/gsim/releases/latest \
+            | jq -er '.assets | map(select(.name | endswith("-X64"))) | first | .browser_download_url')
+          wget -O gsim "$gsim_url"
           chmod +x gsim
+          ./gsim --version
           echo "GSIM_BIN=$(pwd)/gsim" >> $GITHUB_ENV
       - name: Build the REF - Spike
         run: |
