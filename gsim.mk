@@ -29,23 +29,37 @@ GSIM_GEN_RUNTIME_CSRC = $(GSIM_GEN_CSRC_DIR)/gsim_fst_impl.cpp
 GSIM_RUNTIME_CSRC = $(GSIM_EMU_BUILD_DIR)/support/gsim_fst_impl.cpp
 GSIM_MODEL_CXXFILES = $(filter-out $(GSIM_GEN_RUNTIME_CSRC),$(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null))
 GSIM_FLAGS = --supernode-max-size=15 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --sep-aggr=__DOT__
-GSIM_RUNTIME_EXTRA_CSRC =
+GSIM_GEN_CONFIG = $(GSIM_GEN_CSRC_DIR)/.gsim-config
+GSIM_BIN_DEP = $(shell command -v $(firstword $(GSIM_BIN)) 2> /dev/null)
+GSIM_WAVEFORM_CSRC =
 
 ifneq (,$(filter $(EMU_TRACE),vcd VCD))
 $(error GSIM only supports FST waveform. Use EMU_TRACE=fst)
 endif
 ifneq (,$(filter $(EMU_TRACE),1 fst FST))
 GSIM_FLAGS += --trace-fst
-GSIM_RUNTIME_EXTRA_CSRC += $(GSIM_RUNTIME_CSRC)
+GSIM_WAVEFORM_CSRC += $(GSIM_RUNTIME_CSRC)
 endif
 
-$(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir
+.PHONY: gsim-config-force
+gsim-config-force:
+
+$(GSIM_GEN_CONFIG): gsim-config-force
+	@mkdir -p $(@D)
+	@printf '%s\n' '$(GSIM_BIN)' '$(GSIM_FLAGS)' > $@.tmp
+	@if ! cmp -s $@.tmp $@; then \
+		mv $@.tmp $@; \
+		rm -f $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)*.cpp $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h \
+			$(GSIM_RUNTIME_CSRC) $(GSIM_GEN_CSRC_DIR)/gsimFst.h; \
+	else rm -f $@.tmp; fi
+
+$(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir $(GSIM_GEN_CONFIG) $(GSIM_BIN_DEP)
 	@mkdir -p $(@D)
 	@printf '\n[gsim] Generating C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) $(GSIM_BIN) $(GSIM_FLAGS) --dir $(@D) $< | tee $(GSIM_EMU_BUILD_DIR)/gsim-gen-cpp.log
 
-ifneq ($(GSIM_RUNTIME_EXTRA_CSRC),)
+ifneq ($(GSIM_WAVEFORM_CSRC),)
 $(GSIM_RUNTIME_CSRC): $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 	@mkdir -p $(@D)
 	@if [ -f "$(GSIM_GEN_RUNTIME_CSRC)" ]; then \
@@ -58,6 +72,9 @@ $(GSIM_RUNTIME_CSRC): $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 	fi
 endif
 
+$(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
+	@:
+
 gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 
 ##############################################
@@ -65,13 +82,13 @@ gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 ##############################################
 
 GSIM_OTHER_CSRC_DIR = $(abspath ./src/test/csrc/gsim)
-GSIM_CXXFILES = $(EMU_CXXFILES) $(GSIM_RUNTIME_EXTRA_CSRC) $(shell find $(GSIM_OTHER_CSRC_DIR) -name "*.cpp")
+GSIM_CXXFILES = $(EMU_CXXFILES) $(GSIM_WAVEFORM_CSRC) $(shell find $(GSIM_OTHER_CSRC_DIR) -name "*.cpp")
 # We need to replace extra '\' as this is native in Makefile for GSIM
 GSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GSIM_CXXFLAGS += -I$(GSIM_OTHER_CSRC_DIR) -I$(GSIM_GEN_CSRC_DIR)/ -DGSIM
 GSIM_CXXFLAGS += $(EMU_OPTIMIZE) -fbracket-depth=2048 -Wno-parentheses-equality $(PGO_CFLAGS)
-ifneq ($(GSIM_RUNTIME_EXTRA_CSRC),)
-GSIM_CXXFLAGS += -DGSIM_HAS_FST_WAVE
+ifneq ($(GSIM_WAVEFORM_CSRC),)
+GSIM_CXXFLAGS += -DGSIM_TRACE_FST
 GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl -lz $(PGO_LDFLAGS)
 else
 GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
@@ -99,10 +116,10 @@ $(1): $(2)
 endef
 
 $(foreach x, $(GSIM_CXXFILES), $(eval \
-	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_CONFIG) $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h)))
 
 $(foreach x, $(GSIM_MODEL_CXXFILES), $(eval \
-	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_CONFIG) $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h)))
 
 $(eval $(call GSIM_LD_TEMPLATE, $(GSIM_EMU_TARGET), $(GSIM_EMU_OBJS), $(GSIM_LDFLAGS)))
 
