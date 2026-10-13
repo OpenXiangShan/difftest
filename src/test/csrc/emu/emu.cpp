@@ -130,6 +130,9 @@ Emulator::Emulator(int argc, const char *argv[])
 #ifdef WITH_DRAMSIM3
       dramsim3_init(args.dramsim3_ini, args.dramsim3_outdir);
 #endif
+#ifdef WITH_MCSIM
+      mcsim_backend_init();
+#endif
     }
   }
 
@@ -386,6 +389,9 @@ inline void Emulator::single_cycle() {
 
 #ifdef WITH_DRAMSIM3
   dramsim3_step();
+#endif
+#ifdef WITH_MCSIM
+  mcsim_backend_step();
 #endif
 
 #ifdef GSIM

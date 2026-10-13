@@ -30,6 +30,9 @@
 #include "cosimulation.h"
 CoDRAMsim3 *dram = NULL;
 #endif
+#ifdef WITH_MCSIM
+#include "mcsim_c_api.h"
+#endif
 
 SimMemory *simMemory = nullptr;
 
@@ -364,6 +367,9 @@ MmapMemory::~MmapMemory() {
 #ifdef WITH_DRAMSIM3
   dramsim3_finish();
 #endif
+#ifdef WITH_MCSIM
+  mcsim_backend_finish();
+#endif
 }
 
 uint64_t difftest_ram_read(uint64_t rIdx) {
@@ -610,6 +616,38 @@ bool memory_request(uint64_t address, uint32_t id, bool isWrite) {
     return true;
   }
   return false;
+}
+
+#endif
+
+#ifdef WITH_MCSIM
+
+void mcsim_backend_init() {
+#ifndef MCSIM_CPU_FREQ_MHZ
+#error MCSIM_CPU_FREQ_MHZ is not defined
+#endif
+  if (mcsim_init(MCSIM_CPU_FREQ_MHZ) != 0) {
+    std::cerr << "Failed to initialize MCSim at CPU frequency " << MCSIM_CPU_FREQ_MHZ << " MHz" << std::endl;
+    exit(1);
+  }
+  std::cout << "MCSim timing backend: CPU " << MCSIM_CPU_FREQ_MHZ << " MHz" << std::endl;
+}
+
+void mcsim_backend_step() {
+  mcsim_cpu_tick();
+}
+
+void mcsim_backend_finish() {
+  mcsim_print_stats();
+  mcsim_finish();
+}
+
+uint64_t memory_response(bool isWrite) {
+  return mcsim_response(isWrite);
+}
+
+bool memory_request(uint64_t address, uint32_t id, bool isWrite) {
+  return mcsim_request(address, id, isWrite);
 }
 
 #endif
