@@ -29,7 +29,6 @@ GSIM_GEN_RUNTIME_CSRC = $(GSIM_GEN_CSRC_DIR)/gsim_fst_impl.cpp
 GSIM_RUNTIME_CSRC = $(GSIM_EMU_BUILD_DIR)/support/gsim_fst_impl.cpp
 GSIM_MODEL_CXXFILES = $(filter-out $(GSIM_GEN_RUNTIME_CSRC),$(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null))
 GSIM_FLAGS = --supernode-max-size=15 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --sep-aggr=__DOT__
-GSIM_GEN_CONFIG = $(GSIM_GEN_CSRC_DIR)/.gsim-config
 GSIM_BIN_DEP = $(shell command -v $(firstword $(GSIM_BIN)) 2> /dev/null)
 GSIM_WAVEFORM_CSRC =
 
@@ -41,19 +40,7 @@ GSIM_FLAGS += --trace-fst
 GSIM_WAVEFORM_CSRC += $(GSIM_RUNTIME_CSRC)
 endif
 
-.PHONY: gsim-config-force
-gsim-config-force:
-
-$(GSIM_GEN_CONFIG): gsim-config-force
-	@mkdir -p $(@D)
-	@printf '%s\n' '$(GSIM_BIN)' '$(GSIM_FLAGS)' > $@.tmp
-	@if ! cmp -s $@.tmp $@; then \
-		mv $@.tmp $@; \
-		rm -f $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)*.cpp $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h \
-			$(GSIM_RUNTIME_CSRC) $(GSIM_GEN_CSRC_DIR)/gsimFst.h; \
-	else rm -f $@.tmp; fi
-
-$(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir $(GSIM_GEN_CONFIG) $(GSIM_BIN_DEP)
+$(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir $(GSIM_BIN_DEP)
 	@mkdir -p $(@D)
 	@printf '\n[gsim] Generating C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
@@ -116,10 +103,10 @@ $(1): $(2)
 endef
 
 $(foreach x, $(GSIM_CXXFILES), $(eval \
-	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_CONFIG) $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h)))
 
 $(foreach x, $(GSIM_MODEL_CXXFILES), $(eval \
-	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_CONFIG) $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP).h)))
 
 $(eval $(call GSIM_LD_TEMPLATE, $(GSIM_EMU_TARGET), $(GSIM_EMU_OBJS), $(GSIM_LDFLAGS)))
 
