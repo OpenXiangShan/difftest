@@ -29,7 +29,6 @@ GSIM_GEN_RUNTIME_CSRC = $(GSIM_GEN_CSRC_DIR)/gsim_fst_impl.cpp
 GSIM_RUNTIME_CSRC = $(GSIM_EMU_BUILD_DIR)/support/gsim_fst_impl.cpp
 GSIM_MODEL_CXXFILES = $(filter-out $(GSIM_GEN_RUNTIME_CSRC),$(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null))
 GSIM_FLAGS = --supernode-max-size=15 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --sep-aggr=__DOT__
-GSIM_BIN_DEP = $(shell command -v $(firstword $(GSIM_BIN)) 2> /dev/null)
 GSIM_WAVEFORM_CSRC =
 
 ifneq (,$(filter $(EMU_TRACE),vcd VCD))
@@ -40,7 +39,7 @@ GSIM_FLAGS += --trace-fst
 GSIM_WAVEFORM_CSRC += $(GSIM_RUNTIME_CSRC)
 endif
 
-$(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir $(GSIM_BIN_DEP)
+$(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir
 	@mkdir -p $(@D)
 	@printf '\n[gsim] Generating C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
