@@ -27,7 +27,8 @@ static bool warn_waveform_unsupported() {
   if (!warned) {
     warned = true;
     fprintf(stderr,
-      "[gsim] warning: waveform requested, but this emu was built without EMU_TRACE/--trace-fst; waveform APIs become no-ops\n");
+            "[gsim] warning: waveform requested, but this emu was built without EMU_TRACE/--trace-fst; waveform APIs "
+            "become no-ops\n");
   }
   return false;
 }
@@ -58,7 +59,8 @@ void GsimSim::waveform_init(uint64_t cycles, const char *filename) {
 
 void GsimSim::waveform_tick() {
 #ifdef GSIM_TRACE_FST
-  if (!waveform_active) return;
+  if (!waveform_active)
+    return;
   dut->enableWaveform();
 #endif
 }
