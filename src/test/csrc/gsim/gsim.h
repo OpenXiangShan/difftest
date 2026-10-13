@@ -49,6 +49,10 @@ public:
   }
   inline void step() override {
     dut->step();
+#ifdef GSIM_TRACE_FST
+    // waveform_tick() arms only this step; the next range decision re-arms it.
+    dut->disableWaveform();
+#endif
   }
 
   inline uint64_t get_difftest_exit() final {
