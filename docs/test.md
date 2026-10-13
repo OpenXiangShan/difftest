@@ -248,6 +248,113 @@ make -C difftest fpga-clean vcs-clean
 
 ---
 
+### 2.4 Palladium (PLDM)
+
+Generate the RTL first, then create the release package:
+
+```bash
+make -C difftest fpga-release
+```
+
+The release contains the CPU top-level `Makefile` at its root and the DiffTest
+makefiles and Palladium scripts under `difftest/`. In a new shell:
+
+```bash
+source ~/workspace/pldm-env.sh
+cd difftest
+```
+
+**Build**
+
+```bash
+make pldm-build NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
+  WITH_CHISELDB=0 WITH_CONSTANTIN=0 DISABLE_DIFFTEST_RAM_DPIC=1
+```
+
+Build parameters:
+
+| Parameter | Meaning |
+|-----------|---------|
+| `NUM_CORES=N` | Must match the generated design |
+| `DIFFTEST_PERFCNT=1` | Enable DPI/performance-counter statistics |
+| `DISABLE_DIFFTEST_RAM_DPIC=1` | Use the RTL RAM path instead of RAM DPI calls |
+| `NO_DIFF=1` | Remove DiffTest transport at hardware compile time |
+| `SYNTHESIS=1` | Use the synthesis clock entry and omit testbench DPI |
+| `WITH_CHISELDB=0` / `WITH_CONSTANTIN=0` | Disable optional ChiselDB/ConstantIn paths |
+
+For non-synthesis builds, `pldm-build` first resolves `pldm-lib`, then runs
+`vlan` and `ixcom`. Clean `pldm-compile` before switching hardware modes.
+
+**Run**
+
+```bash
+make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
+```
+
+Run parameters:
+
+| Parameter | Meaning |
+|-----------|---------|
+| `+workload=FILE` | Linux image |
+| `+ram_size=SIZE` | Simulated memory size, for example `8GB` |
+| `+diff=FILE` | Enable REF checking |
+| `+no-diff` | Disable checking but keep hardware transport |
+| `+max-cycles=N` | Bounded cycle window; report it as a window, not completed workload |
+
+The four modes are selected as follows:
+
+```bash
+# full checking: build with NO_DIFF=0, run with +diff
+make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
+# transport only: build with NO_DIFF=0, run with +no-diff
+make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+# no transport: build with NO_DIFF=1, run with +no-diff
+make pldm-run NO_DIFF=1 SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+# synthesis: build with SYNTHESIS=1, run with +no-diff
+make pldm-run SYNTHESIS=1 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+```
+
+**Debug and waveforms**
+
+`pldm-debug` uses the same runtime arguments as `pldm-run`, but adds FSDB
+waveform probing through `scripts/palladium/run_debug.tcl`:
+
+```bash
+make pldm-debug SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
+```
+
+It writes `debug-*.log` and `pldm_db` under `build/pldm-compile`. The normal
+`pldm-run` path does not create a waveform database. `traceMemSize` in
+`run_debug.tcl` is measured in ns, so at a 50 MHz clock (20 ns per cycle):
+
+```text
+traceMemSize(ns) = cycles * 20
+cycles = traceMemSize(ns) / 20
+```
+
+For example, `traceMemSize 2000000` records 2 ms, or 100,000 cycles (0.1M
+cycles). A larger value increases waveform storage; it does not change the
+workload or the DUT clock.
+
+When only C++ or headers change and the hardware interface is unchanged, force
+the original whole-library build without running `vlan` or `ixcom`:
+
+```bash
+make -B pldm-lib NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
+  WITH_CHISELDB=0 WITH_CONSTANTIN=0
+```
+
+Replacing only the REF SO does not require a rebuild; pass the new path with
+`+diff` on the next run. The final `build/pldm-compile/run-*.log` contains
+`eval/sec`; divide it by two for cycles/s with this testbench clock. This is
+separate from the software PerfCnt KHz/KIPS report.
+
 ## 3. Debugging Artifacts
 
 ### 3.1 Console Output (Mismatch Log)
