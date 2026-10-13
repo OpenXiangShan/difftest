@@ -123,6 +123,10 @@ public:
   inline DifftestTrapEvent *get_trap_event() {
     return &(dut->trap);
   }
+
+  inline bool get_has_commit() const {
+    return num_commit > 0;
+  }
   uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE

@@ -1,12 +1,15 @@
 FPGA_TARGET = $(BUILD_DIR)/fpga-host
 FPGA_CSRC_DIR   = $(abspath ./src/test/csrc/fpga)
+EMU_CSRC_DIR    = $(abspath ./src/test/csrc/emu)
 FPGA_CONFIG_DIR = $(abspath ./config) # Reserve storage for xdma configuration
 
 DMA_CHANNELS ?= 1
 USE_SERIAL_PORT ?= 1
 
 FPGA_CXXFILES  = $(SIM_CXXFILES) $(shell find $(FPGA_CSRC_DIR) -name "*.cpp")
-FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -DCONFIG_DMA_CHANNELS=$(DMA_CHANNELS) -DFPGA_HOST
+# Task-local: reuse the emu-side periodic REF slicer on the FPGA front-end.
+FPGA_CXXFILES += $(EMU_CSRC_DIR)/ref_checkpoint.cpp
+FPGA_CXXFLAGS  = $(subst \\\",\", $(SIM_CXXFLAGS)) -I$(FPGA_CSRC_DIR) -I$(EMU_CSRC_DIR) -DCONFIG_DMA_CHANNELS=$(DMA_CHANNELS) -DFPGA_HOST
 FPGA_CXXFLAGS += -std=c++20 -O3 -flto -march=native -mtune=native
 FPGA_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
