@@ -399,7 +399,7 @@ When making multi-step changes to the hardware transport pipeline (e.g. modifyin
 
 - **One logical change per phase.** Each phase should modify one module or one aspect of the pipeline. Do not combine unrelated changes in the same phase.
 - **Gate on tests before proceeding.** A phase is complete only when all required tests pass. Never start the next phase on a failing baseline.
-- **Record progress when useful.** For long-running debugging, keep phase results and notes in the issue/PR, conversation, or another suitable location. Do not create a repository progress file solely because this guide mentions one.
+- **Maintain a log.** Record each phase's changes, test results, and debugging notes.
 
 ### Test Ladder
 

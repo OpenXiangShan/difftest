@@ -8,14 +8,11 @@ This document defines the standard workflow for complex difftest tasks — those
 Task received
   │
   ▼
-Create a plan when useful (location is flexible)
-  │
-  ▼
-Track progress when useful (location is flexible)
+Maintain a log
   │
   ▼
 ┌─ Per Phase ──────────────────────────┐
-│  Re-read plan + progress             │
+│  Re-read the log                    │
 │  │                                   │
 │  ▼                                   │
 │  Implement changes                   │
@@ -23,7 +20,7 @@ Track progress when useful (location is flexible)
 │  ▼                                   │
 │  Test (microbench → linux)           │
 │  │                                   │
-│  ├─ PASS → update progress, next     │
+│  ├─ PASS → update log, next          │
 │  └─ FAIL → debug, fix, re-test      │
 └──────────────────────────────────────┘
   │
@@ -36,76 +33,22 @@ Report completion / next steps when relevant
 
 ---
 
-## 1. Plan Document
+## 1. Task Log
 
-For a complex or iterative task, a written plan is recommended when it improves coordination or recovery. It is not required for every non-trivial task, and no particular repository path is required. An issue, PR description, conversation note, or local untracked file may be used instead. Do not add a plan file to `.github/` unless it is useful to reviewers or maintainers.
-
-### Suggested Sections
-
-| Section | Contents |
-|---------|----------|
-| **Header** | Task title, modification scope (which directories/files may be changed), target configuration, execution requirements |
-| **Design Rationale** | High-level description of *what* changes and *why*; core principles and key trade-offs |
-| **Prerequisites** | Environment variables, reference files, common build commands, common test commands, debug workflow |
-| **Phases** | One section per Phase: files to modify, specific changes with before/after logic, expected behavior, test instructions |
-| **Final Verification** | Acceptance test (typically 10-min linux) and exit criteria |
-
-### Guidelines
-
-- **Explicit build and test commands.** Every Phase must include the exact commands to build and test. Do not rely on "same as before" — copy the commands so each Phase is self-contained.
-- **Explicit pass/fail criteria.** For each test, state what constitutes PASS (e.g. `HIT GOOD TRAP`, no `ABORT`/`mismatch`) and FAIL.
-- **Logic description before code.** Describe the intended behavior change in words before showing code snippets. State the invariants that must hold.
-- **Scope boundaries.** Clearly state which files/directories are in-scope and which are off-limits (e.g. "do not modify `src/test/`").
-
-### Versioning
-
-If a written plan needs significant revision, update it in place or create a new version where the notes live. Keep old versions only when they provide useful review or debugging context.
+For complex tasks, maintain a log of changes, test results, and debugging progress. Update it as each phase completes, including failed attempts and relevant commands, metrics, and error messages.
 
 ---
 
-## 2. Progress Document
-
-When a plan is used, progress tracking is recommended for long-running or iterative work. It may be kept in the same note, issue/PR, conversation, or another suitable location; a separate progress file and a fixed `.github/` path are not required.
-
-### Suggested Sections Per Phase
-
-| Section | Contents |
-|---------|----------|
-| **Changes Made** | Bullet list of actual modifications (file, what changed) |
-| **Test Results** | Each test with PASS/FAIL, key metrics (instrCnt, cycleCnt, IPC, duration) |
-| **Issues & Debugging** | Problems encountered, root-cause analysis, attempted fixes (including failed ones), and final resolution |
-
-### Status Table
-
-Use a summary table at the top for quick overview:
-
-```markdown
-| Phase | Change Summary | Microbench | Linux 5min | Linux 10min |
-|-------|---------------|-----------|-----------|-------------|
-| 1     | Squasher Decoupled | ✅ 783387 | ✅ 0 errors | — |
-| 2     | DeltaSplitter Decoupled | ✅ 783387 | ✅ 0 errors | — |
-| Final | All changes | — | — | ✅ 600s |
-```
-
-### Guidelines
-
-- **Record failed attempts.** When a fix fails, document the attempt, the failure mode, and why it was wrong. This prevents repeating the same mistake and preserves debugging context.
-- **Update immediately.** Write progress entries as each phase completes, not at the end. If a conversation is interrupted, the available notes or issue/PR should provide recovery context.
-- **Include quantitative data.** Log exact instrCnt, cycleCnt, step numbers, error messages — not just "passed" or "failed".
-
----
-
-## 3. Execution Practices
+## 2. Execution Practices
 
 ### Context Recovery
 
 At the start of each conversation or after a context reset:
 
-1. **Re-read the plan, if one exists to restore the task definition and Phase structure.
-2. **Re-read the progress notes, if they exist to determine which Phase is current and what has already been tried.
-3. **Re-read relevant docs** (`difftest/docs/`) if the task involves unfamiliar modules.
+1. Re-read the log to restore the task definition, current phase, and previous attempts.
+2. **Re-read relevant docs** (`difftest/docs/`) if the task involves unfamiliar modules.
 
-Use the available task notes and repository state as the source of truth; do not invent missing progress.
+Use the log and repository state as the source of truth.
 
 ### Confirming Ambiguities
 
@@ -117,9 +60,7 @@ When encountering unclear requirements, design choices, or unexpected test resul
 
 ### End-of-Conversation Check
 
-At the end of a task, report open questions and next steps in the issue/PR or conversation when relevant. No follow-up document or prompt is required.
-
-
+At the end of a task, report the result, open questions, and next steps when relevant.
 
 ### Sub-Agent Delegation
 
@@ -136,7 +77,7 @@ The sub-agent should return only the **conclusion and key evidence** (e.g. "mism
 
 ---
 
-## 4. Debugging Escalation
+## 3. Debugging Escalation
 
 When a test fails, follow this escalation order:
 
