@@ -223,19 +223,29 @@ void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes);
 void copy_ram(uint64_t copy_ram_offset);
 uint64_t parse_ramsize(const char *ramsize_str);
 
+#if defined(WITH_DRAMSIM3) || defined(WITH_MCSIM)
+
+extern "C" uint64_t memory_response(bool isWrite);
+extern "C" bool memory_request(uint64_t address, uint32_t id, bool isWrite);
+
+#endif
+
 #ifdef WITH_DRAMSIM3
 
 void dramsim3_init(const char *config_file, const char *out_dir);
 void dramsim3_step();
 void dramsim3_finish();
 
-extern "C" uint64_t memory_response(bool isWrite);
-extern "C" bool memory_request(uint64_t address, uint32_t id, bool isWrite);
-
 struct dramsim3_meta {
   uint32_t id;
 };
 
+#endif
+
+#ifdef WITH_MCSIM
+void mcsim_backend_init();
+void mcsim_backend_step();
+void mcsim_backend_finish();
 #endif
 
 #endif

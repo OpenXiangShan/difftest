@@ -216,6 +216,12 @@ endif
 endif
 endif
 
+# External memory timing backends are mutually exclusive.
+MEMORY_BACKEND_COUNT := $(words $(filter 1,$(WITH_DRAMSIM3) $(WITH_MCSIM)))
+ifneq ($(filter-out 0 1,$(MEMORY_BACKEND_COUNT)),)
+$(error WITH_DRAMSIM3 and WITH_MCSIM are mutually exclusive)
+endif
+
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
 ifndef DRAMSIM3_HOME
@@ -224,6 +230,23 @@ endif
 SIM_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
 SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
 SIM_LDFLAGS  += -L$(DRAMSIM3_HOME)/build -ldramsim3
+endif
+
+# co-simulation with MCSim timing and DifftestMem data
+ifeq ($(WITH_MCSIM),1)
+ifndef MCSIM_HOME
+$(error MCSIM_HOME is not set)
+endif
+MCSIM_LIB ?= $(MCSIM_HOME)/build-verilator-lib/libmcsim.a
+MCSIM_CPU_FREQ_MHZ ?= 3000
+ifeq ($(wildcard $(MCSIM_HOME)/include/mcsim_c_api.h),)
+$(error MCSIM_HOME is invalid: $(MCSIM_HOME))
+endif
+ifeq ($(wildcard $(MCSIM_LIB)),)
+$(error MCSim library is missing. Run: make -C $(MCSIM_HOME) verilator-lib)
+endif
+SIM_CXXFLAGS += -I$(MCSIM_HOME)/include -DWITH_MCSIM -DMCSIM_CPU_FREQ_MHZ=$(MCSIM_CPU_FREQ_MHZ)
+SIM_LDFLAGS  += $(MCSIM_LIB)
 endif
 
 # out ipc info on temporary txt file, mainly applied to support qemu multi-core sampled data
