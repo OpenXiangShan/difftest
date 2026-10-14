@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "difftest.h"
+#include "arch_event.h"
 #include "common.h"
 #include "difftrace.h"
 #include "dut.h"
@@ -656,17 +657,16 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
-  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
-    // isLatter selects the former (0) or latter (1) event position.
-    if (dut->event.valid && i == dut->event.isLatter) {
+  for (int i = 0; i <= CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    if (dut->event.valid && i == arch_event_commit_position(dut->event, 0)) {
       if (int ret = arch_event_checker->step()) {
         return ret;
       }
-      // RTL already deasserts the exception lane's valid. Keep the explicit
-      // cleanup symmetric for former and latter events.
-      dut->commit[i].valid = 0;
+      if (i < CONFIG_DIFF_COMMIT_WIDTH) {
+        dut->commit[i].valid = 0;
+      }
       break;
-    } else if (dut->commit[i].valid) {
+    } else if (i < CONFIG_DIFF_COMMIT_WIDTH && dut->commit[i].valid) {
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
       if (i == 0) {
         dut_commit_batch_pc = dut->commit[i].pc;
