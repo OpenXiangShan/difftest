@@ -240,8 +240,8 @@ bool GbusTransport::c2h_probe_multiword_read(uint32_t words, uint64_t *elapsed_u
   if (elapsed_us)
     *elapsed_us = monotonic_us() - begin;
   if (rc != 1 || block.size() != words * 4) {
-    std::fprintf(stderr, "[fpga-host] GBus multi-word probe failed: count=%u rc=%d bytes=%zu (expected %u)\n",
-                 words, rc, block.size(), words * 4);
+    std::fprintf(stderr, "[fpga-host] GBus multi-word probe failed: count=%u rc=%d bytes=%zu (expected %u)\n", words,
+                 rc, block.size(), words * 4);
     std::exit(EXIT_FAILURE);
   }
   for (size_t i = 0; i < words; ++i) {
@@ -390,8 +390,8 @@ void GbusTransport::c2h_drain_sram_fifo() {
         block.clear();
         const int rc = gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + offset, chunk, block);
         if (rc != 1 || block.size() != static_cast<size_t>(chunk) * 4) {
-          std::fprintf(stderr, "[fpga-host] GBus burst read failed rc=%d requested=%u actual=%zu\n",
-                       rc, chunk * 4, block.size());
+          std::fprintf(stderr, "[fpga-host] GBus burst read failed rc=%d requested=%u actual=%zu\n", rc, chunk * 4,
+                       block.size());
           std::exit(EXIT_FAILURE);
         }
         burst_ok = true;
@@ -463,7 +463,8 @@ void GbusTransport::c2h_drain_dma_window() {
         usleep(c2h_poll_us_);
         continue;
       }
-      if (!alive()) return;
+      if (!alive())
+        return;
       // A FILL that arrives before the startup stream-reset window releases is
       // consumed without any state change or fault evidence and is never
       // replayed by the RTL.  Re-issue the same logical control, but only when
@@ -478,10 +479,12 @@ void GbusTransport::c2h_drain_dma_window() {
         c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_START_FILL);
         const auto deadline = Clock::now() + std::chrono::seconds(2);
         do {
-          if (!alive()) return;
+          if (!alive())
+            return;
           status = c2h_reg_read(GBUS_REG_C2H_STATUS);
           check_status(status);
-          if ((status & GBUS_C2H_STATUS_FROZEN) && !(status & busy)) break;
+          if ((status & GBUS_C2H_STATUS_FROZEN) && !(status & busy))
+            break;
           if (Clock::now() >= deadline) {
             // A fill actually in progress (FILLING/ACTIVE latched) is a real
             // timeout; only a control that left no fill state at all can be
@@ -489,8 +492,8 @@ void GbusTransport::c2h_drain_dma_window() {
             const uint32_t evidence_count = c2h_reg_read(GBUS_REG_C2H_CTRL_COUNT);
             const uint32_t evidence_data = c2h_reg_read(GBUS_REG_C2H_CTRL_DATA);
             const uint32_t bad_ctrl = c2h_reg_read(GBUS_REG_C2H_BAD_CTRL);
-            if ((status & busy) || evidence_count != ctrl_count + 1U ||
-                evidence_data != GBUS_C2H_CTRL_START_FILL || (bad_ctrl & GBUS_C2H_BAD_CTRL_VALID))
+            if ((status & busy) || evidence_count != ctrl_count + 1U || evidence_data != GBUS_C2H_CTRL_START_FILL ||
+                (bad_ctrl & GBUS_C2H_BAD_CTRL_VALID))
               fail("fill deadline exceeded", status, 0);
             if (++reissues > max_fill_reissues)
               fail("fill window never released", status, 0);
@@ -502,7 +505,8 @@ void GbusTransport::c2h_drain_dma_window() {
           usleep(c2h_poll_us_);
         } while (alive());
         if (!(status & GBUS_C2H_STATUS_FROZEN)) {
-          if (!alive()) return;
+          if (!alive())
+            return;
           continue;
         }
         if (status & busy) {
@@ -510,18 +514,22 @@ void GbusTransport::c2h_drain_dma_window() {
           // to the ordinary completion wait below.
           const auto finish_deadline = Clock::now() + std::chrono::seconds(2);
           do {
-            if (!alive()) return;
+            if (!alive())
+              return;
             status = c2h_reg_read(GBUS_REG_C2H_STATUS);
             check_status(status);
-            if ((status & GBUS_C2H_STATUS_FROZEN) && !(status & busy)) break;
-            if (Clock::now() >= finish_deadline) fail("fill deadline exceeded", status, 0);
+            if ((status & GBUS_C2H_STATUS_FROZEN) && !(status & busy))
+              break;
+            if (Clock::now() >= finish_deadline)
+              fail("fill deadline exceeded", status, 0);
             usleep(c2h_poll_us_);
           } while (alive());
         }
         break;
       }
     }
-    if (!alive()) return;
+    if (!alive())
+      return;
     const uint32_t sequence = c2h_reg_read(GBUS_REG_C2H_SEQ);
     const size_t valid = ((status >> GBUS_C2H_STATUS_STAGED_SHIFT) & GBUS_C2H_STATUS_STAGED_MASK) * 4;
     if (!valid || valid > capacity || valid % 32 || (have_sequence && sequence != last_sequence + 1U))
@@ -546,13 +554,14 @@ void GbusTransport::c2h_drain_dma_window() {
           const uint32_t before = c2h_reg_read(GBUS_REG_C2H_AR_COUNT);
           std::vector<uint8_t> block;
           const uint64_t begin = monotonic_us();
-          const int rc = gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, address, count,
-                                       channel_, port_, block);
+          const int rc =
+              gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, address, count, channel_, port_, block);
           const uint64_t elapsed = monotonic_us() - begin;
-          if (!alive()) return;
+          if (!alive())
+            return;
           if (rc != 1 || block.size() != count || elapsed > 10000000ULL) {
-            std::fprintf(stderr, "[fpga-host] GBD1 DMA failed rc=%d addr=0x%llx requested=%zu actual=%zu us=%llu\n",
-                         rc, static_cast<unsigned long long>(address), count, block.size(),
+            std::fprintf(stderr, "[fpga-host] GBD1 DMA failed rc=%d addr=0x%llx requested=%zu actual=%zu us=%llu\n", rc,
+                         static_cast<unsigned long long>(address), count, block.size(),
                          static_cast<unsigned long long>(elapsed));
             fail("DMA capture failed; no further transport I/O", status, sequence);
           }
@@ -560,11 +569,14 @@ void GbusTransport::c2h_drain_dma_window() {
           do {
             status = c2h_reg_read(GBUS_REG_C2H_STATUS);
             check_status(status);
-            if (!(status & GBUS_C2H_STATUS_ACTIVE)) break;
-            if (Clock::now() >= deadline) fail("DMA active deadline exceeded", status, sequence);
+            if (!(status & GBUS_C2H_STATUS_ACTIVE))
+              break;
+            if (Clock::now() >= deadline)
+              fail("DMA active deadline exceeded", status, sequence);
             usleep(c2h_poll_us_);
           } while (alive());
-          if (!alive()) return;
+          if (!alive())
+            return;
           stable();
           const uint32_t ar_count = c2h_reg_read(GBUS_REG_C2H_AR_COUNT);
           const uint32_t ar_address = c2h_reg_read(GBUS_REG_C2H_AR_ADDR);
@@ -572,15 +584,16 @@ void GbusTransport::c2h_drain_dma_window() {
           const uint32_t burst = (attrs >> 22) & 3U;
           const uint32_t size = (attrs >> 19) & 7U;
           const uint32_t len = (attrs >> 15) & 15U;
-          if (ar_count == before || ar_count - before > count / 32 || burst != 1 || size != 5 ||
-              ar_address < address || static_cast<uint64_t>(ar_address) + (len + 1U) * 32U != address + count)
+          if (ar_count == before || ar_count - before > count / 32 || burst != 1 || size != 5 || ar_address < address ||
+              static_cast<uint64_t>(ar_address) + (len + 1U) * 32U != address + count)
             fail("DMA completion lacks matching AXI address evidence", status, sequence);
           if (!banks)
-            std::fprintf(stderr, "[fpga-host] GBD1 AXI verified addr=0x%08x len=%u count=%u bytes=%zu\n",
-                         ar_address, len, ar_count, count);
+            std::fprintf(stderr, "[fpga-host] GBD1 AXI verified addr=0x%08x len=%u count=%u bytes=%zu\n", ar_address,
+                         len, ar_count, count);
           window.insert(window.end(), block.begin(), block.end());
         }
-        if (!alive()) return;
+        if (!alive())
+          return;
         offset += count;
       }
     }
@@ -589,29 +602,36 @@ void GbusTransport::c2h_drain_dma_window() {
       mirror.reserve(valid);
       for (size_t offset = 0; offset < valid && alive(); offset += 4)
         append_le32(mirror, c2h_reg_read(GBUS_REG_C2H_DATA + offset));
-      if (!alive()) return;
+      if (!alive())
+        return;
       stable();
       if (c2h_axi_dma_) {
-        if (mirror != window) fail("DMA/config mirror mismatch", status, sequence);
+        if (mirror != window)
+          fail("DMA/config mirror mismatch", status, sequence);
         std::fprintf(stderr, "[fpga-host] GBD1 first frozen bank DMA/config mirror verified seq=%u bytes=%zu\n",
                      sequence, valid);
       } else {
         window.swap(mirror);
       }
     }
-    if (!alive()) return;
+    if (!alive())
+      return;
     stable();
     c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_ACK);
     const auto ack_deadline = Clock::now() + std::chrono::seconds(2);
     do {
-      if (!alive()) return;
+      if (!alive())
+        return;
       status = c2h_reg_read(GBUS_REG_C2H_STATUS);
       check_status(status);
-      if (!(status & (GBUS_C2H_STATUS_FROZEN | busy))) break;
-      if (Clock::now() >= ack_deadline) fail("ACK deadline exceeded", status, sequence);
+      if (!(status & (GBUS_C2H_STATUS_FROZEN | busy)))
+        break;
+      if (Clock::now() >= ack_deadline)
+        fail("ACK deadline exceeded", status, sequence);
       usleep(c2h_poll_us_);
     } while (alive());
-    if (!alive()) return;
+    if (!alive())
+      return;
     last_sequence = sequence;
     have_sequence = true;
     accumulator.insert(accumulator.end(), window.begin(), window.end());
