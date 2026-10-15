@@ -853,6 +853,26 @@ object DifftestModule {
     for ((className, cppInstances) <- eventBundles.sortBy(_._2.head.desiredModuleName)) {
       difftestCpp += f"  ${toCppField(className, cppInstances)};"
     }
+    difftestCpp += ""
+    difftestCpp += "#ifdef CONFIG_DIFFTEST_REPLAY"
+    difftestCpp += "  // Discard input events while retaining cached register and CSR state."
+    difftestCpp += "  void clear_event_valid() {"
+    for ((_, cppInstances) <- eventBundles.sortBy(_._2.head.desiredModuleName)) {
+      val bundleType = cppInstances.head
+      val instanceName = bundleType.desiredCppName
+      if (bundleType.bits.hasValid && !bundleType.isFlatten) {
+        if (bundleType.isIndexed) {
+          difftestCpp += s"    for (auto &event: $instanceName) event.valid = false;"
+        } else {
+          difftestCpp += s"    $instanceName.valid = false;"
+        }
+      } else if (bundleType.isInstanceOf[TrapEvent]) {
+        difftestCpp += s"    $instanceName.hasTrap = false;"
+        difftestCpp += s"    $instanceName.hasWFI = false;"
+      }
+    }
+    difftestCpp += "  }"
+    difftestCpp += "#endif // CONFIG_DIFFTEST_REPLAY"
     difftestCpp += "} DiffTestState;"
     difftestCpp += ""
 
