@@ -102,6 +102,48 @@ object Preprocess {
 
     bundles.filterNot(b => Seq("pregs_", "rat_").exists(s => b.desiredCppName.contains(s))) ++ archRegs ++ commitDatas
   }
+
+  def addUArchInfo(bundles: Seq[DifftestBundle], valid: Bool): Seq[DifftestBundle] = {
+    val probes = bundles.collect { case probe: DiffUArchProbe[_] => probe }
+    if (probes.isEmpty) {
+      bundles
+    } else {
+      val numCores = bundles.count(_.isUniqueIdentifier)
+      val traps = bundles.collect { case trap: DiffTrapEvent => trap }
+      require(numCores > 0, "DiffUArchProbe requires DiffArchEvent to identify cores")
+      require(traps.length == numCores, "DiffUArchProbe requires one DiffTrapEvent per core")
+      require(probes.length % numCores == 0, "DiffUArchProbe instances must be symmetric across cores")
+
+      val probesPerCore = probes.length / numCores
+      require(probesPerCore <= (1 << 16), "DiffUArchProbe uarchId exceeds 16 bits")
+      val layouts = probes.grouped(probesPerCore).map(_.map(_.desiredCppName)).toSeq
+      require(layouts.tail.forall(_ == layouts.head), "DiffUArchProbe layout must be symmetric across cores")
+      layouts.head.groupBy(identity).foreach { case (name, instances) =>
+        require(instances.length <= (1 << 8), s"$name index exceeds 8 bits")
+      }
+
+      val processed = probes.zipWithIndex.map { case (probe, globalId) =>
+        val localId = globalId % probesPerCore
+        val coreBase = globalId - localId
+        val typeIndex = probes.slice(coreBase, globalId).count(_.desiredCppName == probe.desiredCppName)
+        val coreMatches = traps.map(_.coreid === probe.coreid)
+        val result = WireInit(probe)
+        result.uarchId := localId.U
+        result.index := typeIndex.U
+        result.cycleCnt := Mux1H(coreMatches, traps.map(_.cycleCnt))
+        when(valid && probe.valid) {
+          assert(PopCount(coreMatches) === 1.U, "DiffUArchProbe coreid must match exactly one DiffTrapEvent")
+        }
+        result
+      }
+
+      val processedIterator = processed.iterator
+      bundles.map {
+        case _: DiffUArchProbe[_] => processedIterator.next()
+        case bundle               => bundle
+      }
+    }
+  }
 }
 
 class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Module {
@@ -123,7 +165,7 @@ class PreprocessEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) ex
     replaceReg
   }
 
-  val preprocessed = MixedVecInit(skipLoad.toSeq)
+  val preprocessed = MixedVecInit(Preprocess.addUArchInfo(skipLoad, pipelined.valid).toSeq)
   val out = IO(Decoupled(chiselTypeOf(preprocessed)))
   pipelined.ready := out.ready
   out.valid := pipelined.valid
