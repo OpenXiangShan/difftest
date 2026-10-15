@@ -59,8 +59,8 @@ struct MmaVerificationBuffer {
   uint8_t *src3;                  // Pointer to source matrix 3 data (accumulator)
   uint8_t *dut_result;            // Pointer to DUT result data
 #ifdef CONFIG_DIFFTEST_REPLAY
-  uint64_t sequence = 0;           // Hardware-ROB commit sequence for replay boundaries
-#endif // CONFIG_DIFFTEST_REPLAY
+  uint64_t sequence = 0; // Hardware-ROB commit sequence for replay boundaries
+#endif                   // CONFIG_DIFFTEST_REPLAY
 };
 
 /**

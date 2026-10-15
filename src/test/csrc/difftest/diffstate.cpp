@@ -101,7 +101,7 @@ void DiffState::replay_restore() {
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 void DiffState::release_matrix_sw_rob(std::deque<AmeInstRobEntry> &rob) {
-  for (auto &entry : rob) {
+  for (auto &entry: rob) {
     delete[] entry.res;
     entry.res = nullptr;
   }
@@ -111,7 +111,7 @@ void DiffState::release_matrix_sw_rob(std::deque<AmeInstRobEntry> &rob) {
 #ifdef CONFIG_DIFFTEST_REPLAY
 void DiffState::copy_matrix_sw_rob(std::deque<AmeInstRobEntry> &dst, const std::deque<AmeInstRobEntry> &src) {
   release_matrix_sw_rob(dst);
-  for (const auto &src_entry : src) {
+  for (const auto &src_entry: src) {
     AmeInstRobEntry dst_entry = src_entry;
     if (src_entry.res != nullptr) {
       Assert(src_entry.res_words > 0, "Matrix replay entry has a result without a size");

@@ -404,6 +404,7 @@ int AmuExecChecker::commit_ready_prefix() {
 #ifdef CONFIG_DIFFTEST_REPLAY
           buffer->sequence = iter->sequence;
 #endif // CONFIG_DIFFTEST_REPLAY
+
           // Store DUT result in the buffer
           memcpy(buffer->dut_result, iter->res,
                  amu_event.mtilem * amu_event.mtilen * get_element_size(amu_event.typed));
