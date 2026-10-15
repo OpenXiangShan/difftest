@@ -848,7 +848,7 @@ object DifftestModule {
     difftestCpp += "} DiffTestRegState;"
     difftestCpp += ""
     // create DiffTestState (RegState + others)
-    difftestCpp += "typedef struct {"
+    difftestCpp += "typedef struct DiffTestState {"
     difftestCpp += "  DiffTestRegState regs;"
     for ((className, cppInstances) <- eventBundles.sortBy(_._2.head.desiredModuleName)) {
       difftestCpp += f"  ${toCppField(className, cppInstances)};"
