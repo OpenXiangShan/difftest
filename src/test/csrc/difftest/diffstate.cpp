@@ -16,6 +16,7 @@
 
 #include "diffstate.h"
 #include "spikedasm.h"
+#include <algorithm>
 
 void CommitTrace::display(bool use_spike) {
   Info("%s pc %016lx inst %08x", get_type(), pc, inst);
@@ -61,6 +62,12 @@ DiffState::DiffState(int coreid) : DiffStateValues(coreid), use_spike(spike_vali
 #ifdef CONFIG_DIFFTEST_REPLAY
 void DiffState::replay_snapshot() {
   replay_state = static_cast<const DiffStateValues &>(*this);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  copy_matrix_sw_rob(replay_matrix_sw_rob, matrix_sw_rob);
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  replay_msync_event_queue = msync_event_queue;
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 }
 
 void DiffState::replay_restore() {
@@ -78,8 +85,11 @@ void DiffState::replay_restore() {
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
   load_event_queue = {};
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  copy_matrix_sw_rob(matrix_sw_rob, replay_matrix_sw_rob);
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
-  msync_event_queue = {};
+  msync_event_queue = replay_msync_event_queue;
 #endif // CONFIG_DIFFTEST_MSYNCEVENT
   retire_group_queue = {};
   while (!commit_trace.empty()) {
@@ -88,6 +98,25 @@ void DiffState::replay_restore() {
   }
 }
 #endif // CONFIG_DIFFTEST_REPLAY
+
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_REPLAY)
+void DiffState::copy_matrix_sw_rob(std::deque<AmeInstRobEntry> &dst, const std::deque<AmeInstRobEntry> &src) {
+  dst.clear();
+  for (const auto &src_entry: src) {
+    AmeInstRobEntry dst_entry(src_entry.amu_event, src_entry.sequence);
+    dst_entry.state = src_entry.state;
+    dst_entry.hash = src_entry.hash;
+    if (src_entry.res) {
+      const size_t bytes =
+          src_entry.amu_event.md < 4 ? CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES : CONFIG_DIFF_AMU_C_REG_SIZE_BYTES;
+      const size_t words = (bytes + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+      dst_entry.res = MatrixResult(new uint64_t[words]);
+      std::copy_n(src_entry.res.get(), words, dst_entry.res.get());
+    }
+    dst.push_back(std::move(dst_entry));
+  }
+}
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT && CONFIG_DIFFTEST_REPLAY
 
 static uint64_t get_int_data(const DiffTestState *state, int index) {
 #ifdef CONFIG_DIFFTEST_PHYINTREGSTATE
