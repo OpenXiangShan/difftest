@@ -57,7 +57,7 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
   info.valid := needStore
   info.trace_head := ptr
   info.trace_size := 1.U
-  when(needStore && !control.replay) {
+  when(in.fire && needStore && !control.replay) {
     buffer(ptr) := appendIn
     ptr := ptr + 1.U
     when(ptr === (config.replaySize - 1).U) {
@@ -71,7 +71,7 @@ class ReplayEndpoint(bundles: Seq[DifftestBundle], config: GatewayConfig) extend
     when(!in_replay) {
       in_replay := true.B
       ptr := control.replay_head // position of first corresponding replay data
-    }.otherwise {
+    }.elsewhen(out.fire) {
       ptr := ptr + 1.U
       when(ptr === (config.replaySize - 1).U) {
         ptr := 0.U
