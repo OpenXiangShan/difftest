@@ -25,6 +25,7 @@ private:
   void c2h_reg_write(uint64_t offset, uint32_t value);
   bool c2h_probe_multiword_read(uint32_t words, uint64_t *elapsed_us);
   void c2h_drain_sram_fifo();
+  void c2h_drain_dma_window();
   void c2h_drain_ddr_ring();
   void c2h_dispatch_range(const uint8_t *packet, size_t packet_size);
 
@@ -52,9 +53,11 @@ private:
   // The on-chip GBS1 register window is the default C2H interface.
   // GBUS_C2H_SRAM=0 selects the legacy DDR ring.
   bool c2h_sram_ = true;
-  // Words requested per gbus_read call when draining the staging window.  This
-  // is resolved at run time from a read-only probe of the config BAR, because
-  // the runtime's contract for count > 1 was never verified on this platform.
+  bool c2h_axi_dma_ = false;
+  bool c2h_verify_first_bank_ = true;
+  uint32_t c2h_dma_chunk_bytes_ = 256;
+  uint32_t c2h_idle_timeout_sec_ = 30;
+  // Multi-word reads require explicit selection on unverified runtime releases.
   uint32_t c2h_burst_words_ = 1;
   uint32_t c2h_poll_us_ = 1000;
   std::atomic<bool> running_{false};
