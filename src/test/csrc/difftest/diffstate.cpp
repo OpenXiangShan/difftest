@@ -16,6 +16,7 @@
 
 #include "diffstate.h"
 #include "spikedasm.h"
+#include <algorithm>
 
 void CommitTrace::display(bool use_spike) {
   Info("%s pc %016lx inst %08x", get_type(), pc, inst);
@@ -61,6 +62,12 @@ DiffState::DiffState(int coreid) : DiffStateValues(coreid), use_spike(spike_vali
 #ifdef CONFIG_DIFFTEST_REPLAY
 void DiffState::replay_snapshot() {
   replay_state = static_cast<const DiffStateValues &>(*this);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  copy_matrix_sw_rob(replay_matrix_sw_rob, matrix_sw_rob);
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  replay_msync_event_queue = msync_event_queue;
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 }
 
 void DiffState::replay_restore() {
@@ -78,8 +85,11 @@ void DiffState::replay_restore() {
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
   load_event_queue = {};
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  copy_matrix_sw_rob(matrix_sw_rob, replay_matrix_sw_rob);
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
-  msync_event_queue = {};
+  msync_event_queue = replay_msync_event_queue;
 #endif // CONFIG_DIFFTEST_MSYNCEVENT
   retire_group_queue = {};
   while (!commit_trace.empty()) {
@@ -88,6 +98,31 @@ void DiffState::replay_restore() {
   }
 }
 #endif // CONFIG_DIFFTEST_REPLAY
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+void DiffState::release_matrix_sw_rob(std::deque<AmeInstRobEntry> &rob) {
+  for (auto &entry : rob) {
+    delete[] entry.res;
+    entry.res = nullptr;
+  }
+  rob.clear();
+}
+
+#ifdef CONFIG_DIFFTEST_REPLAY
+void DiffState::copy_matrix_sw_rob(std::deque<AmeInstRobEntry> &dst, const std::deque<AmeInstRobEntry> &src) {
+  release_matrix_sw_rob(dst);
+  for (const auto &src_entry : src) {
+    AmeInstRobEntry dst_entry = src_entry;
+    if (src_entry.res != nullptr) {
+      Assert(src_entry.res_words > 0, "Matrix replay entry has a result without a size");
+      dst_entry.res = new uint64_t[src_entry.res_words];
+      std::copy_n(src_entry.res, src_entry.res_words, dst_entry.res);
+    }
+    dst.push_back(dst_entry);
+  }
+}
+#endif // CONFIG_DIFFTEST_REPLAY
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 static uint64_t get_int_data(const DiffTestState *state, int index) {
 #ifdef CONFIG_DIFFTEST_PHYINTREGSTATE

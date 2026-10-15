@@ -195,7 +195,11 @@ int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
     return STATE_ERROR;
   }
 
+#ifdef CONFIG_DIFFTEST_REPLAY
+  state->matrix_sw_rob.emplace_back(probe, ++state->matrix_commit_sequence);
+#else
   state->matrix_sw_rob.emplace_back(probe);
+#endif // CONFIG_DIFFTEST_REPLAY
   return STATE_OK;
 }
 
@@ -205,10 +209,6 @@ int AmuCtrlChecker::do_step() {
     if (iter->state == DiffState::WAIT_REF_COMMIT) {
       const DifftestAmuCtrlEvent dut_event = iter->amu_event;
       DifftestAmuCtrlEvent ref_event = dut_event;
-      // NOTE:
-      // AMU ctrl is treated as a non-squashable, ordering-sensitive event.
-      // Under squash mode, it still requires one-to-one synchronization with REF.
-      // Therefore "no available REF event" (-1) is an error instead of a retriable case.
       struct AmuCtrlEvent ref_event_nemu = to_nemu_amu_ctrl(ref_event);
       int check_res = proxy->get_amu_ctrl_event(&ref_event_nemu);
       from_nemu_amu_ctrl(ref_event, ref_event_nemu);
@@ -401,6 +401,9 @@ int AmuExecChecker::commit_ready_prefix() {
         case 0: // MMA
           // Allocate buffer for MMA verification
           buffer = mma_verifier->allocate_buffer(&amu_event);
+#ifdef CONFIG_DIFFTEST_REPLAY
+          buffer->sequence = iter->sequence;
+#endif // CONFIG_DIFFTEST_REPLAY
           // Store DUT result in the buffer
           memcpy(buffer->dut_result, iter->res,
                  amu_event.mtilem * amu_event.mtilen * get_element_size(amu_event.typed));
