@@ -18,7 +18,7 @@ package difftest.gateway
 import chisel3._
 import chisel3.util._
 import difftest._
-import difftest.common.DifftestWiring
+import difftest.common.{DifftestPerf, DifftestWiring}
 import difftest.util.Delayer
 import difftest.dpic.DPIC
 import difftest.preprocess.Preprocess
@@ -286,6 +286,13 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     when(ready) { valid := false.B } // fire to clear valid
     when(ce) { valid := true.B } // setup valid for next cycle
     ce := (ready && valid) || reset.asBool
+    if (config.hasBuiltInPerf) {
+      val ungated = !reset.asBool
+      DifftestPerf("ClockEnable", (ungated && ce).asUInt)
+      DifftestPerf("ClockDisable", (ungated && !ce).asUInt)
+      DifftestPerf("GatewayNotReady", (ungated && !ready).asUInt)
+      DifftestPerf("GatewayStall", (ungated && valid && !ready).asUInt)
+    }
   }
 
   if (config.traceLoad) {
