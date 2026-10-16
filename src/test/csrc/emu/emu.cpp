@@ -153,6 +153,12 @@ Emulator::Emulator(int argc, const char *argv[])
     copy_ram(args.copy_ram_offset);
   }
 
+#ifdef WITH_BAIYANG
+  if (!baiyang_bind_difftest_ram(PMEM_BASE)) {
+    printf("Warning: failed to bind Baiyang to difftest RAM backend\n");
+  }
+#endif
+
 #ifdef ENABLE_CHISEL_DB
   init_db(args.dump_db, (args.select_db != NULL), args.select_db);
 #endif
