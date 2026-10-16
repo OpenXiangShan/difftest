@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -21,6 +21,7 @@
 #include "fpga_transport.h"
 #include "mpool.h"
 #include <atomic>
+#include <memory>
 #include <queue>
 #include <signal.h>
 #include <stdbool.h>
@@ -70,8 +71,17 @@ typedef struct __attribute__((packed)) {
 
 class FpgaXdma : public FpgaTransport {
 public:
-  FpgaXdma();
+  FpgaXdma(bool fork_readers = false, size_t pool_slots = NUM_BLOCKS);
   ~FpgaXdma();
+
+#ifdef USE_THREAD_MEMPOOL
+  // Consume published packets and deliver decoded batches through v_difftest_Batch.
+  void process_packets();
+  void set_packet_callbacks(bool (*idle)(), void (*abort)()) {
+    packet_idle = idle;
+    packet_abort = abort;
+  }
+#endif
 
   void start(bool enable_diff) override {
     running = true;
@@ -84,7 +94,9 @@ public:
 #ifdef USE_THREAD_MEMPOOL
       start_transmit_thread();
       while (running && signal_num == 0) {
-        usleep(10000);
+        if (packet_idle && packet_idle())
+          break;
+        usleep(1000);
       }
       running = false;
       stop_thansmit_thread();
@@ -97,7 +109,8 @@ public:
   void stop() override {
     running = false;
 #ifdef USE_THREAD_MEMPOOL
-    thread_cv.notify_one();
+    if (packet_pool)
+      packet_pool->stop_waiting();
 #endif // USE_THREAD_MEMPOOL
   }
 
@@ -117,7 +130,8 @@ public:
   void h2c_load_workload(const void *payload, uint64_t size) override;
 
 private:
-  bool running = false;
+  // Main and parser stop this pipeline; receivers observe the same flag.
+  std::atomic<bool> running{false};
   int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
 #ifdef CONFIG_USE_XDMA_H2C
   int xdma_h2c_fd;
@@ -127,16 +141,17 @@ private:
   uint32_t device_read(bool is_bypass, uint64_t addr);
 
 #ifdef USE_THREAD_MEMPOOL
-  std::mutex thread_mtx;
-  std::condition_variable thread_cv;
-  MemoryIdxPool xdma_mempool;
+  bool (*packet_idle)() = nullptr;
+  void (*packet_abort)() = nullptr;
+  std::unique_ptr<MemoryIdxPool> packet_pool;
+  bool fork_readers = false;
+  std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;
   // thread api
   void start_transmit_thread();
   void stop_thansmit_thread();
   void read_xdma_thread(int channel);
-  void write_difftest_thread();
 #else
   void read_and_process();
 #endif // USE_THREAD_MEMPOOL

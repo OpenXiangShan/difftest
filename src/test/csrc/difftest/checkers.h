@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2025 Beijing Institute of Open Source Chip
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -22,6 +22,11 @@
 #include "matrix_store_tracker.h"
 #include "refproxy.h"
 #include "stopwatch.h"
+#include <type_traits>
+class RefDriveExecutor;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#include "fork_ref/ref_drive.h"
+#endif
 
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
 #include <cxxabi.h>
@@ -64,6 +69,9 @@ public:
   }
 
   virtual int do_step() = 0;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  virtual void discard() {}
+#endif
 
   static const int STATE_OK = 0;
   static const int STATE_DIFF = 1;
@@ -107,6 +115,12 @@ public:
       : DiffTestChecker(state, proxy), get_probe(std::move(get_probe)) {}
   virtual ~ProbeChecker() = default;
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  void discard() override {
+    clear_valid(get_probe());
+  }
+#endif
+
   virtual int do_step() override {
     Probe &probe = get_probe();
     if (get_valid(probe)) {
@@ -127,10 +141,33 @@ protected:
   virtual int check(const Probe &probe) = 0;
 };
 
-class ArchEventChecker : public ProbeChecker<DifftestArchEvent> {
+template <typename Probe> class SyncChecker : public ProbeChecker<Probe> {
+public:
+  using ProbeChecker<Probe>::ProbeChecker;
+
+  template <typename Event> int run(Event &probe, RefDriveExecutor *executor = nullptr) {
+    if (!this->get_valid(probe))
+      return this->STATE_OK;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+    if (executor && !executor->flush())
+      return this->STATE_ERROR;
+#endif
+    int ret = this->check(probe);
+    // Trace replay reads its probes; online checking consumes them.
+    if constexpr (!std::is_const_v<Event>)
+      this->clear_valid(probe);
+    return ret;
+  }
+
+  int do_step() override {
+    return run(this->get_probe());
+  }
+};
+
+class ArchEventChecker : public SyncChecker<DifftestArchEvent> {
 public:
   ArchEventChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy, GetRegsFn get_regs)
-      : ProbeChecker<DifftestArchEvent>(get_probe, state, proxy), get_regs(std::move(get_regs)) {}
+      : SyncChecker<DifftestArchEvent>(get_probe, state, proxy), get_regs(std::move(get_regs)) {}
 
 private:
   GetRegsFn get_regs;
@@ -148,6 +185,8 @@ public:
   FirstInstrCommitChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy, GetRegsFn get_regs)
       : ProbeChecker<DifftestInstrCommit>(get_probe, state, proxy), get_regs(std::move(get_regs)) {}
 
+  static void init_ref(RefProxy &proxy, const DiffTestRegState &regs);
+
 private:
   GetRegsFn get_regs;
 
@@ -155,6 +194,21 @@ private:
   void clear_valid(DifftestInstrCommit &probe) override;
   int check(const DifftestInstrCommit &probe) override;
 };
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+class Difftest;
+class FastRefChecker : public DiffTestChecker {
+public:
+  FastRefChecker(Difftest *self, DiffState *state, RefProxy *proxy)
+      : DiffTestChecker(state, proxy), self(self), driver(proxy, state) {}
+  int do_step() override;
+  int flush();
+
+private:
+  Difftest *self;
+  RefDriveExecutor driver;
+};
+#endif
 
 class InstrCommitChecker : public ProbeChecker<DifftestInstrCommit> {
 public:
@@ -198,10 +252,10 @@ private:
 };
 
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-class LrScChecker : public ProbeChecker<DifftestLrScEvent> {
+class LrScChecker : public SyncChecker<DifftestLrScEvent> {
 public:
   LrScChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
-      : ProbeChecker<DifftestLrScEvent>(get_probe, state, proxy) {}
+      : SyncChecker<DifftestLrScEvent>(get_probe, state, proxy) {}
 
 private:
   bool get_valid(const DifftestLrScEvent &probe) override;
@@ -265,10 +319,10 @@ private:
 #endif // CONFIG_DIFFTEST_REFILLEVENT
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-class NonRegInterruptPendingChecker : public ProbeChecker<DifftestNonRegInterruptPendingEvent> {
+class NonRegInterruptPendingChecker : public SyncChecker<DifftestNonRegInterruptPendingEvent> {
 public:
   NonRegInterruptPendingChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
-      : ProbeChecker<DifftestNonRegInterruptPendingEvent>(get_probe, state, proxy) {}
+      : SyncChecker<DifftestNonRegInterruptPendingEvent>(get_probe, state, proxy) {}
 
 private:
   bool get_valid(const DifftestNonRegInterruptPendingEvent &probe) override;
@@ -278,10 +332,10 @@ private:
 #endif // CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
 
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-class MhpmeventOverflowChecker : public ProbeChecker<DifftestMhpmeventOverflowEvent> {
+class MhpmeventOverflowChecker : public SyncChecker<DifftestMhpmeventOverflowEvent> {
 public:
   MhpmeventOverflowChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
-      : ProbeChecker<DifftestMhpmeventOverflowEvent>(get_probe, state, proxy) {}
+      : SyncChecker<DifftestMhpmeventOverflowEvent>(get_probe, state, proxy) {}
 
 private:
   bool get_valid(const DifftestMhpmeventOverflowEvent &probe) override;
@@ -291,10 +345,10 @@ private:
 #endif // CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
 
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-class AiaChecker : public ProbeChecker<DifftestSyncAIAEvent> {
+class AiaChecker : public SyncChecker<DifftestSyncAIAEvent> {
 public:
   AiaChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
-      : ProbeChecker<DifftestSyncAIAEvent>(get_probe, state, proxy) {}
+      : SyncChecker<DifftestSyncAIAEvent>(get_probe, state, proxy) {}
 
 private:
   bool get_valid(const DifftestSyncAIAEvent &probe) override;
@@ -304,10 +358,10 @@ private:
 #endif // CONFIG_DIFFTEST_SYNCAIAEVENT
 
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-class CustomMflushpwrChecker : public ProbeChecker<DifftestSyncCustomMflushpwrEvent> {
+class CustomMflushpwrChecker : public SyncChecker<DifftestSyncCustomMflushpwrEvent> {
 public:
   CustomMflushpwrChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
-      : ProbeChecker<DifftestSyncCustomMflushpwrEvent>(get_probe, state, proxy) {}
+      : SyncChecker<DifftestSyncCustomMflushpwrEvent>(get_probe, state, proxy) {}
 
 private:
   bool get_valid(const DifftestSyncCustomMflushpwrEvent &probe) override;
@@ -317,10 +371,10 @@ private:
 #endif // CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
 
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-class CriticalErrorChecker : public ProbeChecker<DifftestCriticalErrorEvent> {
+class CriticalErrorChecker : public SyncChecker<DifftestCriticalErrorEvent> {
 public:
   CriticalErrorChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
-      : ProbeChecker<DifftestCriticalErrorEvent>(get_probe, state, proxy) {}
+      : SyncChecker<DifftestCriticalErrorEvent>(get_probe, state, proxy) {}
 
 private:
   bool get_valid(const DifftestCriticalErrorEvent &probe) override;

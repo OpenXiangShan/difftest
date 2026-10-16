@@ -7,7 +7,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <limits>
 #include <unistd.h>
 #include <uvaps_gbus_runtime.h>
 #include <vector>
@@ -25,37 +24,18 @@ constexpr uint64_t GBUS_REG_C2H_STATUS = 0x1200;
 constexpr uint64_t GBUS_REG_C2H_CTRL = 0x1204;
 constexpr uint64_t GBUS_REG_C2H_ID = 0x1208;
 constexpr uint32_t GBUS_C2H_ID_MAGIC = 0x47425331u; // ASCII "GBS1"
-constexpr uint32_t GBUS_C2H_DMA_ID_MAGIC = 0x47424431u;
-constexpr uint64_t GBUS_REG_C2H_SEQ = 0x120c;
-constexpr uint64_t GBUS_REG_C2H_DMA_BASE = 0x1210;
-constexpr uint64_t GBUS_REG_C2H_CAPACITY = 0x1214;
-constexpr uint64_t GBUS_REG_C2H_AR_ADDR = 0x1218;
-constexpr uint64_t GBUS_REG_C2H_AR_ATTRS = 0x121c;
-constexpr uint64_t GBUS_REG_C2H_AR_COUNT = 0x1220;
-// First-control evidence.  Every write to the control register increments the
-// count and updates the data word; an illegal control additionally latches the
-// sticky bad-control word whose bit 31 is the reject flag.
-constexpr uint64_t GBUS_REG_C2H_CTRL_COUNT = 0x1224;
-constexpr uint64_t GBUS_REG_C2H_CTRL_DATA = 0x1228;
-constexpr uint64_t GBUS_REG_C2H_BAD_CTRL = 0x1230;
-constexpr uint32_t GBUS_C2H_BAD_CTRL_VALID = 1U << 31;
-constexpr uint64_t GBUS_C2H_APERTURE = 0x0ffff000ULL;
 constexpr uint64_t GBUS_REG_C2H_DATA = 0x2000;
 constexpr uint32_t GBUS_C2H_STAGE_WORDS = 256;
 constexpr uint32_t GBUS_C2H_DATA_BYTES = GBUS_C2H_STAGE_WORDS * 4;
 
 constexpr uint32_t GBUS_C2H_STATUS_PRESENT = 1U << 31;
 constexpr uint32_t GBUS_C2H_STATUS_FRAME_ERROR = 1U << 30;
-constexpr uint32_t GBUS_C2H_STATUS_PROTOCOL_ERROR = 1U << 29;
-constexpr uint32_t GBUS_C2H_STATUS_FROZEN = 1U << 5;
-constexpr uint32_t GBUS_C2H_STATUS_ACTIVE = 1U << 4;
 constexpr uint32_t GBUS_C2H_STATUS_STAGED_SHIFT = 8;
 constexpr uint32_t GBUS_C2H_STATUS_STAGED_MASK = 0x1ffU;
 constexpr uint32_t GBUS_C2H_STATUS_FILLING = 1U << 7;
 constexpr uint32_t GBUS_C2H_STATUS_HAS_DATA = 1U << 6;
 
 constexpr uint32_t GBUS_C2H_CTRL_START_FILL = 1U << 0;
-constexpr uint32_t GBUS_C2H_CTRL_ACK = 1U << 1;
 
 // The config BAR occupies 0x1000..0x1030.  Its words are individually readable
 // through the already-verified single-word path and are known to differ from
@@ -69,18 +49,19 @@ uint64_t monotonic_us() {
           .count());
 }
 
-uint64_t env_u64(const char *name, uint64_t fallback, uint64_t maximum = std::numeric_limits<uint64_t>::max()) {
+uint64_t monotonic_ms() {
+  return static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+}
+uint64_t env_u64(const char *name, uint64_t fallback) {
   const char *v = std::getenv(name);
-  if (!v)
+  if (!v || !*v)
     return fallback;
   char *end = nullptr;
   errno = 0;
   unsigned long long parsed = std::strtoull(v, &end, 0);
-  if (errno || end == v || *end || *v < '0' || *v > '9' || parsed > maximum) {
-    std::fprintf(stderr, "[fpga-host] invalid %s=%s\n", name, v);
-    std::exit(EXIT_FAILURE);
-  }
-  return static_cast<uint64_t>(parsed);
+  return errno || end == v || *end ? fallback : static_cast<uint64_t>(parsed);
 }
 uint32_t load_le32(const std::vector<uint8_t> &v) {
   if (v.size() < 4)
@@ -102,24 +83,22 @@ void append_le32(std::vector<uint8_t> &out, uint32_t value) {
 } // namespace
 
 GbusTransport::GbusTransport() {
-  prototyping_ = static_cast<uint8_t>(env_u64("GBUS_PROTOTYPING_INSTANCE", 0, 255));
-  board_ = static_cast<uint8_t>(env_u64("GBUS_BOARD", 0, 255));
+  prototyping_ = static_cast<uint8_t>(env_u64("GBUS_PROTOTYPING_INSTANCE", 0));
+  board_ = static_cast<uint8_t>(env_u64("GBUS_BOARD", 0));
   // The runtime topology mapping is platform-specific.  On the checked UVHS
   // U2.2 setup, value 2 selects the design placed on B0.F2 (reported by the
   // daemon as topology fpgaId 3).  Keep it explicit and overrideable.
-  fpga_ = static_cast<uint8_t>(env_u64("GBUS_FPGA", 2, 255));
-  dma_fpga_ = static_cast<uint8_t>(env_u64("GBUS_DMA_FPGA", fpga_, 255));
-  config_instance_ = static_cast<uint8_t>(env_u64("GBUS_CONFIG_INSTANCE", 0, 255));
-  ddr_instance_ = static_cast<uint8_t>(env_u64("GBUS_DDR_INSTANCE", 0, 255));
-  channel_ = static_cast<uint8_t>(env_u64("GBUS_CHANNEL", 0, 255));
-  port_ = static_cast<uint8_t>(env_u64("GBUS_PORT", 0, 255));
-  config_base_ = env_u64("GBUS_CONFIG_BASE", 0x1000ULL, 0xc000);
-  // DMA uses the raw port-local address; CPU DRAM remapping is downstream.
-  ddr_base_ = env_u64("GBUS_DDR_BASE", 0x0ULL, GBUS_C2H_APERTURE);
-  if (config_base_ < 0x1000 || config_base_ % 4 || ddr_base_ % 32) {
-    std::fprintf(stderr, "[fpga-host] invalid GBus config/DDR base alignment or range\n");
-    std::exit(EXIT_FAILURE);
-  }
+  fpga_ = static_cast<uint8_t>(env_u64("GBUS_FPGA", 2));
+  dma_fpga_ = static_cast<uint8_t>(env_u64("GBUS_DMA_FPGA", fpga_));
+  config_instance_ = static_cast<uint8_t>(env_u64("GBUS_CONFIG_INSTANCE", 0));
+  ddr_instance_ = static_cast<uint8_t>(env_u64("GBUS_DDR_INSTANCE", 0));
+  channel_ = static_cast<uint8_t>(env_u64("GBUS_CHANNEL", 0));
+  port_ = static_cast<uint8_t>(env_u64("GBUS_PORT", 0));
+  config_base_ = env_u64("GBUS_CONFIG_BASE", 0x1000ULL);
+  // GBus DMA offsets are relative to the selected DDR IP.  NutShell's AXI
+  // map starts at 0x80000000, but passing that CPU address to the runtime is
+  // invalid (the verified GBus probe accepts 0x0/0x20 and rejects 0x80000000).
+  ddr_base_ = env_u64("GBUS_DDR_BASE", 0x0ULL);
   c2h_ring_base_ = env_u64("GBUS_C2H_RING_BASE", 0x81000000ULL);
   c2h_dma_base_ =
       env_u64("GBUS_C2H_DMA_BASE", c2h_ring_base_ >= 0x80000000ULL ? c2h_ring_base_ - 0x80000000ULL : c2h_ring_base_);
@@ -131,27 +110,11 @@ GbusTransport::GbusTransport() {
   // SRAM staging window lives in the same 0x1000 config window as the DiffTest
   // BAR and reserves no guest address space.
   c2h_wptr_offset_ = env_u64("GBUS_C2H_WPTR_OFFSET", 0x0108ULL);
-  c2h_sram_ = env_u64("GBUS_C2H_SRAM", 1, 1) != 0;
-  const char *mode = std::getenv("GBUS_C2H_MODE");
-  if (mode && std::strcmp(mode, "config-window") != 0 && std::strcmp(mode, "axi-dma") != 0) {
-    std::fprintf(stderr, "[fpga-host] GBUS_C2H_MODE must be config-window or axi-dma\n");
-    std::exit(EXIT_FAILURE);
-  }
-  c2h_axi_dma_ = mode && std::strcmp(mode, "axi-dma") == 0;
-  if (c2h_axi_dma_ && !c2h_sram_) {
-    std::fprintf(stderr, "[fpga-host] axi-dma mode requires the GBD1 SRAM endpoint\n");
-    std::exit(EXIT_FAILURE);
-  }
-  c2h_dma_chunk_bytes_ = static_cast<uint32_t>(env_u64("GBUS_C2H_DMA_CHUNK_BYTES", 256, 512));
-  if (!c2h_dma_chunk_bytes_ || c2h_dma_chunk_bytes_ % 32) {
-    std::fprintf(stderr, "[fpga-host] DMA chunk must be 32..512 bytes, multiple of 32\n");
-    std::exit(EXIT_FAILURE);
-  }
-  c2h_verify_first_bank_ = env_u64("GBUS_C2H_VERIFY_FIRST_BANK", 1, 1) != 0;
-  c2h_idle_timeout_sec_ = static_cast<uint32_t>(env_u64("GBUS_C2H_IDLE_TIMEOUT_SEC", 30, 3600));
-  // Multi-word capability probes are opt-in on unverified runtime releases.
-  c2h_burst_words_ = static_cast<uint32_t>(env_u64("GBUS_C2H_BURST_WORDS", 1, GBUS_C2H_STAGE_WORDS));
-  c2h_poll_us_ = static_cast<uint32_t>(env_u64("GBUS_C2H_POLL_US", 1000, 1000000));
+  c2h_sram_ = env_u64("GBUS_C2H_SRAM", 1) != 0;
+  // 0 means "use the largest burst the runtime accepts", resolved by the probe
+  // below.  Set GBUS_C2H_BURST_WORDS=1 to force one 32-bit read per call.
+  c2h_burst_words_ = static_cast<uint32_t>(env_u64("GBUS_C2H_BURST_WORDS", 0));
+  c2h_poll_us_ = static_cast<uint32_t>(env_u64("GBUS_C2H_POLL_US", 1000));
   const char *host = std::getenv("GBUS_HOST");
   host_ = host && *host ? host : "localhost";
   initialized_ = gbus_initialize(host_.c_str());
@@ -164,19 +127,13 @@ GbusTransport::GbusTransport() {
                  "c2h_dma_base=0x%llx\n",
                  host_.c_str(), board_, fpga_, static_cast<unsigned long long>(config_base_),
                  static_cast<unsigned long long>(ddr_base_), static_cast<unsigned long long>(c2h_dma_base_));
-    std::fprintf(stderr, "[fpga-host] GBus C2H interface layer=%s mode=%s\n", c2h_sram_ ? "sram-window" : "ddr-ring",
-                 c2h_axi_dma_ ? "axi-dma" : "config-window");
+    std::fprintf(stderr, "[fpga-host] GBus C2H interface layer=%s\n", c2h_sram_ ? "sram-window" : "ddr-ring");
   }
 }
 
 GbusTransport::~GbusTransport() {
-  if (initialized_) {
-    if (!gbus_finalize()) {
-      std::fprintf(stderr, "[fpga-host] GBus finalize failed; socket close unconfirmed\n");
-      std::exit(EXIT_FAILURE);
-    }
-    std::fprintf(stderr, "[fpga-host] GBus finalized; socket close confirmed\n");
-  }
+  if (initialized_)
+    gbus_finalize();
 }
 
 void GbusTransport::start(bool enable_diff) {
@@ -240,16 +197,16 @@ bool GbusTransport::c2h_probe_multiword_read(uint32_t words, uint64_t *elapsed_u
   if (elapsed_us)
     *elapsed_us = monotonic_us() - begin;
   if (rc != 1 || block.size() != words * 4) {
-    std::fprintf(stderr, "[fpga-host] GBus multi-word probe failed: count=%u rc=%d bytes=%zu (expected %u)\n",
+    std::fprintf(stderr, "[fpga-host] GBus multi-word probe: count=%u rc=%d bytes=%zu (expected %u) -> not usable\n",
                  words, rc, block.size(), words * 4);
-    std::exit(EXIT_FAILURE);
+    return false;
   }
   for (size_t i = 0; i < words; ++i) {
     std::vector<uint8_t> one;
     if (gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + i * 4, 1, one) != 1 ||
         one.size() != 4) {
       std::fprintf(stderr, "[fpga-host] GBus multi-word probe: single read of word %zu failed\n", i);
-      std::exit(EXIT_FAILURE);
+      return false;
     }
     if (std::memcmp(one.data(), block.data() + i * 4, 4) != 0) {
       std::fprintf(stderr,
@@ -278,14 +235,6 @@ void GbusTransport::c2h_dispatch_range(const uint8_t *packet, size_t packet_size
 
 void GbusTransport::c2h_drain_sram_fifo() {
   const uint32_t id = c2h_reg_read(GBUS_REG_C2H_ID);
-  if (id == GBUS_C2H_DMA_ID_MAGIC) {
-    c2h_drain_dma_window();
-    return;
-  }
-  if (c2h_axi_dma_) {
-    std::fprintf(stderr, "[fpga-host] axi-dma mode requires GBD1, got ID=0x%08x\n", id);
-    std::exit(EXIT_FAILURE);
-  }
   if (id != GBUS_C2H_ID_MAGIC) {
     std::fprintf(stderr, "[fpga-host] GBus C2H unknown ID offset=0x%llx id=0x%08x (expected GBS1)\n",
                  static_cast<unsigned long long>(config_base_ + GBUS_REG_C2H_ID), id);
@@ -388,13 +337,8 @@ void GbusTransport::c2h_drain_sram_fifo() {
       bool burst_ok = false;
       if (chunk > 1) {
         block.clear();
-        const int rc = gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + offset, chunk, block);
-        if (rc != 1 || block.size() != static_cast<size_t>(chunk) * 4) {
-          std::fprintf(stderr, "[fpga-host] GBus burst read failed rc=%d requested=%u actual=%zu\n",
-                       rc, chunk * 4, block.size());
-          std::exit(EXIT_FAILURE);
-        }
-        burst_ok = true;
+        burst_ok = gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + offset, chunk, block) == 1 &&
+                   block.size() == static_cast<size_t>(chunk) * 4;
       }
       if (burst_ok) {
         accumulator.insert(accumulator.end(), block.begin(), block.end());
@@ -410,222 +354,6 @@ void GbusTransport::c2h_drain_sram_fifo() {
       c2h_dispatch_range(accumulator.data(), packet_size);
       accumulator.erase(accumulator.begin(), accumulator.begin() + static_cast<ptrdiff_t>(packet_size));
     }
-  }
-}
-
-// -------------------------------------------------------- frozen SRAM bank
-
-void GbusTransport::c2h_drain_dma_window() {
-  using Clock = std::chrono::steady_clock;
-  const auto alive = [&]() { return running_.load() && signal_num == 0; };
-  const auto fail = [&](const char *reason, uint32_t status, uint32_t sequence) {
-    std::fprintf(stderr, "[fpga-host] GBD1 %s mode=%s status=0x%08x seq=%u (bank not released)\n", reason,
-                 c2h_axi_dma_ ? "axi-dma" : "config-window", status, sequence);
-    running_.store(false);
-    std::exit(EXIT_FAILURE);
-  };
-  const auto check_status = [&](uint32_t status) {
-    if (!(status & GBUS_C2H_STATUS_PRESENT) ||
-        (status & (GBUS_C2H_STATUS_FRAME_ERROR | GBUS_C2H_STATUS_PROTOCOL_ERROR)))
-      fail("invalid status", status, 0);
-  };
-  const uint64_t aperture = c2h_reg_read(GBUS_REG_C2H_DMA_BASE);
-  const uint32_t capacity = c2h_reg_read(GBUS_REG_C2H_CAPACITY);
-  if (aperture != GBUS_C2H_APERTURE || capacity != GBUS_C2H_DATA_BYTES)
-    fail("invalid aperture/capacity", 0, 0);
-  if (c2h_axi_dma_ && (dma_fpga_ != 2 || fpga_ != 2 || port_ != 0 || channel_ != 0 || ddr_instance_ != 0))
-    fail("invalid port-0 DMA topology", 0, 0);
-  constexpr uint32_t busy = GBUS_C2H_STATUS_FILLING | GBUS_C2H_STATUS_ACTIVE;
-  std::vector<uint8_t> accumulator;
-  accumulator.reserve(capacity + sizeof(DmaDiffPackge));
-  bool have_sequence = false;
-  uint32_t last_sequence = 0;
-  uint64_t banks = 0, bytes = 0;
-  auto last_progress = Clock::now();
-  auto busy_deadline = Clock::now() + std::chrono::seconds(2);
-  std::fprintf(stderr, "[fpga-host] GBD1 ready mode=%s raw_base=0x%llx capacity=%u chunk=%u verify_first=%u\n",
-               c2h_axi_dma_ ? "axi-dma" : "config-window", static_cast<unsigned long long>(aperture), capacity,
-               c2h_dma_chunk_bytes_, c2h_verify_first_bank_);
-  while (alive()) {
-    uint32_t status = c2h_reg_read(GBUS_REG_C2H_STATUS);
-    check_status(status);
-    if (c2h_idle_timeout_sec_ && Clock::now() - last_progress >= std::chrono::seconds(c2h_idle_timeout_sec_))
-      fail("no publication progress", status, last_sequence);
-    if (status & busy) {
-      if (Clock::now() >= busy_deadline)
-        fail("busy deadline exceeded", status, last_sequence);
-      usleep(c2h_poll_us_);
-      continue;
-    }
-    busy_deadline = Clock::now() + std::chrono::seconds(2);
-    if (!(status & GBUS_C2H_STATUS_FROZEN)) {
-      if (!(status & GBUS_C2H_STATUS_HAS_DATA)) {
-        usleep(c2h_poll_us_);
-        continue;
-      }
-      if (!alive()) return;
-      // A FILL that arrives before the startup stream-reset window releases is
-      // consumed without any state change or fault evidence and is never
-      // replayed by the RTL.  Re-issue the same logical control, but only when
-      // the first-control evidence proves exactly that benign consumption:
-      // the count advanced, the data word matches this request, and no reject
-      // flag was latched.  Anything else stays fatal, and the budget is bound-
-      // ed so a stuck window can only stop the run, never spin it.
-      constexpr unsigned max_fill_reissues = 3;
-      unsigned reissues = 0;
-      for (;;) {
-        const uint32_t ctrl_count = c2h_reg_read(GBUS_REG_C2H_CTRL_COUNT);
-        c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_START_FILL);
-        const auto deadline = Clock::now() + std::chrono::seconds(2);
-        do {
-          if (!alive()) return;
-          status = c2h_reg_read(GBUS_REG_C2H_STATUS);
-          check_status(status);
-          if ((status & GBUS_C2H_STATUS_FROZEN) && !(status & busy)) break;
-          if (Clock::now() >= deadline) {
-            // A fill actually in progress (FILLING/ACTIVE latched) is a real
-            // timeout; only a control that left no fill state at all can be
-            // the benign startup-window consumption.
-            const uint32_t evidence_count = c2h_reg_read(GBUS_REG_C2H_CTRL_COUNT);
-            const uint32_t evidence_data = c2h_reg_read(GBUS_REG_C2H_CTRL_DATA);
-            const uint32_t bad_ctrl = c2h_reg_read(GBUS_REG_C2H_BAD_CTRL);
-            if ((status & busy) || evidence_count != ctrl_count + 1U ||
-                evidence_data != GBUS_C2H_CTRL_START_FILL || (bad_ctrl & GBUS_C2H_BAD_CTRL_VALID))
-              fail("fill deadline exceeded", status, 0);
-            if (++reissues > max_fill_reissues)
-              fail("fill window never released", status, 0);
-            std::fprintf(stderr,
-                         "[fpga-host] GBD1 startup window consumed FILL %u/%u; re-issuing after stream release\n",
-                         reissues, max_fill_reissues);
-            break;
-          }
-          usleep(c2h_poll_us_);
-        } while (alive());
-        if (!(status & GBUS_C2H_STATUS_FROZEN)) {
-          if (!alive()) return;
-          continue;
-        }
-        if (status & busy) {
-          // The control was accepted but this read sampled mid-fill; fall back
-          // to the ordinary completion wait below.
-          const auto finish_deadline = Clock::now() + std::chrono::seconds(2);
-          do {
-            if (!alive()) return;
-            status = c2h_reg_read(GBUS_REG_C2H_STATUS);
-            check_status(status);
-            if ((status & GBUS_C2H_STATUS_FROZEN) && !(status & busy)) break;
-            if (Clock::now() >= finish_deadline) fail("fill deadline exceeded", status, 0);
-            usleep(c2h_poll_us_);
-          } while (alive());
-        }
-        break;
-      }
-    }
-    if (!alive()) return;
-    const uint32_t sequence = c2h_reg_read(GBUS_REG_C2H_SEQ);
-    const size_t valid = ((status >> GBUS_C2H_STATUS_STAGED_SHIFT) & GBUS_C2H_STATUS_STAGED_MASK) * 4;
-    if (!valid || valid > capacity || valid % 32 || (have_sequence && sequence != last_sequence + 1U))
-      fail("invalid published length/sequence", status, sequence);
-    const auto stable = [&]() {
-      const uint32_t seq = c2h_reg_read(GBUS_REG_C2H_SEQ);
-      status = c2h_reg_read(GBUS_REG_C2H_STATUS);
-      check_status(status);
-      if (seq != sequence || !(status & GBUS_C2H_STATUS_FROZEN) || (status & busy) ||
-          ((status >> GBUS_C2H_STATUS_STAGED_SHIFT) & GBUS_C2H_STATUS_STAGED_MASK) * 4 != valid)
-        fail("bank changed during capture", status, sequence);
-    };
-    std::vector<uint8_t> window;
-    window.reserve(valid);
-    if (c2h_axi_dma_) {
-      for (size_t offset = 0; offset < valid && alive();) {
-        const size_t count = std::min<size_t>(c2h_dma_chunk_bytes_, valid - offset);
-        const uint64_t address = aperture + offset;
-        if (address < aperture || count > capacity - offset || address % 32)
-          fail("invalid DMA range", status, sequence);
-        {
-          const uint32_t before = c2h_reg_read(GBUS_REG_C2H_AR_COUNT);
-          std::vector<uint8_t> block;
-          const uint64_t begin = monotonic_us();
-          const int rc = gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, address, count,
-                                       channel_, port_, block);
-          const uint64_t elapsed = monotonic_us() - begin;
-          if (!alive()) return;
-          if (rc != 1 || block.size() != count || elapsed > 10000000ULL) {
-            std::fprintf(stderr, "[fpga-host] GBD1 DMA failed rc=%d addr=0x%llx requested=%zu actual=%zu us=%llu\n",
-                         rc, static_cast<unsigned long long>(address), count, block.size(),
-                         static_cast<unsigned long long>(elapsed));
-            fail("DMA capture failed; no further transport I/O", status, sequence);
-          }
-          const auto deadline = Clock::now() + std::chrono::seconds(2);
-          do {
-            status = c2h_reg_read(GBUS_REG_C2H_STATUS);
-            check_status(status);
-            if (!(status & GBUS_C2H_STATUS_ACTIVE)) break;
-            if (Clock::now() >= deadline) fail("DMA active deadline exceeded", status, sequence);
-            usleep(c2h_poll_us_);
-          } while (alive());
-          if (!alive()) return;
-          stable();
-          const uint32_t ar_count = c2h_reg_read(GBUS_REG_C2H_AR_COUNT);
-          const uint32_t ar_address = c2h_reg_read(GBUS_REG_C2H_AR_ADDR);
-          const uint32_t attrs = c2h_reg_read(GBUS_REG_C2H_AR_ATTRS);
-          const uint32_t burst = (attrs >> 22) & 3U;
-          const uint32_t size = (attrs >> 19) & 7U;
-          const uint32_t len = (attrs >> 15) & 15U;
-          if (ar_count == before || ar_count - before > count / 32 || burst != 1 || size != 5 ||
-              ar_address < address || static_cast<uint64_t>(ar_address) + (len + 1U) * 32U != address + count)
-            fail("DMA completion lacks matching AXI address evidence", status, sequence);
-          if (!banks)
-            std::fprintf(stderr, "[fpga-host] GBD1 AXI verified addr=0x%08x len=%u count=%u bytes=%zu\n",
-                         ar_address, len, ar_count, count);
-          window.insert(window.end(), block.begin(), block.end());
-        }
-        if (!alive()) return;
-        offset += count;
-      }
-    }
-    if (!c2h_axi_dma_ || (!banks && c2h_verify_first_bank_)) {
-      std::vector<uint8_t> mirror;
-      mirror.reserve(valid);
-      for (size_t offset = 0; offset < valid && alive(); offset += 4)
-        append_le32(mirror, c2h_reg_read(GBUS_REG_C2H_DATA + offset));
-      if (!alive()) return;
-      stable();
-      if (c2h_axi_dma_) {
-        if (mirror != window) fail("DMA/config mirror mismatch", status, sequence);
-        std::fprintf(stderr, "[fpga-host] GBD1 first frozen bank DMA/config mirror verified seq=%u bytes=%zu\n",
-                     sequence, valid);
-      } else {
-        window.swap(mirror);
-      }
-    }
-    if (!alive()) return;
-    stable();
-    c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_ACK);
-    const auto ack_deadline = Clock::now() + std::chrono::seconds(2);
-    do {
-      if (!alive()) return;
-      status = c2h_reg_read(GBUS_REG_C2H_STATUS);
-      check_status(status);
-      if (!(status & (GBUS_C2H_STATUS_FROZEN | busy))) break;
-      if (Clock::now() >= ack_deadline) fail("ACK deadline exceeded", status, sequence);
-      usleep(c2h_poll_us_);
-    } while (alive());
-    if (!alive()) return;
-    last_sequence = sequence;
-    have_sequence = true;
-    accumulator.insert(accumulator.end(), window.begin(), window.end());
-    while (accumulator.size() >= sizeof(DmaDiffPackge) && alive()) {
-      c2h_dispatch_range(accumulator.data(), sizeof(DmaDiffPackge));
-      accumulator.erase(accumulator.begin(), accumulator.begin() + sizeof(DmaDiffPackge));
-    }
-    bytes += valid;
-    ++banks;
-    if (banks <= 2 || (banks & (banks - 1)) == 0)
-      std::fprintf(stderr, "[fpga-host] GBD1 progress mode=%s banks=%llu bytes=%llu seq=%u\n",
-                   c2h_axi_dma_ ? "axi-dma" : "config-window", static_cast<unsigned long long>(banks),
-                   static_cast<unsigned long long>(bytes), sequence);
-    last_progress = Clock::now();
   }
 }
 
@@ -738,27 +466,13 @@ void GbusTransport::fpga_io(uint64_t address, uint32_t value) {
             static_cast<unsigned long long>(address));
     std::exit(EXIT_FAILURE);
   }
-  if (address <= HOST_IO_CPU_AXI_DELAY && address % 4 == 0) {
-    // GeneralBD's write ACK is posted; the ordered read waits for the BAR's B response.
-    const uint32_t observed = fpga_io_read(address);
-    // MEM_INIT/MEM_H2C latch live completion status and CFG_RESET self-clears by
-    // resetting the whole configuration BAR; these words are ordering fences,
-    // not stable storage, so only the remaining words must read back exactly.
-    if (address != HOST_IO_CFG_RESET && address != HOST_IO_MEM_INIT && address != HOST_IO_MEM_H2C &&
-        observed != value) {
-      std::fprintf(stderr, "[fpga-host] GBus BAR write readback mismatch offset=0x%llx wrote=0x%08x read=0x%08x\n",
-                   static_cast<unsigned long long>(address), value, observed);
-      std::exit(EXIT_FAILURE);
-    }
-  }
 }
 
 uint32_t GbusTransport::fpga_io_read(uint64_t address) {
   if (!initialized_)
     std::exit(EXIT_FAILURE);
   std::vector<uint8_t> data;
-  if (gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + address, 1, data) != 1 ||
-      data.size() != 4) {
+  if (gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + address, 1, data) != 1) {
     std::fprintf(stderr, "[fpga-host] GBus register read failed offset=0x%llx\n",
                  static_cast<unsigned long long>(address));
     std::exit(EXIT_FAILURE);
@@ -807,10 +521,6 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
     std::fprintf(stderr, "[fpga-host] GBus DMA workload requires initialized transport and non-empty payload\n");
     std::exit(EXIT_FAILURE);
   }
-  if (size % 32 || size > GBUS_C2H_APERTURE - ddr_base_ || size > std::numeric_limits<size_t>::max() || port_ != 0) {
-    std::fprintf(stderr, "[fpga-host] GBus padded H2C range overlaps reserved page, is unaligned or exceeds port 0\n");
-    std::exit(EXIT_FAILURE);
-  }
   const auto *bytes = static_cast<const uint8_t *>(payload);
   // Keep each request within the transfer size verified by the UVHS GBus runtime.
   constexpr uint64_t chunk = 256ULL;
@@ -833,7 +543,7 @@ void GbusTransport::validate_guest_ram(uint64_t base, uint64_t size) const {
   // reservation carved out of guest RAM.
   if (c2h_sram_)
     return;
-  if (base > c2h_ring_base_ || size > c2h_ring_base_ - base) {
+  if (size > c2h_ring_base_ - base) {
     std::fprintf(stderr, "[fpga-host] guest RAM [0x%llx,0x%llx) overlaps reserved GBus C2H ring at 0x%llx\n",
                  static_cast<unsigned long long>(base), static_cast<unsigned long long>(base + size),
                  static_cast<unsigned long long>(c2h_ring_base_));

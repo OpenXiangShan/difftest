@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -15,7 +15,9 @@
 ***************************************************************************************/
 
 #include "difftest.h"
-#include "arch_event.h"
+#ifdef CONFIG_DIFFTEST_FORK_REF
+#include "fork_ref/fork_ref.h"
+#endif
 #include "common.h"
 #include "difftrace.h"
 #include "dut.h"
@@ -40,6 +42,10 @@ Difftest **difftest = NULL;
 static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_is_child())
+    _Exit(128 + signo);
+#endif
   if (signo != SIGINT) {
     common_splitview_force_cleanup();
     if (difftest != NULL) {
@@ -177,14 +183,16 @@ void difftest_trace_write(int step) {
   }
 }
 
-void difftest_finish() {
+void difftest_finish(bool report_perfcnt) {
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
   Stopwatch::print_stats(CHECKERS);
 #endif
 #ifdef CONFIG_DIFFTEST_PERFCNT
-  uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
-  uint64_t instrCnt = difftest[0]->get_trap_event()->instrCnt;
-  difftest_perfcnt_finish(cycleCnt, instrCnt);
+  if (report_perfcnt) {
+    uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
+    uint64_t instrCnt = difftest[0]->get_trap_event()->instrCnt;
+    difftest_perfcnt_finish(cycleCnt, instrCnt);
+  }
 #endif // CONFIG_DIFFTEST_PERFCNT
 #ifdef CONFIG_DIFFTEST_IOTRACE
   difftest_iotrace_free();
@@ -304,6 +312,9 @@ Difftest::~Difftest() {
     delete checker;
   }
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  delete fast_ref_checker;
+#endif
   delete arch_event_checker;
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     delete instr_commit_checker[i];
@@ -338,8 +349,8 @@ Difftest::~Difftest() {
 void Difftest::init_checkers() {
   checkers.push_back(new TimeoutChecker([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy));
 
-  checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
-                                                 proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
+  add_sync_checker(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
+                                               proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
   // Record stores each cycle; checking waits for their stamps or the complete non-squash batch.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
@@ -424,27 +435,27 @@ void Difftest::init_checkers() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-  checkers.push_back(new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy));
+  add_sync_checker(new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy));
 #endif
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  checkers.push_back(new NonRegInterruptPendingChecker(
+  add_sync_checker(new NonRegInterruptPendingChecker(
       [this]() -> DifftestNonRegInterruptPendingEvent & { return dut->non_reg_interrupt_pending; }, state, proxy));
 #endif
 
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  checkers.push_back(new MhpmeventOverflowChecker(
+  add_sync_checker(new MhpmeventOverflowChecker(
       [this]() -> DifftestMhpmeventOverflowEvent & { return dut->mhpmevent_overflow; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  checkers.push_back(
+  add_sync_checker(
       new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  checkers.push_back(new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy));
+  add_sync_checker(new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  checkers.push_back(new CustomMflushpwrChecker(
+  add_sync_checker(new CustomMflushpwrChecker(
       [this]() -> DifftestSyncCustomMflushpwrEvent & { return dut->sync_custom_mflushpwr; }, state, proxy));
 #endif
 
@@ -475,6 +486,11 @@ void Difftest::init_checkers() {
 
   arch_event_checker = new ArchEventChecker([this]() -> DifftestArchEvent & { return dut->event; }, state, proxy,
                                             [this]() -> const DiffTestRegState & { return dut->regs; });
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  fast_ref_checker = new FastRefChecker(this, state, proxy);
+  fast_checkers.push_back(fast_ref_checker);
+#endif
 
   std::vector<DiffTestChecker *> inst_op_checkers;
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
@@ -585,6 +601,15 @@ void Difftest::do_replay() {
 #endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_is_child())
+    return difftest_ref_fork_check(this);
+#endif
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  if (fast_ref_enabled)
+    return fast_ref_step();
+#endif
+
 #ifdef CONFIG_DIFFTEST_REPLAY
   static int replay_step = 0;
   if (replay_status.in_replay) {
@@ -669,16 +694,17 @@ inline int Difftest::check_all() {
 #endif
 
   num_commit = 0; // reset num_commit this cycle to 0
-  for (int i = 0; i <= CONFIG_DIFF_COMMIT_WIDTH; i++) {
-    if (dut->event.valid && i == arch_event_commit_position(dut->event, 0)) {
+  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
+    // isLatter selects the former (0) or latter (1) event position.
+    if (dut->event.valid && i == dut->event.isLatter) {
       if (int ret = arch_event_checker->step()) {
         return ret;
       }
-      if (i < CONFIG_DIFF_COMMIT_WIDTH) {
-        dut->commit[i].valid = 0;
-      }
+      // RTL already deasserts the exception lane's valid. Keep the explicit
+      // cleanup symmetric for former and latter events.
+      dut->commit[i].valid = 0;
       break;
-    } else if (i < CONFIG_DIFF_COMMIT_WIDTH && dut->commit[i].valid) {
+    } else if (dut->commit[i].valid) {
 #if !defined(BASIC_DIFFTEST_ONLY) && !defined(CONFIG_DIFFTEST_SQUASH)
       if (i == 0) {
         dut_commit_batch_pc = dut->commit[i].pc;
