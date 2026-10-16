@@ -41,11 +41,33 @@ static bool report_error(const char *what, cudaError_t err) {
   return false;
 }
 
+void CudaMmaHostDeleter::operator()(uint8_t *buffer) const {
+  cudaFreeHost(buffer);
+}
+
+static bool allocate_host_buffer(std::unique_ptr<uint8_t[], CudaMmaHostDeleter> &buffer, size_t bytes,
+                                 const char *what) {
+  uint8_t *data = nullptr;
+  if (!report_error(what, cudaMallocHost(reinterpret_cast<void **>(&data), bytes))) {
+    return false;
+  }
+  buffer.reset(data);
+  return true;
+}
+
 bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes) {
   if (descriptors != nullptr || batch_size == 0 || batch_size > 65535 || ab_reg_bytes == 0 || c_reg_bytes == 0 ||
       batch_size > SIZE_MAX / sizeof(CudaMmaBatchDescriptor) || ab_reg_bytes > SIZE_MAX / batch_size ||
       c_reg_bytes > SIZE_MAX / batch_size) {
     fprintf(stderr, "CudaMmaBackend: invalid workspace capacities\n");
+    return false;
+  }
+
+  host_descriptors.resize(batch_size);
+  if (!allocate_host_buffer(host_src1, batch_size * ab_reg_bytes, "allocate pinned batch src1") ||
+      !allocate_host_buffer(host_src2, batch_size * ab_reg_bytes, "allocate pinned batch src2") ||
+      !allocate_host_buffer(host_src3, batch_size * c_reg_bytes, "allocate pinned batch src3")) {
+    release();
     return false;
   }
 
@@ -80,6 +102,9 @@ void CudaMmaWorkspace::release() {
   src1 = nullptr;
   src2 = nullptr;
   src3 = nullptr;
+  host_src1.reset();
+  host_src2.reset();
+  host_src3.reset();
   max_batch_size = 0;
   ab_reg_size = 0;
   c_reg_size = 0;
@@ -107,7 +132,7 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
     return false;
   }
 
-  std::vector<CudaMmaBatchDescriptor> descriptors(count);
+  auto &descriptors = workspace->host_descriptors;
   size_t total_src1_size = 0;
   size_t total_src2_size = 0;
   size_t total_src3_size = 0;
@@ -143,29 +168,29 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
     }
   }
 
-  std::vector<uint8_t> packed_src1(total_src1_size);
-  std::vector<uint8_t> packed_src2(total_src2_size);
-  std::vector<uint8_t> packed_src3(total_src3_size);
+  uint8_t *packed_src1 = workspace->host_src1.get();
+  uint8_t *packed_src2 = workspace->host_src2.get();
+  uint8_t *packed_src3 = workspace->host_src3.get();
   for (size_t i = 0; i < count; ++i) {
     const CudaMmaBatchItem &item = items[i];
     const CudaMmaBatchDescriptor &desc = descriptors[i];
     size_t src1_size = element_size(item.types1) * item.tile_m * item.tile_k;
     size_t src2_size = element_size(item.types2) * item.tile_k * item.tile_n;
     size_t src3_size = sizeof(uint32_t) * item.tile_m * item.tile_n;
-    memcpy(packed_src1.data() + desc.src1_offset, item.src1, src1_size);
-    memcpy(packed_src2.data() + desc.src2_offset, item.src2, src2_size);
-    memcpy(packed_src3.data() + desc.src3_offset, item.src3, src3_size);
+    memcpy(packed_src1 + desc.src1_offset, item.src1, src1_size);
+    memcpy(packed_src2 + desc.src2_offset, item.src2, src2_size);
+    memcpy(packed_src3 + desc.src3_offset, item.src3, src3_size);
   }
 
   const size_t descriptors_bytes = count * sizeof(descriptors[0]);
   if (!report_error("copy batch descriptors to device", cudaMemcpy(workspace->descriptors, descriptors.data(),
                                                                    descriptors_bytes, cudaMemcpyHostToDevice)) ||
       !report_error("copy batch src1 to device",
-                    cudaMemcpy(workspace->src1, packed_src1.data(), total_src1_size, cudaMemcpyHostToDevice)) ||
+                    cudaMemcpy(workspace->src1, packed_src1, total_src1_size, cudaMemcpyHostToDevice)) ||
       !report_error("copy batch src2 to device",
-                    cudaMemcpy(workspace->src2, packed_src2.data(), total_src2_size, cudaMemcpyHostToDevice)) ||
+                    cudaMemcpy(workspace->src2, packed_src2, total_src2_size, cudaMemcpyHostToDevice)) ||
       !report_error("copy batch src3 to device",
-                    cudaMemcpy(workspace->src3, packed_src3.data(), total_src3_size, cudaMemcpyHostToDevice))) {
+                    cudaMemcpy(workspace->src3, packed_src3, total_src3_size, cudaMemcpyHostToDevice))) {
     return false;
   }
   if (!cuda_mma_backend_launch_kernel(type, workspace->descriptors, count, max_output_elements,
@@ -176,7 +201,7 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
     return false;
   }
   if (!report_error("copy batch src3 to host",
-                    cudaMemcpy(packed_src3.data(), workspace->src3, total_src3_size, cudaMemcpyDeviceToHost))) {
+                    cudaMemcpy(packed_src3, workspace->src3, total_src3_size, cudaMemcpyDeviceToHost))) {
     return false;
   }
 
@@ -184,7 +209,7 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
     const CudaMmaBatchItem &item = items[i];
     const CudaMmaBatchDescriptor &desc = descriptors[i];
     size_t result_size = sizeof(uint32_t) * item.tile_m * item.tile_n;
-    memcpy(item.src3, packed_src3.data() + desc.src3_offset, result_size);
+    memcpy(item.src3, packed_src3 + desc.src3_offset, result_size);
     passed[i] = memcmp(item.dut_result, item.src3, result_size) == 0 ? 1 : 0;
   }
   return true;

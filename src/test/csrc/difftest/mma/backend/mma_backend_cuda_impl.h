@@ -19,6 +19,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 enum class CudaMmaType : uint8_t {
   U8U8 = 0,
@@ -53,10 +55,20 @@ struct CudaMmaBatchDescriptor {
   uint16_t tile_n;
 };
 
+struct CudaMmaHostDeleter {
+  void operator()(uint8_t *buffer) const;
+};
+
 // Each backend allocates one maximum batch at initialization and retains it
-// until destruction. Only active bytes are overwritten and transferred.
+// until destruction. Host byte buffers are pinned for direct DMA transfers;
+// only active bytes are overwritten and transferred.
 class CudaMmaWorkspace {
 public:
+  std::vector<CudaMmaBatchDescriptor> host_descriptors;
+  std::unique_ptr<uint8_t[], CudaMmaHostDeleter> host_src1;
+  std::unique_ptr<uint8_t[], CudaMmaHostDeleter> host_src2;
+  std::unique_ptr<uint8_t[], CudaMmaHostDeleter> host_src3;
+
   CudaMmaBatchDescriptor *descriptors = nullptr;
   uint8_t *src1 = nullptr;
   uint8_t *src2 = nullptr;
