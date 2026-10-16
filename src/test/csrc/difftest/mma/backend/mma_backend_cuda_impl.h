@@ -44,6 +44,43 @@ struct CudaMmaBatchItem {
   const uint8_t *dut_result;
 };
 
-extern "C" bool cuda_mma_backend_launch(CudaMmaType type, const CudaMmaBatchItem *items, size_t count, uint8_t *passed);
+struct CudaMmaBatchDescriptor {
+  uint64_t src1_offset;
+  uint64_t src2_offset;
+  uint64_t src3_offset;
+  uint16_t tile_m;
+  uint16_t tile_k;
+  uint16_t tile_n;
+};
+
+// Each backend allocates one maximum batch at initialization and retains it
+// until destruction. Only active bytes are overwritten and transferred.
+class CudaMmaWorkspace {
+public:
+  CudaMmaBatchDescriptor *descriptors = nullptr;
+  uint8_t *src1 = nullptr;
+  uint8_t *src2 = nullptr;
+  uint8_t *src3 = nullptr;
+
+  bool allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes);
+  size_t batch_capacity() const;
+  bool supports(size_t src1_bytes, size_t src2_bytes, size_t src3_bytes) const;
+  void release();
+
+private:
+  size_t max_batch_size = 0;
+  size_t ab_reg_size = 0;
+  size_t c_reg_size = 0;
+};
+
+bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescriptor *descriptors, size_t count,
+                                    size_t max_output_elements, uint8_t *src1, uint8_t *src2, uint8_t *src3);
+
+// Each backend owns one workspace. Calls using the same workspace must be
+// serialized; release follows the verifier worker's final synchronous launch.
+CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes);
+bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
+                             size_t count, uint8_t *passed);
+void cuda_mma_backend_release(CudaMmaWorkspace *workspace);
 
 #endif // __MMA_BACKEND_CUDA_IMPL_H__

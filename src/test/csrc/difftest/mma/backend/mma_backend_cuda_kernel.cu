@@ -19,24 +19,13 @@
 #include <cuda_runtime_api.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include <type_traits>
-#include <vector>
 
 #ifdef CONFIG_DIFF_MMA_REDUCE_WIDTH_BYTES
 static constexpr int kMmaReduceWidthBytes = CONFIG_DIFF_MMA_REDUCE_WIDTH_BYTES;
 #else
 static constexpr int kMmaReduceWidthBytes = 32;
 #endif
-
-struct CudaMmaBatchDescriptor {
-  uint64_t src1_offset;
-  uint64_t src2_offset;
-  uint64_t src3_offset;
-  uint16_t tile_m;
-  uint16_t tile_k;
-  uint16_t tile_n;
-};
 
 __device__ __forceinline__ uint32_t read_u32_device(const uint8_t *data, size_t index0, size_t index1,
                                                     size_t row_bytes) {
@@ -130,15 +119,6 @@ __global__ void mfmacc_cute_fp32_batch_kernel(cute_mma_model::FloatFormat format
                            desc.tile_m, desc.tile_k, desc.tile_n, idx);
 }
 
-static size_t element_size(uint8_t typed) {
-  switch (typed & 3) {
-    case 0: return 1;
-    case 1: return 2;
-    case 2: return 4;
-    default: return 4;
-  }
-}
-
 static bool report_error(const char *what, cudaError_t err) {
   if (err == cudaSuccess) {
     return true;
@@ -147,8 +127,8 @@ static bool report_error(const char *what, cudaError_t err) {
   return false;
 }
 
-static bool launch_batch_kernel(CudaMmaType type, const CudaMmaBatchDescriptor *descriptors, size_t count,
-                                size_t max_output_elements, uint8_t *src1, uint8_t *src2, uint8_t *src3) {
+bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescriptor *descriptors, size_t count,
+                                    size_t max_output_elements, uint8_t *src1, uint8_t *src2, uint8_t *src3) {
   if (count == 0 || count > 65535 || max_output_elements == 0) {
     return false;
   }
@@ -193,117 +173,4 @@ static bool launch_batch_kernel(CudaMmaType type, const CudaMmaBatchDescriptor *
   }
 
   return report_error("batch kernel launch", cudaGetLastError());
-}
-
-extern "C" bool cuda_mma_backend_launch(CudaMmaType type, const CudaMmaBatchItem *items, size_t count,
-                                        uint8_t *passed) {
-  if (count == 0) {
-    return true;
-  }
-  if (!items || !passed || count > 65535) {
-    return false;
-  }
-  memset(passed, 0, count * sizeof(*passed));
-
-  std::vector<CudaMmaBatchDescriptor> descriptors(count);
-  size_t total_src1_size = 0;
-  size_t total_src2_size = 0;
-  size_t total_src3_size = 0;
-  size_t max_output_elements = 0;
-  for (size_t i = 0; i < count; ++i) {
-    const CudaMmaBatchItem &item = items[i];
-    if (item.tile_m == 0 || item.tile_k == 0 || item.tile_n == 0 || !item.src1 || !item.src2 || !item.src3 ||
-        !item.dut_result) {
-      return false;
-    }
-
-    CudaMmaBatchDescriptor &desc = descriptors[i];
-    desc.src1_offset = total_src1_size;
-    desc.src2_offset = total_src2_size;
-    desc.src3_offset = total_src3_size;
-    desc.tile_m = item.tile_m;
-    desc.tile_k = item.tile_k;
-    desc.tile_n = item.tile_n;
-
-    total_src1_size += element_size(item.types1) * item.tile_m * item.tile_k;
-    total_src2_size += element_size(item.types2) * item.tile_k * item.tile_n;
-    total_src3_size += sizeof(uint32_t) * item.tile_m * item.tile_n;
-    size_t output_elements = static_cast<size_t>(item.tile_m) * item.tile_n;
-    if (output_elements > max_output_elements) {
-      max_output_elements = output_elements;
-    }
-  }
-
-  std::vector<uint8_t> packed_src1(total_src1_size);
-  std::vector<uint8_t> packed_src2(total_src2_size);
-  std::vector<uint8_t> packed_src3(total_src3_size);
-  for (size_t i = 0; i < count; ++i) {
-    const CudaMmaBatchItem &item = items[i];
-    const CudaMmaBatchDescriptor &desc = descriptors[i];
-    size_t src1_size = element_size(item.types1) * item.tile_m * item.tile_k;
-    size_t src2_size = element_size(item.types2) * item.tile_k * item.tile_n;
-    size_t src3_size = sizeof(uint32_t) * item.tile_m * item.tile_n;
-    memcpy(packed_src1.data() + desc.src1_offset, item.src1, src1_size);
-    memcpy(packed_src2.data() + desc.src2_offset, item.src2, src2_size);
-    memcpy(packed_src3.data() + desc.src3_offset, item.src3, src3_size);
-  }
-
-  CudaMmaBatchDescriptor *dev_descriptors = nullptr;
-  uint8_t *dev_src1 = nullptr;
-  uint8_t *dev_src2 = nullptr;
-  uint8_t *dev_src3 = nullptr;
-  bool completed = false;
-
-  if (!report_error("cudaMalloc batch descriptors",
-                    cudaMalloc(&dev_descriptors, descriptors.size() * sizeof(descriptors[0]))) ||
-      !report_error("cudaMalloc batch src1", cudaMalloc(&dev_src1, packed_src1.size())) ||
-      !report_error("cudaMalloc batch src2", cudaMalloc(&dev_src2, packed_src2.size())) ||
-      !report_error("cudaMalloc batch src3", cudaMalloc(&dev_src3, packed_src3.size()))) {
-    goto cleanup;
-  }
-  if (!report_error("copy batch descriptors to device",
-                    cudaMemcpy(dev_descriptors, descriptors.data(), descriptors.size() * sizeof(descriptors[0]),
-                               cudaMemcpyHostToDevice)) ||
-      !report_error("copy batch src1 to device",
-                    cudaMemcpy(dev_src1, packed_src1.data(), packed_src1.size(), cudaMemcpyHostToDevice)) ||
-      !report_error("copy batch src2 to device",
-                    cudaMemcpy(dev_src2, packed_src2.data(), packed_src2.size(), cudaMemcpyHostToDevice)) ||
-      !report_error("copy batch src3 to device",
-                    cudaMemcpy(dev_src3, packed_src3.data(), packed_src3.size(), cudaMemcpyHostToDevice))) {
-    goto cleanup;
-  }
-  if (!launch_batch_kernel(type, dev_descriptors, count, max_output_elements, dev_src1, dev_src2, dev_src3)) {
-    goto cleanup;
-  }
-  if (!report_error("batch kernel sync", cudaDeviceSynchronize())) {
-    goto cleanup;
-  }
-  if (!report_error("copy batch src3 to host",
-                    cudaMemcpy(packed_src3.data(), dev_src3, packed_src3.size(), cudaMemcpyDeviceToHost))) {
-    goto cleanup;
-  }
-
-  for (size_t i = 0; i < count; ++i) {
-    const CudaMmaBatchItem &item = items[i];
-    const CudaMmaBatchDescriptor &desc = descriptors[i];
-    size_t result_size = sizeof(uint32_t) * item.tile_m * item.tile_n;
-    memcpy(item.src3, packed_src3.data() + desc.src3_offset, result_size);
-    passed[i] = memcmp(item.dut_result, item.src3, result_size) == 0 ? 1 : 0;
-  }
-  completed = true;
-
-cleanup:
-  if (dev_descriptors != nullptr) {
-    cudaFree(dev_descriptors);
-  }
-  if (dev_src1 != nullptr) {
-    cudaFree(dev_src1);
-  }
-  if (dev_src2 != nullptr) {
-    cudaFree(dev_src2);
-  }
-  if (dev_src3 != nullptr) {
-    cudaFree(dev_src3);
-  }
-  return completed;
 }
