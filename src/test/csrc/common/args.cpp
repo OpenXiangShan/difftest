@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -33,6 +33,13 @@ enum {
   OPT_CPU_AXI_DELAY,
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  OPT_REF_MODE,
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  OPT_REF_FORK_INTERVAL,
+  OPT_PACKET_POOL_LOG2,
+#endif
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -83,6 +90,17 @@ static uint64_t parse_instr_count(const char *str, const char *arg) {
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
   printf("\n");
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  printf("      --ref-mode=MODE        slow, fast, or fork (default: fork)\n");
+#else
+  printf("      --ref-mode=MODE        slow or fast (default: slow)\n");
+#endif
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  printf("      --ref-fork-interval=N  REF segment interval in seconds, default: 5\n");
+  printf("      --packet-pool-log2=N  log2 of fork packet slots (default: 20)\n");
+#endif
   printf("  -s, --seed=NUM             use this seed\n");
   printf("  -C, --max-cycles=NUM       execute at most NUM cycles\n");
   printf("  -I, --max-instr=NUM        execute at most NUM instructions\n");
@@ -201,6 +219,13 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
+#ifdef CONFIG_DIFFTEST_FAST_REF
+    { "ref-mode",          1, NULL, OPT_REF_MODE },
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    { "ref-fork-interval",  1, NULL, OPT_REF_FORK_INTERVAL },
+    { "packet-pool-log2",  1, NULL, OPT_PACKET_POOL_LOG2 },
+#endif
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -340,6 +365,28 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_NO_SQUASH_AFTER_INSTR:
         args.no_squash_after_instr = parse_instr_count(optarg, "no-squash-after-instr");
         continue;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+      case OPT_REF_MODE:
+        if (!strcmp(optarg, "slow"))
+          args.ref_mode = RefMode::SLOW;
+        else if (!strcmp(optarg, "fast"))
+          args.ref_mode = RefMode::FAST;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+        else if (!strcmp(optarg, "fork"))
+          args.ref_mode = RefMode::FORK;
+#endif
+        else {
+          fprintf(stderr, "[ERROR] invalid --ref-mode '%s' for this build\n", optarg);
+          exit(EINVAL);
+        }
+        continue;
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+      case OPT_REF_FORK_INTERVAL:
+        args.ref_fork_interval = 1000ULL * atoll_strict(optarg, "ref-fork-interval");
+        continue;
+      case OPT_PACKET_POOL_LOG2: args.packet_pool_log2 = atoll_strict(optarg, "packet-pool-log2"); continue;
+#endif
       case OPT_CPU_AXI_DELAY: {
         long long cpu_axi_delay = atoll_strict(optarg, "cpu-axi-delay");
         if (cpu_axi_delay < 0 || static_cast<unsigned long long>(cpu_axi_delay) > UINT32_MAX) {
