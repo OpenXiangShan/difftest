@@ -89,14 +89,23 @@ public:
   }
   inline int get_trap_code() {
     if (state->has_trap) {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+      if (state->trap_code == STATE_GOODTRAP && state->bitmte_seen) return finish_bitmte_checks();
+#endif
       return state->trap_code;
     } else if (dut->trap.code > STATE_FUZZ_COND && dut->trap.code < STATE_RUNNING) {
       return STATE_BADTRAP;
     } else {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+      if (dut->trap.code == STATE_GOODTRAP && state->bitmte_seen) return finish_bitmte_checks();
+#endif
       return dut->trap.code;
     }
   }
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  int finish_bitmte_checks();
+#endif
   void display();
   void display_stats();
 

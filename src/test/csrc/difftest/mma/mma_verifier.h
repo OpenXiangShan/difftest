@@ -19,6 +19,7 @@
 
 #include "config.h"
 #include "mma/backend/mma_backend.h"
+#include "matrix_hash.h"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -27,6 +28,13 @@
 #include <thread>
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+
+static constexpr size_t kBitMteTrBytes = 8192;
+static constexpr size_t kBitMteAccBytes = 65536;
+
+// Fingerprint the first K pass in channel-3 bank/byte order. The full final
+// result remains in the ordinary result snapshot, keeping the same footprint.
+void bitmte_hash_bytes(MatrixHash128 &hash, const uint8_t *data, size_t bytes);
 
 /**
  * Each Difftest instance owns one MmaVerifier. AmuExecChecker allocates a
@@ -58,6 +66,7 @@ struct MmaVerificationBuffer {
   uint8_t *src2;                  // Pointer to source matrix 2 data
   uint8_t *src3;                  // Pointer to source matrix 3 data (accumulator)
   uint8_t *dut_result;            // Pointer to DUT result data
+  MatrixHash128 packed_partial_hash{};
 };
 
 /**
@@ -85,6 +94,9 @@ static inline size_t get_element_size(uint8_t typed) {
  * @return Total byte size of src1, src2, src3, and dut_result.
  */
 static inline size_t calculate_mma_buffer_size(const DifftestAmuCtrlEvent *amu_event) {
+  if (amu_event->packedMode) {
+    return 2 * kBitMteTrBytes + 2 * kBitMteAccBytes;
+  }
   size_t element_size_s1 = get_element_size(amu_event->types1);
   size_t element_size_s2 = get_element_size(amu_event->types2);
   size_t element_size_d = get_element_size(amu_event->typed);
@@ -159,6 +171,9 @@ public:
    * @warning This is a logical-state barrier, not by itself a fork-safety barrier.
    */
   bool flush();
+
+  void pending_counts(size_t &queued, size_t &executing);
+  uint64_t packed_checked_count() const { return packed_checked.load(std::memory_order_acquire); }
 
   /**
    * @brief Allocates a verification buffer from the event's matrix geometry.
@@ -236,6 +251,8 @@ private:
 
   // MMA verification backend (CPU by default)
   MmaBackend *backend = nullptr;
+  MmaBackend *packed_backend = nullptr;
+  std::atomic<uint64_t> packed_checked{0};
 
   /**
    * @brief Runs the single-consumer verification loop.

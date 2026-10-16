@@ -34,6 +34,19 @@
 static constexpr size_t kMmaBackpressurePendingLimit =
     static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR;
 
+void bitmte_hash_bytes(MatrixHash128 &hash, const uint8_t *data, size_t bytes) {
+  for (size_t byte = 0; byte < bytes; ++byte) {
+    for (unsigned bit = 0; bit < 8; ++bit) {
+      const bool top = (hash.hi >> 63) != 0;
+      hash.hi = (hash.hi << 1) | (hash.lo >> 63);
+      hash.lo <<= 1;
+      if (top) hash.lo ^= 0x87;
+    }
+    hash.lo ^= data[byte];
+    ++hash.bytes;
+  }
+}
+
 MmaVerifier::MmaVerifier() {
   Assert(CONFIG_DIFF_MMA_BATCH_SIZE > 0, "CONFIG_DIFF_MMA_BATCH_SIZE must be positive");
   Assert(CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR > 0, "CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR must be positive");
@@ -44,6 +57,7 @@ MmaVerifier::MmaVerifier() {
   backend = new CpuMmaBackend();
   const char *backend_name = "CPU";
 #endif
+  packed_backend = new CpuMmaBackend();
   Info("[INFO] MMA reference model backend: %s\n", backend_name);
 }
 
@@ -60,6 +74,7 @@ MmaVerifier::~MmaVerifier() {
   if (err_buf) {
     free_buffer(err_buf);
   }
+  delete packed_backend;
   if (backend) {
     delete backend;
     backend = nullptr;
@@ -112,9 +127,9 @@ MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
   size_t element_sz_s2 = get_element_size(amu_event->types2);
   size_t element_sz_d = get_element_size(amu_event->typed);
 
-  size_t a_sz = element_sz_s1 * m * k;
-  size_t b_sz = element_sz_s2 * k * n;
-  size_t c_sz = element_sz_d * m * n;
+  size_t a_sz = amu_event->packedMode ? kBitMteTrBytes : element_sz_s1 * m * k;
+  size_t b_sz = amu_event->packedMode ? kBitMteTrBytes : element_sz_s2 * k * n;
+  size_t c_sz = amu_event->packedMode ? kBitMteAccBytes : element_sz_d * m * n;
 
   // Allocate memory for the buffer structure and data
   MmaVerificationBuffer *buffer = new MmaVerificationBuffer();
@@ -156,6 +171,12 @@ bool MmaVerifier::has_mma_verification_error() const {
   return mma_error_buffer.load(std::memory_order_acquire) != nullptr;
 }
 
+void MmaVerifier::pending_counts(size_t &queued, size_t &executing) {
+  std::lock_guard<std::mutex> lock(mma_queue_mutex);
+  queued = mma_verification_queue.size();
+  executing = mma_pending_count - queued;
+}
+
 const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
   return mma_error_buffer.load(std::memory_order_acquire);
 }
@@ -163,6 +184,7 @@ const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
 void MmaVerifier::mma_verification_thread_func() {
   while (true) {
     std::vector<MmaVerificationBuffer *> buffers;
+    MmaBackend *selected_backend = nullptr;
 
     // Wait for work, then remove only a consecutive compatible FIFO prefix.
     {
@@ -173,11 +195,12 @@ void MmaVerifier::mma_verification_thread_func() {
         break;
       }
 
-      buffers = take_contiguous_batch(mma_verification_queue, CONFIG_DIFF_MMA_BATCH_SIZE, *backend);
+      selected_backend = mma_verification_queue.front()->amu_event.packedMode ? packed_backend : backend;
+      buffers = take_contiguous_batch(mma_verification_queue, CONFIG_DIFF_MMA_BATCH_SIZE, *selected_backend);
     }
 
     std::vector<uint8_t> passed;
-    backend->verify(buffers, passed);
+    selected_backend->verify(buffers, passed);
     Assert(passed.size() == buffers.size(), "MMA backend returned %zu results for a batch of %zu", passed.size(),
            buffers.size());
 
@@ -185,6 +208,7 @@ void MmaVerifier::mma_verification_thread_func() {
     // the first reported mismatch identical to singleton verification.
     for (size_t i = 0; i < buffers.size(); ++i) {
       auto *buffer = buffers[i];
+      if (buffer->amu_event.packedMode) packed_checked.fetch_add(1, std::memory_order_release);
       if (passed[i]) {
         free_buffer(buffer);
       } else {

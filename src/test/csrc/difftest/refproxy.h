@@ -18,8 +18,11 @@
 #define __NEMU_PROXY_H
 
 #include "common.h"
+#include <string>
 #include <dlfcn.h>
 #include <unistd.h>
+
+struct AmuAbiDescriptor;
 
 /* clang-format off */
 static const char *regs_name_int[] = {
@@ -172,6 +175,7 @@ public:
   f(ref_get_vec_load_vdNum, difftest_get_vec_load_vdNum, int, )                                             \
   f(ref_get_vec_load_dual_goldenmem_reg, difftest_get_vec_load_dual_goldenmem_reg, void*, )                 \
   f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )                                   \
+  f(ref_get_ame_abi, difftest_get_ame_abi, const AmuAbiDescriptor*, )                                       \
   f(ref_amu_ctrl, difftest_amu_ctrl, int, void*)                                                            \
   f(ref_get_amu_ctrl_event_other_info, difftest_get_amu_ctrl_event_other_info, void, void*)                 \
   f(ref_msync_event, difftest_msync_event, int, void*)                                                      \
@@ -195,6 +199,7 @@ protected:
   REF_OPTIONAL(DeclRefFunc)
 
 private:
+  std::string reference_path;
   void *const handler;
   void *load_handler(const char *env, const char *file_path);
   template <typename T> T load_function(const char *func_name);
@@ -587,6 +592,13 @@ struct AmuCtrlEvent {
   uint64_t base;
   uint64_t stride;
   uint64_t pc;
+  uint8_t packedMode;
+  uint8_t kslice;
+};
+
+struct AmuAbiDescriptor {
+  uint32_t version;
+  uint32_t event_size;
 };
 
 struct MsyncEvent {

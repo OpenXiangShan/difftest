@@ -31,6 +31,7 @@ public:
 
 private:
   bool verify_one(MmaVerificationBuffer *buffer);
+  bool verify_packed_mma(MmaVerificationBuffer *buffer);
 
   template <cute_mma_model::FloatFormat Format> bool verify_fp_mma(MmaVerificationBuffer *buffer);
 

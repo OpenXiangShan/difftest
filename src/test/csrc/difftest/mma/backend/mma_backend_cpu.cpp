@@ -53,6 +53,8 @@ bool CpuMmaBackend::verify_one(MmaVerificationBuffer *buffer) {
     return false;
   }
 
+  if (buffer->amu_event.packedMode) return verify_packed_mma(buffer);
+
   if (buffer->amu_event.isfp) { // Floating-point MMA
     const MmaElementType source_type = static_cast<MmaElementType>(buffer->amu_event.types1);
     switch (source_type) {
@@ -75,6 +77,55 @@ bool CpuMmaBackend::verify_one(MmaVerificationBuffer *buffer) {
       default: return false;
     }
   }
+}
+
+// Interpret the native packed rows independently of CUTE's reduction helpers.
+// RTL keeps its existing wrap behavior for both values of the saturation flag.
+bool CpuMmaBackend::verify_packed_mma(MmaVerificationBuffer *buffer) {
+  const auto &event = buffer->amu_event;
+  const unsigned aw = event.types1 == 7 ? 4 : 8;
+  const unsigned bw = event.packedMode == 1 ? 2 : 1;
+  const unsigned k = 512 / aw;
+  if ((event.packedMode != 1 && event.packedMode != 2) || event.isfp ||
+      (event.types1 != 4 && event.types1 != 7) || event.types2 != (bw == 2 ? 4 : 0) || event.typed != 2 ||
+      event.mtilem != 128 || event.mtilen != 128 || event.mtilek != k || event.kslice >= aw / bw)
+    return false;
+
+  bool passed = true;
+  MatrixHash128 partial_hash{};
+  // C writes visit Mgroup, Ngroup, bank, then the eight adjacent columns.
+  for (unsigned mg = 0; mg < 16; ++mg) {
+    for (unsigned ng = 0; ng < 16; ++ng) {
+      for (unsigned bank = 0; bank < 8; ++bank) {
+        const unsigned m = mg * 8 + bank;
+        const uint8_t *a = buffer->src1 + m * 64;
+        for (unsigned column = 0; column < 8; ++column) {
+          const unsigned n = ng * 8 + column;
+          const uint8_t *b = buffer->src2 + n * 64;
+          const size_t offset = m * 512 + n * 4;
+          uint32_t value;
+          memcpy(&value, buffer->src3 + offset, sizeof(value));
+          for (unsigned lane = 0; lane < k; ++lane) {
+            const unsigned a_bit = lane * aw;
+            const unsigned a_code = (a[a_bit / 8] >> (a_bit % 8)) & ((1u << aw) - 1);
+            const int32_t activation = a_code & (1u << (aw - 1)) ? int32_t(a_code) - int32_t(1u << aw) : int32_t(a_code);
+            const unsigned b_bit = (event.kslice * k + lane) * bw;
+            const unsigned b_code = (b[b_bit / 8] >> (b_bit % 8)) & ((1u << bw) - 1);
+            // The reserved ternary code 10 has undefined results; choose zero.
+            const int32_t weight = bw == 1 ? int32_t(b_code) : b_code == 1 ? 1 : b_code == 3 ? -1 : 0;
+            value += uint32_t(int64_t(activation) * weight);
+            if (lane + 1 == k / 2)
+              bitmte_hash_bytes(partial_hash, reinterpret_cast<const uint8_t *>(&value), sizeof(value));
+          }
+          memcpy(buffer->src3 + offset, &value, sizeof(value));
+          uint32_t dut_value;
+          memcpy(&dut_value, buffer->dut_result + offset, sizeof(dut_value));
+          if (dut_value != value) passed = false;
+        }
+      }
+    }
+  }
+  return passed && partial_hash == buffer->packed_partial_hash;
 }
 
 template <cute_mma_model::FloatFormat Format> bool CpuMmaBackend::verify_fp_mma(MmaVerificationBuffer *buffer) {

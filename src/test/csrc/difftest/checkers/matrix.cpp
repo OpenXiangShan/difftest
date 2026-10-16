@@ -80,9 +80,9 @@ static void print_amu_ctrl_event(const char *source, const DifftestAmuCtrlEvent 
     case 0: // MMA
       printf(
           "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
-          "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+          "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d, mode %d, slice %d\n",
           event.md, event.rm, event.sat, event.ms1, event.ms2, event.isfp, event.mtilem, event.mtilen, event.mtilek,
-          event.types1, event.types2, event.typed);
+          event.types1, event.types2, event.typed, event.packedMode, event.kslice);
       break;
     case 1: // MLS
       printf(
@@ -122,6 +122,8 @@ static struct AmuCtrlEvent to_nemu_amu_ctrl(const DifftestAmuCtrlEvent &source) 
   target.base = source.base;
   target.stride = source.stride;
   target.pc = source.pc;
+  target.packedMode = source.packedMode;
+  target.kslice = source.kslice;
   return target;
 }
 
@@ -143,6 +145,8 @@ static void from_nemu_amu_ctrl(DifftestAmuCtrlEvent &target, const struct AmuCtr
   target.base = source.base;
   target.stride = source.stride;
   target.pc = source.pc;
+  target.packedMode = source.packedMode;
+  target.kslice = source.kslice;
 }
 
 // AME instruction lifecycle in software ROB
@@ -196,6 +200,7 @@ int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
   }
 
   state->matrix_sw_rob.emplace_back(probe);
+  if (probe.op == 0 && probe.packedMode) state->bitmte_seen = true;
   return STATE_OK;
 }
 
@@ -314,6 +319,11 @@ int AmuExecRecorder::execute_mrelease(const DifftestAmuCtrlEvent &event, const D
 int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
     if (iter->amu_event.pc == probe.pc && iter->state == DiffState::WAIT_DUT_EXEC) {
+      if (iter->amu_event.op == 0 && iter->amu_event.packedMode) {
+        printf("Packed MMA received on an ordinary finish channel: pc 0x%016lx\n", probe.pc);
+        set_error_pc(state->coreid, probe.pc);
+        return STATE_ERROR;
+      }
       switch (iter->amu_event.op) {
         case 0: // MMA
           record_writeback(*iter, probe);
@@ -356,6 +366,60 @@ int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
   printf("No matching AMU instruction for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
   set_error_pc(state->coreid, probe.pc);
   return STATE_ERROR;
+}
+
+bool BitMteExecRecorder::get_valid(const DifftestAmuFinishEvent &probe) {
+  return probe.valid;
+}
+
+void BitMteExecRecorder::clear_valid(DifftestAmuFinishEvent &probe) {
+  probe.valid = 0;
+}
+
+int BitMteExecRecorder::check(const DifftestAmuFinishEvent &probe) {
+  auto fail = [this, &probe](const char *reason) {
+    printf("BMTE raw finish mismatch: pc=0x%016lx %s\n", probe.pc, reason);
+    set_error_pc(state->coreid, probe.pc);
+    return STATE_ERROR;
+  };
+  for (auto &entry: state->matrix_sw_rob) {
+    if (entry.amu_event.pc != probe.pc || entry.state != DiffState::WAIT_DUT_EXEC) continue;
+    if (entry.amu_event.op != 0 || !entry.amu_event.packedMode)
+      return fail("channel 3 requires a packed MMA owner");
+    if (CONFIG_DIFF_AMU_FINISH_BANKS != 8 || CONFIG_DIFF_AMU_C_WORDS_PER_BANK != 4 ||
+        CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK != 4 ||
+        CONFIG_DIFF_AMU_ARLEN != 4096 || CONFIG_DIFF_AMU_C_REG_SIZE_BYTES != kBitMteAccBytes)
+      return fail("unsupported packed physical geometry");
+    if (!entry.res) {
+      entry.res_words = kBitMteAccBytes / sizeof(uint64_t);
+      entry.res = new uint64_t[entry.res_words]();
+    }
+    bool write = false;
+    for (unsigned bank = 0; bank < 8; ++bank) write |= probe.bankValid[bank];
+    if (write) {
+      if (entry.bitmte_write_beats >= 512) return fail("more than 512 write beats");
+      const unsigned addr = entry.bitmte_write_beats % 256;
+      for (unsigned bank = 0; bank < 8; ++bank) {
+        if (!probe.bankValid[bank] || probe.bankAddr[bank] != addr || probe.bankMask[bank] != UINT32_MAX)
+          return fail("invalid bank, address, or byte mask");
+        const size_t matrix_entry = (addr / 16) * 16 * 8 + bank * 16 + addr % 16;
+        memcpy(&entry.res[matrix_entry * 4], &probe.data[bank * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK], 32);
+        if (entry.bitmte_write_beats < 256)
+          bitmte_hash_bytes(entry.bitmte_partial_hash,
+                           reinterpret_cast<const uint8_t *>(&probe.data[bank * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK]), 32);
+      }
+      ++entry.bitmte_write_beats;
+    } else if (!probe.finish) {
+      return fail("valid event contains neither a write nor finish");
+    }
+    if (probe.finish) {
+      if (entry.bitmte_write_beats != 512) return fail("finish before two complete write passes");
+      entry.state = DiffState::WAIT_SWROB_COMMIT;
+      ++state->bitmte_finish_checks;
+    }
+    return STATE_OK;
+  }
+  return fail("no matching WAIT_DUT_EXEC owner");
 }
 
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
@@ -402,8 +466,15 @@ int AmuExecChecker::commit_ready_prefix() {
           // Allocate buffer for MMA verification
           buffer = mma_verifier->allocate_buffer(&amu_event);
           // Store DUT result in the buffer
+          if (amu_event.packedMode && (!iter->res || iter->res_words * sizeof(uint64_t) != kBitMteAccBytes)) {
+            mma_verifier->free_buffer(buffer);
+            set_error_pc(state->coreid, amu_event.pc);
+            return STATE_ERROR;
+          }
           memcpy(buffer->dut_result, iter->res,
+                 amu_event.packedMode ? kBitMteAccBytes :
                  amu_event.mtilem * amu_event.mtilen * get_element_size(amu_event.typed));
+          if (amu_event.packedMode) buffer->packed_partial_hash = iter->bitmte_partial_hash;
           // Capture REF operands and install the DUT result for asynchronous MMA verification.
           amu_event_nemu = to_nemu_amu_ctrl(amu_event);
           if (proxy->exec_amu_lazy(&amu_event_nemu, iter->res, buffer->src1, buffer->src2, buffer->src3) != 0) {
@@ -431,6 +502,9 @@ int AmuExecChecker::commit_ready_prefix() {
             set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
           }
+#ifdef CONFIG_DIFFTEST_AMUHASHEVENT
+          ++state->bitmte_hash_checks;
+#endif
           delete[] iter->res;
           break;
         case 2: // MRelease

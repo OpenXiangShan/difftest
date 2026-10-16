@@ -193,9 +193,15 @@ public:
     uint64_t *res;
     size_t res_words;
     MatrixHash128 hash{};
+    uint16_t bitmte_write_beats = 0;
+    MatrixHash128 bitmte_partial_hash{};
   };
 
   std::deque<AmeInstRobEntry> matrix_sw_rob;
+  bool bitmte_seen = false;
+  uint64_t bitmte_hash_checks = 0;
+  uint64_t bitmte_finish_checks = 0;
+  uint64_t bitmte_store_checks = 0;
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT

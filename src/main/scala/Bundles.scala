@@ -449,6 +449,9 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
 
   val pc = UInt(64.W)
 
+  val packedMode = UInt(2.W)
+  val kslice = UInt(3.W)
+
   def msyncRd: UInt = mtilem
 
   def opType: UInt = base

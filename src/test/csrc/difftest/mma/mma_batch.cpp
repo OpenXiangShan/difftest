@@ -16,6 +16,7 @@
 
 #include "mma/mma_batch.h"
 #include "mma/backend/mma_backend.h"
+#include "mma/mma_verifier.h"
 #include <algorithm>
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
@@ -32,7 +33,9 @@ std::vector<MmaVerificationBuffer *> take_contiguous_batch(std::queue<MmaVerific
   queue.pop();
   batch.push_back(first);
 
-  while (batch.size() < max_batch_size && !queue.empty() && backend.is_batch_compatible(first, queue.front())) {
+  while (batch.size() < max_batch_size && !queue.empty() &&
+         first->amu_event.packedMode == queue.front()->amu_event.packedMode &&
+         backend.is_batch_compatible(first, queue.front())) {
     batch.push_back(queue.front());
     queue.pop();
   }

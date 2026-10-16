@@ -127,6 +127,9 @@ int MatrixStoreChecker::do_step() {
       observations, state->cycle_count,
       [this](MatrixStoreRequest &request) {
         update_goldenmem(request.addr, request.data.data(), request.mask, 64);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+        ++state->bitmte_store_checks;
+#endif
         if (request.addr == state->track_instr) {
           dumpGoldenMem("Matrix Store", state->track_instr, state->cycle_count);
         }

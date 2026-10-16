@@ -201,6 +201,55 @@ void difftest_finish() {
 }
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+int Difftest::finish_bitmte_checks() {
+  // This barrier is enabled only after a new packed task was observed.
+  // Ordinary-only runs retain their original exit and verifier lifecycle.
+  const bool error = mma_verifier && mma_verifier->has_mma_verification_error();
+  const bool drained = !error && mma_verifier && mma_verifier->flush();
+  size_t queued = 0, executing = 0;
+  if (mma_verifier) mma_verifier->pending_counts(queued, executing);
+  const size_t store_pending =
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+      matrix_store_checker ? matrix_store_checker->pending_count() : 0;
+#else
+      0;
+#endif
+  const bool hash_enabled =
+#ifdef CONFIG_DIFFTEST_AMUHASHEVENT
+      true;
+#else
+      false;
+#endif
+  const bool store_enabled =
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+      matrix_store_checker != nullptr;
+#else
+      false;
+#endif
+  const bool finish_enabled =
+#ifdef CONFIG_DIFFTEST_AMUFINISHEVENT
+      CONFIG_DIFF_AMU_FINISH_WIDTH > 3;
+#else
+      false;
+#endif
+  if (!drained || error || queued || executing || !state->matrix_sw_rob.empty() || store_pending ||
+      !hash_enabled || !store_enabled || !finish_enabled) {
+    Info("BitMTE GOODTRAP rejected: core=%d SWROB=%zu queued=%zu executing=%zu store_pending=%zu drained=%d error=%d hash=%d store=%d finish=%d\n",
+         state->coreid, state->matrix_sw_rob.size(), queued, executing, store_pending, drained, error,
+         hash_enabled, store_enabled, finish_enabled);
+    if (error) dut->trap.pc = mma_verifier->get_error_buffer()->amu_event.pc;
+    state->raise_trap(STATE_BADTRAP);
+    return STATE_BADTRAP;
+  }
+  Info("BITMTE_DIFFTEST {\"schema\":1,\"coreid\":%d,\"software_rob\":0,\"queued\":0,"
+       "\"executing\":0,\"store_pending\":0,\"error\":\"none\",\"golden_workers\":1,"
+       "\"raw_hash_enabled\":true,\"finish_enabled\":true,\"store_enabled\":true,"
+       "\"raw_hash_count\":%lu,\"finish_count\":%lu,\"store_count\":%lu,\"golden_count\":%lu}\n",
+       state->coreid, state->bitmte_hash_checks, state->bitmte_finish_checks, state->bitmte_store_checks,
+       mma_verifier->packed_checked_count());
+  return STATE_GOODTRAP;
+}
+
 void difftest_mma_flush_all() {
   for (int i = 0; i < NUM_CORES; i++) {
     auto verifier = difftest[i]->get_mma_verifier();
@@ -455,8 +504,13 @@ void Difftest::init_checkers() {
   }
   checkers.push_back(new AmuCtrlChecker(state, proxy));
   for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; i++) {
-    checkers.push_back(
-        new AmuExecRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
+    if (i == 3) {
+      checkers.push_back(
+          new BitMteExecRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
+    } else {
+      checkers.push_back(
+          new AmuExecRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
+    }
   }
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
   for (int i = 0; i < CONFIG_DIFF_AMU_HASH_FINISH_WIDTH; ++i) {

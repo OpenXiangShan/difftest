@@ -65,6 +65,17 @@ AbstractRefProxy::AbstractRefProxy(int coreid, size_t ram_size, const char *env,
   REF_ALL(CheckRefFunc)
   REF_OPTIONAL(LoadRefFunc)
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  const AmuAbiDescriptor *ame_abi = ref_get_ame_abi ? ref_get_ame_abi() : nullptr;
+  if (!ame_abi || ame_abi->version != 2 || ame_abi->event_size != sizeof(AmuCtrlEvent)) {
+    eprintf("AME ABI mismatch: ref=%s expected version=2 event_size=%zu; actual version=%u event_size=%u%s\n",
+            reference_path.c_str(), sizeof(AmuCtrlEvent), ame_abi ? ame_abi->version : 0,
+            ame_abi && ame_abi->version == 2 ? ame_abi->event_size : 0,
+            ref_get_ame_abi ? "" : " (missing difftest_get_ame_abi)");
+    exit(EXIT_FAILURE);
+  }
+#endif
+
   if (NUM_CORES > 1) {
     check_and_assert(ref_set_mhartid);
     ref_set_mhartid(coreid);
@@ -100,6 +111,7 @@ AbstractRefProxy::~AbstractRefProxy() {
 
 void *AbstractRefProxy::load_handler(const char *env, const char *file_path) {
 #ifdef LINKED_REFPROXY_LIB
+  reference_path = LINKED_REFPROXY_LIB;
   Info("The reference model (dynamically or statically linked at compile-time) is %s\n", LINKED_REFPROXY_LIB);
   return nullptr;
 #endif
@@ -122,6 +134,7 @@ void *AbstractRefProxy::load_handler(const char *env, const char *file_path) {
     use_given_diff = false;
   }
 
+  reference_path = difftest_ref_so;
   Info("The reference model is %s\n", difftest_ref_so);
 
 #if defined(__APPLE__)

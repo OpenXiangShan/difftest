@@ -366,6 +366,7 @@ public:
 
   void replay_snapshot();
   void replay_restore();
+  size_t pending_count() const { return tracker.size(); }
 
 private:
   int do_step() override;
@@ -523,6 +524,18 @@ public:
 private:
   void record_writeback(DiffState::AmeInstRobEntry &entry, const DifftestAmuFinishEvent &probe);
   int execute_mrelease(const DifftestAmuCtrlEvent &event, const DifftestAmuFinishEvent &probe);
+};
+
+// The appended BMTE channel has a full-tile, two-K-beat write contract.
+// Keep the existing ordinary recorder and its completion behavior unchanged.
+class BitMteExecRecorder : public ProbeChecker<DifftestAmuFinishEvent> {
+public:
+  BitMteExecRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuFinishEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestAmuFinishEvent &probe) override;
+  void clear_valid(DifftestAmuFinishEvent &probe) override;
+  int check(const DifftestAmuFinishEvent &probe) override;
 };
 
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
