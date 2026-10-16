@@ -4,6 +4,8 @@
 * DiffTest is licensed under Mulan PSL v2.
 ***************************************************************************************/
 
+#include "dfi/dfi_handshake_fsm.h"
+#include "ram.h"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -12,11 +14,7 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
-
 #include <svdpi.h>
-
-#include "dfi/dfi_handshake_fsm.h"
-#include "ram.h"
 
 #ifndef BAIYANG_ADDRESS_MAPPING
 #define BAIYANG_ADDRESS_MAPPING "src/main/baiyang/address_mapping_baiyang_dual.ini"
@@ -55,7 +53,7 @@ struct set_default_mapping {
 };
 
 struct difftest_ram_backend {
-  SimMemory* memory = nullptr;
+  SimMemory *memory = nullptr;
   uint64_t size_bytes = 0U;
 };
 
@@ -68,8 +66,7 @@ std::mutex g_ram_mutex;
 
 size_t channel_index(uint32_t channel) {
   if (channel >= kDfiChannels) {
-    std::cerr << "[DFI] invalid channel " << channel
-              << " (configured channels=" << kDfiChannels << ")" << std::endl;
+    std::cerr << "[DFI] invalid channel " << channel << " (configured channels=" << kDfiChannels << ")" << std::endl;
     std::abort();
   }
   return static_cast<size_t>(channel);
@@ -83,14 +80,13 @@ uint32_t extract_arg(uint64_t value, uint32_t phase) {
   return static_cast<uint32_t>(value >> (phase * 32U));
 }
 
-bool backend_range_valid(const difftest_ram_backend* backend, uint64_t offset) {
-  return backend != nullptr && backend->memory != nullptr &&
-         dfi::virtual_ram::kBeatBytes <= backend->size_bytes &&
+bool backend_range_valid(const difftest_ram_backend *backend, uint64_t offset) {
+  return backend != nullptr && backend->memory != nullptr && dfi::virtual_ram::kBeatBytes <= backend->size_bytes &&
          offset <= backend->size_bytes - dfi::virtual_ram::kBeatBytes;
 }
 
-bool backend_read(void* context, uint64_t offset, uint32_t* data) {
-  auto* backend = static_cast<difftest_ram_backend*>(context);
+bool backend_read(void *context, uint64_t offset, uint32_t *data) {
+  auto *backend = static_cast<difftest_ram_backend *>(context);
   if (data == nullptr || !backend_range_valid(backend, offset)) {
     return false;
   }
@@ -103,11 +99,8 @@ bool backend_read(void* context, uint64_t offset, uint32_t* data) {
   return true;
 }
 
-bool backend_write(void* context,
-                   uint64_t offset,
-                   const uint32_t* data,
-                   uint32_t byte_enable) {
-  auto* backend = static_cast<difftest_ram_backend*>(context);
+bool backend_write(void *context, uint64_t offset, const uint32_t *data, uint32_t byte_enable) {
+  auto *backend = static_cast<difftest_ram_backend *>(context);
   if (data == nullptr || !backend_range_valid(backend, offset)) {
     return false;
   }
@@ -128,20 +121,14 @@ bool backend_write(void* context,
   return true;
 }
 
-void dispatch_commands(dfi::dfi_handshake_fsm& fsm,
-                       uint32_t cmd_valid,
-                       uint32_t cmd_kind,
-                       uint32_t cmd_rank,
-                       uint32_t cmd_bank,
-                       uint64_t cmd_arg0,
-                       uint64_t cmd_arg1) {
+void dispatch_commands(dfi::dfi_handshake_fsm &fsm, uint32_t cmd_valid, uint32_t cmd_kind, uint32_t cmd_rank,
+                       uint32_t cmd_bank, uint64_t cmd_arg0, uint64_t cmd_arg1) {
   for (uint32_t phase = 0U; phase < kDfiPhases; ++phase) {
     if (((cmd_valid >> phase) & 0x1U) == 0U) {
       continue;
     }
 
-    const auto kind =
-        static_cast<dfi_cmd_kind>(extract_field(cmd_kind, phase, kCmdKindWidth));
+    const auto kind = static_cast<dfi_cmd_kind>(extract_field(cmd_kind, phase, kCmdKindWidth));
     const uint32_t rank = extract_field(cmd_rank, phase, kCmdRankWidth);
     const uint32_t bank = extract_field(cmd_bank, phase, kCmdBankWidth);
     const uint32_t arg0 = extract_arg(cmd_arg0, phase);
@@ -160,7 +147,7 @@ void dispatch_commands(dfi::dfi_handshake_fsm& fsm,
   }
 }
 
-}  // namespace
+} // namespace
 
 extern "C" void dfi_dpi_reset(uint32_t channel) {
   const size_t index = channel_index(channel);
@@ -169,29 +156,15 @@ extern "C" void dfi_dpi_reset(uint32_t channel) {
   g_preload_done[index] = g_dfi_fsm[index].memory_ready();
 }
 
-extern "C" void dfi_dpi_cycle(uint32_t channel,
-                              uint32_t frequency,
-                              uint32_t ctrlupd_req,
-                              uint32_t lp_req,
-                              uint32_t cmd_valid,
-                              uint32_t cmd_kind,
-                              uint32_t cmd_rank,
-                              uint32_t cmd_bank,
-                              uint64_t cmd_arg0,
-                              uint64_t cmd_arg1,
-                              uint32_t rddata_en,
-                              uint32_t wrdata_en,
-                              uint32_t wrdata_mask,
-                              const svBitVecVal* wrdata,
-                              svBitVecVal* rddata,
-                              uint32_t* rddata_valid,
-                              uint32_t* rddata_dbi,
-                              uint32_t* ctrlupd_ack,
-                              uint32_t* ctrlupd_ack2,
-                              uint32_t* lp_ack) {
+extern "C" void dfi_dpi_cycle(uint32_t channel, uint32_t frequency, uint32_t ctrlupd_req, uint32_t lp_req,
+                              uint32_t cmd_valid, uint32_t cmd_kind, uint32_t cmd_rank, uint32_t cmd_bank,
+                              uint64_t cmd_arg0, uint64_t cmd_arg1, uint32_t rddata_en, uint32_t wrdata_en,
+                              uint32_t wrdata_mask, const svBitVecVal *wrdata, svBitVecVal *rddata,
+                              uint32_t *rddata_valid, uint32_t *rddata_dbi, uint32_t *ctrlupd_ack,
+                              uint32_t *ctrlupd_ack2, uint32_t *lp_ack) {
   const size_t index = channel_index(channel);
-  auto& fsm = g_dfi_fsm[index];
-  auto& out = g_dfi_out[index];
+  auto &fsm = g_dfi_fsm[index];
+  auto &out = g_dfi_out[index];
   fsm.begin_core_cycle(frequency, ctrlupd_req, lp_req, out);
   dispatch_commands(fsm, cmd_valid, cmd_kind, cmd_rank, cmd_bank, cmd_arg0, cmd_arg1);
 
@@ -217,9 +190,7 @@ extern "C" void dfi_dpi_cycle(uint32_t channel,
 }
 
 extern "C" bool baiyang_preload_done() {
-  return std::all_of(g_preload_done.begin(), g_preload_done.end(), [](bool done) {
-    return done;
-  });
+  return std::all_of(g_preload_done.begin(), g_preload_done.end(), [](bool done) { return done; });
 }
 
 extern "C" bool baiyang_bind_difftest_ram(uint64_t base_addr) {
@@ -232,13 +203,10 @@ extern "C" bool baiyang_bind_difftest_ram(uint64_t base_addr) {
   g_ram_backend = {simMemory, simMemory->get_size()};
   bool bound_all = true;
   for (size_t channel = 0U; channel < kDfiChannels; ++channel) {
-    auto& fsm = g_dfi_fsm[channel];
+    auto &fsm = g_dfi_fsm[channel];
     fsm.set_channel(static_cast<uint8_t>(channel));
-    g_preload_done[channel] = fsm.bind_memory_backend(base_addr,
-                                                      g_ram_backend.size_bytes,
-                                                      &g_ram_backend,
-                                                      backend_read,
-                                                      backend_write);
+    g_preload_done[channel] =
+        fsm.bind_memory_backend(base_addr, g_ram_backend.size_bytes, &g_ram_backend, backend_read, backend_write);
     bound_all = bound_all && g_preload_done[channel];
   }
   return bound_all;
