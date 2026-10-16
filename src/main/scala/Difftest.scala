@@ -416,14 +416,12 @@ class DiffMatrixCSRState extends MatrixCSRState with DifftestBundle {
   override val desiredCppName: String = "mcsr"
   override val desiredRegOffset: Option[Int] = Some(8)
   override val updateDependency: Seq[String] = Seq("commit", "event")
-  override val supportsDelta: Boolean = true
 }
 
 class DiffMcfgState extends McfgState with DifftestBundle {
   override val desiredCppName: String = "mcfg"
   override val desiredRegOffset: Option[Int] = Some(9)
   override val updateDependency: Seq[String] = Seq("commit", "event")
-  override val supportsDelta: Boolean = true
 }
 
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
