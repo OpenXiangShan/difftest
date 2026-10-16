@@ -18,17 +18,17 @@
 #include "dfi/dfi_handshake_fsm.h"
 #include "ram.h"
 
-#ifndef MC_COSIM_ADDRESS_MAPPING
-#define MC_COSIM_ADDRESS_MAPPING "src/main/mc_cosim/address_mapping_baiyang_dual.ini"
+#ifndef BAIYANG_ADDRESS_MAPPING
+#define BAIYANG_ADDRESS_MAPPING "src/main/baiyang/address_mapping_baiyang_dual.ini"
 #endif
 
-#ifndef MC_COSIM_DFI_CHANNELS
-#define MC_COSIM_DFI_CHANNELS 2
+#ifndef BAIYANG_DFI_CHANNELS
+#define BAIYANG_DFI_CHANNELS 2
 #endif
 
 namespace {
 
-constexpr size_t kDfiChannels = MC_COSIM_DFI_CHANNELS;
+constexpr size_t kDfiChannels = BAIYANG_DFI_CHANNELS;
 constexpr uint32_t kDfiPhases = 2U;
 constexpr uint32_t kCmdKindWidth = 4U;
 constexpr uint32_t kCmdRankWidth = 2U;
@@ -49,7 +49,7 @@ enum class dfi_cmd_kind : uint32_t {
 struct set_default_mapping {
   set_default_mapping() {
     if (std::getenv("MC_ADDRESS_MAPPING") == nullptr) {
-      setenv("MC_ADDRESS_MAPPING", MC_COSIM_ADDRESS_MAPPING, 0);
+      setenv("MC_ADDRESS_MAPPING", BAIYANG_ADDRESS_MAPPING, 0);
     }
   }
 };
@@ -216,15 +216,15 @@ extern "C" void dfi_dpi_cycle(uint32_t channel,
   *lp_ack = out.lp_ack;
 }
 
-extern "C" bool mc_cosim_preload_done() {
+extern "C" bool baiyang_preload_done() {
   return std::all_of(g_preload_done.begin(), g_preload_done.end(), [](bool done) {
     return done;
   });
 }
 
-extern "C" bool mc_cosim_bind_difftest_ram(uint64_t base_addr) {
+extern "C" bool baiyang_bind_difftest_ram(uint64_t base_addr) {
   if (simMemory == nullptr) {
-    std::cerr << "[MC_COSIM] cannot bind RAM before simMemory initialization" << std::endl;
+    std::cerr << "[BAIYANG] cannot bind RAM before simMemory initialization" << std::endl;
     g_preload_done.fill(false);
     return false;
   }
@@ -244,6 +244,6 @@ extern "C" bool mc_cosim_bind_difftest_ram(uint64_t base_addr) {
   return bound_all;
 }
 
-extern "C" void mc_cosim_preload_difftest_ram(uint64_t base_addr) {
-  (void)mc_cosim_bind_difftest_ram(base_addr);
+extern "C" void baiyang_preload_difftest_ram(uint64_t base_addr) {
+  (void)baiyang_bind_difftest_ram(base_addr);
 }

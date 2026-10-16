@@ -222,6 +222,9 @@ ifneq ($(filter-out 0 1,$(MEMORY_BACKEND_COUNT)),)
 $(error WITH_DRAMSIM3, WITH_MCSIM and WITH_BAIYANG are mutually exclusive)
 endif
 
+include scripts/Makefile.mcsim.mk
+include scripts/Makefile.baiyang.mk
+
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
 ifndef DRAMSIM3_HOME
@@ -230,53 +233,6 @@ endif
 SIM_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
 SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
 SIM_LDFLAGS  += -L$(DRAMSIM3_HOME)/build -ldramsim3
-endif
-
-# co-simulation with MCSim timing and DifftestMem data
-ifeq ($(WITH_MCSIM),1)
-ifndef MCSIM_HOME
-$(error MCSIM_HOME is not set)
-endif
-MCSIM_LIB ?= $(MCSIM_HOME)/build-verilator-lib/libmcsim.a
-MCSIM_CPU_FREQ_MHZ ?= 3000
-ifeq ($(wildcard $(MCSIM_HOME)/include/mcsim_c_api.h),)
-$(error MCSIM_HOME is invalid: $(MCSIM_HOME))
-endif
-ifeq ($(wildcard $(MCSIM_LIB)),)
-$(error MCSim library is missing. Run: make -C $(MCSIM_HOME) verilator-lib)
-endif
-SIM_CXXFLAGS += -I$(MCSIM_HOME)/include -DWITH_MCSIM -DMCSIM_CPU_FREQ_MHZ=$(MCSIM_CPU_FREQ_MHZ)
-SIM_LDFLAGS  += $(MCSIM_LIB)
-endif
-
-# co-simulation with Baiyang mc-cosim DDR wrapper
-MCCOSIM_HOME ?= $(abspath $(DESIGN_DIR)/src/main/mc_cosim)
-ifeq ($(WITH_BAIYANG),1)
-ifeq ($(wildcard $(MCCOSIM_HOME)/rtl/ddr_wrapper_baiyang.sv),)
-$(error MCCOSIM_HOME is invalid: $(MCCOSIM_HOME))
-endif
-MC_COSIM_RTL_DIR = $(MCCOSIM_HOME)/rtl
-BAIYANG_HOME ?= $(abspath $(DESIGN_DIR)/YuQuan)
-MC_COSIM_BAIYANG_BUILD_DIR = $(BAIYANG_HOME)/build
-MC_COSIM_BAIYANG_VSRC = $(shell find $(MC_COSIM_BAIYANG_BUILD_DIR) \( -name "*.v" -o -name "*.sv" \) 2> /dev/null)
-ifeq ($(wildcard $(BAIYANG_HOME)/Makefile),)
-$(error BAIYANG_HOME is invalid: $(BAIYANG_HOME))
-endif
-ifeq ($(wildcard $(MC_COSIM_BAIYANG_BUILD_DIR)/mc_top.sv)$(wildcard $(MC_COSIM_BAIYANG_BUILD_DIR)/mc_top_baiyang.sv)$(wildcard $(MC_COSIM_BAIYANG_BUILD_DIR)/BY_mc_top.sv),)
-$(error Baiyang generated RTL is missing. Run: make -C $(BAIYANG_HOME) verilog)
-endif
-SIM_VSRC += $(MC_COSIM_RTL_DIR)/baiyang_axi_async_bridge.sv $(MC_COSIM_RTL_DIR)/ddr_wrapper_baiyang.sv $(MC_COSIM_BAIYANG_VSRC)
-SIM_CXXFLAGS += -DMC_COSIM_DFI_CHANNELS=2 -DMC_COSIM_BAIYANG
-MC_COSIM_ADDRESS_MAPPING ?= $(MCCOSIM_HOME)/address_mapping_baiyang_dual.ini
-SIM_VFLAGS += -I$(MC_COSIM_RTL_DIR) -I$(MC_COSIM_BAIYANG_BUILD_DIR)
-MC_COSIM_DFI_CSRC_DIR = $(MCCOSIM_HOME)/src/dfi
-MC_COSIM_LOCAL_CSRC_DIR = $(abspath ./src/test/csrc/mc_cosim)
-SIM_CXXFILES += $(filter-out $(MC_COSIM_DFI_CSRC_DIR)/dfi_dpi_helper.cpp,$(shell find $(MC_COSIM_DFI_CSRC_DIR) -name "*.cpp"))
-SIM_CXXFILES += $(MC_COSIM_LOCAL_CSRC_DIR)/dfi_dpi_helper.cpp
-SIM_CXXFLAGS += -DWITH_BAIYANG -I$(MCCOSIM_HOME)/include
-SIM_CXXFLAGS += -DMC_COSIM_ADDRESS_MAPPING=\\\"$(MC_COSIM_ADDRESS_MAPPING)\\\"
-DIFFTEST_FIRST_COMMIT_LIMIT ?= 2000000ULL
-SIM_VFLAGS += -Wno-PINMISSING -Wno-IMPLICIT -Wno-WIDTHCONCAT -Wno-UNOPTFLAT
 endif
 
 ifneq ($(DIFFTEST_FIRST_COMMIT_LIMIT),)

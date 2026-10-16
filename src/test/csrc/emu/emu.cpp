@@ -154,8 +154,8 @@ Emulator::Emulator(int argc, const char *argv[])
   }
 
 #ifdef WITH_BAIYANG
-  if (!mc_cosim_bind_difftest_ram(PMEM_BASE)) {
-    printf("Warning: failed to bind mc-cosim to difftest RAM backend\n");
+  if (!baiyang_bind_difftest_ram(PMEM_BASE)) {
+    printf("Warning: failed to bind Baiyang to difftest RAM backend\n");
   }
 #endif
 
