@@ -153,7 +153,7 @@ Emulator::Emulator(int argc, const char *argv[])
     copy_ram(args.copy_ram_offset);
   }
 
-#ifdef WITH_MC_COSIM
+#ifdef WITH_BAIYANG
   if (!mc_cosim_bind_difftest_ram(PMEM_BASE)) {
     printf("Warning: failed to bind mc-cosim to difftest RAM backend\n");
   }

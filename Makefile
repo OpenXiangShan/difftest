@@ -217,9 +217,9 @@ endif
 endif
 
 # External memory backends are mutually exclusive.
-MEMORY_BACKEND_COUNT := $(words $(filter 1,$(WITH_DRAMSIM3) $(WITH_MCSIM) $(WITH_MC_COSIM)))
+MEMORY_BACKEND_COUNT := $(words $(filter 1,$(WITH_DRAMSIM3) $(WITH_MCSIM) $(WITH_BAIYANG)))
 ifneq ($(filter-out 0 1,$(MEMORY_BACKEND_COUNT)),)
-$(error WITH_DRAMSIM3, WITH_MCSIM and WITH_MC_COSIM are mutually exclusive)
+$(error WITH_DRAMSIM3, WITH_MCSIM and WITH_BAIYANG are mutually exclusive)
 endif
 
 # co-simulation with DRAMsim3
@@ -251,7 +251,7 @@ endif
 
 # co-simulation with Baiyang mc-cosim DDR wrapper
 MCCOSIM_HOME ?= $(abspath $(DESIGN_DIR)/src/main/mc_cosim)
-ifeq ($(WITH_MC_COSIM),1)
+ifeq ($(WITH_BAIYANG),1)
 ifeq ($(wildcard $(MCCOSIM_HOME)/rtl/ddr_wrapper_baiyang.sv),)
 $(error MCCOSIM_HOME is invalid: $(MCCOSIM_HOME))
 endif
@@ -273,7 +273,7 @@ MC_COSIM_DFI_CSRC_DIR = $(MCCOSIM_HOME)/src/dfi
 MC_COSIM_LOCAL_CSRC_DIR = $(abspath ./src/test/csrc/mc_cosim)
 SIM_CXXFILES += $(filter-out $(MC_COSIM_DFI_CSRC_DIR)/dfi_dpi_helper.cpp,$(shell find $(MC_COSIM_DFI_CSRC_DIR) -name "*.cpp"))
 SIM_CXXFILES += $(MC_COSIM_LOCAL_CSRC_DIR)/dfi_dpi_helper.cpp
-SIM_CXXFLAGS += -DWITH_MC_COSIM -I$(MCCOSIM_HOME)/include
+SIM_CXXFLAGS += -DWITH_BAIYANG -I$(MCCOSIM_HOME)/include
 SIM_CXXFLAGS += -DMC_COSIM_ADDRESS_MAPPING=\\\"$(MC_COSIM_ADDRESS_MAPPING)\\\"
 DIFFTEST_FIRST_COMMIT_LIMIT ?= 2000000ULL
 SIM_VFLAGS += -Wno-PINMISSING -Wno-IMPLICIT -Wno-WIDTHCONCAT -Wno-UNOPTFLAT
