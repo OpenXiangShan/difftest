@@ -742,6 +742,13 @@ inline int Difftest::check_all() {
 }
 
 int Difftest::update_delayed_writeback() {
+// A delayed writeback event only updates bookkeeping: it does not retire an
+// instruction, so it must not trigger a state comparison by itself.  In batch
+// transport without delta the DUT register state is only sent on steps that
+// carry a commit or an arch event; comparing on a delayed-writeback-only step
+// would use an all-zero per-step snapshot and report false diffs.  The register
+// is compared again on the next commit.
+//
 // A delayed writeback event reports the register index, the data and whether the
 // DUT actually committed the write in this cycle (nack = !fired). The DUT register
 // probe may still show the value from before the writeback in the releasing cycle
@@ -768,7 +775,6 @@ int Difftest::update_delayed_writeback() {
           }                                                                                        \
           delayed[delay->address] = 0;                                                             \
         }                                                                                          \
-        state->has_progress = true;                                                                \
       }                                                                                            \
     }                                                                                              \
   } while (0);
