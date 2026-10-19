@@ -43,6 +43,8 @@
 #include "simfrontend.h"
 #endif // PLUGIN_SIMFRONTEND
 
+static constexpr uint64_t INSTR_PROGRESS_INTERVAL = 200000;
+
 extern remote_bitbang_t *jtag;
 
 Emulator::Emulator(int argc, const char *argv[])
@@ -205,6 +207,7 @@ Emulator::Emulator(int argc, const char *argv[])
 
   for (int i = 0; i < NUM_CORES; i++) {
     core_max_instr[i] = args.max_instr;
+    next_instr_progress[i] = INSTR_PROGRESS_INTERVAL;
   }
 
   //check compiling options for lightSSS
@@ -466,6 +469,12 @@ int Emulator::tick() {
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
+    if (trap->instrCnt >= next_instr_progress[i]) {
+      Info("Core %d has executed %'" PRIu64 " instructions.\n", i, trap->instrCnt);
+      fflush(stdout);
+      next_instr_progress[i] =
+          trap->instrCnt - trap->instrCnt % INSTR_PROGRESS_INTERVAL + INSTR_PROGRESS_INTERVAL;
+    }
     if (trap->instrCnt >= core_max_instr[i]) {
       trapCode = STATE_LIMIT_EXCEEDED;
 #ifdef FUZZER_LIB

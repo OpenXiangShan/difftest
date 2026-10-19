@@ -40,6 +40,7 @@ private:
   int trapCode;
   uint32_t lasttime_snapshot = 0;
   uint64_t core_max_instr[NUM_CORES];
+  uint64_t next_instr_progress[NUM_CORES];
   uint32_t lasttime_poll = 0;
   uint32_t elapsed_time;
 #ifdef CONFIG_HAS_ACCELERATOR_CLOCK
