@@ -1,4 +1,4 @@
-# DiffTest Task Workflow
+# DiffTest Development Workflow
 
 This document defines the standard workflow for complex difftest tasks — those involving multi-file changes, pipeline modifications, or iterative debugging. Simple one-shot edits do not require this process.
 
@@ -103,7 +103,7 @@ At the start of each conversation or after a context reset:
 
 1. **Re-read the plan** to restore the task definition and Phase structure.
 2. **Re-read the progress** to determine which Phase is current and what has already been tried.
-3. **Re-read relevant docs** (`difftest/docs/`) if the task involves unfamiliar modules.
+3. **Re-read relevant docs** (`docs/`) if the task involves unfamiliar modules.
 
 Do not rely on memory or assumptions about prior state. The plan and progress files are the source of truth.
 
@@ -144,4 +144,4 @@ When a test fails, follow this escalation order:
 
 At each level, form a hypothesis before escalating. If the hypothesis can be verified without the next level, do so.
 
-Detailed command references: see [test.md §3 (Debugging Artifacts)](./test.md#3-debugging-artifacts) and [test.md §4 (Debug Workflow)](./test.md#4-debug-workflow).
+Detailed command references: see [Build, test, and debug](build-and-test.md), especially the debugging artifacts and debug workflow sections.

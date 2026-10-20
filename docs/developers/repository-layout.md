@@ -1,4 +1,4 @@
-# DiffTest Layout
+# DiffTest Repository Layout
 
 ## Directory Structure
 
@@ -75,34 +75,34 @@ difftest/
 
 | File | Role |
 |------|------|
-| [`Bundles.scala`](../src/main/scala/Bundles.scala) | Defines all DiffTest probe bundles (`InstrCommit`, `CSRState`, `StoreEvent`, etc.) |
-| [`Difftest.scala`](../src/main/scala/Difftest.scala) | `DifftestModule.apply()` registers bundles with Gateway; generates corresponding C/C++ structs |
-| [`Gateway.scala`](../src/main/scala/Gateway.scala) | Hardware transport pipeline controller; `GatewayEndpoint` chains all processing stages; parses `--difftest-config` letters |
-| [`DPIC.scala`](../src/main/scala/DPIC.scala) | Generates DPI-C functions (`v_difftest_*`), the HW-to-SW data bridge |
-| [`Squash.scala`](../src/main/scala/Squash.scala) | Cross-cycle event compression, reduces transport volume |
-| [`Batch.scala`](../src/main/scala/Batch.scala) | Multi-cycle batch packaging |
-| [`Delta.scala`](../src/main/scala/Delta.scala) | Transmits only changed elements for further compression |
+| [`Bundles.scala`](../../src/main/scala/Bundles.scala) | Defines all DiffTest probe bundles (`InstrCommit`, `CSRState`, `StoreEvent`, etc.) |
+| [`Difftest.scala`](../../src/main/scala/Difftest.scala) | `DifftestModule.apply()` registers bundles with Gateway; generates corresponding C/C++ structs |
+| [`Gateway.scala`](../../src/main/scala/Gateway.scala) | Hardware transport pipeline controller; `GatewayEndpoint` chains all processing stages; parses `--difftest-config` letters |
+| [`DPIC.scala`](../../src/main/scala/DPIC.scala) | Generates DPI-C functions (`v_difftest_*`), the HW-to-SW data bridge |
+| [`Squash.scala`](../../src/main/scala/Squash.scala) | Cross-cycle event compression, reduces transport volume |
+| [`Batch.scala`](../../src/main/scala/Batch.scala) | Multi-cycle batch packaging |
+| [`Delta.scala`](../../src/main/scala/Delta.scala) | Transmits only changed elements for further compression |
 
 ### Software Side (C++)
 
 | File | Role |
 |------|------|
-| [`difftest.cpp`](../src/test/csrc/difftest/difftest.cpp) | `difftest_init()` initialization, `difftest_step()` drives each checking step |
-| [`refproxy.cpp`](../src/test/csrc/difftest/refproxy.cpp) | Loads reference model `.so` via `dlopen`, exposes `ref_init/step/regcpy` interfaces |
-| [`checkers/`](../src/test/csrc/difftest/checkers) | Checkers: instruction commit, memory access, TLB, traps, etc. |
-| [`diffstate.cpp`](../src/test/csrc/difftest/diffstate.cpp) | Software-side landing point for DPI-C data, manages DUT state buffer |
-| [`args.cpp`](../src/test/csrc/common/args.cpp) | Runtime command-line argument parsing |
-| [`emu/main.cpp`](../src/test/csrc/emu/main.cpp) | EMU backend entry point |
+| [`difftest.cpp`](../../src/test/csrc/difftest/difftest.cpp) | `difftest_init()` initialization, `difftest_step()` drives each checking step |
+| [`refproxy.cpp`](../../src/test/csrc/difftest/refproxy.cpp) | Loads reference model `.so` via `dlopen`, exposes `ref_init/step/regcpy` interfaces |
+| [`checkers/`](../../src/test/csrc/difftest/checkers) | Checkers: instruction commit, memory access, TLB, traps, etc. |
+| [`diffstate.cpp`](../../src/test/csrc/difftest/diffstate.cpp) | Software-side landing point for DPI-C data, manages DUT state buffer |
+| [`args.cpp`](../../src/test/csrc/common/args.cpp) | Runtime command-line argument parsing |
+| [`emu/main.cpp`](../../src/test/csrc/emu/main.cpp) | EMU backend entry point |
 
 ### Build System
 
 | File | Role |
 |------|------|
-| [`Makefile`](../Makefile) | Main entry, standalone interface generation |
-| [`emu.mk`](../emu.mk) | EMU (Verilator) build flow |
-| [`vcs.mk`](../vcs.mk) | VCS / VCS-top build flow |
-| [`fpga.mk`](../fpga.mk) | FPGA host build and release |
-| [`verilator.mk`](../verilator.mk) | Verilator compilation and coverage |
+| [`Makefile`](../../Makefile) | Main entry, standalone interface generation |
+| [`emu.mk`](../../emu.mk) | EMU (Verilator) build flow |
+| [`vcs.mk`](../../vcs.mk) | VCS / VCS-top build flow |
+| [`fpga.mk`](../../fpga.mk) | FPGA host build and release |
+| [`verilator.mk`](../../verilator.mk) | Verilator compilation and coverage |
 
 ## Modification Guide
 

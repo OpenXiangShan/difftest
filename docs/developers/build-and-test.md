@@ -1,8 +1,10 @@
-# DiffTest Build, Test & Debug
+# Build, Test, and Debug DiffTest
 
-All commands run from the **project root** (the directory containing `difftest/`).
+All commands in this guide run from the **host project root**, meaning the directory that contains `difftest/`. This is the usual layout when DiffTest is integrated as a submodule.
 
-> For `DifftestConfig` letter meanings (e.g. `E`, `S`, `B`, `D`, …), see [hw-flow.md](hw-flow.md).
+If you are working in the standalone DiffTest repository and it does not contain a generated CPU top, use its `make` target only to generate standalone interfaces, then build the executable from an integrated CPU project. Use the `--help` output of the resulting executable to confirm the runtime options available in that build.
+
+> For `DifftestConfig` letter meanings (for example `E`, `S`, `B`, or `D`), see [hardware-flow.md](hardware-flow.md).
 
 ## 1. Environment Setup
 
@@ -40,7 +42,7 @@ Optional build flags:
 | `DIFFTEST_QUERY=1` | Enable Query DB (SQLite) support |
 | `DIFFTEST_PERFCNT=1` | Enable performance counters |
 | `MMA_BACKEND=cpu\|cuda` | Select the software MMA reference backend (default: `cpu`) |
-| `MILL_ARGS="--difftest-config <CONFIG>"` | Set DifftestConfig (see [hw-flow.md](hw-flow.md)) |
+| `MILL_ARGS="--difftest-config <CONFIG>"` | Set DifftestConfig (see [hardware-flow.md](hardware-flow.md)) |
 
 Examples:
 
@@ -110,7 +112,7 @@ Optional build flags:
 | `DISABLE_DIFFTEST_RAM_DPIC=1` | Disable RAM DPI-C |
 | `DISABLE_DIFFTEST_FLASH_DPIC=1` | Disable Flash DPI-C |
 | `WORKLOAD_SWITCH=1` | Enable workload-list switching at runtime |
-| `MILL_ARGS="--difftest-config <CONFIG>"` | Set DifftestConfig (see [hw-flow.md](hw-flow.md)) |
+| `MILL_ARGS="--difftest-config <CONFIG>"` | Set DifftestConfig (see [hardware-flow.md](hardware-flow.md)) |
 
 Examples:
 
@@ -368,7 +370,7 @@ The console output is the **first place** to look when a mismatch occurs. When d
 **How to use:**
 
 1. Note which checker failed from the console output.
-2. Locate the checker source in [`src/test/csrc/difftest/checkers/`](../src/test/csrc/difftest/checkers) and read its comparison logic.
+2. Locate the checker source in [`src/test/csrc/difftest/checkers/`](../../src/test/csrc/difftest/checkers) and read its comparison logic.
 3. Inspect the printed DUT vs. REF state to understand which fields diverged.
 
 **Commands by environment:**
@@ -403,7 +405,7 @@ python3 difftest/scripts/query/convert_hex.py build/difftest_query.db
 # Produces: build/difftest_query_hex.db
 ```
 
-Relevant code: [`src/test/csrc/common/query.cpp`](../src/test/csrc/common/query.cpp)
+Relevant code: [`src/test/csrc/common/query.cpp`](../../src/test/csrc/common/query.cpp)
 
 **Build & run by environment:**
 
@@ -492,7 +494,7 @@ EMU runtime waveform options:
 ## 4. Debug Workflow
 
 1. **Reproduce** the mismatch with `--diff` (or `+diff`) and capture the console output. Note the failing checker name and cycle.
-2. **Locate** the checker source in [`src/test/csrc/difftest/checkers/`](../src/test/csrc/difftest/checkers). Read its comparison logic and understand which fields diverged from the printed DUT/REF state.
+2. **Locate** the checker source in [`src/test/csrc/difftest/checkers/`](../../src/test/csrc/difftest/checkers). Read its comparison logic and understand which fields diverged from the printed DUT/REF state.
 3. **Query DB** (if transport stages are suspected): rebuild with `DIFFTEST_QUERY=1`, collect `build/difftest_query.db` from at least two runs (e.g. different `--difftest-config` settings or code revisions). Compare the DBs to narrow which transport stage is implicated.
 4. **Waveform** (for RTL-level verification): after forming a hypothesis, rebuild with `EMU_TRACE=1` (or `EMU_TRACE=fst` for simv). Dump focused waveforms for the suspect time range to validate timing and signal ordering.
 

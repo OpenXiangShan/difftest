@@ -4,7 +4,7 @@ This document describes the hardware-side data flow from DUT probes to the C++ r
 
 ## Overview
 
-The hardware transport pipeline is assembled in `GatewayEndpoint` within [`Gateway.scala`](../src/main/scala/Gateway.scala). The data flow order is:
+The hardware transport pipeline is assembled in `GatewayEndpoint` within [`Gateway.scala`](../../src/main/scala/Gateway.scala). The data flow order is:
 
 ```
 DUT Probes (Bundles.scala)
@@ -43,7 +43,7 @@ Not all stages are always enabled. Which stages are present depends on `--diffte
 
 ### Preprocess
 
-Implementation: [`Preprocess.scala`](../src/main/scala/Preprocess.scala)
+Implementation: [`Preprocess.scala`](../../src/main/scala/Preprocess.scala)
 
 - Converts physical register state + rename tables into architectural register state (when `softArchUpdate` is not enabled)
 - Generates `commit_data` and optional `vec_commit_data`
@@ -53,7 +53,7 @@ Automatically enabled when any of these is true: dut zone, batch, squash, or rep
 
 ### Squash
 
-Implementation: [`Squash.scala`](../src/main/scala/Squash.scala), config letter: `S`
+Implementation: [`Squash.scala`](../../src/main/scala/Squash.scala), config letter: `S`
 
 - Stamps load/store events so they can be matched against commit order
 - Merges compressible events across cycles when bundle rules allow
@@ -63,7 +63,7 @@ Implementation: [`Squash.scala`](../src/main/scala/Squash.scala), config letter:
 
 ### Batch
 
-Implementation: [`Batch.scala`](../src/main/scala/Batch.scala), config letter: `B`
+Implementation: [`Batch.scala`](../../src/main/scala/Batch.scala), config letter: `B`
 
 - Clusters same-type bundles within one cycle
 - Assembles data and metadata across cycles
@@ -76,7 +76,7 @@ Implementation: [`Batch.scala`](../src/main/scala/Batch.scala), config letter: `
 
 ### Delta
 
-Implementation: [`Delta.scala`](../src/main/scala/Delta.scala), config letter: `D` (requires Batch)
+Implementation: [`Delta.scala`](../../src/main/scala/Delta.scala), config letter: `D` (requires Batch)
 
 - Tracks element-level changes, transmits only changed elements plus `DiffDeltaInfo`
 - Queues multi-part updates for in-order delivery
@@ -85,7 +85,7 @@ Implementation: [`Delta.scala`](../src/main/scala/Delta.scala), config letter: `
 
 ### Validate
 
-Implementation: [`Validate.scala`](../src/main/scala/Validate.scala)
+Implementation: [`Validate.scala`](../../src/main/scala/Validate.scala)
 
 - Converts preprocessed bundle stream into `Valid[...]` events
 - Applies gateway-side control rules
@@ -93,7 +93,7 @@ Implementation: [`Validate.scala`](../src/main/scala/Validate.scala)
 
 ### Sink (DPI-C)
 
-Implementation: [`DPIC.scala`](../src/main/scala/DPIC.scala)
+Implementation: [`DPIC.scala`](../../src/main/scala/DPIC.scala)
 
 - Without batch: each valid bundle is written to C++ via individual DPI-C function calls
 - With batch: a packed batch payload is assembled first, then written as a whole
@@ -103,20 +103,20 @@ Implementation: [`DPIC.scala`](../src/main/scala/DPIC.scala)
 
 ### Replay
 
-Implementation: [`Replay.scala`](../src/main/scala/Replay.scala), config letter: `R` (requires Squash)
+Implementation: [`Replay.scala`](../../src/main/scala/Replay.scala), config letter: `R` (requires Squash)
 
 Adds replay trace information so the runtime can revisit or reconstruct previously buffered states.
 
 ### Trace (IOTrace)
 
-Implementation: [`Trace.scala`](../src/main/scala/Trace.scala), config letters: `T` (dump) / `L` (load)
+Implementation: [`Trace.scala`](../../src/main/scala/Trace.scala), config letters: `T` (dump) / `L` (load)
 
 - Trace dump: records the delayed bundle stream before preprocess
 - Trace load: replaces the normal delayed bundle path with loaded trace data
 
 ### Global Enable & Dut Zone
 
-Configured in [`Gateway.scala`](../src/main/scala/Gateway.scala):
+Configured in [`Gateway.scala`](../../src/main/scala/Gateway.scala):
 
 - `E`: adds a global DPI-C enable control path
 - `Z`: enables dut-zone rotation (software side uses a larger diffstate buffer)
