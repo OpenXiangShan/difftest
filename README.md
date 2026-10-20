@@ -21,6 +21,8 @@ docs/
 └── developers/     # Understand and modify DiffTest internals
 ```
 
+See [docs/README.md](docs/README.md) for the complete documentation index.
+
 ## For Emulator Users
 
 Use this path when your CPU project already integrates DiffTest and produces an executable such as `build/emu` or `build/simv`. You need the executable, a workload image, and optionally a reference-model shared library.
@@ -101,15 +103,15 @@ Register a probe on the DUT:
 ```scala
 import difftest._
 
-val instrCommit = DifftestModule(new DiffInstrCommit, delay = 1, dontCare = true)
-instrCommit.valid  := io.in.valid
-instrCommit.pc     := SignExt(io.in.bits.decode.cf.pc, AddrBits)
-instrCommit.instr  := io.in.bits.decode.cf.instr
-instrCommit.skip   := io.in.bits.isMMIO
-instrCommit.isRVC  := io.in.bits.decode.cf.instr(1, 0) =/= "b11".U
-instrCommit.rfwen  := io.wb.rfWen && io.wb.rfDest =/= 0.U
-instrCommit.wdest  := io.wb.rfDest
-instrCommit.wpdest := io.wb.rfDest
+val difftest = DifftestModule(new DiffInstrCommit, delay = 1, dontCare = true)
+difftest.valid  := io.in.valid
+difftest.pc     := SignExt(io.in.bits.decode.cf.pc, AddrBits)
+difftest.instr  := io.in.bits.decode.cf.instr
+difftest.skip   := io.in.bits.isMMIO
+difftest.isRVC  := io.in.bits.decode.cf.instr(1, 0) =/= "b11".U
+difftest.rfwen  := io.wb.rfWen && io.wb.rfDest =/= 0.U
+difftest.wdest  := io.wb.rfDest
+difftest.wpdest := io.wb.rfDest
 ```
 
 The CPU top should expose the simulation clock, reset, and DiffTest interfaces. The current wrapper pattern is:

@@ -59,15 +59,15 @@ Instantiate mandatory probes in the CPU commit path. This abbreviated example sh
 ```scala
 import difftest._
 
-val instrCommit = DifftestModule(new DiffInstrCommit, delay = 1, dontCare = true)
-instrCommit.valid  := io.in.valid
-instrCommit.pc     := SignExt(io.in.bits.decode.cf.pc, AddrBits)
-instrCommit.instr  := io.in.bits.decode.cf.instr
-instrCommit.skip   := io.in.bits.isMMIO
-instrCommit.isRVC  := io.in.bits.decode.cf.instr(1, 0) =/= "b11".U
-instrCommit.rfwen  := io.wb.rfWen && io.wb.rfDest =/= 0.U
-instrCommit.wdest  := io.wb.rfDest
-instrCommit.wpdest := io.wb.rfDest
+val difftest = DifftestModule(new DiffInstrCommit, delay = 1, dontCare = true)
+difftest.valid  := io.in.valid
+difftest.pc     := SignExt(io.in.bits.decode.cf.pc, AddrBits)
+difftest.instr  := io.in.bits.decode.cf.instr
+difftest.skip   := io.in.bits.isMMIO
+difftest.isRVC  := io.in.bits.decode.cf.instr(1, 0) =/= "b11".U
+difftest.rfwen  := io.wb.rfWen && io.wb.rfDest =/= 0.U
+difftest.wdest  := io.wb.rfDest
+difftest.wpdest := io.wb.rfDest
 ```
 
 Use the following rules when wiring probes:
