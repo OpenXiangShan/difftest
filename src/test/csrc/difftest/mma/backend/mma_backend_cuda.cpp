@@ -26,8 +26,8 @@
 #include "mma/backend/mma_backend_cuda_impl.h"
 #include "mma/mma_verifier.h"
 #include <cstdio>
-#include <stdexcept>
 #include <cuda_runtime_api.h>
+#include <stdexcept>
 
 CudaMmaBackend::~CudaMmaBackend() {
   cuda_mma_backend_release(workspace);

@@ -91,8 +91,8 @@ bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescript
 // Each backend owns one workspace. Calls using the same workspace must be
 // serialized; release follows the verifier worker's final synchronous launch.
 CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes);
-bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
-                             size_t count, uint8_t *passed);
+bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items, size_t count,
+                             uint8_t *passed);
 void cuda_mma_backend_release(CudaMmaWorkspace *workspace);
 
 #endif // __MMA_BACKEND_CUDA_IMPL_H__

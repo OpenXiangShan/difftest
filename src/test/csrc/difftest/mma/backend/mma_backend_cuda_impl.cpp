@@ -18,9 +18,9 @@
 
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
 
-#include <cuda_runtime_api.h>
 #include <cstdio>
 #include <cstring>
+#include <cuda_runtime_api.h>
 #include <memory>
 #include <vector>
 
@@ -94,10 +94,14 @@ bool CudaMmaWorkspace::supports(size_t src1_bytes, size_t src2_bytes, size_t src
 }
 
 void CudaMmaWorkspace::release() {
-  if (descriptors != nullptr) cudaFree(descriptors);
-  if (src1 != nullptr) cudaFree(src1);
-  if (src2 != nullptr) cudaFree(src2);
-  if (src3 != nullptr) cudaFree(src3);
+  if (descriptors != nullptr)
+    cudaFree(descriptors);
+  if (src1 != nullptr)
+    cudaFree(src1);
+  if (src2 != nullptr)
+    cudaFree(src2);
+  if (src3 != nullptr)
+    cudaFree(src3);
   descriptors = nullptr;
   src1 = nullptr;
   src2 = nullptr;
@@ -118,8 +122,8 @@ CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes
   return workspace.release();
 }
 
-bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
-                             size_t count, uint8_t *passed) {
+bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items, size_t count,
+                             uint8_t *passed) {
   if (count == 0) {
     return true;
   }
@@ -128,7 +132,8 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
   }
   memset(passed, 0, count * sizeof(*passed));
   if (count > workspace->batch_capacity()) {
-    fprintf(stderr, "CudaMmaBackend: batch of %zu exceeds workspace capacity %zu\n", count, workspace->batch_capacity());
+    fprintf(stderr, "CudaMmaBackend: batch of %zu exceeds workspace capacity %zu\n", count,
+            workspace->batch_capacity());
     return false;
   }
 
@@ -193,8 +198,8 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
                     cudaMemcpy(workspace->src3, packed_src3, total_src3_size, cudaMemcpyHostToDevice))) {
     return false;
   }
-  if (!cuda_mma_backend_launch_kernel(type, workspace->descriptors, count, max_output_elements,
-                                      workspace->src1, workspace->src2, workspace->src3)) {
+  if (!cuda_mma_backend_launch_kernel(type, workspace->descriptors, count, max_output_elements, workspace->src1,
+                                      workspace->src2, workspace->src3)) {
     return false;
   }
   if (!report_error("batch kernel sync", cudaDeviceSynchronize())) {
