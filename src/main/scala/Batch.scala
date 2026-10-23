@@ -18,6 +18,7 @@ package difftest.batch
 import chisel3._
 import chisel3.util._
 import difftest._
+import difftest.common.DifftestPerf
 import difftest.gateway.GatewayConfig
 import difftest.util.{LookupTree, PipelineConnect, SkidBufferConnect}
 
@@ -101,6 +102,11 @@ class BatchEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 
   val out = IO(Decoupled(new BatchIO(param, config)))
   out <> collector.out
+
+  if (config.hasBuiltInPerf) {
+    DifftestPerf("BatchInNotReady", (!in.ready).asUInt)
+    DifftestPerf("BatchInStall", (in.valid && !in.ready).asUInt)
+  }
 }
 
 // Cluster Data from same group in same cycle
@@ -325,6 +331,13 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   out.valid := should_tick
   out.bits.payload := Mux(state_tick, state_chunks.asUInt, merged_head_chunks.asUInt)
   out.bits.step := Mux(out.valid && is_last_step_beat, 1.U(config.stepWidth.W), 0.U)
+
+  if (config.hasBuiltInPerf) {
+    val batchBusy = delay_grouped.valid && !delay_grouped.ready
+    DifftestPerf("BatchNotReady", (!in.ready).asUInt)
+    DifftestPerf("BatchStall", (in.valid && !in.ready).asUInt)
+    DifftestPerf("BatchMultiCycleStall", (in.valid && !in.ready && batchBusy && (!should_tick || out.ready)).asUInt)
+  }
 
   when(state_update) {
     when(pending_valid) {
