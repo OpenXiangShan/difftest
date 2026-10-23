@@ -30,7 +30,14 @@ case class BundleProfile(
   delay: Int,
 ) {
   def toBundle: DifftestBundle = {
-    val constructor = Class.forName(className).getConstructors()(0)
+    val constructors = Class.forName(className).getConstructors
+    val constructor = constructors
+      .filter(_.getParameters.forall(param => classArgs.contains(param.getName)))
+      .sortBy(constructor => (constructor.getParameterCount != classArgs.size, -constructor.getParameterCount))
+      .headOption
+      .getOrElse(
+        throw new IllegalArgumentException(s"No constructor for $className matches ${classArgs.keys.mkString(", ")}")
+      )
     val args = constructor.getParameters.map { param =>
       (classArgs(param.getName), param.getType.getName) match {
         case (arg: BigInt, "int") => arg.toInt
