@@ -121,11 +121,13 @@ object Main extends App {
 5. `make emu` and start simulating & debugging!
 
 We provide example designs, including:
+
 - [XiangShan](https://github.com/OpenXiangShan/XiangShan)
 - [XiangShan (2nd Gen, Nanhu)](https://github.com/OpenXiangShan/XiangShan/tree/nanhu)
 - [XiangShan (1st Gen, Yanqihu)](https://github.com/OpenXiangShan/XiangShan/tree/yanqihu)
 - [NutShell](https://github.com/OSCPU/NutShell/tree/dev-difftest)
 - [Rocket](https://github.com/OpenXiangShan/rocket-chip/tree/dev-difftest)
+- [BOOM v4](https://github.com/poemonsense/riscv-boom/tree/dev-difftest)
 
 If you encountered any issues when integrating DiffTest to your own design, feel free to let us know with necessary information on how you have modified your design. We will try our best to assist you.
 
