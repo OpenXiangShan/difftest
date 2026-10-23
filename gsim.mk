@@ -27,6 +27,13 @@ GSIM_EMU_TARGET = $(abspath $(GSIM_EMU_BUILD_DIR)/emu)
 GSIM_GEN_CSRC_DIR = $(GSIM_EMU_BUILD_DIR)/model
 GSIM_FLAGS = --supernode-max-size=15 --cpp-max-size-KB=8192 --sep-mod=__DOT__ --sep-aggr=__DOT__
 
+ifneq (,$(filter $(EMU_TRACE),vcd VCD))
+$(error GSIM only supports FST waveform. Use EMU_TRACE=fst)
+endif
+ifneq (,$(filter $(EMU_TRACE),1 fst FST))
+GSIM_FLAGS += --trace-fst
+endif
+
 $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir
 	@mkdir -p $(@D)
 	@printf '\n[gsim] Generating C++ files...\n' >> $(TIMELOG)
@@ -45,7 +52,12 @@ GSIM_CXXFILES = $(EMU_CXXFILES) $(shell find $(GSIM_OTHER_CSRC_DIR) -name "*.cpp
 GSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GSIM_CXXFLAGS += -I$(GSIM_OTHER_CSRC_DIR) -I$(GSIM_GEN_CSRC_DIR)/ -DGSIM
 GSIM_CXXFLAGS += $(EMU_OPTIMIZE) -fbracket-depth=2048 -Wno-parentheses-equality $(PGO_CFLAGS)
+ifneq (,$(filter $(EMU_TRACE),1 fst FST))
+GSIM_CXXFLAGS += -DGSIM_TRACE_FST
+GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl -lz $(PGO_LDFLAGS)
+else
 GSIM_LDFLAGS =  $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
+endif
 
 # $(1): object file
 # $(2): source file

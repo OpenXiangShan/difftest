@@ -21,6 +21,7 @@
 class GsimSim final : public Simulator {
 private:
   SSimTop *dut;
+  bool waveform_active = false;
 
 protected:
   inline unsigned get_uart_out_valid() override {
@@ -48,6 +49,10 @@ public:
   }
   inline void step() override {
     dut->step();
+#ifdef GSIM_TRACE_FST
+    // waveform_tick() arms only this step; the next range decision re-arms it.
+    dut->disableWaveform();
+#endif
   }
 
   inline uint64_t get_difftest_exit() final {
@@ -70,6 +75,10 @@ public:
   inline void set_log_end(uint64_t end) override {
     dut->set_difftest__DOT__logCtrl__DOT__end(end);
   }
+
+  void waveform_init(uint64_t cycles) override;
+  void waveform_init(uint64_t cycles, const char *filename) override;
+  void waveform_tick() override;
 };
 
 #endif // __SIMULATOR_GSIM_H
