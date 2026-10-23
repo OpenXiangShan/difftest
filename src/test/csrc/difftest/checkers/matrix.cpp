@@ -257,7 +257,6 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
   if (entry.res == NULL) {
     // first `valid` for this inst: alloc space for matrix inst
     entry.res = new uint64_t[matrix_u64_size];
-    entry.res_words = matrix_u64_size;
     memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
   }
   uint8_t md = entry.amu_event.md;
