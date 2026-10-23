@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
-* Copyright (c) 2025 Beijing Institute of Open Source Chip
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -27,16 +27,16 @@ void FirstInstrCommitChecker::clear_valid(DifftestInstrCommit &probe) {
   state->has_commit = true;
 }
 
+void FirstInstrCommitChecker::init_ref(RefProxy &proxy, const DiffTestRegState &regs) {
+  proxy.flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
+  simMemory->clone_on_demand(
+      [&proxy](uint64_t offset, void *src, size_t n) { proxy.mem_init(PMEM_BASE + offset, src, n, DUT_TO_REF); }, true);
+  proxy.regcpy(&regs, FIRST_INST_ADDRESS);
+}
+
 int FirstInstrCommitChecker::check(const DifftestInstrCommit &probe) {
   Info("The first instruction of core %d has commited. Difftest enabled. \n", state->coreid);
-  proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
-  simMemory->clone_on_demand(
-      [this](uint64_t offset, void *src, size_t n) {
-        uint64_t dest_addr = PMEM_BASE + offset;
-        proxy->mem_init(dest_addr, src, n, DUT_TO_REF);
-      },
-      true);
-  proxy->regcpy(&get_regs(), FIRST_INST_ADDRESS);
+  init_ref(*proxy, get_regs());
   // Do not reconfig simulator 'proxy->update_config(&nemu_config)' here:
   // If this is main sim thread, simulator has its own initial config
   // If this process is checkpoint wakeuped, simulator's config has already been updated,

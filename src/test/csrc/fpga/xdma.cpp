@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -18,6 +18,7 @@
 #include "mpool.h"
 #include "ram.h"
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <errno.h>
 #include <execinfo.h>
@@ -25,6 +26,7 @@
 #include <fstream>
 #include <inttypes.h>
 #include <iostream>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +38,8 @@
 #define XDMA_BYPASS     "/dev/xdma0_bypass"
 #define XDMA_C2H_DEVICE "/dev/xdma0_c2h_"
 #define XDMA_H2C_DEVICE "/dev/xdma0_h2c_0"
+MemoryIdxPool *g_packet_pool = nullptr;
+
 static const size_t H2C_AXIS_BYTES = CONFIG_DIFFTEST_HOST_AXIS_BYTES;
 
 void signal_handler(int sig) {
@@ -53,11 +57,14 @@ template <typename Func, typename Obj, typename... Args> void thread_wrapper(Fun
   (obj->*func)(args...);
 }
 
-FpgaXdma::FpgaXdma()
+FpgaXdma::FpgaXdma(bool fork_readers, size_t pool_slots) {
 #ifdef USE_THREAD_MEMPOOL
-    : xdma_mempool(sizeof(FpgaPackgeHead))
-#endif // USE_THREAD_MEMPOOL
-{
+  this->fork_readers = fork_readers;
+  packet_pool = std::make_unique<MemoryIdxPool>(sizeof(FpgaPackgeHead), fork_readers ? pool_slots : NUM_BLOCKS);
+  if (fork_readers)
+    g_packet_pool = packet_pool.get();
+#endif
+
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     char c2h_device[64];
     sprintf(c2h_device, "%s%d", XDMA_C2H_DEVICE, i);
@@ -90,6 +97,10 @@ FpgaXdma::FpgaXdma()
 }
 
 FpgaXdma::~FpgaXdma() {
+#ifdef USE_THREAD_MEMPOOL
+  if (g_packet_pool == packet_pool.get())
+    g_packet_pool = nullptr;
+#endif
 #ifdef FPGA_SIM
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     xdma_sim_close(i);
@@ -276,17 +287,33 @@ uint32_t FpgaXdma::device_read(bool is_bypass, uint64_t addr) {
 }
 
 #ifdef USE_THREAD_MEMPOOL
+static void xdma_wakeup_handler(int) {}
 void FpgaXdma::start_transmit_thread() {
+  struct sigaction sa {};
+  sa.sa_handler = xdma_wakeup_handler;
+  sigemptyset(&sa.sa_mask);
+  sigaction(SIGUSR1, &sa, nullptr); // Wake blocking read without SA_RESTART.
+
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     printf("start channel %d \n", i);
+    receive_finished[i].store(false);
     receive_thread[i] = std::thread(thread_wrapper<decltype(&FpgaXdma::read_xdma_thread), FpgaXdma *, int>,
                                     &FpgaXdma::read_xdma_thread, this, i);
   }
-  process_thread = std::thread(thread_wrapper<decltype(&FpgaXdma::write_difftest_thread), FpgaXdma *>,
-                               &FpgaXdma::write_difftest_thread, this);
+  if (!fork_readers)
+    process_thread =
+        std::thread(thread_wrapper<decltype(&FpgaXdma::process_packets), FpgaXdma *>, &FpgaXdma::process_packets, this);
 }
 
 void FpgaXdma::stop_thansmit_thread() {
+  stop();
+  for (int i = 0; i < CONFIG_DMA_CHANNELS; ++i) {
+    while (receive_thread[i].joinable() && !receive_finished[i].load(std::memory_order_acquire)) {
+      pthread_kill(receive_thread[i].native_handle(), SIGUSR1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  }
+
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     if (receive_thread[i].joinable())
       receive_thread[i].join();
@@ -307,45 +334,77 @@ void FpgaXdma::stop_thansmit_thread() {
 void FpgaXdma::read_xdma_thread(int channel) {
   size_t mem_get_idx = 0;
   while (running && signal_num == 0) {
-    char *mem = xdma_mempool.get_free_chunk(&mem_get_idx);
-#ifdef FPGA_SIM
-    ssize_t size = static_cast<ssize_t>(xdma_sim_read(channel, mem, sizeof(FpgaPackgeHead)));
-#else
-    ssize_t size = read(xdma_c2h_fd[channel], mem, sizeof(FpgaPackgeHead));
-#endif // FPGA_SIM
-    if (size <= 0) {
-      if (signal_num != 0 || (size < 0 && errno == EINTR)) {
+    char *mem = packet_pool->get_free_chunk(&mem_get_idx);
+    if (!mem) {
+      if (packet_pool->aborted())
         break;
-      }
+      std::this_thread::yield();
       continue;
     }
-    if (xdma_mempool.write_free_chunk(mem[0], mem_get_idx) == false) {
-      printf("It should not be the case that no available block can be found\n");
-      assert(0);
+    // Ordinary read fills a pool slot directly. Short reads accumulate before
+    // publication; a partial packet is never visible to any parser.
+    size_t received = 0;
+    while (running && signal_num == 0 && received < sizeof(FpgaPackgeHead)) {
+#ifdef FPGA_SIM
+      ssize_t size = static_cast<ssize_t>(xdma_sim_read(channel, mem + received, sizeof(FpgaPackgeHead) - received));
+#else
+      ssize_t size = read(xdma_c2h_fd[channel], mem + received, sizeof(FpgaPackgeHead) - received);
+#endif
+      if (size < 0 && errno == EINTR)
+        continue;
+      if (size <= 0) {
+        fprintf(stderr, "XDMA receive failed or ended inside a packet\n");
+        packet_pool->fail();
+        running = false;
+        break;
+      }
+      received += size;
+    }
+    if (received != sizeof(FpgaPackgeHead))
+      break;
+    if (!packet_pool->write_free_chunk(mem[0], mem_get_idx)) {
+      fprintf(stderr, "XDMA pool publication failed\n");
+      packet_pool->fail();
+      running = false;
     }
   }
+  receive_finished[channel].store(true, std::memory_order_release);
 }
 
-void FpgaXdma::write_difftest_thread() {
-  FpgaPackgeHead *packge;
+void FpgaXdma::process_packets() {
+  running = true;
+  auto abort = [this] {
+    if (packet_abort)
+      packet_abort();
+  };
   uint8_t recv_count = 0;
-  xdma_mempool.wait_mempool_start();
   while (running && signal_num == 0) {
-    packge = reinterpret_cast<FpgaPackgeHead *>(xdma_mempool.read_busy_chunk());
-    if (packge == nullptr) {
-      printf("Failed to read data from the XDMA memory pool\n");
-      assert(0);
+    if (packet_pool->aborted()) {
+      abort();
+      return;
     }
-    if (packge->diff_packge[0].packge_idx != recv_count) {
-      printf("read mempool idx failed, packge_idx %d need_idx %d\n", packge->diff_packge[0].packge_idx, recv_count);
-      assert(0);
+    auto *packet = reinterpret_cast<FpgaPackgeHead *>(packet_pool->read_busy_chunk());
+    if (!packet) {
+      if (fork_readers && packet_idle && packet_idle()) {
+        abort();
+        return;
+      }
+      std::this_thread::yield();
+      continue;
     }
-    recv_count++;
-    // packge unpack
-    for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
-      v_difftest_Batch(packge->diff_packge[i].diff_packge);
+    if (packet->diff_packge[0].packge_idx != recv_count++) {
+      fprintf(stderr, "XDMA packet sequence mismatch\n");
+      packet_pool->fail();
+      abort();
+      return;
     }
-    xdma_mempool.set_free_chunk();
+    for (size_t i = 0; i < DMA_PACKGE_NUM; ++i)
+      v_difftest_Batch(packet->diff_packge[i].diff_packge);
+    packet_pool->set_free_chunk();
+    if (fork_readers && packet_idle && packet_idle()) {
+      abort();
+      return;
+    }
   }
 }
 
