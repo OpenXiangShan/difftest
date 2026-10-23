@@ -214,8 +214,12 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
     const CudaMmaBatchItem &item = items[i];
     const CudaMmaBatchDescriptor &desc = descriptors[i];
     size_t result_size = sizeof(uint32_t) * item.tile_m * item.tile_n;
-    memcpy(item.src3, packed_src3 + desc.src3_offset, result_size);
-    passed[i] = memcmp(item.dut_result, item.src3, result_size) == 0 ? 1 : 0;
+    const uint8_t *result = packed_src3 + desc.src3_offset;
+    passed[i] = memcmp(item.dut_result, result, result_size) == 0 ? 1 : 0;
+    if (!passed[i]) {
+      // Retain the computed REF matrix for mismatch diagnostics.
+      memcpy(item.src3, result, result_size);
+    }
   }
   return true;
 }

@@ -44,6 +44,10 @@ public:
   /**
    * @brief Verifies a FIFO-ordered batch and writes one result per request.
    *
+   * On a numerical mismatch, src3 contains the computed reference result for
+   * diagnostics. Successful requests need only a passing result; callers must
+   * not depend on src3 being updated after successful verification.
+   *
    * A singleton batch is the non-batching execution mode.
    */
   virtual void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) = 0;
