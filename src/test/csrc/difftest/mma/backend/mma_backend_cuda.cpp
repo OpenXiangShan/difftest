@@ -27,6 +27,11 @@
 #include "mma/mma_verifier.h"
 #include <cstdio>
 #include <cuda_runtime_api.h>
+#include <stdexcept>
+
+CudaMmaBackend::~CudaMmaBackend() {
+  cuda_mma_backend_release(workspace);
+}
 
 static bool report_cuda_error(const char *what, cudaError_t err) {
   if (err == cudaSuccess) {
@@ -66,6 +71,17 @@ static bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType 
 static bool select_cuda_device() {
   cudaError_t err = cudaSetDevice(0);
   return (err == cudaSuccess || err == cudaErrorSetOnActiveProcess) || report_cuda_error("cudaSetDevice", err);
+}
+
+CudaMmaBackend::CudaMmaBackend() {
+  if (!select_cuda_device()) {
+    throw std::runtime_error("Failed to initialize CUDA MMA device");
+  }
+  workspace = cuda_mma_backend_create(CONFIG_DIFF_MMA_BATCH_SIZE, CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES,
+                                      CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+  if (workspace == nullptr) {
+    throw std::runtime_error("Failed to allocate CUDA MMA workspace");
+  }
 }
 
 bool CudaMmaBackend::is_batch_compatible(const MmaVerificationBuffer *first,
@@ -118,7 +134,7 @@ void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers,
   if (!select_cuda_device()) {
     return;
   }
-  if (!cuda_mma_backend_launch(type, items.data(), items.size(), passed.data())) {
+  if (!cuda_mma_backend_launch(workspace, type, items.data(), items.size(), passed.data())) {
     return;
   }
   if (!report_cuda_error("post-batch-launch", cudaGetLastError())) {
@@ -129,6 +145,10 @@ void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers,
 #else
 
 #include <cassert>
+
+CudaMmaBackend::CudaMmaBackend() = default;
+
+CudaMmaBackend::~CudaMmaBackend() = default;
 
 void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
   passed.assign(buffers.size(), 0);

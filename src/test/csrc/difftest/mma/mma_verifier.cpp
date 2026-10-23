@@ -23,10 +23,6 @@
 #include <cstdio>
 #include <cstring>
 
-#ifndef CONFIG_DIFF_MMA_BATCH_SIZE
-#define CONFIG_DIFF_MMA_BATCH_SIZE 64
-#endif
-
 #ifndef CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR
 #define CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR 4
 #endif
