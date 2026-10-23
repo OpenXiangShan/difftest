@@ -77,7 +77,7 @@ CudaMmaBackend::CudaMmaBackend() {
   if (!select_cuda_device()) {
     throw std::runtime_error("Failed to initialize CUDA MMA device");
   }
-  workspace = cuda_mma_backend_create(CONFIG_DIFF_MMA_BATCH_SIZE, CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES,
+  workspace = cuda_mma_backend_create(host, CONFIG_DIFF_MMA_BATCH_SIZE, CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES,
                                       CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
   if (workspace == nullptr) {
     throw std::runtime_error("Failed to allocate CUDA MMA workspace");
@@ -127,7 +127,7 @@ void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers,
     item.src1 = buffer->src1;
     item.src2 = buffer->src2;
     item.src3 = buffer->src3;
-    item.dut_result = buffer->dut_result;
+    item.dut_result = reinterpret_cast<const uint8_t *>(buffer->dut_result.get());
     items.push_back(item);
   }
 

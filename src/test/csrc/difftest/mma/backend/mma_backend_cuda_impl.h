@@ -17,6 +17,7 @@
 #ifndef __MMA_BACKEND_CUDA_IMPL_H__
 #define __MMA_BACKEND_CUDA_IMPL_H__
 
+#include "mma/backend/mma_backend.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -55,42 +56,44 @@ struct CudaMmaBatchDescriptor {
   uint16_t tile_n;
 };
 
-struct CudaMmaHostDeleter {
-  void operator()(uint8_t *buffer) const;
+struct CudaMmaCopySpan {
+  uint8_t *host;
+  size_t bytes;
 };
 
-// Each backend allocates one maximum batch at initialization and retains it
-// until destruction. Host byte buffers are pinned for direct DMA transfers;
-// only active bytes are overwritten and transferred.
+struct CudaMmaOperand {
+  std::unique_ptr<uint8_t[], MmaHostDeleter> packed;
+  std::vector<CudaMmaCopySpan> spans;
+  size_t direct_bytes = 0;
+  uint8_t *device = nullptr;
+};
+
+// The workspace borrows backend-owned host storage and retains one maximum
+// device batch. All requests must be released before destroying the workspace.
 class CudaMmaWorkspace {
 public:
+  explicit CudaMmaWorkspace(MmaHostBuffer (&host)[3]) : host(host) {}
+  CudaMmaWorkspace(const CudaMmaWorkspace &) = delete;
+  CudaMmaWorkspace &operator=(const CudaMmaWorkspace &) = delete;
+  ~CudaMmaWorkspace();
   std::vector<CudaMmaBatchDescriptor> host_descriptors;
-  std::unique_ptr<uint8_t[], CudaMmaHostDeleter> host_src1;
-  std::unique_ptr<uint8_t[], CudaMmaHostDeleter> host_src2;
-  std::unique_ptr<uint8_t[], CudaMmaHostDeleter> host_src3;
+  MmaHostBuffer (&host)[3];
+  CudaMmaOperand operands[3];
 
   CudaMmaBatchDescriptor *descriptors = nullptr;
-  uint8_t *src1 = nullptr;
-  uint8_t *src2 = nullptr;
-  uint8_t *src3 = nullptr;
 
   bool allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes);
   size_t batch_capacity() const;
-  bool supports(size_t src1_bytes, size_t src2_bytes, size_t src3_bytes) const;
   void release();
-
-private:
-  size_t max_batch_size = 0;
-  size_t ab_reg_size = 0;
-  size_t c_reg_size = 0;
 };
 
 bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescriptor *descriptors, size_t count,
                                     size_t max_output_elements, uint8_t *src1, uint8_t *src2, uint8_t *src3);
 
-// Each backend owns one workspace. Calls using the same workspace must be
-// serialized; release follows the verifier worker's final synchronous launch.
-CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes);
+// Each backend owns one workspace. Launches must be serialized; operand
+// allocation/free may run concurrently. Release requires all users to stop.
+CudaMmaWorkspace *cuda_mma_backend_create(MmaHostBuffer (&host)[3], size_t batch_size, size_t ab_reg_bytes,
+                                          size_t c_reg_bytes);
 bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items, size_t count,
                              uint8_t *passed);
 void cuda_mma_backend_release(CudaMmaWorkspace *workspace);

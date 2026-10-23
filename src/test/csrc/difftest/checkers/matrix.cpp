@@ -401,23 +401,21 @@ int AmuExecChecker::commit_ready_prefix() {
         case 0: // MMA
           // Allocate buffer for MMA verification
           buffer = mma_verifier->allocate_buffer(&amu_event);
-          // Store DUT result in the buffer
-          memcpy(buffer->dut_result, iter->res,
-                 amu_event.mtilem * amu_event.mtilen * get_element_size(amu_event.typed));
+          // Transfer the completed software-ROB result without allocating a copy.
+          buffer->dut_result.reset(iter->res);
+          iter->res = nullptr;
           // Capture REF operands and install the DUT result for asynchronous MMA verification.
           amu_event_nemu = to_nemu_amu_ctrl(amu_event);
-          if (proxy->exec_amu_lazy(&amu_event_nemu, iter->res, buffer->src1, buffer->src2, buffer->src3) != 0) {
+          if (proxy->exec_amu_lazy(&amu_event_nemu, buffer->dut_result.get(), buffer->src1, buffer->src2,
+                                   buffer->src3) != 0) {
             printf("Failed to get REF operands for MMA verification: core %d, pc 0x%016lx\n", state->coreid,
                    amu_event.pc);
             mma_verifier->free_buffer(buffer);
-            delete[] iter->res;
-            iter->res = nullptr;
             set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
           }
           // Pass buffer to verification thread
           mma_verifier->add_to_verification_queue(buffer);
-          delete[] iter->res;
           break;
         case 1: // MLS
         case 3: // Arith
