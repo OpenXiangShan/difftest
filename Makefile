@@ -216,10 +216,17 @@ endif
 endif
 endif
 
-# External memory timing backends are mutually exclusive.
-MEMORY_BACKEND_COUNT := $(words $(filter 1,$(WITH_DRAMSIM3) $(WITH_MCSIM)))
+# External memory backends are mutually exclusive.
+MEMORY_BACKEND_COUNT := $(words $(filter 1,$(WITH_DRAMSIM3) $(WITH_MCSIM) $(WITH_EXTERNAL_MEMORY_BACKEND)))
 ifneq ($(filter-out 0 1,$(MEMORY_BACKEND_COUNT)),)
-$(error WITH_DRAMSIM3 and WITH_MCSIM are mutually exclusive)
+$(error WITH_DRAMSIM3, WITH_MCSIM and WITH_EXTERNAL_MEMORY_BACKEND are mutually exclusive)
+endif
+
+ifneq ($(EXTERNAL_MEMORY_BACKEND_MK),)
+ifeq ($(wildcard $(EXTERNAL_MEMORY_BACKEND_MK)),)
+$(error EXTERNAL_MEMORY_BACKEND_MK does not exist: $(EXTERNAL_MEMORY_BACKEND_MK))
+endif
+include $(EXTERNAL_MEMORY_BACKEND_MK)
 endif
 
 # co-simulation with DRAMsim3
