@@ -3,7 +3,7 @@
 | Phase | Change summary | Build | GemsFDTD smoke | gcc_expr smoke | SPEC06 0.3 |
 |---|---|---|---|---|---|
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
-| 2 | Initial independent GSIM build dispatched | RUNNING `01M5NQ560Q3SWC9BHCCTYMD1KD` | Not applicable | Not applicable | Not applicable |
+| 2 | ZhuJiang setup fixed; fresh GSIM build running | RUNNING `01M5NQ943G825T95J9PN2F8G0V` | Not applicable | Not applicable | Not applicable |
 | 3 | Validate real trace startup and alignment | Not run | Not run | Not run | Not run |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
@@ -37,13 +37,14 @@
 
 ### Test results
 
-- RUNNING: runset `tracertl/migrate-kmhv3-kimi/20261024-1`, build task `01M5NQ560Q3SWC9BHCCTYMD1KD`.
-- Full `featx doctor` before dispatch: 57 OK, 2 unrelated SPEC26 warnings, 0 failures.
-- No elaboration, compile, or link result yet.
+- FAIL: runset `20261024-1`, build `01M5NQ560Q3SWC9BHCCTYMD1KD`, failed at `XSCache.compile` because ZhuJiang types were absent; no RTL elaboration or runtime test occurred.
+- RUNNING: runset `20261024-2`, build `01M5NQ943G825T95J9PN2F8G0V`, after initializing exact ZhuJiang `dfcf69662f7682bbc36410b5763cc285956534c8`.
+- Full `featx doctor` before the first dispatch: 57 OK, 2 unrelated SPEC26 warnings, 0 failures.
+- No result yet for the second build.
 
 ### Issues and debugging
 
-- No Phase 2 failures recorded.
+- Root cause of the first failure: the initializer skipped `XSCache/ZhuJiang` as optional, but `XSCache/src/main/scala/zhujiang/perf/XiangShanPerfBackend.scala` requires its types. Initialized the exact gitlink from a local checkout and resubmitted rather than changing RTL.
 
 ## Phase 3
 
