@@ -3,7 +3,7 @@
 | Phase | Change summary | Build | GemsFDTD smoke | gcc_expr smoke | SPEC06 0.3 |
 |---|---|---|---|---|---|
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
-| 2 | Resolve current GSIM/ChiselDB compatibility | Not run | Not applicable | Not applicable | Not applicable |
+| 2 | Initial independent GSIM build dispatched | RUNNING `01M5NQ560Q3SWC9BHCCTYMD1KD` | Not applicable | Not applicable | Not applicable |
 | 3 | Validate real trace startup and alignment | Not run | Not run | Not run | Not run |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
@@ -31,11 +31,15 @@
 
 ### Changes made
 
-- No changes yet.
+- Completed and committed the independent superproject merge as `7d611ca94`; pinned difftest `661f67887` and TraceRTL `e6d6fc12`.
+- Configured Featx with GSIM trace mode, 64 build jobs, one emulator thread, no binary cache reuse, and the collector.
+- Added compressed-ROB per-slot trace metadata handling and the user-required Verilator waveform debug path. No additional ChiselDB compatibility change has been needed yet.
 
 ### Test results
 
-- Not run; blocked until Phase 1 and the superproject merge are complete.
+- RUNNING: runset `tracertl/migrate-kmhv3-kimi/20261024-1`, build task `01M5NQ560Q3SWC9BHCCTYMD1KD`.
+- Full `featx doctor` before dispatch: 57 OK, 2 unrelated SPEC26 warnings, 0 failures.
+- No elaboration, compile, or link result yet.
 
 ### Issues and debugging
 
