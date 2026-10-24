@@ -18,6 +18,7 @@
 
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cuda_runtime_api.h>
@@ -41,21 +42,25 @@ static bool report_error(const char *what, cudaError_t err) {
   return false;
 }
 
-void CudaMmaHostDeleter::operator()(uint8_t *buffer) const {
+static uint8_t *allocate_pinned(size_t bytes) {
+  uint8_t *buffer = nullptr;
+  if (!report_error("allocate pinned host buffer", cudaMallocHost(reinterpret_cast<void **>(&buffer), bytes))) {
+    return nullptr;
+  }
+  return buffer;
+}
+
+static void free_pinned(uint8_t *buffer) {
   cudaFreeHost(buffer);
 }
 
-static bool allocate_host_buffer(std::unique_ptr<uint8_t[], CudaMmaHostDeleter> &buffer, size_t bytes,
-                                 const char *what) {
-  uint8_t *data = nullptr;
-  if (!report_error(what, cudaMallocHost(reinterpret_cast<void **>(&data), bytes))) {
-    return false;
-  }
-  buffer.reset(data);
-  return true;
+CudaMmaWorkspace::~CudaMmaWorkspace() {
+  release();
 }
 
 bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes) {
+  // Pending requests, one producer snapshot and one retained first mismatch.
+  const size_t slots = batch_size * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR + 2;
   if (descriptors != nullptr || batch_size == 0 || batch_size > 65535 || ab_reg_bytes == 0 || c_reg_bytes == 0 ||
       batch_size > SIZE_MAX / sizeof(CudaMmaBatchDescriptor) || ab_reg_bytes > SIZE_MAX / batch_size ||
       c_reg_bytes > SIZE_MAX / batch_size) {
@@ -64,62 +69,140 @@ bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c
   }
 
   host_descriptors.resize(batch_size);
-  if (!allocate_host_buffer(host_src1, batch_size * ab_reg_bytes, "allocate pinned batch src1") ||
-      !allocate_host_buffer(host_src2, batch_size * ab_reg_bytes, "allocate pinned batch src2") ||
-      !allocate_host_buffer(host_src3, batch_size * c_reg_bytes, "allocate pinned batch src3")) {
-    release();
-    return false;
+  for (size_t i = 0; i < 3; ++i) {
+    auto &op = operands[i];
+    const size_t bytes = i == 2 ? c_reg_bytes : ab_reg_bytes;
+    op.spans.reserve(batch_size + 1);
+    op.packed.get_deleter().free_host = free_pinned;
+    op.packed.reset(allocate_pinned(batch_size * bytes));
+    if (!op.packed || !host[i].allocate(bytes, slots, allocate_pinned, free_pinned)) {
+      release();
+      return false;
+    }
   }
-
   if (!report_error("allocate batch descriptors",
-                    cudaMalloc(reinterpret_cast<void **>(&descriptors), batch_size * sizeof(CudaMmaBatchDescriptor))) ||
-      !report_error("allocate batch src1", cudaMalloc(reinterpret_cast<void **>(&src1), batch_size * ab_reg_bytes)) ||
-      !report_error("allocate batch src2", cudaMalloc(reinterpret_cast<void **>(&src2), batch_size * ab_reg_bytes)) ||
-      !report_error("allocate batch src3", cudaMalloc(reinterpret_cast<void **>(&src3), batch_size * c_reg_bytes))) {
+                    cudaMalloc(reinterpret_cast<void **>(&descriptors), batch_size * sizeof(CudaMmaBatchDescriptor)))) {
     release();
     return false;
   }
-  max_batch_size = batch_size;
-  ab_reg_size = ab_reg_bytes;
-  c_reg_size = c_reg_bytes;
+  for (size_t i = 0; i < 3; ++i) {
+    if (!report_error("allocate batch operand",
+                      cudaMalloc(reinterpret_cast<void **>(&operands[i].device), batch_size * host[i].stride))) {
+      release();
+      return false;
+    }
+  }
   return true;
 }
 
 size_t CudaMmaWorkspace::batch_capacity() const {
-  return max_batch_size;
-}
-
-bool CudaMmaWorkspace::supports(size_t src1_bytes, size_t src2_bytes, size_t src3_bytes) const {
-  return src1_bytes <= ab_reg_size && src2_bytes <= ab_reg_size && src3_bytes <= c_reg_size;
+  return host_descriptors.size();
 }
 
 void CudaMmaWorkspace::release() {
-  if (descriptors != nullptr)
+  if (descriptors != nullptr) {
     cudaFree(descriptors);
-  if (src1 != nullptr)
-    cudaFree(src1);
-  if (src2 != nullptr)
-    cudaFree(src2);
-  if (src3 != nullptr)
-    cudaFree(src3);
-  descriptors = nullptr;
-  src1 = nullptr;
-  src2 = nullptr;
-  src3 = nullptr;
-  host_src1.reset();
-  host_src2.reset();
-  host_src3.reset();
-  max_batch_size = 0;
-  ab_reg_size = 0;
-  c_reg_size = 0;
+    descriptors = nullptr;
+  }
+  for (size_t i = 0; i < 3; ++i) {
+    auto &op = operands[i];
+    if (op.device != nullptr) {
+      cudaFree(op.device);
+      op.device = nullptr;
+    }
+    host[i].release();
+    op.packed.reset();
+    op.spans.clear();
+    op.direct_bytes = 0;
+  }
+  host_descriptors.clear();
 }
 
-CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes) {
-  std::unique_ptr<CudaMmaWorkspace> workspace(new CudaMmaWorkspace());
+CudaMmaWorkspace *cuda_mma_backend_create(MmaHostBuffer (&host)[3], size_t batch_size, size_t ab_reg_bytes,
+                                          size_t c_reg_bytes) {
+  std::unique_ptr<CudaMmaWorkspace> workspace(new CudaMmaWorkspace(host));
   if (!workspace->allocate(batch_size, ab_reg_bytes, c_reg_bytes)) {
     return nullptr;
   }
   return workspace.release();
+}
+
+static const uint8_t *operand_data(const CudaMmaBatchItem &item, size_t operand) {
+  return operand == 0 ? item.src1 : operand == 1 ? item.src2 : item.src3;
+}
+
+static size_t operand_bytes(const CudaMmaBatchItem &item, size_t operand) {
+  if (operand == 2) {
+    return sizeof(uint32_t) * item.tile_m * item.tile_n;
+  }
+  return element_size(operand == 0 ? item.types1 : item.types2) * item.tile_k *
+         (operand == 0 ? item.tile_m : item.tile_n);
+}
+
+static uint64_t &operand_offset(CudaMmaBatchDescriptor &desc, size_t operand) {
+  return operand == 0 ? desc.src1_offset : operand == 1 ? desc.src2_offset : desc.src3_offset;
+}
+
+static void pack_operand(CudaMmaWorkspace &workspace, const CudaMmaBatchItem *items, size_t count, size_t operand) {
+  auto &host = workspace.host[operand];
+  auto &descriptors = workspace.host_descriptors;
+  auto &op = workspace.operands[operand];
+  op.spans.clear();
+  size_t first = 0, full_count = 0;
+  bool direct = true;
+  for (size_t i = 0; i < count; ++i) {
+    const size_t slot = host.slot(operand_data(items[i], operand));
+    if (slot == MmaHostBuffer::invalid_slot)
+      continue;
+    if (operand_bytes(items[i], operand) != host.stride ||
+        (full_count != 0 && slot != (first + full_count) % host.slot_count)) {
+      direct = false;
+      break;
+    }
+    if (full_count == 0)
+      first = slot;
+    ++full_count;
+  }
+  if (!direct)
+    full_count = 0;
+  op.direct_bytes = full_count * host.stride;
+  if (op.direct_bytes != 0) {
+    const size_t head = std::min(full_count, host.slot_count - first) * host.stride;
+    op.spans.push_back({host.slots.get() + first * host.stride, head});
+    if (head < op.direct_bytes)
+      op.spans.push_back({host.slots.get(), op.direct_bytes - head});
+  }
+  size_t direct_offset = 0, packed_bytes = 0;
+  for (size_t i = 0; i < count; ++i) {
+    const auto *source = operand_data(items[i], operand);
+    const size_t bytes = operand_bytes(items[i], operand);
+    auto &offset = operand_offset(descriptors[i], operand);
+    if (op.direct_bytes && host.slot(source) != MmaHostBuffer::invalid_slot) {
+      offset = direct_offset;
+      direct_offset += bytes;
+    } else {
+      offset = op.direct_bytes + packed_bytes;
+      memcpy(op.packed.get() + packed_bytes, source, bytes);
+      packed_bytes += bytes;
+    }
+  }
+  if (packed_bytes != 0)
+    op.spans.push_back({op.packed.get(), packed_bytes});
+}
+
+static bool copy_operand(CudaMmaWorkspace &workspace, size_t operand, cudaMemcpyKind direction) {
+  auto &op = workspace.operands[operand];
+  size_t offset = 0;
+  for (const auto &span: op.spans) {
+    void *device = op.device + offset;
+    const bool to_device = direction == cudaMemcpyHostToDevice;
+    if (!report_error("copy batch operand", cudaMemcpy(to_device ? device : span.host, to_device ? span.host : device,
+                                                       span.bytes, direction))) {
+      return false;
+    }
+    offset += span.bytes;
+  }
+  return true;
 }
 
 bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items, size_t count,
@@ -137,98 +220,59 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
     return false;
   }
 
-  auto &descriptors = workspace->host_descriptors;
-  size_t total_src1_size = 0;
-  size_t total_src2_size = 0;
-  size_t total_src3_size = 0;
   size_t max_output_elements = 0;
   for (size_t i = 0; i < count; ++i) {
-    const CudaMmaBatchItem &item = items[i];
+    const auto &item = items[i];
     if (item.tile_m == 0 || item.tile_k == 0 || item.tile_n == 0 || !item.src1 || !item.src2 || !item.src3 ||
         !item.dut_result) {
       return false;
     }
-
-    CudaMmaBatchDescriptor &desc = descriptors[i];
-    desc.src1_offset = total_src1_size;
-    desc.src2_offset = total_src2_size;
-    desc.src3_offset = total_src3_size;
+    auto &desc = workspace->host_descriptors[i];
     desc.tile_m = item.tile_m;
     desc.tile_k = item.tile_k;
     desc.tile_n = item.tile_n;
-
-    const size_t src1_size = element_size(item.types1) * item.tile_m * item.tile_k;
-    const size_t src2_size = element_size(item.types2) * item.tile_k * item.tile_n;
-    const size_t src3_size = sizeof(uint32_t) * item.tile_m * item.tile_n;
-    if (!workspace->supports(src1_size, src2_size, src3_size)) {
-      fprintf(stderr, "CudaMmaBackend: request %zu exceeds configured matrix register capacities\n", i);
+    max_output_elements = std::max(max_output_elements, size_t(item.tile_m) * item.tile_n);
+  }
+  for (size_t operand = 0; operand < 3; ++operand) {
+    pack_operand(*workspace, items, count, operand);
+  }
+  const size_t descriptors_bytes = count * sizeof(CudaMmaBatchDescriptor);
+  if (!report_error("copy batch descriptors to device",
+                    cudaMemcpy(workspace->descriptors, workspace->host_descriptors.data(), descriptors_bytes,
+                               cudaMemcpyHostToDevice))) {
+    return false;
+  }
+  for (size_t operand = 0; operand < 3; ++operand) {
+    if (!copy_operand(*workspace, operand, cudaMemcpyHostToDevice)) {
       return false;
     }
-    total_src1_size += src1_size;
-    total_src2_size += src2_size;
-    total_src3_size += src3_size;
-    size_t output_elements = static_cast<size_t>(item.tile_m) * item.tile_n;
-    if (output_elements > max_output_elements) {
-      max_output_elements = output_elements;
-    }
+  }
+  if (!cuda_mma_backend_launch_kernel(type, workspace->descriptors, count, max_output_elements,
+                                      workspace->operands[0].device, workspace->operands[1].device,
+                                      workspace->operands[2].device) ||
+      !report_error("batch kernel sync", cudaDeviceSynchronize()) ||
+      !copy_operand(*workspace, 2, cudaMemcpyDeviceToHost)) {
+    return false;
   }
 
-  uint8_t *packed_src1 = workspace->host_src1.get();
-  uint8_t *packed_src2 = workspace->host_src2.get();
-  uint8_t *packed_src3 = workspace->host_src3.get();
+  const auto &output = workspace->operands[2];
   for (size_t i = 0; i < count; ++i) {
-    const CudaMmaBatchItem &item = items[i];
-    const CudaMmaBatchDescriptor &desc = descriptors[i];
-    size_t src1_size = element_size(item.types1) * item.tile_m * item.tile_k;
-    size_t src2_size = element_size(item.types2) * item.tile_k * item.tile_n;
-    size_t src3_size = sizeof(uint32_t) * item.tile_m * item.tile_n;
-    memcpy(packed_src1 + desc.src1_offset, item.src1, src1_size);
-    memcpy(packed_src2 + desc.src2_offset, item.src2, src2_size);
-    memcpy(packed_src3 + desc.src3_offset, item.src3, src3_size);
-  }
-
-  const size_t descriptors_bytes = count * sizeof(descriptors[0]);
-  if (!report_error("copy batch descriptors to device", cudaMemcpy(workspace->descriptors, descriptors.data(),
-                                                                   descriptors_bytes, cudaMemcpyHostToDevice)) ||
-      !report_error("copy batch src1 to device",
-                    cudaMemcpy(workspace->src1, packed_src1, total_src1_size, cudaMemcpyHostToDevice)) ||
-      !report_error("copy batch src2 to device",
-                    cudaMemcpy(workspace->src2, packed_src2, total_src2_size, cudaMemcpyHostToDevice)) ||
-      !report_error("copy batch src3 to device",
-                    cudaMemcpy(workspace->src3, packed_src3, total_src3_size, cudaMemcpyHostToDevice))) {
-    return false;
-  }
-  if (!cuda_mma_backend_launch_kernel(type, workspace->descriptors, count, max_output_elements, workspace->src1,
-                                      workspace->src2, workspace->src3)) {
-    return false;
-  }
-  if (!report_error("batch kernel sync", cudaDeviceSynchronize())) {
-    return false;
-  }
-  if (!report_error("copy batch src3 to host",
-                    cudaMemcpy(packed_src3, workspace->src3, total_src3_size, cudaMemcpyDeviceToHost))) {
-    return false;
-  }
-
-  for (size_t i = 0; i < count; ++i) {
-    const CudaMmaBatchItem &item = items[i];
-    const CudaMmaBatchDescriptor &desc = descriptors[i];
-    size_t result_size = sizeof(uint32_t) * item.tile_m * item.tile_n;
-    const uint8_t *result = packed_src3 + desc.src3_offset;
-    passed[i] = memcmp(item.dut_result, result, result_size) == 0 ? 1 : 0;
-    if (!passed[i]) {
+    const auto &item = items[i];
+    const size_t offset = workspace->host_descriptors[i].src3_offset;
+    const size_t bytes = operand_bytes(item, 2);
+    const uint8_t *result =
+        offset < output.direct_bytes ? item.src3 : output.packed.get() + offset - output.direct_bytes;
+    passed[i] = memcmp(item.dut_result, result, bytes) == 0 ? 1 : 0;
+    if (!passed[i] && result != item.src3) {
       // Retain the computed REF matrix for mismatch diagnostics.
-      memcpy(item.src3, result, result_size);
+      memcpy(item.src3, result, bytes);
     }
   }
   return true;
 }
 
 void cuda_mma_backend_release(CudaMmaWorkspace *workspace) {
-  if (workspace != nullptr) {
-    workspace->release();
-    delete workspace;
-  }
+  delete workspace;
 }
 
 #endif // CONFIG_DIFFTEST_MMA_CUDA

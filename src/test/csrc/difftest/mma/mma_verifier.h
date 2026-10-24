@@ -22,6 +22,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -33,9 +34,10 @@
  * verification buffer, fills it with the reference operands and DUT result,
  * then submits it to the verifier. Submission transfers ownership to the
  * verifier, whose single worker thread drains the FIFO queue and invokes the
- * compile-time-selected CPU or CUDA MmaBackend. The backend performs only the
- * numerical check; the verifier owns its lifetime and serializes all calls to
- * it on the worker thread.
+ * compile-time-selected CPU or CUDA MmaBackend. Numerical checks are serialized
+ * on the worker thread. The backend may also provide operand storage;
+ * acquisition and release can run on producer/worker threads concurrently.
+ * The verifier owns the backend and coordinates request lifetimes.
  *
  * Buffers are caller-owned while being populated and verifier-owned after
  * submission. Successful buffers and all mismatches after the first are freed
@@ -53,11 +55,11 @@
  * See MmaVerifier's allocation and submission methods for ownership rules.
  */
 struct MmaVerificationBuffer {
-  DifftestAmuCtrlEvent amu_event; // AMU control event for this MMA instruction
-  uint8_t *src1;                  // Pointer to source matrix 1 data
-  uint8_t *src2;                  // Pointer to source matrix 2 data
-  uint8_t *src3;                  // Pointer to source matrix 3 data (accumulator)
-  uint8_t *dut_result;            // Pointer to DUT result data
+  DifftestAmuCtrlEvent amu_event;         // AMU control event for this MMA instruction
+  uint8_t *src1;                          // Pointer to source matrix 1 data
+  uint8_t *src2;                          // Pointer to source matrix 2 data
+  uint8_t *src3;                          // Pointer to source matrix 3 data (accumulator)
+  std::unique_ptr<uint64_t[]> dut_result; // Owns the software ROB's original result array
 };
 
 /**
@@ -163,8 +165,8 @@ public:
   /**
    * @brief Allocates a verification buffer from the event's matrix geometry.
    *
-   * The event is copied into the buffer. The operand and result arrays are
-   * uninitialized and must be filled by the caller before submission.
+   * The event is copied into the buffer. A/B/C arrays are uninitialized.
+   * No DUT result is allocated; transfer its ownership before submission.
    *
    * @param[in] amu_event Non-null event describing the MMA request.
    * @return A newly allocated buffer initially owned by the caller.

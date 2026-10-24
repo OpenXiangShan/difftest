@@ -107,7 +107,7 @@ template <cute_mma_model::FloatFormat Format> bool CpuMmaBackend::verify_fp_mma(
     }
   }
 
-  return memcmp(buffer->dut_result, buffer->src3, static_cast<size_t>(tile_m) * tile_n * sizeof(uint32_t)) == 0;
+  return memcmp(buffer->dut_result.get(), buffer->src3, static_cast<size_t>(tile_m) * tile_n * sizeof(uint32_t)) == 0;
 }
 
 template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVerificationBuffer *buffer) {
@@ -140,7 +140,7 @@ template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVeri
     }
   }
 
-  return memcmp(buffer->dut_result, buffer->src3, static_cast<size_t>(tile_m) * tile_n * sizeof(uint32_t)) == 0;
+  return memcmp(buffer->dut_result.get(), buffer->src3, static_cast<size_t>(tile_m) * tile_n * sizeof(uint32_t)) == 0;
 }
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
