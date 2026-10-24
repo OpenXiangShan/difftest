@@ -2,7 +2,7 @@
 
 | Phase | Change summary | Build | GemsFDTD smoke | gcc_expr smoke | SPEC06 0.3 |
 |---|---|---|---|---|---|
-| 1 | Port source GSIM wrapper onto `99f77ff45` | Not run | Not applicable | Not applicable | Not applicable |
+| 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
 | 2 | Resolve current GSIM/ChiselDB compatibility | Not run | Not applicable | Not applicable | Not applicable |
 | 3 | Validate real trace startup and alignment | Not run | Not run | Not run | Not run |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
@@ -11,13 +11,16 @@
 
 ### Changes made
 
-- Created the required plan and this progress record before modifying difftest code.
-- Base is upstream `99f77ff455766d18cd05927b144641bd9744b19a`; source wrapper is `7f4f14ea49c58add5e6c3fc43dad6b8cad269689`.
-- No difftest code changes or cherry-picks have been made yet.
+- Created the required plan/progress records and added the user-required Verilator waveform failure gate.
+- Based the independent branch on upstream `99f77ff455766d18cd05927b144641bd9744b19a` and cherry-picked source `7f4f14ea49c58add5e6c3fc43dad6b8cad269689` as `ee497ea5a`.
+- Ported TraceRTL arguments, runtime initialization, GSIM wrappers, and build integration across seven files.
+- Resolved `args.cpp` by preserving all upstream options and adding TraceRTL options. Resolved `gsim.mk` by combining upstream timing instrumentation with source stale-model cleanup and pipe-failure propagation.
 
 ### Test results
 
-- No tests run. Phase 1 has not started.
+- PASS: wrapper cherry-pick completed with no unresolved conflicts and `git diff --check` passed.
+- PASS: the branch is clean and contains upstream `99f77ff45` plus the independent documentation and wrapper commits.
+- NOT RUN: no emulator build or runtime test yet; Phase 2 must provide those results.
 
 ### Issues and debugging
 
