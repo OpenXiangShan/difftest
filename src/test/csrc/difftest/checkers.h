@@ -239,7 +239,7 @@ public:
 #if defined(CPU_NUTSHELL) || defined(CPU_ROCKET_CHIP)
   static const uint64_t first_commit_limit = 1000;
 #elif defined(CPU_XIANGSHAN_YQH) || defined(CPU_XIANGSHAN_NH) || defined(CPU_XIANGSHAN_KMHV2) || \
-    defined(CPU_XIANGSHAN_KMHV3)
+    defined(CPU_XIANGSHAN_KMHV3) || defined(CPU_BOOM)
   static const uint64_t first_commit_limit = 15000;
 #endif
   static const uint64_t stuck_commit_limit = first_commit_limit * timeout_scale;
