@@ -22,6 +22,7 @@ SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 
 BUILD_DIR  = $(DESIGN_DIR)/build
+export DIFFTEST_BUILD_DIR := $(abspath $(BUILD_DIR))
 
 RTL_DIR = $(BUILD_DIR)/rtl
 RTL_SUFFIX ?= sv

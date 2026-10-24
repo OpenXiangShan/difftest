@@ -102,13 +102,22 @@ PASS: both jobs complete normally, initialize the real trace, advance beyond ins
 
 ## Phase 3A: reproduce runtime failures with Verilator waveforms
 
-For any runtime error after implementation and building, keep the failing GSIM runset and dispatch a fresh Verilator build with FST waveform support:
+For any runtime error after implementation and building, keep the failing GSIM runset and dispatch a fresh Verilator build with FST waveform support. Use the dedicated `build-verilator-fst` directory, not the GSIM `build` directory, so RTL and generated sources are recreated. The single-element artifact list prevents fallback to an old GSIM emulator:
 
 ```bash
 cd "$WT"
-featx submit "$NODE" build --set build.tool=verilator --set build.cache=false --set build.options.flags.EMU_TRACE=fst --set build.verilator.args=CXX=clang++ -m "Waveform reproduction of TraceRTL runtime failure"
+featx submit "$NODE" build \
+  --set build.tool=verilator \
+  --set build.cache=false \
+  --set build.options.flags.EMU_TRACE=fst \
+  --set build.options.flags.BUILD_DIR="$WT/build-verilator-fst" \
+  --set "build.artifact=[build-verilator-fst/emu]" \
+  --set build.verilator.args=CXX=clang++ \
+  -m "Waveform reproduction of TraceRTL runtime failure"
 featx ps -a --node "$NODE" --limit 30
 ```
+
+Both Makefiles export the absolute `BUILD_DIR` as `DIFFTEST_BUILD_DIR`; `common/FileControl.scala` uses it for generated support files and retains `NOOP_HOME/build/generated-src` as the fallback when unset. Do not copy or reuse the GSIM `build/generated-src` directory.
 
 Set `WAVE_TASK` and `WAVE_RUNSET` from this new submission, then wait with `featx wait "$WAVE_TASK" --timeout 36000`. Reproduce the same point with `run.coverage=null` and run arguments that enable `--dump-wave`, focused `-b`/`-e` cycle bounds, and `--wave-path` under the new run directory. Keep the waveform and exact runset as evidence.
 
