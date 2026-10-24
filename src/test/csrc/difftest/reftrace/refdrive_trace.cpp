@@ -15,7 +15,6 @@
 ***************************************************************************************/
 
 #include "refdrive_trace.h"
-#include "diffstate.h"
 #include <atomic>
 #include <memory>
 #include <stdexcept>
@@ -38,9 +37,6 @@ void difftest_refdrive_trace_configure(const CommonArgs &args) {
   if (NUM_CORES != 1 || args.enable_fork || args.gcpt_restore || args.snapshot_path || args.image_as_footprints ||
       args.cst_file || args.copy_ram_offset)
     throw std::runtime_error("RefDriveTrace requires a single core booting from its original image");
-#if (defined(DEBUG_REFILL) && defined(CONFIG_DIFFTEST_REFILLEVENT)) || defined(DEBUG_MODE_DIFF)
-  throw std::runtime_error("RefDriveTrace does not support debug memory corrections");
-#endif
 #ifdef CONFIG_DIFFTEST_REPLAY
   throw std::runtime_error("RefDriveTrace does not support RTL replay/REF rollback");
 #endif
@@ -58,29 +54,12 @@ bool difftest_refdrive_trace_pending() {
 void difftest_refdrive_trace_record(const DiffTestState &dut) {
   if (!difftest_refdrive_trace_pending() || (!initialized && !dut.commit[0].valid))
     return;
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  for (const auto &event: dut.amu_ctrl)
-    if (event.valid)
-      throw std::runtime_error("RefDriveTrace does not support AMU execution");
-#endif
-#ifdef CONFIG_DIFFTEST_MSYNCEVENT
-  for (const auto &event: dut.msync)
-    if (event.valid)
-      throw std::runtime_error("RefDriveTrace does not support msync");
-#endif
   RefDriveTraceEntry entry;
   entry.state = RefDriveState(dut);
   entry.terminal = dut.trap.hasTrap;
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
   entry.terminal |= bool(dut.critical_error.valid);
 #endif
-  for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
-    const auto &c = dut.commit[i];
-    if (!c.valid || !c.skip)
-      continue;
-    if (c.vecwen || c.nFused)
-      throw std::runtime_error("RefDriveTrace does not support vector or fused skips");
-  }
   recorder->append(&entry);
   initialized = true;
   finished = entry.terminal;
@@ -95,9 +74,4 @@ void difftest_refdrive_trace_finish() {
     recorder->append(&entry);
   }
   recorder.reset();
-}
-
-void difftest_refdrive_trace_check_load_correction() {
-  if (recorder)
-    throw std::runtime_error("RefDriveTrace cannot omit load/golden-memory corrections");
 }

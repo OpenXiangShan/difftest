@@ -16,7 +16,6 @@
 
 #include "checkers.h"
 #include "goldenmem.h"
-#include "reftrace/refdrive_trace.h"
 
 #ifdef CONFIG_DIFFTEST_LOADEVENT
 bool LoadChecker::get_valid(const DifftestLoadEvent &probe) {
@@ -141,7 +140,6 @@ int LOADCHECKCLASS::do_vec_load_check(const DifftestLoadEvent &probe, uint8_t fi
       // ===============================================================
       //                      sync memory and regs
       // ===============================================================
-      difftest_refdrive_trace_check_load_correction();
       proxy->vec_update_goldenmem();
 
       for (int vdidx = 0; vdidx < vdNum; vdidx++) {
@@ -169,7 +167,6 @@ int LOADCHECKCLASS::do_load_check(const DifftestLoadEvent &probe, bool regWen, u
   if (probe.isLoad || probe.isAtomic) {
     proxy->sync();
     if (regWen && *refRegPtr != commitData) {
-      difftest_refdrive_trace_check_load_correction();
       uint64_t golden;
       uint64_t golden_flag;
       uint64_t mask = 0xFFFFFFFFFFFFFFFF;
