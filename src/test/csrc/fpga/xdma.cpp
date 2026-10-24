@@ -17,6 +17,7 @@
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
+#include "reftrace/refdrive_trace.h"
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -300,9 +301,9 @@ void FpgaXdma::start_transmit_thread() {
     receive_thread[i] = std::thread(thread_wrapper<decltype(&FpgaXdma::read_xdma_thread), FpgaXdma *, int>,
                                     &FpgaXdma::read_xdma_thread, this, i);
   }
-  if (!fork_readers)
-    process_thread = std::thread(thread_wrapper<decltype(&FpgaXdma::process_packets), FpgaXdma *, bool>,
-                                 &FpgaXdma::process_packets, this, true);
+  if (!fork_readers || difftest_refdrive_trace_pending())
+    process_thread =
+        std::thread(thread_wrapper<decltype(&FpgaXdma::process_packets), FpgaXdma *>, &FpgaXdma::process_packets, this);
 }
 
 void FpgaXdma::stop_thansmit_thread() {
@@ -371,7 +372,8 @@ void FpgaXdma::read_xdma_thread(int channel) {
   receive_finished[channel].store(true, std::memory_order_release);
 }
 
-void FpgaXdma::process_packets(bool poll_callbacks) {
+void FpgaXdma::process_packets() {
+  const bool poll_callbacks = !fork_readers || !difftest_refdrive_trace_pending();
   running = true;
   auto abort = [this, poll_callbacks] {
     if (!poll_callbacks)

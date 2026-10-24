@@ -3,7 +3,6 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <type_traits>
 
 template <typename T>
 DiffTrace<T>::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_size) : is_read(is_read) {
@@ -47,9 +46,7 @@ template <typename T> bool DiffTrace<T>::read_next(T *trace) {
 
 template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
   memset(file_name, 0, PATH_MAX);
-  // Full-state traces interleave all cores in the same directory.
-  static uint64_t shared_index = 0;
-  auto &index = std::is_same_v<T, RefDriveTraceEntry> ? trace_index : shared_index;
+  static uint64_t trace_index = 0;
   char dirname[PATH_MAX];
   int ret = 0;
   if (strchr(trace_name, '/')) {
@@ -68,12 +65,12 @@ template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
 #else
   const char *suffix = "zstd";
 #endif // CONFIG_IOTRACE_ZSTD
-  ret = snprintf(file_name, PATH_MAX, "%s/%lu.%s", dirname, index, suffix);
+  ret = snprintf(file_name, PATH_MAX, "%s/%lu.%s", dirname, trace_index, suffix);
   if (ret < 0 || ret >= PATH_MAX) {
-    printf("File name is too long: %s/%lu.%s\n", dirname, index, suffix);
+    printf("File name is too long: %s/%lu.%s\n", dirname, trace_index, suffix);
     exit(0);
   }
-  index++;
+  trace_index++;
 }
 
 template <typename T> bool DiffTrace<T>::trace_file_next() {

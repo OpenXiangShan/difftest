@@ -76,7 +76,7 @@ public:
 
 #ifdef USE_THREAD_MEMPOOL
   // Consume published packets and deliver decoded batches through v_difftest_Batch.
-  void process_packets(bool poll_callbacks = true);
+  void process_packets();
   void set_packet_callbacks(bool (*idle)(), void (*abort)()) {
     packet_idle = idle;
     packet_abort = abort;

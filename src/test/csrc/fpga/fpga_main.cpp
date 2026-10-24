@@ -39,7 +39,6 @@
 #include <mutex>
 #include <stdint.h>
 #include <sys/wait.h>
-#include <thread>
 #include <unistd.h>
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
@@ -92,7 +91,6 @@ int main(int argc, const char *argv[]) {
 
   printf("fpga init\n");
 #ifdef CONFIG_DIFFTEST_FORK_REF
-  std::thread trace_thread;
   if (args.enable_diff && args.ref_mode == RefMode::FORK) {
     // Fork here: the parent receives XDMA packets; the child runs FAST REF.
     const int role = difftest_ref_fork_start(args.ref_fork_interval);
@@ -112,8 +110,6 @@ int main(int argc, const char *argv[]) {
       }
       g_packet_pool->enter_reader(reader);
       trace_only = true;
-      // The receiver records each DUT window once, independently of REF workers and recovery.
-      trace_thread = std::thread([] { static_cast<FpgaXdma *>(xdma_device)->process_packets(false); });
     }
   }
 #endif
@@ -121,10 +117,6 @@ int main(int argc, const char *argv[]) {
   serial_port->start();
 #endif
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
-#ifdef CONFIG_DIFFTEST_FORK_REF
-  if (trace_thread.joinable())
-    trace_thread.join();
-#endif
   fpga_finish();
   if (signal_num != 0) {
     return 128 + signal_num;
