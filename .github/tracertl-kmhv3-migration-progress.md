@@ -3,7 +3,7 @@
 | Phase | Change summary | Build | GemsFDTD smoke | gcc_expr smoke | SPEC06 0.3 |
 |---|---|---|---|---|---|
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
-| 2 | ZhuJiang setup fixed; fresh GSIM build running | RUNNING `01M5NQ943G825T95J9PN2F8G0V` | Not applicable | Not applicable | Not applicable |
+| 2 | Current API compile fixes committed for next build | PENDING | Not applicable | Not applicable | Not applicable |
 | 3 | Validate real trace startup and alignment | Not run | Not run | Not run | Not run |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
@@ -34,17 +34,18 @@
 - Completed and committed the independent superproject merge as `7d611ca94`; pinned difftest `661f67887` and TraceRTL `e6d6fc12`.
 - Configured Featx with GSIM trace mode, 64 build jobs, one emulator thread, no binary cache reuse, and the collector.
 - Added compressed-ROB per-slot trace metadata handling and the user-required Verilator waveform debug path. No additional ChiselDB compatibility change has been needed yet.
+- Fixed current API mismatches: ROB `debugMeta(uop).pc`, IFU `PcInit(...).signGuard` and `s2_alignShiftNum`, checker `blockSel`, and removal of an obsolete store `vstart` assignment.
 
 ### Test results
 
 - FAIL: runset `20261024-1`, build `01M5NQ560Q3SWC9BHCCTYMD1KD`, failed at `XSCache.compile` because ZhuJiang types were absent; no RTL elaboration or runtime test occurred.
-- RUNNING: runset `20261024-2`, build `01M5NQ943G825T95J9PN2F8G0V`, after initializing exact ZhuJiang `dfcf69662f7682bbc36410b5763cc285956534c8`.
-- Full `featx doctor` before the first dispatch: 57 OK, 2 unrelated SPEC26 warnings, 0 failures.
-- No result yet for the second build.
+- FAIL: runset `20261024-2`, build `01M5NQ943G825T95J9PN2F8G0V`, reached merged Scala and reported nine API errors in ROB, IFU, TracePredictChecker, and NewStoreUnit; no runtime test occurred.
+- PASS: all nine locations were corrected and `git diff --check` passed. A fresh build is pending.
 
 ### Issues and debugging
 
 - Root cause of the first failure: the initializer skipped `XSCache/ZhuJiang` as optional, but `XSCache/src/main/scala/zhujiang/perf/XiangShanPerfBackend.scala` requires its types. Initialized the exact gitlink from a local checkout and resubmitted rather than changing RTL.
+- Root cause of the second failure: source-side code retained old names and types removed by Kunminghu V3. Migrated each use to the current API instead of restoring the removed interfaces.
 
 ## Phase 3
 
