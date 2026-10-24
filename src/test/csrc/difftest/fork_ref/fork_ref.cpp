@@ -520,7 +520,8 @@ int difftest_ref_fork_idle() {
     if (control->complete.load(std::memory_order_acquire) != 1)
       fail();
   }
-  if (!g_packet_pool->aborted()) {
+  // Recording may keep draining after all REF segments have already completed.
+  if (!g_packet_pool->aborted() && control->complete.load(std::memory_order_acquire) != 1) {
     const uint64_t end = control->head.load(std::memory_order_acquire);
     while (trusted_segment < end) {
       Segment &s = segment(trusted_segment);
