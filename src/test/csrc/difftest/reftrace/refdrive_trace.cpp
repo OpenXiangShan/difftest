@@ -48,6 +48,7 @@ void difftest_refdrive_trace_configure(const CommonArgs &args) {
 }
 
 bool difftest_refdrive_trace_pending() {
+  // Forked REF workers inherit the recorder; only the creating process may write or wait for it.
   return recorder && recorder_pid == getpid() && !finished;
 }
 

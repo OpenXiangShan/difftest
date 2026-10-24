@@ -498,7 +498,8 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 #endif
 
 #ifndef CONFIG_NO_DIFFTEST
-  difftest_refdrive_trace_configure(args);
+  if (args.refdrive_trace_name)
+    difftest_refdrive_trace_configure(args);
 #else
   if (args.refdrive_trace_name)
     throw std::runtime_error("RefDriveTrace requires a DiffTest-enabled executable");
