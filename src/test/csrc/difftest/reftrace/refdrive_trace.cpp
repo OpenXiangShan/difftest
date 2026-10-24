@@ -16,11 +16,15 @@
 
 #include "refdrive_trace.h"
 #include "diffstate.h"
+#include <atomic>
 #include <memory>
 #include <stdexcept>
+#include <unistd.h>
 
 static std::unique_ptr<DiffTrace<RefDriveTraceEntry>> recorder;
-static bool initialized = false, finished = false;
+static bool initialized = false;
+static std::atomic<bool> finished{false};
+static pid_t recorder_pid = 0;
 
 void difftest_refdrive_trace_configure(const CommonArgs &args) {
   if (!args.refdrive_trace_name)
@@ -28,12 +32,6 @@ void difftest_refdrive_trace_configure(const CommonArgs &args) {
 #ifndef CONFIG_REF_DRIVE
   if (args.refdrive_trace_is_read)
     throw std::runtime_error("Use ref-drive to load RefDriveTrace");
-#endif
-#ifndef CONFIG_DIFFTEST_FAST_REF
-  throw std::runtime_error("RefDriveTrace requires DIFFTEST_FAST_REF=1");
-#else
-  if (!args.refdrive_trace_is_read && args.ref_mode == RefMode::FORK)
-    throw std::runtime_error("RefDriveTrace does not support --ref-mode=fork");
 #endif
   if (!args.enable_diff)
     throw std::runtime_error("RefDriveTrace requires differential testing");
@@ -49,11 +47,16 @@ void difftest_refdrive_trace_configure(const CommonArgs &args) {
   if (args.refdrive_trace_is_read)
     return;
   recorder = std::make_unique<DiffTrace<RefDriveTraceEntry>>(args.refdrive_trace_name, false, 4096);
+  recorder_pid = getpid();
   initialized = finished = false;
 }
 
+bool difftest_refdrive_trace_pending() {
+  return recorder && recorder_pid == getpid() && !finished;
+}
+
 void difftest_refdrive_trace_record(const DiffTestState &dut) {
-  if (!recorder || finished || (!initialized && !dut.commit[0].valid))
+  if (!difftest_refdrive_trace_pending() || (!initialized && !dut.commit[0].valid))
     return;
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   for (const auto &event: dut.amu_ctrl)
@@ -84,7 +87,7 @@ void difftest_refdrive_trace_record(const DiffTestState &dut) {
 }
 
 void difftest_refdrive_trace_finish() {
-  if (!recorder)
+  if (!recorder || recorder_pid != getpid())
     return;
   if (!finished) {
     RefDriveTraceEntry entry;

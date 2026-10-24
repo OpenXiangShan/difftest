@@ -28,6 +28,7 @@ struct RefDriveTraceEntry {
 
 void difftest_refdrive_trace_configure(const CommonArgs &args);
 void difftest_refdrive_trace_record(const DiffTestState &dut);
+bool difftest_refdrive_trace_pending();
 void difftest_refdrive_trace_finish();
 void difftest_refdrive_trace_check_load_correction();
 

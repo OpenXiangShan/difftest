@@ -39,6 +39,7 @@
 #include <mutex>
 #include <stdint.h>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
@@ -59,6 +60,9 @@ enum {
 
 static std::atomic<uint8_t> fpga_result{FPGA_RUN};
 static CommonArgs args;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+static bool trace_only = false;
+#endif
 static const char *fpga_ddr_load_cmd = nullptr;
 static const char *fpga_ila_arm_cmd = nullptr;
 static const char *fpga_ila_upload_cmd = nullptr;
@@ -88,6 +92,7 @@ int main(int argc, const char *argv[]) {
 
   printf("fpga init\n");
 #ifdef CONFIG_DIFFTEST_FORK_REF
+  std::thread trace_thread;
   if (args.enable_diff && args.ref_mode == RefMode::FORK) {
     // Fork here: the parent receives XDMA packets; the child runs FAST REF.
     const int role = difftest_ref_fork_start(args.ref_fork_interval);
@@ -98,12 +103,28 @@ int main(int argc, const char *argv[]) {
       fflush(nullptr);
       difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP);
     }
+    if (args.refdrive_trace_name) {
+      const unsigned reader = g_packet_pool->add_reader();
+      if (reader == MemoryIdxPool::MAX_READERS) {
+        g_packet_pool->fail();
+        fpga_finish();
+        return 1;
+      }
+      g_packet_pool->enter_reader(reader);
+      trace_only = true;
+      // The receiver records each DUT window once, independently of REF workers and recovery.
+      trace_thread = std::thread([] { static_cast<FpgaXdma *>(xdma_device)->process_packets(false); });
+    }
   }
 #endif
 #ifdef USE_SERIAL_PORT
   serial_port->start();
 #endif
   xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (trace_thread.joinable())
+    trace_thread.join();
+#endif
   fpga_finish();
   if (signal_num != 0) {
     return 128 + signal_num;
@@ -171,11 +192,15 @@ void fpga_init() {
 #if defined(USE_THREAD_MEMPOOL) && !defined(DIFFTEST_HOSTIF_GBUS)
 #ifdef CONFIG_DIFFTEST_FORK_REF
   static_cast<FpgaXdma *>(xdma_device)
-      ->set_packet_callbacks([] { return difftest_ref_fork_idle() != 0; },
-                             [] {
-                               difftest_ref_fork_abort_child();
-                               fpga_ref_fork_abort();
-                             });
+      ->set_packet_callbacks(
+          [] {
+            const int result = difftest_ref_fork_idle();
+            return result && (result != 1 || !difftest_refdrive_trace_pending());
+          },
+          [] {
+            difftest_ref_fork_abort_child();
+            fpga_ref_fork_abort();
+          });
 #else
   static_cast<FpgaXdma *>(xdma_device)->set_packet_callbacks(nullptr, fpga_ref_fork_abort);
 #endif
@@ -355,6 +380,12 @@ void fpga_display_result(int ret) {
 }
 
 int fpga_get_result(uint8_t step) {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (trace_only) {
+    difftest_nstep(step, false);
+    return FPGA_RUN;
+  }
+#endif
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
 #ifdef CONFIG_DIFFTEST_FORK_REF

@@ -150,6 +150,7 @@ void difftest_switch_zone() {
 void difftest_set_dut() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->dut = diffstate_buffer[i]->next();
+    difftest_refdrive_trace_record(*difftest[i]->dut);
   }
 }
 
@@ -603,7 +604,6 @@ void Difftest::do_replay() {
 #endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
-  difftest_refdrive_trace_record(*dut);
 #ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_is_child())
     return difftest_ref_fork_check(this);
