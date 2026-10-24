@@ -4,7 +4,8 @@
 |---|---|---|---|---|---|
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
 | 2 | Fresh GSIM build after pipeline trace metadata fixes | PASS `20261024-6`, `01M5NS6Y3627GZFDBT7KZ7MBB7` | Not applicable | Not applicable | Not applicable |
-| 3 | Validate real trace startup and alignment | PASS: fresh `build/emu` from runset `20261024-6` | Pending dispatch | Pending dispatch | Blocked until both smoke tests pass |
+| 3 | Validate real trace startup and alignment | PASS: fresh `build/emu` from runset `20261024-6` | FAIL `20261024-7`: IBuffer output bubble | Not run; blocked by waveform diagnosis | Blocked until both smoke tests pass |
+| 3A | Reproduce assertion with Verilator FST | FAIL `20261024-8`: unsupported GCC flag; FAIL `20261024-9`: unquoted flag override; RUNNING `20261024-10`, `01M5PZM5PJZKXG36ADRQQM65AP` | Failure preserved for bounded reproduction | Not run | Blocked |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
 ## Phase 1
@@ -62,17 +63,19 @@
 
 ### Changes made
 
-- No changes yet.
+- No RTL changes in response to the runtime failure; waveform diagnosis is required before proposing a fix.
 
 ### Test results
 
-- GemsFDTD `38797`: not run.
-- gcc_expr `4892`: not run.
+- FAIL: GemsFDTD `38797`, runset `20261024-7`, task `01M5PYMKAPPFCCRHDE8Y754RQJ`. The run loaded the real trace, preread 40000000 instructions, reported one finished instruction, then asserted `Bubble in ibuffer.out` at logged time 8425. The recorded command used the runset `20261024-6` binary, `--tracertl-file`, `W=0`, and `I=100000`.
+- NOT RUN: gcc_expr `4892` remains blocked by the failed first smoke and waveform-diagnosis gate.
 
 ### Issues and debugging
 
-- No Phase 3 failures recorded.
-- Required failure handling: any runtime error triggers a separate Verilator `EMU_TRACE=fst` build, a bounded `--dump-wave` reproduction with an explicit waveform path, and waveform-to-RTL analysis before the campaign can resume.
+- The failing assertion is at `src/main/scala/xiangshan/frontend/ibuffer/IBuffer.scala:129-131`: the output head is invalid while at least one later output is valid. Its upstream cause is not yet established; this is not evidence of the earlier DeepSeek ROB watchdog failure.
+- Runset `20261024-8` generated the Verilator model but failed C++ compilation because GCC rejects the default `-fno-slp-vectorize`. Runset `20261024-9` emitted a multiword `OPT_FAST` override without shell quoting and stopped before compilation. Neither produced a waveform.
+- Runset `20261024-10`, task `01M5PZM5PJZKXG36ADRQQM65AP`, is running with `EMU_TRACE=fst` and the single-argument `CXX=clang++` override; Clang accepts the project's original optimization flag. The generated command preserves `TRACERTL_MODE=1` and `--trace-fst`.
+- Static review identified a waveform-checkable hypothesis: the source supplied the S1 enqueue-pointer shift, but migrated IFU supplies the current S2 shift while `TraceRTL.scala` captures it on an S1-to-S2 transfer. Compare `s3ShiftNum`, `s2_prevIBufEnqPtr`, IBuffer `enqPtr`, bypass lane validity, and the current trace packet before accepting or rejecting this hypothesis. No RTL fix is justified yet.
 
 ## Final verification
 

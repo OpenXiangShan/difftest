@@ -106,7 +106,7 @@ For any runtime error after implementation and building, keep the failing GSIM r
 
 ```bash
 cd "$WT"
-featx submit "$NODE" build --set build.tool=verilator --set build.cache=false --set build.options.flags.EMU_TRACE=fst -m "Waveform reproduction of TraceRTL runtime failure"
+featx submit "$NODE" build --set build.tool=verilator --set build.cache=false --set build.options.flags.EMU_TRACE=fst --set build.verilator.args=CXX=clang++ -m "Waveform reproduction of TraceRTL runtime failure"
 featx ps -a --node "$NODE" --limit 30
 ```
 
