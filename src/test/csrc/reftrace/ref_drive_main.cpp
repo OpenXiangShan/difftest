@@ -18,7 +18,7 @@
 #include "flash.h"
 #include "fork_ref/ref_drive.h"
 #include "ram.h"
-#include "refdrive_trace.h"
+#include "reftrace/refdrive_trace.h"
 #include <stdexcept>
 
 static void drive(RefProxy &proxy, DiffTrace<RefDriveTraceEntry> &trace) {
