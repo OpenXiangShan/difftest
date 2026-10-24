@@ -52,6 +52,7 @@
 ### Issues and debugging
 
 - No Phase 3 failures recorded.
+- Required failure handling: any runtime error triggers a separate Verilator `EMU_TRACE=fst` build, a bounded `--dump-wave` reproduction with an explicit waveform path, and waveform-to-RTL analysis before the campaign can resume.
 
 ## Final verification
 

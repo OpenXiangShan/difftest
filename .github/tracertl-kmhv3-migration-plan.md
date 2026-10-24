@@ -98,7 +98,21 @@ featx ps -a --node "$NODE" --limit 20
 
 Inspect each point's `simulator_out.txt` and `simulator_err.txt` through `featx logs` with its run task ID and `-j POINT`.
 
-PASS: both jobs complete normally, initialize the real trace, advance beyond instruction 1 and the 15000-cycle watchdog, and have no assertion, stuck watchdog, or TraceRTL mismatch. FAIL: any abort, no-commit watchdog, checker mismatch, missing trace input, or infrastructure error. A failure blocks the full campaign.
+PASS: both jobs complete normally, initialize the real trace, advance beyond instruction 1 and the 15000-cycle watchdog, and have no assertion, stuck watchdog, or TraceRTL mismatch. FAIL: any abort, no-commit watchdog, checker mismatch, missing trace input, or infrastructure error. A failure blocks the full campaign and enters Phase 3A.
+
+## Phase 3A: reproduce runtime failures with Verilator waveforms
+
+For any runtime error after implementation and building, keep the failing GSIM runset and dispatch a fresh Verilator build with FST waveform support:
+
+```bash
+cd "$WT"
+featx submit "$NODE" build --set build.tool=verilator --set build.cache=false --set build.options.flags.EMU_TRACE=fst -m "Waveform reproduction of TraceRTL runtime failure"
+featx ps -a --node "$NODE" --limit 30
+```
+
+Set `WAVE_TASK` and `WAVE_RUNSET` from this new submission, then wait with `featx wait "$WAVE_TASK" --timeout 36000`. Reproduce the same point with `run.coverage=null` and run arguments that enable `--dump-wave`, focused `-b`/`-e` cycle bounds, and `--wave-path` under the new run directory. Keep the waveform and exact runset as evidence.
+
+PASS: the Verilator run reproduces the failure inside a bounded FST capture and the relevant IFU/ROB/trace handshake signals can be correlated with the owning Scala RTL. Use the waveform to form or reject a concrete fix hypothesis, then return to Phase 2 and repeat Phase 3. FAIL: no waveform, a different failure without an explanation, or a waveform that cannot be bounded to the failing interval; adjust capture bounds and repeat before any full campaign.
 
 ## Final verification: SPEC06 0.3 coverage
 
