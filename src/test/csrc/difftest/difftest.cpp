@@ -24,6 +24,7 @@
 #include "flash.h"
 #include "goldenmem.h"
 #include "ram.h"
+#include "reftrace/refdrive_trace.h"
 #include "spikedasm.h"
 #include "splitview.h"
 #include <csignal>
@@ -149,6 +150,7 @@ void difftest_switch_zone() {
 void difftest_set_dut() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->dut = diffstate_buffer[i]->next();
+    difftest_refdrive_trace_record(*difftest[i]->dut);
   }
 }
 
@@ -184,6 +186,7 @@ void difftest_trace_write(int step) {
 }
 
 void difftest_finish(bool report_perfcnt) {
+  difftest_refdrive_trace_finish();
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
   Stopwatch::print_stats(CHECKERS);
 #endif
