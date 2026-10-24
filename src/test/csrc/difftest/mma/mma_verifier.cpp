@@ -156,6 +156,25 @@ const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
   return mma_error_buffer.load(std::memory_order_acquire);
 }
 
+void MmaVerifier::report_error(const MmaVerificationBuffer *buffer) const {
+  Assert(buffer != nullptr, "Cannot report a null MMA verification buffer");
+  Info("MMA verification error detected at pc = 0x%lx.\n", buffer->amu_event.pc);
+  Info("------ DUT Result ------\n");
+  for (int i = 0; i < buffer->amu_event.mtilem; i++) {
+    for (int j = 0; j < buffer->amu_event.mtilen; j++) {
+      Info("%08x ", ((uint32_t *)(buffer->dut_result))[i * buffer->amu_event.mtilen + j]);
+    }
+    Info("\n");
+  }
+  Info("------ REF Result ------\n");
+  for (int i = 0; i < buffer->amu_event.mtilem; i++) {
+    for (int j = 0; j < buffer->amu_event.mtilen; j++) {
+      Info("%08x ", ((uint32_t *)(buffer->src3))[i * buffer->amu_event.mtilen + j]);
+    }
+    Info("\n");
+  }
+}
+
 void MmaVerifier::mma_verification_thread_func() {
   while (true) {
     std::vector<MmaVerificationBuffer *> buffers;

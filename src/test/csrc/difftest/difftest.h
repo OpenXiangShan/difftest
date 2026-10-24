@@ -277,10 +277,16 @@ private:
     bool in_replay = false;
     int trace_head;
     int trace_size;
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+    uint64_t matrix_commit_boundary = 0;
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   } replay_status;
 
   uint8_t *proxy_reg_ss = NULL;
   uint64_t squash_csr_buf[4096];
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  std::vector<uint8_t> ame_replay_state_ss;
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   bool can_replay();
   bool in_replay_range();
   void replay_snapshot();

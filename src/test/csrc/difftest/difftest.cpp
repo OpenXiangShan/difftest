@@ -559,6 +559,14 @@ void Difftest::replay_snapshot() {
   state->replay_snapshot();
   memcpy(proxy_reg_ss, &proxy->state, sizeof(ref_state_t));
   proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  replay_status.matrix_commit_boundary = state->matrix_commit_sequence;
+  const size_t ame_replay_state_size = proxy->ame_replay_state_size();
+  ame_replay_state_ss.resize(ame_replay_state_size);
+  if (!ame_replay_state_ss.empty()) {
+    proxy->ame_replay_state_save(ame_replay_state_ss.data());
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   proxy->ref_store_log_reset();
   proxy->set_store_log(true);
   goldenmem_store_log_reset();
@@ -575,10 +583,20 @@ void Difftest::do_replay() {
   replay_status.in_replay = true;
   replay_status.trace_head = info.trace_head;
   replay_status.trace_size = info.trace_size;
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  delete mma_verifier;
+  mma_verifier = new MmaVerifier();
+  mma_verifier->start();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   state->replay_restore();
   memcpy(&proxy->state, proxy_reg_ss, sizeof(ref_state_t));
   proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  if (!ame_replay_state_ss.empty()) {
+    proxy->ame_replay_state_restore(ame_replay_state_ss.data());
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   proxy->ref_store_log_restore();
   goldenmem_store_log_restore();
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
@@ -587,16 +605,6 @@ void Difftest::do_replay() {
   }
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
   difftest_replay_head(info.trace_head);
-  // clear buffered queue
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  for (auto &entry: state->matrix_sw_rob) {
-    if (entry.res != nullptr) {
-      delete[] entry.res;
-      entry.res = nullptr;
-    }
-  }
-  state->matrix_sw_rob.clear();
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
@@ -614,6 +622,17 @@ int Difftest::step() {
   static int replay_step = 0;
   if (replay_status.in_replay) {
     if (!in_replay_range()) {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+      mma_verifier->flush();
+      const auto *buffer = mma_verifier->get_error_buffer();
+      if (buffer != nullptr) {
+        mma_verifier->report_error(buffer);
+        dut->trap.pc = buffer->amu_event.pc;
+        display();
+        mma_verifier->stop();
+        return STATE_BADTRAP;
+      }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
       return 0;
     } else {
       replay_step++;
@@ -630,7 +649,36 @@ int Difftest::step() {
     proxy->set_store_log(false);
     goldenmem_set_store_log(false);
   }
+#endif // CONFIG_DIFFTEST_REPLAY
   int ret = check_all();
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  if (ret) {
+    mma_verifier->flush();
+  }
+  if (mma_verifier->has_mma_verification_error()) {
+    auto buffer = mma_verifier->get_error_buffer();
+#ifdef CONFIG_DIFFTEST_REPLAY
+    const bool mma_error_in_packet = canReplay && buffer->sequence > replay_status.matrix_commit_boundary;
+#else
+    const bool mma_error_in_packet = false;
+#endif // CONFIG_DIFFTEST_REPLAY
+    if (mma_error_in_packet) {
+      // The failed MMA request was submitted while processing this packet.
+      // Replay the packet so the original checker order identifies the first error.
+      ret = STATE_BADTRAP;
+    } else {
+      mma_verifier->report_error(buffer);
+      dut->trap.pc = buffer->amu_event.pc;
+      display();
+      ret = STATE_BADTRAP;
+      mma_verifier->stop();
+#ifdef CONFIG_DIFFTEST_REPLAY
+      return ret;
+#endif // CONFIG_DIFFTEST_REPLAY
+    }
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+#ifdef CONFIG_DIFFTEST_REPLAY
   if (ret && canReplay) {
     Info("\n**** Start replay for more accurate error location ****\n");
     do_replay();
@@ -639,36 +687,6 @@ int Difftest::step() {
     return ret;
   }
 #else
-  int ret = check_all();
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  if (mma_verifier) {
-    if (ret) { // find error, wait for mma verification to complete
-      mma_verifier->flush();
-    }
-    if (mma_verifier->has_mma_verification_error()) {
-      auto buffer = mma_verifier->get_error_buffer();
-      Info("MMA verification error detected at pc = 0x%lx.\n", buffer->amu_event.pc);
-      Info("------ DUT Result ------\n");
-      for (int i = 0; i < buffer->amu_event.mtilem; i++) {
-        for (int j = 0; j < buffer->amu_event.mtilen; j++) {
-          Info("%08x ", ((uint32_t *)(buffer->dut_result))[i * buffer->amu_event.mtilen + j]);
-        }
-        Info("\n");
-      }
-      Info("------ REF Result ------\n");
-      for (int i = 0; i < buffer->amu_event.mtilem; i++) {
-        for (int j = 0; j < buffer->amu_event.mtilen; j++) {
-          Info("%08x ", ((uint32_t *)(buffer->src3))[i * buffer->amu_event.mtilen + j]);
-        }
-        Info("\n");
-      }
-      display();
-      dut->trap.pc = buffer->amu_event.pc;
-      ret = STATE_BADTRAP;
-      mma_verifier->stop();
-    }
-  }
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   return ret;
 #endif // CONFIG_DIFFTEST_REPLAY
 }
