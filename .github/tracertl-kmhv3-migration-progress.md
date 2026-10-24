@@ -3,8 +3,8 @@
 | Phase | Change summary | Build | GemsFDTD smoke | gcc_expr smoke | SPEC06 0.3 |
 |---|---|---|---|---|---|
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
-| 2 | Guarded target-path fix committed for next build | PENDING | Not applicable | Not applicable | Not applicable |
-| 3 | Validate real trace startup and alignment | Not run | Not run | Not run | Not run |
+| 2 | Fresh GSIM build after pipeline trace metadata fixes | PASS `20261024-6`, `01M5NS6Y3627GZFDBT7KZ7MBB7` | Not applicable | Not applicable | Not applicable |
+| 3 | Validate real trace startup and alignment | PASS: fresh `build/emu` from runset `20261024-6` | Pending dispatch | Pending dispatch | Blocked until both smoke tests pass |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
 ## Phase 1
@@ -31,12 +31,13 @@
 
 ### Changes made
 
-- Completed and committed the independent superproject merge as `7d611ca94`; pinned difftest `661f67887` and TraceRTL `e6d6fc12`.
+- Completed and committed the independent superproject merge as `7d611ca94`; the successful build records difftest `16c79d94a` and TraceRTL `e6d6fc12`.
 - Configured Featx with GSIM trace mode, 64 build jobs, one emulator thread, no binary cache reuse, and the collector.
-- Added compressed-ROB per-slot trace metadata handling and the user-required Verilator waveform debug path. No additional ChiselDB compatibility change has been needed yet.
+- Added compressed-ROB per-slot trace metadata handling and the user-required Verilator waveform debug path.
 - Fixed current API mismatches: ROB `debugMeta(uop).pc`, IFU `PcInit(...).signGuard` and `s2_alignShiftNum`, checker `blockSel`, and removal of an obsolete store `vstart` assignment.
 - Migrated `TraceDecodedEntry` and `TracePreDecodeFlatResp` jump offsets to `GuardedPc` and removed the redundant IFU conversion.
 - Added a guarded-address helper for fixed and predicted targets in `TracePredictChecker`; retained `Pc` for `mispredPc`.
+- Propagated `traceInfo` through the DataPath issue register and the Region vector-store-data path; initialized the trace-aligned IFU instruction `index` from its instruction-start halfword, `startOffset`.
 
 ### Test results
 
@@ -44,7 +45,9 @@
 - FAIL: runset `20261024-2`, build `01M5NQ943G825T95J9PN2F8G0V`, reached merged Scala and reported nine API errors in ROB, IFU, TracePredictChecker, and NewStoreUnit; no runtime test occurred.
 - FAIL: runset `20261024-3`, build `01M5NQK55XKPM97TFDNHB6KTPN`, failed during hardware elaboration at `TracePreDecoder.scala:38` with a 50-bit versus 51-bit address-width mismatch; no runtime test occurred.
 - FAIL: runset `20261024-4`, build `01M5NQXMWNGY7B3K1RSZQJPNQQ`, moved to `TracePredictChecker.scala:207`, where the fixed target still used the old 50-bit type; no runtime test occurred.
-- PASS: fixed and predicted targets now use guarded addresses and `git diff --check` passed. A fresh build is pending.
+- FAIL: runset `20261024-5`, build `01M5NR569VE98XW79WVRBD72K9`, reported 486 uninitialized-field errors: 390 DataPath, 60 Region, and 36 IFU `index` fields. No emulator or runtime test was produced.
+- PASS: runset `20261024-6`, build `01M5NS6Y3627GZFDBT7KZ7MBB7`, freshly elaborated and generated the model with the three metadata fixes, then linked `build/emu` in step 2. Featx recorded uncached binary SHA-256 `978a1a044d4455998178240cee520da6ce8ccf8958ad34e59edf7922844072da`; `src-patches/super.patch` exactly matches the committed Scala changes.
+- PASS: `git diff --check` passed for the Scala and progress-document changes.
 
 ### Issues and debugging
 
@@ -52,6 +55,8 @@
 - Root cause of the second failure: source-side code retained old names and types removed by Kunminghu V3. Migrated each use to the current API instead of restoring the removed interfaces.
 - Root cause of the third failure: current branch-offset helpers return 51-bit `GuardedPc`, while the old trace bundle retained a 50-bit `PrunedAddr`. Migrated the bundle type instead of truncating the offset.
 - Root cause of the fourth failure: `PredCheckRedirect.target` is guarded, while the source fixed-target path still returned `PrunedAddr`. Converted all fixed-target producers and the predicted-target comparison to `GuardedPc`.
+- Root cause of the fifth failure: upstream's partial bundle assignments did not carry the added trace metadata. Propagated it from the actual upstream payload and initialized the IFU index without `DontCare`.
+- The runset `20261024-6` step-1 link stopped on generated ChiselDB/performance symbols. Featx's configured step 2 compiled `chisel_db.cpp` and completed the link with exit status 0; no additional compatibility source change or stale-model reuse was needed.
 
 ## Phase 3
 
