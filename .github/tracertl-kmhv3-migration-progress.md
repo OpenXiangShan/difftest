@@ -3,7 +3,7 @@
 | Phase | Change summary | Build | GemsFDTD smoke | gcc_expr smoke | SPEC06 0.3 |
 |---|---|---|---|---|---|
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
-| 2 | Current API compile fixes committed for next build | PENDING | Not applicable | Not applicable | Not applicable |
+| 2 | GuardedPc elaboration fix committed for next build | PENDING | Not applicable | Not applicable | Not applicable |
 | 3 | Validate real trace startup and alignment | Not run | Not run | Not run | Not run |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
@@ -35,17 +35,20 @@
 - Configured Featx with GSIM trace mode, 64 build jobs, one emulator thread, no binary cache reuse, and the collector.
 - Added compressed-ROB per-slot trace metadata handling and the user-required Verilator waveform debug path. No additional ChiselDB compatibility change has been needed yet.
 - Fixed current API mismatches: ROB `debugMeta(uop).pc`, IFU `PcInit(...).signGuard` and `s2_alignShiftNum`, checker `blockSel`, and removal of an obsolete store `vstart` assignment.
+- Migrated `TraceDecodedEntry` and `TracePreDecodeFlatResp` jump offsets to `GuardedPc` and removed the redundant IFU conversion.
 
 ### Test results
 
 - FAIL: runset `20261024-1`, build `01M5NQ560Q3SWC9BHCCTYMD1KD`, failed at `XSCache.compile` because ZhuJiang types were absent; no RTL elaboration or runtime test occurred.
 - FAIL: runset `20261024-2`, build `01M5NQ943G825T95J9PN2F8G0V`, reached merged Scala and reported nine API errors in ROB, IFU, TracePredictChecker, and NewStoreUnit; no runtime test occurred.
-- PASS: all nine locations were corrected and `git diff --check` passed. A fresh build is pending.
+- FAIL: runset `20261024-3`, build `01M5NQK55XKPM97TFDNHB6KTPN`, failed during hardware elaboration at `TracePreDecoder.scala:38` with a 50-bit versus 51-bit address-width mismatch; no runtime test occurred.
+- PASS: the jump-offset bundle now uses `GuardedPc` end to end and `git diff --check` passed. A fresh build is pending.
 
 ### Issues and debugging
 
 - Root cause of the first failure: the initializer skipped `XSCache/ZhuJiang` as optional, but `XSCache/src/main/scala/zhujiang/perf/XiangShanPerfBackend.scala` requires its types. Initialized the exact gitlink from a local checkout and resubmitted rather than changing RTL.
 - Root cause of the second failure: source-side code retained old names and types removed by Kunminghu V3. Migrated each use to the current API instead of restoring the removed interfaces.
+- Root cause of the third failure: current branch-offset helpers return 51-bit `GuardedPc`, while the old trace bundle retained a 50-bit `PrunedAddr`. Migrated the bundle type instead of truncating the offset.
 
 ## Phase 3
 
