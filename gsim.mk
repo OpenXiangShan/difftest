@@ -69,10 +69,10 @@ $(1): $(2)
 endef
 
 $(foreach x, $(GSIM_CXXFILES), $(eval \
-	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/other/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_CSRC_DIR)/SimTop.h)))
 
 $(foreach x, $(shell find $(GSIM_GEN_CSRC_DIR) -name "*.cpp" 2> /dev/null), $(eval \
-	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS,)))
+	$(call GSIM_CXX_TEMPLATE, $(GSIM_EMU_BUILD_DIR)/model/$(basename $(notdir $(x))).o, $(x), $(GSIM_CXXFLAGS), GSIM_EMU_OBJS, $(GSIM_GEN_CSRC_DIR)/SimTop.h)))
 
 $(eval $(call GSIM_LD_TEMPLATE, $(GSIM_EMU_TARGET), $(GSIM_EMU_OBJS), $(GSIM_LDFLAGS)))
 
