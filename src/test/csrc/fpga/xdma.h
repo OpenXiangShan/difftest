@@ -77,6 +77,9 @@ public:
 #ifdef USE_THREAD_MEMPOOL
   // Consume published packets and deliver decoded batches through v_difftest_Batch.
   void process_packets();
+  void enable_parser_thread() {
+    parser_thread_enabled = true;
+  }
   void set_packet_callbacks(bool (*idle)(), void (*abort)()) {
     packet_idle = idle;
     packet_abort = abort;
@@ -145,6 +148,7 @@ private:
   void (*packet_abort)() = nullptr;
   std::unique_ptr<MemoryIdxPool> packet_pool;
   bool fork_readers = false;
+  bool parser_thread_enabled = true;
   std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;

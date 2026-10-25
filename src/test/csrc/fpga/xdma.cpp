@@ -17,7 +17,6 @@
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
-#include "reftrace/refdrive_trace.h"
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -61,6 +60,7 @@ template <typename Func, typename Obj, typename... Args> void thread_wrapper(Fun
 FpgaXdma::FpgaXdma(bool fork_readers, size_t pool_slots) {
 #ifdef USE_THREAD_MEMPOOL
   this->fork_readers = fork_readers;
+  parser_thread_enabled = !fork_readers;
   packet_pool = std::make_unique<MemoryIdxPool>(sizeof(FpgaPackgeHead), fork_readers ? pool_slots : NUM_BLOCKS);
   if (fork_readers)
     g_packet_pool = packet_pool.get();
@@ -301,7 +301,7 @@ void FpgaXdma::start_transmit_thread() {
     receive_thread[i] = std::thread(thread_wrapper<decltype(&FpgaXdma::read_xdma_thread), FpgaXdma *, int>,
                                     &FpgaXdma::read_xdma_thread, this, i);
   }
-  if (!fork_readers || difftest_refdrive_trace_pending())
+  if (parser_thread_enabled)
     process_thread =
         std::thread(thread_wrapper<decltype(&FpgaXdma::process_packets), FpgaXdma *>, &FpgaXdma::process_packets, this);
 }
@@ -373,7 +373,8 @@ void FpgaXdma::read_xdma_thread(int channel) {
 }
 
 void FpgaXdma::process_packets() {
-  const bool poll_callbacks = !fork_readers || !difftest_refdrive_trace_pending();
+  // The fork receiver polls supervisor callbacks on its main thread.
+  const bool poll_callbacks = !fork_readers || !parser_thread_enabled;
   running = true;
   auto abort = [this, poll_callbacks] {
     if (!poll_callbacks)
