@@ -69,11 +69,13 @@ CUTE_MMA_HOST_DEVICE static inline bool uses_second_product_half(FloatFormat for
 }
 
 CUTE_MMA_HOST_DEVICE static inline uint32_t load_little_endian(const uint8_t *data, int bytes) {
-  uint32_t value = 0;
-  for (int i = 0; i < bytes; ++i) {
-    value |= static_cast<uint32_t>(data[i]) << (i * 8);
+  // MMA operand buffers and row strides preserve source element alignment.
+  switch (bytes) {
+    case 1: return *data;
+    case 2: return *reinterpret_cast<const uint16_t *>(data);
+    case 4: return *reinterpret_cast<const uint32_t *>(data);
   }
-  return value;
+  return 0;
 }
 
 CUTE_MMA_HOST_DEVICE static inline RawFloat decode_ieee(uint32_t bits, int exp_bits, int mantissa_bits) {
