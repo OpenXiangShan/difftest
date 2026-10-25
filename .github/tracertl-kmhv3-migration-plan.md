@@ -119,7 +119,17 @@ featx ps -a --node "$NODE" --limit 30
 
 Both Makefiles export the absolute `BUILD_DIR` as `DIFFTEST_BUILD_DIR`; `common/FileControl.scala` uses it for generated support files and retains `NOOP_HOME/build/generated-src` as the fallback when unset. Do not copy or reuse the GSIM `build/generated-src` directory.
 
-Set `WAVE_TASK` and `WAVE_RUNSET` from this new submission, then wait with `featx wait "$WAVE_TASK" --timeout 36000`. Reproduce the same point with `run.coverage=null` and run arguments that enable `--dump-wave`, focused `-b`/`-e` cycle bounds, and `--wave-path` under the new run directory. Keep the waveform and exact runset as evidence.
+Set `WAVE_TASK` and `WAVE_RUNSET` from this new submission, then wait with `featx wait "$WAVE_TASK" --timeout 36000`. Reproduce the same point with a bounded capture around the logged failure at time 8425. Featx exports `FX_JOB_DIR` and executes the point there, so the waveform remains in the new run directory:
+
+```bash
+featx submit "$NODE" run --bin "$NODE/$WAVE_RUNSET" \
+  --point GemsFDTD_38797_0.210512 \
+  --set run.coverage=null --set run.W=0 --set run.I=100000 \
+  --set 'run.args=--dump-wave -b 7500 -e 9000 --wave-path "$FX_JOB_DIR/gems_fdtd_ibuffer.fst"' \
+  -m "Bounded FST reproduction of IBuffer assertion"
+```
+
+Keep the waveform and exact runset as evidence. If the failure falls outside this interval, adjust the bounds and reproduce again before analysis.
 
 PASS: the Verilator run reproduces the failure inside a bounded FST capture and the relevant IFU/ROB/trace handshake signals can be correlated with the owning Scala RTL. Use the waveform to form or reject a concrete fix hypothesis, then return to Phase 2 and repeat Phase 3. FAIL: no waveform, a different failure without an explanation, or a waveform that cannot be bounded to the failing interval; adjust capture bounds and repeat before any full campaign.
 

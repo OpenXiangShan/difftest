@@ -5,7 +5,7 @@
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
 | 2 | Fresh GSIM build after pipeline trace metadata fixes | PASS `20261024-6`, `01M5NS6Y3627GZFDBT7KZ7MBB7` | Not applicable | Not applicable | Not applicable |
 | 3 | Validate real trace startup and alignment | PASS: fresh `build/emu` from runset `20261024-6` | FAIL `20261024-7`: IBuffer output bubble | Not run; blocked by waveform diagnosis | Blocked until both smoke tests pass |
-| 3A | Reproduce assertion with isolated Verilator FST build | FAIL 8/9 compiler setup; PASS 10 but not used; FAIL `20261024-11`: generated-support output path; isolated generator fix pending rebuild | Failure preserved for bounded reproduction | Not run | Blocked |
+| 3A | Reproduce and diagnose assertion with isolated Verilator FST | PASS `20261024-12` isolated build; PASS `20261024-13` waveform reproduction and shift/bank diagnosis | Root cause confirmed; fresh build and smoke retest pending | Not run | Blocked |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
 ## Phase 1
@@ -63,21 +63,23 @@
 
 ### Changes made
 
-- No RTL changes in response to the runtime failure; waveform diagnosis is required before proposing a fix.
+- Added `DIFFTEST_BUILD_DIR` to isolate generated Verilator support files from the GSIM build tree.
+- After waveform diagnosis, changed only `traceRTL.io.fromIFU.ifuS1AlignShift` in `Ifu.scala` from the previous S2 shift to `s1_alignShiftInstrNum`. Normal IFU and IBuffer alignment logic is unchanged.
 
 ### Test results
 
 - FAIL: GemsFDTD `38797`, runset `20261024-7`, task `01M5PYMKAPPFCCRHDE8Y754RQJ`. The run loaded the real trace, preread 40000000 instructions, reported one finished instruction, then asserted `Bubble in ibuffer.out` at logged time 8425. The recorded command used the runset `20261024-6` binary, `--tracertl-file`, `W=0`, and `I=100000`.
-- NOT RUN: gcc_expr `4892` remains blocked by the failed first smoke and waveform-diagnosis gate.
+- NOT RUN: gcc_expr `4892` awaits a fresh build and a passing GemsFDTD retest after the shift fix.
 
 ### Issues and debugging
 
-- The failing assertion is at `src/main/scala/xiangshan/frontend/ibuffer/IBuffer.scala:129-131`: the output head is invalid while at least one later output is valid. Its upstream cause is not yet established; this is not evidence of the earlier DeepSeek ROB watchdog failure.
+- The failing assertion is at `src/main/scala/xiangshan/frontend/ibuffer/IBuffer.scala:129-131`: the output head is invalid while at least one later output is valid. Waveform analysis traced it to trace-packet bank alignment, not the earlier DeepSeek ROB watchdog.
 - Runset `20261024-8` generated the Verilator model but failed C++ compilation because GCC rejects the default `-fno-slp-vectorize`. Runset `20261024-9` emitted a multiword `OPT_FAST` override without shell quoting and stopped before compilation. Neither produced a waveform.
-- Runset `20261024-10`, task `01M5PZM5PJZKXG36ADRQQM65AP`, succeeded with `EMU_TRACE=fst` and `CXX=clang++`, but reused the GSIM `build/` tree. It is preserved as a compiler check but will not be used for waveform diagnosis.
+- Runset `20261024-10`, task `01M5PZM5PJZKXG36ADRQQM65AP`, succeeded with `EMU_TRACE=fst` and `CXX=clang++`, but reused the GSIM `build/` tree. It is preserved as a compiler check but was not used for waveform diagnosis.
 - FAIL: runset `20261024-11`, task `01M5Q05FM39J6618NFRH4K4RAP`, freshly elaborated RTL into the dedicated directory but Verilator could not find `DifftestMacros.svh`. `FileControl.scala` hardcoded `NOOP_HOME/build/generated-src`, so the attempt also wrote support files into the old GSIM tree. The failed isolated tree is preserved as `build-verilator-fst-20261024-11/`.
-- Added `DIFFTEST_BUILD_DIR` exports to both Makefiles and made `FileControl.scala` generate support files under that directory, with the original default retained when unset. Direct checks of both Makefiles printed the intended absolute output directory. A clean rebuild must confirm actual generated files before any waveform run.
-- Static review identified a waveform-checkable hypothesis: the source supplied the S1 enqueue-pointer shift, but migrated IFU supplies the current S2 shift while `TraceRTL.scala` captures it on an S1-to-S2 transfer. Compare `s3ShiftNum`, `s2_prevIBufEnqPtr`, IBuffer `enqPtr`, bypass lane validity, and the current trace packet before accepting or rejecting this hypothesis. No RTL fix is justified yet.
+- PASS: runset `20261024-12`, task `01M5Q1CQMRVFP1R77W435WN98C`, completed the fresh isolated Verilator build with clean provenance. Its binary SHA-256 is `de09b270ce1e7467fc08a30a2897f5726420001f241ad96aa366cbca600fc889`. `DIFFTEST_BUILD_DIR` produced the support files under `build-verilator-fst/generated-src`; the GSIM macro copy was not modified by this attempt.
+- REPRODUCED: runset `20261024-13`, task `01M5Q31GHSYEYBH6NDM8MKFVSM`, used the isolated binary and real trace, and hit the same IBuffer output-bubble assertion at logged time 8379. The 6 MB FST at `run/GemsFDTD_38797_0.210512/gems_fdtd_ibuffer.fst` covers cycles 7500-9000 and has been indexed together with the fresh RTL.
+- CONFIRMED ROOT CAUSE: at the failing transaction, the current S1 enqueue-pointer bank is 0, while the migrated TraceRTL path registers shift 2 from the previous S2 packet. `s3ShiftNum` is 2, the shifted checker mask is `0x4`, and only `io_s3Decoded_2_compact_valid` is set. IBuffer has `enqPtr` bank 0 and `useBypass=1`, so the bypass logic in `IBuffer.scala:247-270` reads an invalid lane 0 and a valid later lane. `TraceRTL.scala:89-98` captures on the S1-to-S2 transfer, confirming a pipeline-stage selection error. The `Ifu.scala` fix uses the current S1 instruction-pointer shift; runtime validation remains pending.
 
 ## Final verification
 
