@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "mma/backend/cuda/int8.cuh"
 #include "mma/backend/mma_backend_cuda_impl.h"
 #include "mma/backend/mma_backend_cute_model.h"
 #include <cuda_runtime_api.h>
@@ -105,9 +106,15 @@ template <class src1_t, class src2_t>
 __global__ void mmacc_cute_int32_batch_kernel(const CudaMmaBatchDescriptor *descriptors, const uint8_t *src1,
                                               const uint8_t *src2, uint8_t *src3) {
   const CudaMmaBatchDescriptor &desc = descriptors[blockIdx.y];
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  mmacc_cute_int32_element<src1_t, src2_t>(src1 + desc.src1_offset, src2 + desc.src2_offset, src3 + desc.src3_offset,
-                                           desc.tile_m, desc.tile_k, desc.tile_n, idx);
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+  mmacc_int8_tensor<std::is_signed<src1_t>::value, std::is_signed<src2_t>::value>(desc, src1, src2, src3);
+#else
+  for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < desc.tile_m * desc.tile_n;
+       idx += blockDim.x * gridDim.x) {
+    mmacc_cute_int32_element<src1_t, src2_t>(src1 + desc.src1_offset, src2 + desc.src2_offset, src3 + desc.src3_offset,
+                                             desc.tile_m, desc.tile_k, desc.tile_n, idx);
+  }
+#endif
 }
 
 __global__ void mfmacc_cute_fp32_batch_kernel(cute_mma_model::FloatFormat format,
@@ -144,19 +151,20 @@ bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescript
   const int block_size = 256;
   const int grid_size = static_cast<int>((max_output_elements + block_size - 1) / block_size);
   dim3 grid(grid_size, static_cast<unsigned int>(count));
+  dim3 int_grid((max_output_elements + 1023) / 1024, static_cast<unsigned int>(count));
 
   switch (type) {
     case CudaMmaType::U8U8:
-      mmacc_cute_int32_batch_kernel<uint8_t, uint8_t><<<grid, block_size>>>(descriptors, src1, src2, src3);
+      mmacc_cute_int32_batch_kernel<uint8_t, uint8_t><<<int_grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::U8S8:
-      mmacc_cute_int32_batch_kernel<uint8_t, int8_t><<<grid, block_size>>>(descriptors, src1, src2, src3);
+      mmacc_cute_int32_batch_kernel<uint8_t, int8_t><<<int_grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::S8U8:
-      mmacc_cute_int32_batch_kernel<int8_t, uint8_t><<<grid, block_size>>>(descriptors, src1, src2, src3);
+      mmacc_cute_int32_batch_kernel<int8_t, uint8_t><<<int_grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::S8S8:
-      mmacc_cute_int32_batch_kernel<int8_t, int8_t><<<grid, block_size>>>(descriptors, src1, src2, src3);
+      mmacc_cute_int32_batch_kernel<int8_t, int8_t><<<int_grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::Fp8E5M2ToFp32:
       mfmacc_cute_fp32_specialized_kernel<cute_mma_model::FloatFormat::Fp8E5M2>
