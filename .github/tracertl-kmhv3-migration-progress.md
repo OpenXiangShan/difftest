@@ -4,9 +4,10 @@
 |---|---|---|---|---|---|
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
 | 2 | Fresh GSIM build after pipeline trace metadata fixes | PASS `20261024-6`, `01M5NS6Y3627GZFDBT7KZ7MBB7` | Not applicable | Not applicable | Not applicable |
-| 3 | Validate real trace startup and alignment | PASS `20261026-1`, `01M5T17GXBKJ8FFKPH877W8H5P` after S1 shift fix | FAIL `20261026-2`: LoadQueueRAW mask write collision | Not run; blocked by new runtime failure | Blocked until both smoke tests pass |
+| 3 | Validate real trace startup and alignment | PASS `20261026-6`, `01M5T5DMKZNCHFR5V58FG82JSQ` after RAW slot-rank fix | FAIL `20261026-7`: ROB no-commit watchdog | Not run; blocked by new runtime failure | Blocked until both smoke tests pass |
 | 3A | Reproduce and diagnose assertion with isolated Verilator FST | PASS `20261024-12` isolated build; PASS `20261024-13` waveform reproduction and shift/bank diagnosis | IBuffer shift root cause fixed; new LoadQueueRAW failure found | Not run | Blocked |
-| 3B | Diagnose LoadQueueRAW duplicate mask write | PASS isolated Verilator build `20261026-3`; RUNNING corrected FST capture `20261026-5`, `01M5T4MEY3WXQW3CGE76KDC3HX` | `20261026-4`: 569 instructions, collision at 16551; initial window missed it | Not run | Blocked |
+| 3B | Diagnose LoadQueueRAW duplicate mask write | PASS isolated build `20261026-3` and FST `20261026-5`; slot-rank fix committed | Waveform confirmed equal-rank compressed-slot collision; RAW assertion cleared in retest | Not run | Blocked |
+| 3C | Diagnose ROB no-commit watchdog | QUEUED isolated Verilator build `20261026-8`, `01M5T7BCGTYSR3P5Z3Q68K6VTB` | FST reproduction pending | Not run | Blocked |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
 ## Phase 1
@@ -86,6 +87,7 @@
 - FAIL: runset `20261026-2`, task `01M5T32PE3KQAN6E6V21XP9X3R`, no longer hits the IBuffer assertion but fails at `LoadQueueData.scala:130`: two LoadQueueRAW mask writes target the same entry. This is a distinct runtime failure; its allocation/write-enable cause is not yet established. Isolated Verilator build `20261026-3`, task `01M5T36MAMTJNH0HRD4A4WSDV9`, is running in `build-verilator-fst-lq/` for the required waveform reproduction before further smoke or campaign dispatch.
 - CONFIRMED ROOT CAUSE: the FST shows accepted lanes 0 and 1 with `enqueueRank=0`, equal ROB `flag/value` (entry 12), and opposite `isFormer` bits. Generic `isBefore` ignores that slot bit while full-bundle `===` distinguishes it, so the source rank algorithm collapses both lanes to rank 0. Both then select allocator output 0, giving `maskModule.io_waddr_0 = maskModule.io_waddr_1 = 3` at the assertion edge; lane 2 uses rank 2 and a distinct address. The fix in `LoadQueueRAW.scala:139-141` uses `isBeforeSlot` and `isSameSlot`, preserving age ranking and the port-index tie-break without adding debug-only logic. Runtime validation is pending.
 - Runset `20261026-4` reproduced the same LoadQueueData assertion after 569 instructions at cycle 16551, but its 7500-9000 capture missed the failure. Runset `20261026-5`, task `01M5T4MEY3WXQW3CGE76KDC3HX`, repeated the same binary and point with bounds 16000-16700 and captured the same assertion at cycle 16551 in a 6.8 MB FST. This demonstrates progress beyond instruction 1 and the 15000-cycle watchdog, but the smoke still fails and is not a pass.
+- FAIL: runset `20261026-7`, task `01M5T78AREN29PDDPN60F3S7Q8`, hit `[CROB-STUCK]` with `deq=73`, `commit_v=1`, and `realDestSize=3`. The watchdog at `Rob.scala:1194-1201` is a print, not the hardware assertion itself; GSIM's formatted-print assertion truncates the remaining details. `realDestSize` is not an instruction count, and review confirms `commitDebugUop(2 * i)` selects the correct head slot. The FST must inspect entry `0x73` and bank 3 for incomplete writeback versus a commit-wide block or metadata mismatch. Isolated Verilator build `20261026-8`, task `01M5T7BCGTYSR3P5Z3Q68K6VTB`, is queued for the shared 64-core build allocation; no RTL change is justified yet.
 
 ## Final verification
 
