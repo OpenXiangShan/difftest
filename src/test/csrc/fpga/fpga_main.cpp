@@ -458,7 +458,7 @@ extern "C" void fpga_nstep(uint8_t step) {
     return;
 #ifdef CONFIG_DIFFTEST_FORK_REF
   if (trace_only) {
-    difftest_nstep(step, false);
+    difftest_refdrive_trace_dump(step);
     return;
   }
 #endif

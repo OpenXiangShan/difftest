@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "refdrive_trace.h"
+#include "difftest.h"
 #include <atomic>
 #include <memory>
 #include <stdexcept>
@@ -50,6 +51,15 @@ void difftest_refdrive_trace_configure(const CommonArgs &args) {
 bool difftest_refdrive_trace_pending() {
   // Forked REF workers inherit the recorder; only the creating process may write or wait for it.
   return recorder && recorder_pid == getpid() && !finished;
+}
+
+void difftest_refdrive_trace_dump(int step) {
+#if CONFIG_DIFFTEST_ZONESIZE > 1
+  difftest_switch_zone();
+#endif
+  for (int i = 0; i < step && difftest_refdrive_trace_pending(); i++) {
+    difftest_set_dut();
+  }
 }
 
 void difftest_refdrive_trace_record(const DiffTestState &dut) {
