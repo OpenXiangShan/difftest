@@ -53,7 +53,7 @@ bool difftest_refdrive_trace_pending() {
   return recorder && recorder_pid == getpid() && !finished;
 }
 
-void difftest_refdrive_trace_dump(uint8_t step) {
+void difftest_refdrive_trace_dump(int step) {
 #if CONFIG_DIFFTEST_ZONESIZE > 1
   difftest_switch_zone();
 #endif

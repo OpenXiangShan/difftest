@@ -49,8 +49,6 @@
 
 void fpga_finish();
 void fpga_ref_fork_abort();
-extern "C" void fpga_nstep(uint8_t step);
-void (*fpga_step_callback)(uint8_t step) = fpga_nstep;
 
 enum {
   FPGA_RUN,
@@ -61,6 +59,9 @@ enum {
 
 static std::atomic<uint8_t> fpga_result{FPGA_RUN};
 static CommonArgs args;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+static bool is_xdma_receiver = false;
+#endif
 static const char *fpga_ddr_load_cmd = nullptr;
 static const char *fpga_ila_arm_cmd = nullptr;
 static const char *fpga_ila_upload_cmd = nullptr;
@@ -100,6 +101,7 @@ int main(int argc, const char *argv[]) {
       fflush(nullptr);
       difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP);
     }
+    is_xdma_receiver = true;
     if (args.refdrive_trace_name) {
       const unsigned reader = g_packet_pool->add_reader();
       if (reader == MemoryIdxPool::MAX_READERS) {
@@ -108,8 +110,6 @@ int main(int argc, const char *argv[]) {
         return 1;
       }
       g_packet_pool->enter_reader(reader);
-      fpga_step_callback = difftest_refdrive_trace_dump;
-      static_cast<FpgaXdma *>(xdma_device)->enable_parser_thread();
     }
   }
 #endif
@@ -456,6 +456,12 @@ int fpga_get_result(uint8_t step) {
 extern "C" void fpga_nstep(uint8_t step) {
   if (fpga_result != FPGA_RUN)
     return;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (is_xdma_receiver) {
+    difftest_refdrive_trace_dump(step);
+    return;
+  }
+#endif
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
 #ifdef CONFIG_DIFFTEST_FORK_REF

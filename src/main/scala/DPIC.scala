@@ -325,8 +325,8 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
          |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
          |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
          |#ifdef FPGA_HOST
-         |      extern void (*fpga_step_callback)(uint8_t step);
-         |      fpga_step_callback(1);
+         |      extern void fpga_nstep(uint8_t step);
+         |      fpga_nstep(1);
          |#else
          |      extern void simv_nstep(uint8_t step);
          |      simv_nstep(1);
