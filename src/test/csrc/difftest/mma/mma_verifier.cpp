@@ -23,10 +23,6 @@
 #include <cstdio>
 #include <cstring>
 
-#ifndef CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR
-#define CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR 4
-#endif
-
 static constexpr size_t kMmaBackpressurePendingLimit =
     static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR;
 
@@ -113,26 +109,24 @@ MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
   size_t c_sz = element_sz_d * m * n;
 
   // Allocate memory for the buffer structure and data
-  MmaVerificationBuffer *buffer = new MmaVerificationBuffer();
+  std::unique_ptr<MmaVerificationBuffer> buffer(new MmaVerificationBuffer());
   buffer->amu_event = *amu_event;
-
-  // Allocate memory for each source matrix and result
-  buffer->src1 = new uint8_t[a_sz];
-  buffer->src2 = new uint8_t[b_sz];
-  buffer->src3 = new uint8_t[c_sz];
-  buffer->dut_result = new uint8_t[c_sz];
-
-  return buffer;
+  try {
+    buffer->src1 = backend->host[0].acquire(a_sz);
+    buffer->src2 = backend->host[1].acquire(b_sz);
+    buffer->src3 = backend->host[2].acquire(c_sz);
+  } catch (...) {
+    free_buffer(buffer.release());
+    throw;
+  }
+  return buffer.release();
 }
 
 void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
   if (buffer) {
-    if (buffer->src1) {
-      delete[] buffer->src1;
-      delete[] buffer->src2;
-      delete[] buffer->src3;
-      delete[] buffer->dut_result;
-    }
+    backend->host[0].recycle(buffer->src1);
+    backend->host[1].recycle(buffer->src2);
+    backend->host[2].recycle(buffer->src3);
     delete buffer;
   }
 }

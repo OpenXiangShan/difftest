@@ -18,7 +18,44 @@
 #define __MMA_BACKEND_H__
 
 #include "common.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <queue>
 #include <vector>
+
+struct MmaHostDeleter {
+  void (*free_host)(uint8_t *) = nullptr;
+  void operator()(uint8_t *buffer) const;
+};
+
+// Default empty pools use ordinary arrays. A backend may initialize FIFO slots
+// with its own allocator; acquire/recycle are thread-safe.
+// allocate/release require all users to stop and all acquired storage to return.
+class MmaHostBuffer {
+public:
+  static constexpr size_t invalid_slot = SIZE_MAX;
+
+  std::unique_ptr<uint8_t[], MmaHostDeleter> slots;
+  size_t slot_count = 0;
+  size_t stride = 0;
+
+  bool allocate(size_t bytes, size_t slot_count, uint8_t *(*allocate_host)(size_t) = nullptr,
+                void (*free_host)(uint8_t *) = nullptr);
+
+  size_t slot(const uint8_t *buffer) const;
+
+  uint8_t *acquire(size_t bytes);
+
+  void recycle(uint8_t *buffer);
+
+  void release();
+
+private:
+  std::mutex mutex;
+  std::queue<uint8_t *> free_slots;
+};
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
@@ -40,6 +77,7 @@ static inline bool is_mma_32bit_result_type(uint8_t type) {
 class MmaBackend {
 public:
   virtual ~MmaBackend() = default;
+  MmaHostBuffer host[3];
 
   /**
    * @brief Verifies a FIFO-ordered batch and writes one result per request.

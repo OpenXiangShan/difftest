@@ -186,12 +186,11 @@ public:
 
   struct AmeInstRobEntry {
     explicit AmeInstRobEntry(const DifftestAmuCtrlEvent &event)
-        : amu_event(event), state(WAIT_REF_COMMIT), res(nullptr), res_words(0) {}
+        : amu_event(event), state(WAIT_REF_COMMIT), res(nullptr) {}
 
     DifftestAmuCtrlEvent amu_event;
     AmeInstState state;
     uint64_t *res;
-    size_t res_words;
     MatrixHash128 hash{};
   };
 

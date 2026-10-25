@@ -651,7 +651,7 @@ int Difftest::step() {
       Info("------ DUT Result ------\n");
       for (int i = 0; i < buffer->amu_event.mtilem; i++) {
         for (int j = 0; j < buffer->amu_event.mtilen; j++) {
-          Info("%08x ", ((uint32_t *)(buffer->dut_result))[i * buffer->amu_event.mtilen + j]);
+          Info("%08x ", ((uint32_t *)(buffer->dut_result.get()))[i * buffer->amu_event.mtilen + j]);
         }
         Info("\n");
       }
