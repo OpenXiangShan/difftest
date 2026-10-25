@@ -4,8 +4,9 @@
 |---|---|---|---|---|---|
 | 1 | Source GSIM wrapper ported as `ee497ea5a` | Not run; Phase 2 pending | Not applicable | Not applicable | Not applicable |
 | 2 | Fresh GSIM build after pipeline trace metadata fixes | PASS `20261024-6`, `01M5NS6Y3627GZFDBT7KZ7MBB7` | Not applicable | Not applicable | Not applicable |
-| 3 | Validate real trace startup and alignment | PASS: fresh `build/emu` from runset `20261024-6` | FAIL `20261024-7`: IBuffer output bubble | Not run; blocked by waveform diagnosis | Blocked until both smoke tests pass |
-| 3A | Reproduce and diagnose assertion with isolated Verilator FST | PASS `20261024-12` isolated build; PASS `20261024-13` waveform reproduction and shift/bank diagnosis | Root cause confirmed; fresh build and smoke retest pending | Not run | Blocked |
+| 3 | Validate real trace startup and alignment | PASS `20261026-1`, `01M5T17GXBKJ8FFKPH877W8H5P` after S1 shift fix | FAIL `20261026-2`: LoadQueueRAW mask write collision | Not run; blocked by new runtime failure | Blocked until both smoke tests pass |
+| 3A | Reproduce and diagnose assertion with isolated Verilator FST | PASS `20261024-12` isolated build; PASS `20261024-13` waveform reproduction and shift/bank diagnosis | IBuffer shift root cause fixed; new LoadQueueRAW failure found | Not run | Blocked |
+| 3B | Diagnose LoadQueueRAW duplicate mask write | PASS isolated Verilator build `20261026-3`; RUNNING corrected FST capture `20261026-5`, `01M5T4MEY3WXQW3CGE76KDC3HX` | `20261026-4`: 569 instructions, collision at 16551; initial window missed it | Not run | Blocked |
 | Final | Full 143-point validation | Not run | Not run | Not run | Not run |
 
 ## Phase 1
@@ -65,6 +66,7 @@
 
 - Added `DIFFTEST_BUILD_DIR` to isolate generated Verilator support files from the GSIM build tree.
 - After waveform diagnosis, changed only `traceRTL.io.fromIFU.ifuS1AlignShift` in `Ifu.scala` from the previous S2 shift to `s1_alignShiftInstrNum`. Normal IFU and IBuffer alignment logic is unchanged.
+- After the second waveform reproduction, changed LoadQueueRAW's age-rank comparisons to slot-aware `isBeforeSlot` and `isSameSlot` so compressed ROB slots cannot collapse onto one allocation rank.
 
 ### Test results
 
@@ -79,7 +81,11 @@
 - FAIL: runset `20261024-11`, task `01M5Q05FM39J6618NFRH4K4RAP`, freshly elaborated RTL into the dedicated directory but Verilator could not find `DifftestMacros.svh`. `FileControl.scala` hardcoded `NOOP_HOME/build/generated-src`, so the attempt also wrote support files into the old GSIM tree. The failed isolated tree is preserved as `build-verilator-fst-20261024-11/`.
 - PASS: runset `20261024-12`, task `01M5Q1CQMRVFP1R77W435WN98C`, completed the fresh isolated Verilator build with clean provenance. Its binary SHA-256 is `de09b270ce1e7467fc08a30a2897f5726420001f241ad96aa366cbca600fc889`. `DIFFTEST_BUILD_DIR` produced the support files under `build-verilator-fst/generated-src`; the GSIM macro copy was not modified by this attempt.
 - REPRODUCED: runset `20261024-13`, task `01M5Q31GHSYEYBH6NDM8MKFVSM`, used the isolated binary and real trace, and hit the same IBuffer output-bubble assertion at logged time 8379. The 6 MB FST at `run/GemsFDTD_38797_0.210512/gems_fdtd_ibuffer.fst` covers cycles 7500-9000 and has been indexed together with the fresh RTL.
-- CONFIRMED ROOT CAUSE: at the failing transaction, the current S1 enqueue-pointer bank is 0, while the migrated TraceRTL path registers shift 2 from the previous S2 packet. `s3ShiftNum` is 2, the shifted checker mask is `0x4`, and only `io_s3Decoded_2_compact_valid` is set. IBuffer has `enqPtr` bank 0 and `useBypass=1`, so the bypass logic in `IBuffer.scala:247-270` reads an invalid lane 0 and a valid later lane. `TraceRTL.scala:89-98` captures on the S1-to-S2 transfer, confirming a pipeline-stage selection error. The `Ifu.scala` fix uses the current S1 instruction-pointer shift; runtime validation remains pending.
+- CONFIRMED ROOT CAUSE: at the failing transaction, the current S1 enqueue-pointer bank is 0, while the migrated TraceRTL path registers shift 2 from the previous S2 packet. `s3ShiftNum` is 2, the shifted checker mask is `0x4`, and only `io_s3Decoded_2_compact_valid` is set. IBuffer has `enqPtr` bank 0 and `useBypass=1`, so the bypass logic in `IBuffer.scala:247-270` reads an invalid lane 0 and a valid later lane. `TraceRTL.scala:89-98` captures on the S1-to-S2 transfer, confirming a pipeline-stage selection error. The `Ifu.scala` fix uses the current S1 instruction-pointer shift.
+- PASS: runset `20261026-1`, task `01M5T17GXBKJ8FFKPH877W8H5P`, freshly elaborated and built the S1 shift fix. The uncached binary SHA-256 is `13978cc4e9e450ff60bcb514a9e4097cd67673465f28c2702f25dbc095584a7f`.
+- FAIL: runset `20261026-2`, task `01M5T32PE3KQAN6E6V21XP9X3R`, no longer hits the IBuffer assertion but fails at `LoadQueueData.scala:130`: two LoadQueueRAW mask writes target the same entry. This is a distinct runtime failure; its allocation/write-enable cause is not yet established. Isolated Verilator build `20261026-3`, task `01M5T36MAMTJNH0HRD4A4WSDV9`, is running in `build-verilator-fst-lq/` for the required waveform reproduction before further smoke or campaign dispatch.
+- CONFIRMED ROOT CAUSE: the FST shows accepted lanes 0 and 1 with `enqueueRank=0`, equal ROB `flag/value` (entry 12), and opposite `isFormer` bits. Generic `isBefore` ignores that slot bit while full-bundle `===` distinguishes it, so the source rank algorithm collapses both lanes to rank 0. Both then select allocator output 0, giving `maskModule.io_waddr_0 = maskModule.io_waddr_1 = 3` at the assertion edge; lane 2 uses rank 2 and a distinct address. The fix in `LoadQueueRAW.scala:139-141` uses `isBeforeSlot` and `isSameSlot`, preserving age ranking and the port-index tie-break without adding debug-only logic. Runtime validation is pending.
+- Runset `20261026-4` reproduced the same LoadQueueData assertion after 569 instructions at cycle 16551, but its 7500-9000 capture missed the failure. Runset `20261026-5`, task `01M5T4MEY3WXQW3CGE76KDC3HX`, repeated the same binary and point with bounds 16000-16700 and captured the same assertion at cycle 16551 in a 6.8 MB FST. This demonstrates progress beyond instruction 1 and the 15000-cycle watchdog, but the smoke still fails and is not a pass.
 
 ## Final verification
 

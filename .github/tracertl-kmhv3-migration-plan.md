@@ -102,7 +102,7 @@ PASS: both jobs complete normally, initialize the real trace, advance beyond ins
 
 ## Phase 3A: reproduce runtime failures with Verilator waveforms
 
-For any runtime error after implementation and building, keep the failing GSIM runset and dispatch a fresh Verilator build with FST waveform support. Use the dedicated `build-verilator-fst` directory, not the GSIM `build` directory, so RTL and generated sources are recreated. The single-element artifact list prevents fallback to an old GSIM emulator:
+For any runtime error after implementation and building, keep the failing GSIM runset and dispatch a fresh Verilator build with FST waveform support. Use the dedicated `build-verilator-fst` directory, not the GSIM `build` directory, so RTL and generated sources are recreated. For subsequent failures, use a new per-failure directory such as `build-verilator-fst-lq` and preserve earlier waveform-analysis trees. The single-element artifact list prevents fallback to an old GSIM emulator:
 
 ```bash
 cd "$WT"
