@@ -29,6 +29,7 @@ endif
 CUDA_MMA_BACKEND_SRC = $(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cuda_kernel.cu
 CUDA_MMA_BACKEND_OBJ = $(BUILD_DIR)/mma_backend_cuda_kernel.o
 NVCC ?= nvcc
+CUDA_ARCH ?= native
 
 # Optional CUDA toolchain detection for MMA backend.
 CUDA_HOME ?= /usr/local/cuda
@@ -50,7 +51,7 @@ SIM_EXTRA_OBJS += $(CUDA_MMA_BACKEND_OBJ)
 CUDA_MMA_BACKEND_DEP = $(CUDA_MMA_BACKEND_OBJ:.o=.d)
 
 $(CUDA_MMA_BACKEND_OBJ): $(CUDA_MMA_BACKEND_SRC) $(DIFFTEST_STATE_HEADER) | $(BUILD_DIR)
-	$(NVCC) -std=c++11 $(SIM_CXXFLAGS) -MMD -MP \
+	$(NVCC) -std=c++11 -arch=$(CUDA_ARCH) $(SIM_CXXFLAGS) -MMD -MP \
 		-MF $(CUDA_MMA_BACKEND_DEP) -MT $@ -c $< -o $@
 
 -include $(CUDA_MMA_BACKEND_DEP)

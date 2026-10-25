@@ -110,6 +110,11 @@ software backend:
 - `MMA_BACKEND=cpu` (default): software CUTE-compatible reference backend
 - `MMA_BACKEND=cuda`: CUDA backend, requiring a CUDA toolkit and host GPU
 
+CUDA builds default to `CUDA_ARCH=native`; set `CUDA_ARCH=sm_89`, for example,
+when cross-compiling without a visible GPU. Integer MMA uses INT8 Tensor Core
+instructions on SM80 and newer targets, retaining the software kernel on older
+targets. Accumulation wraps at 32 bits without saturation.
+
 The backend selection affects only software-side numerical verification. It
 does not change the Gateway configuration or generated hardware interface.
 
