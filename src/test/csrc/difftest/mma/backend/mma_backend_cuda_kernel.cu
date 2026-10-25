@@ -119,6 +119,15 @@ __global__ void mfmacc_cute_fp32_batch_kernel(cute_mma_model::FloatFormat format
                            desc.tile_m, desc.tile_k, desc.tile_n, idx);
 }
 
+template <cute_mma_model::FloatFormat Format>
+__global__ void mfmacc_cute_fp32_specialized_kernel(const CudaMmaBatchDescriptor *descriptors, const uint8_t *src1,
+                                                    const uint8_t *src2, uint8_t *src3) {
+  const CudaMmaBatchDescriptor &desc = descriptors[blockIdx.y];
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  mfmacc_cute_fp32_element(Format, src1 + desc.src1_offset, src2 + desc.src2_offset, src3 + desc.src3_offset,
+                           desc.tile_m, desc.tile_k, desc.tile_n, idx);
+}
+
 static bool report_error(const char *what, cudaError_t err) {
   if (err == cudaSuccess) {
     return true;
@@ -150,24 +159,24 @@ bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescript
       mmacc_cute_int32_batch_kernel<int8_t, int8_t><<<grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::Fp8E5M2ToFp32:
-      mfmacc_cute_fp32_batch_kernel<<<grid, block_size>>>(cute_mma_model::FloatFormat::Fp8E5M2, descriptors, src1, src2,
-                                                          src3);
+      mfmacc_cute_fp32_specialized_kernel<cute_mma_model::FloatFormat::Fp8E5M2>
+          <<<grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::Fp8E4M3ToFp32:
-      mfmacc_cute_fp32_batch_kernel<<<grid, block_size>>>(cute_mma_model::FloatFormat::Fp8E4M3, descriptors, src1, src2,
-                                                          src3);
+      mfmacc_cute_fp32_specialized_kernel<cute_mma_model::FloatFormat::Fp8E4M3>
+          <<<grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::Fp16ToFp32:
-      mfmacc_cute_fp32_batch_kernel<<<grid, block_size>>>(cute_mma_model::FloatFormat::Fp16, descriptors, src1, src2,
-                                                          src3);
+      mfmacc_cute_fp32_specialized_kernel<cute_mma_model::FloatFormat::Fp16>
+          <<<grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::Bf16ToFp32:
-      mfmacc_cute_fp32_batch_kernel<<<grid, block_size>>>(cute_mma_model::FloatFormat::Bf16, descriptors, src1, src2,
-                                                          src3);
+      mfmacc_cute_fp32_specialized_kernel<cute_mma_model::FloatFormat::Bf16>
+          <<<grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     case CudaMmaType::Tf32ToFp32:
-      mfmacc_cute_fp32_batch_kernel<<<grid, block_size>>>(cute_mma_model::FloatFormat::Tf32, descriptors, src1, src2,
-                                                          src3);
+      mfmacc_cute_fp32_specialized_kernel<cute_mma_model::FloatFormat::Tf32>
+          <<<grid, block_size>>>(descriptors, src1, src2, src3);
       break;
     default: return false;
   }
