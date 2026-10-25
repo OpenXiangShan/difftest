@@ -61,7 +61,6 @@ int main(int argc, const char *argv[]) {
     if (args.max_instr != uint64_t(-1) || args.max_cycles != uint64_t(-1) || args.log_begin ||
         args.log_end != uint64_t(-1))
       throw std::runtime_error("ref-drive does not support live DUT run controls");
-    difftest_refdrive_trace_configure(args);
     common_init(argv[0]);
     init_ram(args.image, args.ram_size ? parse_ramsize(args.ram_size) : DEFAULT_EMU_RAM_SIZE, args.random_mem,
              args.seed);

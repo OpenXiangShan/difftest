@@ -109,9 +109,6 @@ SIM_VFLAGS   += +define+DIFFTEST
 ifeq ($(DIFFTEST_PERFCNT), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
 endif
-ifneq ($(filter ref-drive,$(MAKECMDGOALS)),)
-override DIFFTEST_FAST_REF := 1
-endif
 ifeq ($(DIFFTEST_FAST_REF), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_FAST_REF
 endif

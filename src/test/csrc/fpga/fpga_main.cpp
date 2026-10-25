@@ -372,12 +372,6 @@ void fpga_display_result(int ret) {
 }
 
 int fpga_get_result(uint8_t step) {
-#ifdef CONFIG_DIFFTEST_FORK_REF
-  if (trace_only) {
-    difftest_nstep(step, false);
-    return FPGA_RUN;
-  }
-#endif
   // Compare DUT and REF
   int trapCode = difftest_nstep(step, args.enable_diff);
 #ifdef CONFIG_DIFFTEST_FORK_REF
@@ -462,6 +456,12 @@ int fpga_get_result(uint8_t step) {
 extern "C" void fpga_nstep(uint8_t step) {
   if (fpga_result != FPGA_RUN)
     return;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (trace_only) {
+    difftest_nstep(step, false);
+    return;
+  }
+#endif
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
 #ifdef CONFIG_DIFFTEST_FORK_REF
