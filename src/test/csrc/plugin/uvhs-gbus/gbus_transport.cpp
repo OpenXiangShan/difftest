@@ -45,7 +45,7 @@ constexpr uint32_t GBUS_C2H_FEATURE_PINGPONG = 1U << 2;
 // Streaming frame FIFO: the same feature bit names the capability, and the
 // counters below replace the frozen-bank metadata.
 constexpr uint32_t GBUS_C2H_FEATURE_STREAM = 1U << 2;
-constexpr uint64_t GBUS_REG_C2H_AVAILABLE = 0x123c;  // read: frames; write: CONSUME
+constexpr uint64_t GBUS_REG_C2H_AVAILABLE = 0x123c; // read: frames; write: CONSUME
 constexpr uint64_t GBUS_REG_C2H_RD_PTR = 0x1240;
 constexpr uint64_t GBUS_REG_C2H_WR_PTR = 0x1244;
 constexpr uint32_t GBUS_C2H_STREAM_FRAME_BYTES = 768;
@@ -184,8 +184,7 @@ GbusTransport::GbusTransport() {
   c2h_fast_fill_ = env_u64("GBUS_C2H_FAST_FILL", 0, 1) != 0;
   c2h_aperture_header_ = env_u64("GBUS_C2H_APERTURE_HEADER", 0, 1) != 0;
   c2h_stream_ = env_u64("GBUS_C2H_STREAM", 1, 1) != 0;
-  c2h_stream_min_frames_ =
-      static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 64, 4096));
+  c2h_stream_min_frames_ = static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 64, 4096));
   c2h_pingpong_ = env_u64("GBUS_C2H_PINGPONG", 0, 1) != 0;
   c2h_idle_timeout_sec_ = static_cast<uint32_t>(env_u64("GBUS_C2H_IDLE_TIMEOUT_SEC", 30, 3600));
   // Multi-word capability probes are opt-in on unverified runtime releases.
@@ -644,8 +643,8 @@ void GbusTransport::c2h_drain_stream_frames() {
 
   std::fprintf(stderr,
                "[fpga-host] GBD1 stream ready base=0x%llx frames=%u bytes=%u min_batch=%u poll_us=%u enabled=%u\n",
-               static_cast<unsigned long long>(aperture), c2h_stream_frames_, ring_bytes,
-               c2h_stream_min_frames_, c2h_poll_us_, armed_now ? 1U : 0U);
+               static_cast<unsigned long long>(aperture), c2h_stream_frames_, ring_bytes, c2h_stream_min_frames_,
+               c2h_poll_us_, armed_now ? 1U : 0U);
 
   std::vector<uint8_t> accumulator;
   accumulator.reserve(ring_bytes);
@@ -672,8 +671,7 @@ void GbusTransport::c2h_drain_stream_frames() {
       fail("counter read failed", status);
     const uint32_t available = words[0];
     uint32_t rd_ptr = words[1];
-    if (available > c2h_stream_frames_ || rd_ptr >= ring_bytes ||
-        rd_ptr % c2h_stream_frame_bytes_ != 0)
+    if (available > c2h_stream_frames_ || rd_ptr >= ring_bytes || rd_ptr % c2h_stream_frame_bytes_ != 0)
       fail("invalid counter snapshot", status);
     if (available != previous_available) {
       previous_available = available;
@@ -686,8 +684,7 @@ void GbusTransport::c2h_drain_stream_frames() {
       if (!(status & GBUS_C2H_STATUS_ENABLED)) {
         c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_START_FILL);
       }
-      if (c2h_idle_timeout_sec_ &&
-          Clock::now() - last_progress >= std::chrono::seconds(c2h_idle_timeout_sec_)) {
+      if (c2h_idle_timeout_sec_ && Clock::now() - last_progress >= std::chrono::seconds(c2h_idle_timeout_sec_)) {
         const uint32_t last = c2h_reg_read(GBUS_REG_C2H_STATUS);
         fail(last & GBUS_C2H_STATUS_ENABLED ? "no capture progress" : "capture never armed", last);
       }
@@ -696,8 +693,7 @@ void GbusTransport::c2h_drain_stream_frames() {
     }
     // Wait for a worthwhile batch, but never strand a tail: once the producer
     // has stopped publishing, ship whatever is left.
-    if (available < c2h_stream_min_frames_ &&
-        Clock::now() - last_change < std::chrono::milliseconds(20)) {
+    if (available < c2h_stream_min_frames_ && Clock::now() - last_change < std::chrono::milliseconds(20)) {
       usleep(c2h_poll_us_);
       continue;
     }
@@ -709,8 +705,8 @@ void GbusTransport::c2h_drain_stream_frames() {
 
     std::vector<uint8_t> block;
     const uint64_t begin = monotonic_us();
-    const int rc = gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, aperture + rd_ptr,
-                                 count, channel_, port_, block);
+    const int rc =
+        gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, aperture + rd_ptr, count, channel_, port_, block);
     const uint64_t elapsed_us = monotonic_us() - begin;
     ++c2h_dma_calls_;
     c2h_dma_us_ += elapsed_us;
@@ -738,8 +734,7 @@ void GbusTransport::c2h_drain_stream_frames() {
       bool same = same_size;
       for (size_t i = 0; same && i < words.size(); ++i) {
         const uint32_t word = words[i];
-        same = block[i * 4] == static_cast<uint8_t>(word) &&
-               block[i * 4 + 1] == static_cast<uint8_t>(word >> 8) &&
+        same = block[i * 4] == static_cast<uint8_t>(word) && block[i * 4 + 1] == static_cast<uint8_t>(word >> 8) &&
                block[i * 4 + 2] == static_cast<uint8_t>(word >> 16) &&
                block[i * 4 + 3] == static_cast<uint8_t>(word >> 24);
       }
@@ -764,8 +759,7 @@ void GbusTransport::c2h_drain_stream_frames() {
       // acknowledged.  Everything already copied out has been dispatched; stop
       // cleanly instead of reporting a transport fault.
       if (!(status_after & GBUS_C2H_STATUS_ENABLED)) {
-        std::fprintf(stderr,
-                     "[fpga-host] GBD1 stream ended by CPU after frames=%llu bytes=%llu\n",
+        std::fprintf(stderr, "[fpga-host] GBD1 stream ended by CPU after frames=%llu bytes=%llu\n",
                      static_cast<unsigned long long>(frames), static_cast<unsigned long long>(bytes));
         break;
       }
@@ -776,13 +770,12 @@ void GbusTransport::c2h_drain_stream_frames() {
     bytes += count;
     ++batches;
     last_progress = Clock::now();
-    previous_available = 0;  // re-read at the top of the loop
+    previous_available = 0; // re-read at the top of the loop
     last_change = Clock::now();
 
     const bool report = batches <= 2 || (batches & (batches - 1)) == 0;
     if (report) {
-      const auto elapsed_ms =
-          std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();
+      const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();
       std::fprintf(stderr,
                    "[fpga-host] GBUS_TIMING c2h banks=%llu bytes=%llu elapsed_ms=%lld "
                    "avg_bank_us=%.1f last_batch=%u dma_calls=%llu dma_us=%llu "
@@ -790,18 +783,12 @@ void GbusTransport::c2h_drain_stream_frames() {
                    "write_calls=%llu write_us=%llu dispatch_us=%llu chunk=%u poll_us=%u "
                    "block_reads=1 fast_fill=0 stream=1\n",
                    static_cast<unsigned long long>(frames), static_cast<unsigned long long>(bytes),
-                   static_cast<long long>(elapsed_ms),
-                   frames ? static_cast<double>(elapsed_ms) * 1000.0 / frames : 0.0, take,
-                   static_cast<unsigned long long>(c2h_dma_calls_),
-                   static_cast<unsigned long long>(c2h_dma_us_),
-                   static_cast<unsigned long long>(c2h_reg_calls_),
-                   static_cast<unsigned long long>(c2h_reg_us_),
-                   static_cast<unsigned long long>(c2h_block_calls_),
-                   static_cast<unsigned long long>(c2h_block_us_),
-                   static_cast<unsigned long long>(c2h_write_calls_),
-                   static_cast<unsigned long long>(c2h_write_us_),
-                   static_cast<unsigned long long>(c2h_dispatch_us_), c2h_dma_chunk_bytes_,
-                   c2h_poll_us_);
+                   static_cast<long long>(elapsed_ms), frames ? static_cast<double>(elapsed_ms) * 1000.0 / frames : 0.0,
+                   take, static_cast<unsigned long long>(c2h_dma_calls_), static_cast<unsigned long long>(c2h_dma_us_),
+                   static_cast<unsigned long long>(c2h_reg_calls_), static_cast<unsigned long long>(c2h_reg_us_),
+                   static_cast<unsigned long long>(c2h_block_calls_), static_cast<unsigned long long>(c2h_block_us_),
+                   static_cast<unsigned long long>(c2h_write_calls_), static_cast<unsigned long long>(c2h_write_us_),
+                   static_cast<unsigned long long>(c2h_dispatch_us_), c2h_dma_chunk_bytes_, c2h_poll_us_);
       std::fprintf(stderr, "[fpga-host] GBD1 progress mode=stream frames=%llu bytes=%llu\n",
                    static_cast<unsigned long long>(frames), static_cast<unsigned long long>(bytes));
     }
@@ -810,8 +797,7 @@ void GbusTransport::c2h_drain_stream_frames() {
   // Final summary: the periodic dump only fires on powers of two, so without
   // this the tail of a long run is invisible and the totals look smaller than
   // they are.
-  const auto total_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();
+  const auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();
   std::fprintf(stderr,
                "[fpga-host] GBUS_TIMING c2h totals banks=%llu bytes=%llu batches=%llu "
                "elapsed_ms=%lld avg_bank_us=%.1f dma_calls=%llu dma_us=%llu "
@@ -820,14 +806,10 @@ void GbusTransport::c2h_drain_stream_frames() {
                static_cast<unsigned long long>(frames), static_cast<unsigned long long>(bytes),
                static_cast<unsigned long long>(batches), static_cast<long long>(total_ms),
                frames ? static_cast<double>(total_ms) * 1000.0 / frames : 0.0,
-               static_cast<unsigned long long>(c2h_dma_calls_),
-               static_cast<unsigned long long>(c2h_dma_us_),
-               static_cast<unsigned long long>(c2h_reg_calls_),
-               static_cast<unsigned long long>(c2h_reg_us_),
-               static_cast<unsigned long long>(c2h_block_calls_),
-               static_cast<unsigned long long>(c2h_block_us_),
-               static_cast<unsigned long long>(c2h_write_calls_),
-               static_cast<unsigned long long>(c2h_write_us_),
+               static_cast<unsigned long long>(c2h_dma_calls_), static_cast<unsigned long long>(c2h_dma_us_),
+               static_cast<unsigned long long>(c2h_reg_calls_), static_cast<unsigned long long>(c2h_reg_us_),
+               static_cast<unsigned long long>(c2h_block_calls_), static_cast<unsigned long long>(c2h_block_us_),
+               static_cast<unsigned long long>(c2h_write_calls_), static_cast<unsigned long long>(c2h_write_us_),
                static_cast<unsigned long long>(c2h_dispatch_us_));
 }
 
@@ -1442,7 +1424,7 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
   // DDR content is verified instead of trusted.  A stale image is otherwise
   // indistinguishable from a CPU bug: the reference runs the intended file while
   // the DUT executes whatever the DDR happens to hold.
-  const uint64_t verify_chunk = 1ULL << 18;  // 256 KiB, well under the 0x7FFFF API cap
+  const uint64_t verify_chunk = 1ULL << 18; // 256 KiB, well under the 0x7FFFF API cap
   uint64_t mismatched = 0, patched = 0;
   for (uint64_t offset = 0; offset < size; offset += verify_chunk) {
     const size_t count = static_cast<size_t>((size - offset) < verify_chunk ? (size - offset) : verify_chunk);
@@ -1460,8 +1442,8 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
         std::exit(EXIT_FAILURE);
       }
       std::vector<uint8_t> data(bytes + offset, bytes + offset + count);
-      if (gbus_dma_write(prototyping_, board_, dma_fpga_, ddr_instance_, ddr_base_ + offset, count, channel_,
-                         port_, data) != 1) {
+      if (gbus_dma_write(prototyping_, board_, dma_fpga_, ddr_instance_, ddr_base_ + offset, count, channel_, port_,
+                         data) != 1) {
         std::fprintf(stderr, "[fpga-host] GBus H2C rewrite failed offset=0x%llx\n",
                      static_cast<unsigned long long>(offset));
         std::exit(EXIT_FAILURE);
