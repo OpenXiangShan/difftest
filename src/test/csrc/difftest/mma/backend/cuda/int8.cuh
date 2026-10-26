@@ -35,7 +35,7 @@ __device__ __forceinline__ uint32_t load_int8_fragment(const uint8_t *data, int 
 
 template <bool SignedA, bool SignedB>
 __device__ __forceinline__ void mma_int8(uint32_t (&c)[4], const uint32_t (&a)[4], const uint32_t (&b)[2]) {
-// No .satfinite: the accumulator wraps modulo 2^32, as in the integer reference model.
+// Half dots start from zero; the caller applies the selected INT32 overflow mode.
 #define MMA_INT8(A, B)                                                           \
   asm volatile("mma.sync.aligned.m16n8k32.row.col.s32." A "." B                  \
                ".s32 "                                                           \
@@ -54,7 +54,7 @@ __device__ __forceinline__ void mma_int8(uint32_t (&c)[4], const uint32_t (&a)[4
 #undef MMA_INT8
 }
 
-template <bool SignedA, bool SignedB>
+template <bool SignedA, bool SignedB, int ReduceWidthBytes>
 __device__ __forceinline__ void mmacc_int8_tensor(const CudaMmaBatchDescriptor &desc, const uint8_t *src1,
                                                   const uint8_t *src2, uint8_t *src3) {
   const int lane = threadIdx.x % 32;
@@ -80,16 +80,30 @@ __device__ __forceinline__ void mmacc_int8_tensor(const CudaMmaBatchDescriptor &
       }
     }
 
-    for (int base = 0; base < desc.tile_k; base += 32) {
+    // Add the low half to C, then the high half, matching Pipe3 and Pipe4.
+    for (int base = 0; base < desc.tile_k; base += ReduceWidthBytes / 2) {
       const int k = base + thread * 4;
-      const uint32_t a[4] = {load_int8_fragment(a_data, row, desc.tile_m, k, desc.tile_k),
-                             load_int8_fragment(a_data, row + 8, desc.tile_m, k, desc.tile_k),
-                             load_int8_fragment(a_data, row, desc.tile_m, k + 16, desc.tile_k),
-                             load_int8_fragment(a_data, row + 8, desc.tile_m, k + 16, desc.tile_k)};
+      const uint32_t a[4] = {
+        load_int8_fragment(a_data, row, desc.tile_m, k, desc.tile_k),
+        load_int8_fragment(a_data, row + 8, desc.tile_m, k, desc.tile_k),
+        ReduceWidthBytes == 64 ? load_int8_fragment(a_data, row, desc.tile_m, k + 16, desc.tile_k) : 0,
+        ReduceWidthBytes == 64 ? load_int8_fragment(a_data, row + 8, desc.tile_m, k + 16, desc.tile_k) : 0};
       // src2 already stores each output column's K elements contiguously.
-      const uint32_t b[2] = {load_int8_fragment(b_data, col + group, desc.tile_n, k, desc.tile_k),
-                             load_int8_fragment(b_data, col + group, desc.tile_n, k + 16, desc.tile_k)};
-      mma_int8<SignedA, SignedB>(c, a, b);
+      const uint32_t b[2] = {
+        load_int8_fragment(b_data, col + group, desc.tile_n, k, desc.tile_k),
+        ReduceWidthBytes == 64 ? load_int8_fragment(b_data, col + group, desc.tile_n, k + 16, desc.tile_k) : 0};
+      // A pure half dot is bounded by 32 * 255 * 255, so its internal
+      // reduction order cannot overflow or affect the exact signed32 sum.
+      uint32_t partial[4] = {};
+      mma_int8<SignedA, SignedB>(partial, a, b);
+#pragma unroll
+      for (int i = 0; i < 4; ++i) {
+        if (desc.sat) {
+          asm volatile("add.sat.s32 %0, %0, %1;" : "+r"(c[i]) : "r"(partial[i]));
+        } else {
+          c[i] += partial[i];
+        }
+      }
     }
 
 #pragma unroll

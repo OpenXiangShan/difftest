@@ -156,10 +156,24 @@ CUTE_MMA_HOST_DEVICE static inline int32_t decode_int8(uint8_t bits, bool is_sig
   return is_signed && (bits & 0x80u) != 0 ? static_cast<int32_t>(bits) - 256 : static_cast<int32_t>(bits);
 }
 
-// Functionally models the fixed-width integer reduction tree for one CUTE ReducePE input vector.
+CUTE_MMA_HOST_DEVICE static inline int64_t add_int32(int64_t lhs, int64_t rhs, bool saturate) {
+  const int64_t result = lhs + rhs;
+  if (saturate) {
+    if (result > INT32_MAX)
+      return INT32_MAX;
+    if (result < INT32_MIN)
+      return INT32_MIN;
+    return result;
+  }
+  return wrap_signed(result, 32);
+}
+
+// Follow CUTE Pipe2/3/4: four-product groups, independent half reductions,
+// first half plus C, then second half. Apply sat at the two 32-bit add boundaries.
 CUTE_MMA_HOST_DEVICE static inline uint32_t reduce_int32_chunk(bool src1_signed, bool src2_signed, const uint8_t *src1,
                                                                const uint8_t *src2, int valid_lanes,
-                                                               int reduce_width_bytes, uint32_t c_bits) {
+                                                               int reduce_width_bytes, uint32_t c_bits,
+                                                               bool saturate = false) {
   const int lane_capacity = reduce_width_bytes;
   if (valid_lanes > lane_capacity) {
     valid_lanes = lane_capacity;
@@ -189,8 +203,8 @@ CUTE_MMA_HOST_DEVICE static inline uint32_t reduce_int32_chunk(bool src1_signed,
     }
   }
 
-  first_half = fixed_add(first_half, wrap_signed(c_bits, 32), 32);
-  return static_cast<uint32_t>(fixed_add(first_half, second_half, 32));
+  first_half = add_int32(first_half, wrap_signed(c_bits, 32), saturate);
+  return static_cast<uint32_t>(add_int32(first_half, second_half, saturate));
 }
 
 CUTE_MMA_HOST_DEVICE static inline uint64_t shift_right(uint64_t value, int amount) {
