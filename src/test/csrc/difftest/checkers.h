@@ -22,7 +22,6 @@
 #include "matrix_store_tracker.h"
 #include "refproxy.h"
 #include "stopwatch.h"
-#include <type_traits>
 class RefDriveExecutor;
 #ifdef CONFIG_DIFFTEST_FAST_REF
 #include "fork_ref/ref_drive.h"
@@ -154,14 +153,19 @@ public:
 #endif
     int ret = this->check(probe);
     // Trace replay reads its probes; online checking consumes them.
-    if constexpr (!std::is_const_v<Event>)
-      this->clear_valid(probe);
+    consume_probe(probe);
     return ret;
   }
 
   int do_step() override {
     return run(this->get_probe());
   }
+
+private:
+  void consume_probe(Probe &probe) {
+    this->clear_valid(probe);
+  }
+  void consume_probe(const Probe &) {}
 };
 
 class ArchEventChecker : public SyncChecker<DifftestArchEvent> {

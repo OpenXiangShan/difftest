@@ -43,7 +43,7 @@ void difftest_refdrive_trace_configure(const CommonArgs &args) {
 #endif
   if (args.refdrive_trace_is_read)
     return;
-  recorder = std::make_unique<DiffTrace<RefDriveTraceEntry>>(args.refdrive_trace_name, false, 4096);
+  recorder.reset(new DiffTrace<RefDriveTraceEntry>(args.refdrive_trace_name, false, 4096));
   recorder_pid = getpid();
   initialized = finished = false;
 }
