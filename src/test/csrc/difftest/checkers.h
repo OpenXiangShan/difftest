@@ -152,7 +152,6 @@ public:
       return this->STATE_ERROR;
 #endif
     int ret = this->check(probe);
-    // Trace replay reads its probes; online checking consumes them.
     consume_probe(probe);
     return ret;
   }
@@ -162,9 +161,11 @@ public:
   }
 
 private:
+  // Online checking passes mutable probes; consume each event after checking.
   void consume_probe(Probe &probe) {
     this->clear_valid(probe);
   }
+  // The same run() receives const probes during trace replay; leave them unchanged.
   void consume_probe(const Probe &) {}
 };
 
