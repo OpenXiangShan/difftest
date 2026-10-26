@@ -8,7 +8,8 @@
 | 3A | Reproduce and diagnose assertion with isolated Verilator FST | PASS `20261024-12` isolated build; PASS `20261024-13` waveform reproduction and shift/bank diagnosis | IBuffer shift root cause fixed; new LoadQueueRAW failure found | Not run | Blocked |
 | 3B | Diagnose LoadQueueRAW duplicate mask write | PASS isolated build `20261026-3` and FST `20261026-5`; slot-rank fix committed | Waveform confirmed equal-rank compressed-slot collision; RAW assertion cleared in retest | Not run | Blocked |
 | 3C | Diagnose ROB watchdog and FP writeback | PASS GSIM `20261026-35` and isolated Verilator `20261026-38`; PASS bounded FST diagnostic `20261026-39` | FAIL GSIM `20261026-37`: persistent ROB watchdog; fresh Verilator completed 100007 instructions and captured cycles 14000-30000 for comparison | Not run | Blocked |
-| Final | Full 143-point validation | Not run | Not run | Not run | Not run |
+| 3D | Preserve two-bit dependency shifts in `BusyTable.scala` | PASS `20261026-47`, task `01M5V61EEEG85E5FT5NBGNNZZ1` | PASS `20261026-48`: 100007 instructions at cycle 58876 | PASS `20261026-50`: 100009 instructions at cycle 143481; `20261026-49` was cycle-limited, not a pass | RUNNING `20261026-51` |
+| Final | Full 143-point validation | PASS `20261026-47` | PASS `20261026-48` | PASS `20261026-50` | RUNNING `20261026-51`; collector queued |
 
 ## Phase 1
 
@@ -109,21 +110,25 @@
 
 - DIAGNOSTIC STOP: runset `20261026-45`, task `01M5V37JHQX7T46XA2JTJ2NNAH`, confirmed the exact source-1 cancellation condition in the unchanged GSIM model. At 18722 the target FP queue entry has source 1 with `bypassDelay=1` and `bypassSource=6`; at 18723 it advances to delay 2 while load-cancel 6 is asserted, and source 1 becomes not-ready at 18724. Source 0 receives the replay wakeup at 18730 and is ready at 18731, but source 1 never recovers. The entry remains valid, unissued, and unblocked at the cycle-34082 watchdog. The good FST keeps source 1 at delay 3, source 0, and ready.
 - CONFIRMED GSIM WIDTH DEFECT: runset `20261026-46`, task `01M5V4HXNP686XJ00E5EZ3C7K3`, recorded `fpBusyTable.loadDependency[86][2]` values 4 at 18717, 16 at 18722, 32 at 18723, 64 at 18724, and 128 at 18725, despite `LoadDependencyWidth = 2`. Allocation of physical register `0x56` at 18709 starts with zero dependency, so this is not simply a stale value retained across allocation. The good Verilator trace instead has `loadDependency_86_2 = 1` at 18613, 2 at 18614, and 0 at 18615, exactly matching the required two-bit wrap. `BusyTable_1.sv` implements `{old[0], 1'h0}`, whereas the generated GSIM `SimTop177.cpp` assigns an unmasked `uint8_t` left shift to the two-bit next-state. This proves incorrect GSIM lowering in the dependency path and explains the unexpected pending dependency at consumer enqueue.
-- PLANNED WORKAROUND: preserve the intended width explicitly in `BusyTable.scala` at both existing shift assignments using `(source << 1)(LoadDependencyWidth - 1, 0)` and `(x << 1)(LoadDependencyWidth - 1, 0)`. Do not patch generated C++ as a deliverable or change cancellation, replay, FALU arbitration, or ROB compression. A fresh GSIM build, generated-mask inspection, and both real trace smoke tests are required before any campaign. If runtime fails again, use a fresh isolated Verilator FST build and waveform analysis.
+- IMPLEMENTED: commit `6e7134093` preserves the intended width explicitly in `BusyTable.scala` at both existing shift assignments using `(source << 1)(LoadDependencyWidth - 1, 0)` and `(x << 1)(LoadDependencyWidth - 1, 0)`. Generated C++ was not patched, and cancellation, replay, FALU arbitration, and ROB compression are unchanged. `make comp` passed; only pre-existing warnings remain.
+- PASS: runset `20261026-47`, task `01M5V61EEEG85E5FT5NBGNNZZ1`, freshly elaborated and built the width workaround with no model reuse. Its uncached binary SHA-256 is `967443b74035e1ea43b44c7daf7afb7663990d274d32b1939361be387a15b5da`. Fresh `SimTop177.cpp:37324-37326` now computes `((loadDependency[...] & 0x1) << 1)`, enforcing the required two-bit result. The step-2 ChiselDB link completed normally.
+- PASS: runset `20261026-48`, task `01M5V84T0RRG3SVW0EJMWQW1BM`, initialized the real GemsFDTD trace and completed 100007 instructions at cycle 58876 with no assertion, watchdog, or TraceRTL mismatch. Performance-counter names containing `mismatch` are not trace-checker failures.
+- LIMITED, NOT A SMOKE PASS: runset `20261026-49`, task `01M5V892EH9VQDRRRDWHEKWME3`, made forward progress to 63739 instructions but reached the diagnostic 120000-cycle bound without an assertion, watchdog, or TraceRTL mismatch. The 100000-instruction target was not met, so this is not counted as a pass.
+- PASS: runset `20261026-50`, task `01M5V8ENWQTN3N90CWGGH31ESJ`, retained `I=100000` with `C=300000` and completed 100009 instructions at cycle 143481 with no assertion, watchdog, or TraceRTL mismatch. Both required smoke tests now pass with the runset-47 binary.
 
 ## Final verification
 
 ### Changes made
 
-- No campaign-specific changes yet.
+- Dispatched runset `20261026-51` using the validated runset-47 binary, with `W=20000000`, `I=40000000`, and `coverage: 0.3`. Run task `01M5V8SR1MQ53BMQN5V1K0RCYH`; collector task `01M5V8SR28FC230Y8WZ04E9TQA` is queued behind it.
 
 ### Test results
 
-- Configured points: 0 submitted by this independent attempt.
-- Successful points: 0 verified.
-- Running points: 0.
-- Failed points: 0.
+- Configured points: 143 across 55 benchmarks, verified in `run/points.json`.
+- Successful points: 0 verified; the campaign is still running.
+- Running points: 143 at dispatch.
+- Failed points: 0 at dispatch.
 
 ### Issues and debugging
 
-- The full campaign is blocked until the fresh build and both smoke tests pass.
+- The dispatched GemsFDTD command uses `--tracertl-file` and binary cache key `4f05c71ebd2f197d2300`, with no `--gen-paddr`. The collector is queued behind the run. Do not call the campaign complete until all point logs and `post/collect/summary.json` are verified.
