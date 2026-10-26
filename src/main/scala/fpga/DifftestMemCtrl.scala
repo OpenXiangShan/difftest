@@ -342,7 +342,14 @@ class DifftestMemCtrl(
   h2c.io.axis <> io.h2c
   cpuDelay.io.enable := memSrcCPU
   cpuDelay.io.delayCycles := cpuDelayConfig.io.out
-  cpuDelay.io.in <> io.cpu
+  cpuDelay.io.in.aw <> io.cpu.aw
+  cpuDelay.io.in.w <> io.cpu.w
+  cpuDelay.io.in.ar <> io.cpu.ar
+  // Keep mode gating and CPU response arbitration off the same ready/valid path.
+  withClockAndReset(io.cpu_clock, reset) {
+    io.cpu.r <> Queue(cpuDelay.io.in.r, entries = 2, pipe = false, flow = false)
+    io.cpu.b <> Queue(cpuDelay.io.in.b, entries = 2, pipe = false, flow = false)
+  }
 
   io.ctrl.memStatus := MuxCase(
     0.U(2.W),
