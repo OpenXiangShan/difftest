@@ -116,7 +116,7 @@ int main(int argc, const char *argv[]) {
 #ifdef USE_SERIAL_PORT
   serial_port->start();
 #endif
-  xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
+  xdma_device->start(args.enable_link); // Trigger stop by fpga_nstep
   fpga_finish();
   if (signal_num != 0) {
     return 128 + signal_num;
@@ -249,7 +249,7 @@ void fpga_init() {
   }
   printf("[fpga-host] CPU AXI delay = %" PRIu32 " cycles\n", cpu_axi_delay);
   xdma_device->fpga_io(HOST_IO_MEM_CPU, true);
-  xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
+  xdma_device->fpga_io(HOST_IO_LINK_ENABLE, args.enable_link);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
   xdma_device->fpga_io(HOST_IO_SQUASH_MAX_FUSED, static_cast<uint32_t>(args.squash_size));
   xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, args.enable_squash);
@@ -372,7 +372,7 @@ void fpga_display_result(int ret) {
 }
 
 int fpga_get_result(uint8_t step) {
-  // Compare DUT and REF
+  // Advance DUT state and detect traps even when REF checking is disabled.
   int trapCode = difftest_nstep(step, args.enable_diff);
 #ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_is_child())
@@ -382,7 +382,7 @@ int fpga_get_result(uint8_t step) {
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
     fpga_ila_triggered = true;
     // Release endpoint backpressure while ILA collects post-trigger samples.
-    xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, false);
+    xdma_device->fpga_io(HOST_IO_LINK_ENABLE, false);
     if (trapCode == STATE_GOODTRAP)
       return FPGA_GOODTRAP;
     else
@@ -426,7 +426,7 @@ int fpga_get_result(uint8_t step) {
     }
   }
   // Trace Debug Support
-  if (args.enable_ref_trace) {
+  if (args.enable_diff && args.enable_ref_trace) {
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       bool is_debug = difftest[i]->proxy->get_debug();

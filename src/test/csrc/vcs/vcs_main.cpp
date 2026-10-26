@@ -400,7 +400,7 @@ int simv_get_result(uint8_t step) {
     }
   }
   // Trace Debug Support
-  if (args.enable_ref_trace) {
+  if (args.enable_diff && args.enable_ref_trace) {
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       bool is_debug = difftest[i]->proxy->get_debug();

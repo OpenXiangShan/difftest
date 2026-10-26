@@ -37,7 +37,7 @@
 
 #define HOST_IO_CFG_RESET        0x0
 #define HOST_IO_RESET            0x4
-#define HOST_IO_DIFFTEST_ENABLE  0x8
+#define HOST_IO_LINK_ENABLE      0x8
 #define HOST_IO_ILA_TRIGGER      0xc
 #define HOST_IO_SQUASH_ENABLE    0x10
 #define HOST_IO_SQUASH_MAX_FUSED 0x14
