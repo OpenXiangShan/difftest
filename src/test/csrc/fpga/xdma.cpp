@@ -17,6 +17,7 @@
 #include "difftest-dpic.h"
 #include "mpool.h"
 #include "ram.h"
+#include "reftrace/refdrive_trace.h"
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -300,7 +301,7 @@ void FpgaXdma::start_transmit_thread() {
     receive_thread[i] = std::thread(thread_wrapper<decltype(&FpgaXdma::read_xdma_thread), FpgaXdma *, int>,
                                     &FpgaXdma::read_xdma_thread, this, i);
   }
-  if (!fork_readers)
+  if (!fork_readers || difftest_refdrive_trace_pending())
     process_thread =
         std::thread(thread_wrapper<decltype(&FpgaXdma::process_packets), FpgaXdma *>, &FpgaXdma::process_packets, this);
 }
@@ -372,9 +373,12 @@ void FpgaXdma::read_xdma_thread(int channel) {
 }
 
 void FpgaXdma::process_packets() {
+  const bool poll_callbacks = !fork_readers || !difftest_refdrive_trace_pending();
   running = true;
-  auto abort = [this] {
-    if (packet_abort)
+  auto abort = [this, poll_callbacks] {
+    if (!poll_callbacks)
+      running = false;
+    else if (packet_abort)
       packet_abort();
   };
   uint8_t recv_count = 0;
@@ -385,7 +389,7 @@ void FpgaXdma::process_packets() {
     }
     auto *packet = reinterpret_cast<FpgaPackgeHead *>(packet_pool->read_busy_chunk());
     if (!packet) {
-      if (fork_readers && packet_idle && packet_idle()) {
+      if (fork_readers && poll_callbacks && packet_idle && packet_idle()) {
         abort();
         return;
       }
@@ -401,7 +405,7 @@ void FpgaXdma::process_packets() {
     for (size_t i = 0; i < DMA_PACKGE_NUM; ++i)
       v_difftest_Batch(packet->diff_packge[i].diff_packge);
     packet_pool->set_free_chunk();
-    if (fork_readers && packet_idle && packet_idle()) {
+    if (fork_readers && poll_callbacks && packet_idle && packet_idle()) {
       abort();
       return;
     }

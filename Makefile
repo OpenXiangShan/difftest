@@ -369,6 +369,7 @@ include galaxsim.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
+include reftrace.mk
 include pdb.mk
 
 clean: vcs-clean pldm-clean fpga-clean
