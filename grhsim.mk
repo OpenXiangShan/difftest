@@ -39,7 +39,13 @@ GRHSIM_MODEL_SRCS := $(sort $(wildcard $(GRHSIM_MODEL_DIR_ABS)/*.cpp) $(wildcard
 GRHSIM_MODEL_SELECT_HEADER := $(GRHSIM_EMU_BUILD_DIR)/grhsim_model_select.hpp
 GRHSIM_MODEL_BUILD_JOBS ?= $(if $(strip $(VM_BUILD_JOBS)),$(VM_BUILD_JOBS),64)
 GRHSIM_MODEL_MAKE_J := -j $(GRHSIM_MODEL_BUILD_JOBS)
-GRHSIM_MODEL_CXXFLAGS ?= -std=c++20 -O3
+# stage-07: -fno-strict-aliasing is load-bearing for the generated model —
+# millions of distinct struct-member accesses send clang's TBAA quadratic
+# (measured on the preserve-aggregate XS model: single TUs spin in
+# TypeBasedAAResult::alias for 45min+; seconds with the flag).
+GRHSIM_MODEL_CXXFLAGS ?= -std=c++20 -O3 -fno-strict-aliasing
+GRHSIM_MODEL_CXXFLAGS += -DWOLVRIX_GRHSIM_PERF=$(WOLVRIX_GRHSIM_PERF)
+WOLVRIX_GRHSIM_SN_TIMING ?= 0
 
 GRHSIM_CXX = $(CXX)
 GRHSIM_CXXFILES = $(EMU_CXXFILES) $(shell find $(GRHSIM_CSRC_DIR) -name "*.cpp")
@@ -47,6 +53,11 @@ GRHSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GRHSIM_CXXFLAGS += -I$(GRHSIM_CSRC_DIR) -I$(GRHSIM_MODEL_DIR_ABS) -I$(GRHSIM_EMU_BUILD_DIR) -DGRHSIM --std=c++20
 GRHSIM_CXXFLAGS += -I$(abspath ../../../wolvrix/external/libfst/src)
 GRHSIM_CXXFLAGS += -DWOLVRIX_GRHSIM_WAVEFORM=$(WOLVRIX_GRHSIM_WAVEFORM)
+GRHSIM_CXXFLAGS += -DWOLVRIX_GRHSIM_PERF=$(WOLVRIX_GRHSIM_PERF)
+# snTimeCycles_/snTimeFires_ are class members gated on this macro in the
+# generated header; harness TUs must agree with the model library on it or the
+# SimTop class layout differs (ODR) and init() segfaults.
+GRHSIM_CXXFLAGS += -DWOLVRIX_GRHSIM_SN_TIMING=$(WOLVRIX_GRHSIM_SN_TIMING)
 GRHSIM_CXXFLAGS += $(EMU_OPTIMIZE) $(PGO_CFLAGS)
 GRHSIM_LDFLAGS = $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
 
