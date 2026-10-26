@@ -327,7 +327,12 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   } else {
     squashed
   }
-  val toSink = deltas
+  // Isolate Delta output and Batch backpressure on both sides of the queue.
+  val toSink = if (config.isDelta && config.isBatch) {
+    Queue(deltas, entries = 2, pipe = false, flow = false)
+  } else {
+    deltas
+  }
 
   val zoneControl = Option.when(config.hasDutZone)(Module(new ZoneControl(config)))
   val step = IO(Output(UInt(config.stepWidth.W)))
