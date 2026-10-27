@@ -328,6 +328,9 @@ bool difftest_ref_fork_enabled() {
 bool difftest_ref_fork_is_child() {
   return role == Role::CHECKER;
 }
+bool difftest_ref_fork_draining() {
+  return control && role == Role::SUPERVISOR && control->endpoint.load(std::memory_order_acquire);
+}
 int difftest_ref_fork_start(uint64_t fork_interval_ms) {
   if (!g_packet_pool || control)
     return -1;
@@ -546,7 +549,6 @@ int difftest_ref_fork_idle() {
       }
       accept(trusted_segment);
     }
-    retire_prefix();
     if (control->endpoint.load(std::memory_order_acquire)) {
       if (!drain_start_ms)
         drain_start_ms = now_ms();
@@ -557,6 +559,8 @@ int difftest_ref_fork_idle() {
         control->complete.store(1, std::memory_order_release);
     }
   }
+  // Final checkers may still be waiting for preceding children to exit.
+  retire_prefix();
   if (g_packet_pool->aborted()) {
     fail();
     if (!leader_reaped)
