@@ -98,11 +98,11 @@ struct CommonArgs {
   bool dump_coverage = false;
   bool image_as_footprints = false;
   bool overwrite_nbytes_autoset = false;
+#ifdef FPGA_HOST
   bool auto_checkpoint = false;
-  bool auto_checkpoint_interval_set = false;
-  bool auto_checkpoint_dir_set = false;
   uint64_t auto_checkpoint_interval = 1000000ULL; // default: 1M instructions
   const char *auto_checkpoint_dir = nullptr;
+#endif
 };
 
 CommonArgs parse_args(int argc, const char *argv[]);

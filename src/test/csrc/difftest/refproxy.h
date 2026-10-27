@@ -536,10 +536,6 @@ public:
   }
 
   inline void trigger_checkpoint(const char *base_filepath) {
-    if (!ref_trigger_checkpoint) {
-      report_unsupported_ref("difftest_trigger_checkpoint");
-      assert(ref_trigger_checkpoint);
-    }
     ref_trigger_checkpoint(base_filepath);
   }
 
