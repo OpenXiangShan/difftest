@@ -21,6 +21,7 @@ ForkShareMemory::ForkShareMemory() {
 
   info->flag = false;
   info->notgood = false;
+  info->take_cpt = false;
   info->endCycles = 0;
   info->oldest = 0;
 }
@@ -78,7 +79,8 @@ int LightSSS::do_fork() {
   return FORK_CHILD;
 }
 
-int LightSSS::wakeup_child(uint64_t cycles) {
+int LightSSS::wakeup_child(uint64_t cycles, bool take_cpt) {
+  forkshm.info->take_cpt = take_cpt;
   forkshm.info->endCycles = cycles;
   forkshm.info->oldest = pidSlot.back();
 

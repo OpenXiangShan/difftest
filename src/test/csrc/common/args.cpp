@@ -46,9 +46,8 @@ enum {
 #endif
   OPT_DUMP_REFDRIVE_TRACE,
   OPT_LOAD_REFDRIVE_TRACE,
-  OPT_AUTO_CHECKPOINT,
-  OPT_AUTO_CHECKPOINT_INTERVAL,
-  OPT_AUTO_CHECKPOINT_DIR,
+  OPT_TAKE_CPT_ON_FAULT,
+  OPT_TAKE_CPT_INTERVAL,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -177,9 +176,10 @@ static inline void print_help(const char *file) {
   printf("      --random-mem           initialize memory from --seed\n");
   printf("      --core-clock-half-period=N        core half-period in scheduler ticks\n");
   printf("      --accelerator-clock-half-period=N accelerator half-period in scheduler ticks\n");
-  printf("      --auto-checkpoint      save periodic REF checkpoints during comparison\n");
-  printf("      --auto-checkpoint-interval=NUM  fixed instruction interval, default: 1M\n");
-  printf("      --auto-checkpoint-dir=DIR  checkpoint output directory, default: $NOOP_HOME/build/<time>-ref-cpt\n");
+#ifndef FPGA_HOST
+  printf("      --take-cpt-on-fault    save a REF checkpoint from fork replay after a DiffTest failure\n");
+#endif
+  printf("      --take-cpt-interval=N  retired instructions between REF checkpoints (K/M/B), default: -1 (disabled)\n");
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -227,9 +227,10 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "random-mem",        0, NULL,  0  },
     { "core-clock-half-period",        1, NULL, OPT_CORE_CLOCK_HALF_PERIOD },
     { "accelerator-clock-half-period", 1, NULL, OPT_ACCELERATOR_CLOCK_HALF_PERIOD },
-    { "auto-checkpoint",   0, NULL, OPT_AUTO_CHECKPOINT },
-    { "auto-checkpoint-interval", 1, NULL, OPT_AUTO_CHECKPOINT_INTERVAL },
-    { "auto-checkpoint-dir", 1, NULL, OPT_AUTO_CHECKPOINT_DIR },
+#ifndef FPGA_HOST
+    { "take-cpt-on-fault", 0, NULL, OPT_TAKE_CPT_ON_FAULT },
+#endif
+    { "take-cpt-interval", 1, NULL, OPT_TAKE_CPT_INTERVAL },
     { "splitview-log",     1, NULL, OPT_SPLITVIEW_LOG },
     { "db-path",           1, NULL, OPT_DB_PATH },
     { "no-squash",         0, NULL, OPT_NO_SQUASH },
@@ -446,12 +447,10 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.accelerator_clock_half_period = static_cast<uint32_t>(accelerator_clock_half_period);
         continue;
       }
-      case OPT_AUTO_CHECKPOINT: args.auto_checkpoint = true; continue;
-      case OPT_AUTO_CHECKPOINT_INTERVAL:
-        args.auto_checkpoint_interval = parse_instr_count(optarg, "auto-checkpoint-interval");
-        continue;
-      case OPT_AUTO_CHECKPOINT_DIR:
-        args.auto_checkpoint_dir = optarg;
+      case OPT_TAKE_CPT_ON_FAULT: args.take_cpt_on_fault = true; continue;
+      case OPT_TAKE_CPT_INTERVAL:
+        args.take_cpt_interval =
+            strcmp(optarg, "-1") == 0 ? UINT64_MAX : parse_instr_count(optarg, "take-cpt-interval");
         continue;
       case 's':
         if (std::string(optarg) != "NO_SEED") {
@@ -496,8 +495,8 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
-  if (args.auto_checkpoint && args.auto_checkpoint_interval == 0) {
-    fprintf(stderr, "[ERROR] --auto-checkpoint-interval must be > 0\n");
+  if (args.take_cpt_interval == 0) {
+    fprintf(stderr, "[ERROR] --take-cpt-interval must be -1 (disabled) or > 0\n");
     exit(EINVAL);
   }
 

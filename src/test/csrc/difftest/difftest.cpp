@@ -80,42 +80,46 @@ static void difftest_register_exit_handlers() {
   std::signal(SIGBUS, difftest_signal_handler);
 }
 
-static uint64_t checkpoint_interval = 0;
+static uint64_t checkpoint_interval = UINT64_MAX;
 static std::string checkpoint_dir;
 
+void difftest_take_checkpoint(const char *reason) {
+  if (checkpoint_dir.empty()) {
+    checkpoint_dir = create_noop_filename("-ref-cpt");
+    std::filesystem::create_directories(checkpoint_dir);
+    Info("[REF_CPT] dir=%s\n", checkpoint_dir.c_str());
+  }
+  uint64_t instr = difftest[0]->get_trap_event()->instrCnt;
+  std::string base = checkpoint_dir + "/" + reason + "-instr" + std::to_string(instr);
+  Info("[REF_CPT] %s request instr=%lu base=%s\n", reason, instr, base.c_str());
+  // The REF skips M-mode checkpoints and reports serialization failures.
+  difftest[0]->proxy->trigger_checkpoint(base.c_str());
+}
+
 static void maybe_checkpoint() {
-  auto *diff = difftest[0];
-  if (!checkpoint_interval || !diff->get_has_commit())
+  if (checkpoint_interval == UINT64_MAX || !difftest[0]->get_has_commit())
     return;
-  uint64_t instr = diff->get_trap_event()->instrCnt;
-  uint64_t interval = instr / checkpoint_interval;
+  uint64_t interval = difftest[0]->get_trap_event()->instrCnt / checkpoint_interval;
   static uint64_t last_interval = 0;
   if (interval <= last_interval)
     return;
   last_interval = interval;
-
-  std::string base = checkpoint_dir + "/instr" + std::to_string(instr);
-  Info("[REF_CPT] request instr=%lu base=%s\n", instr, base.c_str());
-  // The REF skips M-mode checkpoints and reports serialization failures.
-  diff->proxy->trigger_checkpoint(base.c_str());
+  difftest_take_checkpoint("periodic");
 }
 
-void difftest_init_checkpoint(const CommonArgs &args) {
-  if (args.enable_diff && args.auto_checkpoint) {
+void difftest_init_checkpoint(const CommonArgs &args, bool on_fault) {
+  if (args.enable_diff && (args.take_cpt_interval != UINT64_MAX || on_fault)) {
     if (!difftest[0]->proxy->supports_checkpoint()) {
-      fprintf(stderr, "[REF_CPT] --auto-checkpoint requires difftest_trigger_checkpoint\n");
+      fprintf(stderr, "[REF_CPT] checkpointing requires difftest_trigger_checkpoint\n");
       exit(EINVAL);
     }
 #ifdef CONFIG_DIFFTEST_FAST_REF
     if (args.ref_mode != RefMode::SLOW) {
-      fprintf(stderr, "[REF_CPT] --auto-checkpoint requires --ref-mode=slow\n");
+      fprintf(stderr, "[REF_CPT] checkpointing requires --ref-mode=slow\n");
       exit(EINVAL);
     }
 #endif
-    checkpoint_interval = args.auto_checkpoint_interval;
-    checkpoint_dir = args.auto_checkpoint_dir ? args.auto_checkpoint_dir : create_noop_filename("-ref-cpt");
-    std::filesystem::create_directories(checkpoint_dir);
-    Info("[REF_CPT] interval=%lu dir=%s\n", args.auto_checkpoint_interval, checkpoint_dir.c_str());
+    checkpoint_interval = args.take_cpt_interval;
   }
 }
 
