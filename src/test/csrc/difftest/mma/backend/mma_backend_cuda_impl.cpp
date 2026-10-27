@@ -231,6 +231,7 @@ bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, cons
     desc.tile_m = item.tile_m;
     desc.tile_k = item.tile_k;
     desc.tile_n = item.tile_n;
+    desc.sat = item.sat;
     max_output_elements = std::max(max_output_elements, size_t(item.tile_m) * item.tile_n);
   }
   for (size_t operand = 0; operand < 3; ++operand) {

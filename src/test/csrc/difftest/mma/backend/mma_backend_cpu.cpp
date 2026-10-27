@@ -120,7 +120,7 @@ template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVeri
   const bool src1_signed = std::is_signed<src1_t>::value;
   const bool src2_signed = std::is_signed<src2_t>::value;
 
-  // Match CUTE's fixed-width integer reduction tree; the current RTL does not consume the MMA saturation flag.
+  // Follow the same ReducePE chunk boundaries for wrapping and saturation.
   for (int i = 0; i < tile_m; ++i) {
     const uint8_t *src1_row = buffer->src1 + static_cast<size_t>(i) * src_row_bytes;
     for (int j = 0; j < tile_n; ++j) {
@@ -132,8 +132,9 @@ template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVeri
         if (valid_lanes > reduce_chunk_elems) {
           valid_lanes = reduce_chunk_elems;
         }
-        acc_bits = cute_mma_model::reduce_int32_chunk(src1_signed, src2_signed, src1_row + k_base, src2_row + k_base,
-                                                      valid_lanes, kMmaReduceWidthBytes, acc_bits);
+        acc_bits =
+            cute_mma_model::reduce_int32_chunk(src1_signed, src2_signed, src1_row + k_base, src2_row + k_base,
+                                               valid_lanes, kMmaReduceWidthBytes, acc_bits, buffer->amu_event.sat);
       }
 
       write_u32(buffer->src3, i, j, result_row_bytes, acc_bits);

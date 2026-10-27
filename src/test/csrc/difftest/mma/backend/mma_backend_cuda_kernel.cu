@@ -42,7 +42,7 @@ __device__ __forceinline__ void write_u32_device(uint8_t *data, size_t index0, s
 
 template <class src1_t, class src2_t>
 __device__ __forceinline__ void mmacc_cute_int32_element(const uint8_t *src1, const uint8_t *src2, uint8_t *src3,
-                                                         int tile_m, int tile_k, int tile_n, int idx) {
+                                                         int tile_m, int tile_k, int tile_n, int idx, bool saturate) {
   static_assert(sizeof(src1_t) == 1 && sizeof(src2_t) == 1, "CUTE integer MMA expects 8-bit source elements");
   int total = tile_m * tile_n;
   if (idx >= total) {
@@ -65,7 +65,7 @@ __device__ __forceinline__ void mmacc_cute_int32_element(const uint8_t *src1, co
     }
     acc_bits = cute_mma_model::reduce_int32_chunk(std::is_signed<src1_t>::value, std::is_signed<src2_t>::value,
                                                   src1_row + k_base, src2_row + k_base, valid_lanes,
-                                                  kMmaReduceWidthBytes, acc_bits);
+                                                  kMmaReduceWidthBytes, acc_bits, saturate);
   }
 
   write_u32_device(src3, i, j, result_row_bytes, acc_bits);
@@ -107,12 +107,13 @@ __global__ void mmacc_cute_int32_batch_kernel(const CudaMmaBatchDescriptor *desc
                                               const uint8_t *src2, uint8_t *src3) {
   const CudaMmaBatchDescriptor &desc = descriptors[blockIdx.y];
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
-  mmacc_int8_tensor<std::is_signed<src1_t>::value, std::is_signed<src2_t>::value>(desc, src1, src2, src3);
+  mmacc_int8_tensor<std::is_signed<src1_t>::value, std::is_signed<src2_t>::value, kMmaReduceWidthBytes>(desc, src1,
+                                                                                                        src2, src3);
 #else
   for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < desc.tile_m * desc.tile_n;
        idx += blockDim.x * gridDim.x) {
     mmacc_cute_int32_element<src1_t, src2_t>(src1 + desc.src1_offset, src2 + desc.src2_offset, src3 + desc.src3_offset,
-                                             desc.tile_m, desc.tile_k, desc.tile_n, idx);
+                                             desc.tile_m, desc.tile_k, desc.tile_n, idx, desc.sat);
   }
 #endif
 }
