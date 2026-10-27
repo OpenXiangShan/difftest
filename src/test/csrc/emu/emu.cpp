@@ -523,7 +523,7 @@ int Emulator::tick() {
       args.ipc_last_cycle = cycles;
     }
 #endif
-    if (args.enable_ref_trace) {
+    if (args.enable_diff && args.enable_ref_trace) {
       bool is_debug = difftest[i]->proxy->get_debug();
       if (trap->cycleCnt >= args.log_begin && !is_debug) {
         difftest[i]->proxy->set_debug(true);

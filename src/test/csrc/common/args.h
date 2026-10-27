@@ -87,6 +87,9 @@ struct CommonArgs {
   bool enable_snapshot = false;
   bool force_dump_result = false;
   bool enable_diff = true;
+#ifdef FPGA_HOST
+  bool enable_link = true;
+#endif
   bool enable_squash = true;
   uint8_t squash_size = 255;
   uint64_t no_squash_after_instr = -1;

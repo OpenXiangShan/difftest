@@ -67,6 +67,8 @@ make SPLITVIEW=0   # disable for emu builds
 
 When enabled and run directly in an interactive terminal, UART output and host logs are shown side by side in the split view. The same streams are also written asynchronously to `build/logs/uart.log`, `build/logs/host.log`, and a combined `build/logs/all.log` by default, and remaining buffered text is drained before normal shutdown completes. Use `--splitview-log=PATH` to write `uart.log`, `host.log`, and `all.log` under a custom directory. Finished interactive splitview sessions keep the final screen visible; press `q` or `Q` to leave. Non-interactive environments keep the normal linear output.
 
+`fpga-host --no-diff` keeps DiffTest transport, decoding and trap detection while skipping REF initialization and comparison. Use the FPGA-host-only `--no-link` to disable the DiffTest output and receiver as well; it implies `--no-diff`. With the link disabled, the host cannot observe trap events or instruction/cycle limits from that stream; stop it with a signal. Existing FPGA commands that used `--no-diff` for free-running execution should use `--no-link`.
+
 `fpga-host` uses the same build flag as the other targets: pass `SPLITVIEW=1` to enable splitview. At runtime, pass `--no-squash` to disable squash or `--squash-size=NUM` to set the maximum fused instruction count (`0`-`255`, default `255`). Use `--no-squash-after-instr=NUM` to begin with squash enabled and disable it after the specified committed-instruction count. `NUM` accepts an uppercase `K`, `M`, or `B` suffix, such as `6.67B`, and is rounded to the nearest instruction.
 
 Key runtime options:
@@ -75,7 +77,7 @@ Key runtime options:
 |--------|--------|
 | `-i, --image=FILE` | Boot image path |
 | `--diff=PATH` | Reference SO for differential testing |
-| `--no-diff` | Run without difftest comparison |
+| `--no-diff` | Keep DUT data transfer, decoding and trap detection; skip REF initialization and comparison (also supported by `fpga-host`) |
 | `-C, --max-cycles=NUM` | Maximum simulation cycles |
 | `-I, --max-instr=NUM` | Maximum instructions |
 | `-b, --log-begin=NUM` | Start logging at cycle N |
@@ -135,7 +137,7 @@ Key runtime options:
 |--------|--------|
 | `+workload=FILE` | Boot image path |
 | `+diff=PATH` | Reference SO for differential testing |
-| `+no-diff` | Run without difftest comparison |
+| `+no-diff` | Keep DUT data transfer, decoding and trap detection; skip REF initialization and comparison |
 | `+no-squash` | Disable squash |
 | `+squash-size=NUM` | Set maximum fused instruction count (`0`-`255`, default `255`) |
 | `+max-cycles=NUM` | Maximum simulation cycles |

@@ -35,6 +35,9 @@ enum {
   OPT_SQUASH_SIZE,
   OPT_NO_SQUASH_AFTER_INSTR,
   OPT_CPU_AXI_DELAY,
+#ifdef FPGA_HOST
+  OPT_NO_LINK,
+#endif
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
 #ifdef CONFIG_DIFFTEST_FAST_REF
@@ -146,7 +149,10 @@ static inline void print_help(const char *file) {
   printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
   printf("      --cst-file=FILE        load constantin from FILE, stdin, or default init values\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
-  printf("      --no-diff              disable differential testing\n");
+  printf("      --no-diff              skip REF checking; keep DUT data and trap detection\n");
+#ifdef FPGA_HOST
+  printf("      --no-link              disable DiffTest transport (implies --no-diff)\n");
+#endif
   printf("      --no-squash            disable squash\n");
   printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
   printf("      --no-squash-after-instr=NUM disable squash after NUM committed instructions\n");
@@ -227,6 +233,9 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
+#ifdef FPGA_HOST
+    { "no-link",           0, NULL, OPT_NO_LINK },
+#endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
     { "ref-mode",          1, NULL, OPT_REF_MODE },
 #endif
@@ -408,6 +417,12 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.ref_fork_interval = 1000ULL * atoll_strict(optarg, "ref-fork-interval");
         continue;
       case OPT_PACKET_POOL_LOG2: args.packet_pool_log2 = atoll_strict(optarg, "packet-pool-log2"); continue;
+#endif
+#ifdef FPGA_HOST
+      case OPT_NO_LINK:
+        args.enable_link = false;
+        args.enable_diff = false;
+        continue;
 #endif
       case OPT_CPU_AXI_DELAY: {
         long long cpu_axi_delay = atoll_strict(optarg, "cpu-axi-delay");
