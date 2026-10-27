@@ -32,10 +32,8 @@
 #ifdef DIFFTEST_HOSTIF_GBUS
 #include "gbus_transport.h"
 #endif
-#include <cerrno>
 #include <condition_variable>
 #include <cstdlib>
-#include <filesystem>
 #include <getopt.h>
 #include <inttypes.h>
 #include <mutex>
@@ -64,26 +62,6 @@ static CommonArgs args;
 #ifdef CONFIG_DIFFTEST_FORK_REF
 static bool is_xdma_receiver = false;
 #endif
-#ifndef CONFIG_NO_DIFFTEST
-static std::string checkpoint_dir;
-
-static void maybe_checkpoint() {
-  auto *diff = difftest[0];
-  if (!diff->get_has_commit())
-    return;
-  uint64_t instr = diff->get_trap_event()->instrCnt;
-  uint64_t interval = instr / args.auto_checkpoint_interval;
-  static uint64_t last_interval = 0;
-  if (interval <= last_interval)
-    return;
-  last_interval = interval;
-
-  std::string base = checkpoint_dir + "/instr" + std::to_string(instr);
-  Info("[REF_CPT] request instr=%lu base=%s\n", instr, base.c_str());
-  // The REF skips M-mode checkpoints and reports serialization failures.
-  diff->proxy->trigger_checkpoint(base.c_str());
-}
-#endif // CONFIG_NO_DIFFTEST
 static const char *fpga_ddr_load_cmd = nullptr;
 static const char *fpga_ila_arm_cmd = nullptr;
 static const char *fpga_ila_upload_cmd = nullptr;
@@ -317,23 +295,7 @@ void fpga_init() {
   }
 #endif
 
-#ifndef CONFIG_NO_DIFFTEST
-  if (args.enable_diff && args.auto_checkpoint) {
-    if (!difftest[0]->proxy->supports_checkpoint()) {
-      fprintf(stderr, "[fpga-host] --auto-checkpoint requires difftest_trigger_checkpoint\n");
-      exit(EINVAL);
-    }
-#ifdef CONFIG_DIFFTEST_FAST_REF
-    if (args.ref_mode != RefMode::SLOW) {
-      fprintf(stderr, "[fpga-host] --auto-checkpoint requires --ref-mode=slow\n");
-      exit(EINVAL);
-    }
-#endif
-    checkpoint_dir = args.auto_checkpoint_dir ? args.auto_checkpoint_dir : create_noop_filename("-ref-cpt");
-    std::filesystem::create_directories(checkpoint_dir);
-    Info("[REF_CPT] interval=%lu dir=%s\n", args.auto_checkpoint_interval, checkpoint_dir.c_str());
-  }
-#endif // CONFIG_NO_DIFFTEST
+  difftest_init_checkpoint(args);
 
   xdma_device->fpga_io(HOST_IO_RESET, false);
 }
@@ -428,11 +390,6 @@ int fpga_get_result(uint8_t step) {
     else
       return FPGA_FAIL;
   }
-#ifndef CONFIG_NO_DIFFTEST
-  // Checkpoint the single-core REF after a successful comparison.
-  if (args.enable_diff && args.auto_checkpoint)
-    maybe_checkpoint();
-#endif // CONFIG_NO_DIFFTEST
   if (args.enable_squash && args.no_squash_after_instr != UINT64_MAX) {
     for (int i = 0; i < NUM_CORES; i++) {
       uint64_t instr_count = difftest[i]->get_trap_event()->instrCnt;

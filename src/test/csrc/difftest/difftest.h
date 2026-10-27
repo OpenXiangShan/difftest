@@ -294,6 +294,8 @@ private:
 
 extern Difftest **difftest;
 int difftest_init(bool enabled, size_t ramsize);
+struct CommonArgs;
+void difftest_init_checkpoint(const CommonArgs &args);
 
 int difftest_nstep(int step, bool enable_diff);
 void difftest_switch_zone();

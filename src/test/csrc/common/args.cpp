@@ -46,11 +46,9 @@ enum {
 #endif
   OPT_DUMP_REFDRIVE_TRACE,
   OPT_LOAD_REFDRIVE_TRACE,
-#ifdef FPGA_HOST
   OPT_AUTO_CHECKPOINT,
   OPT_AUTO_CHECKPOINT_INTERVAL,
   OPT_AUTO_CHECKPOINT_DIR,
-#endif
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -179,11 +177,9 @@ static inline void print_help(const char *file) {
   printf("      --random-mem           initialize memory from --seed\n");
   printf("      --core-clock-half-period=N        core half-period in scheduler ticks\n");
   printf("      --accelerator-clock-half-period=N accelerator half-period in scheduler ticks\n");
-#ifdef FPGA_HOST
   printf("      --auto-checkpoint      save periodic REF checkpoints during comparison\n");
   printf("      --auto-checkpoint-interval=NUM  fixed instruction interval, default: 1M\n");
   printf("      --auto-checkpoint-dir=DIR  checkpoint output directory, default: $NOOP_HOME/build/<time>-ref-cpt\n");
-#endif
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -231,11 +227,9 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "random-mem",        0, NULL,  0  },
     { "core-clock-half-period",        1, NULL, OPT_CORE_CLOCK_HALF_PERIOD },
     { "accelerator-clock-half-period", 1, NULL, OPT_ACCELERATOR_CLOCK_HALF_PERIOD },
-#ifdef FPGA_HOST
     { "auto-checkpoint",   0, NULL, OPT_AUTO_CHECKPOINT },
     { "auto-checkpoint-interval", 1, NULL, OPT_AUTO_CHECKPOINT_INTERVAL },
     { "auto-checkpoint-dir", 1, NULL, OPT_AUTO_CHECKPOINT_DIR },
-#endif
     { "splitview-log",     1, NULL, OPT_SPLITVIEW_LOG },
     { "db-path",           1, NULL, OPT_DB_PATH },
     { "no-squash",         0, NULL, OPT_NO_SQUASH },
@@ -452,7 +446,6 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.accelerator_clock_half_period = static_cast<uint32_t>(accelerator_clock_half_period);
         continue;
       }
-#ifdef FPGA_HOST
       case OPT_AUTO_CHECKPOINT: args.auto_checkpoint = true; continue;
       case OPT_AUTO_CHECKPOINT_INTERVAL:
         args.auto_checkpoint_interval = parse_instr_count(optarg, "auto-checkpoint-interval");
@@ -460,7 +453,6 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_AUTO_CHECKPOINT_DIR:
         args.auto_checkpoint_dir = optarg;
         continue;
-#endif
       case 's':
         if (std::string(optarg) != "NO_SEED") {
           args.seed = atoll_strict(optarg, "seed");
@@ -504,12 +496,10 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
-#ifdef FPGA_HOST
   if (args.auto_checkpoint && args.auto_checkpoint_interval == 0) {
     fprintf(stderr, "[ERROR] --auto-checkpoint-interval must be > 0\n");
     exit(EINVAL);
   }
-#endif
 
 #ifdef ENABLE_IPC
   char *ipc_image = (char *)malloc(255);

@@ -178,6 +178,7 @@ Emulator::Emulator(int argc, const char *argv[])
   // init difftest
   auto ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
   difftest_init(args.enable_diff, ref_ramsize);
+  difftest_init_checkpoint(args);
 
   // init difftest traces
   if (args.trace_name) {
