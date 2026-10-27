@@ -38,6 +38,8 @@
  * on the worker thread. The backend may also provide operand storage;
  * acquisition and release can run on producer/worker threads concurrently.
  * The verifier owns the backend and coordinates request lifetimes.
+ * With CONFIG_DIFFTEST_MMA_SYNC, submission verifies synchronously on the caller;
+ * start()/stop() are no-ops and flush() reports the retained error.
  *
  * Buffers are caller-owned while being populated and verifier-owned after
  * submission. Successful buffers and all mismatches after the first are freed
@@ -182,7 +184,7 @@ public:
   void free_buffer(MmaVerificationBuffer *buffer);
 
   /**
-   * @brief Submits a fully populated buffer for asynchronous verification.
+   * @brief Submits a fully populated buffer; synchronous builds verify inline.
    *
    * @param[in] buffer Non-null buffer returned by allocate_buffer().
    * @note Blocks when queued or executing work reaches the configured backpressure
@@ -209,6 +211,8 @@ public:
   const MmaVerificationBuffer *get_error_buffer() const;
 
 private:
+  void verify_batch(const std::vector<MmaVerificationBuffer *> &buffers);
+
   std::thread mma_verification_thread;                        // Verification thread
   std::queue<MmaVerificationBuffer *> mma_verification_queue; // Pending verification queue
 

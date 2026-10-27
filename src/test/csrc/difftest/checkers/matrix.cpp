@@ -413,8 +413,15 @@ int AmuExecChecker::commit_ready_prefix() {
             set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
           }
-          // Pass buffer to verification thread
+          // Submit using the build-selected verification schedule.
           mma_verifier->add_to_verification_queue(buffer);
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+          // Do not consume the next ready event after a synchronous failure.
+          if (mma_verifier->has_mma_verification_error()) {
+            set_error_pc(state->coreid, amu_event.pc);
+            return STATE_ERROR;
+          }
+#endif
           break;
         case 1: // MLS
         case 3: // Arith
