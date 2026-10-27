@@ -66,6 +66,13 @@ FpgaXdma::FpgaXdma(bool fork_readers, size_t pool_slots) {
     g_packet_pool = packet_pool.get();
 #endif
 
+#ifndef FPGA_SIM
+  if (XdmaRelayClient::enabled()) {
+    relay = std::make_unique<XdmaRelayClient>(sizeof(FpgaPackgeHead), CONFIG_DMA_CHANNELS);
+    return;
+  }
+#endif
+
   for (int i = 0; i < CONFIG_DMA_CHANNELS; i++) {
     char c2h_device[64];
     sprintf(c2h_device, "%s%d", XDMA_C2H_DEVICE, i);
@@ -160,7 +167,7 @@ void FpgaXdma::h2c_load_workload(const void *payload, uint64_t size) {
   while (offset < size) {
     uint64_t remaining = size - offset;
     size_t request = std::min<uint64_t>(64ull * 1024ull * 1024ull, remaining); // 64MB per XDMA transfer
-    ssize_t written = write(xdma_h2c_fd, buf + offset, request);
+    ssize_t written = relay ? relay->write(buf + offset, request) : write(xdma_h2c_fd, buf + offset, request);
     if (written < 0) {
       if (errno == EINTR) {
         continue;
@@ -188,6 +195,14 @@ void FpgaXdma::h2c_load_workload(const void *payload, uint64_t size) {
 // write xdma_bypass memory or xdma_user
 void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value) {
   (void)workload;
+  if (relay) {
+    if (is_bypass) {
+      fprintf(stderr, "XDMA relay does not support bypass writes\n");
+      exit(1);
+    }
+    relay->write32(addr, value);
+    return;
+  }
 #ifdef FPGA_SIM
   if (is_bypass) {
     fprintf(stderr, "[fpga-host] FPGA_SIM XDMA bypass write is unsupported\n");
@@ -244,6 +259,13 @@ void FpgaXdma::device_write(bool is_bypass, const char *workload, uint64_t addr,
 }
 
 uint32_t FpgaXdma::device_read(bool is_bypass, uint64_t addr) {
+  if (relay) {
+    if (is_bypass) {
+      fprintf(stderr, "XDMA relay does not support bypass reads\n");
+      exit(1);
+    }
+    return relay->read32(addr);
+  }
 #ifdef FPGA_SIM
   if (is_bypass) {
     fprintf(stderr, "[fpga-host] FPGA_SIM XDMA bypass read is unsupported\n");
@@ -321,14 +343,16 @@ void FpgaXdma::stop_thansmit_thread() {
 #ifdef FPGA_SIM
     xdma_sim_close(i);
 #else
-    close(xdma_c2h_fd[i]);
+    if (!relay)
+      close(xdma_c2h_fd[i]);
 #endif // FPGA_SIM
   }
 
   if (process_thread.joinable())
     process_thread.join();
 #if defined(CONFIG_USE_XDMA_H2C) && !defined(FPGA_SIM)
-  close(xdma_h2c_fd);
+  if (!relay)
+    close(xdma_h2c_fd);
 #endif
 }
 
@@ -349,7 +373,8 @@ void FpgaXdma::read_xdma_thread(int channel) {
 #ifdef FPGA_SIM
       ssize_t size = static_cast<ssize_t>(xdma_sim_read(channel, mem + received, sizeof(FpgaPackgeHead) - received));
 #else
-      ssize_t size = read(xdma_c2h_fd[channel], mem + received, sizeof(FpgaPackgeHead) - received);
+      ssize_t size = relay ? relay->read(channel, mem + received, sizeof(FpgaPackgeHead) - received)
+                           : read(xdma_c2h_fd[channel], mem + received, sizeof(FpgaPackgeHead) - received);
 #endif
       if (size < 0 && errno == EINTR)
         continue;
@@ -431,9 +456,31 @@ void FpgaXdma::read_and_process() {
 #ifdef FPGA_SIM
     ssize_t size = static_cast<ssize_t>(xdma_sim_read(0, (char *)packge, sizeof(FpgaPackgeHead)));
 #else
-    ssize_t size = read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
+    ssize_t size =
+        relay ? relay->read(0, packge, sizeof(FpgaPackgeHead)) : read(xdma_c2h_fd[0], packge, sizeof(FpgaPackgeHead));
 #endif // FPGA_SIM
+    if (relay && size > 0 && static_cast<size_t>(size) < sizeof(FpgaPackgeHead)) {
+      size_t received = size;
+      while (running && signal_num == 0 && received < sizeof(FpgaPackgeHead)) {
+        ssize_t n = relay->read(0, reinterpret_cast<char *>(packge) + received, sizeof(FpgaPackgeHead) - received);
+        if (n < 0 && errno == EINTR)
+          continue;
+        if (n <= 0)
+          break;
+        received += n;
+      }
+      if (received != sizeof(FpgaPackgeHead)) {
+        fprintf(stderr, "XDMA relay receive failed or ended inside a packet\n");
+        running = false;
+        break;
+      }
+    }
     if (size <= 0) {
+      if (relay) {
+        fprintf(stderr, "XDMA relay receive failed or ended inside a packet\n");
+        running = false;
+        break;
+      }
       if (signal_num != 0 || (size < 0 && errno == EINTR)) {
         break;
       }

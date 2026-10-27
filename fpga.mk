@@ -76,3 +76,11 @@ fpga-clean:
 RELEASE_DIR ?= $(NOOP_HOME)
 fpga-release:
 	bash ./scripts/fpga/release.sh $(NOOP_HOME) $(RELEASE_DIR) $(RELEASE_SUFFIX)
+
+# Board-side relay does not depend on the generated DiffTest profile.
+FPGA_RELAY_TARGET = $(BUILD_DIR)/fpga-xdma-relay
+$(FPGA_RELAY_TARGET): $(FPGA_CSRC_DIR)/relay/daemon.cc $(FPGA_CSRC_DIR)/relay/wire.h
+	mkdir -p $(dir $@)
+	$(CXX) -std=c++20 -O3 -pthread $< -o $@ -lzstd
+
+fpga-xdma-relay: $(FPGA_RELAY_TARGET)
