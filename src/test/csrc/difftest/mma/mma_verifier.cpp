@@ -37,6 +37,11 @@ MmaVerifier::MmaVerifier() {
   const char *backend_name = "CPU";
 #endif
   Info("[INFO] MMA reference model backend: %s\n", backend_name);
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+  Info("[INFO] MMA verification: synchronous\n");
+#else
+  Info("[INFO] MMA verification: asynchronous\n");
+#endif
 }
 
 MmaVerifier::~MmaVerifier() {
@@ -59,6 +64,7 @@ MmaVerifier::~MmaVerifier() {
 }
 
 void MmaVerifier::start() {
+#ifndef CONFIG_DIFFTEST_MMA_SYNC
   if (mma_verification_thread.joinable()) {
     return;
   }
@@ -66,9 +72,11 @@ void MmaVerifier::start() {
   std::lock_guard<std::mutex> lock(mma_queue_mutex);
   mma_stop_requested = false;
   mma_verification_thread = std::thread(&MmaVerifier::mma_verification_thread_func, this);
+#endif // !CONFIG_DIFFTEST_MMA_SYNC
 }
 
 void MmaVerifier::stop() {
+#ifndef CONFIG_DIFFTEST_MMA_SYNC
   {
     std::lock_guard<std::mutex> lock(mma_queue_mutex);
     mma_stop_requested = true;
@@ -80,9 +88,11 @@ void MmaVerifier::stop() {
   if (mma_verification_thread.joinable()) {
     mma_verification_thread.join();
   }
+#endif // !CONFIG_DIFFTEST_MMA_SYNC
 }
 
 bool MmaVerifier::flush() {
+#ifndef CONFIG_DIFFTEST_MMA_SYNC
   std::unique_lock<std::mutex> lock(mma_queue_mutex);
   Assert(mma_pending_count == 0 || (mma_verification_thread.joinable() && !mma_stop_requested),
          "MMA verifier is not running with %zu pending requests", mma_pending_count);
@@ -93,6 +103,7 @@ bool MmaVerifier::flush() {
     Assert(false, "MMA verifier stopped with %zu pending requests", mma_pending_count);
     return false;
   }
+#endif // !CONFIG_DIFFTEST_MMA_SYNC
   return !has_mma_verification_error();
 }
 
@@ -132,6 +143,9 @@ void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
 }
 
 void MmaVerifier::add_to_verification_queue(MmaVerificationBuffer *buffer) {
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+  verify_batch(std::vector<MmaVerificationBuffer *>{buffer});
+#else
   {
     std::unique_lock<std::mutex> lock(mma_queue_mutex);
     mma_backpressure_cv.wait(lock,
@@ -140,6 +154,7 @@ void MmaVerifier::add_to_verification_queue(MmaVerificationBuffer *buffer) {
     mma_pending_count++;
   }
   mma_worker_cv.notify_one();
+#endif // CONFIG_DIFFTEST_MMA_SYNC
 }
 
 bool MmaVerifier::has_mma_verification_error() const {
@@ -148,6 +163,27 @@ bool MmaVerifier::has_mma_verification_error() const {
 
 const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
   return mma_error_buffer.load(std::memory_order_acquire);
+}
+
+void MmaVerifier::verify_batch(const std::vector<MmaVerificationBuffer *> &buffers) {
+  std::vector<uint8_t> passed;
+  backend->verify(buffers, passed);
+  Assert(passed.size() == buffers.size(), "MMA backend returned %zu results for a batch of %zu", passed.size(),
+         buffers.size());
+
+  // A batch is FIFO ordered, so publishing failures in vector order keeps
+  // the first reported mismatch identical to singleton verification.
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    auto *buffer = buffers[i];
+    if (passed[i]) {
+      free_buffer(buffer);
+    } else {
+      MmaVerificationBuffer *expected = nullptr;
+      if (!mma_error_buffer.compare_exchange_strong(expected, buffer, std::memory_order_acq_rel)) {
+        free_buffer(buffer);
+      }
+    }
+  }
 }
 
 void MmaVerifier::mma_verification_thread_func() {
@@ -166,24 +202,7 @@ void MmaVerifier::mma_verification_thread_func() {
       buffers = take_contiguous_batch(mma_verification_queue, CONFIG_DIFF_MMA_BATCH_SIZE, *backend);
     }
 
-    std::vector<uint8_t> passed;
-    backend->verify(buffers, passed);
-    Assert(passed.size() == buffers.size(), "MMA backend returned %zu results for a batch of %zu", passed.size(),
-           buffers.size());
-
-    // A batch is FIFO ordered, so publishing failures in vector order keeps
-    // the first reported mismatch identical to singleton verification.
-    for (size_t i = 0; i < buffers.size(); ++i) {
-      auto *buffer = buffers[i];
-      if (passed[i]) {
-        free_buffer(buffer);
-      } else {
-        MmaVerificationBuffer *expected = nullptr;
-        if (!mma_error_buffer.compare_exchange_strong(expected, buffer, std::memory_order_acq_rel)) {
-          free_buffer(buffer);
-        }
-      }
-    }
+    verify_batch(buffers);
 
     bool drained = false;
     {
