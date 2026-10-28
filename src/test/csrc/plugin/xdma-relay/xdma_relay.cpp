@@ -14,7 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 #include "xdma_relay.h"
-#include "relay/wire.h"
+#include "wire.h"
 #include <algorithm>
 #include <cstdlib>
 using namespace xdma_relay;

@@ -5,6 +5,13 @@ FPGA host, packet parser and REF workers on a compute machine. It uses the same
 packet pool and fork REF implementation as local XDMA. No NEMU or XDMA driver
 changes are required. Leave XDMA_RELAY_* variables unset for local I/O.
 
+## Layout
+
+This plugin owns the relay client, wire protocol, board daemon, build rules
+and documentation. The FPGA Makefile includes `relay.mk` to link the client;
+the existing XDMA transport keeps only I/O dispatch and packet assembly hooks.
+Local XDMA remains the default unless the relay environment is configured.
+
 ## Build and start
 
 Build fpga-host normally. Build the board executable on the board machine with
