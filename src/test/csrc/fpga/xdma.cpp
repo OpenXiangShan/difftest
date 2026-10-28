@@ -15,6 +15,7 @@
 ***************************************************************************************/
 #include "xdma.h"
 #include "difftest-dpic.h"
+#include "fork_ref/fork_ref.h"
 #include "mpool.h"
 #include "ram.h"
 #include "reftrace/refdrive_trace.h"
@@ -334,6 +335,9 @@ void FpgaXdma::stop_thansmit_thread() {
 
 void FpgaXdma::read_xdma_thread(int channel) {
   size_t mem_get_idx = 0;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  std::chrono::steady_clock::time_point timeout_start{};
+#endif
   while (running && signal_num == 0) {
     char *mem = packet_pool->get_free_chunk(&mem_get_idx);
     if (!mem) {
@@ -353,6 +357,19 @@ void FpgaXdma::read_xdma_thread(int channel) {
 #endif
       if (size < 0 && errno == EINTR)
         continue;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+      // No more packets are expected once FAST has published its endpoint.
+      if (size < 0 && errno == ETIMEDOUT && fork_readers && difftest_ref_fork_draining() && running &&
+          signal_num == 0) {
+        const auto now = std::chrono::steady_clock::now();
+        if (timeout_start == std::chrono::steady_clock::time_point{})
+          timeout_start = now;
+        if (now - timeout_start < std::chrono::minutes(5)) {
+          fprintf(stderr, "XDMA C2H idle timeout; retrying while fork checkers drain\n");
+          continue;
+        }
+      }
+#endif
       if (size <= 0) {
         fprintf(stderr, "XDMA receive failed or ended inside a packet\n");
         packet_pool->fail();
