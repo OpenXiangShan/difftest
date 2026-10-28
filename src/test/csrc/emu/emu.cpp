@@ -315,11 +315,11 @@ inline void Emulator::reset_ncycles(size_t cycles) {
 
 #ifdef VERILATOR
     verilator_half_cycle(0);
+#endif // VERILATOR
 
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
       dut_ptr->waveform_tick();
     }
-#endif // VERILATOR
 
 #ifdef GSIM
     dut_ptr->step();
@@ -328,9 +328,6 @@ inline void Emulator::reset_ncycles(size_t cycles) {
     dut_ptr->set_reset(0);
 
 #ifdef GSIM
-    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-      dut_ptr->waveform_tick();
-    }
     dut_ptr->step();
 #endif // GSIM
   }
@@ -407,7 +404,6 @@ inline void Emulator::single_cycle() {
   verilator_half_cycle(0);
 #endif // VERILATOR
 
-#ifdef VERILATOR
   if (args.enable_waveform && args.enable_waveform_full) {
 #if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
     uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
@@ -420,7 +416,6 @@ inline void Emulator::single_cycle() {
       dut_ptr->waveform_tick();
     }
   }
-#endif // VERILATOR
 
 end_single_cycle:
   cycles++;
