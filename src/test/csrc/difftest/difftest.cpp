@@ -592,12 +592,6 @@ void Difftest::do_replay() {
   difftest_replay_head(info.trace_head);
   // clear buffered queue
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  for (auto &entry: state->matrix_sw_rob) {
-    if (entry.res != nullptr) {
-      delete[] entry.res;
-      entry.res = nullptr;
-    }
-  }
   state->matrix_sw_rob.clear();
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 }

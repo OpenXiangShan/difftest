@@ -64,6 +64,33 @@ static constexpr size_t kMmaResultRowBytes = CONFIG_DIFF_AMU_ARLEN / 8;
 
 bool compare_mma_rows(const void *lhs, const void *rhs, size_t rows, size_t row_bytes);
 
+class MmaResultPool;
+
+struct MatrixResultDeleter {
+  std::shared_ptr<MmaResultPool> pool;
+  void operator()(uint64_t *buffer) const;
+};
+
+// Move the whole lease when transferring ownership. To adopt an ordinary array,
+// assign a fresh MatrixResult; reset(new[]) would retain a pooled lease's deleter.
+using MatrixResult = std::unique_ptr<uint64_t[], MatrixResultDeleter>;
+
+// Typed ordinary-memory ROB storage. A result lease keeps this pool alive even
+// when DiffState outlives its verifier, or a first mismatch is retained.
+class MmaResultPool : public std::enable_shared_from_this<MmaResultPool> {
+public:
+  MmaResultPool(size_t bytes, size_t capacity);
+  MatrixResult acquire();
+  void recycle(uint64_t *buffer);
+
+private:
+  const size_t words;
+  const size_t capacity;
+  std::mutex mutex;
+  std::vector<std::unique_ptr<uint64_t[]>> storage;
+  std::vector<uint64_t *> free_slots;
+};
+
 struct MmaVerificationBuffer;
 
 enum MmaElementType : uint8_t {

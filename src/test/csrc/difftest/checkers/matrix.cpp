@@ -251,8 +251,11 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
   const size_t matrix_u64_size = (matrix_size + sizeof(uint64_t) - 1) / sizeof(uint64_t);
   if (entry.res == NULL) {
     // first `valid` for this inst: alloc space for matrix inst
-    entry.res = new uint64_t[matrix_u64_size];
-    memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
+    if (entry.amu_event.op == 0) {
+      entry.res = difftest[state->coreid]->get_mma_verifier()->allocate_result();
+    } else {
+      entry.res.reset(new uint64_t[matrix_u64_size]());
+    }
   }
   uint8_t md = entry.amu_event.md;
   const size_t matrix_words_per_bank = (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
@@ -396,8 +399,7 @@ int AmuExecChecker::commit_ready_prefix() {
           // Allocate buffer for MMA verification
           buffer = mma_verifier->allocate_buffer(&amu_event);
           // Transfer the completed software-ROB result without allocating a copy.
-          buffer->dut_result.reset(iter->res);
-          iter->res = nullptr;
+          buffer->dut_result = std::move(iter->res);
           // Capture REF operands and install the DUT result for asynchronous MMA verification.
           amu_event_nemu = to_nemu_amu_ctrl(amu_event);
           if (proxy->exec_amu_lazy(&amu_event_nemu, buffer->dut_result.get(), buffer->src1, buffer->src2,
@@ -424,23 +426,19 @@ int AmuExecChecker::commit_ready_prefix() {
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
           if (proxy->exec_amu_hash(&amu_event_nemu, &iter->hash) != 0) {
 #else
-          if (proxy->exec_amu(&amu_event_nemu, iter->res) != 0) {
+          if (proxy->exec_amu(&amu_event_nemu, iter->res.get()) != 0) {
 #endif
             printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_name(amu_event.op));
             set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
           }
-          delete[] iter->res;
           break;
         case 2: // MRelease
           // The REF-side effect was applied when the DUT finish event was recorded.
           break;
         default:
           printf("Unknown amu event op: %d\n", op);
-          if (iter->res != nullptr) {
-            delete[] iter->res;
-            iter->res = nullptr;
-          }
+          iter->res.reset();
           set_error_pc(state->coreid, amu_event.pc);
           return STATE_ERROR;
       }

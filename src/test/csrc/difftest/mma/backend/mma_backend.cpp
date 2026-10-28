@@ -105,4 +105,47 @@ bool compare_mma_rows(const void *lhs, const void *rhs, size_t rows, size_t row_
   }
   return true;
 }
+
+void MatrixResultDeleter::operator()(uint64_t *buffer) const {
+  if (pool) {
+    pool->recycle(buffer);
+  } else {
+    delete[] buffer;
+  }
+}
+
+MmaResultPool::MmaResultPool(size_t bytes, size_t capacity)
+    : words((bytes + sizeof(uint64_t) - 1) / sizeof(uint64_t)), capacity(capacity) {
+  storage.reserve(capacity);
+  free_slots.reserve(capacity);
+}
+
+MatrixResult MmaResultPool::acquire() {
+  std::unique_lock<std::mutex> lock(mutex);
+  uint64_t *buffer;
+  if (!free_slots.empty()) {
+    buffer = free_slots.back();
+    free_slots.pop_back();
+  } else if (storage.size() < capacity) {
+    // Initialize the full physical snapshot once. Inactive bytes may retain
+    // initialized old values on reuse; the architecture leaves them unspecified.
+    storage.emplace_back(new uint64_t[words]());
+    buffer = storage.back().get();
+  } else {
+    lock.unlock();
+    // A hardware ROB can hold more results than the asynchronous queue limit.
+    return MatrixResult(new uint64_t[words]());
+  }
+  MatrixResultDeleter deleter;
+  deleter.pool = shared_from_this();
+  return MatrixResult(buffer, std::move(deleter));
+}
+
+void MmaResultPool::recycle(uint64_t *buffer) {
+  if (!buffer)
+    return;
+  std::lock_guard<std::mutex> lock(mutex);
+  // Capacity was reserved at construction; returning a lease cannot allocate.
+  free_slots.push_back(buffer);
+}
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

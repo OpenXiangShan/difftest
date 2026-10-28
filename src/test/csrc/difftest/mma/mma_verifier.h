@@ -57,11 +57,11 @@
  * See MmaVerifier's allocation and submission methods for ownership rules.
  */
 struct MmaVerificationBuffer {
-  DifftestAmuCtrlEvent amu_event;         // AMU control event for this MMA instruction
-  uint8_t *src1;                          // Pointer to source matrix 1 data
-  uint8_t *src2;                          // Pointer to source matrix 2 data
-  uint8_t *src3;                          // Pointer to source matrix 3 data (accumulator)
-  std::unique_ptr<uint64_t[]> dut_result; // Owns the software ROB's original result array
+  DifftestAmuCtrlEvent amu_event; // AMU control event for this MMA instruction
+  uint8_t *src1;                  // Pointer to source matrix 1 data
+  uint8_t *src2;                  // Pointer to source matrix 2 data
+  uint8_t *src3;                  // Pointer to source matrix 3 data (accumulator)
+  MatrixResult dut_result;        // Owns the software ROB's original result array
 };
 
 /**
@@ -146,6 +146,9 @@ public:
    */
   MmaVerificationBuffer *allocate_buffer(const DifftestAmuCtrlEvent *amu_event);
 
+  // Lease a full result from the pool.
+  MatrixResult allocate_result();
+
   /**
    * @brief Releases a verification buffer and its operand/result arrays.
    *
@@ -210,6 +213,8 @@ private:
 
   // Buffer of the first failed MMA instruction (retained for error reporting)
   std::atomic<MmaVerificationBuffer *> mma_error_buffer{nullptr};
+
+  std::shared_ptr<MmaResultPool> result_pool;
 
   // MMA verification backend (CPU by default)
   MmaBackend *backend = nullptr;
