@@ -22,12 +22,12 @@
 
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
 
-__device__ __forceinline__ uint32_t load_int8_fragment(const uint8_t *data, int row, int rows, int k, int stride) {
+__device__ __forceinline__ uint32_t load_int8_fragment(const uint8_t *data, int row, int rows, int k, int tile_k) {
   uint32_t value = 0;
 #pragma unroll
   for (int byte = 0; byte < 4; ++byte) {
-    if (row < rows && k + byte < stride) {
-      value |= uint32_t(data[size_t(row) * stride + k + byte]) << (byte * 8);
+    if (row < rows && k + byte < tile_k) {
+      value |= uint32_t(data[size_t(row) * kMmaSourceRowBytes + k + byte]) << (byte * 8);
     }
   }
   return value;
@@ -65,6 +65,7 @@ __device__ __forceinline__ void mmacc_int8_tensor(const CudaMmaBatchDescriptor &
   const uint8_t *a_data = src1 + desc.src1_offset;
   const uint8_t *b_data = src2 + desc.src2_offset;
   uint32_t *c_data = reinterpret_cast<uint32_t *>(src3 + desc.src3_offset);
+  const size_t result_row_words = kMmaResultRowBytes / sizeof(uint32_t);
 
   for (int tile = blockIdx.x * (blockDim.x / 32) + threadIdx.x / 32; tile < tiles;
        tile += gridDim.x * (blockDim.x / 32)) {
@@ -76,7 +77,7 @@ __device__ __forceinline__ void mmacc_int8_tensor(const CudaMmaBatchDescriptor &
       const int r = row + (i / 2) * 8;
       const int n = col + thread * 2 + i % 2;
       if (r < desc.tile_m && n < desc.tile_n) {
-        c[i] = c_data[r * desc.tile_n + n];
+        c[i] = c_data[size_t(r) * result_row_words + n];
       }
     }
 
@@ -111,7 +112,7 @@ __device__ __forceinline__ void mmacc_int8_tensor(const CudaMmaBatchDescriptor &
       const int r = row + (i / 2) * 8;
       const int n = col + thread * 2 + i % 2;
       if (r < desc.tile_m && n < desc.tile_n) {
-        c_data[r * desc.tile_n + n] = c[i];
+        c_data[size_t(r) * result_row_words + n] = c[i];
       }
     }
   }

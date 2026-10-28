@@ -39,8 +39,6 @@ struct CudaMmaBatchItem {
   uint16_t tile_m;
   uint16_t tile_k;
   uint16_t tile_n;
-  uint8_t types1;
-  uint8_t types2;
   uint8_t sat;
   const uint8_t *src1;
   const uint8_t *src2;
@@ -64,9 +62,7 @@ struct CudaMmaCopySpan {
 };
 
 struct CudaMmaOperand {
-  std::unique_ptr<uint8_t[], MmaHostDeleter> packed;
   std::vector<CudaMmaCopySpan> spans;
-  size_t direct_bytes = 0;
   uint8_t *device = nullptr;
 };
 

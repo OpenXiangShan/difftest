@@ -108,16 +108,10 @@ bool MmaVerifier::flush() {
 }
 
 MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *amu_event) {
-  size_t m = amu_event->mtilem;
-  size_t n = amu_event->mtilen;
-  size_t k = amu_event->mtilek;
-  size_t element_sz_s1 = get_element_size(amu_event->types1);
-  size_t element_sz_s2 = get_element_size(amu_event->types2);
-  size_t element_sz_d = get_element_size(amu_event->typed);
-
-  size_t a_sz = element_sz_s1 * m * k;
-  size_t b_sz = element_sz_s2 * k * n;
-  size_t c_sz = element_sz_d * m * n;
+  // NEMU copies whole registers, even when only a small tile is active.
+  const size_t a_sz = CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES;
+  const size_t b_sz = CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES;
+  const size_t c_sz = CONFIG_DIFF_AMU_C_REG_SIZE_BYTES;
 
   // Allocate memory for the buffer structure and data
   std::unique_ptr<MmaVerificationBuffer> buffer(new MmaVerificationBuffer());

@@ -247,13 +247,8 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
   const static size_t ARLen = CONFIG_DIFF_AMU_ARLEN;
   const static size_t TRLen = CONFIG_DIFF_AMU_TRLEN;
   const size_t matrix_size =
-      entry.amu_event.op == 0
-          ? size_t(entry.amu_event.mtilem) * entry.amu_event.mtilen * get_element_size(entry.amu_event.typed)
-          : (entry.amu_event.md < 4 ? CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES : CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
-  size_t matrix_u64_size = (matrix_size + sizeof(uint64_t) - 1) / sizeof(uint64_t);
-  if (matrix_u64_size == 0) {
-    matrix_u64_size = 1;
-  }
+      entry.amu_event.md < 4 ? CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES : CONFIG_DIFF_AMU_C_REG_SIZE_BYTES;
+  const size_t matrix_u64_size = (matrix_size + sizeof(uint64_t) - 1) / sizeof(uint64_t);
   if (entry.res == NULL) {
     // first `valid` for this inst: alloc space for matrix inst
     entry.res = new uint64_t[matrix_u64_size];

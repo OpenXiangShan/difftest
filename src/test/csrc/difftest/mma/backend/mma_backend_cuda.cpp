@@ -122,8 +122,6 @@ void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers,
     item.tile_m = buffer->amu_event.mtilem;
     item.tile_k = buffer->amu_event.mtilek;
     item.tile_n = buffer->amu_event.mtilen;
-    item.types1 = buffer->amu_event.types1;
-    item.types2 = buffer->amu_event.types2;
     item.sat = buffer->amu_event.sat;
     item.src1 = buffer->src1;
     item.src2 = buffer->src2;
