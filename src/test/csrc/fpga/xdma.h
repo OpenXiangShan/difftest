@@ -20,6 +20,7 @@
 #include "diffstate.h"
 #include "fpga_transport.h"
 #include "mpool.h"
+#include "xdma_relay.h"
 #include <atomic>
 #include <memory>
 #include <queue>
@@ -108,6 +109,8 @@ public:
 
   void stop() override {
     running = false;
+    if (relay)
+      relay->stop();
 #ifdef USE_THREAD_MEMPOOL
     if (packet_pool)
       packet_pool->stop_waiting();
@@ -132,7 +135,8 @@ public:
 private:
   // Main and parser stop this pipeline; receivers observe the same flag.
   std::atomic<bool> running{false};
-  int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
+  std::unique_ptr<XdmaRelayClient> relay;
+  int xdma_c2h_fd[CONFIG_DMA_CHANNELS]{};
 #ifdef CONFIG_USE_XDMA_H2C
   int xdma_h2c_fd;
 #endif

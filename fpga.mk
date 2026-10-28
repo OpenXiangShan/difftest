@@ -35,6 +35,8 @@ FPGA_CXXFLAGS += -I$(GBUS_PLUGIN_DIR)
 FPGA_LDFLAGS += -L$(GBUS_LIB_DIR) -Wl,-rpath,$(GBUS_LIB_DIR) -luvgbus
 endif
 
+include $(PLUGIN_CSRC_DIR)/xdma-relay/relay.mk
+
 fpga-build: fpga-clean fpga-host
 
 ifneq ($(FPGA_SIM), 1)
