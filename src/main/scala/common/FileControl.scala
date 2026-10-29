@@ -22,7 +22,8 @@ object FileControl {
   def write(fileStream: Iterable[String], fileName: String): Unit = write(fileStream, fileName, append = false)
 
   def write(fileStream: Iterable[String], fileName: String, append: Boolean): Unit = {
-    val outputDir = Paths.get(sys.env("NOOP_HOME"), "build", "generated-src")
+    val buildDir = sys.env.getOrElse("DIFFTEST_BUILD_DIR", Paths.get(sys.env("NOOP_HOME"), "build").toString)
+    val outputDir = Paths.get(buildDir, "generated-src")
     write(fileStream, fileName, outputDir.toString, append)
   }
 

@@ -120,6 +120,11 @@ object Main extends App {
 
 5. `make emu` and start simulating & debugging!
 
+During Chisel elaboration, `DIFFTEST_BUILD_DIR` selects the build directory for
+generated C++ interfaces and profiles under `generated-src/`. It defaults to
+`$NOOP_HOME/build`. When overriding it, pass the same directory as `BUILD_DIR`
+to the simulator Makefile.
+
 We provide example designs, including:
 
 - [XiangShan](https://github.com/OpenXiangShan/XiangShan)
