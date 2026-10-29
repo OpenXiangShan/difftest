@@ -771,7 +771,20 @@ inline int Difftest::check_all() {
 }
 
 int Difftest::update_delayed_writeback() {
-#define CHECK_DELAYED_WB(wb, delayed, n, regs_name)                                                \
+// A delayed writeback event only updates bookkeeping: it does not retire an
+// instruction, so it must not trigger a state comparison by itself.  In batch
+// transport without delta the DUT register state is only sent on steps that
+// carry a commit or an arch event; comparing on a delayed-writeback-only step
+// would use an all-zero per-step snapshot and report false diffs.  The register
+// is compared again on the next commit.
+//
+// A delayed writeback event reports the register index, the data and whether the
+// DUT actually committed the write in this cycle (nack = !fired). The DUT register
+// probe may still show the value from before the writeback in the releasing cycle
+// (it is captured before the write, and batch/delta transport adds another cycle of
+// skew), so apply the data carried by the event when the writeback has retired.
+// Otherwise the comparison below would see a stale register and report a false diff.
+#define CHECK_DELAYED_WB(wb, delayed, n, regs_name, regs_field)                                    \
   do {                                                                                             \
     for (int i = 0; i < n; i++) {                                                                  \
       auto delay = dut->wb + i;                                                                    \
@@ -786,18 +799,20 @@ int Difftest::update_delayed_writeback() {
             delayed[delay->address] -= 1;                                                          \
           }                                                                                        \
         } else {                                                                                   \
+          if (delay->address != 0) {                                                               \
+            dut->regs.regs_field.value[delay->address] = delay->data;                              \
+          }                                                                                        \
           delayed[delay->address] = 0;                                                             \
         }                                                                                          \
-        state->has_progress = true;                                                                \
       }                                                                                            \
     }                                                                                              \
   } while (0);
 
 #ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  CHECK_DELAYED_WB(regs_int_delayed, state->delayed_int, CONFIG_DIFF_REGS_INT_DELAYED_WIDTH, regs_name_int)
+  CHECK_DELAYED_WB(regs_int_delayed, state->delayed_int, CONFIG_DIFF_REGS_INT_DELAYED_WIDTH, regs_name_int, xrf)
 #endif // CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
 #ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  CHECK_DELAYED_WB(regs_fp_delayed, state->delayed_fp, CONFIG_DIFF_REGS_FP_DELAYED_WIDTH, regs_name_fp)
+  CHECK_DELAYED_WB(regs_fp_delayed, state->delayed_fp, CONFIG_DIFF_REGS_FP_DELAYED_WIDTH, regs_name_fp, frf)
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
   return DiffTestChecker::STATE_OK;
 }
