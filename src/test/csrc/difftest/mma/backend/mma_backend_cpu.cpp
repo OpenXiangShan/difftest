@@ -83,8 +83,8 @@ template <cute_mma_model::FloatFormat Format> bool CpuMmaBackend::verify_fp_mma(
   const int tile_n = buffer->amu_event.mtilen;
   const int src_elem_bytes = cute_mma_model::source_bytes(Format);
   const int reduce_chunk_elems = kMmaReduceWidthBytes / src_elem_bytes;
-  const size_t src_row_bytes = static_cast<size_t>(tile_k) * src_elem_bytes;
-  const size_t result_row_bytes = static_cast<size_t>(tile_n) * sizeof(uint32_t);
+  const size_t src_row_bytes = kMmaSourceRowBytes;
+  const size_t result_row_bytes = kMmaResultRowBytes;
 
   // FP addition is not associative; reproduce CUTE's fixed-width reduction tree and FP32 normalization per K chunk.
   for (int i = 0; i < tile_m; ++i) {
@@ -107,7 +107,7 @@ template <cute_mma_model::FloatFormat Format> bool CpuMmaBackend::verify_fp_mma(
     }
   }
 
-  return memcmp(buffer->dut_result.get(), buffer->src3, static_cast<size_t>(tile_m) * tile_n * sizeof(uint32_t)) == 0;
+  return compare_mma_rows(buffer->dut_result.get(), buffer->src3, tile_m, tile_n * sizeof(uint32_t));
 }
 
 template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVerificationBuffer *buffer) {
@@ -115,8 +115,8 @@ template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVeri
   const int tile_k = buffer->amu_event.mtilek;
   const int tile_n = buffer->amu_event.mtilen;
   const int reduce_chunk_elems = kMmaReduceWidthBytes;
-  const size_t src_row_bytes = static_cast<size_t>(tile_k);
-  const size_t result_row_bytes = static_cast<size_t>(tile_n) * sizeof(uint32_t);
+  const size_t src_row_bytes = kMmaSourceRowBytes;
+  const size_t result_row_bytes = kMmaResultRowBytes;
   const bool src1_signed = std::is_signed<src1_t>::value;
   const bool src2_signed = std::is_signed<src2_t>::value;
 
@@ -141,7 +141,7 @@ template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVeri
     }
   }
 
-  return memcmp(buffer->dut_result.get(), buffer->src3, static_cast<size_t>(tile_m) * tile_n * sizeof(uint32_t)) == 0;
+  return compare_mma_rows(buffer->dut_result.get(), buffer->src3, tile_m, tile_n * sizeof(uint32_t));
 }
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

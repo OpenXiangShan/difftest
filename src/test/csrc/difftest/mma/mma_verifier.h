@@ -83,35 +83,6 @@ static inline size_t get_element_size(uint8_t typed) {
 }
 
 /**
- * @brief Calculates the storage required for one MMA verification request.
- *
- * @param[in] amu_event Non-null event containing the element types and matrix geometry.
- * @return Total byte size of src1, src2, src3, and dut_result.
- */
-static inline size_t calculate_mma_buffer_size(const DifftestAmuCtrlEvent *amu_event) {
-  size_t element_size_s1 = get_element_size(amu_event->types1);
-  size_t element_size_s2 = get_element_size(amu_event->types2);
-  size_t element_size_d = get_element_size(amu_event->typed);
-
-  uint16_t m = amu_event->mtilem;
-  uint16_t n = amu_event->mtilen;
-  uint16_t k = amu_event->mtilek;
-
-  // Calculate size for each matrix:
-  // src1: m×k matrix
-  // src2: k×n matrix
-  // src3: m×n matrix (accumulator)
-  // result: m×n matrix
-  size_t src1_size = element_size_s1 * m * k;
-  size_t src2_size = element_size_s2 * k * n;
-  size_t src3_size = element_size_d * m * n;
-  size_t result_size = element_size_d * m * n;
-
-  // Total buffer size
-  return src1_size + src2_size + src3_size + result_size;
-}
-
-/**
  * @brief Coordinates asynchronous MMA verification between DiffTest and one MmaBackend.
  *
  * AmuExecChecker is the producer: it gathers the DUT result, obtains the
@@ -165,7 +136,7 @@ public:
   bool flush();
 
   /**
-   * @brief Allocates a verification buffer from the event's matrix geometry.
+   * @brief Allocates complete physical-register snapshots for one MMA event.
    *
    * The event is copied into the buffer. A/B/C arrays are uninitialized.
    * No DUT result is allocated; transfer its ownership before submission.

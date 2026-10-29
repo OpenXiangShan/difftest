@@ -16,6 +16,9 @@
 
 #include "mma/backend/mma_backend.h"
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#include <cstring>
+
 void MmaHostDeleter::operator()(uint8_t *buffer) const {
   if (free_host) {
     free_host(buffer);
@@ -88,3 +91,18 @@ void MmaHostBuffer::release() {
   slot_count = 0;
   stride = 0;
 }
+
+bool compare_mma_rows(const void *lhs, const void *rhs, size_t rows, size_t row_bytes) {
+  if (rows == 0 || row_bytes == 0)
+    return true;
+  if (row_bytes == kMmaResultRowBytes) {
+    return std::memcmp(lhs, rhs, rows * row_bytes) == 0;
+  }
+  for (size_t row = 0; row < rows; ++row) {
+    if (std::memcmp(static_cast<const uint8_t *>(lhs) + row * kMmaResultRowBytes,
+                    static_cast<const uint8_t *>(rhs) + row * kMmaResultRowBytes, row_bytes) != 0)
+      return false;
+  }
+  return true;
+}
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT

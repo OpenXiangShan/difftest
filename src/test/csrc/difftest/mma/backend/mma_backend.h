@@ -59,6 +59,11 @@ private:
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
+static constexpr size_t kMmaSourceRowBytes = CONFIG_DIFF_AMU_TRLEN / 8;
+static constexpr size_t kMmaResultRowBytes = CONFIG_DIFF_AMU_ARLEN / 8;
+
+bool compare_mma_rows(const void *lhs, const void *rhs, size_t rows, size_t row_bytes);
+
 struct MmaVerificationBuffer;
 
 enum MmaElementType : uint8_t {

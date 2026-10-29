@@ -41,56 +41,60 @@ __device__ __forceinline__ void write_u32_device(uint8_t *data, size_t index0, s
 }
 
 template <class src1_t, class src2_t>
-__device__ __forceinline__ void mmacc_cute_int32_element(const uint8_t *src1, const uint8_t *src2, uint8_t *src3,
-                                                         int tile_m, int tile_k, int tile_n, int idx, bool saturate) {
+__device__ __forceinline__ void mmacc_cute_int32_element(const CudaMmaBatchDescriptor &desc, const uint8_t *src1,
+                                                         const uint8_t *src2, uint8_t *src3, int idx) {
   static_assert(sizeof(src1_t) == 1 && sizeof(src2_t) == 1, "CUTE integer MMA expects 8-bit source elements");
-  int total = tile_m * tile_n;
+  src1 += desc.src1_offset;
+  src2 += desc.src2_offset;
+  src3 += desc.src3_offset;
+
+  int total = desc.tile_m * desc.tile_n;
   if (idx >= total) {
     return;
   }
 
-  int i = idx / tile_n;
-  int j = idx % tile_n;
+  int i = idx / desc.tile_n;
+  int j = idx % desc.tile_n;
   int reduce_chunk_elems = kMmaReduceWidthBytes;
-  size_t src_row_bytes = static_cast<size_t>(tile_k);
-  size_t result_row_bytes = static_cast<size_t>(tile_n) * sizeof(uint32_t);
-  const uint8_t *src1_row = src1 + static_cast<size_t>(i) * src_row_bytes;
-  const uint8_t *src2_row = src2 + static_cast<size_t>(j) * src_row_bytes;
-  uint32_t acc_bits = read_u32_device(src3, i, j, result_row_bytes);
+  const uint8_t *src1_row = src1 + static_cast<size_t>(i) * kMmaSourceRowBytes;
+  const uint8_t *src2_row = src2 + static_cast<size_t>(j) * kMmaSourceRowBytes;
+  uint32_t acc_bits = read_u32_device(src3, i, j, kMmaResultRowBytes);
 
-  for (int k_base = 0; k_base < tile_k; k_base += reduce_chunk_elems) {
-    int valid_lanes = tile_k - k_base;
+  for (int k_base = 0; k_base < desc.tile_k; k_base += reduce_chunk_elems) {
+    int valid_lanes = desc.tile_k - k_base;
     if (valid_lanes > reduce_chunk_elems) {
       valid_lanes = reduce_chunk_elems;
     }
     acc_bits = cute_mma_model::reduce_int32_chunk(std::is_signed<src1_t>::value, std::is_signed<src2_t>::value,
                                                   src1_row + k_base, src2_row + k_base, valid_lanes,
-                                                  kMmaReduceWidthBytes, acc_bits, saturate);
+                                                  kMmaReduceWidthBytes, acc_bits, desc.sat);
   }
 
-  write_u32_device(src3, i, j, result_row_bytes, acc_bits);
+  write_u32_device(src3, i, j, kMmaResultRowBytes, acc_bits);
 }
 
-__device__ __forceinline__ void mfmacc_cute_fp32_element(cute_mma_model::FloatFormat format, const uint8_t *src1,
-                                                         const uint8_t *src2, uint8_t *src3, int tile_m, int tile_k,
-                                                         int tile_n, int idx) {
-  int total = tile_m * tile_n;
+__device__ __forceinline__ void mfmacc_cute_fp32_element(cute_mma_model::FloatFormat format,
+                                                         const CudaMmaBatchDescriptor &desc, const uint8_t *src1,
+                                                         const uint8_t *src2, uint8_t *src3, int idx) {
+  src1 += desc.src1_offset;
+  src2 += desc.src2_offset;
+  src3 += desc.src3_offset;
+
+  int total = desc.tile_m * desc.tile_n;
   if (idx >= total) {
     return;
   }
 
-  int i = idx / tile_n;
-  int j = idx % tile_n;
+  int i = idx / desc.tile_n;
+  int j = idx % desc.tile_n;
   int src_elem_bytes = cute_mma_model::source_bytes(format);
   int reduce_chunk_elems = kMmaReduceWidthBytes / src_elem_bytes;
-  size_t src_row_bytes = static_cast<size_t>(tile_k) * src_elem_bytes;
-  size_t result_row_bytes = static_cast<size_t>(tile_n) * sizeof(uint32_t);
-  const uint8_t *src1_row = src1 + static_cast<size_t>(i) * src_row_bytes;
-  const uint8_t *src2_row = src2 + static_cast<size_t>(j) * src_row_bytes;
-  uint32_t acc_bits = read_u32_device(src3, i, j, result_row_bytes);
+  const uint8_t *src1_row = src1 + static_cast<size_t>(i) * kMmaSourceRowBytes;
+  const uint8_t *src2_row = src2 + static_cast<size_t>(j) * kMmaSourceRowBytes;
+  uint32_t acc_bits = read_u32_device(src3, i, j, kMmaResultRowBytes);
 
-  for (int k_base = 0; k_base < tile_k; k_base += reduce_chunk_elems) {
-    int valid_lanes = tile_k - k_base;
+  for (int k_base = 0; k_base < desc.tile_k; k_base += reduce_chunk_elems) {
+    int valid_lanes = desc.tile_k - k_base;
     if (valid_lanes > reduce_chunk_elems) {
       valid_lanes = reduce_chunk_elems;
     }
@@ -99,7 +103,7 @@ __device__ __forceinline__ void mfmacc_cute_fp32_element(cute_mma_model::FloatFo
                                                  kMmaReduceWidthBytes, acc_bits);
   }
 
-  write_u32_device(src3, i, j, result_row_bytes, acc_bits);
+  write_u32_device(src3, i, j, kMmaResultRowBytes, acc_bits);
 }
 
 template <class src1_t, class src2_t>
@@ -112,8 +116,7 @@ __global__ void mmacc_cute_int32_batch_kernel(const CudaMmaBatchDescriptor *desc
 #else
   for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < desc.tile_m * desc.tile_n;
        idx += blockDim.x * gridDim.x) {
-    mmacc_cute_int32_element<src1_t, src2_t>(src1 + desc.src1_offset, src2 + desc.src2_offset, src3 + desc.src3_offset,
-                                             desc.tile_m, desc.tile_k, desc.tile_n, idx, desc.sat);
+    mmacc_cute_int32_element<src1_t, src2_t>(desc, src1, src2, src3, idx);
   }
 #endif
 }
@@ -123,8 +126,7 @@ __global__ void mfmacc_cute_fp32_batch_kernel(cute_mma_model::FloatFormat format
                                               const uint8_t *src2, uint8_t *src3) {
   const CudaMmaBatchDescriptor &desc = descriptors[blockIdx.y];
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  mfmacc_cute_fp32_element(format, src1 + desc.src1_offset, src2 + desc.src2_offset, src3 + desc.src3_offset,
-                           desc.tile_m, desc.tile_k, desc.tile_n, idx);
+  mfmacc_cute_fp32_element(format, desc, src1, src2, src3, idx);
 }
 
 template <cute_mma_model::FloatFormat Format>
@@ -132,8 +134,7 @@ __global__ void mfmacc_cute_fp32_specialized_kernel(const CudaMmaBatchDescriptor
                                                     const uint8_t *src2, uint8_t *src3) {
   const CudaMmaBatchDescriptor &desc = descriptors[blockIdx.y];
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  mfmacc_cute_fp32_element(Format, src1 + desc.src1_offset, src2 + desc.src2_offset, src3 + desc.src3_offset,
-                           desc.tile_m, desc.tile_k, desc.tile_n, idx);
+  mfmacc_cute_fp32_element(Format, desc, src1, src2, src3, idx);
 }
 
 static bool report_error(const char *what, cudaError_t err) {

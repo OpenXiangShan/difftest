@@ -654,14 +654,14 @@ int Difftest::step() {
       Info("------ DUT Result ------\n");
       for (int i = 0; i < buffer->amu_event.mtilem; i++) {
         for (int j = 0; j < buffer->amu_event.mtilen; j++) {
-          Info("%08x ", ((uint32_t *)(buffer->dut_result.get()))[i * buffer->amu_event.mtilen + j]);
+          Info("%08x ", ((uint32_t *)(buffer->dut_result.get()))[i * (kMmaResultRowBytes / sizeof(uint32_t)) + j]);
         }
         Info("\n");
       }
       Info("------ REF Result ------\n");
       for (int i = 0; i < buffer->amu_event.mtilem; i++) {
         for (int j = 0; j < buffer->amu_event.mtilen; j++) {
-          Info("%08x ", ((uint32_t *)(buffer->src3))[i * buffer->amu_event.mtilen + j]);
+          Info("%08x ", ((uint32_t *)(buffer->src3))[i * (kMmaResultRowBytes / sizeof(uint32_t)) + j]);
         }
         Info("\n");
       }
