@@ -20,3 +20,36 @@ GsimSim::GsimSim() : dut(new SSimTop) {}
 GsimSim::~GsimSim() {
   delete dut;
 }
+
+#ifndef GSIM_TRACE_FST
+static void warn_waveform_unsupported() {
+  static bool warned = false;
+  if (!warned) {
+    warned = true;
+    fprintf(stderr,
+            "[gsim] warning: waveform requested, but this emu was built without EMU_TRACE/--trace-fst; waveform APIs "
+            "become no-ops\n");
+  }
+}
+#endif
+
+void GsimSim::waveform_init(uint64_t cycles) {
+  waveform_init(cycles, create_noop_filename(".fst"));
+}
+
+void GsimSim::waveform_init(uint64_t cycles, const char *filename) {
+  (void)cycles;
+#ifdef GSIM_TRACE_FST
+  dut->setWaveformPath(filename);
+  dut->enableWaveform();
+#else
+  (void)filename;
+  warn_waveform_unsupported();
+#endif
+}
+
+void GsimSim::waveform_tick() {
+#ifdef GSIM_TRACE_FST
+  dut->dump();
+#endif
+}
