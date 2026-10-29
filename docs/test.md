@@ -321,6 +321,45 @@ make pldm-run SYNTHESIS=1 \
   PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
 ```
 
+**Segmented RAM loading**
+
+Regenerate the RTL with the updated memory helper, then build with the following
+macro to skip the byte-by-byte RTL `$fread` initializer. RAM DPI must be disabled; `+workload` still initializes
+the software/REF memory:
+
+```bash
+make pldm-build NUM_CORES=1 DISABLE_DIFFTEST_RAM_DPIC=1 \
+  WITH_CHISELDB=0 WITH_CONSTANTIN=0 DIFFTEST_PERFCNT=1 \
+  PLDM_EXTRA_MACRO="+define+PLDM_NATIVE_LOAD"
+```
+
+Convert the binary image to `%pd_raw2` files on the PLDM host. Repeat `--memory`
+for **every** RAM lane helper in the generated RTL:
+
+```bash
+python3 scripts/palladium/load_memory.py "0x0:$WORKLOAD" --ram-size 16 \
+  --memory tb_top.sim.cpu.memory.ram.rdata_mem.helper_0 \
+  --memory tb_top.sim.cpu.memory.ram.rdata_mem.helper_1 \
+  --memory tb_top.sim.cpu.memory.ram.rdata_mem.helper_2 \
+  --memory tb_top.sim.cpu.memory.ram.rdata_mem.helper_3 \
+  --output "$PWD/memory-load"
+PLDM_MEM_LOAD="$PWD/memory-load/load.tcl" make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=16GB +diff=$REF_SO"
+```
+
+`PLDM_MEM_LOAD` is sourced after `run -swap` and before CPU execution, including
+in `pldm-debug`. The generated RAM size, `--ram-size` (GiB), and `+ram_size` must
+match. Images up to 16 GiB are supported; arrays above 8 GiB use two 64-bit banks
+so each array stays below Xcelium's 2^31-element limit.
+
+To load selected image regions, replace `0x0:$WORKLOAD` with multiple
+`OFFSET:FILE` segments. Offsets are **bytes from the RAM base**, must be aligned
+to 8 bytes, and must match the merged binary passed with `+workload`. The script
+keeps zero bytes within each segment, pads its final word with zeros, and splits
+at the 8 GiB bank boundary. Omitted regions are left untouched (`-nofill`).
+It writes big-endian 64-bit raw2 words at bank-local **word** indices, with the
+same full address stream for every helper; do not deinterleave lane files.
+
 **Debug and waveforms**
 
 `pldm-debug` uses the same runtime arguments as `pldm-run`, but adds FSDB
