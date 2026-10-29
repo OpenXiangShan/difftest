@@ -72,6 +72,9 @@ private:
   bool c2h_sram_ = true;
   bool c2h_axi_dma_ = false;
   bool c2h_verify_first_bank_ = true;
+  // Read the workload back after H2C to catch a silently dropped write.
+  // Opt-in: it adds one DMA read per chunk to the upload path.
+  bool h2c_verify_ = false;
   // Bytes per gbus_dma_read when draining a frozen bank.  The 256-byte default
   // is the size verified on the board; larger requests (up to the 1024-byte
   // bank) are expected to arrive as consecutive AXI3 bursts, but were not yet
@@ -111,7 +114,10 @@ private:
   bool c2h_stream_ready_ = false;
   uint32_t c2h_stream_frames_ = 0;
   uint32_t c2h_stream_frame_bytes_ = 0;
-  uint32_t c2h_stream_min_frames_ = 64;
+  uint32_t c2h_stream_min_frames_ = 0;
+  // True when the operator pinned the threshold instead of letting it
+  // default to the ring depth.
+  bool c2h_stream_min_frames_set_ = false;
   uint32_t c2h_header_bytes_ = 0;
   uint64_t c2h_reg_calls_ = 0;
   uint64_t c2h_reg_us_ = 0;
