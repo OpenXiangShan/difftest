@@ -55,7 +55,11 @@ constexpr uint32_t GBUS_C2H_HDR_FLAG_PRESENT = 1U << 31;
 constexpr uint32_t GBUS_C2H_HDR_FLAG_HEADER = 1U << 30;
 constexpr uint32_t GBUS_C2H_HEADER_BYTES = 64;
 constexpr uint32_t GBUS_C2H_BAD_CTRL_VALID = 1U << 31;
-constexpr uint64_t GBUS_C2H_APERTURE = 0x0ffc0000ULL;
+// The streaming ring owns the top 256 KiB of port 0.  Bitstreams that predate
+// it still expose the frozen bank at the top 4 KiB, so the two protocols keep
+// separate bases instead of assuming the aperture is the same in both.
+constexpr uint64_t GBUS_C2H_STREAM_APERTURE = 0x0ffc0000ULL;
+constexpr uint64_t GBUS_C2H_FROZEN_APERTURE = 0x0ffff000ULL;
 constexpr uint64_t GBUS_REG_C2H_DATA = 0x2000;
 constexpr uint32_t GBUS_C2H_STAGE_WORDS = 256;
 // Former frozen bank size.  Retained for the legacy register ABI; the
@@ -73,6 +77,9 @@ constexpr uint32_t GBUS_C2H_STATUS_FILLING = 1U << 7;
 // Streaming engine: bit 7 reports capture-enable, bit 5 data-available.
 constexpr uint32_t GBUS_C2H_STATUS_ENABLED = 1U << 7;
 constexpr uint32_t GBUS_C2H_STATUS_HAS_DATA = 1U << 6;
+// Streaming engine only: a complete frame is published (RTL status bit 5).
+// Bit 6 is the live stream VALID line there, not an occupancy flag.
+constexpr uint32_t GBUS_C2H_STATUS_DATA_AVAILABLE = 1U << 5;
 
 constexpr uint32_t GBUS_C2H_CTRL_START_FILL = 1U << 0;
 constexpr uint32_t GBUS_C2H_CTRL_ACK = 1U << 1;
@@ -138,7 +145,7 @@ GbusTransport::GbusTransport() {
   port_ = static_cast<uint8_t>(env_u64("GBUS_PORT", 0, 255));
   config_base_ = env_u64("GBUS_CONFIG_BASE", 0x1000ULL, 0xc000);
   // DMA uses the raw port-local address; CPU DRAM remapping is downstream.
-  ddr_base_ = env_u64("GBUS_DDR_BASE", 0x0ULL, GBUS_C2H_APERTURE);
+  ddr_base_ = env_u64("GBUS_DDR_BASE", 0x0ULL, GBUS_C2H_STREAM_APERTURE);
   if (config_base_ < 0x1000 || config_base_ % 4 || ddr_base_ % 32) {
     std::fprintf(stderr, "[fpga-host] invalid GBus config/DDR base alignment or range\n");
     std::exit(EXIT_FAILURE);
@@ -170,12 +177,17 @@ GbusTransport::GbusTransport() {
     std::fprintf(stderr, "[fpga-host] DMA chunk must be 32..1024 bytes, multiple of 32\n");
     std::exit(EXIT_FAILURE);
   }
-  h2c_chunk_bytes_ = static_cast<uint32_t>(env_u64("GBUS_H2C_CHUNK_BYTES", 256, 1024));
+  // The runtime accepts up to 0x7FFFF bytes per call, so a 1 MiB workload only
+  // needs a handful of writes instead of one per KiB.  0x7FFFF rounded down to
+  // the required 32-byte alignment is the largest legal chunk.
+  constexpr uint32_t GBUS_H2C_MAX_CHUNK = 0x7FFE0;
+  h2c_chunk_bytes_ = static_cast<uint32_t>(env_u64("GBUS_H2C_CHUNK_BYTES", 256, GBUS_H2C_MAX_CHUNK));
   if (!h2c_chunk_bytes_ || h2c_chunk_bytes_ % 32) {
-    std::fprintf(stderr, "[fpga-host] H2C chunk must be 32..1024 bytes, multiple of 32\n");
+    std::fprintf(stderr, "[fpga-host] H2C chunk must be 32..%u bytes, multiple of 32\n", GBUS_H2C_MAX_CHUNK);
     std::exit(EXIT_FAILURE);
   }
   c2h_verify_first_bank_ = env_u64("GBUS_C2H_VERIFY_FIRST_BANK", 1, 1) != 0;
+  h2c_verify_ = env_u64("GBUS_H2C_VERIFY", 0, 1) != 0;
   timing_ = env_u64("GBUS_TIMING", 0, 1) != 0;
   // GBUS_C2H_BLOCK_READS=1 groups the per-bank register reads into single
   // runtime calls, but only after the probe in c2h_drain_sram_fifo() proves
@@ -184,7 +196,10 @@ GbusTransport::GbusTransport() {
   c2h_fast_fill_ = env_u64("GBUS_C2H_FAST_FILL", 0, 1) != 0;
   c2h_aperture_header_ = env_u64("GBUS_C2H_APERTURE_HEADER", 0, 1) != 0;
   c2h_stream_ = env_u64("GBUS_C2H_STREAM", 1, 1) != 0;
-  c2h_stream_min_frames_ = static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 64, 4096));
+  // Default to draining a full ring: the batch threshold is resolved against the
+  // ring size once the streaming engine reports it, so this is only the floor.
+  c2h_stream_min_frames_ = static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 0, 4096));
+  c2h_stream_min_frames_set_ = c2h_stream_min_frames_ != 0;
   c2h_pingpong_ = env_u64("GBUS_C2H_PINGPONG", 0, 1) != 0;
   c2h_idle_timeout_sec_ = static_cast<uint32_t>(env_u64("GBUS_C2H_IDLE_TIMEOUT_SEC", 30, 3600));
   // Multi-word capability probes are opt-in on unverified runtime releases.
@@ -289,17 +304,18 @@ void GbusTransport::c2h_read_block(uint64_t offset, uint32_t words, std::vector<
 }
 
 bool GbusTransport::c2h_probe_gbd1_block_reads() {
-  // The block spans status/control/ID/sequence/aperture/capacity/AR evidence.
-  // ID, aperture and capacity are distinct constants, so a runtime that
-  // ignores the address or the count cannot reproduce all three.
   // ID, aperture and capacity must all reproduce through both a grouped and a
   // single-word read, so a runtime that ignores the count or the address cannot
-  // pass.  Capacity is compared against this bitstream's own value instead of a
+  // pass.  Capacity is compared against this bitstream's own value rather than a
   // compile-time constant: the streaming ring is much larger than the legacy
   // 1 KiB bank, and a stale constant would reject every valid runtime.
   std::vector<uint32_t> words;
   c2h_read_block(GBUS_REG_C2H_STATUS, 13, words);
-  if (words[2] != GBUS_C2H_DMA_ID_MAGIC || words[4] != GBUS_C2H_APERTURE || words[5] == 0)
+  // Either base is legitimate: this probe only has to prove that the runtime
+  // honours a multi-word count and an address, so it accepts whichever aperture
+  // the bitstream reports and then checks that single-word reads agree.
+  const bool known_base = words[4] == GBUS_C2H_STREAM_APERTURE || words[4] == GBUS_C2H_FROZEN_APERTURE;
+  if (words[2] != GBUS_C2H_DMA_ID_MAGIC || !known_base || words[5] == 0)
     return false;
   return c2h_reg_read(GBUS_REG_C2H_ID) == words[2] && c2h_reg_read(GBUS_REG_C2H_DMA_BASE) == words[4] &&
          c2h_reg_read(GBUS_REG_C2H_CAPACITY) == words[5];
@@ -596,10 +612,15 @@ bool GbusTransport::c2h_probe_stream() {
     return false;
   const uint32_t ring = c2h_reg_read(GBUS_REG_C2H_CAPACITY);
   const uint64_t base = c2h_reg_read(GBUS_REG_C2H_DMA_BASE);
-  if (base != GBUS_C2H_APERTURE || ring == 0 || ring % GBUS_C2H_STREAM_FRAME_BYTES != 0)
+  if (base != GBUS_C2H_STREAM_APERTURE || ring == 0 || ring % GBUS_C2H_STREAM_FRAME_BYTES != 0)
     return false;
   c2h_stream_frames_ = ring / GBUS_C2H_STREAM_FRAME_BYTES;
   c2h_stream_frame_bytes_ = GBUS_C2H_STREAM_FRAME_BYTES;
+  // A batch cannot exceed the ring, and draining at the ring depth is what
+  // amortises the fixed per-call cost.  Leave a small margin so the producer is
+  // not forced to stall exactly at the boundary.
+  if (!c2h_stream_min_frames_set_ || c2h_stream_min_frames_ > c2h_stream_frames_)
+    c2h_stream_min_frames_ = c2h_stream_frames_ > 8 ? c2h_stream_frames_ - 8 : c2h_stream_frames_;
   return true;
 }
 
@@ -625,7 +646,7 @@ void GbusTransport::c2h_drain_stream_frames() {
 
   const uint64_t aperture = c2h_reg_read(GBUS_REG_C2H_DMA_BASE);
   const uint32_t ring_bytes = c2h_reg_read(GBUS_REG_C2H_CAPACITY);
-  if (aperture != GBUS_C2H_APERTURE || ring_bytes != c2h_stream_frames_ * c2h_stream_frame_bytes_)
+  if (aperture != GBUS_C2H_STREAM_APERTURE || ring_bytes != c2h_stream_frames_ * c2h_stream_frame_bytes_)
     fail("invalid aperture/ring", 0);
   if (dma_fpga_ != 2 || fpga_ != 2 || port_ != 0 || channel_ != 0 || ddr_instance_ != 0)
     fail("invalid port-0 DMA topology", 0);
@@ -658,16 +679,31 @@ void GbusTransport::c2h_drain_stream_frames() {
     const uint32_t status = c2h_reg_read(GBUS_REG_C2H_STATUS);
     check_status(status);
 
-    // One grouped read returns available, the read pointer and the write
-    // pointer: everything needed to size and address the batch.
-    if (!c2h_block_reads_) {
-      // The three counters are contiguous, so the block path is always valid
-      // on a streaming bitstream; require it rather than paying three reads.
-      fail("streaming mode requires grouped register reads", status);
+    // STATUS bit 5 already says whether any complete frame is published, so an
+    // empty poll needs no counter read at all.  Reading the counter block on
+    // every poll cost about a third of the loop, and most polls find nothing.
+    if (!(status & GBUS_C2H_STATUS_DATA_AVAILABLE)) {
+      // Arming is lost across the startup stream-reset window; re-assert it
+      // until the readback shows capture really is on.
+      if (!(status & GBUS_C2H_STATUS_ENABLED))
+        c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_START_FILL);
+      if (c2h_idle_timeout_sec_ && Clock::now() - last_progress >= std::chrono::seconds(c2h_idle_timeout_sec_)) {
+        const uint32_t last = c2h_reg_read(GBUS_REG_C2H_STATUS);
+        fail(last & GBUS_C2H_STATUS_ENABLED ? "no capture progress" : "capture never armed", last);
+      }
+      usleep(c2h_poll_us_);
+      continue;
     }
+
+    // The streaming loop needs the two counters in one call, and the startup
+    // probe has already established that this runtime honours a multi-word
+    // count.  A grouped read costs a fixed overhead plus a per-word cost, so
+    // the write pointer is left out: nothing reads it.
+    if (!c2h_block_reads_)
+      fail("streaming mode requires grouped register reads", status);
     std::vector<uint32_t> words;
-    c2h_read_block(GBUS_REG_C2H_AVAILABLE, 3, words);
-    if (words.size() != 3)
+    c2h_read_block(GBUS_REG_C2H_AVAILABLE, 2, words);
+    if (words.size() != 2)
       fail("counter read failed", status);
     const uint32_t available = words[0];
     uint32_t rd_ptr = words[1];
@@ -679,20 +715,13 @@ void GbusTransport::c2h_drain_stream_frames() {
     }
 
     if (available == 0) {
-      // Arming is lost across the startup stream-reset window; re-assert it
-      // until the readback shows capture really is on.
-      if (!(status & GBUS_C2H_STATUS_ENABLED)) {
-        c2h_reg_write(GBUS_REG_C2H_CTRL, GBUS_C2H_CTRL_START_FILL);
-      }
-      if (c2h_idle_timeout_sec_ && Clock::now() - last_progress >= std::chrono::seconds(c2h_idle_timeout_sec_)) {
-        const uint32_t last = c2h_reg_read(GBUS_REG_C2H_STATUS);
-        fail(last & GBUS_C2H_STATUS_ENABLED ? "no capture progress" : "capture never armed", last);
-      }
       usleep(c2h_poll_us_);
       continue;
     }
-    // Wait for a worthwhile batch, but never strand a tail: once the producer
-    // has stopped publishing, ship whatever is left.
+    // Wait until the ring is worth draining, but never strand a tail: once the
+    // producer stops publishing, ship whatever is left.  Draining at the ring
+    // depth rather than at an arbitrary fraction amortises the fixed per-call
+    // cost over the largest batch the hardware can hold.
     if (available < c2h_stream_min_frames_ && Clock::now() - last_change < std::chrono::milliseconds(20)) {
       usleep(c2h_poll_us_);
       continue;
@@ -716,10 +745,25 @@ void GbusTransport::c2h_drain_stream_frames() {
       fail("DMA capture failed", status);
 
     const uint64_t dispatch_begin = monotonic_us();
-    accumulator.insert(accumulator.end(), block.begin(), block.end());
-    while (accumulator.size() >= sizeof(DmaDiffPackge) && alive()) {
-      c2h_dispatch_range(accumulator.data(), sizeof(DmaDiffPackge));
-      accumulator.erase(accumulator.begin(), accumulator.begin() + sizeof(DmaDiffPackge));
+    // Dispatch straight out of the DMA buffer.  A batch starts at a frame
+    // boundary, so it only continues an unfinished record when the previous
+    // batch left a partial one; that tail is small enough to prepend.
+    size_t consumed = 0;
+    if (!accumulator.empty()) {
+      accumulator.insert(accumulator.end(), block.begin(), block.end());
+      while (accumulator.size() - consumed >= sizeof(DmaDiffPackge) && alive()) {
+        c2h_dispatch_range(accumulator.data() + consumed, sizeof(DmaDiffPackge));
+        consumed += sizeof(DmaDiffPackge);
+      }
+      accumulator.erase(accumulator.begin(), accumulator.begin() + static_cast<ptrdiff_t>(consumed));
+    } else {
+      while (block.size() - consumed >= sizeof(DmaDiffPackge) && alive()) {
+        c2h_dispatch_range(block.data() + consumed, sizeof(DmaDiffPackge));
+        consumed += sizeof(DmaDiffPackge);
+      }
+      // A frame is 768 B and a record is 96 B, so a batch normally ends exactly
+      // on a record boundary; keep only a genuinely partial tail.
+      accumulator.assign(block.begin() + static_cast<ptrdiff_t>(consumed), block.end());
     }
     c2h_dispatch_us_ += monotonic_us() - dispatch_begin;
 
@@ -831,7 +875,7 @@ void GbusTransport::c2h_drain_dma_window() {
   };
   const uint64_t aperture = c2h_reg_read(GBUS_REG_C2H_DMA_BASE);
   const uint32_t capacity = c2h_reg_read(GBUS_REG_C2H_CAPACITY);
-  if (aperture != GBUS_C2H_APERTURE || capacity != GBUS_C2H_DATA_BYTES)
+  if (aperture != GBUS_C2H_FROZEN_APERTURE || capacity != GBUS_C2H_DATA_BYTES)
     fail("invalid aperture/capacity", 0, 0);
   if (c2h_axi_dma_ && (dma_fpga_ != 2 || fpga_ != 2 || port_ != 0 || channel_ != 0 || ddr_instance_ != 0))
     fail("invalid port-0 DMA topology", 0, 0);
@@ -1029,7 +1073,7 @@ void GbusTransport::c2h_drain_dma_window() {
       sequence = hdr_seq;
       if ((hdr_flags & (GBUS_C2H_HDR_FLAG_PRESENT | GBUS_C2H_HDR_FLAG_HEADER)) !=
               (GBUS_C2H_HDR_FLAG_PRESENT | GBUS_C2H_HDR_FLAG_HEADER) ||
-          hdr_base != GBUS_C2H_APERTURE + c2h_header_bytes_ || hdr_capacity != GBUS_C2H_DATA_BYTES ||
+          hdr_base != GBUS_C2H_FROZEN_APERTURE + c2h_header_bytes_ || hdr_capacity != GBUS_C2H_DATA_BYTES ||
           hdr_words * 4 != valid || (have_sequence && hdr_seq != last_sequence + 1U) ||
           (hdr_status & GBUS_C2H_STATUS_FILLING) || !(hdr_status & GBUS_C2H_STATUS_FROZEN))
         fail("snapshot header does not describe the frozen bank", hdr_status, hdr_seq);
@@ -1390,7 +1434,8 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
     std::fprintf(stderr, "[fpga-host] GBus DMA workload requires initialized transport and non-empty payload\n");
     std::exit(EXIT_FAILURE);
   }
-  if (size % 32 || size > GBUS_C2H_APERTURE - ddr_base_ || size > std::numeric_limits<size_t>::max() || port_ != 0) {
+  if (size % 32 || size > GBUS_C2H_STREAM_APERTURE - ddr_base_ || size > std::numeric_limits<size_t>::max() ||
+      port_ != 0) {
     std::fprintf(stderr, "[fpga-host] GBus padded H2C range overlaps reserved page, is unaligned or exceeds port 0\n");
     std::exit(EXIT_FAILURE);
   }
@@ -1420,13 +1465,14 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
                  static_cast<unsigned long long>(h2c_requests), static_cast<long long>(h2c_us),
                  h2c_requests ? static_cast<double>(h2c_us) / h2c_requests : 0.0);
   }
-  // The vendor write path reports success for chunks that did not land, so the
-  // DDR content is verified instead of trusted.  A stale image is otherwise
-  // indistinguishable from a CPU bug: the reference runs the intended file while
-  // the DUT executes whatever the DDR happens to hold.
+  // Optional DDR readback.  The vendor write path reports success for chunks
+  // that did not land, so a stale image looks exactly like a CPU bug: the
+  // reference runs the intended file while the DUT executes whatever the DDR
+  // holds.  Verifying costs one extra DMA read per chunk and changes the call
+  // sequence, so it is opt-in rather than always on.
   const uint64_t verify_chunk = 1ULL << 18; // 256 KiB, well under the 0x7FFFF API cap
   uint64_t mismatched = 0, patched = 0;
-  for (uint64_t offset = 0; offset < size; offset += verify_chunk) {
+  for (uint64_t offset = 0; h2c_verify_ && offset < size; offset += verify_chunk) {
     const size_t count = static_cast<size_t>((size - offset) < verify_chunk ? (size - offset) : verify_chunk);
     for (unsigned attempt = 0; attempt < 3; ++attempt) {
       std::vector<uint8_t> back;
@@ -1451,9 +1497,10 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
       ++patched;
     }
   }
-  std::fprintf(stderr, "[fpga-host] GBus H2C readback verified bytes=%llu chunks_failed=%llu patched=%llu\n",
-               static_cast<unsigned long long>(size), static_cast<unsigned long long>(mismatched),
-               static_cast<unsigned long long>(patched));
+  if (h2c_verify_)
+    std::fprintf(stderr, "[fpga-host] GBus H2C readback verified bytes=%llu chunks_failed=%llu patched=%llu\n",
+                 static_cast<unsigned long long>(size), static_cast<unsigned long long>(mismatched),
+                 static_cast<unsigned long long>(patched));
 
   std::fprintf(stderr, "[fpga-host] GBus DMA workload queued %llu bytes\n", static_cast<unsigned long long>(size));
 }
