@@ -21,12 +21,12 @@
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 #include <cstdio>
-#include <cstring>
 
 static constexpr size_t kMmaBackpressurePendingLimit =
     static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR;
 
-MmaVerifier::MmaVerifier() {
+MmaVerifier::MmaVerifier()
+    : result_pool(std::make_shared<MmaResultPool>(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES, kMmaBackpressurePendingLimit + 2)) {
   Assert(CONFIG_DIFF_MMA_BATCH_SIZE > 0, "CONFIG_DIFF_MMA_BATCH_SIZE must be positive");
   Assert(CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR > 0, "CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR must be positive");
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
@@ -125,6 +125,10 @@ MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
     throw;
   }
   return buffer.release();
+}
+
+MatrixResult MmaVerifier::allocate_result() {
+  return result_pool->acquire();
 }
 
 void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
