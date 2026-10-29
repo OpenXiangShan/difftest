@@ -295,6 +295,8 @@ void fpga_init() {
   }
 #endif
 
+  difftest_init_checkpoint(args);
+
   xdma_device->fpga_io(HOST_IO_RESET, false);
 }
 

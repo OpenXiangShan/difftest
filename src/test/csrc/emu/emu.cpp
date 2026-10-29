@@ -178,6 +178,7 @@ Emulator::Emulator(int argc, const char *argv[])
   // init difftest
   auto ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
   difftest_init(args.enable_diff, ref_ramsize);
+  difftest_init_checkpoint(args, args.take_cpt_on_fault && args.enable_fork);
 
   // init difftest traces
   if (args.trace_name) {
@@ -245,7 +246,7 @@ Emulator::~Emulator() {
   if (args.enable_fork && !is_fork_child()) {
     bool need_wakeup = trapCode != STATE_GOODTRAP && trapCode != STATE_LIMIT_EXCEEDED && trapCode != STATE_SIG;
     if (need_wakeup) {
-      lightsss->wakeup_child(cycles);
+      lightsss->wakeup_child(cycles, args.take_cpt_on_fault && difftest_failed);
     } else {
       lightsss->do_clear();
     }
@@ -577,6 +578,7 @@ int Emulator::tick() {
   }
 
   trapCode = difftest_nstep(step, args.enable_diff);
+  difftest_failed = args.enable_diff && trapCode == STATE_ABORT;
 
   if (trapCode != STATE_RUNNING) {
 #ifdef FUZZER_LIB
@@ -818,12 +820,19 @@ void Emulator::snapshot_load(const char *filename) {
 void Emulator::fork_child_init() {
   dut_ptr->atClone();
 
+#ifndef CONFIG_NO_DIFFTEST
+  if (lightsss->take_cpt_on_fault())
+    difftest_take_checkpoint("fault");
+#endif
+
   FORK_PRINTF("the oldest checkpoint start to dump wave and dump nemu log...\n")
 
+#if !defined(VERILATOR) || VM_TRACE == 1
   dut_ptr->waveform_init(args.enable_waveform_full ? 2 * cycles : cycles);
   // override output range config, force dump wave
   force_dump_wave = true;
   args.enable_waveform = true;
+#endif
 
 #ifndef CONFIG_NO_DIFFTEST
 #ifdef ENABLE_SIMULATOR_DEBUG_INFO

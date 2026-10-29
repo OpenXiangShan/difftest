@@ -203,7 +203,8 @@ public:
   f(ref_get_msync_event_other_info, difftest_get_msync_event_other_info, void, void*)                       \
   f(ref_amu_exec, difftest_amu_exec, int, void*, void*)                                                     \
   f(ref_amu_exec_hash, difftest_amu_exec_hash, int, void*, void*)                                           \
-  f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)
+  f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)                               \
+  f(ref_trigger_checkpoint, difftest_trigger_checkpoint, void, const char *)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -528,6 +529,14 @@ public:
 
   inline int get_status() {
     return ref_status ? ref_status() : 0;
+  }
+
+  inline bool supports_checkpoint() const {
+    return ref_trigger_checkpoint != nullptr;
+  }
+
+  inline void trigger_checkpoint(const char *base_filepath) {
+    ref_trigger_checkpoint(base_filepath);
   }
 
 private:

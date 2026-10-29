@@ -101,6 +101,8 @@ struct CommonArgs {
   bool dump_coverage = false;
   bool image_as_footprints = false;
   bool overwrite_nbytes_autoset = false;
+  bool take_cpt_on_fault = false;
+  uint64_t take_cpt_interval = UINT64_MAX; // -1 disables periodic checkpoints
 };
 
 CommonArgs parse_args(int argc, const char *argv[]);

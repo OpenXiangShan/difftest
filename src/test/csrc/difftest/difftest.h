@@ -123,6 +123,10 @@ public:
   inline DifftestTrapEvent *get_trap_event() {
     return &(dut->trap);
   }
+
+  inline bool get_has_commit() const {
+    return num_commit > 0;
+  }
   uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
@@ -290,6 +294,9 @@ private:
 
 extern Difftest **difftest;
 int difftest_init(bool enabled, size_t ramsize);
+struct CommonArgs;
+void difftest_init_checkpoint(const CommonArgs &args, bool on_fault = false);
+void difftest_take_checkpoint(const char *reason);
 
 int difftest_nstep(int step, bool enable_diff);
 void difftest_switch_zone();

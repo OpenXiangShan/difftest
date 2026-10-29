@@ -32,6 +32,7 @@
 typedef struct shinfo {
   bool flag;
   bool notgood;
+  bool take_cpt;
   uint64_t endCycles;
   pid_t oldest;
 } shinfo;
@@ -64,8 +65,11 @@ class LightSSS {
 
 public:
   int do_fork();
-  int wakeup_child(uint64_t cycles);
+  int wakeup_child(uint64_t cycles, bool take_cpt = false);
   bool is_child();
+  bool take_cpt_on_fault() const {
+    return forkshm.info->take_cpt;
+  }
   int do_clear();
   uint64_t get_end_cycles() {
     return forkshm.info->endCycles;
