@@ -30,8 +30,8 @@ struct MmaHostDeleter {
   void operator()(uint8_t *buffer) const;
 };
 
-// Default empty pools use ordinary arrays. A backend may initialize FIFO slots
-// with its own allocator; acquire/recycle are thread-safe.
+// Default empty pools use ordinary arrays. A backend may initialize slots with
+// its own allocator; acquire/recycle are thread-safe.
 // allocate/release require all users to stop and all acquired storage to return.
 class MmaHostBuffer {
 public:
@@ -54,7 +54,10 @@ public:
 
 private:
   std::mutex mutex;
-  std::queue<uint8_t *> free_slots;
+  std::vector<uint8_t> slot_busy;
+  size_t active_slots = 0;
+  size_t leased_slots = 0;
+  size_t next_slot = 0;
 };
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT

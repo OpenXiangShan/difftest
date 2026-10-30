@@ -17,6 +17,7 @@
 #include "mma/backend/mma_backend.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#include <algorithm>
 #include <cstring>
 
 void MmaHostDeleter::operator()(uint8_t *buffer) const {
@@ -39,9 +40,8 @@ bool MmaHostBuffer::allocate(size_t bytes, size_t slot_count, uint8_t *(*allocat
       return false;
     }
   }
-  for (size_t i = 0; i < slot_count; ++i) {
-    free_slots.push(slots.get() + i * bytes);
-  }
+  slot_busy.assign(slot_count, 0);
+  active_slots = std::min(slot_count, static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) + 2);
   return true;
 }
 
@@ -64,10 +64,23 @@ size_t MmaHostBuffer::slot(const uint8_t *buffer) const {
 uint8_t *MmaHostBuffer::acquire(size_t bytes) {
   if (bytes == stride && slots) {
     std::lock_guard<std::mutex> lock(mutex);
-    if (!free_slots.empty()) {
-      auto *buffer = free_slots.front();
-      free_slots.pop();
-      return buffer;
+    // Cycle through a small prefix in address order for contiguous DMA. Grow
+    // only when all active slots are leased, retaining the full pool capacity.
+    if (leased_slots == active_slots && active_slots < slot_count) {
+      next_slot = active_slots;
+      active_slots = std::min(slot_count, active_slots + CONFIG_DIFF_MMA_BATCH_SIZE);
+    }
+    if (leased_slots < active_slots) {
+      while (slot_busy[next_slot]) {
+        if (++next_slot == active_slots)
+          next_slot = 0;
+      }
+      const size_t slot = next_slot;
+      slot_busy[slot] = 1;
+      ++leased_slots;
+      if (++next_slot == active_slots)
+        next_slot = 0;
+      return slots.get() + slot * stride;
     }
   }
   // Preserve submission backpressure; exhausted pools do not wait.
@@ -75,19 +88,22 @@ uint8_t *MmaHostBuffer::acquire(size_t bytes) {
 }
 
 void MmaHostBuffer::recycle(uint8_t *buffer) {
-  if (slot(buffer) == invalid_slot) {
+  const size_t index = slot(buffer);
+  if (index == invalid_slot) {
     delete[] buffer;
     return;
   }
   std::lock_guard<std::mutex> lock(mutex);
-  free_slots.push(buffer);
+  slot_busy[index] = 0;
+  --leased_slots;
 }
 
 void MmaHostBuffer::release() {
   slots.reset();
-  while (!free_slots.empty()) {
-    free_slots.pop();
-  }
+  slot_busy.clear();
+  active_slots = 0;
+  leased_slots = 0;
+  next_slot = 0;
   slot_count = 0;
   stride = 0;
 }
