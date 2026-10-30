@@ -153,6 +153,12 @@ Emulator::Emulator(int argc, const char *argv[])
     copy_ram(args.copy_ram_offset);
   }
 
+#ifdef WITH_EXTERNAL_MEMORY_BACKEND
+  if (!external_memory_backend_bind(PMEM_BASE)) {
+    printf("Warning: failed to bind external memory backend to difftest RAM\n");
+  }
+#endif
+
 #ifdef ENABLE_CHISEL_DB
   init_db(args.dump_db, (args.select_db != NULL), args.select_db);
 #endif
