@@ -187,7 +187,9 @@ GbusTransport::GbusTransport() {
     std::exit(EXIT_FAILURE);
   }
   c2h_verify_first_bank_ = env_u64("GBUS_C2H_VERIFY_FIRST_BANK", 1, 1) != 0;
-  h2c_verify_ = env_u64("GBUS_H2C_VERIFY", 0, 1) != 0;
+  // Preserve the previous safety default; set GBUS_H2C_VERIFY=0 only when
+  // an operator explicitly accepts skipping DDR readback.
+  h2c_verify_ = env_u64("GBUS_H2C_VERIFY", 1, 1) != 0;
   timing_ = env_u64("GBUS_TIMING", 0, 1) != 0;
   // GBUS_C2H_BLOCK_READS=1 groups the per-bank register reads into single
   // runtime calls, but only after the probe in c2h_drain_sram_fifo() proves
@@ -196,9 +198,9 @@ GbusTransport::GbusTransport() {
   c2h_fast_fill_ = env_u64("GBUS_C2H_FAST_FILL", 0, 1) != 0;
   c2h_aperture_header_ = env_u64("GBUS_C2H_APERTURE_HEADER", 0, 1) != 0;
   c2h_stream_ = env_u64("GBUS_C2H_STREAM", 1, 1) != 0;
-  // Default to draining a full ring: the batch threshold is resolved against the
-  // ring size once the streaming engine reports it, so this is only the floor.
-  c2h_stream_min_frames_ = static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 0, 4096));
+  // Preserve the established 64-frame batching default. Set the variable to 0
+  // explicitly to opt into the ring-sized threshold optimization.
+  c2h_stream_min_frames_ = static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 64, 4096));
   c2h_stream_min_frames_set_ = c2h_stream_min_frames_ != 0;
   c2h_pingpong_ = env_u64("GBUS_C2H_PINGPONG", 0, 1) != 0;
   c2h_idle_timeout_sec_ = static_cast<uint32_t>(env_u64("GBUS_C2H_IDLE_TIMEOUT_SEC", 30, 3600));
