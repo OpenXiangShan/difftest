@@ -634,7 +634,9 @@ int Emulator::tick() {
       have_initial_fork = true;
       lasttime_snapshot = timer;
 #if !defined(CONFIG_NO_DIFFTEST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
-      difftest_mma_flush_all();
+      // Report an existing MMA error through the normal checker before taking a snapshot.
+      if (!difftest_mma_flush_all())
+        return 0;
       difftest_mma_stop_all();
 #endif // !CONFIG_NO_DIFFTEST && CONFIG_DIFFTEST_AMUCTRLEVENT
       switch (lightsss->do_fork()) {

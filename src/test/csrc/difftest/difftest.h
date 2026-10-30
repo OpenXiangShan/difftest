@@ -300,7 +300,7 @@ void difftest_finish(bool report_perfcnt = true);
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 //Waits for all MMA verifier workers to drain their pending requests.
-void difftest_mma_flush_all();
+bool difftest_mma_flush_all();
 
 // Stops and joins all MMA verifier workers.
 void difftest_mma_stop_all();
