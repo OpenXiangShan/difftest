@@ -73,8 +73,8 @@ private:
   bool c2h_axi_dma_ = false;
   bool c2h_verify_first_bank_ = true;
   // Read the workload back after H2C to catch a silently dropped write.
-  // Opt-in: it adds one DMA read per chunk to the upload path.
-  bool h2c_verify_ = false;
+  // Enabled by default; set GBUS_H2C_VERIFY=0 to skip the extra DMA reads.
+  bool h2c_verify_ = true;
   // Bytes per gbus_dma_read when draining a frozen bank.  The 256-byte default
   // is the size verified on the board; larger requests (up to the 1024-byte
   // bank) are expected to arrive as consecutive AXI3 bursts, but were not yet
