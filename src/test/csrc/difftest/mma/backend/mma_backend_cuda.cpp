@@ -24,24 +24,10 @@
 #endif
 
 #include "mma/backend/mma_backend_cuda_impl.h"
+#include "mma/backend/mma_backend_cuda_process.h"
 #include "mma/mma_verifier.h"
-#include <cstdio>
-#include <cuda_runtime_api.h>
-#include <stdexcept>
 
-CudaMmaBackend::~CudaMmaBackend() {
-  cuda_mma_backend_release(workspace);
-}
-
-static bool report_cuda_error(const char *what, cudaError_t err) {
-  if (err == cudaSuccess) {
-    return true;
-  }
-  fprintf(stderr, "CudaMmaBackend: %s failed: %s\n", what, cudaGetErrorString(err));
-  return false;
-}
-
-static bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType *type) {
+bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType *type) {
   if (!is_mma_32bit_result_type(event.typed)) {
     return false;
   }
@@ -68,20 +54,12 @@ static bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType 
   }
 }
 
-static bool select_cuda_device() {
-  cudaError_t err = cudaSetDevice(0);
-  return (err == cudaSuccess || err == cudaErrorSetOnActiveProcess) || report_cuda_error("cudaSetDevice", err);
-}
+CudaMmaBackend::CudaMmaBackend() : process(new CudaMmaProcess(host)) {}
 
-CudaMmaBackend::CudaMmaBackend() {
-  if (!select_cuda_device()) {
-    throw std::runtime_error("Failed to initialize CUDA MMA device");
-  }
-  workspace = cuda_mma_backend_create(host, CONFIG_DIFF_MMA_BATCH_SIZE, CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES,
-                                      CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
-  if (workspace == nullptr) {
-    throw std::runtime_error("Failed to allocate CUDA MMA workspace");
-  }
+CudaMmaBackend::~CudaMmaBackend() = default;
+
+void CudaMmaBackend::start() {
+  process->prepare();
 }
 
 bool CudaMmaBackend::is_batch_compatible(const MmaVerificationBuffer *first,
@@ -102,46 +80,7 @@ bool CudaMmaBackend::is_batch_compatible(const MmaVerificationBuffer *first,
 }
 
 void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
-  passed.assign(buffers.size(), 0);
-  if (buffers.empty()) {
-    return;
-  }
-
-  CudaMmaType type;
-  if (!select_cuda_mma_type(buffers.front()->amu_event, &type)) {
-    const auto &event = buffers.front()->amu_event;
-    fprintf(stderr, "CudaMmaBackend: unsupported MMA type pc=0x%lx isfp=%u types1=%u types2=%u typed=%u\n", event.pc,
-            event.isfp, event.types1, event.types2, event.typed);
-    return;
-  }
-
-  std::vector<CudaMmaBatchItem> items;
-  items.reserve(buffers.size());
-  for (auto *buffer: buffers) {
-    CudaMmaBatchItem item;
-    item.tile_m = buffer->amu_event.mtilem;
-    item.tile_k = buffer->amu_event.mtilek;
-    item.tile_n = buffer->amu_event.mtilen;
-    item.sat = buffer->amu_event.sat;
-    item.src1 = buffer->src1;
-    item.src2 = buffer->src2;
-    item.src3 = buffer->src3;
-    items.push_back(item);
-  }
-
-  if (!select_cuda_device()) {
-    return;
-  }
-  if (!cuda_mma_backend_launch(workspace, type, items.data(), items.size())) {
-    return;
-  }
-  if (!report_cuda_error("post-batch-launch", cudaGetLastError())) {
-    return;
-  }
-  for (size_t i = 0; i < items.size(); ++i) {
-    const auto &item = items[i];
-    passed[i] = compare_mma_rows(buffers[i]->dut_result.get(), item.src3, item.tile_m, sizeof(uint32_t) * item.tile_n);
-  }
+  process->verify(buffers, passed);
 }
 
 #else
@@ -151,6 +90,8 @@ void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers,
 CudaMmaBackend::CudaMmaBackend() = default;
 
 CudaMmaBackend::~CudaMmaBackend() = default;
+
+void CudaMmaBackend::start() {}
 
 void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
   passed.assign(buffers.size(), 0);

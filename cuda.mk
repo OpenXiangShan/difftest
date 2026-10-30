@@ -59,4 +59,7 @@ $(CUDA_MMA_BACKEND_OBJ): $(CUDA_MMA_BACKEND_SRC) $(DIFFTEST_STATE_HEADER) | $(BU
 		-MF $(CUDA_MMA_BACKEND_DEP) -MT $@ -c $< -o $@
 
 -include $(CUDA_MMA_BACKEND_DEP)
+
 endif
+
+include $(DIFFTEST_CSRC_DIR)/mma/worker/worker.mk

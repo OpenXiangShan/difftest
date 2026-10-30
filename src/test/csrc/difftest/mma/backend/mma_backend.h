@@ -118,6 +118,9 @@ public:
   virtual ~MmaBackend() = default;
   MmaHostBuffer host[3];
 
+  // Runs on the producer before the verification thread starts.
+  virtual void start() {}
+
   /**
    * @brief Verifies a FIFO-ordered batch and writes one result per request.
    *

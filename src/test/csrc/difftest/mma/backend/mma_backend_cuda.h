@@ -21,7 +21,7 @@
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
-class CudaMmaWorkspace;
+class CudaMmaProcess;
 
 class CudaMmaBackend : public MmaBackend {
 public:
@@ -30,10 +30,13 @@ public:
   CudaMmaBackend &operator=(const CudaMmaBackend &) = delete;
   ~CudaMmaBackend() override;
   void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) override;
+  void start() override;
   bool is_batch_compatible(const MmaVerificationBuffer *first, const MmaVerificationBuffer *candidate) const override;
 
 private:
-  CudaMmaWorkspace *workspace = nullptr;
+#ifdef CONFIG_DIFFTEST_MMA_CUDA
+  std::unique_ptr<CudaMmaProcess> process;
+#endif
 };
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

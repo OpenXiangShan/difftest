@@ -35,6 +35,10 @@ enum class CudaMmaType : uint8_t {
   Tf32ToFp32 = 13,
 };
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType *type);
+#endif
+
 struct CudaMmaBatchItem {
   uint16_t tile_m;
   uint16_t tile_k;
