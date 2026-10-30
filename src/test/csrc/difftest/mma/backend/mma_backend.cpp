@@ -45,6 +45,21 @@ bool MmaHostBuffer::allocate(size_t bytes, size_t slot_count, uint8_t *(*allocat
   return true;
 }
 
+void MmaHostBuffer::bind(uint8_t *storage, size_t bytes, size_t count) {
+  release();
+  slots.get_deleter().free_host = [](uint8_t *) {};
+  slots.reset(storage);
+  stride = bytes;
+  slot_count = count;
+  slot_busy.assign(count, 0);
+  active_slots = std::min(count, static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) + 2);
+}
+
+bool MmaHostBuffer::all_recycled() {
+  std::lock_guard<std::mutex> lock(mutex);
+  return leased_slots == 0;
+}
+
 size_t MmaHostBuffer::slot(const uint8_t *buffer) const {
   if (!slots) {
     return invalid_slot;

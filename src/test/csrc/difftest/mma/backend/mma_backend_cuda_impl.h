@@ -43,7 +43,6 @@ struct CudaMmaBatchItem {
   const uint8_t *src1;
   const uint8_t *src2;
   uint8_t *src3;
-  const uint8_t *dut_result;
 };
 
 struct CudaMmaBatchDescriptor {
@@ -62,12 +61,15 @@ struct CudaMmaCopySpan {
 };
 
 struct CudaMmaOperand {
+  // Optional borrowed pinned storage containing the physical operand slots.
+  uint8_t *shared_host = nullptr;
+  size_t stride = 0;
   std::vector<CudaMmaCopySpan> spans;
   uint8_t *device = nullptr;
 };
 
-// The workspace borrows backend-owned host storage and retains one maximum
-// device batch. All requests must be released before destroying the workspace.
+// The workspace uses backend-owned host pools or a borrowed pinned batch, and
+// retains one maximum device batch. Stop all users before destroying it.
 class CudaMmaWorkspace {
 public:
   explicit CudaMmaWorkspace(MmaHostBuffer (&host)[3]) : host(host) {}
@@ -80,7 +82,7 @@ public:
 
   CudaMmaBatchDescriptor *descriptors = nullptr;
 
-  bool allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes);
+  bool allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes, uint8_t *const shared_host[3]);
   size_t batch_capacity() const;
   void release();
 };
@@ -90,10 +92,13 @@ bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescript
 
 // Each backend owns one workspace. Launches must be serialized; operand
 // allocation/free may run concurrently. Release requires all users to stop.
+// Optional shared_host borrows a pinned contiguous batch per operand; it must
+// outlive the workspace; each item points at a physical slot within that batch.
 CudaMmaWorkspace *cuda_mma_backend_create(MmaHostBuffer (&host)[3], size_t batch_size, size_t ab_reg_bytes,
-                                          size_t c_reg_bytes);
-bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items, size_t count,
-                             uint8_t *passed);
+                                          size_t c_reg_bytes, uint8_t *const shared_host[3] = nullptr);
+// Compute reference results into each item's src3; return execution success.
+bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
+                             size_t count);
 void cuda_mma_backend_release(CudaMmaWorkspace *workspace);
 
 #endif // __MMA_BACKEND_CUDA_IMPL_H__

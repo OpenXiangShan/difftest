@@ -126,18 +126,21 @@ void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers,
     item.src1 = buffer->src1;
     item.src2 = buffer->src2;
     item.src3 = buffer->src3;
-    item.dut_result = reinterpret_cast<const uint8_t *>(buffer->dut_result.get());
     items.push_back(item);
   }
 
   if (!select_cuda_device()) {
     return;
   }
-  if (!cuda_mma_backend_launch(workspace, type, items.data(), items.size(), passed.data())) {
+  if (!cuda_mma_backend_launch(workspace, type, items.data(), items.size())) {
     return;
   }
   if (!report_cuda_error("post-batch-launch", cudaGetLastError())) {
-    passed.assign(buffers.size(), 0);
+    return;
+  }
+  for (size_t i = 0; i < items.size(); ++i) {
+    const auto &item = items[i];
+    passed[i] = compare_mma_rows(buffers[i]->dut_result.get(), item.src3, item.tile_m, sizeof(uint32_t) * item.tile_n);
   }
 }
 

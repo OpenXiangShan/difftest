@@ -44,6 +44,10 @@ public:
   bool allocate(size_t bytes, size_t slot_count, uint8_t *(*allocate_host)(size_t) = nullptr,
                 void (*free_host)(uint8_t *) = nullptr);
 
+  // Borrowed storage must outlive all leases and be detached only when empty.
+  void bind(uint8_t *storage, size_t bytes, size_t slot_count);
+  bool all_recycled();
+
   size_t slot(const uint8_t *buffer) const;
 
   uint8_t *acquire(size_t bytes);
