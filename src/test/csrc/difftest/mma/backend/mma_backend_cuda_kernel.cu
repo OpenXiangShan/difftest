@@ -145,6 +145,29 @@ static bool report_error(const char *what, cudaError_t err) {
   return false;
 }
 
+__global__ void compare_mma_batch_kernel(const CudaMmaBatchDescriptor *descriptors, const uint8_t *reference,
+                                         const uint8_t *dut, uint8_t *passed) {
+  const auto &desc = descriptors[blockIdx.x];
+  reference += desc.src3_offset;
+  dut += desc.src3_offset;
+  bool mismatch = false;
+  for (int idx = threadIdx.x; idx < desc.tile_m * desc.tile_n; idx += blockDim.x) {
+    const size_t row = idx / desc.tile_n;
+    const size_t column = idx % desc.tile_n;
+    mismatch = mismatch || read_u32_device(reference, row, column, kMmaResultRowBytes) !=
+                               read_u32_device(dut, row, column, kMmaResultRowBytes);
+  }
+  const int any_mismatch = __syncthreads_or(mismatch);
+  if (threadIdx.x == 0)
+    passed[blockIdx.x] = !any_mismatch;
+}
+
+bool cuda_mma_backend_compare_kernel(const CudaMmaBatchDescriptor *descriptors, size_t count, const uint8_t *reference,
+                                     const uint8_t *dut, uint8_t *passed, cudaStream_t stream) {
+  compare_mma_batch_kernel<<<count, 256, 0, stream>>>(descriptors, reference, dut, passed);
+  return report_error("batch comparison kernel launch", cudaGetLastError());
+}
+
 bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescriptor *descriptors, size_t count,
                                     size_t max_output_elements, uint8_t *src1, uint8_t *src2, uint8_t *src3,
                                     cudaStream_t stream) {

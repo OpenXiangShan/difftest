@@ -44,13 +44,13 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
 extern char **environ;
 
 namespace {
 const int kWorkerSocket = 3;
 const int kWorkerStorage = 4;
 const int kReplyTimeoutMs = 60000;
+const int kEnqueued = 1;
 const size_t kPoolSlots = static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR + 2;
 // Ordinary-array fallback requests use a separate batch beyond the pool.
 const size_t kSharedSlots = kPoolSlots + CONFIG_DIFF_MMA_BATCH_SIZE;
@@ -62,7 +62,7 @@ struct Message {
 };
 
 // Only temporary operand snapshots are shared. ROB results and reference architectural state
-// remain ordinary COW memory in the simulator; DUT results are compared there.
+// remain ordinary COW memory in the simulator; DUT results are snapshotted here.
 struct SharedBatch {
   pid_t owner;
   DifftestAmuCtrlEvent events[CONFIG_DIFF_MMA_BATCH_SIZE];
@@ -71,6 +71,7 @@ struct SharedBatch {
   uint64_t src1[kSharedSlots][CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES / sizeof(uint64_t)];
   uint64_t src2[kSharedSlots][CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES / sizeof(uint64_t)];
   uint64_t src3[kSharedSlots][CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / sizeof(uint64_t)];
+  uint64_t dut_results[CONFIG_DIFF_MMA_BATCH_SIZE][CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / sizeof(uint64_t)];
 };
 
 uint8_t *operand_storage(SharedBatch *batch, size_t operand) {
@@ -487,6 +488,25 @@ void CudaMmaProcess::verify(const std::vector<MmaVerificationBuffer *> &buffers,
     disconnect();
     return;
   }
+  if (!receive_message(socket_fd, reply, true) || reply.sequence != request.sequence || reply.count != 0 ||
+      reply.status != kEnqueued) {
+    disconnect();
+    return;
+  }
+  // Start REF immediately, then publish DUT prefixes as their snapshots become
+  // ready. Neither CPU staging nor DUT H2D needs to wait for REF computation.
+  for (size_t begin = 0; begin < buffers.size(); begin += kMmaCompletionSize) {
+    const size_t end = std::min(begin + kMmaCompletionSize, buffers.size());
+    for (size_t i = begin; i < end; ++i)
+      if (batch->events[i].mtilem && batch->events[i].mtilen)
+        memcpy(batch->dut_results[i], buffers[i]->dut_result.get(), CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+    Message uploaded = {request.sequence, static_cast<uint32_t>(end), 0};
+    if (!send_message(socket_fd, uploaded) || !receive_message(socket_fd, reply, true) ||
+        reply.sequence != request.sequence || reply.count != end || reply.status != kEnqueued) {
+      disconnect();
+      return;
+    }
+  }
   size_t completed = 0;
   while (completed < buffers.size()) {
     if (!receive_message(socket_fd, reply, true) || reply.sequence != request.sequence || reply.count <= completed ||
@@ -500,8 +520,7 @@ void CudaMmaProcess::verify(const std::vector<MmaVerificationBuffer *> &buffers,
     for (size_t i = completed; i < reply.count; ++i) {
       const auto &event = batch->events[i];
       const auto *result = batch->src3[batch->slots[i][2]];
-      passed[i] = batch->passed[i] &&
-                  compare_mma_rows(buffers[i]->dut_result.get(), result, event.mtilem, sizeof(uint32_t) * event.mtilen);
+      passed[i] = batch->passed[i];
       if (!passed[i] && event.mtilem && event.mtilen && buffers[i]->src3 != reinterpret_cast<const uint8_t *>(result))
         memcpy(buffers[i]->src3, result, sizeof(batch->src3[0]));
     }
@@ -613,10 +632,29 @@ int cuda_mma_worker_main() {
                 workspace->operands[operand].shared_host = operand_storage(batch, operand);
               CudaMmaType type;
               const bool success = select_cuda_mma_type(batch->events[0], &type);
-              if (success && (!cuda_mma_backend_enqueue(workspace.get(), type, items.data(), items.size()) ||
+              if (success && (!cuda_mma_backend_enqueue_references(workspace.get(), type, items.data(), items.size()) ||
                               cudaGetLastError() != cudaSuccess))
                 throw std::runtime_error("CUDA service computation failed");
-              memset(batch->passed, success, request.count);
+              if (!success)
+                memset(batch->passed, 0, request.count);
+              Message enqueued = {request.sequence, 0, kEnqueued};
+              connected = send_message(client.socket, enqueued);
+              // Consume all DUT-ready prefixes before waiting for comparisons,
+              // so later DUT uploads can overlap earlier REF/compare work.
+              for (size_t begin = 0; connected && begin < request.count; begin += kMmaCompletionSize) {
+                const size_t end = std::min(begin + kMmaCompletionSize, size_t(request.count));
+                Message uploaded;
+                connected = receive_message(client.socket, uploaded, true) && uploaded.sequence == request.sequence &&
+                            uploaded.count == end && !uploaded.status;
+                if (connected && success &&
+                    !cuda_mma_backend_enqueue_checks(workspace.get(), items.data(), items.size(), begin, end,
+                                                     reinterpret_cast<const uint8_t *>(batch->dut_results),
+                                                     batch->passed))
+                  throw std::runtime_error("CUDA service comparison failed");
+                enqueued.count = end;
+                if (connected)
+                  connected = send_message(client.socket, enqueued);
+              }
               // Publish completed prefixes while later ranges remain on the GPU.
               // Keep the batch and its slots leased until the final reply is consumed.
               const size_t completion_size = kMmaCompletionSize;
@@ -625,6 +663,9 @@ int cuda_mma_worker_main() {
                 if (success &&
                     !(request.count <= completion_size ? workspace->synchronize() : workspace->wait(begin, end)))
                   throw std::runtime_error("CUDA service computation failed");
+                for (size_t i = begin; success && i < end; ++i)
+                  if (!batch->passed[i] && !cuda_mma_backend_read_result(workspace.get(), i, items[i].src3))
+                    throw std::runtime_error("CUDA service result readback failed");
                 Message reply = {request.sequence, static_cast<uint32_t>(end), 0};
                 connected = send_message(client.socket, reply);
               }
