@@ -19,6 +19,7 @@
 #if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_MMA_CUDA)
 #include "mma/backend/mma_backend_cuda_impl.h"
 #include "mma/mma_verifier.h"
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <climits>
@@ -482,21 +483,29 @@ void CudaMmaProcess::verify(const std::vector<MmaVerificationBuffer *> &buffers,
     }
   }
   Message request = {++sequence, static_cast<uint32_t>(buffers.size()), 0}, reply = {};
-  if (!send_message(socket_fd, request) || !receive_message(socket_fd, reply, true) ||
-      reply.sequence != request.sequence || reply.count != request.count || reply.status != 0) {
-    fprintf(stderr, "CudaMmaBackend: worker failed while verifying batch %llu\n",
-            static_cast<unsigned long long>(sequence));
-    // Outstanding buffers still borrow this mapping, including the first error.
+  if (!send_message(socket_fd, request)) {
     disconnect();
     return;
   }
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    const auto &event = batch->events[i];
-    const auto *result = batch->src3[batch->slots[i][2]];
-    passed[i] = batch->passed[i] &&
-                compare_mma_rows(buffers[i]->dut_result.get(), result, event.mtilem, sizeof(uint32_t) * event.mtilen);
-    if (!passed[i] && event.mtilem && event.mtilen && buffers[i]->src3 != reinterpret_cast<const uint8_t *>(result))
-      memcpy(buffers[i]->src3, result, sizeof(batch->src3[0]));
+  size_t completed = 0;
+  while (completed < buffers.size()) {
+    if (!receive_message(socket_fd, reply, true) || reply.sequence != request.sequence || reply.count <= completed ||
+        reply.count > request.count || reply.status != 0) {
+      fprintf(stderr, "CudaMmaBackend: worker failed while verifying batch %llu\n",
+              static_cast<unsigned long long>(sequence));
+      // Outstanding buffers still borrow this mapping, including the first error.
+      disconnect();
+      return;
+    }
+    for (size_t i = completed; i < reply.count; ++i) {
+      const auto &event = batch->events[i];
+      const auto *result = batch->src3[batch->slots[i][2]];
+      passed[i] = batch->passed[i] &&
+                  compare_mma_rows(buffers[i]->dut_result.get(), result, event.mtilem, sizeof(uint32_t) * event.mtilen);
+      if (!passed[i] && event.mtilem && event.mtilen && buffers[i]->src3 != reinterpret_cast<const uint8_t *>(result))
+        memcpy(buffers[i]->src3, result, sizeof(batch->src3[0]));
+    }
+    completed = reply.count;
   }
 }
 
@@ -604,11 +613,23 @@ int cuda_mma_worker_main() {
                 workspace->operands[operand].shared_host = operand_storage(batch, operand);
               CudaMmaType type;
               const bool success = select_cuda_mma_type(batch->events[0], &type);
-              if (success && (!cuda_mma_backend_launch(workspace.get(), type, items.data(), items.size()) ||
+              if (success && (!cuda_mma_backend_enqueue(workspace.get(), type, items.data(), items.size()) ||
                               cudaGetLastError() != cudaSuccess))
                 throw std::runtime_error("CUDA service computation failed");
               memset(batch->passed, success, request.count);
-              connected = send_message(client.socket, request);
+              // Publish completed prefixes while later ranges remain on the GPU.
+              // Keep the batch and its slots leased until the final reply is consumed.
+              const size_t completion_size = kMmaCompletionSize;
+              for (size_t begin = 0; connected && begin < request.count; begin += completion_size) {
+                const size_t end = std::min(begin + completion_size, size_t(request.count));
+                if (success &&
+                    !(request.count <= completion_size ? workspace->synchronize() : workspace->wait(begin, end)))
+                  throw std::runtime_error("CUDA service computation failed");
+                Message reply = {request.sequence, static_cast<uint32_t>(end), 0};
+                connected = send_message(client.socket, reply);
+              }
+              if (!connected && !workspace->synchronize())
+                throw std::runtime_error("CUDA service computation failed");
             }
           }
         }
