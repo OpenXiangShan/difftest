@@ -59,6 +59,11 @@ struct CudaMmaBatchDescriptor {
   uint8_t sat;
 };
 
+static constexpr size_t kMmaCompletionSize = 128;
+
+struct CUstream_st;
+struct CUevent_st;
+
 struct CudaMmaCopySpan {
   uint8_t *host;
   size_t bytes;
@@ -80,7 +85,10 @@ public:
   CudaMmaWorkspace(const CudaMmaWorkspace &) = delete;
   CudaMmaWorkspace &operator=(const CudaMmaWorkspace &) = delete;
   ~CudaMmaWorkspace();
-  std::vector<CudaMmaBatchDescriptor> host_descriptors;
+  CudaMmaBatchDescriptor *host_descriptors = nullptr;
+  size_t capacity = 0;
+  CUstream_st *streams[4] = {};
+  std::vector<CUevent_st *> completed;
   MmaHostBuffer (&host)[3];
   CudaMmaOperand operands[3];
 
@@ -88,11 +96,15 @@ public:
 
   bool allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes, uint8_t *const shared_host[3]);
   size_t batch_capacity() const;
+  bool synchronize();
+  // Requires a streamed batch (count > kMmaCompletionSize) enqueued successfully.
+  bool wait(size_t begin, size_t end);
   void release();
 };
 
 bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescriptor *descriptors, size_t count,
-                                    size_t max_output_elements, uint8_t *src1, uint8_t *src2, uint8_t *src3);
+                                    size_t max_output_elements, uint8_t *src1, uint8_t *src2, uint8_t *src3,
+                                    CUstream_st *stream);
 
 // Each backend owns one workspace. Launches must be serialized; operand
 // allocation/free may run concurrently. Release requires all users to stop.
@@ -103,6 +115,9 @@ CudaMmaWorkspace *cuda_mma_backend_create(MmaHostBuffer (&host)[3], size_t batch
 // Compute reference results into each item's src3; return execution success.
 bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
                              size_t count);
+// Enqueue the batch. Streamed batches support wait(); smaller batches use synchronize().
+bool cuda_mma_backend_enqueue(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
+                              size_t count);
 void cuda_mma_backend_release(CudaMmaWorkspace *workspace);
 
 #endif // __MMA_BACKEND_CUDA_IMPL_H__
