@@ -39,7 +39,7 @@
  * acquisition and release can run on producer/worker threads concurrently.
  * The verifier owns the backend and coordinates request lifetimes.
  * With CONFIG_DIFFTEST_MMA_SYNC, submission verifies synchronously on the caller;
- * start()/stop() are no-ops and flush() reports the retained error.
+ * start() prepares the backend, stop() is a no-op, and flush() reports the retained error.
  *
  * Buffers are caller-owned while being populated and verifier-owned after
  * submission. Successful buffers and all mismatches after the first are freed
@@ -109,7 +109,7 @@ public:
   ~MmaVerifier();
 
   /**
-   * @brief Starts the single verifier worker.
+   * @brief Prepares the backend and starts the single verifier worker.
    *
    * @pre Call this before submitting buffers.
    * @note This is a no-op unless the previous worker has not started or has been joined.

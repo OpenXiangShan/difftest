@@ -212,13 +212,14 @@ void difftest_finish(bool report_perfcnt) {
 }
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-void difftest_mma_flush_all() {
+bool difftest_mma_flush_all() {
+  bool passed = true;
   for (int i = 0; i < NUM_CORES; i++) {
     auto verifier = difftest[i]->get_mma_verifier();
-    if (verifier) {
-      verifier->flush();
-    }
+    if (verifier && !verifier->flush())
+      passed = false;
   }
+  return passed;
 }
 
 void difftest_mma_stop_all() {

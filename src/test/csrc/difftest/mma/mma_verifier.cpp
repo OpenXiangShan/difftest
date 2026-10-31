@@ -68,7 +68,9 @@ void MmaVerifier::start() {
   if (mma_verification_thread.joinable()) {
     return;
   }
-
+#endif
+  backend->start();
+#ifndef CONFIG_DIFFTEST_MMA_SYNC
   std::lock_guard<std::mutex> lock(mma_queue_mutex);
   mma_stop_requested = false;
   mma_verification_thread = std::thread(&MmaVerifier::mma_verification_thread_func, this);
