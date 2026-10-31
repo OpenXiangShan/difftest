@@ -612,6 +612,7 @@ int Difftest::step() {
   static int replay_step = 0;
   if (replay_status.in_replay) {
     if (!in_replay_range()) {
+      dut->clear_event_valid();
       return 0;
     } else {
       replay_step++;
