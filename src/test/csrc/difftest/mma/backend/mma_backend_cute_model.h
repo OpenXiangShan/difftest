@@ -153,7 +153,7 @@ CUTE_MMA_HOST_DEVICE static inline int64_t fixed_add(int64_t lhs, int64_t rhs, i
 }
 
 CUTE_MMA_HOST_DEVICE static inline int32_t decode_int8(uint8_t bits, bool is_signed) {
-  return is_signed && (bits & 0x80u) != 0 ? static_cast<int32_t>(bits) - 256 : static_cast<int32_t>(bits);
+  return is_signed ? static_cast<int32_t>(bits ^ 0x80u) - 0x80 : static_cast<int32_t>(bits);
 }
 
 CUTE_MMA_HOST_DEVICE static inline int64_t add_int32(int64_t lhs, int64_t rhs, bool saturate) {
@@ -193,7 +193,8 @@ CUTE_MMA_HOST_DEVICE static inline uint32_t reduce_int32_chunk(bool src1_signed,
         const int32_t b = decode_int8(src2[lane], src2_signed);
         product = static_cast<int64_t>(a) * b;
       }
-      group_sum = fixed_add(group_sum, product, 28);
+      // Four 8-bit products fit in 28 bits for every signedness combination.
+      group_sum += product;
     }
 
     if (group < groups_per_half) {
