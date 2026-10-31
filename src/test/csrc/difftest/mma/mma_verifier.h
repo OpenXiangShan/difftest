@@ -62,6 +62,9 @@ struct MmaVerificationBuffer {
   uint8_t *src2;                  // Pointer to source matrix 2 data
   uint8_t *src3;                  // Pointer to source matrix 3 data (accumulator)
   MatrixResult dut_result;        // Owns the software ROB's original result array
+#ifdef CONFIG_DIFFTEST_REPLAY
+  uint64_t sequence = 0; // Hardware-ROB commit sequence for replay boundaries
+#endif                   // CONFIG_DIFFTEST_REPLAY
 };
 
 /**
@@ -183,6 +186,10 @@ public:
    * verifier is destroyed and must not be freed or modified by the caller.
    */
   const MmaVerificationBuffer *get_error_buffer() const;
+
+  // Print the saved DUT/REF result for an error buffer. The caller owns
+  // DiffTest-level state such as the trap PC and commit trace display.
+  void report_error(const MmaVerificationBuffer *buffer) const;
 
 private:
   void verify_batch(const std::vector<MmaVerificationBuffer *> &buffers);
