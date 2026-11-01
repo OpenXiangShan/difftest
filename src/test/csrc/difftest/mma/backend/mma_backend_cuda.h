@@ -31,6 +31,8 @@ public:
   ~CudaMmaBackend() override;
   void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) override;
   void start() override;
+  void prepare_result(MmaVerificationBuffer *buffer) override;
+  void release_result(MmaVerificationBuffer *buffer) override;
   bool is_batch_compatible(const MmaVerificationBuffer *first, const MmaVerificationBuffer *candidate) const override;
 
 private:

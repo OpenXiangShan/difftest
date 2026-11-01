@@ -33,6 +33,8 @@ public:
   CudaMmaProcess(const CudaMmaProcess &) = delete;
   CudaMmaProcess &operator=(const CudaMmaProcess &) = delete;
   void prepare();
+  void prepare_result(MmaVerificationBuffer *buffer);
+  void release_result(MmaVerificationBuffer *buffer);
   void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed);
 
 private:
@@ -42,6 +44,7 @@ private:
   void disconnect();
   void release();
   MmaHostBuffer (&host)[3];
+  MmaHostBuffer dut_host;
   int storage_fd = -1;
   int socket_fd = -1;
   pid_t worker_pid = -1;

@@ -121,6 +121,12 @@ public:
   // Runs on the producer before the verification thread starts.
   virtual void start() {}
 
+  // Refresh an optional upload snapshot on the producer before submission.
+  // A previous snapshot may be refreshed after verification completes.
+  // Release is called when the verifier disposes of the buffer.
+  virtual void prepare_result(MmaVerificationBuffer *) {}
+  virtual void release_result(MmaVerificationBuffer *) {}
+
   /**
    * @brief Verifies a FIFO-ordered batch and writes one result per request.
    *

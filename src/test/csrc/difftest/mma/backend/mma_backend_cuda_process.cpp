@@ -50,7 +50,6 @@ namespace {
 const int kWorkerSocket = 3;
 const int kWorkerStorage = 4;
 const int kReplyTimeoutMs = 60000;
-const int kEnqueued = 1;
 const size_t kPoolSlots = static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR + 2;
 // Ordinary-array fallback requests use a separate batch beyond the pool.
 const size_t kSharedSlots = kPoolSlots + CONFIG_DIFF_MMA_BATCH_SIZE;
@@ -67,11 +66,11 @@ struct SharedBatch {
   pid_t owner;
   DifftestAmuCtrlEvent events[CONFIG_DIFF_MMA_BATCH_SIZE];
   uint8_t passed[CONFIG_DIFF_MMA_BATCH_SIZE];
-  uint32_t slots[CONFIG_DIFF_MMA_BATCH_SIZE][3];
+  uint32_t slots[CONFIG_DIFF_MMA_BATCH_SIZE][4];
   uint64_t src1[kSharedSlots][CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES / sizeof(uint64_t)];
   uint64_t src2[kSharedSlots][CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES / sizeof(uint64_t)];
   uint64_t src3[kSharedSlots][CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / sizeof(uint64_t)];
-  uint64_t dut_results[CONFIG_DIFF_MMA_BATCH_SIZE][CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / sizeof(uint64_t)];
+  uint64_t dut_results[kSharedSlots][CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / sizeof(uint64_t)];
 };
 
 uint8_t *operand_storage(SharedBatch *batch, size_t operand) {
@@ -280,6 +279,8 @@ void CudaMmaProcess::detach_inherited() {
     Assert(pool.all_recycled(), "MMA operand snapshots must be released before fork");
     pool.release();
   }
+  Assert(dut_host.all_recycled(), "MMA DUT snapshots must be released before fork");
+  dut_host.release();
   if (shared)
     munmap(shared, sizeof(SharedBatch));
   if (storage_fd >= 0)
@@ -293,6 +294,7 @@ void CudaMmaProcess::detach_inherited() {
 
 void CudaMmaProcess::release() {
   disconnect();
+  dut_host.release();
   for (auto &pool: host)
     pool.release();
   if (shared)
@@ -368,6 +370,8 @@ bool CudaMmaProcess::start() {
       for (size_t operand = 0; operand < 3; ++operand)
         host[operand].bind(operand_storage(static_cast<SharedBatch *>(shared), operand), operand_bytes(operand),
                            kPoolSlots);
+      dut_host.bind(reinterpret_cast<uint8_t *>(static_cast<SharedBatch *>(shared)->dut_results),
+                    CONFIG_DIFF_AMU_C_REG_SIZE_BYTES, kPoolSlots);
     }
     static_cast<SharedBatch *>(shared)->owner = client_pid;
     if (!owner) {
@@ -459,6 +463,21 @@ void CudaMmaProcess::prepare() {
     throw std::runtime_error("Failed to restart CUDA MMA worker");
 }
 
+void CudaMmaProcess::prepare_result(MmaVerificationBuffer *buffer) {
+  if (!buffer->amu_event.mtilem || !buffer->amu_event.mtilen)
+    return;
+  if (!buffer->dut_snapshot)
+    buffer->dut_snapshot = dut_host.acquire(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+  memcpy(buffer->dut_snapshot, buffer->dut_result.get(), CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+}
+
+void CudaMmaProcess::release_result(MmaVerificationBuffer *buffer) {
+  if (buffer->dut_snapshot) {
+    dut_host.recycle(buffer->dut_snapshot);
+    buffer->dut_snapshot = nullptr;
+  }
+}
+
 void CudaMmaProcess::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
   passed.assign(buffers.size(), 0);
   if (buffers.empty())
@@ -482,30 +501,20 @@ void CudaMmaProcess::verify(const std::vector<MmaVerificationBuffer *> &buffers,
       }
       batch->slots[i][operand] = slot;
     }
+    const auto *dut_result =
+        buffer.dut_snapshot ? buffer.dut_snapshot : reinterpret_cast<const uint8_t *>(buffer.dut_result.get());
+    size_t slot = dut_host.slot(dut_result);
+    if (slot == MmaHostBuffer::invalid_slot) {
+      slot = kPoolSlots + i;
+      if (buffer.amu_event.mtilem && buffer.amu_event.mtilen)
+        memcpy(batch->dut_results[slot], dut_result, CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+    }
+    batch->slots[i][3] = slot;
   }
   Message request = {++sequence, static_cast<uint32_t>(buffers.size()), 0}, reply = {};
   if (!send_message(socket_fd, request)) {
     disconnect();
     return;
-  }
-  if (!receive_message(socket_fd, reply, true) || reply.sequence != request.sequence || reply.count != 0 ||
-      reply.status != kEnqueued) {
-    disconnect();
-    return;
-  }
-  // Start REF immediately, then publish DUT prefixes as their snapshots become
-  // ready. Neither CPU staging nor DUT H2D needs to wait for REF computation.
-  for (size_t begin = 0; begin < buffers.size(); begin += kMmaCompletionSize) {
-    const size_t end = std::min(begin + kMmaCompletionSize, buffers.size());
-    for (size_t i = begin; i < end; ++i)
-      if (batch->events[i].mtilem && batch->events[i].mtilen)
-        memcpy(batch->dut_results[i], buffers[i]->dut_result.get(), CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
-    Message uploaded = {request.sequence, static_cast<uint32_t>(end), 0};
-    if (!send_message(socket_fd, uploaded) || !receive_message(socket_fd, reply, true) ||
-        reply.sequence != request.sequence || reply.count != end || reply.status != kEnqueued) {
-      disconnect();
-      return;
-    }
   }
   size_t completed = 0;
   while (completed < buffers.size()) {
@@ -611,7 +620,7 @@ int cuda_mma_worker_main() {
             items.clear();
             for (size_t i = 0; connected && i < request.count; ++i) {
               const auto &event = batch->events[i];
-              for (size_t operand = 0; operand < 3; ++operand)
+              for (size_t operand = 0; operand < 4; ++operand)
                 if (batch->slots[i][operand] >= kSharedSlots)
                   connected = false;
               if (!connected)
@@ -624,6 +633,7 @@ int cuda_mma_worker_main() {
               item.src1 = reinterpret_cast<const uint8_t *>(batch->src1[batch->slots[i][0]]);
               item.src2 = reinterpret_cast<const uint8_t *>(batch->src2[batch->slots[i][1]]);
               item.src3 = reinterpret_cast<uint8_t *>(batch->src3[batch->slots[i][2]]);
+              item.dut = reinterpret_cast<const uint8_t *>(batch->dut_results[batch->slots[i][3]]);
               items.push_back(item);
             }
             if (connected) {
@@ -637,24 +647,9 @@ int cuda_mma_worker_main() {
                 throw std::runtime_error("CUDA service computation failed");
               if (!success)
                 memset(batch->passed, 0, request.count);
-              Message enqueued = {request.sequence, 0, kEnqueued};
-              connected = send_message(client.socket, enqueued);
-              // Consume all DUT-ready prefixes before waiting for comparisons,
-              // so later DUT uploads can overlap earlier REF/compare work.
-              for (size_t begin = 0; connected && begin < request.count; begin += kMmaCompletionSize) {
-                const size_t end = std::min(begin + kMmaCompletionSize, size_t(request.count));
-                Message uploaded;
-                connected = receive_message(client.socket, uploaded, true) && uploaded.sequence == request.sequence &&
-                            uploaded.count == end && !uploaded.status;
-                if (connected && success &&
-                    !cuda_mma_backend_enqueue_checks(workspace.get(), items.data(), items.size(), begin, end,
-                                                     reinterpret_cast<const uint8_t *>(batch->dut_results),
-                                                     batch->passed))
-                  throw std::runtime_error("CUDA service comparison failed");
-                enqueued.count = end;
-                if (connected)
-                  connected = send_message(client.socket, enqueued);
-              }
+              if (success &&
+                  !cuda_mma_backend_enqueue_checks(workspace.get(), items.data(), items.size(), batch->passed))
+                throw std::runtime_error("CUDA service comparison failed");
               // Publish completed prefixes while later ranges remain on the GPU.
               // Keep the batch and its slots leased until the final reply is consumed.
               const size_t completion_size = kMmaCompletionSize;

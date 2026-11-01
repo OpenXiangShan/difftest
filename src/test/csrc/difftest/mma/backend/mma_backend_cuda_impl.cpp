@@ -63,6 +63,7 @@ bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c
   }
 
   capacity = batch_size;
+  dut_spans.reserve(batch_size + 1);
   if (!report_error("allocate host batch descriptors", cudaMallocHost(reinterpret_cast<void **>(&host_descriptors),
                                                                       batch_size * sizeof(CudaMmaBatchDescriptor)))) {
     release();
@@ -308,26 +309,63 @@ bool cuda_mma_backend_enqueue_references(CudaMmaWorkspace *workspace, CudaMmaTyp
 }
 
 bool cuda_mma_backend_enqueue_checks(CudaMmaWorkspace *workspace, const CudaMmaBatchItem *items, size_t count,
-                                     size_t first, size_t last, const uint8_t *dut, uint8_t *passed) {
+                                     uint8_t *passed) {
   if (count == 0)
     return true;
-  if (!validate_batch(workspace, items, count) || !dut || !passed)
+  if (!validate_batch(workspace, items, count) || !passed)
     return false;
   const size_t result_bytes = workspace->operands[2].stride;
-  for (size_t begin = first; begin < last; begin += kRangeSize) {
-    const size_t end = std::min(begin + kRangeSize, last);
+  for (size_t begin = 0; begin < count; begin += kRangeSize) {
+    const size_t end = std::min(begin + kRangeSize, count);
     const auto stream = workspace->streams[(begin / kRangeSize) % 4];
     size_t max_output_elements = 0;
     for (size_t i = begin; i < end; ++i)
       max_output_elements = std::max(max_output_elements, size_t(items[i].tile_m) * items[i].tile_n);
     if (max_output_elements) {
-      // DUT is already available: upload on its own stream while REF computes.
-      // Only comparison waits for both inputs.
+      // Coalesce adjacent prepared slots without repacking on the caller.
+      auto &spans = workspace->dut_spans;
+      spans.clear();
+      for (size_t i = begin; i < end; ++i) {
+        auto *data = const_cast<uint8_t *>(items[i].dut);
+        if (!spans.empty() &&
+            reinterpret_cast<uintptr_t>(data) == reinterpret_cast<uintptr_t>(spans.back().host) + spans.back().bytes)
+          spans.back().bytes += result_bytes;
+        else
+          spans.push_back({data, result_bytes});
+      }
+#if CUDART_VERSION >= 13030
+      if (spans.size() > 1) {
+        void *destinations[kRangeSize];
+        const void *sources[kRangeSize];
+        size_t sizes[kRangeSize];
+        size_t offset = begin * result_bytes;
+        for (size_t i = 0; i < spans.size(); ++i) {
+          destinations[i] = workspace->device_dut + offset;
+          sources[i] = spans[i].host;
+          sizes[i] = spans[i].bytes;
+          offset += sizes[i];
+        }
+        cudaMemcpyAttributes attributes = {};
+        attributes.srcAccessOrder = cudaMemcpySrcAccessOrderStream;
+        attributes.flags = cudaMemcpyFlagPreferOverlapWithCompute;
+        size_t index = 0;
+        if (!report_error("upload DUT result batch",
+                          cudaMemcpyBatchAsync(destinations, sources, sizes, spans.size(), &attributes, &index, 1,
+                                               workspace->dut_stream)))
+          return false;
+      } else
+#endif
+      {
+        size_t offset = begin * result_bytes;
+        for (const auto &span: spans) {
+          if (!report_error("upload DUT results", cudaMemcpyAsync(workspace->device_dut + offset, span.host, span.bytes,
+                                                                  cudaMemcpyHostToDevice, workspace->dut_stream)))
+            return false;
+          offset += span.bytes;
+        }
+      }
       const auto uploaded = workspace->dut_uploaded[begin / kRangeSize];
-      if (!report_error("upload DUT results",
-                        cudaMemcpyAsync(workspace->device_dut + begin * result_bytes, dut + begin * result_bytes,
-                                        (end - begin) * result_bytes, cudaMemcpyHostToDevice, workspace->dut_stream)) ||
-          !report_error("record DUT upload", cudaEventRecord(uploaded, workspace->dut_stream)) ||
+      if (!report_error("record DUT upload", cudaEventRecord(uploaded, workspace->dut_stream)) ||
           !report_error("wait for DUT upload", cudaStreamWaitEvent(stream, uploaded, 0)) ||
           !cuda_mma_backend_compare_kernel(workspace->descriptors + begin, end - begin, workspace->operands[2].device,
                                            workspace->device_dut, workspace->device_passed + begin, stream) ||

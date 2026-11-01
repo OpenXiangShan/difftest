@@ -47,6 +47,7 @@ struct CudaMmaBatchItem {
   const uint8_t *src1;
   const uint8_t *src2;
   uint8_t *src3;
+  const uint8_t *dut = nullptr;
 };
 
 struct CudaMmaBatchDescriptor {
@@ -97,6 +98,7 @@ public:
   CudaMmaBatchDescriptor *descriptors = nullptr;
   uint8_t *device_dut = nullptr;
   uint8_t *device_passed = nullptr;
+  std::vector<CudaMmaCopySpan> dut_spans;
 
   bool allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes, uint8_t *const shared_host[3]);
   size_t batch_capacity() const;
@@ -121,10 +123,10 @@ CudaMmaWorkspace *cuda_mma_backend_create(MmaHostBuffer (&host)[3], size_t batch
 // Leave REF on device so DUT preparation/upload can proceed concurrently.
 bool cuda_mma_backend_enqueue_references(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
                                          size_t count);
-// DUT and passed are pinned, contiguous host batches retained until completion.
+// DUT snapshots and passed are pinned host storage retained until completion.
 // Upload DUT independently of REF computation; download only pass/fail bytes.
 bool cuda_mma_backend_enqueue_checks(CudaMmaWorkspace *workspace, const CudaMmaBatchItem *items, size_t count,
-                                     size_t begin, size_t end, const uint8_t *dut, uint8_t *passed);
+                                     uint8_t *passed);
 // Read a completed reference result only for mismatch diagnostics.
 bool cuda_mma_backend_read_result(CudaMmaWorkspace *workspace, size_t index, uint8_t *result);
 
