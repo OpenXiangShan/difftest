@@ -147,8 +147,8 @@ void XdmaRelayClient::write32(uint64_t address, uint32_t value) {
   std::lock_guard<std::mutex> lock(commands);
   uint32_t status;
   require(address <= UINT32_MAX && address % 4 == 0, "relay MMIO address");
-  require(put(control, WRITE32) && put(control, address) && put(control, value) && get(control, status),
-          "relay write32");
+  uint32_t request[] = {htonl(WRITE32), htonl(static_cast<uint32_t>(address)), htonl(value)};
+  require(io(control, request, sizeof(request), true) && get(control, status), "relay write32");
   errno = status;
   require(!status, "relay device write32");
 }
