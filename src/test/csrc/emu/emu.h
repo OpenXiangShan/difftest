@@ -38,6 +38,7 @@ private:
   // emu control variable
   uint64_t cycles;
   int trapCode;
+  bool difftest_failed = false;
   uint32_t lasttime_snapshot = 0;
   uint64_t core_max_instr[NUM_CORES];
   uint32_t lasttime_poll = 0;
