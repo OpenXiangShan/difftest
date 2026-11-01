@@ -137,7 +137,11 @@ bool compare_mma_rows(const void *lhs, const void *rhs, size_t rows, size_t row_
   return true;
 }
 
-void MatrixResultDeleter::operator()(uint64_t *buffer) const {
+void MatrixResultDeleter::operator()(uint64_t *buffer) {
+  if (reinterpret_cast<uint8_t *>(buffer) == shared_result.get()) {
+    shared_result.reset();
+    return;
+  }
   if (pool) {
     pool->recycle(buffer);
   } else {

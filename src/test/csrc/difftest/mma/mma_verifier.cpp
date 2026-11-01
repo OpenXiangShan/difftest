@@ -130,11 +130,15 @@ MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
 }
 
 MatrixResult MmaVerifier::allocate_result() {
+  MatrixResult result = backend->allocate_result();
+  if (result)
+    return result;
   return result_pool->acquire();
 }
 
 void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
   if (buffer) {
+    backend->release_result(buffer);
     backend->host[0].recycle(buffer->src1);
     backend->host[1].recycle(buffer->src2);
     backend->host[2].recycle(buffer->src3);
@@ -143,6 +147,12 @@ void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
 }
 
 void MmaVerifier::add_to_verification_queue(MmaVerificationBuffer *buffer) {
+  try {
+    backend->prepare_result(buffer);
+  } catch (...) {
+    free_buffer(buffer);
+    throw;
+  }
 #ifdef CONFIG_DIFFTEST_MMA_SYNC
   verify_batch(std::vector<MmaVerificationBuffer *>{buffer});
 #else

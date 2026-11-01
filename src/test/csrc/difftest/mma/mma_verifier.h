@@ -57,11 +57,12 @@
  * See MmaVerifier's allocation and submission methods for ownership rules.
  */
 struct MmaVerificationBuffer {
-  DifftestAmuCtrlEvent amu_event; // AMU control event for this MMA instruction
-  uint8_t *src1;                  // Pointer to source matrix 1 data
-  uint8_t *src2;                  // Pointer to source matrix 2 data
-  uint8_t *src3;                  // Pointer to source matrix 3 data (accumulator)
-  MatrixResult dut_result;        // Owns the software ROB's original result array
+  DifftestAmuCtrlEvent amu_event;  // AMU control event for this MMA instruction
+  uint8_t *src1;                   // Pointer to source matrix 1 data
+  uint8_t *src2;                   // Pointer to source matrix 2 data
+  uint8_t *src3;                   // Pointer to source matrix 3 data (accumulator)
+  MatrixResult dut_result;         // Owns the software ROB's original result array
+  uint8_t *dut_snapshot = nullptr; // Optional backend-owned upload snapshot
 };
 
 /**

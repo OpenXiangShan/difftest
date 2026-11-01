@@ -62,6 +62,18 @@ void CudaMmaBackend::start() {
   process->prepare();
 }
 
+void CudaMmaBackend::prepare_result(MmaVerificationBuffer *buffer) {
+  process->prepare_result(buffer);
+}
+
+MatrixResult CudaMmaBackend::allocate_result() {
+  return process->allocate_result();
+}
+
+void CudaMmaBackend::release_result(MmaVerificationBuffer *buffer) {
+  process->release_result(buffer);
+}
+
 bool CudaMmaBackend::is_batch_compatible(const MmaVerificationBuffer *first,
                                          const MmaVerificationBuffer *candidate) const {
   CudaMmaType first_type;
@@ -92,6 +104,13 @@ CudaMmaBackend::CudaMmaBackend() = default;
 CudaMmaBackend::~CudaMmaBackend() = default;
 
 void CudaMmaBackend::start() {}
+
+MatrixResult CudaMmaBackend::allocate_result() {
+  return MatrixResult();
+}
+
+void CudaMmaBackend::prepare_result(MmaVerificationBuffer *) {}
+void CudaMmaBackend::release_result(MmaVerificationBuffer *) {}
 
 void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
   passed.assign(buffers.size(), 0);

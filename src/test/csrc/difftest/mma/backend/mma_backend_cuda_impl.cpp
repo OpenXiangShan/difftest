@@ -63,6 +63,7 @@ bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c
   }
 
   capacity = batch_size;
+  dut_spans.reserve(batch_size + 1);
   if (!report_error("allocate host batch descriptors", cudaMallocHost(reinterpret_cast<void **>(&host_descriptors),
                                                                       batch_size * sizeof(CudaMmaBatchDescriptor)))) {
     release();
@@ -74,10 +75,21 @@ bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c
       return false;
     }
   }
+  if (!report_error("create DUT upload stream", cudaStreamCreateWithFlags(&dut_stream, cudaStreamNonBlocking))) {
+    release();
+    return false;
+  }
   completed.resize((batch_size + kRangeSize - 1) / kRangeSize);
   for (auto &event: completed) {
     if (!report_error("create range completion",
                       cudaEventCreateWithFlags(&event, cudaEventBlockingSync | cudaEventDisableTiming))) {
+      release();
+      return false;
+    }
+  }
+  dut_uploaded.resize(completed.size());
+  for (auto &event: dut_uploaded) {
+    if (!report_error("create DUT upload completion", cudaEventCreateWithFlags(&event, cudaEventDisableTiming))) {
       release();
       return false;
     }
@@ -105,6 +117,13 @@ bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c
       return false;
     }
   }
+  if (!report_error("allocate device DUT results",
+                    cudaMalloc(reinterpret_cast<void **>(&device_dut), batch_size * c_reg_bytes)) ||
+      !report_error("allocate device comparison flags",
+                    cudaMalloc(reinterpret_cast<void **>(&device_passed), batch_size))) {
+    release();
+    return false;
+  }
   return true;
 }
 
@@ -118,6 +137,8 @@ bool CudaMmaWorkspace::synchronize() {
     if (stream && !report_error("batch stream sync", cudaStreamSynchronize(stream)))
       success = false;
   }
+  if (dut_stream && !report_error("DUT stream sync", cudaStreamSynchronize(dut_stream)))
+    success = false;
   return success;
 }
 
@@ -136,6 +157,23 @@ void CudaMmaWorkspace::release() {
       cudaEventDestroy(event);
   }
   completed.clear();
+  for (auto event: dut_uploaded) {
+    if (event)
+      cudaEventDestroy(event);
+  }
+  dut_uploaded.clear();
+  if (dut_stream) {
+    cudaStreamDestroy(dut_stream);
+    dut_stream = nullptr;
+  }
+  if (device_dut) {
+    cudaFree(device_dut);
+    device_dut = nullptr;
+  }
+  if (device_passed) {
+    cudaFree(device_passed);
+    device_passed = nullptr;
+  }
   for (auto &stream: streams) {
     if (stream) {
       cudaStreamDestroy(stream);
@@ -202,16 +240,13 @@ static void map_operand(CudaMmaWorkspace &workspace, const CudaMmaBatchItem *ite
   }
 }
 
-static bool copy_operand(CudaMmaWorkspace &workspace, size_t operand, size_t begin, cudaMemcpyKind direction,
-                         cudaStream_t stream) {
+static bool copy_operand(CudaMmaWorkspace &workspace, size_t operand, size_t begin, cudaStream_t stream) {
   auto &op = workspace.operands[operand];
   size_t offset = begin * op.stride;
   for (const auto &span: op.spans) {
     void *device = op.device + offset;
-    const bool to_device = direction == cudaMemcpyHostToDevice;
     if (!report_error("copy batch operand",
-                      cudaMemcpyAsync(to_device ? device : span.host, to_device ? span.host : device, span.bytes,
-                                      direction, stream))) {
+                      cudaMemcpyAsync(device, span.host, span.bytes, cudaMemcpyHostToDevice, stream))) {
       return false;
     }
     offset += span.bytes;
@@ -219,75 +254,138 @@ static bool copy_operand(CudaMmaWorkspace &workspace, size_t operand, size_t beg
   return true;
 }
 
-bool cuda_mma_backend_enqueue(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
-                              size_t count) {
-  if (count == 0) {
-    return true;
-  }
-  if (!workspace || !items || count > 65535) {
+static bool validate_batch(CudaMmaWorkspace *workspace, const CudaMmaBatchItem *items, size_t count) {
+  if (!workspace || !items || count > 65535)
     return false;
-  }
   if (count > workspace->batch_capacity()) {
     fprintf(stderr, "CudaMmaBackend: batch of %zu exceeds workspace capacity %zu\n", count,
             workspace->batch_capacity());
     return false;
   }
+  return true;
+}
 
-  // Requests in different ranges use disjoint device slots and can overlap
-  // uploads, computation and downloads. Record completion after each download.
-  const size_t range_size = kRangeSize;
-  bool success = true;
-  for (size_t begin = 0; success && begin < count; begin += range_size) {
-    const size_t end = std::min(begin + range_size, count);
-    const auto stream = workspace->streams[(begin / range_size) % 4];
-    size_t max_output_elements = 0;
-    for (size_t i = begin; i < end; ++i) {
-      const auto &item = items[i];
-      auto &desc = workspace->host_descriptors[i];
-      desc.tile_m = item.tile_m;
-      desc.tile_k = item.tile_k;
-      desc.tile_n = item.tile_n;
-      desc.sat = item.sat;
-      max_output_elements = std::max(max_output_elements, size_t(item.tile_m) * item.tile_n);
-    }
-    if (max_output_elements == 0) {
-      if (count > kMmaCompletionSize)
-        success =
-            report_error("record range completion", cudaEventRecord(workspace->completed[begin / range_size], stream));
-      continue;
-    }
-    for (size_t operand = 0; operand < 3; ++operand)
-      map_operand(*workspace, items, begin, end, operand);
-    success =
-        report_error("copy batch descriptors to device",
-                     cudaMemcpyAsync(workspace->descriptors + begin, workspace->host_descriptors + begin,
-                                     (end - begin) * sizeof(CudaMmaBatchDescriptor), cudaMemcpyHostToDevice, stream));
-    for (size_t operand = 0; success && operand < 3; ++operand)
-      success = copy_operand(*workspace, operand, begin, cudaMemcpyHostToDevice, stream);
-    if (success)
-      success = cuda_mma_backend_launch_kernel(type, workspace->descriptors + begin, end - begin, max_output_elements,
-                                               workspace->operands[0].device, workspace->operands[1].device,
-                                               workspace->operands[2].device, stream);
-    if (success)
-      success = copy_operand(*workspace, 2, begin, cudaMemcpyDeviceToHost, stream);
-    if (success && count > kMmaCompletionSize)
-      success =
-          report_error("record range completion", cudaEventRecord(workspace->completed[begin / range_size], stream));
+static bool enqueue_range(CudaMmaWorkspace &workspace, CudaMmaType type, const CudaMmaBatchItem *items, size_t begin,
+                          size_t end, cudaStream_t stream) {
+  size_t max_output_elements = 0;
+  for (size_t i = begin; i < end; ++i) {
+    const auto &item = items[i];
+    auto &desc = workspace.host_descriptors[i];
+    desc.tile_m = item.tile_m;
+    desc.tile_k = item.tile_k;
+    desc.tile_n = item.tile_n;
+    desc.sat = item.sat;
+    max_output_elements = std::max(max_output_elements, size_t(item.tile_m) * item.tile_n);
   }
-  return success;
+  if (max_output_elements == 0)
+    return true;
+  for (size_t operand = 0; operand < 3; ++operand)
+    map_operand(workspace, items, begin, end, operand);
+  if (!report_error("copy batch descriptors to device",
+                    cudaMemcpyAsync(workspace.descriptors + begin, workspace.host_descriptors + begin,
+                                    (end - begin) * sizeof(CudaMmaBatchDescriptor), cudaMemcpyHostToDevice, stream)))
+    return false;
+  for (size_t operand = 0; operand < 3; ++operand)
+    if (!copy_operand(workspace, operand, begin, stream))
+      return false;
+  return cuda_mma_backend_launch_kernel(type, workspace.descriptors + begin, end - begin, max_output_elements,
+                                        workspace.operands[0].device, workspace.operands[1].device,
+                                        workspace.operands[2].device, stream);
 }
 
-bool cuda_mma_backend_launch(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
-                             size_t count) {
-  const bool success = cuda_mma_backend_enqueue(workspace, type, items, count);
-  if (!workspace)
-    return success;
-  const bool completed = workspace->synchronize();
-  return success && completed;
+bool cuda_mma_backend_enqueue_references(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
+                                         size_t count) {
+  if (count == 0)
+    return true;
+  if (!validate_batch(workspace, items, count))
+    return false;
+  for (size_t begin = 0; begin < count; begin += kRangeSize) {
+    const size_t end = std::min(begin + kRangeSize, count);
+    const auto stream = workspace->streams[(begin / kRangeSize) % 4];
+    if (!enqueue_range(*workspace, type, items, begin, end, stream))
+      return false;
+  }
+  return true;
 }
 
-void cuda_mma_backend_release(CudaMmaWorkspace *workspace) {
-  delete workspace;
+bool cuda_mma_backend_enqueue_checks(CudaMmaWorkspace *workspace, const CudaMmaBatchItem *items, size_t count,
+                                     uint8_t *passed) {
+  if (count == 0)
+    return true;
+  if (!validate_batch(workspace, items, count) || !passed)
+    return false;
+  const size_t result_bytes = workspace->operands[2].stride;
+  for (size_t begin = 0; begin < count; begin += kRangeSize) {
+    const size_t end = std::min(begin + kRangeSize, count);
+    const auto stream = workspace->streams[(begin / kRangeSize) % 4];
+    size_t max_output_elements = 0;
+    for (size_t i = begin; i < end; ++i)
+      max_output_elements = std::max(max_output_elements, size_t(items[i].tile_m) * items[i].tile_n);
+    if (max_output_elements) {
+      // Coalesce adjacent prepared slots without repacking on the caller.
+      auto &spans = workspace->dut_spans;
+      spans.clear();
+      for (size_t i = begin; i < end; ++i) {
+        auto *data = const_cast<uint8_t *>(items[i].dut);
+        if (!spans.empty() &&
+            reinterpret_cast<uintptr_t>(data) == reinterpret_cast<uintptr_t>(spans.back().host) + spans.back().bytes)
+          spans.back().bytes += result_bytes;
+        else
+          spans.push_back({data, result_bytes});
+      }
+#if CUDART_VERSION >= 13030
+      if (spans.size() > 1) {
+        void *destinations[kRangeSize];
+        const void *sources[kRangeSize];
+        size_t sizes[kRangeSize];
+        size_t offset = begin * result_bytes;
+        for (size_t i = 0; i < spans.size(); ++i) {
+          destinations[i] = workspace->device_dut + offset;
+          sources[i] = spans[i].host;
+          sizes[i] = spans[i].bytes;
+          offset += sizes[i];
+        }
+        cudaMemcpyAttributes attributes = {};
+        attributes.srcAccessOrder = cudaMemcpySrcAccessOrderStream;
+        attributes.flags = cudaMemcpyFlagPreferOverlapWithCompute;
+        size_t index = 0;
+        if (!report_error("upload DUT result batch",
+                          cudaMemcpyBatchAsync(destinations, sources, sizes, spans.size(), &attributes, &index, 1,
+                                               workspace->dut_stream)))
+          return false;
+      } else
+#endif
+      {
+        size_t offset = begin * result_bytes;
+        for (const auto &span: spans) {
+          if (!report_error("upload DUT results", cudaMemcpyAsync(workspace->device_dut + offset, span.host, span.bytes,
+                                                                  cudaMemcpyHostToDevice, workspace->dut_stream)))
+            return false;
+          offset += span.bytes;
+        }
+      }
+      const auto uploaded = workspace->dut_uploaded[begin / kRangeSize];
+      if (!report_error("record DUT upload", cudaEventRecord(uploaded, workspace->dut_stream)) ||
+          !report_error("wait for DUT upload", cudaStreamWaitEvent(stream, uploaded, 0)) ||
+          !cuda_mma_backend_compare_kernel(workspace->descriptors + begin, end - begin, workspace->operands[2].device,
+                                           workspace->device_dut, workspace->device_passed + begin, stream) ||
+          !report_error("download comparison flags", cudaMemcpyAsync(passed + begin, workspace->device_passed + begin,
+                                                                     end - begin, cudaMemcpyDeviceToHost, stream)))
+        return false;
+    } else {
+      memset(passed + begin, 1, end - begin);
+    }
+    if (count > kMmaCompletionSize &&
+        !report_error("record range completion", cudaEventRecord(workspace->completed[begin / kRangeSize], stream)))
+      return false;
+  }
+  return true;
+}
+
+bool cuda_mma_backend_read_result(CudaMmaWorkspace *workspace, size_t index, uint8_t *result) {
+  const auto &operand = workspace->operands[2];
+  return report_error("read mismatched reference result", cudaMemcpy(result, operand.device + index * operand.stride,
+                                                                     operand.stride, cudaMemcpyDeviceToHost));
 }
 
 #endif // CONFIG_DIFFTEST_MMA_CUDA
