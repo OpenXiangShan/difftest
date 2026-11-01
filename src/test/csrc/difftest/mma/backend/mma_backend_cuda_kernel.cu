@@ -14,9 +14,9 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "mma/backend/cuda/fp32.cuh"
 #include "mma/backend/cuda/int8.cuh"
 #include "mma/backend/mma_backend_cuda_impl.h"
-#include "mma/backend/mma_backend_cute_model.h"
 #include <cuda_runtime_api.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -98,9 +98,9 @@ __device__ __forceinline__ void mfmacc_cute_fp32_element(cute_mma_model::FloatFo
     if (valid_lanes > reduce_chunk_elems) {
       valid_lanes = reduce_chunk_elems;
     }
-    acc_bits = cute_mma_model::reduce_fp32_chunk(format, src1_row + static_cast<size_t>(k_base) * src_elem_bytes,
-                                                 src2_row + static_cast<size_t>(k_base) * src_elem_bytes, valid_lanes,
-                                                 kMmaReduceWidthBytes, acc_bits);
+    acc_bits = cute_mma_cuda::reduce_chunk<kMmaReduceWidthBytes>(
+        format, src1_row + static_cast<size_t>(k_base) * src_elem_bytes,
+        src2_row + static_cast<size_t>(k_base) * src_elem_bytes, valid_lanes, acc_bits);
   }
 
   write_u32_device(src3, i, j, kMmaResultRowBytes, acc_bits);

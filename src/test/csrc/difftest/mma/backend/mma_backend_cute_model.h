@@ -225,6 +225,9 @@ CUTE_MMA_HOST_DEVICE static inline int64_t align_c(const RawFloat &c, int max_ex
 }
 
 CUTE_MMA_HOST_DEVICE static inline int leading_zeros_32(uint32_t value) {
+#if defined(__CUDA_ARCH__)
+  return __clz(value);
+#else
   int count = 0;
   for (int bit = 31; bit >= 0; --bit) {
     if (((value >> bit) & 1u) != 0) {
@@ -233,6 +236,7 @@ CUTE_MMA_HOST_DEVICE static inline int leading_zeros_32(uint32_t value) {
     ++count;
   }
   return count;
+#endif
 }
 
 CUTE_MMA_HOST_DEVICE static inline uint32_t normalize_fp32(uint32_t reduce_bits, int max_exponent_token) {
@@ -305,7 +309,12 @@ CUTE_MMA_HOST_DEVICE static inline uint32_t reduce_fp32_chunk(FloatFormat format
         const RawFloat b = decode_source(load_little_endian(src2 + lane * elem_bytes, elem_bytes), format);
         aligned = align_product(multiply(a, b), max_exponent_token);
       }
+#if defined(__CUDA_ARCH__)
+      // Four aligned magnitudes sum to at most 4 * 2047 * 2047 * 8, which fits in 28 signed bits.
+      group_sum += aligned;
+#else
       group_sum = fixed_add(group_sum, aligned, 28);
+#endif
     }
 
     if (group < groups_per_half) {
