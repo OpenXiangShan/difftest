@@ -66,6 +66,10 @@ void CudaMmaBackend::prepare_result(MmaVerificationBuffer *buffer) {
   process->prepare_result(buffer);
 }
 
+MatrixResult CudaMmaBackend::allocate_result() {
+  return process->allocate_result();
+}
+
 void CudaMmaBackend::release_result(MmaVerificationBuffer *buffer) {
   process->release_result(buffer);
 }
@@ -100,6 +104,10 @@ CudaMmaBackend::CudaMmaBackend() = default;
 CudaMmaBackend::~CudaMmaBackend() = default;
 
 void CudaMmaBackend::start() {}
+
+MatrixResult CudaMmaBackend::allocate_result() {
+  return MatrixResult();
+}
 
 void CudaMmaBackend::prepare_result(MmaVerificationBuffer *) {}
 void CudaMmaBackend::release_result(MmaVerificationBuffer *) {}

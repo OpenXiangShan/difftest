@@ -130,6 +130,9 @@ MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
 }
 
 MatrixResult MmaVerifier::allocate_result() {
+  MatrixResult result = backend->allocate_result();
+  if (result)
+    return result;
   return result_pool->acquire();
 }
 

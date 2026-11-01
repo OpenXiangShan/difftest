@@ -60,9 +60,9 @@ struct Message {
   int32_t status;
 };
 
-// Only temporary operand snapshots are shared. ROB results and reference architectural state
-// remain ordinary COW memory in the simulator; DUT results are snapshotted here.
-struct SharedBatch {
+// Operands and canonical DUT results are shared with the CUDA service.
+// SharedStorage preserves private DUT snapshots for LightSSS replay.
+struct SharedBatchOperands {
   pid_t owner;
   DifftestAmuCtrlEvent events[CONFIG_DIFF_MMA_BATCH_SIZE];
   uint8_t passed[CONFIG_DIFF_MMA_BATCH_SIZE];
@@ -70,7 +70,99 @@ struct SharedBatch {
   uint64_t src1[kSharedSlots][CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES / sizeof(uint64_t)];
   uint64_t src2[kSharedSlots][CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES / sizeof(uint64_t)];
   uint64_t src3[kSharedSlots][CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / sizeof(uint64_t)];
+};
+
+struct SharedBatch : SharedBatchOperands {
+  uint8_t result_padding[65536 - sizeof(SharedBatchOperands) % 65536];
   uint64_t dut_results[kSharedSlots][CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / sizeof(uint64_t)];
+};
+
+// The simulator writes DUT results directly into this shared tail region.
+// LightSSS stops DUT writers before fork. Snapshots get private pages at
+// the same addresses, so existing ROB pointers remain valid while the parent
+// continues recycling shared slots.
+class SharedStorage {
+public:
+  explicit SharedStorage(void *mapping) : mapping(mapping) {
+    const long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0)
+      throw std::runtime_error("Cannot determine CUDA result page size");
+    const size_t page = page_size;
+    result = reinterpret_cast<uint8_t *>(static_cast<SharedBatch *>(mapping)->dut_results);
+    bytes = (sizeof(static_cast<SharedBatch *>(mapping)->dut_results) + page - 1) / page * page;
+    if (reinterpret_cast<uintptr_t>(result) % page)
+      throw std::runtime_error("CUDA result storage is not page-aligned");
+    std::lock_guard<std::mutex> lock(mutex());
+    static bool registered = false;
+    if (!registered) {
+      if (pthread_atfork(before_fork, after_parent, after_child))
+        throw std::runtime_error("Cannot register CUDA result snapshot handlers");
+      registered = true;
+    }
+    mappings().push_back(this);
+  }
+
+  ~SharedStorage() {
+    std::lock_guard<std::mutex> lock(mutex());
+    auto &live = mappings();
+    live.erase(std::find(live.begin(), live.end(), this));
+    munmap(mapping, sizeof(SharedBatch));
+  }
+
+private:
+  void *mapping;
+  uint8_t *result;
+  size_t bytes;
+  void *snapshot = nullptr;
+  bool private_results = false;
+
+  // Fork handlers remain installed until process exit.
+  static std::mutex &mutex() {
+    static auto *value = new std::mutex;
+    return *value;
+  }
+  static std::vector<SharedStorage *> &mappings() {
+    static auto *value = new std::vector<SharedStorage *>;
+    return *value;
+  }
+  static void fail() {
+    const char message[] = "CudaMmaBackend: cannot preserve DUT results across fork\n";
+    const ssize_t ignored = write(STDERR_FILENO, message, sizeof(message) - 1);
+    (void)ignored;
+    _exit(EXIT_FAILURE);
+  }
+  static void before_fork() {
+    mutex().lock();
+    for (auto *storage: mappings()) {
+      if (storage->private_results)
+        continue;
+      storage->snapshot = mmap(nullptr, storage->bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+      if (storage->snapshot == MAP_FAILED)
+        fail();
+      memcpy(storage->snapshot, storage->result, storage->bytes);
+    }
+  }
+  static void after_parent() {
+    for (auto *storage: mappings()) {
+      if (!storage->snapshot)
+        continue;
+      munmap(storage->snapshot, storage->bytes);
+      storage->snapshot = nullptr;
+    }
+    mutex().unlock();
+  }
+  static void after_child() {
+    for (auto *storage: mappings()) {
+      if (!storage->snapshot)
+        continue;
+      if (reinterpret_cast<void *>(syscall(SYS_mremap, storage->snapshot, storage->bytes, storage->bytes,
+                                           MREMAP_MAYMOVE | MREMAP_FIXED, storage->result)) == MAP_FAILED)
+        fail();
+      storage->snapshot = nullptr;
+      storage->private_results = true;
+    }
+    mutex().unlock();
+  }
 };
 
 uint8_t *operand_storage(SharedBatch *batch, size_t operand) {
@@ -257,7 +349,7 @@ void close_other_fds() {
 
 } // namespace
 
-CudaMmaProcess::CudaMmaProcess(MmaHostBuffer (&host)[3]) : host(host) {
+CudaMmaProcess::CudaMmaProcess(MmaHostBuffer (&host)[3]) : host(host), dut_host(new MmaHostBuffer()) {
   try {
     if (!start())
       throw std::runtime_error("Failed to start CUDA MMA worker");
@@ -279,10 +371,9 @@ void CudaMmaProcess::detach_inherited() {
     Assert(pool.all_recycled(), "MMA operand snapshots must be released before fork");
     pool.release();
   }
-  Assert(dut_host.all_recycled(), "MMA DUT snapshots must be released before fork");
-  dut_host.release();
-  if (shared)
-    munmap(shared, sizeof(SharedBatch));
+  // In-flight ROB results retain their now-private old mapping.
+  dut_host.reset(new MmaHostBuffer());
+  shared_storage.reset();
   if (storage_fd >= 0)
     close(storage_fd);
   storage_fd = -1;
@@ -294,11 +385,12 @@ void CudaMmaProcess::detach_inherited() {
 
 void CudaMmaProcess::release() {
   disconnect();
-  dut_host.release();
+  dut_host.reset();
   for (auto &pool: host)
     pool.release();
-  if (shared)
+  if (shared && !shared_storage)
     munmap(shared, sizeof(SharedBatch));
+  shared_storage.reset();
   if (storage_fd >= 0)
     close(storage_fd);
   shared = nullptr;
@@ -367,11 +459,12 @@ bool CudaMmaProcess::start() {
         shared = nullptr;
         break;
       }
+      shared_storage = std::make_shared<SharedStorage>(shared);
       for (size_t operand = 0; operand < 3; ++operand)
         host[operand].bind(operand_storage(static_cast<SharedBatch *>(shared), operand), operand_bytes(operand),
                            kPoolSlots);
-      dut_host.bind(reinterpret_cast<uint8_t *>(static_cast<SharedBatch *>(shared)->dut_results),
-                    CONFIG_DIFF_AMU_C_REG_SIZE_BYTES, kPoolSlots);
+      dut_host->bind(reinterpret_cast<uint8_t *>(static_cast<SharedBatch *>(shared)->dut_results),
+                     CONFIG_DIFF_AMU_C_REG_SIZE_BYTES, kPoolSlots);
     }
     static_cast<SharedBatch *>(shared)->owner = client_pid;
     if (!owner) {
@@ -463,17 +556,33 @@ void CudaMmaProcess::prepare() {
     throw std::runtime_error("Failed to restart CUDA MMA worker");
 }
 
+MatrixResult CudaMmaProcess::allocate_result() {
+  uint8_t *data = dut_host->acquire(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+  if (dut_host->slot(data) == MmaHostBuffer::invalid_slot) {
+    dut_host->recycle(data);
+    return MatrixResult();
+  }
+  const auto pool = dut_host;
+  const auto storage = shared_storage;
+  MatrixResultDeleter deleter;
+  deleter.shared_result = std::shared_ptr<uint8_t>(data, [pool, storage](uint8_t *result) { pool->recycle(result); });
+  return MatrixResult(reinterpret_cast<uint64_t *>(data), std::move(deleter));
+}
+
 void CudaMmaProcess::prepare_result(MmaVerificationBuffer *buffer) {
   if (!buffer->amu_event.mtilem || !buffer->amu_event.mtilen)
     return;
+  auto *result = reinterpret_cast<uint8_t *>(buffer->dut_result.get());
+  if (dut_host->slot(result) != MmaHostBuffer::invalid_slot)
+    return;
   if (!buffer->dut_snapshot)
-    buffer->dut_snapshot = dut_host.acquire(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+    buffer->dut_snapshot = dut_host->acquire(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
   memcpy(buffer->dut_snapshot, buffer->dut_result.get(), CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
 }
 
 void CudaMmaProcess::release_result(MmaVerificationBuffer *buffer) {
   if (buffer->dut_snapshot) {
-    dut_host.recycle(buffer->dut_snapshot);
+    dut_host->recycle(buffer->dut_snapshot);
     buffer->dut_snapshot = nullptr;
   }
 }
@@ -503,7 +612,7 @@ void CudaMmaProcess::verify(const std::vector<MmaVerificationBuffer *> &buffers,
     }
     const auto *dut_result =
         buffer.dut_snapshot ? buffer.dut_snapshot : reinterpret_cast<const uint8_t *>(buffer.dut_result.get());
-    size_t slot = dut_host.slot(dut_result);
+    size_t slot = dut_host->slot(dut_result);
     if (slot == MmaHostBuffer::invalid_slot) {
       slot = kPoolSlots + i;
       if (buffer.amu_event.mtilem && buffer.amu_event.mtilen)

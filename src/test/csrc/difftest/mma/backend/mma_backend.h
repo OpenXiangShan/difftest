@@ -75,7 +75,8 @@ class MmaResultPool;
 
 struct MatrixResultDeleter {
   std::shared_ptr<MmaResultPool> pool;
-  void operator()(uint64_t *buffer) const;
+  std::shared_ptr<uint8_t> shared_result;
+  void operator()(uint64_t *buffer);
 };
 
 // Move the whole lease when transferring ownership. To adopt an ordinary array,
@@ -120,6 +121,11 @@ public:
 
   // Runs on the producer before the verification thread starts.
   virtual void start() {}
+
+  // A backend may capture DUT writeback directly in uploadable storage.
+  virtual MatrixResult allocate_result() {
+    return MatrixResult();
+  }
 
   // Refresh an optional upload snapshot on the producer before submission.
   // A previous snapshot may be refreshed after verification completes.
