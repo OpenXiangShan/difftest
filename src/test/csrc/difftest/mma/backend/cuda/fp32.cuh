@@ -101,7 +101,8 @@ template <FloatFormat Format, int Width>
 __device__ __forceinline__ uint32_t reduce_chunk(const uint8_t *a, const uint8_t *b, int valid_lanes, uint32_t c_bits) {
   const int elem_bytes = ProductEncoding<Format>::bytes;
   const int capacity = Width / elem_bytes;
-  uint32_t products[capacity];
+  const int products_per_word = elem_bytes == 1 ? 2 : 1;
+  uint32_t products[(capacity + products_per_word - 1) / products_per_word];
   // A fixed unrolled bound keeps the packed products in registers, including partial tiles.
   if (valid_lanes > capacity)
     valid_lanes = capacity;
@@ -117,7 +118,11 @@ __device__ __forceinline__ uint32_t reduce_chunk(const uint8_t *a, const uint8_t
         max_exponent_token = product.exponent_token;
       if (product.is_nan || product.is_inf)
         special |= static_cast<uint32_t>(product.is_nan) | (product.is_inf ? (2u << product.sign) : 0);
-      products[lane] = pack_product<Format>(product);
+      const uint32_t packed = pack_product<Format>(product);
+      if (products_per_word == 1 || lane % products_per_word == 0)
+        products[lane / products_per_word] = packed;
+      else
+        products[lane / products_per_word] |= packed << 16;
     }
   }
   const int groups_per_half = Width / 8;
@@ -131,7 +136,10 @@ __device__ __forceinline__ uint32_t reduce_chunk(const uint8_t *a, const uint8_t
       const int lane = group * 4 + offset;
       int64_t aligned = 0;
       if (lane < valid_lanes && lane < capacity) {
-        const auto product = unpack_product<Format>(products[lane]);
+        uint32_t packed = products[lane / products_per_word];
+        if (products_per_word == 2)
+          packed = (packed >> (16 * (lane % 2))) & 0xffffu;
+        const auto product = unpack_product<Format>(packed);
         aligned = align_product(product, max_exponent_token);
       }
       group_sum += aligned;
