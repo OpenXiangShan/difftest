@@ -139,6 +139,10 @@ struct DiffStateValues {
 
   bool dump_commit_trace = false;
 
+#if defined(CONFIG_DIFFTEST_REPLAY) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+  uint64_t matrix_commit_sequence = 0;
+#endif // CONFIG_DIFFTEST_REPLAY && CONFIG_DIFFTEST_AMUCTRLEVENT
+
 protected:
   uint64_t commit_counter = 0;
 };
@@ -190,10 +194,17 @@ public:
   struct AmeInstRobEntry {
     explicit AmeInstRobEntry(const DifftestAmuCtrlEvent &event)
         : amu_event(event), state(WAIT_REF_COMMIT), res(nullptr) {}
+#ifdef CONFIG_DIFFTEST_REPLAY
+    AmeInstRobEntry(const DifftestAmuCtrlEvent &event, uint64_t sequence)
+        : amu_event(event), state(WAIT_REF_COMMIT), res(nullptr), sequence(sequence) {}
+#endif // CONFIG_DIFFTEST_REPLAY
 
     DifftestAmuCtrlEvent amu_event;
     AmeInstState state;
     MatrixResult res;
+#ifdef CONFIG_DIFFTEST_REPLAY
+    uint64_t sequence = 0;
+#endif // CONFIG_DIFFTEST_REPLAY
     MatrixHash128 hash{};
   };
 
@@ -268,6 +279,14 @@ private:
 
 #ifdef CONFIG_DIFFTEST_REPLAY
   DiffStateValues replay_state;
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  std::deque<AmeInstRobEntry> replay_matrix_sw_rob;
+
+  static void copy_matrix_sw_rob(std::deque<AmeInstRobEntry> &dst, const std::deque<AmeInstRobEntry> &src);
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  std::queue<DifftestMsyncEvent> replay_msync_event_queue;
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
 #endif // CONFIG_DIFFTEST_REPLAY
 };
 

@@ -46,6 +46,14 @@ MmaVerifier::MmaVerifier()
 
 MmaVerifier::~MmaVerifier() {
   stop();
+  discard_pending();
+  if (backend) {
+    delete backend;
+    backend = nullptr;
+  }
+}
+
+void MmaVerifier::discard_pending() {
   // Single-threaded here (verification thread already joined), no lock needed
   while (!mma_verification_queue.empty()) {
     auto buffer = mma_verification_queue.front();
@@ -56,10 +64,6 @@ MmaVerifier::~MmaVerifier() {
   MmaVerificationBuffer *err_buf = mma_error_buffer.exchange(nullptr);
   if (err_buf) {
     free_buffer(err_buf);
-  }
-  if (backend) {
-    delete backend;
-    backend = nullptr;
   }
 }
 
@@ -91,6 +95,12 @@ void MmaVerifier::stop() {
     mma_verification_thread.join();
   }
 #endif // !CONFIG_DIFFTEST_MMA_SYNC
+}
+
+void MmaVerifier::reset() {
+  stop();
+  discard_pending();
+  start();
 }
 
 bool MmaVerifier::flush() {
@@ -173,6 +183,26 @@ bool MmaVerifier::has_mma_verification_error() const {
 
 const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
   return mma_error_buffer.load(std::memory_order_acquire);
+}
+
+void MmaVerifier::report_error(const MmaVerificationBuffer *buffer) const {
+  Assert(buffer != nullptr, "Cannot report a null MMA verification buffer");
+  Info("MMA verification error detected at pc = 0x%lx.\n", buffer->amu_event.pc);
+  Info("------ DUT Result ------\n");
+  for (int i = 0; i < buffer->amu_event.mtilem; i++) {
+    for (int j = 0; j < buffer->amu_event.mtilen; j++) {
+      Info("%08x ", reinterpret_cast<const uint32_t *>(
+                        buffer->dut_result.get())[i * (kMmaResultRowBytes / sizeof(uint32_t)) + j]);
+    }
+    Info("\n");
+  }
+  Info("------ REF Result ------\n");
+  for (int i = 0; i < buffer->amu_event.mtilem; i++) {
+    for (int j = 0; j < buffer->amu_event.mtilen; j++) {
+      Info("%08x ", reinterpret_cast<const uint32_t *>(buffer->src3)[i * (kMmaResultRowBytes / sizeof(uint32_t)) + j]);
+    }
+    Info("\n");
+  }
 }
 
 void MmaVerifier::verify_batch(const std::vector<MmaVerificationBuffer *> &buffers) {

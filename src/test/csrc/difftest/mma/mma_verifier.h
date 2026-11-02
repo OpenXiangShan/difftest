@@ -63,6 +63,9 @@ struct MmaVerificationBuffer {
   uint8_t *src3;                   // Pointer to source matrix 3 data (accumulator)
   MatrixResult dut_result;         // Owns the software ROB's original result array
   uint8_t *dut_snapshot = nullptr; // Optional backend-owned upload snapshot
+#ifdef CONFIG_DIFFTEST_REPLAY
+  uint64_t sequence = 0; // Hardware-ROB commit sequence for replay boundaries
+#endif
 };
 
 /**
@@ -125,6 +128,11 @@ public:
    */
   void stop();
 
+  // Discard queued requests and the retained error, then resume verification.
+  // Keep the backend and its service alive for existing LightSSS snapshots.
+  // The producer must not submit requests while resetting.
+  void reset();
+
   /**
    * @brief Waits until no request remains queued or executing in the backend.
    *
@@ -185,7 +193,12 @@ public:
    */
   const MmaVerificationBuffer *get_error_buffer() const;
 
+  // Print the saved DUT/REF result for an error buffer. The caller owns
+  // DiffTest-level state such as the trap PC and commit trace display.
+  void report_error(const MmaVerificationBuffer *buffer) const;
+
 private:
+  void discard_pending();
   void verify_batch(const std::vector<MmaVerificationBuffer *> &buffers);
 
   std::thread mma_verification_thread;                        // Verification thread
