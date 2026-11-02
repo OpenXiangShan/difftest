@@ -57,6 +57,10 @@ private:
   bool h2c_verify_ = true;
   // Cross-check the first streamed frame against the config-window mirror.
   bool c2h_verify_first_bank_ = true;
+  // Confirm each CONSUME by reading the ring read pointer back.  Set
+  // GBUS_C2H_CONSUME_VERIFY=0 to drop that read and save one runtime round trip
+  // per batch when the drain, not the check, is the bottleneck.
+  bool c2h_consume_verify_ = true;
   // Payload bytes per gbus_dma_write when loading the H2C image.
   uint32_t h2c_chunk_bytes_ = 256;
   // Opt-in timing summary for board A/B measurements; off by default so a
