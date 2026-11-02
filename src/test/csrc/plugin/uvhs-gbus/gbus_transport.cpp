@@ -36,7 +36,11 @@ constexpr uint64_t GBUS_REG_C2H_RD_PTR = 0x1240;
 // frame cross-check.
 constexpr uint64_t GBUS_REG_C2H_DATA = 0x2000;
 constexpr uint32_t GBUS_C2H_STREAM_FRAME_BYTES = 768;
-constexpr uint64_t GBUS_C2H_STREAM_APERTURE = 0x0ffc0000ULL;
+constexpr uint64_t GBUS_C2H_STREAM_APERTURE = 0x0ff40000ULL;
+// Contiguous {status, available, rd_ptr, wr_ptr} snapshot.  Reading it once per
+// batch replaces one runtime round trip per field, which is what keeps the ring
+// drained fast enough that producer backpressure never reaches the CPU.
+constexpr uint64_t GBUS_REG_C2H_SNAPSHOT = 0x1248;
 
 constexpr uint32_t GBUS_C2H_STATUS_PRESENT = 1U << 31;
 constexpr uint32_t GBUS_C2H_STATUS_FRAME_ERROR = 1U << 30;
@@ -116,6 +120,7 @@ GbusTransport::GbusTransport() {
   if (!h2c_chunk_bytes_ || h2c_chunk_bytes_ % 32)
     fatal("H2C chunk must be 32..0x7FFE0 bytes and a multiple of 32");
   c2h_verify_first_bank_ = env_u64("GBUS_C2H_VERIFY_FIRST_BANK", 1, 1) != 0;
+  c2h_consume_verify_ = env_u64("GBUS_C2H_CONSUME_VERIFY", 1, 1) != 0;
   h2c_verify_ = env_u64("GBUS_H2C_VERIFY", 1, 1) != 0;
   timing_ = env_u64("GBUS_TIMING", 0, 1) != 0;
   // Preserve the established 64-frame batching default. Set the variable to 0
@@ -246,11 +251,11 @@ void GbusTransport::c2h_probe_stream() {
     fatal("GBus GBD1 streaming aperture or ring size is invalid");
   c2h_stream_frames_ = ring / GBUS_C2H_STREAM_FRAME_BYTES;
   c2h_stream_frame_bytes_ = GBUS_C2H_STREAM_FRAME_BYTES;
-  // A batch cannot exceed the ring, and draining at the ring depth is what
-  // amortises the fixed per-call cost.  Leave a small margin so the producer is
-  // not forced to stall exactly at the boundary.
+  // Drain at half the ring: the remaining half is the headroom the producer
+  // keeps while this batch is in flight.  Draining near the ring depth would
+  // leave no slack and stall the CPU for the whole DMA.
   if (c2h_stream_min_frames_ == 0 || c2h_stream_min_frames_ > c2h_stream_frames_)
-    c2h_stream_min_frames_ = c2h_stream_frames_ > 8 ? c2h_stream_frames_ - 8 : c2h_stream_frames_;
+    c2h_stream_min_frames_ = c2h_stream_frames_ > 2 ? c2h_stream_frames_ / 2 : 1;
   if (c2h_stream_frames_ == 0)
     fatal("GBus GBD1 streaming ring is empty");
 }
@@ -306,7 +311,12 @@ void GbusTransport::c2h_drain_stream_frames() {
   uint32_t previous_available = 0;
 
   while (alive()) {
-    const uint32_t status = c2h_reg_read(GBUS_REG_C2H_STATUS);
+    // One grouped read returns status, frame count and both ring pointers.
+    std::vector<uint32_t> snap;
+    c2h_read_block(GBUS_REG_C2H_SNAPSHOT, 4, snap);
+    if (snap.size() != 4)
+      fail("snapshot read failed", 0);
+    uint32_t status = snap[0];
     check_status(status);
 
     // STATUS bit 5 already says whether any complete frame is published, so an
@@ -324,16 +334,8 @@ void GbusTransport::c2h_drain_stream_frames() {
       continue;
     }
 
-    // The drain loop needs the two ring counters in one call; the startup
-    // probe has already established that this runtime honours a multi-word
-    // count.  A grouped read costs a fixed overhead plus a per-word cost, so
-    // the write pointer is left out: nothing reads it.
-    std::vector<uint32_t> words;
-    c2h_read_block(GBUS_REG_C2H_AVAILABLE, 2, words);
-    if (words.size() != 2)
-      fail("counter read failed", status);
-    const uint32_t available = words[0];
-    uint32_t rd_ptr = words[1];
+    const uint32_t available = snap[1];
+    uint32_t rd_ptr = snap[2];
     if (available > c2h_stream_frames_ || rd_ptr >= ring_bytes || rd_ptr % c2h_stream_frame_bytes_ != 0)
       fail("invalid counter snapshot", status);
     if (available != previous_available) {
@@ -420,21 +422,29 @@ void GbusTransport::c2h_drain_stream_frames() {
     // keeps writing during the DMA call, so a counter comparison would race,
     // while the read pointer must advance by exactly the released frame count.
     c2h_reg_write(GBUS_REG_C2H_AVAILABLE, take);
-    const uint32_t status_after = c2h_reg_read(GBUS_REG_C2H_STATUS);
-    check_status(status_after);
-    const uint32_t rd_after = c2h_reg_read(GBUS_REG_C2H_RD_PTR);
-    const uint64_t expect_rd = (static_cast<uint64_t>(rd_ptr) + count) % ring_bytes;
-    if (rd_after != expect_rd) {
-      // The engine drops capture (and clears both ring pointers) when the CPU
-      // ends its DiffTest stream, so a CONSUME issued after the trap cannot be
-      // acknowledged.  Everything already copied out has been dispatched; stop
-      // cleanly instead of reporting a transport fault.
-      if (!(status_after & GBUS_C2H_STATUS_ENABLED)) {
-        std::fprintf(stderr, "[fpga-host] GBD1 stream ended by CPU after frames=%llu bytes=%llu\n",
-                     static_cast<unsigned long long>(frames), static_cast<unsigned long long>(bytes));
-        break;
+    // GBUS_C2H_CONSUME_VERIFY=0 drops the confirmation read to save one runtime
+    // round trip per batch; the release itself is unchanged.
+    if (c2h_consume_verify_) {
+      std::vector<uint32_t> after;
+      c2h_read_block(GBUS_REG_C2H_SNAPSHOT, 4, after);
+      if (after.size() != 4)
+        fail("post-consume snapshot failed", 0);
+      const uint32_t status_after = after[0];
+      check_status(status_after);
+      const uint32_t rd_after = after[2];
+      const uint64_t expect_rd = (static_cast<uint64_t>(rd_ptr) + count) % ring_bytes;
+      if (rd_after != expect_rd) {
+        // The engine drops capture (and clears both ring pointers) when the CPU
+        // ends its DiffTest stream, so a CONSUME issued after the trap cannot be
+        // acknowledged.  Everything already copied out has been dispatched; stop
+        // cleanly instead of reporting a transport fault.
+        if (!(status_after & GBUS_C2H_STATUS_ENABLED)) {
+          std::fprintf(stderr, "[fpga-host] GBD1 stream ended by CPU after frames=%llu bytes=%llu\n",
+                       static_cast<unsigned long long>(frames), static_cast<unsigned long long>(bytes));
+          break;
+        }
+        fail("CONSUME was not applied", status_after);
       }
-      fail("CONSUME was not applied", status_after);
     }
 
     frames += take;
