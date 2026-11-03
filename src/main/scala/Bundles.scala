@@ -454,7 +454,8 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
   def opType: UInt = base
 }
 
-class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends DifftestBaseBundle with HasValid {
+// Matrix-register write beats; finish marks the end of the instruction.
+class AmuWritebackEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends DifftestBaseBundle with HasValid {
   require(nBanks > 0, s"nBanks should be positive, got $nBanks")
   require(wordsPerBank > 0, s"wordsPerBank should be positive, got $wordsPerBank")
 
@@ -466,8 +467,13 @@ class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends Dif
   val finish = Bool()
 }
 
+// Completion notification for mstore/mrelease; validity implies completion.
+class AmuFinishEvent extends DifftestBaseBundle with HasValid {
+  val pc = UInt(64.W)
+}
+
 // Compact completion record used by load/zero instructions.  The full
-// AmuFinishEvent is intentionally retained for MMA, whose result is consumed
+// AmuWritebackEvent is intentionally retained for MMA, whose result is consumed
 // by the asynchronous numerical verifier.
 class AmuHashFinishEvent extends DifftestBaseBundle with HasValid {
   val pc = UInt(64.W)

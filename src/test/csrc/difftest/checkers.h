@@ -570,19 +570,30 @@ public:
   int do_step() override;
 };
 
-class AmuExecRecorder : public ProbeChecker<DifftestAmuFinishEvent> {
+class AmuExecRecorder : public ProbeChecker<DifftestAmuWritebackEvent> {
 public:
   AmuExecRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuWritebackEvent>(get_probe, state, proxy) {}
+
+  bool get_valid(const DifftestAmuWritebackEvent &probe) override;
+  void clear_valid(DifftestAmuWritebackEvent &probe) override;
+  int check(const DifftestAmuWritebackEvent &probe) override;
+
+private:
+  void record_writeback(DiffState::AmeInstRobEntry &entry, const DifftestAmuWritebackEvent &probe);
+};
+
+#ifdef CONFIG_DIFFTEST_AMUFINISHEVENT
+class AmuFinishRecorder : public ProbeChecker<DifftestAmuFinishEvent> {
+public:
+  AmuFinishRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
       : ProbeChecker<DifftestAmuFinishEvent>(get_probe, state, proxy) {}
 
   bool get_valid(const DifftestAmuFinishEvent &probe) override;
   void clear_valid(DifftestAmuFinishEvent &probe) override;
   int check(const DifftestAmuFinishEvent &probe) override;
-
-private:
-  void record_writeback(DiffState::AmeInstRobEntry &entry, const DifftestAmuFinishEvent &probe);
-  int execute_mrelease(const DifftestAmuCtrlEvent &event, const DifftestAmuFinishEvent &probe);
 };
+#endif
 
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
 class AmuHashExecRecorder : public ProbeChecker<DifftestAmuHashEvent> {

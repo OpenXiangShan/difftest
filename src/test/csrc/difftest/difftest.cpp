@@ -289,12 +289,6 @@ Difftest::Difftest(int coreid) {
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   mma_verifier = nullptr;
-
-  // Initialize AMU finish event buffers
-  for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
-    amu_finish_buffers[i] = new uint8_t[128 * 128 * 4];
-    memset(amu_finish_buffers[i], 0, 128 * 128 * 4);
-  }
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 }
 
@@ -303,11 +297,6 @@ Difftest::~Difftest() {
   // Stop MMA verification thread and clean up verifier
   if (mma_verifier) {
     delete mma_verifier;
-  }
-
-  // Free AMU finish event buffers
-  for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
-    delete[] amu_finish_buffers[i];
   }
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
@@ -468,10 +457,16 @@ void Difftest::init_checkers() {
         new AmuCtrlRecorder([this, i]() -> DifftestAmuCtrlEvent & { return dut->amu_ctrl[i]; }, state, proxy));
   }
   checkers.push_back(new AmuCtrlChecker(state, proxy));
-  for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; i++) {
-    checkers.push_back(
-        new AmuExecRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
+  for (int i = 0; i < CONFIG_DIFF_AMU_WRITEBACK_WIDTH; i++) {
+    checkers.push_back(new AmuExecRecorder([this, i]() -> DifftestAmuWritebackEvent & { return dut->amu_writeback[i]; },
+                                           state, proxy));
   }
+#ifdef CONFIG_DIFFTEST_AMUFINISHEVENT
+  for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
+    checkers.push_back(
+        new AmuFinishRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
+  }
+#endif
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
   for (int i = 0; i < CONFIG_DIFF_AMU_HASH_FINISH_WIDTH; ++i) {
     checkers.push_back(new AmuHashExecRecorder(

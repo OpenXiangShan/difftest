@@ -2,7 +2,7 @@ package difftest.util
 
 import chisel3._
 import chisel3.util._
-import difftest.{DiffAmuFinishEvent, DiffAmuHashEvent, DifftestModule}
+import difftest.{DiffAmuHashEvent, DiffAmuWritebackEvent, DifftestModule}
 
 /** A position-bound fingerprint of accepted matrix-register writes, before Gateway/FPGA transport.
   *
@@ -63,14 +63,14 @@ object MatrixHash {
   }
 
   // Callers drive the returned accepted-write bundle; only the compact hash enters the gateway.
-  def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int): DiffAmuFinishEvent =
+  def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int): DiffAmuWritebackEvent =
     apply(banks, bankBytes, regBytes, rowBytes, ports = 1).head
 
   // Port zero owns instruction metadata and finish. Other ports only contribute
   // accepted writes to that same instruction; they never complete independently.
-  def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports: Int): Vec[DiffAmuFinishEvent] = {
+  def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports: Int): Vec[DiffAmuWritebackEvent] = {
     val module = Module(new MatrixHash(banks, bankBytes, regBytes, rowBytes, ports))
-    val writes = Wire(Vec(ports, new DiffAmuFinishEvent(banks, bankBytes / 8)))
+    val writes = Wire(Vec(ports, new DiffAmuWritebackEvent(banks, bankBytes / 8)))
     module.io.in := writes
     DifftestModule(new DiffAmuHashEvent) := module.io.out
     writes
@@ -97,7 +97,7 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
   require(entriesPerBank > 1 && entriesPerBank <= 256 && isPow2(entriesPerBank))
 
   val io = IO(new Bundle {
-    val in = Input(Vec(ports, new DiffAmuFinishEvent(banks, bankBytes / 8)))
+    val in = Input(Vec(ports, new DiffAmuWritebackEvent(banks, bankBytes / 8)))
     val out = Output(new DiffAmuHashEvent)
   })
 

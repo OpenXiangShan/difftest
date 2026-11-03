@@ -40,12 +40,12 @@ static void set_error_pc(int coreid, uint64_t pc) {
 #define CONFIG_DIFF_AMU_BANK_WIDTH 256
 #endif
 
-#ifndef CONFIG_DIFF_AMU_FINISH_BANKS
-#define CONFIG_DIFF_AMU_FINISH_BANKS 8
+#ifndef CONFIG_DIFF_AMU_WRITEBACK_BANKS
+#define CONFIG_DIFF_AMU_WRITEBACK_BANKS 8
 #endif
 
-#ifndef CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK
-#define CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK 4
+#ifndef CONFIG_DIFF_AMU_WRITEBACK_WORDS_PER_BANK
+#define CONFIG_DIFF_AMU_WRITEBACK_WORDS_PER_BANK 4
 #endif
 
 #ifndef CONFIG_DIFF_AMU_AB_WORDS_PER_BANK
@@ -234,16 +234,16 @@ int AmuCtrlChecker::do_step() {
   return STATE_OK;
 }
 
-// 3. Capture DUT matrix writeback; apply mrelease's REF effect and mark it ready for software ROB retirement
-bool AmuExecRecorder::get_valid(const DifftestAmuFinishEvent &probe) {
+// 3. Record DUT matrix writeback and completion events before software ROB retirement
+bool AmuExecRecorder::get_valid(const DifftestAmuWritebackEvent &probe) {
   return probe.valid;
 }
 
-void AmuExecRecorder::clear_valid(DifftestAmuFinishEvent &probe) {
+void AmuExecRecorder::clear_valid(DifftestAmuWritebackEvent &probe) {
   probe.valid = 0;
 }
 
-void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const DifftestAmuFinishEvent &probe) {
+void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const DifftestAmuWritebackEvent &probe) {
   const static size_t ARLen = CONFIG_DIFF_AMU_ARLEN;
   const static size_t TRLen = CONFIG_DIFF_AMU_TRLEN;
   const size_t matrix_size =
@@ -260,7 +260,7 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
   uint8_t md = entry.amu_event.md;
   const size_t matrix_words_per_bank = (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
   // bankAddr is an entry index in the selected matrix register. The
-  // finish event may carry a wider, shared payload than that entry
+  // writeback event may carry a wider, shared payload than that entry
   // (e.g. C is 128 bits in MinimalMatrixConfig, while the event is
   // still 256 bits for the A/B path). Derive the interleave stride from
   // the selected register's physical entry width, not the event width.
@@ -272,15 +272,15 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
   assert(stride > 0);
   assert(matrix_words_per_bank > 0);
 
-  for (int j = 0; j < CONFIG_DIFF_AMU_FINISH_BANKS; ++j) { // for each bank
+  for (int j = 0; j < CONFIG_DIFF_AMU_WRITEBACK_BANKS; ++j) { // for each bank
     if (probe.bankValid[j]) {
       const size_t addr = probe.bankAddr[j];
-      const size_t matrix_entry = addr / stride * stride * CONFIG_DIFF_AMU_FINISH_BANKS + j * stride + addr % stride;
+      const size_t matrix_entry = addr / stride * stride * CONFIG_DIFF_AMU_WRITEBACK_BANKS + j * stride + addr % stride;
       const size_t idx = matrix_entry * matrix_words_per_bank;
       assert(idx + matrix_words_per_bank <= matrix_u64_size);
 
       uint8_t *dst = reinterpret_cast<uint8_t *>(&entry.res[idx]);
-      const uint8_t *src = reinterpret_cast<const uint8_t *>(&probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK]);
+      const uint8_t *src = reinterpret_cast<const uint8_t *>(&probe.data[j * CONFIG_DIFF_AMU_WRITEBACK_WORDS_PER_BANK]);
       const uint64_t mask = probe.bankMask[j];
       const size_t bank_bytes = matrix_words_per_bank * sizeof(uint64_t);
       for (size_t k = 0; k < bank_bytes; ++k) {
@@ -292,68 +292,70 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
   }
 }
 
-int AmuExecRecorder::execute_mrelease(const DifftestAmuCtrlEvent &event, const DifftestAmuFinishEvent &probe) {
-  if (!probe.finish) {
-    printf("Mrelease finish event is incomplete: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
-    set_error_pc(state->coreid, probe.pc);
-    return STATE_ERROR;
-  }
-
-  struct AmuCtrlEvent amu_event_nemu = to_nemu_amu_ctrl(event);
-  if (proxy->exec_amu(&amu_event_nemu) != 0) {
-    printf("Failed to execute REF mrelease: core %d, pc 0x%016lx\n", state->coreid, event.pc);
-    set_error_pc(state->coreid, event.pc);
-    return STATE_ERROR;
-  }
-  return STATE_OK;
-}
-
-int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
+int AmuExecRecorder::check(const DifftestAmuWritebackEvent &probe) {
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
     if (iter->amu_event.pc == probe.pc && iter->state == DiffState::WAIT_DUT_EXEC) {
-      switch (iter->amu_event.op) {
-        case 0: // MMA
-          record_writeback(*iter, probe);
-          break;
-#ifndef CONFIG_DIFFTEST_AMUHASHEVENT
-        case 1: // Matrix load/store
-          if (iter->amu_event.sat == 1)
-            break;
-        case 3: // mzero
-          record_writeback(*iter, probe);
-          break;
+      const auto &event = iter->amu_event;
+#ifdef CONFIG_DIFFTEST_AMUHASHEVENT
+      // MMA
+      bool expects_writeback = event.op == 0;
 #else
-        case 1: // Matrix load/store
-          if (iter->amu_event.sat == 0) {
-            printf("Expected hash completion for mload/mzero: pc 0x%016lx\n", probe.pc);
-            set_error_pc(state->coreid, probe.pc);
-            return STATE_ERROR;
-          }
-          break;
-        case 3: // Matrix Arith
-          printf("Expected hash completion for mload/mzero: pc 0x%016lx\n", probe.pc);
-          set_error_pc(state->coreid, probe.pc);
-          return STATE_ERROR;
-#endif
-        case 2: // mrelease
-          if (execute_mrelease(iter->amu_event, probe) != STATE_OK)
-            return STATE_ERROR;
-          break;
-        default:
-          printf("Unknown amu event op: %d\n", iter->amu_event.op);
-          set_error_pc(state->coreid, probe.pc);
-          return STATE_ERROR;
+      // MMA/mload/mzero
+      bool expects_writeback = event.op == 0 || (event.op == 1 && event.sat == 0) || event.op == 3;
+#endif // CONFIG_DIFFTEST_AMUHASHEVENT
+      if (!expects_writeback) {
+        printf("Unexpected writeback event: core %d, pc 0x%016lx, op %d\n", state->coreid, probe.pc, event.op);
+        set_error_pc(state->coreid, probe.pc);
+        return STATE_ERROR;
       }
+      record_writeback(*iter, probe);
       if (probe.finish) {
         iter->state = DiffState::WAIT_SWROB_COMMIT;
       }
       return STATE_OK;
     }
   }
+  printf("No matching AMU instruction for writeback event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+  set_error_pc(state->coreid, probe.pc);
+  return STATE_ERROR;
+}
+
+#ifdef CONFIG_DIFFTEST_AMUFINISHEVENT
+bool AmuFinishRecorder::get_valid(const DifftestAmuFinishEvent &probe) {
+  return probe.valid;
+}
+
+void AmuFinishRecorder::clear_valid(DifftestAmuFinishEvent &probe) {
+  probe.valid = 0;
+}
+
+int AmuFinishRecorder::check(const DifftestAmuFinishEvent &probe) {
+  for (auto &entry: state->matrix_sw_rob) {
+    if (entry.amu_event.pc != probe.pc || entry.state != DiffState::WAIT_DUT_EXEC) {
+      continue;
+    }
+    const auto &event = entry.amu_event;
+    if (event.op == 2) {
+      // Apply msync before a following core-side macquire can be checked.
+      struct AmuCtrlEvent amu_event_nemu = to_nemu_amu_ctrl(event);
+      if (proxy->exec_amu(&amu_event_nemu) != 0) {
+        printf("Failed to execute REF mrelease: core %d, pc 0x%016lx\n", state->coreid, event.pc);
+        set_error_pc(state->coreid, event.pc);
+        return STATE_ERROR;
+      }
+    } else if (event.op != 1 || event.sat != 1) {
+      printf("Expected mstore/mrelease for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+      set_error_pc(state->coreid, probe.pc);
+      return STATE_ERROR;
+    }
+    entry.state = DiffState::WAIT_SWROB_COMMIT;
+    return STATE_OK;
+  }
   printf("No matching AMU instruction for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
   set_error_pc(state->coreid, probe.pc);
   return STATE_ERROR;
 }
+#endif // CONFIG_DIFFTEST_AMUFINISHEVENT
 
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
 bool AmuHashExecRecorder::get_valid(const DifftestAmuHashEvent &probe) {

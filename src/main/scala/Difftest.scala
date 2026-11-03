@@ -571,13 +571,19 @@ class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWit
   override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
 }
 
-class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
-  extends AmuFinishEvent(nBanks, wordsPerBank)
+class DiffAmuWritebackEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
+  extends AmuWritebackEvent(nBanks, wordsPerBank)
   with DifftestBundle
   with DifftestWithIndex {
-  override val desiredCppName: String = "amu_finish"
+  override val desiredCppName: String = "amu_writeback"
 
   override def classArgs: Map[String, Any] = Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank)
+
+  override val squashGroup: Seq[String] = Seq("MATRIX")
+}
+
+class DiffAmuFinishEvent extends AmuFinishEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "amu_finish"
 
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
@@ -812,15 +818,18 @@ object DifftestModule {
           val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
           difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
         }
-        if (bundleType.desiredCppName == "amu_finish") {
-          val amuFinish = bundleType.asInstanceOf[AmuFinishEvent]
+        if (bundleType.desiredCppName == "amu_writeback") {
+          val amuFinish = bundleType.asInstanceOf[AmuWritebackEvent]
           val amuBanks = amuFinish.bankValid.length
           val amuWordBits = amuFinish.data.head.getWidth
-          require(amuFinish.data.length % amuBanks == 0, "AmuFinishEvent.data length should be divisible by bank count")
+          require(
+            amuFinish.data.length % amuBanks == 0,
+            "AmuWritebackEvent.data length should be divisible by bank count",
+          )
           val amuWordsPerBank = amuFinish.data.length / amuBanks
-          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_BANKS $amuBanks"
-          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK $amuWordsPerBank"
-          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_WORD_BITS $amuWordBits"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_WRITEBACK_BANKS $amuBanks"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_WRITEBACK_WORDS_PER_BANK $amuWordsPerBank"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_WRITEBACK_WORD_BITS $amuWordBits"
           difftestCpp += s"#define CONFIG_DIFF_AMU_BANK_WIDTH ${amuWordsPerBank * amuWordBits}"
         }
         difftestCpp += bundleType.toCppDeclaration(structPacked, structAligned)

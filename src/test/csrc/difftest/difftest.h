@@ -212,10 +212,6 @@ protected:
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   // MMA verifier instance
   MmaVerifier *mma_verifier;
-
-  // AMU finish event buffers
-  // Each buffer is a 128x128 matrix of 32-bit elements (4 bytes each)
-  uint8_t *amu_finish_buffers[CONFIG_DIFF_AMU_FINISH_WIDTH];
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #ifdef CONFIG_DIFFTEST_FAST_REF

@@ -174,7 +174,8 @@ coherence via RefillTest.
 | `DiffUncacheMMStoreEvent` | Uncache buffer main memory store operations | No |
 | `DiffCMOInvalEvent` | Commit of cbo.inval | No |
 | `DiffAmuCtrlEvent` | AMU control events for Matrix instructions | No |
-| `DiffAmuFinishEvent` | AMU execution completion and matrix register-bank updates | No |
+| `DiffAmuWritebackEvent` | Matrix register-bank writeback data and final-writeback indication | No |
+| `DiffAmuFinishEvent` | Completion notifications for matrix store and release instructions | No |
 | `DiffMsyncEvent` | Synchronization events for msyncregreset, macquire, and mfence instructions | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
