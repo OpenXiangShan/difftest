@@ -79,6 +79,7 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
   def dpicFuncName: String = s"v_difftest_${desiredName.replace("DiffExt", "")}"
   def dpicFuncArgs: Seq[Seq[(String, Data)]] =
     modPorts.filterNot(p => p.length == 1 && commonPorts.exists(_._1 == p.head._1))
+  def dpicFuncCallArgs: Seq[String] = dpicFuncArgs.flatten.map(_._1)
   def dpicFuncProto: String =
     s"""
        |extern "C" void $dpicFuncName (
@@ -160,7 +161,7 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
          |$gfifoInitial
          |  always @(posedge clock) begin
          |    if (enable)
-         |      $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
+         |      $dpicFuncName (${dpicFuncCallArgs.mkString(", ")});
          |  end
          |`endif // CONFIG_DIFFTEST_FPGA
          |`endif // DIFFTEST
@@ -177,7 +178,7 @@ abstract class DPICBase(config: GatewayConfig) extends ExtModule with HasExtModu
        |  ${extArgs.mkString(",\n  ")}
        |) {
        |  if (enable) {
-       |    $dpicFuncName (${dpicFuncArgs.flatten.map(_._1).mkString(", ")});
+       |    $dpicFuncName (${dpicFuncCallArgs.mkString(", ")});
        |  }
        |}
        |""".stripMargin
@@ -188,18 +189,37 @@ class DPIC[T <: DifftestBundle](gen: T, config: GatewayConfig) extends DPICBase(
   val io = IO(Input(gen))
 
   override def desiredName: String = gen.desiredModuleName.replace("Difftest", "DiffExt")
-  override def modPorts: Seq[Seq[(String, Data)]] = {
-    super.modPorts ++ io.elementsInSeqUInt.map { case (name, dataSeq) =>
+  private def namedIOPorts(elements: Seq[(String, Seq[UInt])]): Seq[Seq[(String, Data)]] = {
+    elements.map { case (name, dataSeq) =>
       val prefixName = s"io_$name"
       val finalName = (i: Int) => if (dataSeq.length == 1) prefixName else s"${prefixName}_$i"
       dataSeq.zipWithIndex.map { case (d, i) => (finalName(i), d) }
     }
   }
-  override def dpicFuncArgs: Seq[Seq[(String, Data)]] = if (gen.bits.hasValid) {
-    super.dpicFuncArgs.filterNot(p => p.length == 1 && p.head._1 == "io_valid")
-  } else {
-    super.dpicFuncArgs
+
+  private val physicalIOPorts = namedIOPorts(io.physicalElementsInSeqUInt)
+  private val logicalIOPorts = namedIOPorts(io.elementsInSeqUInt)
+  require(
+    physicalIOPorts.flatten.length == logicalIOPorts.flatten.length,
+    s"Physical and logical DPIC layouts differ for ${gen.desiredModuleName}",
+  )
+  require(
+    physicalIOPorts.flatten.map(_._2.getWidth) == logicalIOPorts.flatten.map(_._2.getWidth),
+    s"Physical and logical DPIC widths differ for ${gen.desiredModuleName}",
+  )
+
+  private def withoutCommonPorts(ports: Seq[Seq[(String, Data)]]): Seq[Seq[(String, Data)]] =
+    ports.filterNot(p => p.length == 1 && commonPorts.exists(_._1 == p.head._1))
+
+  private def withoutValid(ports: Seq[Seq[(String, Data)]]): Seq[Seq[(String, Data)]] = {
+    if (gen.bits.hasValid) ports.filterNot(p => p.length == 1 && p.head._1 == "io_valid") else ports
   }
+
+  override def modPorts: Seq[Seq[(String, Data)]] = super.modPorts ++ physicalIOPorts
+  override def dpicFuncArgs: Seq[Seq[(String, Data)]] =
+    withoutValid(withoutCommonPorts(super.modPorts) ++ logicalIOPorts)
+  override def dpicFuncCallArgs: Seq[String] =
+    withoutValid(withoutCommonPorts(super.modPorts) ++ physicalIOPorts).flatten.map(_._1)
 
   override def dpicFuncAssigns: Seq[String] = {
     val filters: Seq[(DifftestBundle => Boolean, Seq[String])] = Seq(
