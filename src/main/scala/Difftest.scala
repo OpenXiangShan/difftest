@@ -577,7 +577,9 @@ object DifftestModule {
   def get_command_configs(): Seq[String] = cmdConfigs.toSeq
 
   def collect(cpu: String): GatewayResult = {
-    val gateway = Gateway.collect()
+    // An observation-free simulation still needs the top-level UART/log ports
+    // and generated headers, but has no cores in the DiffTest interface schema.
+    val gateway = if (interfaces.isEmpty) GatewayResult() else Gateway.collect()
     generateCppHeader(
       cpu,
       gateway.instances,

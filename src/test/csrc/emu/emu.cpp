@@ -95,6 +95,10 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif // VERILATOR
 
   args = parse_args(argc, argv);
+#ifdef CONFIG_NO_DIFFTEST
+  args.enable_diff = false;
+  Info("[DIFFTEST_MODE] disabled (CONFIG_NO_DIFFTEST): collection=off checking=off\n");
+#endif
   progress_trace_interval_cycles = parse_env_u64("EMU_PROGRESS_EVERY_CYCLES", 0);
   progress_trace_enabled = progress_trace_interval_cycles != 0;
   next_progress_trace_cycle = progress_trace_interval_cycles;
@@ -796,6 +800,10 @@ void Emulator::trigger_stat_dump() {
 }
 
 void Emulator::display_stats() {
+#ifdef CONFIG_NO_DIFFTEST
+  Info("[EMU_COMPLETION] reason=%s cycles=%" PRIu64 "\n",
+       trapCode == STATE_LIMIT_EXCEEDED ? "cycle-limit" : "other", cycles);
+#endif
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     printf("Core %d: ", i);
