@@ -248,4 +248,8 @@ void mcsim_backend_step();
 void mcsim_backend_finish();
 #endif
 
+#ifdef WITH_EXTERNAL_MEMORY_BACKEND
+extern "C" bool external_memory_backend_bind(uint64_t base_addr);
+#endif
+
 #endif
