@@ -20,13 +20,16 @@ import chisel3.experimental.ExtModule
 import chisel3.util._
 
 private trait HasMemInitializer { this: ExtModule =>
-  def mem_decl: String
-  def mem_target: String
+  def mem_decl(banked: Boolean): String
+  def mem_targets(banked: Boolean): Seq[String]
+  def mem_read(index: String, banked: Boolean): String
+  def mem_write(index: String, data: String, mask: String, banked: Boolean): String
 
-  private val initializer =
+  private def initializer(banked: Boolean) =
     """
       |  string bin_file;
-      |  integer memory_image = 0, n_read = 0, byte_read = 1;
+      |  integer memory_image = 0, byte_read = 1;
+      |  longint unsigned n_read = 0;
       |  byte data;
       |  initial begin
       |    if ($test$plusargs("workload")) begin
@@ -36,34 +39,39 @@ private trait HasMemInitializer { this: ExtModule =>
       |      $display("Error: failed to open %s", bin_file);
       |      $finish;
       |    end
-      |    foreach (`MEM_TARGET[i]) begin
-      |      if (byte_read == 0) break;
-      |      for (integer j = 0; j < 8; j++) begin
-      |        byte_read = $fread(data, memory_image);
-      |        if (byte_read == 0) break;
-      |        n_read += 1;
-      |        `MEM_TARGET[i][j * 8 +: 8] = data;
-      |      end
-      |    end
-      |    $fclose(memory_image);
-      |    $display("%m: load %d bytes from %s.", n_read, bin_file);
-      |  end
-      |end
-      |""".stripMargin
-  val mem_init =
+      |""".stripMargin + mem_targets(banked).map { target =>
+      s"""
+         |    foreach ($target[i]) begin
+         |      if (byte_read == 0) break;
+         |      for (integer j = 0; j < 8; j++) begin
+         |        byte_read = $$fread(data, memory_image);
+         |        if (byte_read == 0) break;
+         |        n_read += 1;
+         |        $target[i][j * 8 +: 8] = data;
+         |      end
+         |    end
+         |""".stripMargin
+    }.mkString + """
+                   |    $fclose(memory_image);
+                   |    $display("%m: load %d bytes from %s.", n_read, bin_file);
+                   |  end
+                   |end
+                   |""".stripMargin
+  def mem_init(banked: Boolean) =
     s"""
        |`ifdef DISABLE_DIFFTEST_RAM_DPIC
        |`ifdef PALLADIUM
        |  initial $$ixc_ctrl("tb_import", "$$display");
        |`endif // PALLADIUM
-       |$mem_decl
-       |`define MEM_TARGET $mem_target
-       |$initializer
+       |${mem_decl(banked)}
+       |`ifndef PLDM_NATIVE_LOAD
+       |${initializer(banked)}
+       |`endif // PLDM_NATIVE_LOAD
        |`endif // DISABLE_DIFFTEST_RAM_DPIC
        |""".stripMargin
 }
 
-private trait HasMemReadHelper { this: ExtModule =>
+private trait HasMemReadHelper { this: ExtModule with HasMemInitializer =>
   private def r(i: Int): String = s"r_$i"
 
   def r_dpic: String =
@@ -82,7 +90,7 @@ private trait HasMemReadHelper { this: ExtModule =>
        |""".stripMargin
   def r_sv_interface(n: Int): String = (0 until n).map(sv_interface).mkString(",\n")
 
-  private def sv_body(i: Int): String =
+  private def sv_body(i: Int, banked: Boolean): String =
     s"""
        |`ifdef GSIM
        |  assign ${r(i)}_async = 1'b1;
@@ -94,7 +102,7 @@ private trait HasMemReadHelper { this: ExtModule =>
        |  end
        |`else
        |  if (${r(i)}_enable) begin
-       |    ${r(i)}_data = `MEM_TARGET[${r(i)}_index];
+       |    ${r(i)}_data = ${mem_read(s"${r(i)}_index", banked)};
        |  end
        |`endif // DISABLE_DIFFTEST_RAM_DPIC
        |end
@@ -107,13 +115,13 @@ private trait HasMemReadHelper { this: ExtModule =>
        |  end
        |`else
        |  if (${r(i)}_enable) begin
-       |    ${r(i)}_data <= `MEM_TARGET[${r(i)}_index];
+       |    ${r(i)}_data <= ${mem_read(s"${r(i)}_index", banked)};
        |  end
        |`endif // DISABLE_DIFFTEST_RAM_DPIC
        |end
        |`endif // GSIM
        |""".stripMargin
-  def r_sv_body(n: Int): String = (0 until n).map(sv_body).mkString
+  def r_sv_body(n: Int, banked: Boolean): String = (0 until n).map(i => sv_body(i, banked)).mkString
 
   private def cpp_arg(i: Int): String =
     s"""
@@ -132,7 +140,7 @@ private trait HasMemReadHelper { this: ExtModule =>
   def r_cpp_body(n: Int): String = (0 until n).map(cpp_body).mkString
 }
 
-private trait HasMemWriteHelper {
+private trait HasMemWriteHelper { this: HasMemInitializer =>
   private def w(i: Int): String = s"w_$i"
 
   def w_dpic: String =
@@ -156,7 +164,7 @@ private trait HasMemWriteHelper {
        |""".stripMargin
   def w_sv_interface(n: Int): String = (0 until n).map(sv_interface).mkString(",\n")
 
-  private def sv_body(i: Int): String =
+  private def sv_body(i: Int, banked: Boolean): String =
     s"""
        |`ifndef DISABLE_DIFFTEST_RAM_DPIC
        |if (${w(i)}_enable) begin
@@ -164,14 +172,19 @@ private trait HasMemWriteHelper {
        |end
        |`else
        |if (${w(i)}_enable) begin
-       |  `MEM_TARGET[${w(i)}_index] <= (${w(i)}_data & ${w(i)}_mask) | (`MEM_TARGET[${w(i)}_index] & ~${w(i)}_mask);
+       |  ${mem_write(
+        s"${w(i)}_index",
+        s"${w(i)}_data",
+        s"${w(i)}_mask",
+        banked,
+      )}
        |end
        |`endif // DISABLE_DIFFTEST_RAM_DPIC
        |""".stripMargin
-  def w_sv_body(n: Int): String =
+  def w_sv_body(n: Int, banked: Boolean): String =
     s"""
        |always @(posedge clock) begin
-       |${(0 until n).map(sv_body).mkString}
+       |${(0 until n).map(i => sv_body(i, banked)).mkString}
        |end
        |""".stripMargin
 
@@ -229,12 +242,38 @@ private class MemRWHelper(size: BigInt, val nr: Int, val nw: Int)
     w(i).mask := mask
   }
 
-  def mem_decl: String =
-    """
-      |reg [63:0] memory [0 : RAM_SIZE / 8 - 1];
-      |""".stripMargin
+  def mem_targets(banked: Boolean): Seq[String] =
+    if (banked) Seq("memory_lo", "memory_hi") else Seq("memory")
 
-  def mem_target: String = "memory"
+  def mem_decl(banked: Boolean): String =
+    if (banked) {
+      // Keep each 16 GiB RAM bank below Xcelium's 2^31-element limit.
+      """
+        |localparam BANK_WORDS = 64'd1073741824;
+        |reg [63:0] memory_lo [0 : BANK_WORDS - 1];
+        |reg [63:0] memory_hi [0 : RAM_SIZE / 8 - BANK_WORDS - 1];
+        |""".stripMargin
+    } else "reg [63:0] memory [0 : RAM_SIZE / 8 - 1];\n"
+
+  def mem_read(index: String, banked: Boolean): String =
+    if (banked) s"($index[30] ? memory_hi[$index[29:0]] : memory_lo[$index[29:0]])"
+    else s"memory[$index]"
+
+  def mem_write(index: String, data: String, mask: String, banked: Boolean): String = {
+    def update(target: String): String =
+      s"$target <= ($data & $mask) | ($target & ~$mask);"
+    if (banked) {
+      s"if ($index[30]) ${update(s"memory_hi[$index[29:0]]")}\n" +
+        s"else ${update(s"memory_lo[$index[29:0]]")}"
+    } else update(s"memory[$index]")
+  }
+
+  private def sv_body(banked: Boolean): String =
+    s"""
+       |${mem_init(banked)}
+       |${r_sv_body(nr, banked)}
+       |${w_sv_body(nw, banked)}
+       |""".stripMargin
 
   override def desiredName: String = s"Mem${nr}R${nw}WHelper"
 
@@ -264,11 +303,15 @@ private class MemRWHelper(size: BigInt, val nr: Int, val nw: Int)
        |  ${r_sv_interface(nr)},
        |  ${w_sv_interface(nw)}
        |);
-       |  $mem_init
        |  $r_dpic
        |  $w_dpic
-       |  ${r_sv_body(nr)}
-       |  ${w_sv_body(nw)}
+       |  generate
+       |    if (RAM_SIZE > 64'd8589934592 && RAM_SIZE <= 64'd17179869184) begin : banked
+       |      ${sv_body(true)}
+       |    end else begin : single_bank
+       |      ${sv_body(false)}
+       |    end
+       |  endgenerate
        |endmodule
      """.stripMargin,
   )
