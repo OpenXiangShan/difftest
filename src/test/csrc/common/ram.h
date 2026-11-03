@@ -248,4 +248,10 @@ void mcsim_backend_step();
 void mcsim_backend_finish();
 #endif
 
+#ifdef WITH_BAIYANG
+extern "C" bool baiyang_preload_done();
+extern "C" bool baiyang_bind_difftest_ram(uint64_t base_addr);
+extern "C" void baiyang_preload_difftest_ram(uint64_t base_addr);
+#endif
+
 #endif
