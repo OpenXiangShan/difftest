@@ -546,6 +546,12 @@ object DifftestModule {
         case "--difftest-exclude" :: names :: tail =>
           nameExcludes ++= names.split(",").map(_.trim)
           nextOption(args.patch(args.indexOf("--difftest-exclude"), Nil, 2), tail)
+        case "--difftest-relax-intermediate-wires" :: tail =>
+          Gateway.setPreserveIntermediateWires(false)
+          nextOption(args.patch(args.indexOf("--difftest-relax-intermediate-wires"), Nil, 1), tail)
+        case "--difftest-packed-delay-regs" :: tail =>
+          Gateway.setPackedDelayRegs(true)
+          nextOption(args.patch(args.indexOf("--difftest-packed-delay-regs"), Nil, 1), tail)
         case _ :: tail => nextOption(args, tail)
       }
     }

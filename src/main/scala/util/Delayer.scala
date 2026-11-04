@@ -32,6 +32,15 @@ private class DelayReg[T <: Data](gen: T, n_cycles: Int) extends Delayer(gen, n_
   o := r
 }
 
+private class DelayPackedReg[T <: Data](gen: T, n_cycles: Int) extends Delayer(gen, n_cycles) {
+  private val width = gen.getWidth
+  var r = WireInit(i.asUInt)
+  for (_ <- 0 until n_cycles) {
+    r = RegNext(r, 0.U(width.W))
+  }
+  o := r.asTypeOf(gen)
+}
+
 private class DelayMem[T <: Data](gen: T, n_cycles: Int) extends Delayer(gen, n_cycles) {
   val mem = Mem(n_cycles, chiselTypeOf(gen))
   val ptr = RegInit(0.U(log2Ceil(n_cycles).W))
@@ -46,9 +55,11 @@ private class DelayMem[T <: Data](gen: T, n_cycles: Int) extends Delayer(gen, n_
 }
 
 object Delayer {
-  def apply[T <: Data](gen: T, n_cycles: Int, useMem: Boolean = false): T = {
+  def apply[T <: Data](gen: T, n_cycles: Int, useMem: Boolean = false, packedReg: Boolean = false): T = {
     if (n_cycles > 0) {
-      val delayer = if (useMem) {
+      val delayer = if (packedReg) {
+        Module(new DelayPackedReg(gen, n_cycles))
+      } else if (useMem) {
         Module(new DelayMem(gen, n_cycles))
       } else {
         Module(new DelayReg(gen, n_cycles))

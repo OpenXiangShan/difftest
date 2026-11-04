@@ -48,6 +48,8 @@ case class GatewayConfig(
   traceLoad: Boolean = false,
   hierarchicalWiring: Boolean = false,
   softArchUpdate: Boolean = false,
+  preserveIntermediateWires: Boolean = true,
+  packedDelayRegs: Boolean = false,
   isFPGA: Boolean = false,
   isGSIM: Boolean = false,
 ) {
@@ -148,6 +150,15 @@ object Gateway {
   private val instanceWithDelay = ListBuffer.empty[(DifftestBundle, Int)]
   private var config = GatewayConfig()
 
+  def setPreserveIntermediateWires(enabled: Boolean): Unit = {
+    config = config.copy(preserveIntermediateWires = enabled)
+  }
+
+  def setPackedDelayRegs(enabled: Boolean): Unit = {
+    config = config.copy(packedDelayRegs = enabled)
+  }
+
+
   def setConfig(cfg: String): Unit = {
     cfg.foreach {
       case 'E' => config = config.copy(hasGlobalEnable = true)
@@ -172,7 +183,9 @@ object Gateway {
 
   def apply[T <: DifftestBundle](gen: T, delay: Int): T = {
     val bundle = WireInit(0.U.asTypeOf(gen)).suggestName(gen.desiredCppName)
-    dontTouch(bundle)
+    if (config.preserveIntermediateWires) {
+      dontTouch(bundle)
+    }
     if (!config.traceLoad) {
       if (config.needEndpoint) {
         val packed = WireInit(UInt(bundle.getWidth.W), bundle.asUInt)
@@ -180,7 +193,7 @@ object Gateway {
       } else {
         val control = WireInit(0.U.asTypeOf(new GatewaySinkControl(config)))
         control.enable := true.B
-        GatewaySink(control, Delayer(bundle, delay).genValidBundle, config)
+        GatewaySink(control, Delayer(bundle, delay, packedReg = config.packedDelayRegs).genValidBundle, config)
       }
     }
     instanceWithDelay += ((gen, delay))
@@ -238,7 +251,9 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     in_bundle
   } else {
     val delayed = MixedVecInit(
-      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d) }.toSeq
+      in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) =>
+        Delayer(i, d, packedReg = config.packedDelayRegs)
+      }.toSeq
     )
     if (config.traceDump) Trace(delayed)
     delayed
