@@ -208,10 +208,19 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 
   // Gate non-delta bits to only be valid during pipelined.fire
   val pipelinedFire = pipelined.fire
+  val windowTransfer = WireInit(false.B)
   val nonDeltaBits = pipelined.bits.filterNot(_.bits.supportsDelta).map { b =>
     val gated = WireInit(b)
-    gated.valid := b.valid && pipelinedFire
-    gated.bits.bits.getValidOption.foreach(_ := b.valid && pipelinedFire)
+    val valid = if (b.bits.isInstanceOf[DiffIlaWindowEvent]) {
+      val pending = RegInit(false.B)
+      when(b.valid && pipelinedFire) { pending := true.B }
+      when(windowTransfer) { pending := false.B }
+      (pending || (b.valid && pipelinedFire)) && !inPending.asUInt.orR
+    } else {
+      b.valid && pipelinedFire
+    }
+    gated.valid := valid
+    gated.bits.bits.getValidOption.foreach(_ := valid)
     gated
   }
 
@@ -220,6 +229,9 @@ class DeltaEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) 
 
   out.valid := VecInit(withDeltas.map(_.valid)).asUInt.orR
   out.bits := withDeltas
+  windowTransfer := out.fire && nonDeltaBits.collect {
+    case bundle if bundle.bits.isInstanceOf[DiffIlaWindowEvent] => bundle.valid
+  }.foldLeft(false.B)(_ || _)
 
   splitters.foreach(_.out.ready := out.ready)
   pipelined.ready := VecInit(splitters.map(_.in.ready)).asUInt.andR && out.ready

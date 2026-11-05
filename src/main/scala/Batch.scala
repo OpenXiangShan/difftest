@@ -67,6 +67,7 @@ class BatchStats(param: BatchParam) extends Bundle {
 class BatchIO(val param: BatchParam, config: GatewayConfig) extends Bundle {
   val payload = UInt(param.BeatBitLen.W)
   val step = UInt(config.stepWidth.W)
+  val windowEnd = Bool()
 }
 
 class BatchInfo extends Bundle {
@@ -173,10 +174,14 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
     val info = Vec(param.StepGroupSize, UInt(param.infoWidth.W))
     val status = Vec(param.StepGroupSize, new BatchStats(param))
     val trace_info = Option.when(config.hasReplay)(new DiffTraceInfo(config))
+    val windowEnd = Bool()
   }
   val grouped = Wire(Decoupled(new GroupBundle))
   grouped.valid := in.valid
   in.ready := grouped.ready
+  grouped.bits.windowEnd := in.bits.collect {
+    case bundle if bundle.bits.isInstanceOf[DiffIlaWindowEvent] => bundle.valid
+  }.foldLeft(false.B)(_ || _)
 
   grouped.bits.trace_info.foreach(
     _ := in.bits.map(_.bits).filter(_.desiredCppName == "trace_info").head.asInstanceOf[DiffTraceInfo]
@@ -265,6 +270,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val pending_beat = Reg(Vec(param.BeatChunkSize, UInt(param.ChunkBitLen.W)))
   val pending_valid_mask = RegInit(0.U(param.BeatChunkSize.W))
   val pending_last = RegInit(false.B)
+  val pending_window_end = RegInit(false.B)
   val pending_valid = RegInit(false.B)
 
   // Stage 3: scan the payload beat bitmap and register one selected beat as pending.
@@ -325,6 +331,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   out.valid := should_tick
   out.bits.payload := Mux(state_tick, state_chunks.asUInt, merged_head_chunks.asUInt)
   out.bits.step := Mux(out.valid && is_last_step_beat, 1.U(config.stepWidth.W), 0.U)
+  out.bits.windowEnd := out.valid && is_last_step_beat && pending_window_end
 
   when(state_update) {
     when(pending_valid) {
@@ -341,6 +348,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
     pending_beat := select_beat
     pending_valid_mask := select_beat_valid
     pending_last := next_remain_beat_mask === 0.U
+    pending_window_end := delay_grouped.bits.windowEnd
     pending_valid := true.B
   }.elsewhen(pending_consumed) {
     pending_valid := false.B

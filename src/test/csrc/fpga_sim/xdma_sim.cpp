@@ -80,6 +80,7 @@ typedef struct {
   pthread_cond_t read_cond;
   pthread_cond_t write_cond;
   bool read_waiting;
+  bool cancelled;
   bool data_valid;
   uint64_t tkeep;
   uint8_t tlast;
@@ -140,8 +141,12 @@ public:
     shm_ptr->read_waiting = true;
     shm_ptr->write_size = 0;
     shm_ptr->read_size = size;
-    while (shm_ptr->write_size < size) {
+    while (shm_ptr->write_size < size && !shm_ptr->cancelled) {
       pthread_cond_wait(&shm_ptr->read_cond, &shm_ptr->lock);
+    }
+    if (shm_ptr->cancelled) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return 0;
     }
     size_t to_copy = size < shm_ptr->write_size ? size : shm_ptr->write_size;
     memcpy(buf, shm_ptr->buffer, to_copy);
@@ -153,9 +158,13 @@ public:
 
   int write(const char *buf, unsigned char tlast, size_t size) {
     pthread_mutex_lock(&shm_ptr->lock);
-    while (!shm_ptr->read_waiting) {
+    while (!shm_ptr->read_waiting && !shm_ptr->cancelled) {
       pthread_mutex_unlock(&shm_ptr->lock);
       pthread_mutex_lock(&shm_ptr->lock);
+    }
+    if (shm_ptr->cancelled) {
+      pthread_mutex_unlock(&shm_ptr->lock);
+      return 0;
     }
     size_t space = shm_ptr->read_size - shm_ptr->write_size;
     size_t to_write = size < space ? size : space;
@@ -172,6 +181,13 @@ public:
     pthread_mutex_unlock(&shm_ptr->lock);
 
     return to_write;
+  }
+
+  void cancel_read() {
+    pthread_mutex_lock(&shm_ptr->lock);
+    shm_ptr->cancelled = true;
+    pthread_cond_broadcast(&shm_ptr->read_cond);
+    pthread_mutex_unlock(&shm_ptr->lock);
   }
 };
 
@@ -442,6 +458,11 @@ void xdma_sim_close(int channel) {
 
 int xdma_sim_read(int channel, char *buf, size_t size) {
   return xsim[channel]->read(buf, size);
+}
+
+void xdma_sim_cancel_read(int channel) {
+  if (xsim[channel])
+    xsim[channel]->cancel_read();
 }
 
 int xdma_sim_write(int channel, const char *buf, uint8_t tlast, size_t size) {

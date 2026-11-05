@@ -163,6 +163,7 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
 
         host.io.difftest.valid := fpgaIO.valid && ctrl.diffEnable
         host.io.difftest.bits := fpgaIO.bits
+        host.io.difftest.windowEnd := fpgaIO.windowEnd
         fpgaIO.ready := Mux(ctrl.diffEnable, host.io.difftest.ready, true.B)
         val pcie_clock = IO(Input(Clock()))
         host.io.pcie_clock := pcie_clock
@@ -182,6 +183,10 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         fpgaDiffEnable := ctrl.diffEnable
         gateway.fpgaSquashEnable.foreach(_ := ctrl.enableSquash)
         gateway.fpgaSquashMaxFused.foreach(_ := ctrl.squashMaxFused)
+        gateway.fpgaIlaWindowBase.foreach(_ := cfg.io.ilaWindowBase)
+        gateway.fpgaIlaWindowSize.foreach(_ := Mux(ctrl.diffEnable, cfg.io.ilaWindowSize, 0.U))
+        cfg.io.ilaWindowStalled := gateway.fpgaIlaWindowStalled.getOrElse(false.B)
+        cfg.io.ilaWindowSupported := gateway.fpgaIlaWindowSupported.getOrElse(false.B)
 
         cfg.io.memCtrl.memStatus := 0.U
         from_host_axis.viewAs[AXI4Stream].ready := false.B

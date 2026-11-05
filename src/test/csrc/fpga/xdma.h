@@ -49,6 +49,12 @@
 #define HOST_IO_MEM_H2C          0x28
 #define HOST_IO_H2C_SIZE_MB      0x2c
 #define HOST_IO_CPU_AXI_DELAY    0x30
+#define HOST_IO_ILA_WINDOW_BASE_LO 0x34
+#define HOST_IO_ILA_WINDOW_BASE_HI 0x38
+#define HOST_IO_ILA_WINDOW_SIZE_LO 0x3c
+#define HOST_IO_ILA_WINDOW_SIZE_HI 0x40
+#define HOST_IO_ILA_WINDOW_COMMIT  0x44
+#define HOST_IO_ILA_WINDOW_STATUS  0x48
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
@@ -81,6 +87,9 @@ public:
   void set_packet_callbacks(bool (*idle)(), void (*abort)()) {
     packet_idle = idle;
     packet_abort = abort;
+  }
+  void set_ila_window(bool enabled) {
+    ila_window_enabled = enabled;
   }
 #endif
 
@@ -149,6 +158,7 @@ private:
   void (*packet_abort)() = nullptr;
   std::unique_ptr<MemoryIdxPool> packet_pool;
   bool fork_readers = false;
+  bool ila_window_enabled = false;
   std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;

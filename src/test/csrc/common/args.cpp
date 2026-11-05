@@ -21,6 +21,7 @@
 #ifndef CONFIG_NO_DIFFTEST
 #include "reftrace/refdrive_trace.h"
 #endif
+#include <charconv>
 #include <cmath>
 #include <getopt.h>
 #include <stdexcept>
@@ -37,6 +38,8 @@ enum {
   OPT_CPU_AXI_DELAY,
 #ifdef FPGA_HOST
   OPT_NO_LINK,
+  OPT_ILA_WINDOW_BASE,
+  OPT_ILA_WINDOW_SIZE,
 #endif
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
@@ -58,6 +61,19 @@ static inline long long int atoll_strict(const char *str, const char *arg) {
   }
   return atoll(str);
 }
+
+#ifdef FPGA_HOST
+static uint64_t parse_cycle_count(const char *text, const char *name) {
+  uint64_t value = 0;
+  const char *end = text + strlen(text);
+  const auto result = std::from_chars(text, end, value);
+  if (result.ec != std::errc{} || result.ptr != end) {
+    fprintf(stderr, "[ERROR] --%s requires an unsigned 64-bit decimal cycle count\n", name);
+    exit(EINVAL);
+  }
+  return value;
+}
+#endif
 
 static uint64_t parse_instr_count(const char *str, const char *arg) {
   char *end = nullptr;
@@ -152,6 +168,8 @@ static inline void print_help(const char *file) {
   printf("      --no-diff              skip REF checking; keep DUT data and trap detection\n");
 #ifdef FPGA_HOST
   printf("      --no-link              disable DiffTest transport (implies --no-diff)\n");
+  printf("      --ila-window-base=N    initially checked DUT cycle boundary, default: 0\n");
+  printf("      --ila-window-size=N    maximum cycles ahead of checked base, 0 disables (default)\n");
 #endif
   printf("      --no-squash            disable squash\n");
   printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
@@ -235,6 +253,8 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
 #ifdef FPGA_HOST
     { "no-link",           0, NULL, OPT_NO_LINK },
+    { "ila-window-base",   1, NULL, OPT_ILA_WINDOW_BASE },
+    { "ila-window-size",   1, NULL, OPT_ILA_WINDOW_SIZE },
 #endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
     { "ref-mode",          1, NULL, OPT_REF_MODE },
@@ -419,6 +439,8 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_PACKET_POOL_LOG2: args.packet_pool_log2 = atoll_strict(optarg, "packet-pool-log2"); continue;
 #endif
 #ifdef FPGA_HOST
+      case OPT_ILA_WINDOW_BASE: args.ila_window_base = parse_cycle_count(optarg, "ila-window-base"); continue;
+      case OPT_ILA_WINDOW_SIZE: args.ila_window_size = parse_cycle_count(optarg, "ila-window-size"); continue;
       case OPT_NO_LINK:
         args.enable_link = false;
         args.enable_diff = false;
@@ -494,6 +516,23 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   }
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
+
+#ifdef FPGA_HOST
+  if (args.ila_window_size > UINT64_MAX - args.ila_window_base) {
+    fprintf(stderr, "[ERROR] ILA window base + size exceeds the 64-bit cycle range\n");
+    exit(EINVAL);
+  }
+  if (args.ila_window_size && (!args.enable_diff || !args.enable_link || args.refdrive_trace_name)) {
+    fprintf(stderr, "[ERROR] a nonzero ILA window requires REF checking and cannot use RefDriveTrace\n");
+    exit(EINVAL);
+  }
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  if (args.ila_window_size && args.ref_mode == RefMode::FAST) {
+    fprintf(stderr, "[ERROR] a nonzero ILA window requires --ref-mode slow or fork\n");
+    exit(EINVAL);
+  }
+#endif
+#endif
 
 #ifdef ENABLE_IPC
   char *ipc_image = (char *)malloc(255);

@@ -9,6 +9,10 @@ RAM_SIZE=""
 SEED=""
 RANDOM_MEM=0
 CPU_AXI_DELAY=0
+ILA_WINDOW_BASE=0
+ILA_WINDOW_SIZE=0
+REF_MODE=""
+REF_FORK_INTERVAL=""
 SPLITVIEW="${SPLITVIEW:-0}"
 SPLITVIEW_LOG="${SPLITVIEW_LOG:-}"
 
@@ -37,6 +41,18 @@ for arg in "$@"; do
       ;;
     CPU_AXI_DELAY=*)
       CPU_AXI_DELAY="${arg#CPU_AXI_DELAY=}"
+      ;;
+    ILA_WINDOW_BASE=*)
+      ILA_WINDOW_BASE="${arg#ILA_WINDOW_BASE=}"
+      ;;
+    ILA_WINDOW_SIZE=*)
+      ILA_WINDOW_SIZE="${arg#ILA_WINDOW_SIZE=}"
+      ;;
+    REF_MODE=*)
+      REF_MODE="${arg#REF_MODE=}"
+      ;;
+    REF_FORK_INTERVAL=*)
+      REF_FORK_INTERVAL="${arg#REF_FORK_INTERVAL=}"
       ;;
     SPLITVIEW=*)
       SPLITVIEW="${arg#SPLITVIEW=}"
@@ -85,6 +101,13 @@ if [[ -n "${FLASH}" ]]; then
   HOST_ARGS+=(-F "${FLASH}")
 fi
 HOST_ARGS+=(--cpu-axi-delay="${CPU_AXI_DELAY}")
+HOST_ARGS+=(--ila-window-base="${ILA_WINDOW_BASE}" --ila-window-size="${ILA_WINDOW_SIZE}")
+if [[ -n "${REF_MODE}" ]]; then
+  HOST_ARGS+=(--ref-mode="${REF_MODE}")
+fi
+if [[ -n "${REF_FORK_INTERVAL}" ]]; then
+  HOST_ARGS+=(--ref-fork-interval="${REF_FORK_INTERVAL}")
+fi
 if [[ -n "${RAM_SIZE}" ]]; then
   HOST_ARGS+=(--ram-size="${RAM_SIZE}")
 fi

@@ -49,6 +49,16 @@ int Difftest::fast_ref_step() {
       for (size_t i = 1; i < fast_checkers.size(); ++i)
         fast_checkers[i]->discard();
       dut->event.valid = 0;
+#if defined(CONFIG_DIFFTEST_FORK_REF) && defined(CONFIG_DIFFTEST_ILAWINDOWEVENT)
+      if (fork_check && dut->ila_window.valid) {
+        const int ret = difftest_ref_fork_prepare(this);
+        if (ret == 1)
+          return difftest_ref_fork_check(this);
+        if (ret)
+          return DiffTestChecker::STATE_ERROR;
+        difftest_ref_fork_publish(this);
+      }
+#endif
       return DiffTestChecker::STATE_OK;
     }
   }

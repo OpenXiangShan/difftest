@@ -72,8 +72,28 @@ void fpga_step();
 void set_diff_ref_so(char *s);
 void args_parsing(int argc, char *argv[]);
 static bool run_external_cmd(const char *cmd, const char *tag);
+static void fpga_ila_window_advance(uint64_t checked_cycle);
 
 FpgaTransport *xdma_device = NULL;
+
+static void fpga_ila_window_write_base(uint64_t base) {
+  xdma_device->fpga_io(HOST_IO_ILA_WINDOW_BASE_LO, static_cast<uint32_t>(base));
+  xdma_device->fpga_io(HOST_IO_ILA_WINDOW_BASE_HI, static_cast<uint32_t>(base >> 32));
+  xdma_device->fpga_io(HOST_IO_ILA_WINDOW_COMMIT, 1);
+}
+
+static void fpga_ila_window_advance(uint64_t checked_cycle) {
+  if (!args.ila_window_size || checked_cycle <= args.ila_window_base)
+    return;
+  if (checked_cycle > UINT64_MAX - args.ila_window_size) {
+    fprintf(stderr, "[fpga-host] ILA window exhausted the 64-bit cycle range\n");
+    fpga_result = FPGA_FAIL;
+    xdma_device->stop();
+    return;
+  }
+  fpga_ila_window_write_base(checked_cycle);
+  args.ila_window_base = checked_cycle;
+}
 #ifdef USE_SERIAL_PORT
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
@@ -182,11 +202,13 @@ void fpga_init() {
 #endif
 #endif
 #if defined(USE_THREAD_MEMPOOL) && !defined(DIFFTEST_HOSTIF_GBUS)
+  static_cast<FpgaXdma *>(xdma_device)->set_ila_window(args.ila_window_size != 0);
 #ifdef CONFIG_DIFFTEST_FORK_REF
   static_cast<FpgaXdma *>(xdma_device)
       ->set_packet_callbacks(
           [] {
             const int result = difftest_ref_fork_idle();
+            fpga_ila_window_advance(difftest_ref_fork_checked_cycle());
             return result && (result != 1 || !difftest_refdrive_trace_pending());
           },
           [] {
@@ -240,6 +262,25 @@ void fpga_init() {
 #endif // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
+  if (args.ila_window_base || args.ila_window_size) {
+    const uint32_t status = xdma_device->fpga_io_read(HOST_IO_ILA_WINDOW_STATUS);
+    if ((status & ~3u) != 0x494c4100u || (args.ila_window_size && !(status & 2u))) {
+      fprintf(stderr, "[fpga-host] ILA window requires updated RTL with one core, zero probe delays and no Replay\n");
+      exit(1);
+    }
+    xdma_device->fpga_io(HOST_IO_ILA_WINDOW_SIZE_LO, static_cast<uint32_t>(args.ila_window_size));
+    xdma_device->fpga_io(HOST_IO_ILA_WINDOW_SIZE_HI, static_cast<uint32_t>(args.ila_window_size >> 32));
+    fpga_ila_window_write_base(args.ila_window_base);
+    const uint64_t base = xdma_device->fpga_io_read(HOST_IO_ILA_WINDOW_BASE_LO) |
+                          (uint64_t{xdma_device->fpga_io_read(HOST_IO_ILA_WINDOW_BASE_HI)} << 32);
+    const uint64_t size = xdma_device->fpga_io_read(HOST_IO_ILA_WINDOW_SIZE_LO) |
+                          (uint64_t{xdma_device->fpga_io_read(HOST_IO_ILA_WINDOW_SIZE_HI)} << 32);
+    if (base != args.ila_window_base || size != args.ila_window_size) {
+      fprintf(stderr, "[fpga-host] ILA window configuration readback mismatch\n");
+      exit(1);
+    }
+    printf("[fpga-host] ILA window base=%" PRIu64 " size=%" PRIu64 " DUT cycles\n", base, size);
+  }
   xdma_device->fpga_io(HOST_IO_CPU_AXI_DELAY, args.cpu_axi_delay);
   uint32_t cpu_axi_delay = xdma_device->fpga_io_read(HOST_IO_CPU_AXI_DELAY);
   if (cpu_axi_delay != args.cpu_axi_delay) {
@@ -374,6 +415,10 @@ void fpga_display_result(int ret) {
 int fpga_get_result(uint8_t step) {
   // Advance DUT state and detect traps even when REF checking is disabled.
   int trapCode = difftest_nstep(step, args.enable_diff);
+#ifdef CONFIG_DIFFTEST_ILAWINDOWEVENT
+  for (int core = 0; core < NUM_CORES; ++core)
+    difftest[core]->dut->ila_window.valid = 0;
+#endif
 #ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_is_child())
     return FPGA_RUN;
@@ -388,6 +433,10 @@ int fpga_get_result(uint8_t step) {
     else
       return FPGA_FAIL;
   }
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (!difftest_ref_fork_enabled())
+#endif
+    fpga_ila_window_advance(difftest[0]->get_trap_event()->cycleCnt);
   if (args.enable_squash && args.no_squash_after_instr != UINT64_MAX) {
     for (int i = 0; i < NUM_CORES; i++) {
       uint64_t instr_count = difftest[i]->get_trap_event()->instrCnt;
@@ -497,6 +546,11 @@ void fpga_ref_fork_abort() {
 #ifdef CONFIG_DIFFTEST_FORK_REF
   const bool fork_ref = difftest_ref_fork_enabled();
   difftest_ref_fork_finish();
+  if (args.ila_window_size && fork_ref) {
+    xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
+    fpga_ila_triggered = true;
+    xdma_device->fpga_io(HOST_IO_LINK_ENABLE, false);
+  }
   if (!fork_ref)
 #endif
     fpga_display_result(FPGA_FAIL);
