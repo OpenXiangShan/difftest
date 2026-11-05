@@ -64,6 +64,7 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif // VERILATOR
 
   args = parse_args(argc, argv);
+  dut_ptr->set_perf_in_roi(args.warmup_instr == 0 || args.warmup_instr == uint64_t(-1));
 #ifdef VERILATOR
   Verilated::commandArgs(argc, argv); // Prepare extra args for TLMonitor
 #endif
@@ -551,6 +552,8 @@ int Emulator::tick() {
 
   dut_ptr->set_perf_clean(0);
   dut_ptr->set_perf_dump(0);
+  // The clean edge still belongs to warmup; measure from the following cycle.
+  dut_ptr->set_perf_in_roi(args.warmup_instr == 0 || args.warmup_instr == uint64_t(-1));
 
 #ifndef CONFIG_NO_DIFFTEST
   int step = 0;

@@ -61,6 +61,9 @@ public:
   // Get the step signal from DiffTest.
   virtual uint64_t get_difftest_step() = 0;
 
+  // Mark cycles in the measured window after warmup.
+  virtual void set_perf_in_roi(unsigned in_roi) = 0;
+
   // Set the clean signal for performance counters.
   virtual void set_perf_clean(unsigned clean) = 0;
   // Set the dump signal for performance counters.

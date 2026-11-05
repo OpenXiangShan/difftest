@@ -36,6 +36,7 @@ wire        workload_switch;
 wire [63:0] difftest_logCtrl_begin;
 wire [63:0] difftest_logCtrl_end;
 wire [63:0] difftest_logCtrl_level;
+wire        difftest_perfCtrl_inRoi;
 wire        difftest_perfCtrl_clean;
 wire        difftest_perfCtrl_dump;
 wire        difftest_uart_out_valid;
@@ -276,6 +277,7 @@ SimTop sim(
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),
   .difftest_logCtrl_level(difftest_logCtrl_level),
+  .difftest_perfCtrl_inRoi(difftest_perfCtrl_inRoi),
   .difftest_perfCtrl_clean(difftest_perfCtrl_clean),
   .difftest_perfCtrl_dump(difftest_perfCtrl_dump),
   .difftest_uart_out_valid(difftest_uart_out_valid),
@@ -302,6 +304,7 @@ DifftestEndpoint difftest(
   .difftest_logCtrl_begin(difftest_logCtrl_begin),
   .difftest_logCtrl_end(difftest_logCtrl_end),
   .difftest_logCtrl_level(difftest_logCtrl_level),
+  .difftest_perfCtrl_inRoi(difftest_perfCtrl_inRoi),
   .difftest_perfCtrl_clean(difftest_perfCtrl_clean),
   .difftest_perfCtrl_dump(difftest_perfCtrl_dump),
   .difftest_uart_out_valid(difftest_uart_out_valid),
