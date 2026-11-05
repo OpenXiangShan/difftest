@@ -115,8 +115,6 @@ class TrapEvent extends DifftestBaseBundle {
   override def needUpdate: Option[Bool] = Some(hasTrap || hasWFI)
 }
 
-private[difftest] class IlaWindowEvent extends DifftestBaseBundle with HasValid
-
 class CSRState extends DifftestBaseBundle {
   val privilegeMode = UInt(64.W)
   val mstatus = UInt(64.W)

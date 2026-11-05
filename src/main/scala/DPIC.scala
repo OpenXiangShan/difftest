@@ -339,14 +339,6 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |  uint8_t* payload = (uint8_t*)io;
            |  static DifftestBatchParser parser;
            |  static int dut_index = 0;
-           |#ifdef CONFIG_DIFFTEST_FPGA
-           |  if (parser.idle()) {
-           |    bool padding = true;
-           |    for (uint32_t byte = 0; byte < CONFIG_DIFFTEST_BATCH_BYTELEN; ++byte)
-           |      padding &= payload[byte] == 0;
-           |    if (padding) return;
-           |  }
-           |#endif
            |
            |  for (uint32_t chunk = 0; chunk <= DIFFTEST_BATCH_BEAT_CHUNKS; chunk++) {
            |    bool has_chunk = chunk < DIFFTEST_BATCH_BEAT_CHUNKS;
@@ -605,7 +597,6 @@ object DPIC {
           |  inline DifftestBatchInfo* info_entries() { return reinterpret_cast<DifftestBatchInfo*>(info_buf); }
           |
           |public:
-          |  bool idle() const { return info_idx == 0 && info_len == 0; }
           |  bool reading_info() const { return info_idx == 0; }
           |  uint32_t info_count() const { return info_num; }
           |  uint32_t parsed_info_count() const { return parsed_infos; }

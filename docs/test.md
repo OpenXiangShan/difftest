@@ -208,10 +208,6 @@ bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=$WORKLOAD DIFF=$REF_SO FLASH=$B
 | `SEED=NUM` | Forward the random seed to `fpga-host` and `simv` |
 | `RANDOM_MEM=1` | Enable random memory initialization in `fpga-host` and `simv` |
 | `CPU_AXI_DELAY=NUM` | Set each channel's minimum to `max(1, NUM)` CPU AXI cycles (default `0`) |
-| `ILA_WINDOW_BASE=NUM` | Initial checked DUT cycle boundary (default `0`) |
-| `ILA_WINDOW_SIZE=NUM` | Maximum DUT cycles ahead of the checked boundary; `0` disables (default) |
-| `REF_MODE=slow\|fast\|fork` | Select REF mode when the Host build supports it |
-| `REF_FORK_INTERVAL=SECONDS` | Override the fork segment interval |
 
 In FPGA_SIM, `fpga-host` writes seed, RAM size in MB, and random-memory enable
 to the XDMA ConfigBar. `cosim.sh` also passes matching plusargs to `simv`, so
@@ -233,36 +229,6 @@ and downstream backpressure can extend the sampled minimum delay. A full FIFO
 can accept a replacement beat in the same cycle that its head dequeues.
 Program the delay while the CPU is held in host reset; the standard `fpga-host`
 startup sequence does this before enabling CPU memory.
-
-ILA window configuration uses BAR addresses `0x34/0x38` for base low/high and
-`0x3c/0x40` for size low/high. Write bit 0 of `0x44` to publish the complete pair
-atomically. Reads of these four words return the shadow configuration. `0x48`
-returns `0x494c4100`, with bit 1 indicating window support and bit 0 indicating
-that the current DUT cycle has reached the limit. Pending configuration writes do
-not change the running limit until commit. The two values default to zero.
-
-For a bounded integration test without compiling a CPU, the test fixture emits a
-known integer increment stream through the real SimTop, Gateway, Squash/Delta, Batch,
-ConfigBar, asynchronous XDMA and NEMU checker paths:
-
-```bash
-bash difftest/scripts/fpga_sim/tests/build_ila_window.sh "$OUTPUT" ESBIFU
-python3 difftest/scripts/fpga_sim/tests/run_ila_window.py \
-  --host "$OUTPUT/build/fpga-host" --simulator "$OUTPUT/obj/VIlaWindowSimulation" \
-  --ref "$REF_SO" --output "$OUTPUT/fork-size-1" --mode fork --size 1
-python3 difftest/scripts/fpga_sim/tests/run_ila_window.py \
-  --control --host "$OUTPUT/control-test" --simulator "$OUTPUT/obj/VIlaWindowSimulation" \
-  --output "$OUTPUT/control"
-```
-
-Use `ESBIFDU` to include Delta; `--gap 9`, `--no-squash`, `--corrupt` and
-`--finish 96` cover idle cycles, runtime Squash disable, a DUT register error and
-DiffState buffer reuse. The fixture asserts the raw DUT cycle limit and verifies
-the final cycle/instruction counts and fork trusted-prefix result. Control tests
-exercise atomic BAR writes and window disable/reset/link release. These tests
-are synthetic integration evidence; CPU workloads and physical ILA captures need
-separate validation. The runner requires unused FPGA_SIM shared-memory names and
-cleans up only its own test run.
 
 #### Precautions
 

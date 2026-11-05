@@ -39,11 +39,9 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
 
   // Read clock domain
   withClock(io.pcie_clock) {
-    val fifo = Module(new AsyncClockFIFO(UInt((difftest_width + 1).W), fifo_depth, axis_width))
+    val fifo = Module(new AsyncClockFIFO(UInt(difftest_width.W), fifo_depth, axis_width))
     fifo.io.enqClock := clock
-    fifo.io.enq.valid := io.difftest.valid
-    fifo.io.enq.bits := Cat(io.difftest.windowEnd, io.difftest.bits)
-    io.difftest.ready := fifo.io.enq.ready
+    fifo.io.enq <> io.difftest
 
     val rangeActive = RegInit(false.B)
     val packetValid = RegInit(false.B)
@@ -53,21 +51,19 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     val counter = RegInit(0.U(3.W)) // 0 to 7
     val currentPktID = RegInit(0.U(pkt_id_w.W))
     val sendPacketEnd = counter === (numPacketPerRange - 1).U
-    val padding = RegInit(false.B)
-    val payload = Mux(padding, 0.U(difftest_width.W), fifo.io.deq.bits(difftest_width - 1, 0))
 
     val startTransfer = !rangeActive && fifo.io.deq.valid
-    val loadPacket = (fifo.io.deq.valid || padding) && !packetValid
+    val loadPacket = fifo.io.deq.valid && (!rangeActive || !packetValid)
 
     val packetPayload =
       if (payload_pad_width > 0) {
-        Cat(0.U(payload_pad_width.W), payload, currentPktID)
+        Cat(0.U(payload_pad_width.W), fifo.io.deq.bits, currentPktID)
       } else {
-        Cat(payload, currentPktID)
+        Cat(fifo.io.deq.bits, currentPktID)
       }
     val packetPayloadBeats = packetPayload.asTypeOf(Vec(axis_send_len, UInt(axis_width.W)))
 
-    fifo.io.deq.ready := loadPacket && !padding
+    fifo.io.deq.ready := loadPacket
 
     when(startTransfer) {
       rangeActive := true.B
@@ -78,7 +74,6 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
       packetBeats := packetPayloadBeats
       packetValid := true.B
       sendCnt := 0.U
-      when(!padding && fifo.io.deq.bits(difftest_width)) { padding := true.B }
     }.elsewhen(packetValid && io.axis.fire) {
       when(sendLast) {
         packetValid := false.B
@@ -88,7 +83,6 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
           rangeActive := false.B
           counter := 0.U
           currentPktID := currentPktID + 1.U // Increment ID for next range
-          padding := false.B
         }.otherwise {
           counter := counter + 1.U
         }
@@ -122,7 +116,6 @@ class HostEndpoint(
   diff2axis.io.pcie_clock := io.pcie_clock
   diff2axis.io.reset := reset
   PipelineConnect(io.difftest, diff2axis.io.difftest, diff2axis.io.difftest.fire)
-  diff2axis.io.difftest.windowEnd := RegEnable(io.difftest.windowEnd, io.difftest.fire)
 
   // AXI-Stream output domain (PCIe clock)
   io.to_host_axis <> diff2axis.io.axis

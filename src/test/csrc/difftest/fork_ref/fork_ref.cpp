@@ -78,7 +78,6 @@ Role role = Role::SUPERVISOR;
 uint64_t interval_ms = 0, generation = 0, current_segment = OPEN_END;
 uint64_t windows = 0, last_instr = 0, last_cycle = 0, last_fork_ms = 0, child_window = 0;
 uint64_t trusted_segment = 0, trusted_windows = 0;
-uint64_t trusted_cycle = 0;
 uint64_t accepted_segments = 0, recoveries = 0, drain_start_ms = 0;
 pid_t supervisor_pid = 0, leader_pid = 0;
 unsigned leader_reader = 0;
@@ -245,7 +244,6 @@ void accept(uint64_t seq) {
   auto *trap = difftest[0]->get_trap_event();
   trap->instrCnt = s.slow_instr;
   trap->cycleCnt = s.slow_cycle;
-  trusted_cycle = s.slow_cycle;
   trusted_windows = s.end_window.load(std::memory_order_acquire);
   ++trusted_segment;
   ++accepted_segments;
@@ -332,9 +330,6 @@ bool difftest_ref_fork_is_child() {
 }
 bool difftest_ref_fork_draining() {
   return control && role == Role::SUPERVISOR && control->endpoint.load(std::memory_order_acquire);
-}
-uint64_t difftest_ref_fork_checked_cycle() {
-  return control && role == Role::SUPERVISOR ? trusted_cycle : 0;
 }
 int difftest_ref_fork_start(uint64_t fork_interval_ms) {
   if (!g_packet_pool || control)
@@ -498,12 +493,6 @@ void difftest_ref_fork_publish(Difftest *self) {
   last_instr = self->dut->trap.instrCnt;
   last_cycle = self->dut->trap.cycleCnt;
   control->published_windows.store(++windows, std::memory_order_release);
-#ifdef CONFIG_DIFFTEST_ILAWINDOWEVENT
-  if (self->dut->ila_window.valid) {
-    close_segment(self);
-    current_segment = OPEN_END;
-  }
-#endif
 }
 void difftest_ref_fork_abort_child() {
   if (role == Role::CHECKER)

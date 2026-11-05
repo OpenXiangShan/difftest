@@ -58,8 +58,7 @@ class XDMAMemCtrlIO extends Bundle {
 
 private object XDMAConfigReg extends Enumeration {
   val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, SquashMaxFused, Seed, RamSizeMB, MemInit, MemCPU,
-    MemH2C, H2CSizeMB, CpuAXIDelay, IlaWindowBaseLo, IlaWindowBaseHi, IlaWindowSizeLo, IlaWindowSizeHi,
-    IlaWindowCommit, IlaWindowStatus = Value
+    MemH2C, H2CSizeMB, CpuAXIDelay, IlaBaseLo, IlaBaseHi, IlaSizeLo, IlaSizeHi = Value
 }
 
 class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
@@ -70,10 +69,8 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     val cfgReset = Output(Bool())
     val hostCtrl = Output(new XDMAHostCtrlIO)
     val memCtrl = new XDMAMemCtrlIO
-    val ilaWindowBase = Output(UInt(64.W))
-    val ilaWindowSize = Output(UInt(64.W))
-    val ilaWindowStalled = Input(Bool())
-    val ilaWindowSupported = Input(Bool())
+    val ilaBase = Output(UInt(64.W))
+    val ilaSize = Output(UInt(64.W))
   })
 
   private val numRegs = XDMAConfigReg.maxId
@@ -83,10 +80,9 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     init.U(dataWidth.W)
   }))
 
-  private val ilaWindowBase = RegInit(0.U(64.W))
-  private val ilaWindowSize = RegInit(0.U(64.W))
-  io.ilaWindowBase := ilaWindowBase
-  io.ilaWindowSize := ilaWindowSize
+  private val ilaBase = RegInit(0.U(64.W))
+  io.ilaBase := ilaBase
+  io.ilaSize := Cat(regfile(XDMAConfigReg.IlaSizeHi.id), regfile(XDMAConfigReg.IlaSizeLo.id))
 
   io.hostCtrl.reset := regfile(XDMAConfigReg.HostReset.id)(0)
   io.hostCtrl.diffEnable := regfile(XDMAConfigReg.DiffEnable.id)(0)
@@ -139,12 +135,11 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     wValid := true.B
   }
   when(doWrite) {
-    when(writeWord < numRegs.U && writeWord =/= XDMAConfigReg.IlaWindowStatus.id.U) {
+    when(writeWord < numRegs.U) {
       regfile(writeIdx) := mergeByByte(regfile(writeIdx), nextWData, nextWStrb)
     }
-    when(writeWord === XDMAConfigReg.IlaWindowCommit.id.U && nextWStrb(0) && nextWData(0)) {
-      ilaWindowBase := Cat(regfile(XDMAConfigReg.IlaWindowBaseHi.id), regfile(XDMAConfigReg.IlaWindowBaseLo.id))
-      ilaWindowSize := Cat(regfile(XDMAConfigReg.IlaWindowSizeHi.id), regfile(XDMAConfigReg.IlaWindowSizeLo.id))
+    when(writeWord === XDMAConfigReg.IlaBaseHi.id.U && nextWStrb.orR) {
+      ilaBase := Cat(mergeByByte(regfile(writeIdx), nextWData, nextWStrb), regfile(XDMAConfigReg.IlaBaseLo.id))
     }
     awValid := false.B
     wValid := false.B
@@ -165,11 +160,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
   when(io.axilite.ar.valid && arReady) {
     val readWord = io.axilite.ar.bits.addr(addrWidth - 1, 2)
     val readIdx = readWord(idxBits - 1, 0)
-    rData := Mux(
-      readWord === XDMAConfigReg.IlaWindowStatus.id.U,
-      "h494c4100".U | Cat(io.ilaWindowSupported, io.ilaWindowStalled),
-      Mux(readWord < numRegs.U, regfile(readIdx), 0.U),
-    )
+    rData := Mux(readWord < numRegs.U, regfile(readIdx), 0.U)
     arReady := false.B
     rValid := true.B
   }.elsewhen(rValid && io.axilite.r.ready) {

@@ -89,8 +89,7 @@ struct CommonArgs {
   bool enable_diff = true;
 #ifdef FPGA_HOST
   bool enable_link = true;
-  uint64_t ila_window_base = 0;
-  uint64_t ila_window_size = 0;
+  uint64_t ila_size = 0;
 #endif
   bool enable_squash = true;
   uint8_t squash_size = 255;

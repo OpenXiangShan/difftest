@@ -23,7 +23,6 @@ class Difftest;
 bool difftest_ref_fork_enabled();
 bool difftest_ref_fork_is_child();
 bool difftest_ref_fork_draining();
-uint64_t difftest_ref_fork_checked_cycle();
 // Start before threads: 0 supervisor, 1 leader, -1 failure.
 int difftest_ref_fork_start(uint64_t interval_ms);
 void difftest_ref_fork_leader_exit(int result);

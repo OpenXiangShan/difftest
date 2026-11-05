@@ -286,11 +286,6 @@ class DiffTrapEvent extends TrapEvent with DifftestBundle {
   override def supportsSquashBase: Bool = !hasTrap && !hasWFI
 }
 
-private[difftest] class DiffIlaWindowEvent extends IlaWindowEvent with DifftestBundle {
-  override val desiredCppName: String = "ila_window"
-  override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM", "MATRIX")
-}
-
 class DiffCSRState extends CSRState with DifftestBundle {
   override val desiredCppName: String = "csr"
   override val desiredRegOffset: Option[Int] = Some(2)

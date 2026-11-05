@@ -27,8 +27,6 @@ Generate normal FPGA headers first and rebuild when changing build flags. NEMU r
 | `--ref-mode slow\|fast\|fork` | `fork` when compiled with FORK_REF, otherwise `slow` | Select REF execution mode. |
 | `--ref-fork-interval SECONDS` | `5` | Fork interval; `0` checks the entire run as one segment. Independent of LightSSS `--fork-interval`. |
 | `--packet-pool-log2 N` | `20` | Allocate `2^N` shared packet slots for fork mode. |
-| `--ila-window-base N` | `0` | Initial checked boundary in DUT `trap.cycleCnt` units. |
-| `--ila-window-size N` | `0` | Bound DUT cycles ahead of the checked boundary; zero disables the limit. |
 
 ```bash
 make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK_REF=1 USE_THREAD_MEMPOOL=1
@@ -37,21 +35,4 @@ make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK_REF=1 USE_THREAD_MEMPOO
 
 `FAST PerfCnt` reports speculative FAST completion before the SLOW drain. On success, `SLOW PerfCnt` uses the last trusted segment's instruction/cycle counts and the global runtime, including the drain. These reports show execution counts, IPC, runtime and speed. On a DUT mismatch, the failing SLOW waits for its predecessors to pass, then prints its own report and commit history before execution stops; failures from discarded snapshots are not reported as authoritative.
 
-With a nonzero ILA window size, Gateway stops the CPU when the raw `trap.cycleCnt`
-reaches `base + size`. The reference clock, BAR access and transport keep running.
-SLOW mode writes each successfully checked position back to base. Fork mode writes
-only the accepted contiguous SLOW prefix; an out-of-order completion cannot skip
-an unchecked segment. A window boundary closes the current fork segment even with
-`--ref-fork-interval 0`, so a small window does not wait for another CPU step to finish checking.
-
-Both parameters accept unsigned decimal 64-bit counts. A nonzero initial base
-declares an initially trusted boundary; it does not seek the CPU or initialize REF
-from a checkpoint. The initial base plus size must fit in 64 bits. Fast-only,
-`--no-diff`, `--no-link` and RefDriveTrace cannot enable the window.
-
-The first implementation requires one core, zero configured probe delays and no
-Replay. Host checks the RTL capability before releasing CPU reset. The window
-requires regenerated RTL and rebuilt Host; its internal boundary event changes
-the generated Batch interface. After an error, the existing ILA trigger/link
-release path permits post-trigger sampling. Physical capture retention while the
-CPU is stopped still depends on the ILA clock and sample-enable configuration.
+`--ila-size N` (default `0`, disabled) limits DUT cycles ahead of the SLOW-checked base, which Host advances after successful checking.

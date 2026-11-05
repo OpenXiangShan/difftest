@@ -124,9 +124,7 @@ case class GatewayConfig(
   }
 }
 
-class FpgaDiffIO(dataWidth: Int) extends DecoupledIO(UInt(dataWidth.W)) {
-  val windowEnd = Output(Bool())
-}
+class FpgaDiffIO(dataWidth: Int) extends DecoupledIO(UInt(dataWidth.W))
 
 case class GatewayResult(
   cppMacros: Seq[String] = Seq(),
@@ -141,10 +139,8 @@ case class GatewayResult(
   fpgaIO: Option[FpgaDiffIO] = None,
   fpgaSquashEnable: Option[Bool] = None,
   fpgaSquashMaxFused: Option[UInt] = None,
-  fpgaIlaWindowBase: Option[UInt] = None,
-  fpgaIlaWindowSize: Option[UInt] = None,
-  fpgaIlaWindowStalled: Option[Bool] = None,
-  fpgaIlaWindowSupported: Option[Bool] = None,
+  fpgaIlaBase: Option[UInt] = None,
+  fpgaIlaSize: Option[UInt] = None,
   clockEnable: Option[Bool] = None,
 ) {
   def +(that: GatewayResult): GatewayResult = {
@@ -161,11 +157,8 @@ case class GatewayResult(
       fpgaIO = if (fpgaIO.isDefined) fpgaIO else that.fpgaIO,
       fpgaSquashEnable = if (fpgaSquashEnable.isDefined) fpgaSquashEnable else that.fpgaSquashEnable,
       fpgaSquashMaxFused = if (fpgaSquashMaxFused.isDefined) fpgaSquashMaxFused else that.fpgaSquashMaxFused,
-      fpgaIlaWindowBase = if (fpgaIlaWindowBase.isDefined) fpgaIlaWindowBase else that.fpgaIlaWindowBase,
-      fpgaIlaWindowSize = if (fpgaIlaWindowSize.isDefined) fpgaIlaWindowSize else that.fpgaIlaWindowSize,
-      fpgaIlaWindowStalled = if (fpgaIlaWindowStalled.isDefined) fpgaIlaWindowStalled else that.fpgaIlaWindowStalled,
-      fpgaIlaWindowSupported =
-        if (fpgaIlaWindowSupported.isDefined) fpgaIlaWindowSupported else that.fpgaIlaWindowSupported,
+      fpgaIlaBase = if (fpgaIlaBase.isDefined) fpgaIlaBase else that.fpgaIlaBase,
+      fpgaIlaSize = if (fpgaIlaSize.isDefined) fpgaIlaSize else that.fpgaIlaSize,
       clockEnable = if (clockEnable.isDefined) clockEnable else that.clockEnable,
     )
   }
@@ -267,10 +260,8 @@ object Gateway {
         fpgaIO = endpoint.fpgaIO,
         fpgaSquashEnable = endpoint.fpgaSquashEnable,
         fpgaSquashMaxFused = endpoint.fpgaSquashMaxFused,
-        fpgaIlaWindowBase = endpoint.fpgaIlaWindowBase,
-        fpgaIlaWindowSize = endpoint.fpgaIlaWindowSize,
-        fpgaIlaWindowStalled = endpoint.fpgaIlaWindowStalled,
-        fpgaIlaWindowSupported = endpoint.fpgaIlaWindowSupported,
+        fpgaIlaBase = endpoint.fpgaIlaBase,
+        fpgaIlaSize = endpoint.fpgaIlaSize,
         clockEnable = endpoint.clockEnable,
       )
     } else {
@@ -288,29 +279,16 @@ object Gateway {
 class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: GatewayConfig) extends Module {
   val in = IO(Input(UInt(instanceWithDelay.map(_._1.getWidth).sum.W)))
   val in_bundle = in.asTypeOf(MixedVec(instanceWithDelay.map(_._1)))
-  val windowEvent = Option.when(config.isFPGA)(Wire(new DiffIlaWindowEvent))
-  val endpointBundles = MixedVecInit(in_bundle.toSeq ++ windowEvent.toSeq)
-  val decoupledIn = Wire(Decoupled(chiselTypeOf(endpointBundles)))
+  val decoupledIn = Wire(Decoupled(chiselTypeOf(in_bundle)))
   val clockEnable = Option.when(config.hasClockGate)(IO(Output(Bool())))
   val fpgaSquashEnable = Option.when(config.isSquash && config.isFPGA)(IO(Input(Bool())))
   val fpgaSquashMaxFused = Option.when(config.isSquash && config.isFPGA)(IO(Input(UInt(8.W))))
-  val fpgaIlaWindowBase = Option.when(config.isFPGA)(IO(Input(UInt(64.W))))
-  val fpgaIlaWindowSize = Option.when(config.isFPGA)(IO(Input(UInt(64.W))))
-  val fpgaIlaWindowStalled = Option.when(config.isFPGA)(IO(Output(Bool())))
-  val fpgaIlaWindowSupported = Option.when(config.isFPGA)(IO(Output(Bool())))
-  val traps = in_bundle.collect { case trap: DiffTrapEvent => trap }
-  val windowSupported = traps.length == 1 && instanceWithDelay.forall(_._2 == 0) && !config.hasReplay
-  val windowReached = WireInit(false.B)
-  if (config.isFPGA) {
-    fpgaIlaWindowSupported.get := windowSupported.B
-    if (windowSupported) {
-      windowReached := fpgaIlaWindowSize.get =/= 0.U &&
-        traps.head.cycleCnt.pad(65) >= (fpgaIlaWindowBase.get +& fpgaIlaWindowSize.get)
-    }
-    fpgaIlaWindowStalled.get := windowReached
-    windowEvent.get.coreid := 0.U
-    windowEvent.get.valid := windowReached
-  }
+  val fpgaIlaBase = Option.when(config.isFPGA)(IO(Input(UInt(64.W))))
+  val fpgaIlaSize = Option.when(config.isFPGA)(IO(Input(UInt(64.W))))
+  val ilaReached = if (config.isFPGA) {
+    val cycleCnt = in_bundle.collect { case trap: DiffTrapEvent => trap.cycleCnt }.head
+    fpgaIlaSize.get =/= 0.U && cycleCnt.pad(65) >= (fpgaIlaBase.get +& fpgaIlaSize.get)
+  } else false.B
   // clockEnable should hold with one cycle fire to sample signals
   decoupledIn.valid := !reset.asBool
   clockEnable.foreach { ce =>
@@ -319,17 +297,17 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     decoupledIn.valid := !reset.asBool && valid
     when(ready) { valid := false.B } // fire to clear valid
     when(ce) { valid := true.B } // setup valid for next cycle
-    ce := (if (config.isFPGA) (!valid || ready) && !windowReached else ready && valid) || reset.asBool
+    ce := (if (config.isFPGA) (!valid || ready) && !ilaReached else ready && valid) || reset.asBool
   }
 
   if (config.traceLoad) {
-    decoupledIn.bits := endpointBundles
+    decoupledIn.bits := in_bundle
   } else {
     val delayed = MixedVecInit(
       in_bundle.zip(instanceWithDelay.map(_._2)).map { case (i, d) => Delayer(i, d, decoupledIn.fire) }.toSeq
     )
     if (config.traceDump) Trace(delayed)
-    decoupledIn.bits := MixedVecInit(delayed.toSeq ++ windowEvent.toSeq)
+    decoupledIn.bits := delayed
   }
 
   if (!config.hasClockGate) {
@@ -382,7 +360,6 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     if (config.isFPGA) {
       fpgaIO.get.bits := batch.bits.payload
       fpgaIO.get.valid := batch.valid
-      fpgaIO.get.windowEnd := batch.bits.windowEnd
       batch.ready := fpgaIO.get.ready
     } else {
       batch.ready := true.B
