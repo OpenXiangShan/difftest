@@ -284,7 +284,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val fpgaSquashEnable = Option.when(config.isSquash && config.isFPGA)(IO(Input(Bool())))
   val fpgaSquashMaxFused = Option.when(config.isSquash && config.isFPGA)(IO(Input(UInt(8.W))))
   val fpgaIlaBase = Option.when(config.isFPGA)(IO(Input(UInt(64.W))))
-  val fpgaIlaSize = Option.when(config.isFPGA)(IO(Input(UInt(64.W))))
+  val fpgaIlaSize = Option.when(config.isFPGA)(IO(Input(UInt(32.W))))
   val ilaReached = if (config.isFPGA) {
     val cycleCnt = in_bundle.collect { case trap: DiffTrapEvent => trap.cycleCnt }.head
     fpgaIlaSize.get =/= 0.U && cycleCnt.pad(65) >= (fpgaIlaBase.get +& fpgaIlaSize.get)

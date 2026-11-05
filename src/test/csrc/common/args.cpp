@@ -422,7 +422,15 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_PACKET_POOL_LOG2: args.packet_pool_log2 = atoll_strict(optarg, "packet-pool-log2"); continue;
 #endif
 #ifdef FPGA_HOST
-      case OPT_ILA_SIZE: args.ila_size = parse_instr_count(optarg, "ila-size"); continue;
+      case OPT_ILA_SIZE: {
+        const uint64_t size = parse_instr_count(optarg, "ila-size");
+        if (size > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --ila-size exceeds the uint32 range\n");
+          exit(EINVAL);
+        }
+        args.ila_size = static_cast<uint32_t>(size);
+        continue;
+      }
       case OPT_NO_LINK:
         args.enable_link = false;
         args.enable_diff = false;

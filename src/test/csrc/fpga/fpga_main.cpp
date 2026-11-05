@@ -82,8 +82,9 @@ static void fpga_update_ila_base() {
   const uint64_t checked = difftest[0]->get_trap_event()->cycleCnt;
   if (checked <= base)
     return;
+  if ((checked >> 32) != (base >> 32))
+    xdma_device->fpga_io(HOST_IO_ILA_BASE_HI, static_cast<uint32_t>(checked >> 32));
   xdma_device->fpga_io(HOST_IO_ILA_BASE_LO, static_cast<uint32_t>(checked));
-  xdma_device->fpga_io(HOST_IO_ILA_BASE_HI, static_cast<uint32_t>(checked >> 32));
   base = checked;
 }
 #ifdef USE_SERIAL_PORT
@@ -254,10 +255,8 @@ void fpga_init() {
 #endif // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
-  if (args.ila_size) {
-    xdma_device->fpga_io(HOST_IO_ILA_SIZE_LO, static_cast<uint32_t>(args.ila_size));
-    xdma_device->fpga_io(HOST_IO_ILA_SIZE_HI, static_cast<uint32_t>(args.ila_size >> 32));
-  }
+  if (args.ila_size)
+    xdma_device->fpga_io(HOST_IO_ILA_SIZE, args.ila_size);
   xdma_device->fpga_io(HOST_IO_CPU_AXI_DELAY, args.cpu_axi_delay);
   uint32_t cpu_axi_delay = xdma_device->fpga_io_read(HOST_IO_CPU_AXI_DELAY);
   if (cpu_axi_delay != args.cpu_axi_delay) {

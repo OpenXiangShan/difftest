@@ -58,7 +58,7 @@ class XDMAMemCtrlIO extends Bundle {
 
 private object XDMAConfigReg extends Enumeration {
   val CfgReset, HostReset, DiffEnable, IlaTrigger, EnableSquash, SquashMaxFused, Seed, RamSizeMB, MemInit, MemCPU,
-    MemH2C, H2CSizeMB, CpuAXIDelay, IlaBaseLo, IlaBaseHi, IlaSizeLo, IlaSizeHi = Value
+    MemH2C, H2CSizeMB, CpuAXIDelay, IlaBaseLo, IlaBaseHi, IlaSize = Value
 }
 
 class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Module {
@@ -70,7 +70,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     val hostCtrl = Output(new XDMAHostCtrlIO)
     val memCtrl = new XDMAMemCtrlIO
     val ilaBase = Output(UInt(64.W))
-    val ilaSize = Output(UInt(64.W))
+    val ilaSize = Output(UInt(32.W))
   })
 
   private val numRegs = XDMAConfigReg.maxId
@@ -82,7 +82,7 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
 
   private val ilaBase = RegInit(0.U(64.W))
   io.ilaBase := ilaBase
-  io.ilaSize := Cat(regfile(XDMAConfigReg.IlaSizeHi.id), regfile(XDMAConfigReg.IlaSizeLo.id))
+  io.ilaSize := regfile(XDMAConfigReg.IlaSize.id)
 
   io.hostCtrl.reset := regfile(XDMAConfigReg.HostReset.id)(0)
   io.hostCtrl.diffEnable := regfile(XDMAConfigReg.DiffEnable.id)(0)
@@ -138,8 +138,8 @@ class XDMAConfigBar(val addrWidth: Int = 32, val dataWidth: Int = 32) extends Mo
     when(writeWord < numRegs.U) {
       regfile(writeIdx) := mergeByByte(regfile(writeIdx), nextWData, nextWStrb)
     }
-    when(writeWord === XDMAConfigReg.IlaBaseHi.id.U && nextWStrb.orR) {
-      ilaBase := Cat(mergeByByte(regfile(writeIdx), nextWData, nextWStrb), regfile(XDMAConfigReg.IlaBaseLo.id))
+    when(writeWord === XDMAConfigReg.IlaBaseLo.id.U && nextWStrb.orR) {
+      ilaBase := Cat(regfile(XDMAConfigReg.IlaBaseHi.id), mergeByByte(regfile(writeIdx), nextWData, nextWStrb))
     }
     awValid := false.B
     wValid := false.B

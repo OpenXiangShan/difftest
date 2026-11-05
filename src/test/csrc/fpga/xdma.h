@@ -51,8 +51,7 @@
 #define HOST_IO_CPU_AXI_DELAY    0x30
 #define HOST_IO_ILA_BASE_LO      0x34
 #define HOST_IO_ILA_BASE_HI      0x38
-#define HOST_IO_ILA_SIZE_LO      0x3c
-#define HOST_IO_ILA_SIZE_HI      0x40
+#define HOST_IO_ILA_SIZE         0x3c
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
