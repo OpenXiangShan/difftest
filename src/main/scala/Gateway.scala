@@ -297,7 +297,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     decoupledIn.valid := !reset.asBool && valid
     when(ready) { valid := false.B } // fire to clear valid
     when(ce) { valid := true.B } // setup valid for next cycle
-    ce := ilaReached.map(reached => (!valid || ready) && !reached).getOrElse(ready && valid) || reset.asBool
+    ce := ((!valid || ready) && !ilaReached.getOrElse(false.B)) || reset.asBool
   }
 
   if (config.traceLoad) {
