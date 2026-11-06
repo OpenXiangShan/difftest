@@ -182,6 +182,8 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
         fpgaDiffEnable := ctrl.diffEnable
         gateway.fpgaSquashEnable.foreach(_ := ctrl.enableSquash)
         gateway.fpgaSquashMaxFused.foreach(_ := ctrl.squashMaxFused)
+        gateway.fpgaIlaBase.foreach(_ := cfg.io.ilaBase)
+        gateway.fpgaIlaSize.foreach(_ := Mux(ctrl.diffEnable, cfg.io.ilaSize, 0.U))
 
         cfg.io.memCtrl.memStatus := 0.U
         from_host_axis.viewAs[AXI4Stream].ready := false.B

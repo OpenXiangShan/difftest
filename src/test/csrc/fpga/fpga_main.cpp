@@ -74,6 +74,19 @@ void args_parsing(int argc, char *argv[]);
 static bool run_external_cmd(const char *cmd, const char *tag);
 
 FpgaTransport *xdma_device = NULL;
+
+static void fpga_update_ila_base() {
+  static uint64_t base = 0;
+  if (!args.ila_size)
+    return;
+  const uint64_t checked = difftest[0]->get_trap_event()->cycleCnt;
+  if (checked <= base)
+    return;
+  if ((checked >> 32) != (base >> 32))
+    xdma_device->fpga_io(HOST_IO_ILA_BASE_HI, static_cast<uint32_t>(checked >> 32));
+  xdma_device->fpga_io(HOST_IO_ILA_BASE_LO, static_cast<uint32_t>(checked));
+  base = checked;
+}
 #ifdef USE_SERIAL_PORT
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
@@ -187,6 +200,8 @@ void fpga_init() {
       ->set_packet_callbacks(
           [] {
             const int result = difftest_ref_fork_idle();
+            if (is_xdma_receiver)
+              fpga_update_ila_base();
             return result && (result != 1 || !difftest_refdrive_trace_pending());
           },
           [] {
@@ -240,6 +255,8 @@ void fpga_init() {
 #endif // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
+  if (args.ila_size)
+    xdma_device->fpga_io(HOST_IO_ILA_SIZE, args.ila_size);
   xdma_device->fpga_io(HOST_IO_CPU_AXI_DELAY, args.cpu_axi_delay);
   uint32_t cpu_axi_delay = xdma_device->fpga_io_read(HOST_IO_CPU_AXI_DELAY);
   if (cpu_axi_delay != args.cpu_axi_delay) {
@@ -388,6 +405,10 @@ int fpga_get_result(uint8_t step) {
     else
       return FPGA_FAIL;
   }
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (!difftest_ref_fork_enabled())
+#endif
+    fpga_update_ila_base();
   if (args.enable_squash && args.no_squash_after_instr != UINT64_MAX) {
     for (int i = 0; i < NUM_CORES; i++) {
       uint64_t instr_count = difftest[i]->get_trap_event()->instrCnt;
