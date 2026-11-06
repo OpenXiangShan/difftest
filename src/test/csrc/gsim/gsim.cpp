@@ -21,6 +21,27 @@ GsimSim::~GsimSim() {
   delete dut;
 }
 
+void GsimSim::single_cycle(const std::function<void()> &memory_tick, const std::function<bool()> &should_dump,
+                           const std::function<bool()> &) {
+  const bool dump = should_dump();
+  memory_tick();
+  step();
+  if (dump)
+    waveform_tick();
+  step_uart();
+}
+
+void GsimSim::reset_cycle(bool dump) {
+  set_reset(1);
+  step();
+  if (dump)
+    waveform_tick();
+  set_reset(0);
+  step();
+  if (dump)
+    waveform_tick();
+}
+
 #ifndef GSIM_TRACE_FST
 static void warn_waveform_unsupported() {
   static bool warned = false;
