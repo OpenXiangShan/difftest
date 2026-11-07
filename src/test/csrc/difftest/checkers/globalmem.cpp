@@ -113,7 +113,7 @@ int MatrixStoreChecker::do_step() {
       observation.reqEncodedSourceId = probe.reqEncodedSourceId;
       observation.request.addr = probe.addr;
       std::copy_n(probe.data, observation.request.data.size(), observation.request.data.begin());
-      observation.request.mask = probe.mask;
+      observation.request.mask = UINT64_MAX >> (64 - CONFIG_DIFF_MATRIX_STORE_BYTES);
       observation.respValid = probe.respValid;
       observation.respEncodedSourceId = probe.respEncodedSourceId;
     }

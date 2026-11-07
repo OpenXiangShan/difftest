@@ -273,7 +273,7 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
   assert(matrix_words_per_bank > 0);
 
   for (int j = 0; j < CONFIG_DIFF_AMU_WRITEBACK_BANKS; ++j) { // for each bank
-    if (probe.bankValid[j]) {
+    if ((probe.bankValid >> j) & 0x1U) {
       const size_t addr = probe.bankAddr[j];
       const size_t matrix_entry = addr / stride * stride * CONFIG_DIFF_AMU_WRITEBACK_BANKS + j * stride + addr % stride;
       const size_t idx = matrix_entry * matrix_words_per_bank;
@@ -281,13 +281,17 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
 
       uint8_t *dst = reinterpret_cast<uint8_t *>(&entry.res[idx]);
       const uint8_t *src = reinterpret_cast<const uint8_t *>(&probe.data[j * CONFIG_DIFF_AMU_WRITEBACK_WORDS_PER_BANK]);
-      const uint64_t mask = probe.bankMask[j];
       const size_t bank_bytes = matrix_words_per_bank * sizeof(uint64_t);
+#ifdef CONFIG_DIFF_AMU_WRITEBACK_NO_MASK
+      memcpy(dst, src, bank_bytes);
+#else
+      const uint64_t mask = probe.bankMask[j];
       for (size_t k = 0; k < bank_bytes; ++k) {
         if ((mask >> k) & 0x1U) {
           dst[k] = src[k];
         }
       }
+#endif
     }
   }
 }
@@ -296,13 +300,13 @@ int AmuExecRecorder::check(const DifftestAmuWritebackEvent &probe) {
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
     if (iter->amu_event.pc == probe.pc && iter->state == DiffState::WAIT_DUT_EXEC) {
       const auto &event = iter->amu_event;
-#ifdef CONFIG_DIFFTEST_AMUHASHEVENT
+#ifdef CONFIG_DIFF_AMU_WRITEBACK_NO_MASK
       // MMA
       bool expects_writeback = event.op == 0;
 #else
-      // MMA/mload/mzero
+      // Raw loads/zero may coexist with hashed loads on other probe channels.
       bool expects_writeback = event.op == 0 || (event.op == 1 && event.sat == 0) || event.op == 3;
-#endif // CONFIG_DIFFTEST_AMUHASHEVENT
+#endif // CONFIG_DIFF_AMU_WRITEBACK_NO_MASK
       if (!expects_writeback) {
         printf("Unexpected writeback event: core %d, pc 0x%016lx, op %d\n", state->coreid, probe.pc, event.op);
         set_error_pc(state->coreid, probe.pc);
@@ -372,7 +376,7 @@ int AmuHashExecRecorder::check(const DifftestAmuHashEvent &probe) {
       const auto &event = entry.amu_event;
       if (!(event.op == 3 || (event.op == 1 && event.sat == 0)))
         break;
-      entry.hash = {probe.hashLo, probe.hashHi, probe.byteCount};
+      entry.hash = {probe.hashLo, 0, probe.byteCount};
       entry.state = DiffState::WAIT_SWROB_COMMIT;
       return STATE_OK;
     }
@@ -425,19 +429,22 @@ int AmuExecChecker::commit_ready_prefix() {
           }
 #endif
           break;
-        case 1: // MLS
-        case 3: // Arith
+        case 1:   // MLS
+        case 3: { // Arith
           amu_event_nemu = to_nemu_amu_ctrl(amu_event);
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
-          if (proxy->exec_amu_hash(&amu_event_nemu, &iter->hash) != 0) {
+          const int result = iter->res ? proxy->exec_amu(&amu_event_nemu, iter->res.get())
+                                       : proxy->exec_amu_hash(&amu_event_nemu, &iter->hash);
 #else
-          if (proxy->exec_amu(&amu_event_nemu, iter->res.get()) != 0) {
+          const int result = proxy->exec_amu(&amu_event_nemu, iter->res.get());
 #endif
+          if (result != 0) {
             printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_name(amu_event.op));
             set_error_pc(state->coreid, amu_event.pc);
             return STATE_ERROR;
           }
           break;
+        }
         case 2: // MRelease
           // The REF-side effect was applied when the DUT finish event was recorded.
           break;

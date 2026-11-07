@@ -138,7 +138,7 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
         .reduce(Cat(_, _))
       val bytes = (0 until bankBytes).map { byte =>
         Mux(
-          active && writes.bankMask(bank)(byte),
+          active && writes.bankMask.get(bank)(byte),
           Cat(1.U(1.W), data(byte * 8 + 7, byte * 8)),
           0.U(symbolWidth.W),
         )
@@ -196,13 +196,13 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
       a.valid && b.valid && a.bankValid(bank) && b.bankValid(bank) &&
         a.bankAddr(bank) === b.bankAddr(bank)
     ) {
-      assert(!(a.bankMask(bank) & b.bankMask(bank)).orR, "Concurrent matrix hash writes must not overlap bytes")
+      assert(!(a.bankMask.get(bank) & b.bankMask.get(bank)).orR, "Concurrent matrix hash writes must not overlap bytes")
     }
   }
   val count = PopCount(VecInit((0 until ports).flatMap { port =>
     (0 until banks).flatMap { bank =>
       (0 until bankBytes).map { byte =>
-        io.in(port).valid && io.in(port).bankValid(bank) && io.in(port).bankMask(bank)(byte)
+        io.in(port).valid && io.in(port).bankValid(bank) && io.in(port).bankMask.get(bank)(byte)
       }
     }
   }))
@@ -230,6 +230,5 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
   val normalState = (nextHash ^ initialRemainder.U(hashWidth.W))(hashWidth - 1, 0)
   val checksum = Reverse(normalState) ^ allOnes.U(hashWidth.W)
   io.out.hashLo := RegEnable(checksum, finish)
-  io.out.hashHi := 0.U
   io.out.byteCount := RegEnable(nextCount, finish)
 }
