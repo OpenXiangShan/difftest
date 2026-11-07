@@ -260,12 +260,13 @@ class SbufferEvent extends DifftestBaseBundle with HasValid {
   val mask = UInt(64.W)
 }
 
-class MatrixStoreEvent extends DifftestBaseBundle with HasValid {
+class MatrixStoreEvent(val storeBytes: Int = 64) extends DifftestBaseBundle with HasValid {
+  require(storeBytes > 0 && storeBytes <= 64, s"Matrix store width must be within [1, 64] bytes, got $storeBytes")
+
   val reqValid = Bool()
   val reqEncodedSourceId = UInt(64.W)
   val addr = UInt(64.W)
   val data = Vec(64, UInt(8.W))
-  val mask = UInt(64.W)
   val respValid = Bool()
   val respEncodedSourceId = UInt(64.W)
 }
@@ -455,15 +456,17 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
 }
 
 // Matrix-register write beats; finish marks the end of the instruction.
-class AmuWritebackEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends DifftestBaseBundle with HasValid {
+class AmuWritebackEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4, val hasMask: Boolean = true)
+  extends DifftestBaseBundle
+  with HasValid {
   require(nBanks > 0, s"nBanks should be positive, got $nBanks")
   require(wordsPerBank > 0, s"wordsPerBank should be positive, got $wordsPerBank")
 
   val pc = UInt(64.W)
-  val bankValid = Vec(nBanks, Bool())
+  val bankValid = UInt(nBanks.W)
   val bankAddr = Vec(nBanks, UInt(8.W))
   val data = Vec(nBanks * wordsPerBank, UInt(64.W))
-  val bankMask = Vec(nBanks, UInt((wordsPerBank * 8).W))
+  val bankMask = Option.when(hasMask)(Vec(nBanks, UInt((wordsPerBank * 8).W)))
   val finish = Bool()
 }
 
@@ -477,9 +480,8 @@ class AmuFinishEvent extends DifftestBaseBundle with HasValid {
 // by the asynchronous numerical verifier.
 class AmuHashFinishEvent extends DifftestBaseBundle with HasValid {
   val pc = UInt(64.W)
-  // CRC32C zero-extended in hashLo; retain reserved zero hashHi for ABI stability.
-  val hashLo = UInt(64.W)
-  val hashHi = UInt(64.W)
+  // The host expands this compact CRC32C to the unchanged NEMU completion ABI.
+  val hashLo = UInt(32.W)
   val byteCount = UInt(32.W)
 }
 

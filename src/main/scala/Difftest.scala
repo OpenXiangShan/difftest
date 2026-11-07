@@ -431,8 +431,12 @@ class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWit
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
 }
 
-class DiffMatrixStoreEvent extends MatrixStoreEvent with DifftestBundle with DifftestWithIndex {
+class DiffMatrixStoreEvent(storeBytes: Int = 64)
+  extends MatrixStoreEvent(storeBytes)
+  with DifftestBundle
+  with DifftestWithIndex {
   override val desiredCppName: String = "matrix_store"
+  override def classArgs: Map[String, Any] = Map("storeBytes" -> storeBytes)
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
 }
 
@@ -571,13 +575,14 @@ class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWit
   override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
 }
 
-class DiffAmuWritebackEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
-  extends AmuWritebackEvent(nBanks, wordsPerBank)
+class DiffAmuWritebackEvent(nBanks: Int = 8, wordsPerBank: Int = 4, hasMask: Boolean = true)
+  extends AmuWritebackEvent(nBanks, wordsPerBank, hasMask)
   with DifftestBundle
   with DifftestWithIndex {
   override val desiredCppName: String = "amu_writeback"
 
-  override def classArgs: Map[String, Any] = Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank)
+  override def classArgs: Map[String, Any] =
+    Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank, "hasMask" -> hasMask)
 
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
@@ -818,9 +823,25 @@ object DifftestModule {
           val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
           difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
         }
+        if (bundleType.desiredCppName == "matrix_store") {
+          val storeBytes = bundleType.asInstanceOf[MatrixStoreEvent].storeBytes
+          require(
+            bundles.forall(_.asInstanceOf[MatrixStoreEvent].storeBytes == storeBytes),
+            "MatrixStoreEvent instances must share the same store width",
+          )
+          difftestCpp += s"#define CONFIG_DIFF_MATRIX_STORE_BYTES $storeBytes"
+        }
         if (bundleType.desiredCppName == "amu_writeback") {
           val amuFinish = bundleType.asInstanceOf[AmuWritebackEvent]
-          val amuBanks = amuFinish.bankValid.length
+          require(
+            bundles.forall { bundle =>
+              val event = bundle.asInstanceOf[AmuWritebackEvent]
+              event.nBanks == amuFinish.nBanks && event.wordsPerBank == amuFinish.wordsPerBank &&
+              event.hasMask == amuFinish.hasMask
+            },
+            "AmuWritebackEvent instances must share the same bank and mask layout",
+          )
+          val amuBanks = amuFinish.nBanks
           val amuWordBits = amuFinish.data.head.getWidth
           require(
             amuFinish.data.length % amuBanks == 0,
@@ -831,6 +852,7 @@ object DifftestModule {
           difftestCpp += s"#define CONFIG_DIFF_AMU_WRITEBACK_WORDS_PER_BANK $amuWordsPerBank"
           difftestCpp += s"#define CONFIG_DIFF_AMU_WRITEBACK_WORD_BITS $amuWordBits"
           difftestCpp += s"#define CONFIG_DIFF_AMU_BANK_WIDTH ${amuWordsPerBank * amuWordBits}"
+          if (!amuFinish.hasMask) difftestCpp += "#define CONFIG_DIFF_AMU_WRITEBACK_NO_MASK"
         }
         difftestCpp += bundleType.toCppDeclaration(structPacked, structAligned)
         difftestCpp += ""
