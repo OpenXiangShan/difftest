@@ -22,7 +22,12 @@ import difftest.common.AXI4Stream
 import difftest.gateway.FpgaDiffIO
 import difftest.util.PipelineConnect
 
-class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module {
+class Difftest2AXIs(
+  val difftest_width: Int,
+  val axis_width: Int,
+  val idle_timeout_cycles: Int = 200000,
+) extends Module {
+  require(idle_timeout_cycles > 0, "transport idle timeout must be positive")
   val io = IO(new Bundle {
     val pcie_clock = Input(Clock()) // Read clock
     val reset = Input(Bool())
@@ -36,6 +41,7 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
   val payload_width = axis_send_len * axis_width
   val payload_pad_width = payload_width - difftest_width - pkt_id_w
   val fifo_depth = 16
+  require(payload_pad_width >= 8, "transport idle drain needs one outer padding byte")
 
   // Read clock domain
   withClock(io.pcie_clock) {
@@ -52,18 +58,31 @@ class Difftest2AXIs(val difftest_width: Int, val axis_width: Int) extends Module
     val currentPktID = RegInit(0.U(pkt_id_w.W))
     val sendPacketEnd = counter === (numPacketPerRange - 1).U
 
-    val startTransfer = !rangeActive && fifo.io.deq.valid
-    val loadPacket = fifo.io.deq.valid && (!rangeActive || !packetValid)
+    val idleCount = RegInit(0.U(math.max(1, log2Ceil(idle_timeout_cycles)).W))
+    val draining = RegInit(false.B)
+    val idleWaiting = rangeActive && !packetValid && !fifo.io.deq.valid && !draining
+    val idleExpired = idleWaiting && idleCount >= (idle_timeout_cycles - 1).U
+    when(!idleWaiting) {
+      idleCount := 0.U
+    }.elsewhen(!idleExpired) {
+      idleCount := idleCount + 1.U
+    }
+    when(idleExpired) { draining := true.B }
+    when(!rangeActive || (packetValid && io.axis.fire && sendLast && sendPacketEnd)) {
+      draining := false.B
+    }
 
-    val packetPayload =
-      if (payload_pad_width > 0) {
-        Cat(0.U(payload_pad_width.W), fifo.io.deq.bits, currentPktID)
-      } else {
-        Cat(fifo.io.deq.bits, currentPktID)
-      }
+    val startTransfer = !rangeActive && fifo.io.deq.valid
+    val loadReal = fifo.io.deq.valid && (!rangeActive || !packetValid)
+    val loadPadding = rangeActive && !packetValid && !fifo.io.deq.valid && (draining || idleExpired)
+    val loadPacket = loadReal || loadPadding
+    // Outer padding[0]=1 is discarded by the host before the stateful Batch parser.
+    val packetData = Mux(loadPadding, 0.U(difftest_width.W), fifo.io.deq.bits)
+    val packetPadding = Mux(loadPadding, 1.U(payload_pad_width.W), 0.U(payload_pad_width.W))
+    val packetPayload = Cat(packetPadding, packetData, currentPktID)
     val packetPayloadBeats = packetPayload.asTypeOf(Vec(axis_send_len, UInt(axis_width.W)))
 
-    fifo.io.deq.ready := loadPacket
+    fifo.io.deq.ready := loadReal
 
     when(startTransfer) {
       rangeActive := true.B
