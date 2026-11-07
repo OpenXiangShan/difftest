@@ -477,6 +477,7 @@ class AmuFinishEvent extends DifftestBaseBundle with HasValid {
 // by the asynchronous numerical verifier.
 class AmuHashFinishEvent extends DifftestBaseBundle with HasValid {
   val pc = UInt(64.W)
+  // CRC32C zero-extended in hashLo; retain reserved zero hashHi for ABI stability.
   val hashLo = UInt(64.W)
   val hashHi = UInt(64.W)
   val byteCount = UInt(32.W)

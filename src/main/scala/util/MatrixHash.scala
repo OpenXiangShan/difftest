@@ -4,21 +4,31 @@ import chisel3._
 import chisel3.util._
 import difftest.{DiffAmuHashEvent, DiffAmuWritebackEvent, DifftestModule}
 
-/** A position-bound fingerprint of accepted matrix-register writes, before Gateway/FPGA transport.
+/** CRC-32/ISCSI (CRC32C) of the canonical accepted matrix-register image.
   *
   * For logical register byte i, encode a written byte as s(i) = 0x100 | data(i), or zero if unwritten.
-  * The hash is XOR_i(s(i) * x^(9*i)) modulo P(x) = x^128 + x^7 + x^2 + x + 1, using carry-less
-  * polynomial arithmetic. The ninth bit distinguishes a written zero from an unwritten byte.
-  * This is a linear error-detection fingerprint, not a cryptographic digest.
+  * Canonical stream: descending logical byte offsets, symbol bits 8 down to 0,
+  * packed into byte bits 0 up to 7 for the reflected input convention.
+  * The ninth bit distinguishes a written zero from an unwritten byte.
+  * Polynomial: 0x1edc6f41; init/xorout all ones; refin/refout true.
   *
-  * NEMU computes the same remainder by visiting logical bytes from high to low. The hardware instead
-  * hashes each bank fragment, multiplies by its position coefficient, and XORs the contributions.
+  * NEMU uses the same canonical stream, including unwritten register capacity.
+  * Hardware hashes each bank fragment, multiplies by its position coefficient, and XORs contributions.
   * Each defined byte must be written once per instruction; disjoint masks and arbitrary order are supported.
   */
 object MatrixHash {
-  private val hashWidth = 128
+  private val hashWidth = 32
   private val symbolWidth = 9
-  private val polynomial = (BigInt(1) << hashWidth) | 0x87
+  private val polynomial = (BigInt(1) << hashWidth) | BigInt("1edc6f41", 16)
+
+  private def xorTree(values: Seq[UInt]): UInt = {
+    require(values.nonEmpty)
+    if (values.size == 1) values.head
+    else {
+      val (left, right) = values.splitAt(values.size / 2)
+      xorTree(left) ^ xorTree(right)
+    }
+  }
 
   // Elaboration-time polynomial division: BigInt calculations only determine constants and wiring.
   private def constantRemainder(value: BigInt): BigInt = {
@@ -81,7 +91,7 @@ object MatrixHash {
   * A beat may write several banks. `valid && finish` closes the instruction, including that beat's writes.
   * Instructions may be back-to-back, but their write streams must not interleave within this instance.
   *
-  * Pipeline: fragment/coefficient -> partial products -> bank contribution -> accumulation/completion.
+  * Pipeline: fragment/address -> partial products -> shared contribution -> accumulation/completion.
   * Output valid and metadata are delayed by four registers from the input finish beat.
   */
 class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports: Int = 1) extends Module {
@@ -110,12 +120,17 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
     .take(regBytes / bankBytes)
     .toVector
 
-  val contributions = (0 until ports).flatMap { port =>
+  // Standard CRC initialization is an affine correction over this fixed-size image.
+  private val allOnes = (BigInt(1) << hashWidth) - 1
+  private val initialRemainder = (0 until symbolWidth * regBytes)
+    .foldLeft(allOnes)((value, _) => constantRemainder(value << 1))
+
+  val products = (0 until ports).flatMap { port =>
     val writes = io.in(port)
     (0 until banks).map { bank =>
       val active = writes.valid && writes.bankValid(bank)
 
-      // Stage 1: encode this beat's bytes and select their logical position coefficient.
+      // Stage 1: encode this beat's bytes and register their logical bank address.
       // Reverse before Cat so word 0, then byte 0, occupies the least-significant bits.
       val data = writes.data
         .slice(bank * bankBytes / 8, (bank + 1) * bankBytes / 8)
@@ -128,34 +143,44 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
           0.U(symbolWidth.W),
         )
       }
-      val fragment = RegNext(reducePolynomial(bytes.reverse.reduce(Cat(_, _)), symbolWidth * bankBytes))
+      // CRC input bits enter through the feedback polynomial: include the x^32 factor.
+      val fragment = RegNext(
+        reducePolynomial(
+          bytes.reverse.reduce(Cat(_, _)) << hashWidth,
+          symbolWidth * bankBytes + hashWidth,
+        )
+      )
+      val address = RegNext(writes.bankAddr(bank)(log2Ceil(entriesPerBank) - 1, 0))
 
       // Banks interleave logical rows; consecutive chunks of a row stay in the same bank.
-      // All address arithmetic here uses Scala Ints to build constants, not hardware dividers.
+      // Lookup after the address register avoids registering the full coefficient.
+      // Address arithmetic uses Scala Ints to build constants, not hardware dividers.
       val coefficients = VecInit((0 until entriesPerBank).map { addr =>
         val row = (addr / chunksPerRow) * banks + bank
         val chunkInRow = addr % chunksPerRow
         val offset = row * rowBytes + chunkInRow * bankBytes
         positions(offset / bankBytes).U(hashWidth.W)
       })
-      val coefficient = RegNext(coefficients(writes.bankAddr(bank)(log2Ceil(entriesPerBank) - 1, 0)))
+      val coefficient = coefficients(address)
       when(active) {
         assert(writes.bankAddr(bank) < entriesPerBank.U, "Matrix hash address exceeds register capacity")
       }
 
-      // Stage 2: three 64x64 carry-less products form a 128x128 Karatsuba multiplication.
-      val lo = RegNext(carrylessMultiply(fragment(63, 0), coefficient(63, 0)))
-      val hi = RegNext(carrylessMultiply(fragment(127, 64), coefficient(127, 64)))
+      // Stage 2: three 16x16 carry-less products form a 32x32 Karatsuba multiplication.
+      val lo = RegNext(carrylessMultiply(fragment(15, 0), coefficient(15, 0)))
+      val hi = RegNext(carrylessMultiply(fragment(31, 16), coefficient(31, 16)))
       val mid =
-        RegNext(carrylessMultiply(fragment(63, 0) ^ fragment(127, 64), coefficient(63, 0) ^ coefficient(127, 64)))
+        RegNext(carrylessMultiply(fragment(15, 0) ^ fragment(31, 16), coefficient(15, 0) ^ coefficient(31, 16)))
 
-      // Stage 3: recombine the 256-bit product and reduce modulo P.
-      // (fragment * x^(9*offset)) mod P binds the local bytes to their register positions.
-      RegNext(reducePolynomial(lo.pad(256) ^ ((mid ^ lo ^ hi) << 64).pad(256) ^ (hi << 128), 256))
+      lo.pad(64) ^ ((mid ^ lo ^ hi) << 16).pad(64) ^ (hi << 32)
     }
   }
 
-  // Count accepted byte writes (not unique addresses) and align with the stage-3 contributions.
+  // Stage 3: reduction is linear, so all products share one reduction and register.
+  // Balance the cross-port/bank XOR to keep its depth logarithmic in the number of products.
+  val contribution = RegNext(reducePolynomial(xorTree(products), 64))
+
+  // Count accepted byte writes (not unique addresses) and align with the stage-3 contribution.
   // This catches extra writes even when identical polynomial contributions cancel under XOR.
   for (port <- 1 until ports) {
     assert(!io.in(port).finish, "Matrix hash finish belongs to port zero")
@@ -189,7 +214,7 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
   // pipeline; fragment/product registers need no reset because invalid beats cannot update state.
   val hash = RegInit(0.U(hashWidth.W))
   val byteCount = RegInit(0.U(32.W))
-  val nextHash = hash ^ contributions.reduce(_ ^ _)
+  val nextHash = hash ^ contribution
   val nextCount = byteCount + beatCount
 
   // Capture nextHash/nextCount on finish, so final-beat writes are included in the completion.
@@ -202,7 +227,9 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
   io.out.pc := ShiftRegister(io.in(0).pc, completionLatency)
   io.out.coreid := ShiftRegister(io.in(0).coreid, completionLatency)
   io.out.index := ShiftRegister(io.in(0).index, completionLatency)
-  io.out.hashLo := RegEnable(nextHash(63, 0), finish)
-  io.out.hashHi := RegEnable(nextHash(127, 64), finish)
+  val normalState = (nextHash ^ initialRemainder.U(hashWidth.W))(hashWidth - 1, 0)
+  val checksum = Reverse(normalState) ^ allOnes.U(hashWidth.W)
+  io.out.hashLo := RegEnable(checksum, finish)
+  io.out.hashHi := 0.U
   io.out.byteCount := RegEnable(nextCount, finish)
 }
