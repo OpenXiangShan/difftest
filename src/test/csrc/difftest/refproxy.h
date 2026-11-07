@@ -503,7 +503,7 @@ public:
     }
   }
 
-  inline int exec_amu_hash(struct AmuCtrlEvent *amu_ctrl, struct MatrixHash128 *result) {
+  inline int exec_amu_hash(struct AmuCtrlEvent *amu_ctrl, struct MatrixHashResult *result) {
     if (ref_amu_exec_hash) {
       return ref_amu_exec_hash(amu_ctrl, result);
     } else {

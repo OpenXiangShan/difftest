@@ -205,7 +205,7 @@ public:
 #ifdef CONFIG_DIFFTEST_REPLAY
     uint64_t sequence = 0;
 #endif // CONFIG_DIFFTEST_REPLAY
-    MatrixHash128 hash{};
+    MatrixHashResult hash{};
   };
 
   std::deque<AmeInstRobEntry> matrix_sw_rob;
