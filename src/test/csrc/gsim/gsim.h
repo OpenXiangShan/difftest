@@ -22,6 +22,15 @@ class GsimSim final : public Simulator {
 private:
   SSimTop *dut;
 
+  inline void set_reset(unsigned reset) {
+    dut->set_reset(reset);
+  }
+  inline void step() {
+    dut->step();
+  }
+
+  void waveform_tick();
+
 protected:
   inline unsigned get_uart_out_valid() override {
     return dut->get_difftest__DOT__uart__DOT__out__DOT__valid();
@@ -39,16 +48,6 @@ protected:
 public:
   GsimSim();
   ~GsimSim();
-
-  inline void set_clock(unsigned clock) override {
-    // Gsim does not use explicit clock. Simply call step() instead.
-  }
-  inline void set_reset(unsigned reset) override {
-    dut->set_reset(reset);
-  }
-  inline void step() override {
-    dut->step();
-  }
 
   inline uint64_t get_difftest_exit() final {
     return dut->get_difftest__DOT__exit();
@@ -71,9 +70,12 @@ public:
     dut->set_difftest__DOT__logCtrl__DOT__end(end);
   }
 
+  void single_cycle(const std::function<void()> &memory_tick, const std::function<bool()> &should_dump,
+                    const std::function<bool()> &should_dump_full) override;
+  void reset_cycle(bool dump) override;
+
   void waveform_init(uint64_t cycles) override;
   void waveform_init(uint64_t cycles, const char *filename) override;
-  void waveform_tick() override;
 };
 
 #endif // __SIMULATOR_GSIM_H

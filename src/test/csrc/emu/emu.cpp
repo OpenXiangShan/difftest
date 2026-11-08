@@ -78,12 +78,8 @@ Emulator::Emulator(int argc, const char *argv[])
   srand48(args.seed);
   Verilated::randSeed(args.seed);
   Verilated::randReset(2);
-#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
-  dut_ptr->set_clock(0);
-  dut_ptr->set_accelerator_clock(0);
-  dut_ptr->step();
-#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 #endif // VERILATOR
+  dut_ptr->configure_clocks(args.core_clock_half_period, args.accelerator_clock_half_period);
 
   // init remote-bitbang
   if (enable_simjtag) {
@@ -302,122 +298,48 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   if (args.trace_name && args.trace_is_read) {
     return;
   }
-  for (int i = 0; i < cycles; i++) {
-    dut_ptr->set_reset(1);
-
-#ifdef VERILATOR
-    verilator_half_cycle(1);
-#endif // VERILATOR
-
-    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-      dut_ptr->waveform_tick();
-    }
-
-#ifdef VERILATOR
-    verilator_half_cycle(0);
-#endif // VERILATOR
-
-    if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
-      dut_ptr->waveform_tick();
-    }
-
-#ifdef GSIM
-    dut_ptr->step();
-#endif
-
-    dut_ptr->set_reset(0);
-
-#ifdef GSIM
-    dut_ptr->step();
-#endif // GSIM
+  for (size_t i = 0; i < cycles; i++) {
+    dut_ptr->reset_cycle(args.enable_waveform && args.enable_waveform_full && args.log_begin == 0);
   }
-}
-
-inline void Emulator::verilator_half_cycle(unsigned core_clock_level) {
-#ifdef VERILATOR
-#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
-  bool accelerator_edge_at_core_edge = false;
-  accelerator_clock_phase += args.core_clock_half_period;
-  while (accelerator_clock_phase >= args.accelerator_clock_half_period) {
-    accelerator_clock_phase -= args.accelerator_clock_half_period;
-    accelerator_clock_level ^= 1;
-    dut_ptr->set_accelerator_clock(accelerator_clock_level);
-
-    if (accelerator_clock_phase == 0) {
-      // Both clock edges occur at the same simulated time. Update both inputs
-      // before a single evaluation to avoid imposing an accelerator-first order.
-      dut_ptr->set_clock(core_clock_level);
-      dut_ptr->step();
-      accelerator_edge_at_core_edge = true;
-    } else {
-      dut_ptr->step();
-    }
-  }
-
-  if (!accelerator_edge_at_core_edge) {
-    dut_ptr->set_clock(core_clock_level);
-    dut_ptr->step();
-  }
-#else
-  dut_ptr->set_clock(core_clock_level);
-  dut_ptr->step();
-#endif // CONFIG_HAS_ACCELERATOR_CLOCK
-#endif // VERILATOR
 }
 
 inline void Emulator::single_cycle() {
   if (args.trace_name && args.trace_is_read) {
-    goto end_single_cycle;
+    cycles++;
+    return;
   }
 
-#ifdef VERILATOR
-  verilator_half_cycle(1);
-#endif // VERILATOR
-
-  if (args.enable_waveform) {
-#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_SQUASH)
-    uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
-#else
-    static uint64_t cycle = -1UL;
-    cycle++;
-#endif
-    bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
-    if (in_range || force_dump_wave) {
-      dut_ptr->waveform_tick();
-    }
-  }
-
+  dut_ptr->single_cycle(
+      [] {
 #ifdef WITH_DRAMSIM3
-  dramsim3_step();
+        dramsim3_step();
 #endif
 #ifdef WITH_MCSIM
-  mcsim_backend_step();
+        mcsim_backend_step();
 #endif
-
-#ifdef GSIM
-  dut_ptr->step();
-#endif // GSIM
-
-  dut_ptr->step_uart();
-
-#ifdef VERILATOR
-  verilator_half_cycle(0);
-#endif // VERILATOR
-
-  if (args.enable_waveform && args.enable_waveform_full) {
-#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
-    uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
+      },
+      [this] {
+        if (!args.enable_waveform)
+          return false;
+#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_SQUASH)
+        uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
 #else
-    static uint64_t cycle = -1UL;
-    cycle++;
+        static uint64_t cycle = -1UL;
+        cycle++;
 #endif
-    bool in_range = (args.log_begin <= cycle) && (cycle <= args.log_end);
-    if (in_range || force_dump_wave) {
-      dut_ptr->waveform_tick();
-    }
-  }
-
-end_single_cycle:
+        return (args.log_begin <= cycle && cycle <= args.log_end) || force_dump_wave;
+      },
+      [this] {
+        if (!args.enable_waveform || !args.enable_waveform_full)
+          return false;
+#if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
+        uint64_t cycle = difftest[0]->get_trap_event()->cycleCnt;
+#else
+        static uint64_t cycle = -1UL;
+        cycle++;
+#endif
+        return (args.log_begin <= cycle && cycle <= args.log_end) || force_dump_wave;
+      });
   cycles++;
 }
 
@@ -754,12 +676,7 @@ void Emulator::snapshot_save() {
     sdcard_offset = 0;
   snapshot_write(&sdcard_offset, sizeof(sdcard_offset));
 
-#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
-  // The DUT snapshot restores the accelerator clock pin, but not this scheduler
-  // remainder. Persist it so the next half-cycle keeps the saved edge alignment.
-  snapshot_write(&accelerator_clock_phase, sizeof(accelerator_clock_phase));
-  snapshot_write(&accelerator_clock_level, sizeof(accelerator_clock_level));
-#endif // CONFIG_HAS_ACCELERATOR_CLOCK
+  dut_ptr->save_extra_state(snapshot_write);
 }
 
 void Emulator::snapshot_load(const char *filename) {
@@ -799,19 +716,7 @@ void Emulator::snapshot_load(const char *filename) {
   long sdcard_offset = 0;
   snapshot_read(&sdcard_offset, sizeof(sdcard_offset));
 
-#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
-  snapshot_read(&accelerator_clock_phase, sizeof(accelerator_clock_phase));
-  unsigned saved_accelerator_clock_level = 0;
-  snapshot_read(&saved_accelerator_clock_level, sizeof(saved_accelerator_clock_level));
-  accelerator_clock_level = dut_ptr->get_accelerator_clock();
-  if (accelerator_clock_phase >= args.accelerator_clock_half_period ||
-      saved_accelerator_clock_level != accelerator_clock_level) {
-    printf("Invalid accelerator clock snapshot: phase=%" PRIu64 " level=%u, DUT level=%u, half-period=%" PRIu32 "\n",
-           accelerator_clock_phase, saved_accelerator_clock_level, accelerator_clock_level,
-           args.accelerator_clock_half_period);
-    assert(0);
-  }
-#endif // CONFIG_HAS_ACCELERATOR_CLOCK
+  dut_ptr->load_extra_state(snapshot_read);
 
   if (fp)
     fseek(fp, sdcard_offset, SEEK_SET);
