@@ -37,6 +37,7 @@ enum {
   OPT_CPU_AXI_DELAY,
 #ifdef FPGA_HOST
   OPT_NO_LINK,
+  OPT_ILA_SIZE,
 #endif
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
@@ -152,6 +153,7 @@ static inline void print_help(const char *file) {
   printf("      --no-diff              skip REF checking; keep DUT data and trap detection\n");
 #ifdef FPGA_HOST
   printf("      --no-link              disable DiffTest transport (implies --no-diff)\n");
+  printf("      --ila-size=N           maximum DUT cycles ahead of SLOW, 0 disables (default)\n");
 #endif
   printf("      --no-squash            disable squash\n");
   printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
@@ -235,6 +237,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
 #ifdef FPGA_HOST
     { "no-link",           0, NULL, OPT_NO_LINK },
+    { "ila-size",          1, NULL, OPT_ILA_SIZE },
 #endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
     { "ref-mode",          1, NULL, OPT_REF_MODE },
@@ -419,6 +422,15 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_PACKET_POOL_LOG2: args.packet_pool_log2 = atoll_strict(optarg, "packet-pool-log2"); continue;
 #endif
 #ifdef FPGA_HOST
+      case OPT_ILA_SIZE: {
+        const uint64_t size = parse_instr_count(optarg, "ila-size");
+        if (size > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --ila-size exceeds the uint32 range\n");
+          exit(EINVAL);
+        }
+        args.ila_size = static_cast<uint32_t>(size);
+        continue;
+      }
       case OPT_NO_LINK:
         args.enable_link = false;
         args.enable_diff = false;
@@ -494,6 +506,19 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   }
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
+
+#ifdef FPGA_HOST
+  if (args.ila_size && (!args.enable_diff || !args.enable_link || args.refdrive_trace_name)) {
+    fprintf(stderr, "[ERROR] --ila-size requires REF checking and cannot use RefDriveTrace\n");
+    exit(EINVAL);
+  }
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  if (args.ila_size && args.ref_mode == RefMode::FAST) {
+    fprintf(stderr, "[ERROR] --ila-size requires --ref-mode slow or fork\n");
+    exit(EINVAL);
+  }
+#endif
+#endif
 
 #ifdef ENABLE_IPC
   char *ipc_image = (char *)malloc(255);

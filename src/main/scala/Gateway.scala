@@ -139,6 +139,8 @@ case class GatewayResult(
   fpgaIO: Option[FpgaDiffIO] = None,
   fpgaSquashEnable: Option[Bool] = None,
   fpgaSquashMaxFused: Option[UInt] = None,
+  fpgaIlaBase: Option[UInt] = None,
+  fpgaIlaSize: Option[UInt] = None,
   clockEnable: Option[Bool] = None,
 ) {
   def +(that: GatewayResult): GatewayResult = {
@@ -155,6 +157,8 @@ case class GatewayResult(
       fpgaIO = if (fpgaIO.isDefined) fpgaIO else that.fpgaIO,
       fpgaSquashEnable = if (fpgaSquashEnable.isDefined) fpgaSquashEnable else that.fpgaSquashEnable,
       fpgaSquashMaxFused = if (fpgaSquashMaxFused.isDefined) fpgaSquashMaxFused else that.fpgaSquashMaxFused,
+      fpgaIlaBase = if (fpgaIlaBase.isDefined) fpgaIlaBase else that.fpgaIlaBase,
+      fpgaIlaSize = if (fpgaIlaSize.isDefined) fpgaIlaSize else that.fpgaIlaSize,
       clockEnable = if (clockEnable.isDefined) clockEnable else that.clockEnable,
     )
   }
@@ -256,6 +260,8 @@ object Gateway {
         fpgaIO = endpoint.fpgaIO,
         fpgaSquashEnable = endpoint.fpgaSquashEnable,
         fpgaSquashMaxFused = endpoint.fpgaSquashMaxFused,
+        fpgaIlaBase = endpoint.fpgaIlaBase,
+        fpgaIlaSize = endpoint.fpgaIlaSize,
         clockEnable = endpoint.clockEnable,
       )
     } else {
@@ -277,6 +283,12 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
   val clockEnable = Option.when(config.hasClockGate)(IO(Output(Bool())))
   val fpgaSquashEnable = Option.when(config.isSquash && config.isFPGA)(IO(Input(Bool())))
   val fpgaSquashMaxFused = Option.when(config.isSquash && config.isFPGA)(IO(Input(UInt(8.W))))
+  val fpgaIlaBase = Option.when(config.isFPGA)(IO(Input(UInt(64.W))))
+  val fpgaIlaSize = Option.when(config.isFPGA)(IO(Input(UInt(32.W))))
+  val ilaReached = Option.when(config.isFPGA) {
+    val cycleCnt = in_bundle.collect { case trap: DiffTrapEvent => trap.cycleCnt }.head
+    fpgaIlaSize.get =/= 0.U && cycleCnt.pad(65) >= (fpgaIlaBase.get +& fpgaIlaSize.get)
+  }
   // clockEnable should hold with one cycle fire to sample signals
   decoupledIn.valid := !reset.asBool
   clockEnable.foreach { ce =>
@@ -285,7 +297,7 @@ class GatewayEndpoint(instanceWithDelay: Seq[(DifftestBundle, Int)], config: Gat
     decoupledIn.valid := !reset.asBool && valid
     when(ready) { valid := false.B } // fire to clear valid
     when(ce) { valid := true.B } // setup valid for next cycle
-    ce := (ready && valid) || reset.asBool
+    ce := ((!valid || ready) && !ilaReached.getOrElse(false.B)) || reset.asBool
   }
 
   if (config.traceLoad) {
