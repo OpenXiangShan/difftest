@@ -136,8 +136,14 @@ int difftest_nstep(int step, bool enable_diff) {
       difftest_set_dut();
     }
     int status = difftest_state();
-    if (status != STATE_RUNNING)
+    if (status != STATE_RUNNING) {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+      // Destruction can discard queued work, so verify it before accepting the trap.
+      if (enable_diff && !difftest_mma_flush_all())
+        return STATE_BADTRAP;
+#endif
       return status;
+    }
   }
   return STATE_RUNNING;
 }
@@ -216,8 +222,12 @@ bool difftest_mma_flush_all() {
   bool passed = true;
   for (int i = 0; i < NUM_CORES; i++) {
     auto verifier = difftest[i]->get_mma_verifier();
-    if (verifier && !verifier->flush())
+    if (verifier && !verifier->flush()) {
+      const auto *error = verifier->get_error_buffer();
+      if (error)
+        verifier->report_error(error);
       passed = false;
+    }
   }
   return passed;
 }
