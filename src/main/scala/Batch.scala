@@ -287,7 +287,9 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val merged_tail_chunks = VecInit(merged_chunks.drop(param.BeatChunkSize))
   val merge_full = merged_count >= param.BeatChunkSize.U
   val payload_beat_mask = VecInit(payload_beat_valid.map(_.orR)).asUInt
-  val input_step_valid = delay_grouped.valid && info_num =/= 0.U && payload_beat_mask =/= 0.U
+  val genericInputEnabled = WireDefault(true.B)
+  val genericOut = Wire(Decoupled(new BatchIO(param, config)))
+  val input_step_valid = genericInputEnabled && delay_grouped.valid && info_num =/= 0.U && payload_beat_mask =/= 0.U
   val select_beat_mask = Mux(
     remain_beat_mask === 0.U,
     Mux(!pending_valid && state_count === 0.U && input_step_valid, payload_beat_mask, 0.U),
@@ -303,7 +305,7 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val merged_tick = pending_valid && (merge_full || pending_last)
   // A tick means emitting one Batch beat.
   val should_tick = merged_tick || state_tick
-  val state_update = !should_tick || out.ready
+  val state_update = !should_tick || genericOut.ready
   val pending_consumed = pending_valid && state_update
   // Only refill pending in the same cycle when the old pending beat can be
   // merged into state without waiting for downstream ready. This cuts the
@@ -321,10 +323,63 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val is_last_step_beat = state_tick || (merged_tick && pending_last && merged_count <= param.BeatChunkSize.U)
 
   // Keep delay_grouped.bits stable while scanning the current step payload.
-  delay_grouped.ready := !input_step_valid || (load_pending_beat && next_remain_beat_mask === 0.U)
-  out.valid := should_tick
-  out.bits.payload := Mux(state_tick, state_chunks.asUInt, merged_head_chunks.asUInt)
-  out.bits.step := Mux(out.valid && is_last_step_beat, 1.U(config.stepWidth.W), 0.U)
+  val genericInputReady = !input_step_valid || (load_pending_beat && next_remain_beat_mask === 0.U)
+  delay_grouped.ready := genericInputReady
+  genericOut.valid := should_tick
+  genericOut.bits.payload := Mux(state_tick, state_chunks.asUInt, merged_head_chunks.asUInt)
+  genericOut.bits.step := Mux(genericOut.valid && is_last_step_beat, 1.U(config.stepWidth.W), 0.U)
+  out <> genericOut
+
+  // A single WB has one info chunk followed by three data chunks. Reuse the
+  // existing packed fields, bypassing only the sparse payload-beat scanner.
+  // Other layouts, replay, and all mixed-event steps retain the generic path.
+  val writebackGroup = sorted.zipWithIndex.find { case (group, _) =>
+    group.size == 1 && group.head.bits.desiredCppName == "amu_writeback" && getGroupDataChunks(group) == 3
+  }
+  if (config.isFPGA && !config.hasReplay && param.ChunkByteLen == 32 && param.BeatChunkSize == 2) {
+    writebackGroup.foreach { case (_, groupIdx) =>
+      val writebackOnly = info_num === 1.U && info_chunk_count === 1.U &&
+        delay_group_status(groupIdx).cluster_info_cnt === 1.U && cluster_chunk_count(groupIdx) === 3.U
+      val genericIdle = remain_beat_mask === 0.U && !pending_valid && state_count === 0.U
+      val writebacks = Module(new Queue(UInt((2 * param.BeatBitLen).W), entries = 2, pipe = false, flow = false))
+      val secondBeat = RegInit(false.B)
+      val writebackPending = writebacks.io.deq.valid
+
+      writebacks.io.enq.valid := delay_grouped.valid && writebackOnly && genericIdle
+      writebacks.io.enq.bits := Cat(
+        delay_group_data(groupIdx).pad(3 * param.ChunkBitLen),
+        info_chunks(0),
+      )
+
+      // A queued WB drains before a later generic step can start. Conversely,
+      // the scanner must fully drain its last pending beat before accepting WB.
+      // Do not let genericInputReady's empty-step case consume a routed WB.
+      genericInputEnabled := !writebackPending && !writebackOnly
+      delay_grouped.ready := Mux(
+        writebackOnly,
+        genericIdle && writebacks.io.enq.ready,
+        !writebackPending && genericInputReady,
+      )
+      genericOut.ready := out.ready && !writebackPending
+      out.valid := writebackPending || genericOut.valid
+      out.bits.payload := Mux(
+        writebackPending,
+        Mux(
+          secondBeat,
+          writebacks.io.deq.bits(2 * param.BeatBitLen - 1, param.BeatBitLen),
+          writebacks.io.deq.bits(param.BeatBitLen - 1, 0),
+        ),
+        genericOut.bits.payload,
+      )
+      out.bits.step := Mux(writebackPending, secondBeat.asUInt, genericOut.bits.step)
+      writebacks.io.deq.ready := out.ready && secondBeat
+      when(writebackPending && out.ready) {
+        secondBeat := !secondBeat
+      }
+
+      assert(!writebackPending || genericIdle, "WB and generic Batch paths must not overlap")
+    }
+  }
 
   when(state_update) {
     when(pending_valid) {
