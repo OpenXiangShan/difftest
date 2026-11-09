@@ -444,8 +444,10 @@ void FpgaXdma::process_packets() {
       abort();
       return;
     }
-    for (size_t i = 0; i < DMA_PACKGE_NUM; ++i)
-      v_difftest_Batch(packet->diff_packge[i].diff_packge);
+    for (size_t i = 0; i < DMA_PACKGE_NUM; ++i) {
+      if (!dma_packet_is_padding(packet->diff_packge[i]))
+        v_difftest_Batch(packet->diff_packge[i].diff_packge);
+    }
     packet_pool->set_free_chunk();
     if (fork_readers && poll_callbacks && packet_idle && packet_idle()) {
       abort();
@@ -504,7 +506,8 @@ void FpgaXdma::read_and_process() {
       continue;
     }
     for (size_t i = 0; i < DMA_PACKGE_NUM; i++) {
-      v_difftest_Batch(packge->diff_packge[i].diff_packge);
+      if (!dma_packet_is_padding(packge->diff_packge[i]))
+        v_difftest_Batch(packge->diff_packge[i].diff_packge);
     }
   }
   free(packge);

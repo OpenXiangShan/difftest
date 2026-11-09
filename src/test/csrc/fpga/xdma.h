@@ -73,6 +73,18 @@ typedef struct __attribute__((packed)) {
   DmaDiffPackge diff_packge[DMA_PACKGE_NUM];
 } FpgaPackgeHead;
 
+inline bool dma_packet_is_padding(const DmaDiffPackge &packet) {
+#if (DMA_PACKGE_PADDING > 0)
+  if (packet.padding[0] > 1) {
+    fprintf(stderr, "XDMA invalid transport padding flag: %u\n", packet.padding[0]);
+    abort();
+  }
+  return packet.padding[0] == 1;
+#else
+  return false;
+#endif
+}
+
 class FpgaXdma : public FpgaTransport {
 public:
   FpgaXdma(bool fork_readers = false, size_t pool_slots = NUM_BLOCKS);
