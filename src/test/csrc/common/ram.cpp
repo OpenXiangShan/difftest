@@ -309,16 +309,18 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uin
     }
   }
 
+  bool dest_is_zero = !random_mem || seed == 0;
 #ifdef TLB_UNITTEST
   //new add
   addpageSv39();
+  dest_is_zero = false;
   //new end
 #endif
 
-  load_image(image);
+  load_image(image, dest_is_zero);
 }
 
-void MmapMemory::load_image(const char *image) {
+void MmapMemory::load_image(const char *image, bool dest_is_zero) {
   if (image == NULL) {
     img_size = 0;
     return;
@@ -327,11 +329,11 @@ void MmapMemory::load_image(const char *image) {
   printf("The image is %s\n", image);
   if (isGzFile(image)) {
     Info("Gzip file detected and loading image from extracted gz file\n");
-    img_size = readFromGz(ram, image, memory_size, LOAD_RAM);
+    img_size = readFromGz(ram, image, memory_size, LOAD_RAM, dest_is_zero);
     assert(img_size >= 0);
   } else if (isZstdFile(image)) {
     Info("Zstd file detected and loading image from extracted zstd file\n");
-    img_size = readFromZstd(ram, image, memory_size, LOAD_RAM);
+    img_size = readFromZstd(ram, image, memory_size, LOAD_RAM, dest_is_zero);
     assert(img_size >= 0);
   } else if (isElfFile(image)) {
     Info("ELF file detected and loading image from extracted elf file\n");

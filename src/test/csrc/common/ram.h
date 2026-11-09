@@ -139,7 +139,7 @@ private:
 public:
   MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed);
   virtual ~MmapMemory();
-  void load_image(const char *image);
+  void load_image(const char *image, bool dest_is_zero = false);
   uint64_t pad_img_size(uint64_t align);
   void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) {
     size_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
