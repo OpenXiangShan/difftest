@@ -108,7 +108,7 @@ static inline void print_help(const char *file) {
 #endif
 #endif
 #ifdef CONFIG_DIFFTEST_FORK_REF
-  printf("      --ref-fork-interval=N  REF segment interval in seconds, default: 5\n");
+  printf("      --ref-fork-interval=N  REF segment interval in seconds, default: 1\n");
   printf("      --packet-pool-log2=N  log2 of fork packet slots (default: 20)\n");
 #endif
   printf("  -s, --seed=NUM             use this seed\n");
