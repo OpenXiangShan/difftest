@@ -206,13 +206,15 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uin
     }
   }
 
+  bool dest_is_zero = !random_mem || seed == 0;
 #ifdef TLB_UNITTEST
   //new add
   addpageSv39();
+  dest_is_zero = false;
   //new end
 #endif
 
-  load_image(image, random_mem ? MemoryWriteMode::Overwrite : MemoryWriteMode::SkipZeroWords);
+  load_image(image, dest_is_zero ? MemoryWriteMode::SkipZeroWords : MemoryWriteMode::Overwrite);
 }
 
 void MmapMemory::load_image(const char *image, MemoryWriteMode raw_mode) {
