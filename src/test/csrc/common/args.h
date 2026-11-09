@@ -37,7 +37,7 @@ struct CommonArgs {
 #endif
 #ifdef CONFIG_DIFFTEST_FORK_REF
   uint64_t ref_fork_interval = 1000; // Milliseconds; CLI accepts seconds.
-  unsigned packet_pool_log2 = 20;    // Shared packet slots = 2^packet_pool_log2.
+  unsigned packet_pool_log2 = 22;    // Shared packet slots = 2^packet_pool_log2.
 #endif
   uint32_t reset_cycles = 50;
   uint32_t core_clock_half_period = 1;

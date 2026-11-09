@@ -26,11 +26,11 @@ Generate normal FPGA headers first and rebuild when changing build flags. NEMU r
 |---|---|---|
 | `--ref-mode slow\|fast\|fork` | `fork` when compiled with FORK_REF, otherwise `slow` | Select REF execution mode. |
 | `--ref-fork-interval SECONDS` | `1` | Fork interval; `0` checks the entire run as one segment. Independent of LightSSS `--fork-interval`. |
-| `--packet-pool-log2 N` | `20` | Allocate `2^N` shared packet slots for fork mode. |
+| `--packet-pool-log2 N` | `22` | Allocate `2^N` shared packet slots for fork mode; 3 GiB with 768-byte packets. |
 
 ```bash
 make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK_REF=1 USE_THREAD_MEMPOOL=1
-./build/fpga-host --ref-mode fork --ref-fork-interval 1 <normal arguments>
+./build/fpga-host --ref-mode fork --ref-fork-interval 1 --packet-pool-log2 22 <normal arguments>
 ```
 
 `FAST PerfCnt` reports speculative FAST completion before the SLOW drain. On success, `SLOW PerfCnt` uses the last trusted segment's instruction/cycle counts and the global runtime, including the drain. These reports show execution counts, IPC, runtime and speed. On a DUT mismatch, the failing SLOW waits for its predecessors to pass, then prints its own report and commit history before execution stops; failures from discarded snapshots are not reported as authoritative.
