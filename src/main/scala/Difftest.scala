@@ -23,6 +23,7 @@ import chisel3.util._
 import difftest.common.FileControl
 import difftest.gateway.{Gateway, GatewayConfig, GatewayResult}
 import difftest.util.Profile
+import utility.SimulationModels
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
@@ -533,6 +534,10 @@ object DifftestModule {
   private val nameExcludes = ListBuffer.empty[String]
   private val cmdConfigs = ListBuffer.empty[String]
 
+  private def behaviorRawBundle(name: String): Boolean =
+    SimulationModels.enabled("commit-rat") &&
+      Seq("pregs_xrf", "pregs_frf", "pregs_vrf", "rat_xrf", "rat_frf", "rat_vrf").contains(name)
+
   // Some FIRTOOL options are customized for DiffTest
   def parseArgs(args: Array[String]): (Array[String], Seq[FirtoolOption]) = {
     cmdConfigs ++= args
@@ -567,7 +572,10 @@ object DifftestModule {
   ): T = {
     val difftest: T = Wire(gen)
     val isExcluded = nameExcludes.exists(ex => gen.desiredModuleName.contains(ex))
-    if (enabled && !isExcluded) {
+    if (SimulationModels.enabled("commit-rat") && gen.desiredCppName == "commit") {
+      require(enabled && !isExcluded, "commit-rat requires enabled, non-excluded commit events")
+      BehaviorDifftest.registerCommit(difftest.asInstanceOf[DiffInstrCommit], delay)
+    } else if (enabled && !isExcluded && !behaviorRawBundle(gen.desiredCppName)) {
       Gateway(gen, delay) := difftest
       interfaces.append((gen, delay))
     }
@@ -582,7 +590,43 @@ object DifftestModule {
 
   def get_command_configs(): Seq[String] = cmdConfigs.toSeq
 
+  def registerPhysicalWrites(
+    name: String,
+    rows: Int,
+    dataWidth: Int,
+    addrWidth: Int,
+    enables: Seq[Bool],
+    addresses: Seq[UInt],
+    data: Seq[UInt],
+    delay: Int,
+  ): Unit = BehaviorDifftest.registerPhysicalWrites(
+    name, rows, dataWidth, addrWidth, enables, addresses, data, delay)
+
+  def registerRatWrites(
+    name: String,
+    rows: Int,
+    dataWidth: Int,
+    addrWidth: Int,
+    enables: Seq[Bool],
+    addresses: Seq[UInt],
+    data: Seq[UInt],
+    delay: Int,
+  ): Unit = BehaviorDifftest.registerRatWrites(
+    name, rows, dataWidth, addrWidth, enables, addresses, data, delay)
+
+  private[difftest] def attachBehavior[T <: DifftestBundle](source: T, delay: Int): Unit = {
+    // `interfaces` stores Chisel *types* so Gateway.collect can construct its
+    // MixedVec.  The adapter output itself is hardware and must only be used
+    // as the RHS of the Gateway connection.
+    val genType = chiselTypeOf(source)
+    val gen = Wire(genType)
+    gen := source
+    Gateway(genType, delay) := gen
+    interfaces.append((genType, delay))
+  }
+
   def collect(cpu: String): GatewayResult = {
+    BehaviorDifftest.build()
     // An observation-free simulation still needs the top-level UART/log ports
     // and generated headers, but has no cores in the DiffTest interface schema.
     val gateway = if (interfaces.isEmpty) GatewayResult() else Gateway.collect()

@@ -222,6 +222,7 @@ object Gateway {
         packed.asUInt
       }
       val endpoint = Module(new GatewayEndpoint(instanceWithDelay.toSeq, config))
+      utility.SimulationModels.observerModule(endpoint, "difftest.gateway")
       endpoint.in := gatewayIn
       val numCores = instances.count(_.isUniqueIdentifier)
       GatewayResult(
