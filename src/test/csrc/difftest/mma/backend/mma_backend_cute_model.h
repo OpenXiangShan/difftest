@@ -227,6 +227,8 @@ CUTE_MMA_HOST_DEVICE static inline int64_t align_c(const RawFloat &c, int max_ex
 CUTE_MMA_HOST_DEVICE static inline int leading_zeros_32(uint32_t value) {
 #if defined(__CUDA_ARCH__)
   return __clz(value);
+#elif defined(__GNUC__) || defined(__clang__)
+  return value == 0 ? 32 : __builtin_clz(value);
 #else
   int count = 0;
   for (int bit = 31; bit >= 0; --bit) {
