@@ -16,7 +16,6 @@
 package difftest.common
 
 import chisel3._
-import chisel3.util._
 import chisel3.reflect.DataMirror
 import chisel3.util.experimental.BoringUtils
 
