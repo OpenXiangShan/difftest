@@ -23,12 +23,14 @@
 #include "dut.h"
 #include "flash.h"
 #include "goldenmem.h"
+#include "matrix_wb_fastpath.h"
 #include "ram.h"
 #include "reftrace/refdrive_trace.h"
 #include "spikedasm.h"
 #include "splitview.h"
 #include <csignal>
 #include <cstdlib>
+#include <string>
 #if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
 #include "svdpi.h"
 #endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
@@ -40,6 +42,77 @@
 #endif // CONFIG_DIFFTEST_QUERY
 
 Difftest **difftest = NULL;
+namespace {
+bool matrix_wb_step_hint = false;
+bool *matrix_wb_step_slot_cache = nullptr;
+struct MatrixWbOptions {
+  bool fast, decode, packet, rebuild, classify_cache, typed_chain, slot_invalidate;
+  static bool flag(const char *name) {
+    const char *value = std::getenv(name);
+    if (value && std::strcmp(value, "0") && std::strcmp(value, "1"))
+      throw std::invalid_argument(std::string(name) + " must be 0 or 1");
+    return value && std::strcmp(value, "1") == 0;
+  }
+  MatrixWbOptions()
+      : fast(flag("FPGA_MATRIX_WB_FAST")), decode(flag("FPGA_MATRIX_WB_DECODE")), packet(flag("FPGA_MATRIX_WB_PACKET")),
+        rebuild(flag("FPGA_MATRIX_WB_REBUILD")), classify_cache(flag("FPGA_MATRIX_WB_CLASSIFY_CACHE")),
+        typed_chain(flag("FPGA_MATRIX_WB_TYPED_CHAIN")), slot_invalidate(flag("FPGA_MATRIX_WB_SLOT_INVALIDATE")) {}
+};
+const MatrixWbOptions &matrix_wb_options() {
+  static const MatrixWbOptions options;
+  return options;
+}
+bool matrix_wb_supported() {
+#if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_AMUWRITEBACKEVENT) && \
+    !defined(CONFIG_DIFFTEST_REPLAY) && !defined(CONFIG_DIFFTEST_QUERY) && defined(CONFIG_DIFFTEST_INTERNAL_STEP)
+  if (NUM_CORES != 1 || !difftest || !difftest[0] || !difftest[0]->matrix_wb_compatible() ||
+      difftest_refdrive_trace_pending())
+    return false;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_enabled())
+    return false;
+#endif
+  return true;
+#else
+  return false;
+#endif
+}
+} // namespace
+
+void difftest_matrix_wb_step(bool only_writeback, bool *packet_slot_cache) {
+  matrix_wb_step_hint = only_writeback;
+  matrix_wb_step_slot_cache = only_writeback ? packet_slot_cache : nullptr;
+}
+bool difftest_matrix_wb_classify_cache_enabled() {
+#if defined(FPGA_HOST) && NUM_CORES == 1
+  // This only attaches a slot-proof pointer. PACKET entry and check_all still
+  // check live supported mode before parsing/using that proof respectively.
+  const auto &options = matrix_wb_options();
+  return options.classify_cache && options.fast && options.packet;
+#else
+  return false;
+#endif
+}
+bool difftest_matrix_wb_slot_invalidate_enabled() {
+#if defined(FPGA_HOST) && NUM_CORES == 1 && CONFIG_DIFFTEST_ZONESIZE == 1 && \
+    CONFIG_DIFFTEST_BUFLEN == CONFIG_DIFFTEST_BATCH_SIZE
+  const auto &options = matrix_wb_options();
+  return options.slot_invalidate && options.fast && options.packet && options.classify_cache && matrix_wb_supported();
+#else
+  return false;
+#endif
+}
+bool difftest_matrix_wb_decode_enabled() {
+  return matrix_wb_options().decode && matrix_wb_supported();
+}
+bool difftest_matrix_wb_packet_enabled() {
+  return matrix_wb_options().packet && matrix_wb_supported();
+}
+bool difftest_matrix_wb_rebuild_enabled() {
+  // Reconstruction changes only the guarded address/copy implementation;
+  // replay and fork modes retain the same event and result semantics.
+  return matrix_wb_options().rebuild;
+}
 static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
@@ -78,6 +151,12 @@ static void difftest_register_exit_handlers() {
 }
 
 int difftest_init(bool enabled, size_t ramsize) {
+  matrix_wb_step_hint = false;
+  const auto &matrix_options = matrix_wb_options();
+  if (matrix_options.fast || matrix_options.decode || matrix_options.packet || matrix_options.rebuild)
+    printf("[DiffTest][MatrixWB] fast=%d decode=%d packet=%d rebuild=%d (unsupported modes use the ordinary path)\n",
+           matrix_options.fast ? 1 : 0, matrix_options.decode ? 1 : 0, matrix_options.packet ? 1 : 0,
+           matrix_options.rebuild ? 1 : 0);
 #ifdef CONFIG_DIFFTEST_PERFCNT
   difftest_perfcnt_init();
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -350,7 +429,12 @@ Difftest::~Difftest() {
 }
 
 void Difftest::init_checkers() {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  matrix_wb_timeout_checker = new TimeoutChecker([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy);
+  add_matrix_wb_checker(matrix_wb_timeout_checker);
+#else
   checkers.push_back(new TimeoutChecker([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy));
+#endif
 
   add_sync_checker(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
                                                proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
@@ -380,7 +464,12 @@ void Difftest::init_checkers() {
 #endif // CONFIG_DIFFTEST_LOADEVENT
 
 #ifdef DEBUG_GOLDENMEM
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  matrix_wb_golden_checker = new GoldenMemoryInit([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy);
+  add_matrix_wb_checker(matrix_wb_golden_checker);
+#else
   checkers.push_back(new GoldenMemoryInit([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy));
+#endif
 
 #ifdef CONFIG_DIFFTEST_UNCACHEMMSTOREEVENT
   for (int i = 0; i < CONFIG_DIFF_UNCACHE_MM_STORE_WIDTH; i++) {
@@ -467,10 +556,12 @@ void Difftest::init_checkers() {
     checkers.push_back(
         new AmuCtrlRecorder([this, i]() -> DifftestAmuCtrlEvent & { return dut->amu_ctrl[i]; }, state, proxy));
   }
-  checkers.push_back(new AmuCtrlChecker(state, proxy));
+  matrix_wb_ctrl_checker = new AmuCtrlChecker(state, proxy);
+  add_matrix_wb_checker(matrix_wb_ctrl_checker);
   for (int i = 0; i < CONFIG_DIFF_AMU_WRITEBACK_WIDTH; i++) {
-    checkers.push_back(new AmuExecRecorder([this, i]() -> DifftestAmuWritebackEvent & { return dut->amu_writeback[i]; },
-                                           state, proxy));
+    matrix_wb_recorders[i] =
+        new AmuExecRecorder([this, i]() -> DifftestAmuWritebackEvent & { return dut->amu_writeback[i]; }, state, proxy);
+    add_matrix_wb_checker(matrix_wb_recorders[i]);
   }
 #ifdef CONFIG_DIFFTEST_AMUFINISHEVENT
   for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
@@ -484,7 +575,8 @@ void Difftest::init_checkers() {
         [this, i]() -> DifftestAmuHashEvent & { return dut->amu_hash_finish[i]; }, state, proxy));
   }
 #endif
-  checkers.push_back(new AmuExecChecker(state, proxy));
+  matrix_wb_exec_checker = new AmuExecChecker(state, proxy);
+  add_matrix_wb_checker(matrix_wb_exec_checker);
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
@@ -698,15 +790,63 @@ int Difftest::step() {
 #endif // CONFIG_DIFFTEST_REPLAY
 }
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+int Difftest::check_matrix_wb_typed() {
+  if (int ret = matrix_wb_timeout_checker->step_with_probe(dut->trap))
+    return ret;
+#ifdef DEBUG_GOLDENMEM
+  if (int ret = matrix_wb_golden_checker->step_with_probe(dut->trap))
+    return ret;
+#endif
+  if (int ret = matrix_wb_ctrl_checker->step_typed<AmuCtrlChecker>())
+    return ret;
+  for (int i = 0; i < CONFIG_DIFF_AMU_WRITEBACK_WIDTH; ++i) {
+    if (int ret = matrix_wb_recorders[i]->step_with_probe(dut->amu_writeback[i]))
+      return ret;
+  }
+  return matrix_wb_exec_checker->step_typed<AmuExecChecker>();
+}
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
 inline int Difftest::check_all() {
+  // Consume the generated PACKET hint before any checker can return or throw.
+  // No pointer is retained across a completed/error step or a generic step.
+  [[maybe_unused]] bool *const packet_slot_cache = matrix_wb_step_slot_cache;
+  matrix_wb_step_slot_cache = nullptr;
   state->cycle_count = get_trap_event()->cycleCnt;
   state->has_progress = false;
 
-  // normal checkers
-  for (auto checker: checkers) {
-    if (int ret = checker->step()) {
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_MATRIX_WB_CLASSIFIER)
+  const auto &matrix_options = matrix_wb_options();
+  const bool matrix_only =
+      matrix_options.fast && matrix_wb_step_hint && state->has_commit && matrix_wb_supported() &&
+      matrix_wb_fastpath::classify_cached(packet_slot_cache, dut->amu_writeback[0].valid != 0, dut->trap.hasTrap != 0,
+                                          dut->trap.hasWFI != 0, [&] { return diffstate_matrix_wb_only(*dut); });
+  const auto &active_checkers = matrix_only ? matrix_wb_checkers : checkers;
+#else
+  const bool matrix_only = false;
+  const auto &active_checkers = checkers;
+#endif
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_MATRIX_WB_CLASSIFIER)
+  if (matrix_only && matrix_options.typed_chain) {
+    if (int ret = check_matrix_wb_typed())
       return ret;
+  } else
+#endif
+  {
+    for (auto checker: active_checkers) {
+      if (int ret = checker->step()) {
+        return ret;
+      }
     }
+  }
+  if (matrix_only) {
+    // No other probe is valid and no core instruction commits. Pending store,
+    // load and msync queues advance only with such a commit; MatrixStoreTracker
+    // is unchanged by an empty observation. The AMU pending queues were serviced
+    // above in their original order, including full SWROB retirement/mrelease.
+    num_commit = 0;
+    return DiffTestChecker::STATE_OK;
   }
 
 #ifdef DEBUG_MODE_DIFF

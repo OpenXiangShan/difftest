@@ -887,6 +887,35 @@ object DifftestModule {
     difftestCpp += "} DiffTestState;"
     difftestCpp += ""
 
+    // Classify the reconstructed logical step, including probes accumulated
+    // while Delta completion was pending. Unknown/flattened valid layouts
+    // conservatively disable this optimization.
+    eventBundles.find(_._2.head.desiredCppName == "amu_writeback").foreach { case (_, writebacks) =>
+      difftestCpp += "#define CONFIG_DIFFTEST_MATRIX_WB_CLASSIFIER"
+      difftestCpp += "static inline bool diffstate_matrix_wb_only(const DiffTestState& dut) {"
+      difftestCpp += "  bool has_writeback = false;"
+      difftestCpp += s"  for (unsigned i = 0; i < ${writebacks.length / numCores}; i++) has_writeback |= dut.amu_writeback[i].valid != 0;"
+      difftestCpp += "  if (!has_writeback) return false;"
+      for ((_, probes) <- eventBundles.sortBy(_._2.head.desiredModuleName)) {
+        val probe = probes.head
+        val name = probe.desiredCppName
+        if (name == "trap") {
+          difftestCpp += "  if (dut.trap.hasTrap || dut.trap.hasWFI) return false;"
+        } else if (name != "amu_writeback" && probe.bits.hasValid) {
+          if (probe.isFlatten) {
+            difftestCpp += "  return false; // Flattened probes have no per-entry valid bit."
+          } else if (probe.isIndexed) {
+            difftestCpp += s"  for (unsigned i = 0; i < ${probes.length / numCores}; i++) if (dut.$name[i].valid) return false;"
+          } else {
+            difftestCpp += s"  if (dut.$name.valid) return false;"
+          }
+        }
+      }
+      difftestCpp += "  return true;"
+      difftestCpp += "}"
+      difftestCpp += ""
+    }
+
     difftestCpp +=
       s"""
          |class DiffStateBuffer {

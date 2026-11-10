@@ -84,6 +84,14 @@ public:
   // Trigger a difftest checking procdure
   int step();
 
+  bool matrix_wb_compatible() const {
+#ifdef CONFIG_DIFFTEST_FAST_REF
+    if (fast_ref_enabled)
+      return false;
+#endif
+    return proxy != nullptr;
+  }
+
   inline bool get_trap_valid() {
     return dut->trap.hasTrap || state->has_trap;
   }
@@ -191,6 +199,25 @@ protected:
   uint64_t dut_commit_batch_pc = 0;
 
   std::vector<DiffTestChecker *> checkers;
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  // Non-owning subset; these checkers can advance state without a core commit.
+  std::vector<DiffTestChecker *> matrix_wb_checkers;
+  // Same objects as the owning checkers vector; no separate deletion.
+  // MATRIX_TYPED_MEMBERS_BEGIN
+  TimeoutChecker *matrix_wb_timeout_checker = nullptr;
+#ifdef DEBUG_GOLDENMEM
+  GoldenMemoryInit *matrix_wb_golden_checker = nullptr;
+#endif
+  AmuCtrlChecker *matrix_wb_ctrl_checker = nullptr;
+  AmuExecRecorder *matrix_wb_recorders[CONFIG_DIFF_AMU_WRITEBACK_WIDTH] = {};
+  AmuExecChecker *matrix_wb_exec_checker = nullptr;
+  // MATRIX_TYPED_MEMBERS_END
+  int check_matrix_wb_typed();
+  void add_matrix_wb_checker(DiffTestChecker *checker) {
+    checkers.push_back(checker);
+    matrix_wb_checkers.push_back(checker);
+  }
+#endif
   ArchEventChecker *arch_event_checker = nullptr;
   InstrCommitChecker *instr_commit_checker[CONFIG_DIFF_COMMIT_WIDTH] = {nullptr};
 #ifdef CONFIG_DIFFTEST_STOREEVENT
@@ -292,6 +319,14 @@ private:
 
 extern Difftest **difftest;
 int difftest_init(bool enabled, size_t ramsize);
+
+// Generated FPGA decoder supplies a logical-step hint after Delta completion.
+void difftest_matrix_wb_step(bool only_writeback, bool *packet_slot_cache = nullptr);
+bool difftest_matrix_wb_classify_cache_enabled();
+bool difftest_matrix_wb_slot_invalidate_enabled();
+bool difftest_matrix_wb_decode_enabled();
+bool difftest_matrix_wb_packet_enabled();
+bool difftest_matrix_wb_rebuild_enabled();
 
 int difftest_nstep(int step, bool enable_diff);
 void difftest_switch_zone();
