@@ -15,7 +15,11 @@
 
 #include "simulator.h"
 
-GsimSim::GsimSim() : dut(new SSimTop) {}
+GsimSim::GsimSim() : dut(new SSimTop) {
+#ifdef GSIM_HAS_ASSERT_HANDLER
+  dut->register_assert(xs_assert_v2);
+#endif
+}
 
 GsimSim::~GsimSim() {
   delete dut;
