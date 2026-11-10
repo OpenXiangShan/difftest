@@ -15,9 +15,14 @@
 ***************************************************************************************/
 
 #include "refproxy.h"
+#include <cerrno>
 #include <dlfcn.h>
 #include <fstream>
 #include <iostream>
+#include <system_error>
+#ifdef __linux__
+#include <sys/mman.h>
+#endif
 #include <unistd.h>
 #include <vector>
 
@@ -275,12 +280,44 @@ void RefProxy::display(DiffTestState *dut) {
   }
 };
 
-void RefProxy::flash_init(const uint8_t *flash_base, size_t size, const char *flash_bin) {
+void RefProxy::flash_init(const uint8_t *flash_base, size_t size, const char * /* flash_bin */) {
   if (load_flash_bin_v2) {
     load_flash_bin_v2(flash_base, size);
   } else if (load_flash_bin) {
-    // This API is deprecated because flash_bin may be an empty pointer
-    load_flash_bin(flash_bin, size);
+    // A legacy REF may embed a different default ROM. Supply the actual DUT
+    // bytes, including already decompressed or truncated explicit images.
+    struct FlashImage {
+      int fd = -1;
+      std::string path;
+      bool remove = false;
+      ~FlashImage() {
+        if (fd >= 0) close(fd);
+        if (remove) unlink(path.c_str());
+      }
+    } image;
+#ifdef __linux__
+    image.fd = memfd_create("difftest-flash", MFD_CLOEXEC);
+    image.path = "/proc/" + std::to_string(getpid()) + "/fd/" + std::to_string(image.fd);
+#else
+    char path[] = "/tmp/difftest-flash-XXXXXX";
+    image.fd = mkstemp(path);
+    image.path = path;
+    image.remove = image.fd >= 0;
+#endif
+    if (image.fd < 0) {
+      throw std::system_error(errno, std::generic_category(), "create legacy REF flash image");
+    }
+    size_t written = 0;
+    while (written < size) {
+      const auto count = write(image.fd, flash_base + written, size - written);
+      if (count < 0 && errno == EINTR) continue;
+      if (count <= 0) {
+        throw std::system_error(count < 0 ? errno : EIO, std::generic_category(), "write legacy REF flash image");
+      }
+      written += static_cast<size_t>(count);
+    }
+    // The legacy API reads synchronously; keep the file alive until it returns.
+    load_flash_bin(image.path.c_str(), size);
   } else {
     std::cout << "Require load_flash_bin or load_flash_bin_v2 to initialize the flash" << std::endl;
     assert(0);
