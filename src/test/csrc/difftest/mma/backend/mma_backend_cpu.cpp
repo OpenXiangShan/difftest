@@ -105,7 +105,9 @@ prepare_fp32_chunk_cpu(cute_mma_model::FloatFormat format, const uint8_t *src1, 
   uint32_t exception_mask = batch.exception_masks[output];
   int first_a_exponents[kMmaReduceWidthBytes];
   int first_b_exponents[kMmaReduceWidthBytes];
-  // Bits 0..3 are sign, zero, NaN and Inf. These fields belong only to the first pass.
+  uint32_t a_significands[kMmaReduceWidthBytes];
+  uint32_t b_significands[kMmaReduceWidthBytes];
+  // Cache decoded fields for metadata and alignment; bits 0..3 are sign, zero, NaN and Inf.
   uint32_t first_a_flags[kMmaReduceWidthBytes];
   uint32_t first_b_flags[kMmaReduceWidthBytes];
   for (int lane = 0; lane < valid_lanes; ++lane) {
@@ -113,6 +115,8 @@ prepare_fp32_chunk_cpu(cute_mma_model::FloatFormat format, const uint8_t *src1, 
     const RawFloat b = decode_source(load_little_endian(src2 + lane * elem_bytes, elem_bytes), format);
     first_a_exponents[lane] = a.exponent;
     first_b_exponents[lane] = b.exponent;
+    a_significands[lane] = a.significand;
+    b_significands[lane] = b.significand;
     first_a_flags[lane] = static_cast<uint32_t>(a.sign) | (static_cast<uint32_t>(a.is_zero) << 1) |
                           (static_cast<uint32_t>(a.is_nan) << 2) | (static_cast<uint32_t>(a.is_inf) << 3);
     first_b_flags[lane] = static_cast<uint32_t>(b.sign) | (static_cast<uint32_t>(b.is_zero) << 1) |
@@ -136,31 +140,12 @@ prepare_fp32_chunk_cpu(cute_mma_model::FloatFormat format, const uint8_t *src1, 
     }
     exception_mask |= is_nan | ((is_inf & (sign ^ 1u)) << 1) | ((is_inf & sign) << 2);
   }
-  // Decode again; these temporaries are populated only by the second pass.
-  uint32_t a_significands[kMmaReduceWidthBytes];
-  uint32_t b_significands[kMmaReduceWidthBytes];
-  int a_exponents[kMmaReduceWidthBytes];
-  int b_exponents[kMmaReduceWidthBytes];
-  // Bit 0 is sign; bit 1 is zero. Combine them only in the SIMD loop below.
-  uint32_t a_flags[kMmaReduceWidthBytes];
-  uint32_t b_flags[kMmaReduceWidthBytes];
-  for (int lane = 0; lane < valid_lanes; ++lane) {
-    const RawFloat a = decode_source(load_little_endian(src1 + lane * elem_bytes, elem_bytes), format);
-    const RawFloat b = decode_source(load_little_endian(src2 + lane * elem_bytes, elem_bytes), format);
-    a_significands[lane] = a.significand;
-    b_significands[lane] = b.significand;
-    a_exponents[lane] = a.exponent;
-    b_exponents[lane] = b.exponent;
-    a_flags[lane] = static_cast<uint32_t>(a.sign) | (static_cast<uint32_t>(a.is_zero) << 1);
-    b_flags[lane] = static_cast<uint32_t>(b.sign) | (static_cast<uint32_t>(b.is_zero) << 1);
-  }
-
   int64_t aligned[kMmaReduceWidthBytes] = {};
   for (int lane = 0; lane < valid_lanes; ++lane) {
     // Match multiply()'s integer fields; exceptions were collected in the first pass.
-    const bool sign = ((a_flags[lane] ^ b_flags[lane]) & 1u) != 0;
-    const bool zero = ((a_flags[lane] | b_flags[lane]) & 2u) != 0;
-    const ProductTerm product = {sign, zero ? 0 : a_exponents[lane] + b_exponents[lane] + 511,
+    const bool sign = ((first_a_flags[lane] ^ first_b_flags[lane]) & 1u) != 0;
+    const bool zero = ((first_a_flags[lane] | first_b_flags[lane]) & 2u) != 0;
+    const ProductTerm product = {sign, zero ? 0 : first_a_exponents[lane] + first_b_exponents[lane] + 511,
                                  a_significands[lane] * b_significands[lane], false, false};
     aligned[lane] = align_product(product, max_exponent_token);
   }
