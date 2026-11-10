@@ -37,11 +37,19 @@
 #include "remote_bitbang.h"
 #ifdef FPGA_SIM
 #include "xdma_sim.h"
+#include <pthread.h>
 #endif // FPGA_SIM
 
 static bool has_reset = false;
 static char *workload_list = NULL;
 static CommonArgs args;
+
+#ifdef FPGA_SIM
+static struct {
+  pthread_t thread;
+  bool started;
+} workload_loader;
+#endif // FPGA_SIM
 
 enum {
   SIMV_RUN,
@@ -171,36 +179,103 @@ extern "C" void set_no_diff() {
   args.enable_diff = false;
 }
 
+extern "C" void set_no_squash() {
+  printf("disable squash\n");
+  args.enable_squash = false;
+}
+
+extern "C" void set_squash_size(int size) {
+  if (size < 0 || size > UINT8_MAX) {
+    fprintf(stderr, "[ERROR] +squash-size must be in range [0, 255]\n");
+    exit(EINVAL);
+  }
+  printf("set squash size: %d\n", size);
+  args.squash_size = static_cast<uint8_t>(size);
+}
+
+extern "C" void set_seed(uint64_t seed) {
+  args.seed = seed;
+  Info("Using seed = %d\n", args.seed);
+}
+
+extern "C" void set_random_mem() {
+  args.random_mem = true;
+}
+
 extern "C" void set_simjtag() {
   enable_simjtag = true;
 }
 
+#ifdef FPGA_SIM
+static void *fpga_sim_workload_thread_main(void *) {
+  char workload[4096];
+  while (true) {
+    int ret = xdma_sim_wait_workload(workload, sizeof(workload));
+    if (ret <= 0) {
+      break;
+    }
+    load_ram_image(workload);
+    xdma_sim_complete_workload();
+  }
+  return nullptr;
+}
+
+static void start_fpga_sim_workload_thread() {
+  if (workload_loader.started) {
+    return;
+  }
+
+  int ret = pthread_create(&workload_loader.thread, nullptr, fpga_sim_workload_thread_main, nullptr);
+  if (ret != 0) {
+    errno = ret;
+    perror("XDMA_SIM: Failed to create workload loader thread");
+    exit(-1);
+  }
+  workload_loader.started = true;
+}
+
+static void stop_fpga_sim_workload_thread() {
+  if (!workload_loader.started) {
+    return;
+  }
+
+  xdma_sim_cancel_workload();
+  pthread_join(workload_loader.thread, nullptr);
+  workload_loader.started = false;
+}
+#endif // FPGA_SIM
+
 extern "C" uint8_t simv_init() {
-  if (workload_list != NULL) {
-    if (switch_workload())
-      return 1;
+  if (workload_list != NULL && switch_workload()) {
+    return 1;
   }
   common_init("simv");
 
-  uint64_t ram_size = DEFAULT_EMU_RAM_SIZE;
-  if (args.ram_size) {
-    ram_size = parse_ramsize(args.ram_size);
-  }
-  init_ram(args.image, ram_size);
+  uint64_t ram_size = args.ram_size ? parse_ramsize(args.ram_size) : DEFAULT_EMU_RAM_SIZE;
+  init_ram(args.image, ram_size, args.random_mem, args.seed);
 #ifdef WITH_DRAMSIM3
   dramsim3_init(nullptr, nullptr);
 #endif
+#ifdef FPGA_SIM
+  xdma_sim_workload_open(false);
+  start_fpga_sim_workload_thread();
+#else
   if (args.gcpt_restore != NULL) {
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
   }
   if (args.copy_ram_offset) {
     copy_ram(args.copy_ram_offset);
   }
+#endif // FPGA_SIM
 
   init_flash(args.flash_bin);
 
 #ifndef CONFIG_NO_DIFFTEST
   difftest_init(args.enable_diff, ram_size);
+#if defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_FPGA)
+  difftest_squash_enable(args.enable_squash);
+  difftest_squash_max_fused(args.squash_size);
+#endif // CONFIG_DIFFTEST_SQUASH && !CONFIG_DIFFTEST_FPGA
 #endif // CONFIG_NO_DIFFTEST
 
   init_device();
@@ -267,11 +342,16 @@ void simv_finish() {
   }
 #endif // CONFIG_NO_DIFFTEST
 
+#ifdef FPGA_SIM
+  stop_fpga_sim_workload_thread();
+#endif // FPGA_SIM
+
   finish_device();
   delete simMemory;
   simMemory = nullptr;
 
 #ifdef FPGA_SIM
+  xdma_sim_workload_close(false);
   xdma_sim_close(0);
 #endif //FPGA_SIM
 }
@@ -320,7 +400,7 @@ int simv_get_result(uint8_t step) {
     }
   }
   // Trace Debug Support
-  if (args.enable_ref_trace) {
+  if (args.enable_diff && args.enable_ref_trace) {
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       bool is_debug = difftest[i]->proxy->get_debug();
@@ -373,8 +453,12 @@ void simv_display_result(int ret) {
 static uint8_t simv_result = SIMV_RUN;
 #ifdef CONFIG_DIFFTEST_DEFERRED_RESULT
 extern "C" void simv_nstep(uint8_t step) {
-  if (simv_result == SIMV_GOODTRAP || simv_result == SIMV_EXCEED || simv_result == SIMV_FAIL || difftest == NULL)
+  if (simv_result == SIMV_GOODTRAP || simv_result == SIMV_EXCEED || simv_result == SIMV_FAIL)
     return;
+#ifndef CONFIG_NO_DIFFTEST
+  if (difftest == NULL)
+    return;
+#endif // CONFIG_NO_DIFFTEST
 #else
 extern "C" uint8_t simv_nstep(uint8_t step) {
 #ifndef CONFIG_NO_DIFFTEST

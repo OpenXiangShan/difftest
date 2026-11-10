@@ -20,6 +20,7 @@ import chisel3._
 import chisel3.reflect.DataMirror
 import circt.stage.FirtoolOption
 import chisel3.util._
+import difftest.util.StoreHash
 import difftest.common.FileControl
 import difftest.gateway.{Gateway, GatewayConfig, GatewayResult}
 import difftest.util.Profile
@@ -32,12 +33,15 @@ trait DifftestWithCoreid {
 }
 
 trait DifftestWithIndex {
-  val index = UInt(8.W)
+  def idxWidth = 8
+  val index = UInt(idxWidth.W)
 }
 
 trait DifftestWithStamp {
   val stamp = UInt(16.W)
 }
+
+trait DifftestHash
 
 trait DiffTestIsInherited { this: DifftestBundle =>
   def inheritFrom[T <: DifftestBundle](parent: T): Unit = {
@@ -79,6 +83,8 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
 
   protected val needFlatten: Boolean = false
   def isFlatten: Boolean = hasAddress && this.needFlatten
+
+  def fpgaFilterElems: Seq[String] = Seq.empty
 
   // Convert elements into flatten UInt/Vec[UInt]
   private def seqUIntHelper(in: Seq[(String, Data)]): Seq[(String, Seq[UInt])] = {
@@ -154,12 +160,12 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   val updateDependency: Seq[String] = Seq()
 
   // returns Bool indicating whether `this` bundle can be squashed with `base`
-  def supportsSquash(base: DifftestBundle): Bool = supportsSquashBase
+  def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = supportsSquashBase
   def supportsSquashBase: Bool = if (hasValid) !getValid else true.B
   // returns a seq of Group name of this bundle, Default: REF
   // Only bundles with same GroupName will affect others' squash state.
   // Some bundle will have several GroupName, such as LoadEvent
-  // Optional GroupName: REF / GOLDENMEM
+  // Optional GroupName: REF / GOLDENMEM / MATRIX
   val squashGroup: Seq[String] = Seq("REF")
   // returns a squashed, right-value Bundle. Default: overriding `base` with `this`
   def squash(base: DifftestBundle): DifftestBundle = this
@@ -177,6 +183,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   val supportsDelta: Boolean = false
   def isDeltaElem: Boolean = this.isInstanceOf[DiffDeltaElem]
   def deltaElemWidth: Int = dataElements.map(_._2).max
+  def deltaIdxWidth: Int = math.max(8, log2Ceil(dataElements.map(_._3.length).sum))
 
   // Byte align all elements
   def getByteAlignElems(isTrace: Boolean): Seq[(String, Data)] = {
@@ -225,6 +232,8 @@ private[difftest] class DiffDeltaElem(gen: DifftestBundle)
   extends DeltaElem(gen.deltaElemWidth)
   with DifftestBundle
   with DifftestWithIndex {
+  def srcGenType: DifftestBundle = gen
+  override def idxWidth = gen.deltaIdxWidth
   override val desiredCppName: String = gen.desiredCppName + "_elem"
   override def desiredModuleName: String = gen.desiredModuleName + "Elem"
 }
@@ -237,12 +246,13 @@ class DiffArchEvent extends ArchEvent with DifftestBundle {
 
 class DiffInstrCommit(nPhyRegs: Int = 32) extends InstrCommit(nPhyRegs) with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "commit"
+  override def fpgaFilterElems: Seq[String] =
+    Seq("robIdx", "lqIdx", "sqIdx", "isLoad", "isStore")
 
-  private val maxNumFused = 255
-  override def supportsSquash(base: DifftestBundle): Bool = {
+  override def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = {
     val that = base.asInstanceOf[DiffInstrCommit]
     val nextNFused = (nFused +& that.nFused) + 1.U
-    !valid || (!skip && (!that.valid || nextNFused <= maxNumFused.U) && !special.asUInt.orR)
+    !valid || (!skip && (!that.valid || nextNFused <= maxFused) && !special.asUInt.orR)
   }
   override def supportsSquashBase: Bool = {
     !valid || (!skip && !special.asUInt.orR)
@@ -272,6 +282,7 @@ private[difftest] class DiffVecCommitData extends VecCommitData with DifftestBun
 
 class DiffTrapEvent extends TrapEvent with DifftestBundle {
   override val desiredCppName: String = "trap"
+  override def fpgaFilterElems: Seq[String] = Seq("code")
   override def supportsSquashBase: Bool = !hasTrap && !hasWFI
 }
 
@@ -364,18 +375,27 @@ abstract class DiffPhyRegState(val numPhyRegs: Int) extends PhyRegState(numPhyRe
   override val supportsDelta: Boolean = true
   override def classArgs: Map[String, Any] = Map("numPhyRegs" -> numPhyRegs)
   override val updateDependency: Seq[String] = Seq("commit", "event")
+  def archTarget: ArchRegState with DifftestBundle
+  def ratTarget: DiffArchRenameTable
+  def needRat: Boolean = numPhyRegs != archTarget.numRegs
 }
 
 class DiffPhyIntRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {
   override val desiredCppName: String = "pregs_xrf"
+  override def archTarget = new DiffArchIntRegState
+  override def ratTarget = new DiffArchIntRenameTable(numPhyRegs)
 }
 
 class DiffPhyFpRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {
   override val desiredCppName: String = "pregs_frf"
+  override def archTarget = new DiffArchFpRegState
+  override def ratTarget = new DiffArchFpRenameTable(numPhyRegs)
 }
 
 class DiffPhyVecRegState(numPhyRegs: Int) extends DiffPhyRegState(numPhyRegs) {
   override val desiredCppName: String = "pregs_vrf"
+  override def archTarget = new DiffArchVecRegState
+  override def ratTarget = new DiffArchVecRenameTable(numPhyRegs)
 }
 
 class DiffVecCSRState extends VecCSRState with DifftestBundle {
@@ -392,8 +412,27 @@ class DiffFpCSRState extends FpCSRState with DifftestBundle {
   override val supportsDelta: Boolean = true
 }
 
+class DiffMatrixCSRState extends MatrixCSRState with DifftestBundle {
+  override val desiredCppName: String = "mcsr"
+  override val desiredRegOffset: Option[Int] = Some(8)
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val supportsDelta: Boolean = true
+}
+
+class DiffMcfgState extends McfgState with DifftestBundle {
+  override val desiredCppName: String = "mcfg"
+  override val desiredRegOffset: Option[Int] = Some(9)
+  override val updateDependency: Seq[String] = Seq("commit", "event")
+  override val supportsDelta: Boolean = true
+}
+
 class DiffSbufferEvent extends SbufferEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "sbuffer"
+  override val squashGroup: Seq[String] = Seq("GOLDENMEM")
+}
+
+class DiffMatrixStoreEvent extends MatrixStoreEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "matrix_store"
   override val squashGroup: Seq[String] = Seq("GOLDENMEM")
 }
 
@@ -408,6 +447,37 @@ class DiffStoreEvent extends StoreEvent with DifftestBundle with DifftestWithInd
 
 private[difftest] class DiffStoreEventQueue extends DiffStoreEvent with DifftestWithStamp with DiffTestIsInherited {
   override val squashQueue: Boolean = true
+}
+
+// Internal queue event for accumulating store hashes during squash.
+private[difftest] class DiffStoreHashEventQueue
+  extends StoreHashEvent
+  with DifftestBundle
+  with DifftestWithStamp
+  with DifftestHash {
+  override val desiredCppName: String = "store_hash"
+  override val squashQueue: Boolean = true
+
+  override def supportsSquashBase: Bool = true.B
+  override def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = {
+    val that = base.asInstanceOf[DiffStoreHashEventQueue]
+    !valid || !that.valid || !(record_count +& that.record_count)(record_count.getWidth)
+  }
+
+  override def squash(base: DifftestBundle): DifftestBundle = {
+    val that = base.asInstanceOf[DiffStoreHashEventQueue]
+    val squashed = WireInit(Mux(valid, this, that))
+    squashed.valid := valid || that.valid
+    when(valid) {
+      val seed = Mux(that.valid, that.hash_lo, StoreHash.crc.seed)
+      squashed.hash_lo := StoreHash.crc
+        .advance(seed, record_count, StoreHash.MaxLanes * StoreHash.MaxRecords) ^ hash_lo
+      squashed.record_count := Mux(that.valid, that.record_count, 0.U) + record_count
+      squashed.instr_begin := Mux(that.valid, that.instr_begin, instr_begin)
+      squashed.stamp := Mux(that.valid, StoreHash.latestStamp(that.stamp, stamp), stamp)
+    }
+    squashed
+  }
 }
 
 class DiffLoadEvent extends LoadEvent with DifftestBundle with DifftestWithIndex {
@@ -495,11 +565,40 @@ class DiffSyncCustomMflushpwrEvent extends SyncCustomMflushpwrEvent with Difftes
   override val desiredCppName: String = "sync_custom_mflushpwr"
 }
 
+class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "amu_ctrl"
+
+  override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
+}
+
+class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
+  extends AmuFinishEvent(nBanks, wordsPerBank)
+  with DifftestBundle
+  with DifftestWithIndex {
+  override val desiredCppName: String = "amu_finish"
+
+  override def classArgs: Map[String, Any] = Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank)
+
+  override val squashGroup: Seq[String] = Seq("MATRIX")
+}
+
+class DiffAmuHashEvent extends AmuHashFinishEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "amu_hash_finish"
+
+  override val squashGroup: Seq[String] = Seq("MATRIX")
+}
+
+class DiffMsyncEvent extends MsyncEvent with DifftestBundle with DifftestWithIndex {
+  override val desiredCppName: String = "msync"
+
+  override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
+}
+
 private[difftest] class DiffTraceInfo(config: GatewayConfig) extends TraceInfo with DifftestBundle {
   override val desiredCppName: String = "trace_info"
 
   override val squashGroup: Seq[String] = Seq("REF", "GOLDENMEM")
-  override def supportsSquash(base: DifftestBundle): Bool = {
+  override def supportsSquash(base: DifftestBundle, maxFused: UInt): Bool = {
     val that = base.asInstanceOf[DiffTraceInfo]
     !valid || !that.valid || (trace_size +& that.trace_size <= config.replaySize.U)
   }
@@ -530,8 +629,13 @@ object DifftestModule {
   private val interfaces = ListBuffer.empty[(DifftestBundle, Int)]
   private val cppExtModules = ListBuffer.empty[(String, String)]
   private val cppExtHeaders = ListBuffer.empty[String]
+  private val cppDPICModules = ListBuffer.empty[(String, String)]
+  private val cppDPICHeaders = ListBuffer.empty[String]
   private val nameExcludes = ListBuffer.empty[String]
   private val cmdConfigs = ListBuffer.empty[String]
+  private val extraCppMacros = scala.collection.mutable.LinkedHashSet.empty[String]
+
+  def isFPGA: Boolean = Gateway.isFPGA
 
   // Some FIRTOOL options are customized for DiffTest
   def parseArgs(args: Array[String]): (Array[String], Seq[FirtoolOption]) = {
@@ -572,9 +676,22 @@ object DifftestModule {
     difftest
   }
 
+  def applyVec[T <: DifftestBundle](
+    gens: Seq[T],
+    dontCare: Boolean = false,
+    delay: Int = 0,
+  ): Seq[T] = {
+    require(gens.nonEmpty, "DifftestModule.applyVec requires at least one lane")
+    gens.map(gen => apply(gen, dontCare, delay))
+  }
+
   def get_current_interfaces(): Seq[(DifftestBundle, Int)] = interfaces.toSeq
 
   def get_command_configs(): Seq[String] = cmdConfigs.toSeq
+
+  def addCppMacro(name: String, value: BigInt): Unit = {
+    extraCppMacros += s"$name $value"
+  }
 
   def collect(cpu: String): GatewayResult = {
     val gateway = Gateway.collect()
@@ -585,6 +702,9 @@ object DifftestModule {
       gateway.structPacked.getOrElse(false),
       gateway.structAligned.getOrElse(false),
     )
+    if (cppDPICModules.nonEmpty) {
+      generateCppDPICModules()
+    }
     if (gateway.cppExtModule.getOrElse(false)) {
       generateCppExtModules()
     }
@@ -659,7 +779,7 @@ object DifftestModule {
     difftestCpp += "#include <cstdint>"
     difftestCpp += ""
 
-    macros.foreach(m => difftestCpp += s"#define $m")
+    (macros ++ extraCppMacros.toSeq).distinct.foreach(m => difftestCpp += s"#define $m")
     difftestCpp += ""
 
     val cpu_s = cpu.replace("-", "_").replace(" ", "").toUpperCase
@@ -691,6 +811,17 @@ object DifftestModule {
         if (bundleType.isFlatten) {
           val configWidthName = s"CONFIG_DIFF_${macroName}_WIDTH"
           difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
+        }
+        if (bundleType.desiredCppName == "amu_finish") {
+          val amuFinish = bundleType.asInstanceOf[AmuFinishEvent]
+          val amuBanks = amuFinish.bankValid.length
+          val amuWordBits = amuFinish.data.head.getWidth
+          require(amuFinish.data.length % amuBanks == 0, "AmuFinishEvent.data length should be divisible by bank count")
+          val amuWordsPerBank = amuFinish.data.length / amuBanks
+          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_BANKS $amuBanks"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK $amuWordsPerBank"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_WORD_BITS $amuWordBits"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_BANK_WIDTH ${amuWordsPerBank * amuWordBits}"
         }
         difftestCpp += bundleType.toCppDeclaration(structPacked, structAligned)
         difftestCpp += ""
@@ -771,6 +902,24 @@ object DifftestModule {
     }
   }
   def createCppExtModule(name: String, func: String): Unit = createCppExtModule(name, func, None)
+
+  def createCppDPICModule(name: String, func: String, header: Option[String]): Unit = {
+    if (!cppDPICModules.exists(_._1 == name)) {
+      cppDPICModules += ((name, func))
+      if (header.isDefined && !cppDPICHeaders.contains(header.get)) {
+        cppDPICHeaders += header.get
+      }
+    }
+  }
+  def createCppDPICModule(name: String, func: String): Unit = createCppDPICModule(name, func, None)
+
+  def generateCppDPICModules(): Unit = {
+    val difftestCppDPICs = ListBuffer.empty[String]
+    difftestCppDPICs += "#include <cstdint>"
+    cppDPICHeaders.foreach(h => difftestCppDPICs += s"#include $h")
+    cppDPICModules.foreach(m => difftestCppDPICs += m._2)
+    FileControl.write(difftestCppDPICs, "difftest-dpic-ext.cpp")
+  }
 
   def generateCppExtModules(): Unit = {
     val difftestCppExts = ListBuffer.empty[String]

@@ -1,0 +1,574 @@
+/***************************************************************************************
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2026 Beijing Institute of Open Source Chip (BOSC)
+*
+* DiffTest is licensed under Mulan PSL v2.
+* You can use this software according to the terms and conditions of the Mulan PSL v2.
+* You may obtain a copy of Mulan PSL v2 at:
+*          http://license.coscl.org.cn/MulanPSL2
+*
+* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+*
+* See the Mulan PSL v2 for more details.
+***************************************************************************************/
+
+#include "difftest.h"
+#include "matrix_hash.h"
+
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) || defined(CONFIG_DIFFTEST_MSYNCEVENT)
+static void set_error_pc(int coreid, uint64_t pc) {
+  difftest[coreid]->get_trap_event()->pc = pc;
+}
+#endif
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#include <cassert>
+
+// Temporary legacy defaults for designs that do not generate AMU geometry.
+#ifndef CONFIG_DIFF_AMU_ARLEN
+#define CONFIG_DIFF_AMU_ARLEN 4096
+#endif
+
+#ifndef CONFIG_DIFF_AMU_TRLEN
+#define CONFIG_DIFF_AMU_TRLEN 512
+#endif
+
+#ifndef CONFIG_DIFF_AMU_BANK_WIDTH
+#define CONFIG_DIFF_AMU_BANK_WIDTH 256
+#endif
+
+#ifndef CONFIG_DIFF_AMU_FINISH_BANKS
+#define CONFIG_DIFF_AMU_FINISH_BANKS 8
+#endif
+
+#ifndef CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK
+#define CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK 4
+#endif
+
+#ifndef CONFIG_DIFF_AMU_AB_WORDS_PER_BANK
+#define CONFIG_DIFF_AMU_AB_WORDS_PER_BANK 4
+#endif
+
+#ifndef CONFIG_DIFF_AMU_C_WORDS_PER_BANK
+#define CONFIG_DIFF_AMU_C_WORDS_PER_BANK 4
+#endif
+
+#ifndef CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES
+#define CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES 8192
+#endif
+
+#ifndef CONFIG_DIFF_AMU_C_REG_SIZE_BYTES
+#define CONFIG_DIFF_AMU_C_REG_SIZE_BYTES 65536
+#endif
+
+static inline const char *amu_ctrl_op_name(uint8_t op) {
+  switch (op) {
+    case 0: return "MMA";
+    case 1: return "MLS";
+    case 2: return "MRELEASE";
+    case 3: return "MARITH";
+    default: return "UNKNOWN";
+  }
+}
+
+static void print_amu_ctrl_event(const char *source, const DifftestAmuCtrlEvent &event) {
+  printf("  %s AMU ctrl: pc 0x%016lx, op %s\n", source, event.pc, amu_ctrl_op_name(event.op));
+  switch (event.op) {
+    case 0: // MMA
+      printf(
+          "                md %d, rm %d, sat %d, ms1 %d, ms2 %d, fp %d,\n"
+          "                mtilem %d, mtilen %d, mtilek %d, types1 %d, types2 %d, typed %d\n",
+          event.md, event.rm, event.sat, event.ms1, event.ms2, event.isfp, event.mtilem, event.mtilen, event.mtilek,
+          event.types1, event.types2, event.typed);
+      break;
+    case 1: // MLS
+      printf(
+          "                md %d, ls %d, transpose %d, isacc %d,\n"
+          "                base %016lx, stride %016lx, row %d, column %d, widths %d\n",
+          event.md, event.sat, event.isfp, event.types1, event.base, event.stride, event.mtilem, event.mtilen,
+          event.typed);
+      break;
+    case 2: // MRelease
+      printf("                msyncRd %d\n", event.mtilem);
+      break;
+    case 3: // Arith
+      printf("                md %d, opType %#lx\n", event.md, event.base);
+      break;
+    default: printf("                Unknown amu event op: %d\n", event.op); break;
+  }
+}
+
+// Difftest events can be packed by the batch gateway. Convert to the natural
+// layout expected by NEMU before crossing the reference-model ABI boundary.
+static struct AmuCtrlEvent to_nemu_amu_ctrl(const DifftestAmuCtrlEvent &source) {
+  struct AmuCtrlEvent target = {};
+  target.valid = source.valid;
+  target.op = source.op;
+  target.rm = source.rm;
+  target.md = source.md;
+  target.sat = source.sat;
+  target.ms1 = source.ms1;
+  target.ms2 = source.ms2;
+  target.mtilem = source.mtilem;
+  target.mtilen = source.mtilen;
+  target.mtilek = source.mtilek;
+  target.types1 = source.types1;
+  target.types2 = source.types2;
+  target.typed = source.typed;
+  target.isfp = source.isfp;
+  target.base = source.base;
+  target.stride = source.stride;
+  target.pc = source.pc;
+  return target;
+}
+
+static void from_nemu_amu_ctrl(DifftestAmuCtrlEvent &target, const struct AmuCtrlEvent &source) {
+  target.valid = source.valid;
+  target.op = source.op;
+  target.rm = source.rm;
+  target.md = source.md;
+  target.sat = source.sat;
+  target.ms1 = source.ms1;
+  target.ms2 = source.ms2;
+  target.mtilem = source.mtilem;
+  target.mtilen = source.mtilen;
+  target.mtilek = source.mtilek;
+  target.types1 = source.types1;
+  target.types2 = source.types2;
+  target.typed = source.typed;
+  target.isfp = source.isfp;
+  target.base = source.base;
+  target.stride = source.stride;
+  target.pc = source.pc;
+}
+
+// AME instruction lifecycle in software ROB
+// - An AME instruction is first committed in the DUT's hardware ROB, then
+// sent to CUTE. When it's sent to CUTE, it is captured by AmuCtrlRecorder
+// and from then on it is no longer managed by the DUT hardware ROB, but
+// instead by the DiffTest framework's software ROB. In this phase, the
+// instruction waits for the REF side to commit it as well; this corresponds
+// to the WAIT_REF_COMMIT state.
+// - Once REF has also committed this instruction, AmuCtrlChecker compares
+// the amu_ctrl signals from DUT and REF. If the signals match, the state
+// transitions to WAIT_DUT_EXEC, meaning we are now waiting for the DUT's
+// execution result.
+// - Next, the DUT's matrix unit executes the instruction and gradually
+// writes the result into the matrix registers. AmuExecRecorder captures this
+// writeback process and updates the mirrored registers in DiffTest. When the
+// instruction has fully finished and all matrix register writes are
+// complete, the state becomes WAIT_SWROB_COMMIT, waiting for the software
+// ROB to commit the instruction.
+// - An instruction in the software ROB can normally be committed if and only
+// if it has completed and all preceding instructions have also completed.
+// Mrelease is different from other asynchronous matrix operations: its
+// completion directly advances DUT msync, which may unblock a following
+// core-side macquire. CUTE orders mrelease only after preceding mstores, so it
+// may complete while a preceding non-store is still unfinished. The recorder
+// must therefore apply its REF-side effect as soon as the DUT finish event
+// arrives; otherwise macquire could be checked against stale REF msync state.
+// The checker then verifies that no preceding mstore is unfinished and retires
+// the mrelease entry without waiting for preceding non-stores.
+
+// 1. Capture AME commit from DUT ROB → push to software ROB (WAIT_REF_COMMIT)
+bool AmuCtrlRecorder::get_valid(const DifftestAmuCtrlEvent &probe) {
+  return probe.valid;
+}
+
+void AmuCtrlRecorder::clear_valid(DifftestAmuCtrlEvent &probe) {
+  probe.valid = 0;
+}
+
+int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
+  if (probe.op > 3) {
+    Info("Invalid AMU ctrl op: core=%d, pc=0x%016lx, op=%d\n", state->coreid, probe.pc, probe.op);
+    set_error_pc(state->coreid, probe.pc);
+    return STATE_ERROR;
+  }
+
+  if (probe.op == 0 && !is_mma_32bit_result_type(probe.typed)) {
+    Info("Unsupported MMA result type: typed=%u is not 32-bit\n", static_cast<unsigned>(probe.typed));
+    set_error_pc(state->coreid, probe.pc);
+    return STATE_ERROR;
+  }
+
+  state->matrix_sw_rob.emplace_back(probe);
+  return STATE_OK;
+}
+
+// 2. When REF commits same inst, compare amu_ctrl → on match set WAIT_DUT_EXEC
+int AmuCtrlChecker::do_step() {
+  for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
+    if (iter->state == DiffState::WAIT_REF_COMMIT) {
+      const DifftestAmuCtrlEvent dut_event = iter->amu_event;
+      DifftestAmuCtrlEvent ref_event = dut_event;
+      // NOTE:
+      // AMU ctrl is treated as a non-squashable, ordering-sensitive event.
+      // Under squash mode, it still requires one-to-one synchronization with REF.
+      // Therefore "no available REF event" (-1) is an error instead of a retriable case.
+      struct AmuCtrlEvent ref_event_nemu = to_nemu_amu_ctrl(ref_event);
+      int check_res = proxy->get_amu_ctrl_event(&ref_event_nemu);
+      from_nemu_amu_ctrl(ref_event, ref_event_nemu);
+
+      if (check_res == 1) {
+        printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", state->coreid);
+        printf("Mismatch for amu ctrl event \n");
+        print_amu_ctrl_event("REF", ref_event);
+        print_amu_ctrl_event("DUT", dut_event);
+        set_error_pc(state->coreid, dut_event.pc);
+        return STATE_ERROR;
+      } else if (check_res == -1) {
+        printf("\n==============  Amu Mma Ctrl Event (Core %d)  ==============\n", state->coreid);
+        printf("  No available REF AMU ctrl\n");
+        print_amu_ctrl_event("DUT", dut_event);
+        set_error_pc(state->coreid, dut_event.pc);
+        return STATE_ERROR;
+      } else {
+        iter->state = DiffState::WAIT_DUT_EXEC;
+      }
+    }
+  }
+  return STATE_OK;
+}
+
+// 3. Capture DUT matrix writeback; apply mrelease's REF effect and mark it ready for software ROB retirement
+bool AmuExecRecorder::get_valid(const DifftestAmuFinishEvent &probe) {
+  return probe.valid;
+}
+
+void AmuExecRecorder::clear_valid(DifftestAmuFinishEvent &probe) {
+  probe.valid = 0;
+}
+
+void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const DifftestAmuFinishEvent &probe) {
+  const static size_t ARLen = CONFIG_DIFF_AMU_ARLEN;
+  const static size_t TRLen = CONFIG_DIFF_AMU_TRLEN;
+  const size_t matrix_size =
+      entry.amu_event.op == 0
+          ? size_t(entry.amu_event.mtilem) * entry.amu_event.mtilen * get_element_size(entry.amu_event.typed)
+          : (entry.amu_event.md < 4 ? CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES : CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+  size_t matrix_u64_size = (matrix_size + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+  if (matrix_u64_size == 0) {
+    matrix_u64_size = 1;
+  }
+  if (entry.res == NULL) {
+    // first `valid` for this inst: alloc space for matrix inst
+    entry.res = new uint64_t[matrix_u64_size];
+    memset(entry.res, 0, matrix_u64_size * sizeof(uint64_t));
+  }
+  uint8_t md = entry.amu_event.md;
+  const size_t matrix_words_per_bank = (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
+  // bankAddr is an entry index in the selected matrix register. The
+  // finish event may carry a wider, shared payload than that entry
+  // (e.g. C is 128 bits in MinimalMatrixConfig, while the event is
+  // still 256 bits for the A/B path). Derive the interleave stride from
+  // the selected register's physical entry width, not the event width.
+  const size_t row_bits = (md < 4) ? TRLen : ARLen;
+  const size_t entry_bits = matrix_words_per_bank * sizeof(uint64_t) * 8;
+  assert(entry_bits > 0);
+  assert(row_bits % entry_bits == 0);
+  const size_t stride = row_bits / entry_bits;
+  assert(stride > 0);
+  assert(matrix_words_per_bank > 0);
+
+  for (int j = 0; j < CONFIG_DIFF_AMU_FINISH_BANKS; ++j) { // for each bank
+    if (probe.bankValid[j]) {
+      const size_t addr = probe.bankAddr[j];
+      const size_t matrix_entry = addr / stride * stride * CONFIG_DIFF_AMU_FINISH_BANKS + j * stride + addr % stride;
+      const size_t idx = matrix_entry * matrix_words_per_bank;
+      assert(idx + matrix_words_per_bank <= matrix_u64_size);
+
+      uint8_t *dst = reinterpret_cast<uint8_t *>(&entry.res[idx]);
+      const uint8_t *src = reinterpret_cast<const uint8_t *>(&probe.data[j * CONFIG_DIFF_AMU_FINISH_WORDS_PER_BANK]);
+      const uint64_t mask = probe.bankMask[j];
+      const size_t bank_bytes = matrix_words_per_bank * sizeof(uint64_t);
+      for (size_t k = 0; k < bank_bytes; ++k) {
+        if ((mask >> k) & 0x1U) {
+          dst[k] = src[k];
+        }
+      }
+    }
+  }
+}
+
+int AmuExecRecorder::execute_mrelease(const DifftestAmuCtrlEvent &event, const DifftestAmuFinishEvent &probe) {
+  if (!probe.finish) {
+    printf("Mrelease finish event is incomplete: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+    set_error_pc(state->coreid, probe.pc);
+    return STATE_ERROR;
+  }
+
+  struct AmuCtrlEvent amu_event_nemu = to_nemu_amu_ctrl(event);
+  if (proxy->exec_amu(&amu_event_nemu) != 0) {
+    printf("Failed to execute REF mrelease: core %d, pc 0x%016lx\n", state->coreid, event.pc);
+    set_error_pc(state->coreid, event.pc);
+    return STATE_ERROR;
+  }
+  return STATE_OK;
+}
+
+int AmuExecRecorder::check(const DifftestAmuFinishEvent &probe) {
+  for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
+    if (iter->amu_event.pc == probe.pc && iter->state == DiffState::WAIT_DUT_EXEC) {
+      switch (iter->amu_event.op) {
+        case 0: // MMA
+          record_writeback(*iter, probe);
+          break;
+#ifndef CONFIG_DIFFTEST_AMUHASHEVENT
+        case 1: // Matrix load/store
+          if (iter->amu_event.sat == 1)
+            break;
+        case 3: // mzero
+          record_writeback(*iter, probe);
+          break;
+#else
+        case 1: // Matrix load/store
+          if (iter->amu_event.sat == 0) {
+            printf("Expected hash completion for mload/mzero: pc 0x%016lx\n", probe.pc);
+            set_error_pc(state->coreid, probe.pc);
+            return STATE_ERROR;
+          }
+          break;
+        case 3: // Matrix Arith
+          printf("Expected hash completion for mload/mzero: pc 0x%016lx\n", probe.pc);
+          set_error_pc(state->coreid, probe.pc);
+          return STATE_ERROR;
+#endif
+        case 2: // mrelease
+          if (execute_mrelease(iter->amu_event, probe) != STATE_OK)
+            return STATE_ERROR;
+          break;
+        default:
+          printf("Unknown amu event op: %d\n", iter->amu_event.op);
+          set_error_pc(state->coreid, probe.pc);
+          return STATE_ERROR;
+      }
+      if (probe.finish) {
+        iter->state = DiffState::WAIT_SWROB_COMMIT;
+      }
+      return STATE_OK;
+    }
+  }
+  printf("No matching AMU instruction for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+  set_error_pc(state->coreid, probe.pc);
+  return STATE_ERROR;
+}
+
+#ifdef CONFIG_DIFFTEST_AMUHASHEVENT
+bool AmuHashExecRecorder::get_valid(const DifftestAmuHashEvent &probe) {
+  return probe.valid;
+}
+
+void AmuHashExecRecorder::clear_valid(DifftestAmuHashEvent &probe) {
+  probe.valid = 0;
+}
+
+int AmuHashExecRecorder::check(const DifftestAmuHashEvent &probe) {
+  for (auto &entry: state->matrix_sw_rob) {
+    if (entry.amu_event.pc == probe.pc && entry.state == DiffState::WAIT_DUT_EXEC) {
+      const auto &event = entry.amu_event;
+      if (!(event.op == 3 || (event.op == 1 && event.sat == 0)))
+        break;
+      entry.hash = {probe.hashLo, probe.hashHi, probe.byteCount};
+      entry.state = DiffState::WAIT_SWROB_COMMIT;
+      return STATE_OK;
+    }
+  }
+  printf("No matching mload/mzero for hash completion: pc 0x%016lx\n", probe.pc);
+  set_error_pc(state->coreid, probe.pc);
+  return STATE_ERROR;
+}
+#endif
+
+int AmuExecChecker::commit_ready_prefix() {
+  Difftest *dt = difftest[state->coreid];
+  MmaVerifier *mma_verifier = dt->get_mma_verifier();
+
+  // Retire the ready prefix in software-ROB order. The first non-ready entry
+  // blocks ordinary operations, but not a completed mrelease; check_mreleases()
+  // handles those entries separately.
+  for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end();) {
+    if (iter->state == DiffState::WAIT_SWROB_COMMIT) {
+      DifftestAmuCtrlEvent amu_event = iter->amu_event;
+      uint8_t op = amu_event.op;
+      MmaVerificationBuffer *buffer = nullptr;
+      struct AmuCtrlEvent amu_event_nemu = {};
+      switch (op) {
+        case 0: // MMA
+          // Allocate buffer for MMA verification
+          buffer = mma_verifier->allocate_buffer(&amu_event);
+          // Transfer the completed software-ROB result without allocating a copy.
+          buffer->dut_result.reset(iter->res);
+          iter->res = nullptr;
+          // Capture REF operands and install the DUT result for asynchronous MMA verification.
+          amu_event_nemu = to_nemu_amu_ctrl(amu_event);
+          if (proxy->exec_amu_lazy(&amu_event_nemu, buffer->dut_result.get(), buffer->src1, buffer->src2,
+                                   buffer->src3) != 0) {
+            printf("Failed to get REF operands for MMA verification: core %d, pc 0x%016lx\n", state->coreid,
+                   amu_event.pc);
+            mma_verifier->free_buffer(buffer);
+            set_error_pc(state->coreid, amu_event.pc);
+            return STATE_ERROR;
+          }
+          // Submit using the build-selected verification schedule.
+          mma_verifier->add_to_verification_queue(buffer);
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+          // Do not consume the next ready event after a synchronous failure.
+          if (mma_verifier->has_mma_verification_error()) {
+            set_error_pc(state->coreid, amu_event.pc);
+            return STATE_ERROR;
+          }
+#endif
+          break;
+        case 1: // MLS
+        case 3: // Arith
+          amu_event_nemu = to_nemu_amu_ctrl(amu_event);
+#ifdef CONFIG_DIFFTEST_AMUHASHEVENT
+          if (proxy->exec_amu_hash(&amu_event_nemu, &iter->hash) != 0) {
+#else
+          if (proxy->exec_amu(&amu_event_nemu, iter->res) != 0) {
+#endif
+            printf("Mismatch for amu exec event: pc 0x%016lx, op %s\n", amu_event.pc, amu_ctrl_op_name(amu_event.op));
+            set_error_pc(state->coreid, amu_event.pc);
+            return STATE_ERROR;
+          }
+          delete[] iter->res;
+          break;
+        case 2: // MRelease
+          // The REF-side effect was applied when the DUT finish event was recorded.
+          break;
+        default:
+          printf("Unknown amu event op: %d\n", op);
+          if (iter->res != nullptr) {
+            delete[] iter->res;
+            iter->res = nullptr;
+          }
+          set_error_pc(state->coreid, amu_event.pc);
+          return STATE_ERROR;
+      }
+      // Remove the processed event from matrix_sw_rob
+      iter = state->matrix_sw_rob.erase(iter);
+    } else {
+      // When there's an unfinished inst before the current inst, the current inst will not be committed.
+      // So, when the current inst is unfinished, break the loop.
+      break;
+    }
+  }
+  return STATE_OK;
+}
+
+int AmuExecChecker::check_mreleases() {
+  // Retire completed mrelease entries without waiting for older non-stores.
+  // CUTE makes mrelease depend only on older mstores, so a completed mrelease
+  // with an unfinished older mstore indicates a DUT ordering violation.
+  bool unfinished_store_seen = false;
+  for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end();) {
+    if (iter->state == DiffState::WAIT_SWROB_COMMIT && iter->amu_event.op == 2) {
+      if (unfinished_store_seen) {
+        printf("Mrelease completed before an older mstore: core %d, mrelease pc 0x%016lx\n", state->coreid,
+               iter->amu_event.pc);
+        set_error_pc(state->coreid, iter->amu_event.pc);
+        return STATE_ERROR;
+      }
+      iter = state->matrix_sw_rob.erase(iter);
+    } else {
+      if (iter->state != DiffState::WAIT_SWROB_COMMIT && iter->amu_event.op == 1 && iter->amu_event.sat == 1) {
+        unfinished_store_seen = true;
+      }
+      ++iter;
+    }
+  }
+  return STATE_OK;
+}
+
+// 4. Commit ready inst from software ROB: REF exec and compare
+int AmuExecChecker::do_step() {
+  if (int ret = commit_ready_prefix()) {
+    return ret;
+  }
+  return check_mreleases();
+}
+
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+
+static void print_msync_event(const char *source, const DifftestMsyncEvent &event) {
+  const char *op_name = "UNKNOWN";
+  switch (event.op) {
+    case 0: op_name = "msyncregreset"; break;
+    case 1: op_name = "macquire"; break;
+    case 2: op_name = "mfence"; break;
+  }
+
+  printf("  %s Msync: pc 0x%016lx, op %s, MsyncRd %d\n", source, event.pc, op_name, event.msyncRd);
+  if (event.op > 2) {
+    printf("               Unknown Msync event op: %d\n", event.op);
+  }
+}
+
+static struct MsyncEvent to_nemu_msync(const DifftestMsyncEvent &source) {
+  struct MsyncEvent target = {};
+  target.valid = source.valid;
+  target.op = source.op;
+  target.msyncRd = source.msyncRd;
+  target.pc = source.pc;
+  return target;
+}
+
+static void from_nemu_msync(DifftestMsyncEvent &target, const struct MsyncEvent &source) {
+  target.valid = source.valid;
+  target.op = source.op;
+  target.msyncRd = source.msyncRd;
+  target.pc = source.pc;
+}
+
+int MsyncChecker::do_step() {
+  while (!state->msync_event_queue.empty()) {
+    const DifftestMsyncEvent dut_event = state->msync_event_queue.front();
+    DifftestMsyncEvent ref_event = dut_event;
+    struct MsyncEvent ref_event_nemu = to_nemu_msync(ref_event);
+    int check_res = proxy->get_msync_event(&ref_event_nemu);
+    from_nemu_msync(ref_event, ref_event_nemu);
+
+    if (check_res == 1) {
+      // Compare the msync event info.
+      // For mismatch, proxy returns 1 and sets the msync event info.
+      // Use global difftest pointer to access the owning Difftest instance for this core
+      printf("\n==============  Msync Event (Core %d)  ==============\n", state->coreid);
+      printf("Mismatch for Msync event\n");
+      print_msync_event("REF", ref_event);
+      print_msync_event("DUT", dut_event);
+      state->msync_event_queue.pop();
+      set_error_pc(state->coreid, dut_event.pc);
+      return STATE_ERROR;
+    } else if (check_res == -1) {
+      printf("\n==============  Msync Event (Core %d)  ==============\n", state->coreid);
+      printf("  No available REF Msync events\n");
+      print_msync_event("DUT", dut_event);
+      state->msync_event_queue.pop();
+      set_error_pc(state->coreid, dut_event.pc);
+      return STATE_ERROR;
+    }
+    state->msync_event_queue.pop();
+  }
+  return STATE_OK;
+}
+
+bool MsyncRecorder::get_valid(const DifftestMsyncEvent &probe) {
+  return probe.valid;
+}
+
+void MsyncRecorder::clear_valid(DifftestMsyncEvent &probe) {
+  probe.valid = 0;
+}
+
+int MsyncRecorder::check(const DifftestMsyncEvent &probe) {
+  state->msync_event_queue.push(probe);
+  return STATE_OK;
+}
+
+#endif // CONFIG_DIFFTEST_MSYNCEVENT

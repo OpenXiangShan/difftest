@@ -54,33 +54,6 @@ static BrType get_br_type(uint32_t instr, bool rvc) {
   return BrType::NotCfi;
 }
 
-bool parse_line(std::string_view line, uint64_t &pc, uint32_t &instr) {
-  size_t colon_pos = line.find(':');
-  if (colon_pos == std::string_view::npos) {
-    std::cout << "This: { " << line << " } parsec failed" << std::endl;
-    assert(false && "Line format error: no colon found");
-  }
-
-  std::string_view pc_sv = line.substr(0, colon_pos);
-  std::string_view instr_sv = line.substr(colon_pos + 1);
-
-  if (pc_sv.empty() || instr_sv.empty()) {
-    return false;
-  }
-
-  auto res_pc = std::from_chars(pc_sv.data(), pc_sv.data() + pc_sv.size(), pc, 16);
-  if (res_pc.ec != std::errc() || res_pc.ptr != pc_sv.data() + pc_sv.size()) {
-    return false;
-  }
-
-  auto res_instr = std::from_chars(instr_sv.data(), instr_sv.data() + instr_sv.size(), instr, 16);
-  if (res_instr.ec != std::errc() || res_instr.ptr != instr_sv.data() + instr_sv.size()) {
-    return false;
-  }
-
-  return true;
-}
-
 RiscvInstructionInfo analyze_instruction(uint32_t instr) {
   RiscvInstructionInfo info;
 

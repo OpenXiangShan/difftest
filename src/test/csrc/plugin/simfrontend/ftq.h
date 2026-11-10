@@ -18,7 +18,6 @@
 #define FTQ_H
 
 #include <array>
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -97,7 +96,6 @@ static inline bool is_rvc(uint32_t instr) {
   return (instr & 0x3) != 0x3;
 }
 
-bool parse_line(std::string_view line, uint64_t &pc, uint32_t &instr);
 RiscvInstructionInfo analyze_instruction(uint32_t instr);
 uint32_t pack_trace_data(const RiscvInstructionInfo &info, bool pred_taken, bool is_last_ftq_entry, bool wrap,
                          uint32_t queue_id, uint32_t offset);

@@ -18,16 +18,6 @@
 NOOP_HOME  ?= $(abspath .)
 export NOOP_HOME
 
-HOST_CC_FALLBACK := $(shell if command -v clang >/dev/null 2>&1; then echo clang; elif command -v gcc >/dev/null 2>&1; then echo gcc; else echo cc; fi)
-HOST_CXX_FALLBACK := $(shell if command -v clang++ >/dev/null 2>&1; then echo clang++; elif command -v g++ >/dev/null 2>&1; then echo g++; else echo c++; fi)
-
-ifeq ($(origin CC), default)
-CC := $(HOST_CC_FALLBACK)
-endif
-ifeq ($(origin CXX), default)
-CXX := $(HOST_CXX_FALLBACK)
-endif
-
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 
@@ -55,7 +45,17 @@ difftest_verilog:
 	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
 
 TIMELOG = $(BUILD_DIR)/time.log
-TIME_CMD = time -avp -o $(TIMELOG)
+# Resolve `time` to a real binary: shells such as bash provide `time` only as a
+# reserved word, which accepts neither -o nor the GNU report flags. `env` looks
+# the binary up on PATH without going through the shell, so it stays usable when
+# no well-known path exists. Then pick the richest report format the available
+# implementation actually supports, and leave TIME_CMD empty if none does, so an
+# unusual host loses the timings instead of failing the build.
+TIME_BIN ?= $(or $(firstword $(wildcard /usr/bin/time /bin/time)),env time)
+TIME_FLAGS := $(shell for f in -av -ap -a; do \
+                        $(TIME_BIN) $$f -o /dev/null true >/dev/null 2>&1 && { echo $$f; break; }; \
+                      done)
+TIME_CMD = $(if $(TIME_FLAGS),$(TIME_BIN) $(TIME_FLAGS) -o $(TIMELOG))
 
 # remote machine with more cores to speedup c++ build
 REMOTE ?= localhost
@@ -67,6 +67,9 @@ SIM_CXXFILES = $(shell find $(SIM_CSRC_DIR) -name "*.cpp") $(shell find $(SIM_CO
 SIM_CXXFLAGS = -I$(SIM_CSRC_DIR) -I$(SIM_CONFIG_DIR)
 
 SIM_CXXFLAGS += -DNOOP_HOME=\\\"$(NOOP_HOME)\\\"
+ifeq ($(SPLITVIEW),1)
+SIM_CXXFLAGS += -DCONFIG_SPLITVIEW
+endif
 
 # generated-src
 GEN_CSRC_DIR  = $(BUILD_DIR)/generated-src
@@ -75,6 +78,7 @@ SIM_CXXFLAGS += -I$(GEN_CSRC_DIR)
 
 PLUGIN_CSRC_DIR = $(abspath ./src/test/csrc/plugin)
 PLUGIN_INC_DIR  = $(abspath $(PLUGIN_CSRC_DIR)/include)
+SIM_CXXFILES   += $(shell find $(PLUGIN_CSRC_DIR)/topdown -name "*.cpp" 2> /dev/null)
 SIM_CXXFLAGS   += -I$(PLUGIN_INC_DIR)
 
 GEN_VSRC_DIR = $(BUILD_DIR)/generated-src
@@ -101,8 +105,21 @@ else
 SIM_CXXFILES += $(DIFFTEST_CXXFILES)
 SIM_CXXFLAGS += -I$(DIFFTEST_CSRC_DIR)
 SIM_VFLAGS   += +define+DIFFTEST
+
 ifeq ($(DIFFTEST_PERFCNT), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
+endif
+ifeq ($(DIFFTEST_FAST_REF), 1)
+SIM_CXXFLAGS += -DCONFIG_DIFFTEST_FAST_REF
+endif
+ifeq ($(DIFFTEST_FORK_REF), 1)
+ifneq ($(DIFFTEST_FAST_REF), 1)
+$(error DIFFTEST_FORK_REF requires DIFFTEST_FAST_REF=1)
+endif
+SIM_CXXFLAGS += -DCONFIG_DIFFTEST_FORK_REF
+endif
+ifeq ($(DIFFTEST_CHECKER_PERF), 1)
+SIM_CXXFLAGS += -DCONFIG_DIFFTEST_CHECKER_PERF
 endif
 ifeq ($(DIFFTEST_QUERY), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_QUERY
@@ -137,17 +154,21 @@ endif # SYNTHESIS
 
 # FPGA DiffTest Simulate Support
 ifeq ($(FPGA_SIM), 1)
-FPGA_VSRC_DIR = $(abspath ./src/test/vsrc/fpga)
 FPGA_SIM_CSRC_DIR = $(abspath ./src/test/csrc/fpga_sim)
 FPGA_SIM_VSRC_DIR = $(abspath ./src/test/vsrc/fpga_sim)
 SIM_CXXFILES += $(shell find $(FPGA_SIM_CSRC_DIR) -name "*.cpp")
 SIM_CXXFLAGS += -I$(FPGA_SIM_CSRC_DIR) -DFPGA_SIM
 SIM_LDFLAGS  += -lrt
 SIM_VFLAGS   += +define+FPGA_SIM
-SIM_VSRC     += $(shell find $(FPGA_VSRC_DIR) -name "*.v" -or -name "*.sv") $(shell find $(FPGA_SIM_VSRC_DIR) -name "*.v" -or -name "*.sv")
+SIM_VSRC     += $(shell find $(FPGA_SIM_VSRC_DIR) -name "*.v" -or -name "*.sv")
 ifneq ($(ASYNC_CLK_2N), )
 SIM_VFLAGS   += +define+ASYNC_CLK_2N=$(ASYNC_CLK_2N)
 endif
+endif
+
+# OpenIOMMU owns its RTL filelist. Include it only for explicitly enabled builds.
+ifeq ($(WITH_IOMMU),1)
+override RTL_INCLUDE += $(abspath $(DESIGN_DIR)/OpenIOMMU/iommu_wrap.f)
 endif
 
 # Third-party RTL include files
@@ -180,6 +201,7 @@ endif
 # ConstantIn
 WITH_CONSTANTIN ?= 1
 ifeq ($(WITH_CONSTANTIN), 1)
+SIM_CXXFILES += $(shell find $(PLUGIN_CSRC_DIR)/constantin -name "*.cpp")
 SIM_CXXFILES += $(BUILD_DIR)/constantin.cpp
 SIM_CXXFLAGS += -I$(BUILD_DIR) -DENABLE_CONSTANTIN
 endif
@@ -203,6 +225,12 @@ endif
 endif
 endif
 
+# External memory timing backends are mutually exclusive.
+MEMORY_BACKEND_COUNT := $(words $(filter 1,$(WITH_DRAMSIM3) $(WITH_MCSIM)))
+ifneq ($(filter-out 0 1,$(MEMORY_BACKEND_COUNT)),)
+$(error WITH_DRAMSIM3 and WITH_MCSIM are mutually exclusive)
+endif
+
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
 ifndef DRAMSIM3_HOME
@@ -211,6 +239,23 @@ endif
 SIM_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
 SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
 SIM_LDFLAGS  += -L$(DRAMSIM3_HOME)/build -ldramsim3
+endif
+
+# co-simulation with MCSim timing and DifftestMem data
+ifeq ($(WITH_MCSIM),1)
+ifndef MCSIM_HOME
+$(error MCSIM_HOME is not set)
+endif
+MCSIM_LIB ?= $(MCSIM_HOME)/build-verilator-lib/libmcsim.a
+MCSIM_CPU_FREQ_MHZ ?= 3000
+ifeq ($(wildcard $(MCSIM_HOME)/include/mcsim_c_api.h),)
+$(error MCSIM_HOME is invalid: $(MCSIM_HOME))
+endif
+ifeq ($(wildcard $(MCSIM_LIB)),)
+$(error MCSim library is missing. Run: make -C $(MCSIM_HOME) verilator-lib)
+endif
+SIM_CXXFLAGS += -I$(MCSIM_HOME)/include -DWITH_MCSIM -DMCSIM_CPU_FREQ_MHZ=$(MCSIM_CPU_FREQ_MHZ)
+SIM_LDFLAGS  += $(MCSIM_LIB)
 endif
 
 # out ipc info on temporary txt file, mainly applied to support qemu multi-core sampled data
@@ -267,12 +312,11 @@ SIM_CXXFILES += $(shell find $(PLUGIN_CSRC_DIR)/runahead -name "*.cpp")
 endif
 
 # SimFrontend plugin
+SIMFRONTEND_CSRC_DIR = $(abspath $(PLUGIN_CSRC_DIR)/simfrontend)
 ifeq ($(ENABLE_SIMFRONTEND), 1)
-TRACE_CSR_DIR = $(abspath ./src/test/csrc/plugin/simfrontend)
-SIM_CXXFILES += $(shell find $(TRACE_CSR_DIR) -name "*.cpp")
-SIM_CXXFLAGS += -I$(TRACE_CSR_DIR) -DPLUGIN_SIMFRONTEND
+SIM_CXXFILES += $(shell find $(SIMFRONTEND_CSRC_DIR) -name "*.cpp")
+SIM_CXXFLAGS += -I$(SIMFRONTEND_CSRC_DIR) -DPLUGIN_SIMFRONTEND -DCPU_XIANGSHAN
 endif
-
 
 # Check if XFUZZ is set
 ifeq ($(XFUZZ), 1)
@@ -316,12 +360,16 @@ ifeq ($(CXX_NO_WARNING),1)
 SIM_CXXFLAGS += -Werror
 endif
 
+include pgo.mk
+include cuda.mk
 include emu.mk
 include vcs.mk
+include uvs.mk
 include galaxsim.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
+include reftrace.mk
 include pdb.mk
 
 clean: vcs-clean pldm-clean fpga-clean
@@ -335,7 +383,7 @@ scala-format:
 CLANG_FORMAT_VER = 18.1.4
 clang-format:
 ifeq ($(shell clang-format --version 2> /dev/null| cut -f3 -d' ' | tr '.' '_'), $(shell echo $(CLANG_FORMAT_VER) | tr '.' '_'))
-	clang-format -i $(shell find ./src/test/csrc -name "*.cpp" -or -name "*.h" -or -name "*.inc")
+	clang-format -i $(shell find ./src/test/csrc -name "*.cpp" -or -name "*.h" -or -name "*.inc" -or -name "*.cu")
 else
 	@echo "Required clang-format Version: $(CLANG_FORMAT_VER)"
 	@echo "Your Version: $(shell clang-format --version)"

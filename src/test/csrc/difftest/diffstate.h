@@ -18,16 +18,18 @@
 #define __DIFFSTATE_H__
 
 #include "common.h"
+#include "matrix_hash.h"
+#include <cstdint>
+#include <deque>
 #include <queue>
 #include <unordered_set>
 
 class CommitTrace {
 public:
-  uint64_t cycle;
   uint64_t pc;
   uint32_t inst;
 
-  CommitTrace(uint64_t cycle, uint64_t pc, uint32_t inst) : cycle(cycle), pc(pc), inst(inst) {}
+  CommitTrace(uint64_t pc, uint32_t inst) : pc(pc), inst(inst) {}
   virtual ~CommitTrace() {}
   virtual const char *get_type() = 0;
   virtual void display(bool use_spike = false);
@@ -50,9 +52,9 @@ public:
   uint8_t isStore;
   uint8_t sqidx;
 
-  InstrTrace(uint64_t cycle, uint64_t pc, uint32_t inst, uint8_t wen, uint8_t dest, uint64_t data, uint8_t lqidx, uint8_t sqidx,
+  InstrTrace(uint64_t pc, uint32_t inst, uint8_t wen, uint8_t dest, uint64_t data, uint8_t lqidx, uint8_t sqidx,
              uint16_t robidx, uint8_t isLoad, uint8_t isStore, bool skip = false, bool delayed = false)
-      : CommitTrace(cycle, pc, inst), robidx(robidx), isLoad(isLoad), lqidx(lqidx), isStore(isStore), sqidx(sqidx), wen(wen),
+      : CommitTrace(pc, inst), robidx(robidx), isLoad(isLoad), lqidx(lqidx), isStore(isStore), sqidx(sqidx), wen(wen),
         dest(dest), data(data), tag(get_tag(skip, delayed)) {}
   virtual inline const char *get_type() {
     return "commit";
@@ -86,7 +88,7 @@ private:
 class ExceptionTrace : public CommitTrace {
 public:
   uint64_t cause;
-  ExceptionTrace(uint64_t cycle, uint64_t pc, uint32_t inst, uint64_t cause) : CommitTrace(cycle, pc, inst), cause(cause) {}
+  ExceptionTrace(uint64_t pc, uint32_t inst, uint64_t cause) : CommitTrace(pc, inst), cause(cause) {}
   virtual inline const char *get_type() {
     return "exception";
   };
@@ -99,14 +101,16 @@ protected:
 
 class InterruptTrace : public ExceptionTrace {
 public:
-  InterruptTrace(uint64_t cycle, uint64_t pc, uint32_t inst, uint64_t cause) : ExceptionTrace(cycle, pc, inst, cause) {}
+  InterruptTrace(uint64_t pc, uint32_t inst, uint64_t cause) : ExceptionTrace(pc, inst, cause) {}
   virtual inline const char *get_type() {
     return "interrupt";
   }
 };
 
-class DiffState {
-public:
+// State copied when replay starts. Keep owning or self-referential types out.
+struct DiffStateValues {
+  explicit DiffStateValues(int coreid = 0) : coreid(coreid) {}
+
   int coreid;
   uint64_t cycle_count = 0;
   bool has_progress = false;
@@ -122,19 +126,8 @@ public:
   int delayed_fp[32] = {0};
 #endif // CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
 
-#ifdef CONFIG_DIFFTEST_STOREEVENT
-  std::queue<DifftestStoreEvent> store_event_queue;
-#endif // CONFIG_DIFFTEST_STOREEVENT
-
-#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-  std::unordered_set<uint64_t> cmo_inval_event_set;
-#endif
-
 #ifdef CONFIG_DIFFTEST_SQUASH
   int commit_stamp = 0;
-#ifdef CONFIG_DIFFTEST_LOADEVENT
-  std::queue<DifftestLoadEvent> load_event_queue;
-#endif // CONFIG_DIFFTEST_LOADEVENT
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #ifdef DEBUG_REFILL
@@ -143,7 +136,93 @@ public:
 
   bool dump_commit_trace = false;
 
+protected:
+  uint64_t commit_counter = 0;
+};
+
+class DiffState : public DiffStateValues {
+public:
+#ifdef CONFIG_DIFFTEST_STOREEVENT
+  typedef struct {
+    uint8_t valid;
+    uint64_t addr;
+    uint64_t data;
+    uint8_t mask;
+    uint64_t pc;
+    uint16_t robidx;
+    uint64_t origin_addr;
+    uint64_t origin_lowdata;
+    uint64_t origin_highdata;
+    uint16_t origin_mask;
+#ifdef CONFIG_DIFFTEST_SQUASH
+    uint32_t stamp;
+#endif // CONFIG_DIFFTEST_SQUASH
+  } StoreCommit;
+
+  std::queue<StoreCommit> store_event_queue;
+#endif // CONFIG_DIFFTEST_STOREEVENT
+
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  std::queue<DifftestStoreHashEvent> store_hash_queue;
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
+
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+  std::unordered_set<uint64_t> cmo_inval_event_set;
+#endif
+
+#ifdef CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_LOADEVENT
+  std::queue<DifftestLoadEvent> load_event_queue;
+#endif // CONFIG_DIFFTEST_LOADEVENT
+#endif // CONFIG_DIFFTEST_SQUASH
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  enum AmeInstState {
+    INVALID = 0,
+    WAIT_REF_COMMIT,  // Waiting for REF to commit the AME control event.
+    WAIT_DUT_EXEC,    // Waiting for DUT matrix execution and writeback.
+    WAIT_SWROB_COMMIT // Waiting for the software ROB to commit the result.
+  };
+
+  struct AmeInstRobEntry {
+    explicit AmeInstRobEntry(const DifftestAmuCtrlEvent &event)
+        : amu_event(event), state(WAIT_REF_COMMIT), res(nullptr) {}
+
+    DifftestAmuCtrlEvent amu_event;
+    AmeInstState state;
+    uint64_t *res;
+    MatrixHash128 hash{};
+  };
+
+  std::deque<AmeInstRobEntry> matrix_sw_rob;
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  std::queue<DifftestMsyncEvent> msync_event_queue;
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
+
   DiffState(int coreid);
+  ~DiffState() {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+    for (auto &entry: matrix_sw_rob) {
+      if (entry.res != nullptr) {
+        delete[] entry.res;
+        entry.res = nullptr;
+      }
+    }
+    matrix_sw_rob.clear();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+    while (!commit_trace.empty()) {
+      delete commit_trace.front();
+      commit_trace.pop();
+    }
+  }
+
+#ifdef CONFIG_DIFFTEST_REPLAY
+  void replay_snapshot();
+  void replay_restore();
+#endif // CONFIG_DIFFTEST_REPLAY
+
   void record_group(uint64_t pc, uint32_t count) {
     if (retire_group_queue.size() >= DEBUG_GROUP_TRACE_SIZE) {
       retire_group_queue.pop();
@@ -152,13 +231,13 @@ public:
   }
   void record_inst(uint64_t pc, uint32_t inst, uint8_t en, uint8_t dest, uint64_t data, bool skip, bool delayed,
                    uint8_t lqidx, uint8_t sqidx, uint16_t robidx, uint8_t isLoad, uint8_t isStore) {
-    push_back_trace(new InstrTrace(cycle_count, pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
+    push_back_trace(new InstrTrace(pc, inst, en, dest, data, lqidx, sqidx, robidx, isLoad, isStore, skip, delayed));
   };
   void record_exception(uint64_t pc, uint32_t inst, uint64_t cause) {
-    push_back_trace(new ExceptionTrace(cycle_count, pc, inst, cause));
+    push_back_trace(new ExceptionTrace(pc, inst, cause));
   };
   void record_interrupt(uint64_t pc, uint32_t inst, uint64_t cause) {
-    push_back_trace(new InterruptTrace(cycle_count, pc, inst, cause));
+    push_back_trace(new InterruptTrace(pc, inst, cause));
   };
   void display();
 
@@ -176,7 +255,6 @@ private:
   static const int DEBUG_INST_TRACE_SIZE = 32;
   std::queue<CommitTrace *> commit_trace;
 
-  uint64_t commit_counter = 0;
   void push_back_trace(CommitTrace *trace) {
     if (commit_trace.size() >= DEBUG_INST_TRACE_SIZE) {
       delete commit_trace.front();
@@ -193,6 +271,10 @@ private:
       fflush(stdout);
     }
   }
+
+#ifdef CONFIG_DIFFTEST_REPLAY
+  DiffStateValues replay_state;
+#endif // CONFIG_DIFFTEST_REPLAY
 };
 
 extern uint64_t get_commit_data(const DiffTestState *state, int index);

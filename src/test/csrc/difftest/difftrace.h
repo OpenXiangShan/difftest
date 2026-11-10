@@ -2,6 +2,7 @@
 #define __DIFFTRACE_H__
 
 #include "common.h"
+#include <limits.h>
 #ifdef CONFIG_DIFFTEST_IOTRACE
 #include "difftest-iotrace.h"
 #endif // CONFIG_DIFFTEST_IOTRACE
@@ -27,6 +28,7 @@ public:
 
   ~DiffTraceZstd() {
     ZSTD_freeCCtx(trace_cctx);
+    ZSTD_freeDCtx(trace_dctx);
   }
 
   void diff_zstd_next(const char *file_name, bool is_read);
@@ -41,6 +43,8 @@ private:
   uint64_t max_compress_size = 0; // The number of bytes in a single compression
   uint64_t max_dcompress_size = 0;
   std::vector<char> io_trace_buffer;
+  std::vector<char> inputBuffer;
+  ZSTD_inBuffer input = {nullptr, 0, 0};
 
   ZSTD_CCtx *trace_cctx = NULL;
   ZSTD_DCtx *trace_dctx = NULL;
@@ -50,7 +54,7 @@ private:
 
 template <typename T> class DiffTrace {
 public:
-  char trace_name[32];
+  char trace_name[PATH_MAX];
   bool is_read;
 #ifdef CONFIG_IOTRACE_ZSTD
   DiffTraceZstd *trace_zstd = NULL;

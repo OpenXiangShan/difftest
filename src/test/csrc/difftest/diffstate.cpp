@@ -18,7 +18,7 @@
 #include "spikedasm.h"
 
 void CommitTrace::display(bool use_spike) {
-  Info("%s cycle %lu pc %016lx inst %08x", get_type(), cycle, pc, inst);
+  Info("%s pc %016lx inst %08x", get_type(), pc, inst);
   display_custom();
   if (use_spike) {
     Info(" %s", spike_dasm(inst));
@@ -56,39 +56,38 @@ void DiffState::display() {
   fflush(stdout);
 }
 
-DiffState::DiffState(int coreid) : use_spike(spike_valid()), coreid(coreid) {
-  cycle_count = 0;
-  has_progress = false;
-  has_commit = false;
-  last_commit_cycle = 0;
-  has_trap = false;
-  trap_code = 0;
-#ifdef CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE
-  memset(delayed_int, 0, sizeof(delayed_int));
-#endif
-#ifdef CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE
-  memset(delayed_fp, 0, sizeof(delayed_fp));
-#endif
+DiffState::DiffState(int coreid) : DiffStateValues(coreid), use_spike(spike_valid()) {}
+
+#ifdef CONFIG_DIFFTEST_REPLAY
+void DiffState::replay_snapshot() {
+  replay_state = static_cast<const DiffStateValues &>(*this);
+}
+
+void DiffState::replay_restore() {
+  static_cast<DiffStateValues &>(*this) = replay_state;
+
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   store_event_queue = {};
-#endif
+#endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  store_hash_queue = {};
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
   cmo_inval_event_set.clear();
-#endif
-#ifdef CONFIG_DIFFTEST_SQUASH
-  commit_stamp = 0;
-#ifdef CONFIG_DIFFTEST_LOADEVENT
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
+#if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
   load_event_queue = {};
-#endif
-#endif
-#ifdef DEBUG_REFILL
-  track_instr = 0;
-#endif
-  dump_commit_trace = false;
+#endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
+#ifdef CONFIG_DIFFTEST_MSYNCEVENT
+  msync_event_queue = {};
+#endif // CONFIG_DIFFTEST_MSYNCEVENT
   retire_group_queue = {};
-  commit_trace = {};
-  commit_counter = 0;
+  while (!commit_trace.empty()) {
+    delete commit_trace.front();
+    commit_trace.pop();
+  }
 }
+#endif // CONFIG_DIFFTEST_REPLAY
 
 static uint64_t get_int_data(const DiffTestState *state, int index) {
 #ifdef CONFIG_DIFFTEST_PHYINTREGSTATE

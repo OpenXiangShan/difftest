@@ -118,7 +118,7 @@ long readFromElf(void *ptr, const char *file_name, long buf_size) {
       return -1;
     }
 
-    printf("Loading %ld bytes at address 0x%lx at offset 0x%lx\n", len, section.data_dst, offset);
+    // printf("Loading %ld bytes at address 0x%lx at offset 0x%lx\n", len, section.data_dst, offset);
     std::memset((uint8_t *)ptr + offset, 0, len);
     std::memcpy((uint8_t *)ptr + offset, section.data_src, section.data_len);
     len_written += len;

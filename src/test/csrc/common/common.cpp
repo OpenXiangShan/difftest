@@ -15,13 +15,18 @@
 ***************************************************************************************/
 
 #include "common.h"
+#include "splitview.h"
+#include <limits.h>
 #include <locale.h>
 #include <signal.h>
 #include <time.h>
+#include <unistd.h>
 
 int assert_count = 0;
 int signal_num = 0;
 const char *emu_path = NULL;
+static bool common_initialized = false;
+static bool common_finished = false;
 
 // Usage in SV/Verilog: xs_assert(`__LINE__);
 void xs_assert(long long line) {
@@ -40,8 +45,13 @@ void xs_assert_v2(const char *filename, long long line) {
 }
 
 void sig_handler(int signo) {
-  if (signal_num != 0)
-    exit(0);
+  static const char msg[] = "[common] SIGINT captured\n";
+  write(STDERR_FILENO, msg, sizeof(msg) - 1);
+  if (signal_num != 0) {
+    common_splitview_force_cleanup();
+    _exit(128 + signo);
+  }
+  common_splitview_request_finish();
   signal_num = signo;
 }
 
@@ -63,7 +73,38 @@ uint32_t uptime(void) {
 
 static char mybuf[BUFSIZ];
 
+static bool numeric_locale_has_grouping() {
+  struct lconv *lc = localeconv();
+  if (lc == NULL || lc->thousands_sep == NULL || lc->grouping == NULL) {
+    return false;
+  }
+  if (lc->thousands_sep[0] == '\0' || lc->grouping[0] == '\0') {
+    return false;
+  }
+  unsigned char first_group = lc->grouping[0];
+  return first_group != CHAR_MAX;
+}
+
+void common_set_locale() {
+  const char *numeric_locales[] = {
+    "", "en_US.UTF-8", "en_US.utf8", "zh_CN.UTF-8", "zh_CN.utf8",
+  };
+
+  for (auto locale: numeric_locales) {
+    if (setlocale(LC_NUMERIC, locale) != NULL && numeric_locale_has_grouping()) {
+      return;
+    }
+  }
+}
+
 void common_init_without_assertion(const char *program_name) {
+  if (common_initialized) {
+    return;
+  }
+
+  common_splitview_preinit(program_name);
+  atexit(common_splitview_finish);
+
   // set emu_path
   emu_path = program_name;
 
@@ -71,11 +112,13 @@ void common_init_without_assertion(const char *program_name) {
   elf_name = elf_name ? elf_name + 1 : program_name;
   Info("%s compiled at %s, %s\n", elf_name, __DATE__, __TIME__);
 
-  // set buffer for stderr
-  setbuf(stderr, mybuf);
+  // use buffered stderr only in linear log mode
+  if (!common_splitview_is_active()) {
+    setbuf(stderr, mybuf);
+  }
 
   // enable thousands separator for printf()
-  setlocale(LC_NUMERIC, "");
+  common_set_locale();
 
   // set up SIGINT handler
   if (signal(SIGINT, sig_handler) == SIG_ERR) {
@@ -86,6 +129,8 @@ void common_init_without_assertion(const char *program_name) {
 
   assert_count = -1;
   signal_num = 0;
+  common_initialized = true;
+  common_finished = false;
 }
 
 void common_enable_assert() {
@@ -99,6 +144,8 @@ void common_init(const char *program_name) {
 
 void common_finish() {
   fflush(stdout);
+  fflush(stderr);
+  common_finished = true;
 }
 
 static eprintf_handle_t eprintf_handle = vprintf;

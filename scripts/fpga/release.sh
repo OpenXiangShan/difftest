@@ -8,7 +8,7 @@ set -e
 CPU_DIR="$1"
 RELEASE_DIR="$2"
 RELEASE_SUFFIX="${3:-}"
-if [ $# -ne 2 ] && [ $# -ne 3]; then
+if [ $# -ne 2 ] && [ $# -ne 3 ]; then
     echo "Usage: $0 <CPU_PATH> <RELEASE_FOLDER> [RELEASE_SUFFIX]"
     exit 1
 fi
@@ -25,7 +25,7 @@ fi
 # 2. Extract cpu and cmdConfigs from JSON
 # ----------------------------------------------------------
 
-if [ command -v jq >/dev/null 2>&1 ]; then
+if command -v jq >/dev/null 2>&1; then
     CPU_NAME=$(jq -r '.cpu' "$PROFILE_JSON")
     CMDS=$(jq -r '.cmdConfigs[]?' "$PROFILE_JSON")
 else
@@ -70,6 +70,16 @@ if [ -n "$RELEASE_SUFFIX" ]; then
 fi
 RELEASE_HOME="$CPU_DIR/$RELEASE_TAG"
 
+copy_with_tar() {
+    local src="$1"
+    local dst="$2"
+    shift 2
+
+    echo "rsync not found; using tar fallback."
+    mkdir -p "$dst"
+    tar -C "$src" "$@" -cf - . | tar -C "$dst" -xf -
+}
+
 # ----------------------------------------------------------
 # 3. Copy RTL and Source Code
 # ----------------------------------------------------------
@@ -77,27 +87,54 @@ RELEASE_HOME="$CPU_DIR/$RELEASE_TAG"
 mkdir -p ${RELEASE_HOME}
 
 echo "Copying $CPU_DIR/build/ into $RELEASE_HOME/build ..."
-rsync -av \
-    --exclude='rtl/*.fir' \
-    --exclude='*-compile/' \
-    --exclude='emu/' \
-    --exclude='simv*' \
-    "$CPU_DIR/build/" "$RELEASE_HOME/build/"
+if command -v rsync >/dev/null 2>&1; then
+    rsync -av \
+        --exclude='rtl/*.fir' \
+        --exclude='*-compile/' \
+        --exclude='emu/' \
+        --exclude='simv*' \
+        "$CPU_DIR/build/" "$RELEASE_HOME/build/"
+else
+    copy_with_tar "$CPU_DIR/build" "$RELEASE_HOME/build" \
+        --exclude='rtl/*.fir' \
+        --exclude='*-compile' \
+        --exclude='emu' \
+        --exclude='simv*'
+fi
 echo "CPU Build copied."
 
 echo "Copying $DIFF_HOME into $RELEASE_HOME ..."
-rsync -av \
-    --include='config/***' \
-    --include='src/***' \
-    --include='*.mk' \
-    --include='Makefile' \
-    --exclude='*' \
-    "$DIFF_HOME/" "$RELEASE_HOME/difftest/"
+if command -v rsync >/dev/null 2>&1; then
+    rsync -av \
+        --exclude='.git' \
+        --exclude='worktrees/' \
+        --exclude='build/***' \
+        --exclude='build/' \
+        "$DIFF_HOME/" "$RELEASE_HOME/difftest/"
+else
+    copy_with_tar "$DIFF_HOME" "$RELEASE_HOME/difftest" \
+        --exclude='.git' \
+        --exclude='worktrees' \
+        --exclude='build'
+fi
+
+if [ -f "$CPU_DIR/Makefile" ]; then
+    echo "Copying $CPU_DIR/Makefile into $RELEASE_HOME/Makefile ..."
+    cp "$CPU_DIR/Makefile" "$RELEASE_HOME/Makefile"
+fi
 
 RELEASE_RTL="$RELEASE_HOME/build/rtl"
-echo "Copying $DIFF_HOME/src/test/vsrc/fpga into $RELEASE_RTL ..."
-cp $DIFF_HOME/src/test/vsrc/fpga/* $RELEASE_RTL
+echo "Copying $DIFF_HOME/src/test/vsrc/common/DifftestClockGate.v into $RELEASE_RTL ..."
+cp $DIFF_HOME/src/test/vsrc/common/DifftestClockGate.v $RELEASE_RTL
 echo "Difftest Source copied."
+
+echo "Replacing SimTop.soc with soc in SimTop.sv ..."
+SIMTOP_FILE="$RELEASE_RTL/SimTop.sv"
+if [ -f "$SIMTOP_FILE" ]; then
+    echo "$SIMTOP_FILE"
+    sed -i 's/SimTop\.//' "$SIMTOP_FILE"
+fi
+echo "SimTop.soc replacement done."
 
 echo "Replacing RAM with depth > 4000 to URAM ..."
 for f in "$RELEASE_RTL"/array_*.v; do
@@ -108,6 +145,31 @@ for f in "$RELEASE_RTL"/array_*.v; do
         "$f"
 done
 echo "Replacing done."
+
+echo "Replacing Diff RAT state banks with BRAM ..."
+for f in "$RELEASE_RTL"/diff_rat_state_bank_*.sv; do
+    [ -f "$f" ] || continue
+    echo "$f"
+    sed -E -i \
+        's@^([[:space:]]*)reg ([[:space:]]*\[[0-9]+:[0-9]+\]) Memory(\[0:[0-9]+\]);@\1(* ram_style = "block" *) reg \2 Memory\3;@' \
+        "$f"
+done
+echo "Replacing done."
+
+if [ -f "$RELEASE_RTL/ClockGate.sv" ]; then
+    echo "Replacing ClockGate.sv ..."
+    cat > "$RELEASE_RTL/ClockGate.sv" <<'CLOCKGATE_EOF'
+module ClockGate (
+    input  wire TE,
+    input  wire E,
+    input  wire CK,
+    output wire Q
+);
+    assign Q = CK;
+endmodule
+CLOCKGATE_EOF
+    echo "Replaceing done."
+fi
 
 # -----------------------------
 # 4. Print Git Version

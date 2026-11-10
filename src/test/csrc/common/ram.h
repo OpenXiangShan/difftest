@@ -134,12 +134,15 @@ class MmapMemory : public SimMemory {
 private:
   uint64_t *ram;
   uint64_t img_size;
+  bool clone_full_mem;
 
 public:
-  MmapMemory(const char *image, uint64_t n_bytes);
+  MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed);
   virtual ~MmapMemory();
-  void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
-    uint64_t n_bytes = skip_zero ? img_size : get_size();
+  void load_image(const char *image);
+  uint64_t pad_img_size(uint64_t align);
+  void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) {
+    size_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
     func(ram, n_bytes);
   }
   uint64_t &at(uint64_t index) {
@@ -161,7 +164,8 @@ private:
   std::ofstream footprints_file;
 
 public:
-  MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name);
+  MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name, bool random_mem,
+                           uint32_t seed);
   ~MmapMemoryWithFootprints();
   uint64_t &at(uint64_t index);
 };
@@ -183,7 +187,7 @@ public:
   FootprintsMemory(const char *footprints_name, uint64_t n_bytes);
   ~FootprintsMemory();
   uint64_t &at(uint64_t index);
-  void clone(std::function<void(void *, uint64_t)> func, bool skip_zero = false) {
+  void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) {
     printf("clone_instant not support by FootprintsMemory\n");
     assert(0);
   }
@@ -213,10 +217,18 @@ public:
 
 extern SimMemory *simMemory;
 // This is to initialize the common mmap RAM
-void init_ram(const char *image, uint64_t n_bytes);
+void init_ram(const char *image, uint64_t n_bytes, bool random_mem = false, uint32_t seed = 0);
+void load_ram_image(const char *image);
 void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes);
 void copy_ram(uint64_t copy_ram_offset);
 uint64_t parse_ramsize(const char *ramsize_str);
+
+#if defined(WITH_DRAMSIM3) || defined(WITH_MCSIM)
+
+extern "C" uint64_t memory_response(bool isWrite);
+extern "C" bool memory_request(uint64_t address, uint32_t id, bool isWrite);
+
+#endif
 
 #ifdef WITH_DRAMSIM3
 
@@ -224,13 +236,16 @@ void dramsim3_init(const char *config_file, const char *out_dir);
 void dramsim3_step();
 void dramsim3_finish();
 
-extern "C" uint64_t memory_response(bool isWrite);
-extern "C" bool memory_request(uint64_t address, uint32_t id, bool isWrite);
-
 struct dramsim3_meta {
   uint32_t id;
 };
 
+#endif
+
+#ifdef WITH_MCSIM
+void mcsim_backend_init();
+void mcsim_backend_step();
+void mcsim_backend_finish();
 #endif
 
 #endif

@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -13,15 +13,17 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#ifdef WOLVRIX_PARTITIONED_VERILATOR
+#ifndef __SPLITVIEW_H
+#define __SPLITVIEW_H
 
-#include "simulator.h"
+void common_splitview_preinit(const char *program_name);
+void common_splitview_finish();
+void common_splitview_force_cleanup();
+void common_splitview_request_finish();
+void common_splitview_request_detach();
+void common_splitview_set_uart_input_fd(int fd);
+void common_splitview_set_log_path(const char *path);
+bool common_splitview_is_active();
+int common_splitview_uart_fd();
 
-WolviRepCutVerilatorDiffTestSim::WolviRepCutVerilatorDiffTestSim() : dut(new WolviRepCutVerilatorSim) {}
-
-WolviRepCutVerilatorDiffTestSim::~WolviRepCutVerilatorDiffTestSim() {
-  delete dut;
-  dut = nullptr;
-}
-
-#endif // WOLVRIX_PARTITIONED_VERILATOR
+#endif // __SPLITVIEW_H

@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -53,6 +53,10 @@ typedef struct {
   uint64_t instrCnt;
   uint64_t cycleCnt;
 } WarmupInfo;
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#include "mma/mma_verifier.h"
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 class Difftest {
 public:
@@ -137,6 +141,12 @@ public:
     return dut;
   }
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  inline MmaVerifier *get_mma_verifier() {
+    return mma_verifier;
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
 #ifdef DEBUG_REFILL
   void set_track_instr(uint64_t instr) {
     state->track_instr = instr;
@@ -191,13 +201,61 @@ protected:
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   StoreChecker *store_checker = nullptr;
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  StoreHashChecker *store_hash_checker = nullptr;
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   LoadChecker *load_checker[CONFIG_DIFF_LOAD_WIDTH] = {nullptr};
 #ifdef CONFIG_DIFFTEST_SQUASH
   LoadSquashChecker *load_squash_checker = nullptr;
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_LOADEVENT
+#ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
+  MatrixStoreChecker *matrix_store_checker = nullptr;
+#endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  // MMA verifier instance
+  MmaVerifier *mma_verifier;
+
+  // AMU finish event buffers
+  // Each buffer is a 128x128 matrix of 32-bit elements (4 bytes each)
+  uint8_t *amu_finish_buffers[CONFIG_DIFF_AMU_FINISH_WIDTH];
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+
+#ifdef CONFIG_DIFFTEST_FAST_REF
+public:
+  // Select at startup or an established fork boundary.
+  bool set_ref_mode(RefExecMode mode);
+  int flush_fast_ref() {
+    return fast_ref_enabled ? fast_ref_checker->flush() : DiffTestChecker::STATE_OK;
+  }
+  int fork_check_step() {
+    return check_all();
+  }
+  int fork_commit_stamp() const {
+#ifdef CONFIG_DIFFTEST_SQUASH
+    return state->commit_stamp;
+#else
+    return 0;
+#endif
+  }
+
+private:
+  friend class FastRefChecker;
+  int fast_ref_step();
+  bool fast_ref_enabled = false;
+#endif
+  void add_sync_checker(DiffTestChecker *checker) {
+    checkers.push_back(checker);
+#ifdef CONFIG_DIFFTEST_FAST_REF
+    fast_checkers.push_back(checker);
+#endif
+  }
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  std::vector<DiffTestChecker *> fast_checkers; // First/sync checkers are owned by checkers.
+  FastRefChecker *fast_ref_checker = nullptr;
+#endif
   int check_all();
 
   inline bool in_disambiguation_state() {
@@ -226,7 +284,6 @@ protected:
     int trace_size;
   } replay_status;
 
-  DiffState *state_ss = NULL;
   uint8_t *proxy_reg_ss = NULL;
   uint64_t squash_csr_buf[4096];
   bool can_replay();
@@ -244,7 +301,18 @@ void difftest_switch_zone();
 void difftest_set_dut();
 int difftest_step();
 int difftest_state();
-void difftest_finish();
+void difftest_finish(bool report_perfcnt = true);
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+//Waits for all MMA verifier workers to drain their pending requests.
+void difftest_mma_flush_all();
+
+// Stops and joins all MMA verifier workers.
+void difftest_mma_stop_all();
+
+// Starts all MMA verifier workers.
+void difftest_mma_start_all();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 void difftest_trace_read();
 void difftest_trace_write(int step);
@@ -252,6 +320,7 @@ void difftest_trace_write(int step);
 #ifdef CONFIG_DIFFTEST_SQUASH
 extern "C" void set_squash_scope();
 extern "C" void difftest_squash_enable(int enable);
+extern "C" void difftest_squash_max_fused(int squash_max_fused);
 #endif // CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_REPLAY
 extern "C" void set_replay_scope();

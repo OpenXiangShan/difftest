@@ -15,11 +15,60 @@
 ***************************************************************************************/
 
 #include "serial_port.h"
+#include "common.h"
+#include "splitview.h"
+#include <cerrno>
+#include <cstring>
 #include <fcntl.h>
 #include <iostream>
-#include <sys/select.h>
+#include <poll.h>
+#include <termios.h>
+#include <unistd.h>
 
 #ifdef USE_SERIAL_PORT
+
+namespace {
+
+void close_fd(int &fd) {
+  if (fd >= 0) {
+    close(fd);
+    fd = -1;
+  }
+}
+
+bool wait_readable(int fd, int stop_fd, const char *name) {
+  pollfd fds[2] = {{fd, POLLIN, 0}, {stop_fd, POLLIN, 0}};
+
+  while (poll(fds, 2, -1) < 0) {
+    if (errno == EINTR) {
+      continue;
+    }
+    std::cerr << "SerialPort: " << name << " poll failed" << std::endl;
+    return false;
+  }
+
+  if (fds[1].revents) {
+    return false;
+  }
+  if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+    std::cerr << "SerialPort: " << name << " poll failed" << std::endl;
+    return false;
+  }
+  return fds[0].revents & POLLIN;
+}
+
+void emit_serial_output(const char *buf, size_t len) {
+  int fd = STDOUT_FILENO;
+#ifdef CONFIG_SPLITVIEW
+  const int uart_fd = common_splitview_uart_fd();
+  if (uart_fd >= 0) {
+    fd = uart_fd;
+  }
+#endif
+  write(fd, buf, len);
+}
+
+} // namespace
 
 bool SerialPort::open_port(int baudrate) {
   fd_ = open(device_, O_RDWR | O_NOCTTY | O_SYNC);
@@ -31,17 +80,18 @@ bool SerialPort::open_port(int baudrate) {
   memset(&tty, 0, sizeof tty);
   if (tcgetattr(fd_, &tty) != 0) {
     std::cerr << "Error from tcgetattr" << std::endl;
+    close_port();
     return false;
   }
   cfsetospeed(&tty, baudrate);
   cfsetispeed(&tty, baudrate);
-  tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8; // 8-bit chars
-  tty.c_iflag &= ~IGNBRK;                     // disable break processing
-  tty.c_lflag = 0;                            // no signaling chars, no echo,
-                                              // no canonical processing
-  tty.c_oflag = 0;                            // no remapping, no delays
-  tty.c_cc[VMIN] = 1;                         // read blocks
-  tty.c_cc[VTIME] = 1;                        // 0.1 seconds read timeout
+  tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;       // 8-bit chars
+  tty.c_iflag &= ~(IGNBRK | IGNCR | ICRNL | INLCR); // disable break and CR/LF remapping
+  tty.c_lflag = 0;                                  // no signaling chars, no echo,
+                                                    // no canonical processing
+  tty.c_oflag = 0;                                  // no remapping, no delays
+  tty.c_cc[VMIN] = 1;                               // read blocks
+  tty.c_cc[VTIME] = 1;                              // 0.1 seconds read timeout
 
   tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
 
@@ -53,37 +103,69 @@ bool SerialPort::open_port(int baudrate) {
 
   if (tcsetattr(fd_, TCSANOW, &tty) != 0) {
     std::cerr << "Error from tcsetattr" << std::endl;
+    close_port();
     return false;
   }
   return true;
 }
 
 void SerialPort::close_port() {
-  if (fd_ >= 0) {
-    close(fd_);
-    fd_ = -1;
-  }
+  close_fd(fd_);
 }
 
 SerialPort::~SerialPort() {
+  stop();
+}
+
+void SerialPort::start() {
+  if (pipe(stop_pipe_) != 0) {
+    std::cerr << "SerialPort: failed to create stop pipe" << std::endl;
+    return;
+  }
+  if (!open_port(B115200)) {
+    close_fd(stop_pipe_[0]);
+    close_fd(stop_pipe_[1]);
+    return;
+  }
+#ifdef CONFIG_SPLITVIEW
+  if (common_splitview_is_active()) {
+    common_splitview_set_uart_input_fd(dup(fd_));
+  }
+#endif
+  read_thread = std::thread(&SerialPort::start_read_thread, this);
+  if (!common_splitview_is_active()) {
+    write_thread = std::thread(&SerialPort::start_write_thread, this);
+  }
+}
+
+void SerialPort::stop() {
+  if (stop_pipe_[1] >= 0) {
+    char byte = 0;
+    write(stop_pipe_[1], &byte, sizeof(byte));
+  }
+  if (read_thread.joinable()) {
+    read_thread.join();
+  }
+  if (write_thread.joinable()) {
+    write_thread.join();
+  }
+  close_fd(stop_pipe_[0]);
+  close_fd(stop_pipe_[1]);
   close_port();
 }
+
 void SerialPort::start_read_thread() {
   char buf[256];
   try {
     printf("SerailPort: start read from %s\n", device_);
     setvbuf(stdout, NULL, _IONBF, 0);
-    while (running) {
-      fd_set readfds;
-      FD_ZERO(&readfds);
-      FD_SET(fd_, &readfds);
-      int ret = select(fd_ + 1, &readfds, nullptr, nullptr, nullptr);
-      if (ret > 0 && FD_ISSET(fd_, &readfds)) {
-        ssize_t n = read(fd_, buf, sizeof(buf) - 1);
-        if (n > 0) {
-          buf[n] = '\0';
-          printf("%s", buf);
-        }
+    while (wait_readable(fd_, stop_pipe_[0], "read")) {
+      ssize_t n = read(fd_, buf, sizeof(buf) - 1);
+      if (n > 0) {
+        emit_serial_output(buf, static_cast<size_t>(n));
+      } else if (n < 0 && errno != EINTR) {
+        std::cerr << "SerialPort: read failed" << std::endl;
+        break;
       }
     }
   } catch (const std::exception &e) {
@@ -96,19 +178,20 @@ void SerialPort::start_read_thread() {
 void SerialPort::start_write_thread() {
   try {
     printf("SerialPort: start write to %s\n", device_);
-    std::string line;
-    while (running) {
-      fd_set readfds;
-      FD_ZERO(&readfds);
-      FD_SET(STDIN_FILENO, &readfds);
-      timeval tv{1, 0}; // eheck timeout per second
-      int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv);
-      if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds)) {
-        std::string line;
-        if (std::getline(std::cin, line)) {
-          line.push_back('\n');
+    if (!isatty(STDIN_FILENO)) {
+      printf("SerialPort: stdin is not a TTY, disable UART input\n");
+      return;
+    }
+    while (wait_readable(STDIN_FILENO, stop_pipe_[0], "write")) {
+      std::string line;
+      if (std::getline(std::cin, line)) {
+        line.push_back('\n');
+        // write(fd_, line.c_str(), line.size());
+        if (fd_ >= 0) {
           write(fd_, line.c_str(), line.size());
         }
+      } else {
+        break;
       }
     }
   } catch (const std::exception &e) {

@@ -40,6 +40,7 @@ GRHSIM_MODEL_SELECT_HEADER := $(GRHSIM_EMU_BUILD_DIR)/grhsim_model_select.hpp
 GRHSIM_MODEL_BUILD_JOBS ?= $(if $(strip $(VM_BUILD_JOBS)),$(VM_BUILD_JOBS),64)
 GRHSIM_MODEL_MAKE_J := -j $(GRHSIM_MODEL_BUILD_JOBS)
 GRHSIM_MODEL_CXXFLAGS ?= -std=c++20 -O3
+WOLVRIX_GRHSIM_WAVEFORM ?= 0
 
 GRHSIM_CXX = $(CXX)
 GRHSIM_CXXFILES = $(EMU_CXXFILES) $(shell find $(GRHSIM_CSRC_DIR) -name "*.cpp")
@@ -47,8 +48,8 @@ GRHSIM_CXXFLAGS = $(subst \\\",\", $(EMU_CXXFLAGS))
 GRHSIM_CXXFLAGS += -I$(GRHSIM_CSRC_DIR) -I$(GRHSIM_MODEL_DIR_ABS) -I$(GRHSIM_EMU_BUILD_DIR) -DGRHSIM --std=c++20
 GRHSIM_CXXFLAGS += -I$(abspath ../../../wolvrix/external/libfst/src)
 GRHSIM_CXXFLAGS += -DWOLVRIX_GRHSIM_WAVEFORM=$(WOLVRIX_GRHSIM_WAVEFORM)
-GRHSIM_CXXFLAGS += $(EMU_OPTIMIZE) $(PGO_CFLAGS)
-GRHSIM_LDFLAGS = $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS)
+GRHSIM_CXXFLAGS += $(EMU_OPTIMIZE) $(PGO_CFLAGS) -pthread
+GRHSIM_LDFLAGS = $(SIM_LDFLAGS) -ldl $(PGO_LDFLAGS) -pthread
 
 # $(1): object file
 # $(2): source file
@@ -66,9 +67,9 @@ endef
 # $(2): source file
 # $(3): ld flags
 define GRHSIM_LD_TEMPLATE =
-$(1): $(2) $(GRHSIM_MODEL_LIB)
+$(1): $(2) $(GRHSIM_MODEL_LIB) $(SIM_EXTRA_OBJS)
 	@mkdir -p $$(@D) && echo + LD $$@
-	@$(GRHSIM_CXX) $$^ $(3) -o $$@
+	@$(GRHSIM_CXX) $(2) $(GRHSIM_MODEL_LIB) $(3) -o $$@
 endef
 
 $(foreach x,$(GRHSIM_CXXFILES),$(eval \

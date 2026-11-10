@@ -16,8 +16,9 @@
 
 #include "simfrontend.h"
 #include "debug.h"
+#include "flash.h"
 #include "ftq.h"
-#include "tracereader.h"
+#include "instructionsource.h"
 #include <assert.h>
 #include <cstddef>
 #include <cstdio>
@@ -37,16 +38,15 @@ bool get_debug_flag() {
 
 std::vector<std::string_view> debug_read_line_vector;
 
-MmapLineReader trace_fetch;
+InstructionTraceSource trace_fetch;
 ContinuityChecker PcChecker;
 FetchTargetQueue ftq;
 uint32_t tick_fetch_count = 0;
 
 bool TryFetchNextLine(uint32_t read_count) {
-  if (trace_fetch.is_final)
+  if (trace_fetch.is_final())
     return false;
 
-  std::string_view line;
   for (uint32_t i = 0; i < read_count; ++i) {
     if (ftq.is_full()) {
       DEBUG_INFO(std::cout << "FTQ Full" << std::endl;)
@@ -54,27 +54,25 @@ bool TryFetchNextLine(uint32_t read_count) {
       return false;
     }
 
-    if (!trace_fetch.get_next_line(line)) {
+    InstructionTraceEntry current_entry;
+    if (!trace_fetch.get_next(current_entry)) {
+      if (!trace_fetch.error().empty()) {
+        std::cerr << "SimFrontend trace error: " << trace_fetch.error() << std::endl;
+        assert(false && "invalid SimFrontend instruction trace");
+      }
       ftq.set_final();
       return false;
     }
     debug_line_number = trace_fetch.get_line_read_count();
 
-    uint64_t current_pc;
-    uint32_t current_instr;
+    bool is_discontinuous = PcChecker.is_discontinuous(current_entry.pc, current_entry.instr);
+    InstructionTraceEntry next_entry = current_entry;
+    if (!trace_fetch.probe_next(next_entry) && !trace_fetch.error().empty()) {
+      std::cerr << "SimFrontend trace error: " << trace_fetch.error() << std::endl;
+      assert(false && "invalid SimFrontend instruction trace");
+    }
 
-    parse_line(line, current_pc, current_instr);
-
-    bool is_discontinuous = PcChecker.is_discontinuous(current_pc, current_instr);
-    uint64_t next_pc = current_pc;
-    uint32_t next_instr = current_instr;
-    std::string_view next_line;
-
-    if (trace_fetch.probe_next_line(next_line)) {
-      parse_line(next_line, next_pc, next_instr);
-    };
-
-    if (!ftq.enqueue(current_pc, current_instr, next_pc, next_instr, is_discontinuous))
+    if (!ftq.enqueue(current_entry.pc, current_entry.instr, next_entry.pc, next_entry.instr, is_discontinuous))
       assert(false && "ftq full");
   }
 
@@ -148,10 +146,10 @@ void SimFrontGetFtqToBackEnd(uint64_t *pc, uint32_t *pack_data, uint64_t *newest
   bool ftq_full = ftq.is_full();
 
   if (ftq_read_empty) {
-    if (trace_fetch.is_final) {
+    if (trace_fetch.is_final()) {
       ftq.set_final();
     }
-    if (trace_fetch.is_final || ftq_full) {
+    if (trace_fetch.is_final() || ftq_full) {
       return;
     }
 
@@ -170,19 +168,15 @@ void SimFrontGetFtqToBackEnd(uint64_t *pc, uint32_t *pack_data, uint64_t *newest
   size_t next_id = ftq.get_read_ftq_id();
   auto newest_ftq_info = ftq.peek_id_group(0);
   if (!newest_ftq_info.has_value()) {
-    if (trace_fetch.is_final) {
+    if (trace_fetch.is_final()) {
       return;
     }
 
-    std::string_view line;
-    uint64_t current_pc;
-    uint32_t current_instr;
-
-    if (!trace_fetch.probe_next_line(line))
+    InstructionTraceEntry next_entry;
+    if (!trace_fetch.probe_next(next_entry))
       return;
-    parse_line(line, current_pc, current_instr);
 
-    *newest_pc = current_pc;
+    *newest_pc = next_entry.pc;
     *newest_pack_data = (1ULL << 6) | ftq_id;
   } else {
 
@@ -211,13 +205,15 @@ void SimFrontRobCommit(uint32_t valid, uint32_t ftqIdxFlag, uint32_t ftqIdxValue
 }
 
 bool init_sim_frontend(const std::string &file) {
-  trace_fetch.init(file);
-  if (!trace_fetch.is_open) {
-    std::cerr << "Failed to open file." << std::endl;
-    assert(false && "Failed to open file.");
-    return 1;
+  const FlashImageView flash = {reinterpret_cast<const uint8_t *>(flash_dev.base),
+                                static_cast<size_t>(flash_dev.img_size), static_cast<size_t>(flash_dev.size),
+                                flash_dev.img_path == nullptr};
+  if (!trace_fetch.init(file, flash)) {
+    std::cerr << "Failed to initialize SimFrontend trace: " << trace_fetch.error() << std::endl;
+    assert(false && "Failed to initialize SimFrontend trace");
+    return false;
   }
-  std::cout << "Open instrction trace: " << file << std::endl;
+  std::cout << "Open instruction trace: " << file << std::endl;
 
   return true;
 }

@@ -51,14 +51,23 @@ private:
   uint64_t phase_timing_tick_total_us = 0;
   uint64_t phase_timing_single_cycle_us = 0;
   uint64_t phase_timing_difftest_us = 0;
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  uint64_t accelerator_clock_phase = 0;
+  unsigned accelerator_clock_level = 0;
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 
   inline void reset_ncycles(size_t cycles);
+  inline void verilator_half_cycle(unsigned core_clock_level);
   inline void single_cycle();
   void trigger_stat_dump();
   void display_stats();
 
   inline const char *logdb_filename() {
     return create_noop_filename(".db");
+  }
+
+  inline const char *db_filename() {
+    return args.db_path ? args.db_path : logdb_filename();
   }
 
   void snapshot_save();

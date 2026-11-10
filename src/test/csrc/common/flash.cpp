@@ -16,6 +16,7 @@
 
 #include "flash.h"
 #include "common.h"
+#include "compress.h"
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -60,6 +61,19 @@ void init_flash(const char *flash_bin) {
   Info("Using simulated %luB flash\n", flash_dev.size);
 
   if (!flash_bin) {
+#if defined(CPU_XIANGSHAN_KMHV2) || defined(CPU_XIANGSHAN_KMHV3)
+    /** no specified flash_path, use defualt 6 instructions */
+    // csrrsi x0, mnstatus, 8     # 0x74446073 set mnstatus.nmie
+    // addiw  t0, zero, 1         # 0x0010029b
+    // slli   t1, t0, 42          # 0x02a29313
+    // csrrc  x0, mstatus, t1     # 0x30033073 clear mstatus.mdt
+    // slli   t0, t0, 31          # 0x01f29293
+    // jr     t0                  # 0x00028067 jump 0x80000000
+    flash_dev.base[0] = 0x0010029b74446073;
+    flash_dev.base[1] = 0x3003307302a29313;
+    flash_dev.base[2] = 0x0002806701f29293;
+    flash_dev.img_size = 3 * sizeof(uint64_t);
+#else
     /** no specified flash_path, use defualt 3 instructions */
     // addiw   t0,zero,1
     // slli    to,to,  0x1f
@@ -67,11 +81,26 @@ void init_flash(const char *flash_bin) {
     flash_dev.base[0] = 0x01f292930010029b;
     flash_dev.base[1] = 0x00028067;
     flash_dev.img_size = 2 * sizeof(uint64_t);
+#endif // CPU_XIANGSHAN_KMHV2 || CPU_XIANGSHAN_KMHV3
     return;
   }
 
   flash_dev.img_path = (char *)flash_bin;
   Info("use %s as flash bin\n", flash_dev.img_path);
+
+  if (isGzFile(flash_dev.img_path)) {
+    long ret = readFromGz(flash_dev.base, flash_dev.img_path, flash_dev.size, LOAD_SNAPSHOT);
+    assert(ret >= 0);
+    flash_dev.img_size = ret;
+    return;
+  }
+
+  if (isZstdFile(flash_dev.img_path)) {
+    long ret = readFromZstd(flash_dev.base, flash_dev.img_path, flash_dev.size, LOAD_SNAPSHOT);
+    assert(ret >= 0);
+    flash_dev.img_size = ret;
+    return;
+  }
 
   FILE *flash_fp = fopen(flash_dev.img_path, "r");
   if (!flash_fp) {

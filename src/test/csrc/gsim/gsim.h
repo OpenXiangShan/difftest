@@ -71,15 +71,9 @@ public:
     dut->set_difftest__DOT__logCtrl__DOT__end(end);
   }
 
-#ifdef GSIM_RUNTIME_PROFILE
-  inline void set_runtime_profile_enabled(bool enabled) override {
-    dut->set_runtime_profile_enabled(enabled);
-  }
-
-  inline void dump_runtime_profile() const override {
-    dut->dump_runtime_profile();
-  }
-#endif
+  void waveform_init(uint64_t cycles) override;
+  void waveform_init(uint64_t cycles, const char *filename) override;
+  void waveform_tick() override;
 };
 
 #endif // __SIMULATOR_GSIM_H

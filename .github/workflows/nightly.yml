@@ -13,10 +13,10 @@ jobs:
     #     which is the default apt-installed version on ubuntu 20.04.
     #     On ubuntu 22.04, toolchain 11.4.0 won't compile riscv-arch-test.
     # (2) to test whether difftest compiles correctly on ubuntu 20.04
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-20.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-20.04-slim
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Enable -Werror for EMU Build
         run: |
@@ -30,21 +30,21 @@ jobs:
               | grep "browser_download_url"                                          \
               | grep "libfuzzer-ubuntu-20.04.a"                                      \
               | cut -d '"' -f 4                                                      \
-              | xargs wget -O libfuzzer.a
+              | xargs curl -fL --retry 3 -o libfuzzer.a
 
       - name: Download the customized firtool
         run: |
             curl -s https://api.github.com/repos/OpenXiangShan/circt/releases/latest \
               | grep "browser_download_url"                                          \
-              | grep "firtool-1.135.0-ubuntu-20.04"                                  \
+              | grep "firtool-1.155.0-ubuntu-20.04"                                  \
               | cut -d '"' -f 4                                                      \
-              | xargs wget -O firtool
+              | xargs curl -fL --retry 3 -o firtool
             chmod +x ./firtool
 
       - name: Build the fuzzing corpus - riscv-arch-test
         run: |
             cd $GITHUB_WORKSPACE/..
-            git clone https://github.com/OpenXiangShan/riscv-arch-test.git
+            git clone -b main --single-branch https://github.com/OpenXiangShan/riscv-arch-test.git
             cd riscv-arch-test/riscv-test-suite
             make build_I CROSS=riscv64-linux-gnu- RISCV_ARCH=rv64gc -j2
             rm build/*.elf build/*.txt
@@ -84,9 +84,9 @@ jobs:
       matrix:
         os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:${{ matrix.os }}
+    container: ghcr.io/openxiangshan/xs-env:${{ matrix.os }}-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare XiangShan
         run: |
@@ -105,7 +105,7 @@ jobs:
           mv $NOOP_HOME/build/libdifftest.so $GITHUB_WORKSPACE/libdifftest.so
 
       - name: Release libdifftest.so to artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: libdifftest-${{ matrix.os }}-xiangshan.so
           path: libdifftest.so

@@ -17,6 +17,7 @@
 #define __SIMULATOR_H
 
 #include "common.h"
+#include "splitview.h"
 
 struct SimulatorRuntimeStats {
   uint64_t modelStepCount = 0;
@@ -27,8 +28,6 @@ struct SimulatorRuntimeStats {
   uint64_t totalRoundCount = 0;
   uint64_t computeBatchExecCount = 0;
   uint64_t commitBatchExecCount = 0;
-  uint64_t computePhaseTimeUs = 0;
-  uint64_t commitPhaseTimeUs = 0;
   uint64_t touchedStateShadowCount = 0;
   uint64_t touchedWriteCount = 0;
 };
@@ -60,6 +59,11 @@ public:
   /******* mandatory methods for child classes *******/
   // Set the clock signal, 0 or 1.
   virtual void set_clock(unsigned clock) = 0;
+  // Optional independent accelerator clock. Simulators without this port may ignore it.
+  virtual void set_accelerator_clock(unsigned) {}
+  virtual unsigned get_accelerator_clock() const {
+    return 0;
+  }
   // Set the reset signal, 0 or 1.
   virtual void set_reset(unsigned reset) = 0;
   // Tick one step. Note this method may have various implementations.
@@ -129,8 +133,15 @@ public:
   // This method cannot be overridden.
   inline void step_uart() {
     if (get_uart_out_valid()) {
-      printf("%c", get_uart_out_ch());
-      fflush(stdout);
+      char ch = static_cast<char>(get_uart_out_ch());
+      int fd = STDOUT_FILENO;
+#ifdef CONFIG_SPLITVIEW
+      const int uart_fd = common_splitview_uart_fd();
+      if (uart_fd >= 0) {
+        fd = uart_fd;
+      }
+#endif
+      write(fd, &ch, 1);
     }
     if (get_uart_in_valid()) {
       extern uint8_t uart_getc();
@@ -140,13 +151,8 @@ public:
 };
 
 #ifdef VERILATOR
-#ifdef WOLVRIX_PARTITIONED_VERILATOR
-#define SIMULATOR WolviRepCutVerilatorDiffTestSim
-#include "partitioned_verilator.h"
-#else
 #define SIMULATOR VerilatorSim
 #include "verilator.h"
-#endif
 #endif // VERILATOR
 
 #ifdef GSIM

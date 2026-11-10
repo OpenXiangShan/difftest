@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -75,6 +75,17 @@ static const char *regs_name_fp_csr[] = {
   "fcsr"
 };
 
+static const char *regs_name_matrix_csr[] = {
+  "mcsr", "mxrm", "msat", "mfflags", "mfrm", "msaten",
+  "tlenb", "trlenb", "alenb",
+  "mtilem", "mtilen", "mtilek", "msync"
+};
+
+static const char *regs_name_mcfg[] = {
+  "mcfg0", "mcfg1", "mcfg2", "mcfg3",
+  "mcfg4", "mcfg5", "mcfg6", "mcfg7"
+};
+
 static const char *regs_name_triggercsr[] = {
   "tselect", "tdata1", "tinfo"
 };
@@ -84,6 +95,15 @@ static const char *regs_name_triggercsr[] = {
 enum {
   REF_TO_DUT,
   DUT_TO_REF
+};
+
+struct DifftestStateHash {
+  uint64_t state_lo, state_hi;
+  uint64_t store_lo, store_hi, store_count;
+};
+enum RefExecMode {
+  REF_EXEC_FAST = 0,
+  REF_EXEC_SLOW = 1
 };
 
 class RefProxyConfig {
@@ -134,7 +154,25 @@ public:
   REF_STORE_LOG(f)  \
   REF_DEBUG_MODE(f)
 
-#define REF_OPTIONAL(f)                                                                                     \
+// Optional for old SLOW REFs; validate when the corresponding mode is selected.
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#define REF_EXEC_MODE(f) \
+  f(ref_set_exec_mode, difftest_set_exec_mode, void, int) \
+  f(ref_get_instr_count, difftest_get_instr_count, uint64_t, )
+#else
+#define REF_EXEC_MODE(f)
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+#define REF_FORK(f) \
+  f(ref_state_hash, difftest_state_hash, int, void*)
+#else
+#define REF_FORK(f)
+#endif
+
+#define REF_OPTIONAL(f) \
+  f(ref_store_commit_hash, difftest_store_commit_hash, int, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) \
+  REF_EXEC_MODE(f) \
+  REF_FORK(f)                                                                                     \
   f(ref_init_v2, difftest_init_v2, void, unsigned)                                                          \
   f(load_flash_bin, difftest_load_flash, void, const char*, size_t)                                         \
   f(load_flash_bin_v2, difftest_load_flash_v2, void, const uint8_t*, size_t)                                \
@@ -158,7 +196,14 @@ public:
   f(ref_sync_custom_mflushpwr, difftest_sync_custom_mflushpwr, void, bool)                                  \
   f(ref_get_vec_load_vdNum, difftest_get_vec_load_vdNum, int, )                                             \
   f(ref_get_vec_load_dual_goldenmem_reg, difftest_get_vec_load_dual_goldenmem_reg, void*, )                 \
-  f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )
+  f(ref_update_vec_load_goldenmen, difftest_update_vec_load_pmem, void, )                                   \
+  f(ref_amu_ctrl, difftest_amu_ctrl, int, void*)                                                            \
+  f(ref_get_amu_ctrl_event_other_info, difftest_get_amu_ctrl_event_other_info, void, void*)                 \
+  f(ref_msync_event, difftest_msync_event, int, void*)                                                      \
+  f(ref_get_msync_event_other_info, difftest_get_msync_event_other_info, void, void*)                       \
+  f(ref_amu_exec, difftest_amu_exec, int, void*, void*)                                                     \
+  f(ref_amu_exec_hash, difftest_amu_exec_hash, int, void*, void*)                                           \
+  f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -199,6 +244,12 @@ typedef struct __attribute__((packed)) {
 #ifdef CONFIG_DIFFTEST_FPCSRSTATE
   DifftestFpCSRState fcsr;
 #endif // CONFIG_DIFFTEST_FPCSRSTATE
+#ifdef CONFIG_DIFFTEST_MATRIXCSRSTATE
+  DifftestMatrixCSRState mcsr;
+#endif
+#ifdef CONFIG_DIFFTEST_MCFGSTATE
+  DifftestMcfgState mcfg;
+#endif // CONFIG_DIFFTEST_MCFGSTATE
 #ifdef CONFIG_DIFFTEST_TRIGGERCSRSTATE
   DifftestTriggerCSRState triggercsr;
 #endif // CONFIG_DIFFTEST_TRIGGERCSRSTATE
@@ -230,13 +281,24 @@ public:
     ref_regcpy(&state.xrf, is_from_dut, is_from_dut);
   }
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  using AbstractRefProxy::ref_get_instr_count;
+  using AbstractRefProxy::ref_set_exec_mode;
+  bool require_exec_mode_interfaces(bool with_fork);
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  inline bool state_hash(DifftestStateHash &hash) {
+    return ref_state_hash && ref_state_hash(&hash) == 0;
+  }
+#endif
+
   void regcpy(const DiffTestRegState *regs, uint64_t pc);
   int compare(DiffTestState *dut);
   void display(DiffTestState *dut = nullptr);
 
   inline void skip_one(bool isRVC, bool rfwen, bool fpwen, bool vecwen, uint32_t wdest, uint64_t wdata) {
     bool wen = rfwen | fpwen;
-    if (ref_skip_one) {
+    if (ref_skip_one && !fpwen && !vecwen) {
       ref_skip_one(isRVC, wen, wdest, wdata);
     } else {
       sync();
@@ -374,13 +436,86 @@ public:
 
   void flash_init(const uint8_t *flash_base, size_t size, const char *flash_bin);
 
+  inline void report_unsupported_ref(const char *feature) {
+    Info("This version of 'REF' does not support %s. Please use a newer version of 'REF'.\n", feature);
+  }
+
   inline void get_store_event_other_info(void *info) {
     if (ref_get_store_event_other_info) {
       ref_get_store_event_other_info(info);
     } else {
-      Info(
-          "This version of 'REF' does not support the 'PC' value of store commit event. Please use a newer version of "
-          "'REF'.\n");
+      report_unsupported_ref("the 'PC' value of store commit event");
+    }
+  }
+
+  inline int store_commit_hash(uint64_t count, uint64_t hash_lo, uint64_t hash_hi, uint64_t instr_begin,
+                               uint64_t instr_end) {
+    if (ref_store_commit_hash) {
+      return ref_store_commit_hash(count, hash_lo, hash_hi, instr_begin, instr_end);
+    }
+    report_unsupported_ref("store commit hash checking");
+    return 1;
+  }
+
+  inline int get_amu_ctrl_event(struct AmuCtrlEvent *info) {
+    if (ref_amu_ctrl) {
+      return ref_amu_ctrl(info);
+    } else {
+      report_unsupported_ref("the 'PC' value of AmuCtrl event");
+      return 1;
+    }
+  }
+
+  inline void get_amu_ctrl_event_other_info(void *info) {
+    if (ref_get_amu_ctrl_event_other_info) {
+      ref_get_amu_ctrl_event_other_info(info);
+    } else {
+      report_unsupported_ref("the 'PC' value of AmuCtrl event");
+    }
+  }
+
+  inline int get_msync_event(struct MsyncEvent *info) {
+    if (ref_msync_event) {
+      return ref_msync_event(info);
+    } else {
+      report_unsupported_ref("the 'PC' value of Msync event");
+      return 1;
+    }
+  }
+
+  inline void get_msync_event_other_info(void *info) {
+    if (ref_get_msync_event_other_info) {
+      ref_get_msync_event_other_info(info);
+    } else {
+      report_unsupported_ref("the 'PC' value of Msync event");
+    }
+  }
+
+  inline int exec_amu(struct AmuCtrlEvent *amu_ctrl, void *matrix = nullptr) {
+    if (ref_amu_exec) {
+      return ref_amu_exec(amu_ctrl, matrix);
+    } else {
+      report_unsupported_ref("AME");
+      return 1;
+    }
+  }
+
+  inline int exec_amu_hash(struct AmuCtrlEvent *amu_ctrl, struct MatrixHash128 *result) {
+    if (ref_amu_exec_hash) {
+      return ref_amu_exec_hash(amu_ctrl, result);
+    } else {
+      report_unsupported_ref("AME result hash");
+      return 1;
+    }
+  }
+
+  inline int exec_amu_lazy(struct AmuCtrlEvent *amu_ctrl, void *res, void *src1, void *src2, void *src3) {
+    if (ref_amu_lazy) {
+      ref_amu_lazy(amu_ctrl, res, src1, src2, src3);
+      return 0;
+    } else {
+      report_unsupported_ref("AME");
+      return 1;
     }
   }
 
@@ -465,6 +600,36 @@ struct FromAIA {
 struct InterruptDelegate {
   bool irToHS;
   bool irToVS;
+};
+
+// These structures mirror NEMU's naturally aligned AME ABI. The generated
+// Difftest events may be packed in batch mode; conversion is performed by the
+// corresponding checker before invoking RefProxy.
+struct AmuCtrlEvent {
+  uint8_t valid;
+  uint8_t op;
+  uint8_t rm;
+  uint8_t md;
+  uint8_t sat;
+  uint8_t ms1;
+  uint8_t ms2;
+  uint16_t mtilem;
+  uint16_t mtilen;
+  uint16_t mtilek;
+  uint8_t types1;
+  uint8_t types2;
+  uint8_t typed;
+  uint8_t isfp;
+  uint64_t base;
+  uint64_t stride;
+  uint64_t pc;
+};
+
+struct MsyncEvent {
+  uint8_t valid;
+  uint8_t op;
+  uint8_t msyncRd;
+  uint64_t pc;
 };
 
 extern const char *difftest_ref_so;

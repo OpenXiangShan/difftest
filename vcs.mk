@@ -28,10 +28,22 @@ VCS_CXXFILES  = $(SIM_CXXFILES) $(shell find $(VCS_CSRC_DIR) -name "*.cpp")
 VCS_CXXFLAGS  = $(SIM_CXXFLAGS) -I$(VCS_CSRC_DIR)
 VCS_LDFLAGS   = $(SIM_LDFLAGS) -lpthread -ldl
 
+# VCS places -LDFLAGS before the generated object files.  Force the static
+# DRAMsim3 archive to be included so its co-simulation implementation is not
+# skipped by the linker's one-pass archive scan.
+ifeq ($(WITH_DRAMSIM3),1)
+VCS_LDFLAGS := $(filter-out -L$(DRAMSIM3_HOME)/build -ldramsim3,$(VCS_LDFLAGS))
+VCS_LDFLAGS += -Wl,--whole-archive $(DRAMSIM3_HOME)/build/libdramsim3.a -Wl,--no-whole-archive
+endif
+
 VCS_VSRC_DIR 	= $(abspath ./src/test/vsrc/vcs)
 VCS_VFILES    = $(SIM_VSRC) $(shell find $(VCS_VSRC_DIR) -name "*.v" -or -name "*.sv")
 
 VCS_FLAGS 		= $(SIM_VFLAGS)
+
+ifeq ($(WITH_DRAMSIM3),1)
+VCS_FLAGS += +define+WITH_DRAMSIM3
+endif
 
 ifeq ($(RELEASE),1)
 VCS_FLAGS    += +define+SNPS_FAST_SIM_FFV +define+USE_RF_DEBUG
@@ -60,8 +72,19 @@ ifeq ($(VCS),verilator)
 VCS_FLAGS += --exe --cc --main --top-module $(VCS_TOP) -Wno-WIDTH --max-num-width 150000
 VCS_FLAGS += --instr-count-dpi 1 --timing +define+VERILATOR_5
 VCS_FLAGS += -Mdir $(VCS_BUILD_DIR)  --compiler gcc
-VCS_CXXFLAGS += -std=c++20
-else
+ifneq (,$(filter $(EMU_TRACE),1 vcd VCD))
+VCS_FLAGS += --trace +define+EMU_TRACE
+else ifneq (,$(filter $(EMU_TRACE),fst FST))
+VCS_FLAGS += --trace-fst +define+EMU_TRACE +define+ENABLE_FST
+endif
+
+VCS_CXXFLAGS += -std=c++20 $(PGO_CFLAGS)
+VCS_LDFLAGS += $(PGO_LDFLAGS)
+EMU_THREADS ?= 0
+ifneq ($(EMU_THREADS),0)
+VCS_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
+endif
+else # VCS = verilator
 VCS_FLAGS += -full64 +v2k -top $(VCS_TOP) -timescale=1ns/1ns -sverilog -debug_access+all +lint=TFIPC-L
 VCS_FLAGS += -Mdir=$(VCS_BUILD_DIR) -j200
 VCS_FLAGS += +define+VCS
@@ -72,7 +95,7 @@ else
 VCS_FLAGS += +vcs+initreg+random
 endif
 VCS_CXXFLAGS += -std=c++11 -static
-endif
+endif # VCS = verilator
 
 VCS_FLAGS += -o $(VCS_TARGET)
 ifneq ($(ENABLE_XPROP),1)
@@ -95,7 +118,24 @@ VCS_FLAGS += +incdir+$(GEN_VSRC_DIR)
 # enable fsdb dump
 VCS_FLAGS += $(EXTRA)
 
+# Profile Guided Optimization
+PGO_MAX_CYCLE = 100000   # Default for VCS = verilator; cmdline can override
+VCS_PGO_ARGS ?= +no-diff
+VCS_PGO_RUN_OPT = "+workload=$(PGO_WORKLOAD) +max-cycles=$(PGO_MAX_CYCLE) $(VCS_PGO_ARGS)"
+
 $(VCS_TARGET): $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
+ifdef PGO_WORKLOAD
+	$(MAKE) pgo-build \
+		PGO_CLEAN_OBJ=vcs-clean-obj \
+		PGO_BUILD_TARGET=vcs-build \
+		PGO_TARGET=$(VCS_TARGET) \
+		PGO_EMU_DIR=$(VCS_BUILD_DIR) \
+		PGO_RUN_OPT=$(VCS_PGO_RUN_OPT)
+else
+	@$(MAKE) vcs-build
+endif # PGO_WORKLOAD
+
+vcs-build:
 	$(VCS) $(VCS_FLAGS) $(SIM_TOP_V) $(VCS_CXXFILES) $(VCS_VFILES)
 ifeq ($(VCS),verilator)
 	$(MAKE) -s -C $(VCS_BUILD_DIR) -f V$(VCS_TOP).mk
@@ -131,6 +171,9 @@ simv-run:
 	ln -s $(VCS_TARGET) $(VCS_RUN_DIR)/simv
 	ln -s $(BUILD_DIR)/simv.daidir $(VCS_RUN_DIR)/simv.daidir
 	cd $(VCS_RUN_DIR) && (./simv $(RUN_OPTS) 2> assert.log | tee sim.log)
+
+vcs-clean-obj:
+	rm -f $(VCS_BUILD_DIR)/*.o $(VCS_BUILD_DIR)/*.gch $(VCS_BUILD_DIR)/*.a $(VCS_TARGET)
 
 vcs-clean:
 	rm -rf simv csrc DVEfiles simv.daidir stack.info.* ucli.key $(VCS_BUILD_DIR)

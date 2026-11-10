@@ -95,6 +95,10 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif // VERILATOR
 
   args = parse_args(argc, argv);
+#ifdef CONFIG_NO_DIFFTEST
+  args.enable_diff = false;
+  Info("[DIFFTEST_MODE] disabled (CONFIG_NO_DIFFTEST): collection=off checking=off\n");
+#endif
   progress_trace_interval_cycles = parse_env_u64("EMU_PROGRESS_EVERY_CYCLES", 0);
   progress_trace_enabled = progress_trace_interval_cycles != 0;
   next_progress_trace_cycle = progress_trace_interval_cycles;
@@ -122,8 +126,8 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif
 
 #ifdef ENABLE_CONSTANTIN
-  void constantinLoad();
-  constantinLoad();
+  void constantinLoad(const char *cst_file);
+  constantinLoad(args.cst_file);
 #endif // CONSTANTIN
 #ifdef VERILATOR
   // srand
@@ -131,6 +135,11 @@ Emulator::Emulator(int argc, const char *argv[])
   srand48(args.seed);
   Verilated::randSeed(args.seed);
   Verilated::randReset(2);
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  dut_ptr->set_clock(0);
+  dut_ptr->set_accelerator_clock(0);
+  dut_ptr->step();
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 #endif // VERILATOR
 
   // init remote-bitbang
@@ -172,11 +181,14 @@ Emulator::Emulator(int argc, const char *argv[])
   // normal linear memory
   else {
     if (args.footprints_name) {
-      simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name);
+      simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name, args.random_mem, args.seed);
     } else {
-      init_ram(args.image, ram_size);
+      init_ram(args.image, ram_size, args.random_mem, args.seed);
 #ifdef WITH_DRAMSIM3
       dramsim3_init(args.dramsim3_ini, args.dramsim3_outdir);
+#endif
+#ifdef WITH_MCSIM
+      mcsim_backend_init();
 #endif
     }
   }
@@ -185,7 +197,10 @@ Emulator::Emulator(int argc, const char *argv[])
     if (args.overwrite_nbytes_autoset) {
       FILE *fp = fopen(args.gcpt_restore, "rb");
       fseek(fp, 4, SEEK_SET);
-      fread(&args.overwrite_nbytes, sizeof(uint32_t), 1, fp);
+      if (fread(&args.overwrite_nbytes, sizeof(uint32_t), 1, fp) != 1) {
+        printf("Failed to read overwrite_nbytes from gcpt_restore file %s\n", args.gcpt_restore);
+        assert(0);
+      }
       fclose(fp);
     }
     overwrite_ram(args.gcpt_restore, args.overwrite_nbytes);
@@ -322,7 +337,7 @@ Emulator::~Emulator() {
 
 #ifdef ENABLE_CHISEL_DB
   if (args.dump_db) {
-    save_db(logdb_filename());
+    save_db(db_filename());
   }
 #endif
 
@@ -350,12 +365,10 @@ Emulator::~Emulator() {
     Info("[EMU_PHASE_TIMING] model_step_count=%" PRIu64 " eval_count=%" PRIu64
          " round1_count=%" PRIu64 " round2_count=%" PRIu64 " total_round_count=%" PRIu64
          " compute_batch_exec_count=%" PRIu64 " commit_batch_exec_count=%" PRIu64
-         " compute_phase_us=%" PRIu64 " commit_phase_us=%" PRIu64
          " touched_state_shadow_count=%" PRIu64 " touched_write_count=%" PRIu64 "\n",
          runtime_stats.modelStepCount, runtime_stats.evalCount, runtime_stats.round1Count,
          runtime_stats.round2Count, runtime_stats.totalRoundCount, runtime_stats.computeBatchExecCount,
-         runtime_stats.commitBatchExecCount, runtime_stats.computePhaseTimeUs, runtime_stats.commitPhaseTimeUs,
-         runtime_stats.touchedStateShadowCount,
+         runtime_stats.commitBatchExecCount, runtime_stats.touchedStateShadowCount,
          runtime_stats.touchedWriteCount);
   }
   if (runtime_profile_enabled) {
@@ -378,19 +391,23 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   for (int i = 0; i < cycles; i++) {
     dut_ptr->set_reset(1);
 
-#if defined(VERILATOR) || defined(GRHSIM)
+#ifdef VERILATOR
+    verilator_half_cycle(1);
+#elif defined(GRHSIM)
     dut_ptr->set_clock(1);
     dut_ptr->step();
-#endif // defined(VERILATOR) || defined(GRHSIM)
+#endif // VERILATOR / GRHSIM
 
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
       dut_ptr->waveform_tick();
     }
 
-#if defined(VERILATOR) || defined(GRHSIM)
+#ifdef VERILATOR
+    verilator_half_cycle(0);
+#elif defined(GRHSIM)
     dut_ptr->set_clock(0);
     dut_ptr->step();
-#endif // defined(VERILATOR) || defined(GRHSIM)
+#endif // VERILATOR / GRHSIM
 
     if (args.enable_waveform && args.enable_waveform_full && args.log_begin == 0) {
       dut_ptr->waveform_tick();
@@ -408,15 +425,49 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   }
 }
 
+inline void Emulator::verilator_half_cycle(unsigned core_clock_level) {
+#ifdef VERILATOR
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  bool accelerator_edge_at_core_edge = false;
+  accelerator_clock_phase += args.core_clock_half_period;
+  while (accelerator_clock_phase >= args.accelerator_clock_half_period) {
+    accelerator_clock_phase -= args.accelerator_clock_half_period;
+    accelerator_clock_level ^= 1;
+    dut_ptr->set_accelerator_clock(accelerator_clock_level);
+
+    if (accelerator_clock_phase == 0) {
+      // Both clock edges occur at the same simulated time. Update both inputs
+      // before a single evaluation to avoid imposing an accelerator-first order.
+      dut_ptr->set_clock(core_clock_level);
+      dut_ptr->step();
+      accelerator_edge_at_core_edge = true;
+    } else {
+      dut_ptr->step();
+    }
+  }
+
+  if (!accelerator_edge_at_core_edge) {
+    dut_ptr->set_clock(core_clock_level);
+    dut_ptr->step();
+  }
+#else
+  dut_ptr->set_clock(core_clock_level);
+  dut_ptr->step();
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
+#endif // VERILATOR
+}
+
 inline void Emulator::single_cycle() {
   if (args.trace_name && args.trace_is_read) {
     goto end_single_cycle;
   }
 
-#if defined(VERILATOR) || defined(GRHSIM)
+#ifdef VERILATOR
+  verilator_half_cycle(1);
+#elif defined(GRHSIM)
   dut_ptr->set_clock(1);
   dut_ptr->step();
-#endif // defined(VERILATOR) || defined(GRHSIM)
+#endif // VERILATOR / GRHSIM
 
   if (args.enable_waveform) {
 #if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_SQUASH)
@@ -434,6 +485,9 @@ inline void Emulator::single_cycle() {
 #ifdef WITH_DRAMSIM3
   dramsim3_step();
 #endif
+#ifdef WITH_MCSIM
+  mcsim_backend_step();
+#endif
 
 #ifdef GSIM
   dut_ptr->step();
@@ -441,10 +495,12 @@ inline void Emulator::single_cycle() {
 
   dut_ptr->step_uart();
 
-#if defined(VERILATOR) || defined(GRHSIM)
+#ifdef VERILATOR
+  verilator_half_cycle(0);
+#elif defined(GRHSIM)
   dut_ptr->set_clock(0);
   dut_ptr->step();
-#endif // defined(VERILATOR) || defined(GRHSIM)
+#endif // VERILATOR / GRHSIM
 
   if (args.enable_waveform && args.enable_waveform_full) {
 #if !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MERGE)
@@ -601,7 +657,7 @@ int Emulator::tick() {
       args.ipc_last_cycle = cycles;
     }
 #endif
-    if (args.enable_ref_trace) {
+    if (args.enable_diff && args.enable_ref_trace) {
       bool is_debug = difftest[i]->proxy->get_debug();
       if (trap->cycleCnt >= args.log_begin && !is_debug) {
         difftest[i]->proxy->set_debug(true);
@@ -707,7 +763,7 @@ int Emulator::tick() {
 #ifdef DEBUG_TILELINK
   if (args.dump_tl_interval != 0) {
     if ((cycles != 0) && (cycles % args.dump_tl_interval == 0)) {
-      checkpoint_db(logdb_filename());
+      checkpoint_db(db_filename());
     }
   }
 #endif
@@ -723,11 +779,22 @@ int Emulator::tick() {
     if (((timer - lasttime_snapshot > args.fork_interval) || !have_initial_fork) && !is_fork_child()) {
       have_initial_fork = true;
       lasttime_snapshot = timer;
+#if !defined(CONFIG_NO_DIFFTEST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+      difftest_mma_flush_all();
+      difftest_mma_stop_all();
+#endif // !CONFIG_NO_DIFFTEST && CONFIG_DIFFTEST_AMUCTRLEVENT
       switch (lightsss->do_fork()) {
-        case FORK_ERROR: return -1;
+        case FORK_ERROR:
+#if !defined(CONFIG_NO_DIFFTEST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+          difftest_mma_start_all();
+#endif // !CONFIG_NO_DIFFTEST && CONFIG_DIFFTEST_AMUCTRLEVENT
+          return -1;
         case FORK_CHILD: fork_child_init();
         default: break;
       }
+#if !defined(CONFIG_NO_DIFFTEST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+      difftest_mma_start_all();
+#endif // !CONFIG_NO_DIFFTEST && CONFIG_DIFFTEST_AMUCTRLEVENT
     }
   }
 
@@ -798,6 +865,10 @@ void Emulator::trigger_stat_dump() {
 }
 
 void Emulator::display_stats() {
+#ifdef CONFIG_NO_DIFFTEST
+  Info("[EMU_COMPLETION] reason=%s cycles=%" PRIu64 "\n",
+       trapCode == STATE_LIMIT_EXCEEDED ? "cycle-limit" : "other", cycles);
+#endif
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     printf("Core %d: ", i);
@@ -866,6 +937,13 @@ void Emulator::snapshot_save() {
   else
     sdcard_offset = 0;
   snapshot_write(&sdcard_offset, sizeof(sdcard_offset));
+
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  // The DUT snapshot restores the accelerator clock pin, but not this scheduler
+  // remainder. Persist it so the next half-cycle keeps the saved edge alignment.
+  snapshot_write(&accelerator_clock_phase, sizeof(accelerator_clock_phase));
+  snapshot_write(&accelerator_clock_level, sizeof(accelerator_clock_level));
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 }
 
 void Emulator::snapshot_load(const char *filename) {
@@ -904,6 +982,20 @@ void Emulator::snapshot_load(const char *filename) {
 
   long sdcard_offset = 0;
   snapshot_read(&sdcard_offset, sizeof(sdcard_offset));
+
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  snapshot_read(&accelerator_clock_phase, sizeof(accelerator_clock_phase));
+  unsigned saved_accelerator_clock_level = 0;
+  snapshot_read(&saved_accelerator_clock_level, sizeof(saved_accelerator_clock_level));
+  accelerator_clock_level = dut_ptr->get_accelerator_clock();
+  if (accelerator_clock_phase >= args.accelerator_clock_half_period ||
+      saved_accelerator_clock_level != accelerator_clock_level) {
+    printf("Invalid accelerator clock snapshot: phase=%" PRIu64 " level=%u, DUT level=%u, half-period=%" PRIu32 "\n",
+           accelerator_clock_phase, saved_accelerator_clock_level, accelerator_clock_level,
+           args.accelerator_clock_half_period);
+    assert(0);
+  }
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 
   if (fp)
     fseek(fp, sdcard_offset, SEEK_SET);

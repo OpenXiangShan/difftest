@@ -1,4 +1,6 @@
 #include "difftrace.h"
+#include "reftrace/refdrive_trace.h"
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -8,8 +10,8 @@ DiffTrace<T>::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_
   if (!is_read) {
     buffer = (T *)calloc(buffer_size, sizeof(T));
   }
-  if (strlen(trace_name) > 31) {
-    printf("Length of trace_name %s is more than 31 characters.\n", trace_name);
+  if (strlen(_trace_name) >= sizeof(trace_name)) {
+    printf("Length of trace_name %s exceeds the path limit.\n", _trace_name);
     printf("Please use a shorter name.\n");
     exit(0);
   }
@@ -32,7 +34,7 @@ template <typename T> bool DiffTrace<T>::read_next(T *trace) {
 #ifndef CONFIG_IOTRACE_ZSTD
   if (!buffer || buffer_count == buffer_size) {
 #else
-  if (!buffer || trace_zstd->trace_load_len == buffer_count) {
+  while (!buffer || trace_zstd->trace_load_len == buffer_count) {
 #endif // CONFIG_IOTRACE_ZSTD
     trace_file_next();
   }
@@ -43,27 +45,38 @@ template <typename T> bool DiffTrace<T>::read_next(T *trace) {
 }
 
 template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
-  memset(file_name, 0, 128);
+  memset(file_name, 0, PATH_MAX);
   static uint64_t trace_index = 0;
-  char dirname[128];
+  char dirname[PATH_MAX];
+  int ret = 0;
   if (strchr(trace_name, '/')) {
-    snprintf(dirname, 128, "%s", trace_name);
+    ret = snprintf(dirname, sizeof(dirname), "%s", trace_name);
   } else {
     char *noop_home = getenv("NOOP_HOME");
-    snprintf(dirname, 128, "%s/%s", noop_home, trace_name);
+    ret = snprintf(dirname, sizeof(dirname), "%s/%s", noop_home, trace_name);
+  }
+  if (ret < 0 || ret >= (int)sizeof(dirname)) {
+    printf("Directory name is too long: %s\n", trace_name);
+    exit(0);
   }
   mkdir(dirname, 0755);
 #ifndef CONFIG_IOTRACE_ZSTD
-  const char *prefix = "bin";
+  const char *suffix = "bin";
 #else
-  const char *prefix = "zstd";
+  const char *suffix = "zstd";
 #endif // CONFIG_IOTRACE_ZSTD
-  snprintf(file_name, 128, "%s/%lu.%s", dirname, trace_index, prefix);
+  ret = snprintf(file_name, PATH_MAX, "%s/%lu.%s", dirname, trace_index, suffix);
+  if (ret < 0 || ret >= PATH_MAX) {
+    printf("File name is too long: %s/%lu.%s\n", dirname, trace_index, suffix);
+    exit(0);
+  }
   trace_index++;
 }
 
 template <typename T> bool DiffTrace<T>::trace_file_next() {
-  static char *filename = (char *)malloc(128);
+  if (!is_read && !buffer_count)
+    return false;
+  static char *filename = (char *)malloc(PATH_MAX);
 #ifdef CONFIG_IOTRACE_ZSTD
   if (trace_zstd->need_load_new_file == true && is_read) {
     next_file_name(filename);
@@ -121,6 +134,7 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
 }
 
 template class DiffTrace<DiffTestState>;
+template class DiffTrace<RefDriveTraceEntry>;
 
 #ifdef CONFIG_IOTRACE_ZSTD
 void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
@@ -141,7 +155,7 @@ void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
 void DiffTraceZstd::diff_IOtrace_dump(const char *str, uint64_t len) {
   static const size_t cLevel = 1; // compression level
 
-  std::vector<char> outputBuffer(max_compress_size);
+  std::vector<char> outputBuffer(ZSTD_compressBound(len));
   trace_cctx = ZSTD_createCCtx();
 
   size_t compressedSize = ZSTD_compressCCtx(trace_cctx, outputBuffer.data(), outputBuffer.size(), str, len, cLevel);
@@ -161,6 +175,7 @@ bool DiffTraceZstd::diff_IOtrace_load(char *buffer, uint64_t len) {
   int result = diff_IOtrace_ZstdDcompress();
   if (result != 0) {
     need_load_new_file = true;
+    trace_load_len = 0;
     return false;
   } else {
     uint64_t have_size = io_trace_buffer.size() / len;
@@ -177,7 +192,6 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
   // Set up buffers
   static const size_t inbufferSize = ZSTD_DStreamInSize(); // Use ZSTD's recommended output buffer size
   static const size_t outbufferSize = ZSTD_DStreamOutSize();
-  static std::vector<char> inputBuffer(inbufferSize);
   std::vector<char> outputBuffer(outbufferSize);
 
   if (trace_dctx == NULL) {
@@ -185,33 +199,30 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
   }
   // Read and decompress data in a loop
   ZSTD_outBuffer output = {outputBuffer.data(), outbufferSize, 0};
-  static ZSTD_inBuffer input = {inputBuffer.data(), 0, 0};
 
   if (input.pos == input.size) {
     inputBuffer.resize(inbufferSize);
+    input.src = inputBuffer.data();
     io_trace_file.read(inputBuffer.data(), inbufferSize);
     input.size = io_trace_file.gcount();
     input.pos = 0;
+  }
 
-    // Outputs the current file pointer location
-    std::streampos currentPos = io_trace_file.tellg();
-    if (currentPos == -1) {
-      std::cout << "Decompress read zstd file error" << std::endl;
-      return 2;
-    }
-  } else if (input.size == 0) {
+  // Always call the decoder, even when no new input was read: a previous call
+  // may have filled outputBuffer while leaving output pending inside the
+  // decoder, which has to be drained before the file can be considered
+  // exhausted.  `ret == 0` marks the end of a frame.
+  size_t ret = ZSTD_decompressStream(trace_dctx, &output, &input);
+  (void)ret;
+
+  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.begin() + output.pos);
+
+  // No input left and nothing produced: the current file is fully consumed.
+  if (input.size == 0 && output.pos == 0) {
     ZSTD_freeDCtx(trace_dctx);
     trace_dctx = NULL;
     return 1;
-  } else {
-    input.size = input.size;
-    input.pos = input.pos;
   }
-
-  // Decompress the data
-  size_t ret = ZSTD_decompressStream(trace_dctx, &output, &input);
-
-  io_trace_buffer.insert(io_trace_buffer.end(), outputBuffer.begin(), outputBuffer.end());
 
   return 0;
 }

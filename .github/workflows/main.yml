@@ -11,10 +11,10 @@ on:
 jobs:
   test-difftest-main:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compile
         run: |
@@ -38,6 +38,12 @@ jobs:
           make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
           make clean
 
+      - name: Generate EMU with Squash
+        run: |
+          make PROFILE=./difftest_profile.json NUM_CORES=4 CONFIG=S
+          make emu WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j2
+          make clean
+
       - name: Generate EMU with SoftArchUpdate
         run: |
           make PROFILE=./difftest_profile.json NUM_CORES=4 CONFIG=U
@@ -50,12 +56,12 @@ jobs:
 
   test-verilator-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     needs: test-difftest-main
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Enable -Werror for EMU Build
         run: |
@@ -157,13 +163,6 @@ jobs:
             ./build/emu -i microbench.bin --diff $REF_SO --as-footprints
             make clean
 
-      - name: Difftest with Batch
-        run: |
-            cd $NOOP_HOME
-            make emu MILL_ARGS="--difftest-config B" -j2
-            ./build/emu -i $WORKLOAD --diff $REF_SO
-            make clean
-
       - name: Difftest with Global DPI-C Enable
         run: |
             cd $NOOP_HOME
@@ -178,17 +177,10 @@ jobs:
             ./build/emu -i $WORKLOAD --diff $REF_SO
             make clean
 
-      - name: Difftest with Squash Batch and Global Enable
+      - name: Difftest with Squash GlobalEnable and Query
         run: |
             cd $NOOP_HOME
-            make emu MILL_ARGS="--difftest-config ESB" -j2
-            ./build/emu -i $WORKLOAD --diff $REF_SO
-            make clean
-
-      - name: Difftest with Squash Batch GlobalEnable and Query
-        run: |
-            cd $NOOP_HOME
-            make emu MILL_ARGS="--difftest-config ESB" DIFFTEST_QUERY=1 -j2
+            make emu MILL_ARGS="--difftest-config ES" DIFFTEST_QUERY=1 -j2
             ./build/emu -i $WORKLOAD --diff $REF_SO
             make clean
 
@@ -216,12 +208,12 @@ jobs:
 
   test-vcs-top-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     needs: test-difftest-main
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Enable -Werror for EMU Build
         run: |
@@ -241,6 +233,41 @@ jobs:
             cd $NOOP_HOME
             make simv NO_DIFF=1 VCS=verilator -j2
             ./build/simv +workload=$WORKLOAD +max-cycles=100000
+            make clean
+
+      - name: Verilator with Random Memory(8MB)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO +random-mem +seed=1234 +ram_size=8MB
+            make clean
+
+      - name: Verilator Build with VCS Top (PGO using compiler instrumentation)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator PGO_WORKLOAD=$WORKLOAD LLVM_PROFDATA=llvm-profdata VCS_PGO_ARGS="+diff=$REF_SO 2>/dev/null" PGO_BOLT=0 -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO
+            make clean
+
+      - name: Verilator Build with VCS Top (PGO using BOLT)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator PGO_WORKLOAD=$WORKLOAD VCS_PGO_ARGS="+diff=$REF_SO 2>/dev/null" PGO_BOLT=1 -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO
+            make clean
+
+      - name: Verilator Build with VCS Top (TraceFst)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator EMU_TRACE=fst -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO +dump-wave
+            make clean
+
+      - name: Verilator Build with VCS Top (2 THREADS)
+        run: |
+            cd $NOOP_HOME
+            make simv VCS=verilator EMU_THREADS=2 -j2
+            ./build/simv +workload=$WORKLOAD +diff=$REF_SO
             make clean
 
       - name: Verilator Build with VCS Top (SYNTHESIS)(with DutZone)
@@ -346,12 +373,12 @@ jobs:
 
   test-fpga-nutshell:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-22.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     needs: test-difftest-main
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare NutShell
         run: |
@@ -366,7 +393,20 @@ jobs:
             make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 DIFFTEST_PERFCNT=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1
-            bash difftest/scripts/fpga_sim/ci.sh
+            bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=./ready-to-run/microbench.bin DIFF=./ready-to-run/riscv64-nemu-interpreter-so
+            make -C difftest fpga-clean vcs-clean
+
+      - name: FPGA-difftest Build (RANDOM_MEM)
+        run: |
+            cd $NOOP_HOME
+            make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
+            make -C difftest fpga-build FPGA=1 FPGA_SIM=1 DIFFTEST_PERFCNT=1
+            make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1
+            set -euo pipefail
+            bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=./ready-to-run/microbench.bin DIFF=./ready-to-run/riscv64-nemu-interpreter-so RAM_SIZE=1MB SEED=1234 RANDOM_MEM=1 2>&1 | tee fpga-random-mem.log
+            host_first_word=$(grep 'Using memory random init seed' fpga-random-mem.log | head -n1 | sed -n 's/.*first word = \(0x[0-9a-fA-F]*\).*/\1/p' || true)
+            simv_first_word=$(grep 'FPGA_SIM.*Memory random init with seed' fpga-random-mem.log | head -n1 | sed -n 's/.*first word = \(0x[0-9a-fA-F]*\).*/\1/p' || true)
+            test -n "$host_first_word" && test -n "$simv_first_word" && test "$host_first_word" = "$simv_first_word"
             make -C difftest fpga-clean vcs-clean
 
       - name: FPGA-difftest Build (with THREAD and ASYNC_CLK)
@@ -375,7 +415,21 @@ jobs:
             make sim-verilog MILL_ARGS="--difftest-config ESBIDUF" -j2
             make -C difftest fpga-build FPGA=1 FPGA_SIM=1 USE_THREAD_MEMPOOL=1 DIFFTEST_PERFCNT=1
             make simv VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2N=1
-            bash difftest/scripts/fpga_sim/ci.sh
+            bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=./ready-to-run/microbench.bin DIFF=./ready-to-run/riscv64-nemu-interpreter-so
+            make -C difftest fpga-clean vcs-clean
+
+      - name: FPGA-difftest Build (ASYNC_CLK, RANDOM_MEM, H2C)
+        run: |
+            cd $NOOP_HOME
+            make simv MILL_ARGS="--difftest-config ESBIDUF" VCS=verilator WITH_CHISELDB=0 WITH_CONSTANTIN=0 FPGA_SIM=1 ASYNC_CLK_2N=1
+            make -C difftest fpga-build FPGA=1 FPGA_SIM=1 USE_XDMA_H2C=1 DIFFTEST_PERFCNT=1
+            set -euo pipefail
+            bash difftest/scripts/fpga_sim/cosim.sh WORKLOAD=./ready-to-run/microbench.bin DIFF=./ready-to-run/riscv64-nemu-interpreter-so RAM_SIZE=1MB SEED=1234 RANDOM_MEM=1 2>&1 | tee fpga-h2c-async-random.log
+            grep -q 'FPGA_SIM H2C queued' fpga-h2c-async-random.log
+            grep -q 'H2C load done' fpga-h2c-async-random.log
+            host_first_word=$(grep 'Using memory random init seed' fpga-h2c-async-random.log | head -n1 | sed -n 's/.*first word = \(0x[0-9a-fA-F]*\).*/\1/p' || true)
+            simv_first_word=$(grep 'FPGA_SIM.*Memory random init with seed' fpga-h2c-async-random.log | head -n1 | sed -n 's/.*first word = \(0x[0-9a-fA-F]*\).*/\1/p' || true)
+            test -n "$host_first_word" && test -n "$simv_first_word" && test "$host_first_word" = "$simv_first_word"
             make -C difftest fpga-clean vcs-clean
 
 
@@ -387,25 +441,11 @@ jobs:
 
   test-gsim-rocketchip:
     runs-on: ubuntu-latest
-    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Download latest released GSIM
-        run: |
-          # GSIM depends on GMP and clang >= 19
-          sudo apt update
-          sudo apt install -y libgmp-dev clang-19
-          cd $GITHUB_WORKSPACE/..
-          mkdir -p gsim-bin && cd gsim-bin
-          curl -s https://api.github.com/repos/OpenXiangShan/gsim/releases/latest \
-            | grep "browser_download_url"                                         \
-            | grep "gsim"                                                         \
-            | cut -d '"' -f 4                                                     \
-            | xargs wget -O gsim
-          chmod +x gsim
-          echo "GSIM_BIN=$(pwd)/gsim" >> $GITHUB_ENV
       - name: Build the REF - Spike
         run: |
           cd $GITHUB_WORKSPACE/..
@@ -423,5 +463,5 @@ jobs:
       - name: Build and run EMU with GSIM
         run: |
           cd $NOOP_HOME
-          make emu REF=Spike GSIM=1 GSIM_CXX=clang++-19 -j2
+          make emu REF=Spike GSIM=1 -j2
           ./build/emu -i ./bootrom/bootrom.img -C 1000000

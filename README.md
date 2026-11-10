@@ -49,7 +49,7 @@ through a `json` file.
 
 ## Example Chisel Usage: Connecting Your Own Design with DiffTest
 
-We are supporting Chisel 7.3.0 (the latest stable version supporting MLIR FIRRTL Compiler).
+We are supporting Chisel 7.14.0 (the latest stable version supporting MLIR FIRRTL Compiler).
 Note that we have removed the support for Chisel 3.6.1 and older versions.
 
 Here are the detail instructions on integrating DiffTest to your own project.
@@ -121,18 +121,20 @@ object Main extends App {
 5. `make emu` and start simulating & debugging!
 
 We provide example designs, including:
+
 - [XiangShan](https://github.com/OpenXiangShan/XiangShan)
 - [XiangShan (2nd Gen, Nanhu)](https://github.com/OpenXiangShan/XiangShan/tree/nanhu)
 - [XiangShan (1st Gen, Yanqihu)](https://github.com/OpenXiangShan/XiangShan/tree/yanqihu)
 - [NutShell](https://github.com/OSCPU/NutShell/tree/dev-difftest)
 - [Rocket](https://github.com/OpenXiangShan/rocket-chip/tree/dev-difftest)
+- [BOOM v4](https://github.com/poemonsense/riscv-boom/tree/dev-difftest)
 
 If you encountered any issues when integrating DiffTest to your own design, feel free to let us know with necessary information on how you have modified your design. We will try our best to assist you.
 
 ## APIs (DiffTest Interfaces)
 
 Currently we are supporting the RISC-V base ISA as well as some extensions,
-including Float/Double, Debug, and Vector. We also support checking the cache
+including Float/Double, Debug, Vector, and Matrix. We also support checking the cache
 coherence via RefillTest.
 
 | Probe Name | Descriptions | Mandatory |
@@ -151,11 +153,13 @@ coherence via RefillTest.
 | `DiffVecCSRState` | CSRs for the Vector extension | No |
 | `DiffHCSRState` | CSRs for the Hypervisor extension | No |
 | `DiffTriggerCSRState` | CSRs for the Trigger support | No |
+| `DiffMatrixCSRState` | CSRs for the Matrix extension | No |
 | `DiffDebugMode` | Debug mode registers | No |
 | `DiffArchIntDelayedUpdate` | Delayed general-purpose writeback | No |
 | `DiffArchFpDelayedUpdate` | Delayed floating-point writeback | No |
 | `DiffStoreEvent` | Store operations | No |
 | `DiffSbufferEvent` | Store buffer operations | No |
+| `DiffMatrixStoreEvent` | Matrix store events | No |
 | `DiffLoadEvent` | Load operations | No |
 | `DiffAtomicEvent` | Atomic operations | No |
 | `DiffL1TLBEvent` | L1 TLB operations | No |
@@ -169,6 +173,9 @@ coherence via RefillTest.
 | `DiffSyncCustomMflushpwrEvent` | custom CSR mflushpwr | No |
 | `DiffUncacheMMStoreEvent` | Uncache buffer main memory store operations | No |
 | `DiffCMOInvalEvent` | Commit of cbo.inval | No |
+| `DiffAmuCtrlEvent` | AMU control events for Matrix instructions | No |
+| `DiffAmuFinishEvent` | AMU execution completion and matrix register-bank updates | No |
+| `DiffMsyncEvent` | Synchronization events for msyncregreset, macquire, and mfence instructions | No |
 
 The DiffTest framework comes with a simulation framework with some top-level IOs.
 They will be automatically created when calling `DifftestModule.finish(cpu: String)`.

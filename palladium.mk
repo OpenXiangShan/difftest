@@ -90,8 +90,9 @@ $(PLDM_BUILD_DIR):
 $(PLDM_CC_OBJ_DIR):
 	mkdir -p $(PLDM_CC_OBJ_DIR)
 
-$(PLDM_VFILELIST):
-	find $(PLDM_VSRC_DIR) -name "*.v" -or -name "*.sv" >> $(PLDM_VFILELIST)
+$(PLDM_VFILELIST): | $(PLDM_BUILD_DIR)
+	find $(PLDM_VSRC_DIR) \( -name "*.v" -or -name "*.sv" \) \
+		$(if $(wildcard $(RTL_DIR)/DifftestClockGate.v),! -path "$(abspath ./src/test/vsrc/common/DifftestClockGate.v)") > $(PLDM_VFILELIST)
 
 $(PLDM_CLOCK_SRC): $(PLDM_CLOCK_DEF)
 	ixclkgen -input $(PLDM_CLOCK_DEF) -output $(PLDM_CLOCK_SRC) -module $(PLDM_CLOCK) -hierarchy "$(PLDM_TB_TOP)."
@@ -102,7 +103,7 @@ pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(PLDM_CLOCK_SRC)
 	cd $(PLDM_BUILD_DIR) 					&& \
 	ixcom $(IXCOM_FLAGS) -l $(PLDM_BUILD_DIR)/ixcom.log
 else
-pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(DPILIB_EMU)
+pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) pldm-lib
 	cd $(PLDM_BUILD_DIR) 					&& \
 	vlan $(VLAN_FLAGS) -l $(PLDM_BUILD_DIR)/vlan.log	&& \
 	ixcom $(IXCOM_FLAGS) -l $(PLDM_BUILD_DIR)/ixcom.log
@@ -110,7 +111,9 @@ pldm-build: $(PLDM_BUILD_DIR) $(PLDM_VFILELIST) $(DPILIB_EMU)
 $(DPILIB_EMU): $(PLDM_CC_OBJ_DIR)
 	cd $(PLDM_CC_OBJ_DIR) 					&& \
 	$(CC) $(PLDM_CXXFLAGS) $(PLDM_CXXFILES)			&& \
-	$(CC) -o $@ -m64 -shared *.o $(PLDM_LD_LIB)
+	$(CC) -o $@ -m64 -shared *.o $(SIM_LDFLAGS) -ldl -lpthread $(PLDM_LD_LIB)
+
+pldm-lib: $(DPILIB_EMU)
 endif
 
 pldm-run: $(PLDM_BUILD_DIR)
@@ -123,3 +126,5 @@ pldm-debug: $(PLDM_BUILD_DIR)
 
 pldm-clean:
 	rm -rf $(PLDM_BUILD_DIR)
+
+.PHONY: pldm-lib

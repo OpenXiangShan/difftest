@@ -57,6 +57,14 @@ public:
   inline void set_clock(unsigned clock) override {
     dut->clock = clock;
   }
+#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
+  inline void set_accelerator_clock(unsigned clock) override {
+    dut->acceleratorClock = clock;
+  }
+  inline unsigned get_accelerator_clock() const override {
+    return dut->acceleratorClock;
+  }
+#endif // CONFIG_HAS_ACCELERATOR_CLOCK
   inline void set_reset(unsigned reset) override {
     dut->reset = reset;
   }

@@ -55,18 +55,14 @@ VERILATOR_FLAGS += --trace-fst
 VERILATOR_CXXFLAGS += -DENABLE_FST
 endif
 
-VERILATOR_THREAD_FLAGS =
-ifneq ($(EMU_THREADS),0)
-VERILATOR_THREAD_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
+# Verilator trace underscore support
+ifeq ($(EMU_TRACE_ALL),1)
+VERILATOR_FLAGS += --trace-underscore
 endif
 
-# Verilator build parallelization (controls split .cpp compilation)
-VM_PARALLEL_BUILDS ?= 1
-ifneq ($(VM_PARALLEL_BUILDS),0)
-VM_PARALLEL_BUILDS := 1
+ifneq ($(EMU_THREADS),0)
+VERILATOR_FLAGS += --threads $(EMU_THREADS) --threads-dpi all
 endif
-VM_BUILD_JOBS ?=
-VM_MAKE_J := $(if $(strip $(VM_BUILD_JOBS)),-j $(VM_BUILD_JOBS),)
 
 ifeq ($(EMU_SNAPSHOT),1)
 VERILATOR_FLAGS += --savable
@@ -77,90 +73,7 @@ VERILATOR_FLAGS += --coverage-line --coverage-toggle
 endif
 
 # C optimization
-OPT_FAST ?= -O3
-
-# Randomization control (enable with EMU_RANDOMIZE=1)
-EMU_RANDOMIZE ?= 0
-ifeq ($(EMU_RANDOMIZE),1)
-VERILATOR_RANDOMIZE_FLAGS =         \
-  +define+RANDOMIZE_REG_INIT        \
-  +define+RANDOMIZE_MEM_INIT        \
-  +define+RANDOMIZE_GARBAGE_ASSIGN  \
-  +define+RANDOMIZE_DELAY=0
-else
-VERILATOR_RANDOMIZE_FLAGS =
-endif
-
-WOLVRIX_PARTITIONED_PACKAGE_DIR ?=
-ifneq ($(strip $(WOLVRIX_PARTITIONED_PACKAGE_DIR)),)
-WOLVRIX_PARTITIONED_PACKAGE_ROOT := $(abspath $(WOLVRIX_PARTITIONED_PACKAGE_DIR))
-WOLVRIX_PARTITIONED_BUILD_DIR := $(WOLVRIX_PARTITIONED_PACKAGE_ROOT)/build
-PACKAGE_ROOT := $(WOLVRIX_PARTITIONED_PACKAGE_ROOT)
-VERILATED_DIR := $(WOLVRIX_PARTITIONED_BUILD_DIR)/verilated
-SV_SOURCES := $(wildcard $(PACKAGE_ROOT)/sv/*.sv)
-WOLVRIX_PARTITIONED_WRAPPER_SRCS := $(sort $(wildcard $(WOLVRIX_PARTITIONED_PACKAGE_ROOT)/wolvi_repcut_verilator_sim*.cpp))
-ifeq ($(strip $(WOLVRIX_PARTITIONED_WRAPPER_SRCS)),)
-$(error missing partitioned wrapper sources under $(WOLVRIX_PARTITIONED_PACKAGE_ROOT))
-endif
-PARTITIONED_VERILATOR_FLAGS := $(VERILATOR_FLAGS) -Wno-STMTDLY -Wno-WIDTH -Wno-WIDTHTRUNC --output-split 30000 --output-split-cfuncs 30000
-include $(WOLVRIX_PARTITIONED_PACKAGE_ROOT)/units.mk
-
-WOLVRIX_PARTITIONED_UNIT_INCLUDE_FLAGS := $(foreach unit,$(PARTITIONED_UNITS),-I$(UNIT_$(unit)_MDIR))
-WOLVRIX_PARTITIONED_SIM_CXXFILES := \
-	$(EMU_CXXFILES) \
-	$(VERILATOR_CSRC_DIR)/partitioned_verilator.cpp \
-	$(WOLVRIX_PARTITIONED_WRAPPER_SRCS)
-WOLVRIX_PARTITIONED_CPPFLAGS := \
-	-I$(WOLVRIX_PARTITIONED_PACKAGE_ROOT) \
-	-I$(VERILATOR_ROOT)/include \
-	-I$(VERILATOR_ROOT)/include/vltstd \
-	$(WOLVRIX_PARTITIONED_UNIT_INCLUDE_FLAGS)
-WOLVRIX_PARTITIONED_CXXFLAGS := \
-	$(subst \\\",\", $(filter-out -DEMU_THREAD=%,$(EMU_CXXFLAGS))) \
-	-I$(VERILATOR_CSRC_DIR) \
-	-DVERILATOR \
-	-DWOLVRIX_PARTITIONED_VERILATOR \
-	--std=c++17
-
-partitioned-obj = $(VERILATOR_BUILD_DIR)/obj$(1).o
-
-WOLVRIX_PARTITIONED_RUNTIME_SRCS := \
-	$(WOLVRIX_PARTITIONED_SIM_CXXFILES) \
-	$(VERILATOR_ROOT)/include/verilated.cpp \
-	$(VERILATOR_ROOT)/include/verilated_dpi.cpp \
-	$(VERILATOR_ROOT)/include/verilated_threads.cpp
-WOLVRIX_PARTITIONED_RUNTIME_OBJS := \
-	$(foreach src,$(WOLVRIX_PARTITIONED_RUNTIME_SRCS),$(call partitioned-obj,$(src)))
-
-define make-partitioned-object-rule
-$(call partitioned-obj,$(1)): $(1) $(UNIT_ARCHIVES)
-	@mkdir -p $$(@D)
-	$(CXX) $(WOLVRIX_PARTITIONED_CPPFLAGS) $(WOLVRIX_PARTITIONED_CXXFLAGS) -c -o $$@ $$<
-endef
-
-$(foreach src,$(WOLVRIX_PARTITIONED_RUNTIME_SRCS),$(eval $(call make-partitioned-object-rule,$(src))))
-
-verilator-build-emu: $(VERILATOR_TARGET)
-
-$(VERILATOR_TARGET): $(UNIT_ARCHIVES) $(WOLVRIX_PARTITIONED_RUNTIME_OBJS)
-	@mkdir -p $(@D)
-	$(CXX) $(LDFLAGS) -o $@ $(WOLVRIX_PARTITIONED_RUNTIME_OBJS) $(UNIT_ARCHIVES) $(VERILATOR_LDFLAGS) -pthread
-
-verilator-emu: $(VERILATOR_TARGET)
-verilator-emu-mk: $(UNIT_MKS)
-
-COVERAGE_DATA ?= $(shell find $(BUILD_DIR) -maxdepth 1 -name "*.dat")
-COVERAGE_DIR  ?= $(DESIGN_DIR)/$(basename $(notdir $(COVERAGE_DATA)))
-coverage:
-	@echo "Coverage is unsupported in wolvrix partitioned verilator mode."
-	@false
-
-verilator-clean-obj:
-	rm -rf $(VERILATOR_BUILD_DIR)/obj
-	rm -f $(VERILATOR_TARGET)
-
-.PHONY: verilator-build-emu verilator-clean-obj
-else
+OPT_FAST ?= -O3 -fno-slp-vectorize
 
 ########## Verilator Build Recipes ##########
 VERILATOR_FLAGS_ALL =               \
@@ -168,8 +81,12 @@ VERILATOR_FLAGS_ALL =               \
   --cc --top-module $(EMU_TOP)      \
   +define+VERILATOR=1               \
   +define+PRINTF_COND=1             \
-  $(VERILATOR_RANDOMIZE_FLAGS)      \
+  +define+RANDOMIZE_REG_INIT        \
+  +define+RANDOMIZE_MEM_INIT        \
+  +define+RANDOMIZE_GARBAGE_ASSIGN  \
+  +define+RANDOMIZE_DELAY=0         \
   -Wno-STMTDLY -Wno-WIDTH           \
+  -Wno-UNSIGNED                     \
   --max-num-width 150000            \
   --assert --x-assign unique        \
   --output-split 30000              \
@@ -181,22 +98,17 @@ VERILATOR_FLAGS_ALL =               \
   -CFLAGS "\$$(PGO_CFLAGS)"         \
   -LDFLAGS "\$$(PGO_LDFLAGS)"       \
   -o $(VERILATOR_TARGET)            \
-  $(VERILATOR_FLAGS)                \
-  $(VERILATOR_THREAD_FLAGS)
+  $(VERILATOR_FLAGS)
 
 VERILATOR_MK = $(VERILATOR_BUILD_DIR)/V$(EMU_TOP).mk
 VERILATOR_HEADERS := $(EMU_HEADERS) $(shell find $(VERILATOR_CSRC_DIR) -name "*.h")
-
-# Profile Guided Optimization
-VERILATOR_PGO_DIR  = $(VERILATOR_BUILD_DIR)/pgo
-PGO_MAX_CYCLE ?= 2000000
 
 $(VERILATOR_MK): $(SIM_TOP_V) | $(SIM_VSRC) $(VERILATOR_CXXFILES)
 ifeq ($(EMU_COVERAGE),1)
 	@python3 ./scripts/coverage/vtransform.py $(RTL_DIR)
 endif
 	@mkdir -p $(@D)
-	@echo -e "\n[verilator] Generating C++ files..." >> $(TIMELOG)
+	@printf '\n[verilator] Generating C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 	$(TIME_CMD) $(VERILATOR) $(VERILATOR_FLAGS_ALL) --Mdir $(@D) $^ $(SIM_VSRC) $(VERILATOR_CXXFILES)
 	@sed -i -e 's/$(subst /,\/,$(NOOP_HOME))/$$(NOOP_HOME)/g' \
@@ -210,103 +122,42 @@ endif
 EMU_COMPILE_FILTER =
 # 2> $(BUILD_DIR)/g++.err.log | tee $(BUILD_DIR)/g++.out.log | grep 'g++' | awk '{print "Compiling/Generating", $$NF}'
 
-verilator-build-emu:
+verilator-build-emu: $(SIM_EXTRA_OBJS)
 ifeq ($(REMOTE),localhost)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
-	$(TIME_CMD) $(MAKE) -s $(VM_MAKE_J) VM_PARALLEL_BUILDS=$(VM_PARALLEL_BUILDS) OPT_SLOW="-O0" \
-						OPT_FAST=$(OPT_FAST) \
+	@sync -d $(BUILD_DIR) $(VERILATOR_BUILD_DIR)
+	$(TIME_CMD) $(MAKE) -s VM_PARALLEL_BUILDS=1 OPT_SLOW="-O0" \
+						OPT_FAST="$(OPT_FAST)" \
 						PGO_CFLAGS="$(PGO_CFLAGS)" \
 						PGO_LDFLAGS="$(PGO_LDFLAGS)" \
+						OBJCACHE="$(OBJCACHE)" \
 						-C $(VERILATOR_BUILD_DIR) -f $(VERILATOR_MK) $(EMU_COMPILE_FILTER)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
+	@sync -d $(BUILD_DIR) $(VERILATOR_BUILD_DIR)
 else
 	ssh -tt $(REMOTE) 'export NOOP_HOME=$(NOOP_HOME); \
 					   $(MAKE) -C $(NOOP_HOME)/difftest verilator-build-emu \
-					   -j $(if $(strip $(VM_BUILD_JOBS)),$(VM_BUILD_JOBS),`nproc`) \
-					   VM_PARALLEL_BUILDS="$(VM_PARALLEL_BUILDS)" \
+					   -j `nproc` \
 					   OPT_FAST="'"$(OPT_FAST)"'" \
 					   PGO_CFLAGS="'"$(PGO_CFLAGS)"'" \
-					   PGO_LDFLAGS="'"$(PGO_LDFLAGS)"'"'
+					   PGO_LDFLAGS="'"$(PGO_LDFLAGS)"'" \
+					   OBJCACHE="'"$(OBJCACHE)"'"'
 endif
 
-$(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILATOR_HEADERS)
-	@echo -e "\n[c++] Compiling C++ files..." >> $(TIMELOG)
+# Profile Guided Optimization
+PGO_MAX_CYCLE = 2000000   # Default for Verilator; cmdline can override
+
+$(VERILATOR_TARGET): $(VERILATOR_MK) $(SIM_VSRC) $(VERILATOR_CXXFILES) $(VERILATOR_HEADERS) $(SIM_EXTRA_OBJS)
+	@printf '\n[c++] Compiling C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
 ifdef PGO_WORKLOAD
-ifneq ($(PGO_BOLT),1)
-	@echo "If available, please use install llvm-bolt for much reduced PGO build time."
-	@echo "Building PGO profile..."
-	@stat $(PGO_WORKLOAD) > /dev/null
-	@$(MAKE) verilator-clean-obj
-	@mkdir -p $(VERILATOR_PGO_DIR)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
-	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
-					   PGO_CFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)" \
-					   PGO_LDFLAGS="-fprofile-generate=$(VERILATOR_PGO_DIR)"
-	@echo "Training emu with PGO Workload..."
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
-	$(VERILATOR_TARGET) -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
-		   1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
-		   2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
-		   $(PGO_EMU_ARGS)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
-ifdef LLVM_PROFDATA
-# When using LLVM's profile-guided optimization, the raw data can not
-# directly be used in -fprofile-use. We need to use a specific version of
-# llvm-profdata. This happens when verilator compiled with CC=clang
-# CXX=clang++. In this case, we should add LLVM_PROFDATA=llvm-profdata
-# when calling make. For GCC, this step should be skipped. Also, some
-# machines may have multiple versions of llvm-profdata. So please never
-# add default value for LLVM_PROFDATA unless we have a proper way to probe
-# the compiler and the corresponding llvm-profdata value.
-	$(LLVM_PROFDATA) merge $(VERILATOR_PGO_DIR)/*.profraw -o $(VERILATOR_PGO_DIR)/default.profdata
-else # ifdef LLVM_PROFDATA
-	@echo ""
-	@echo "----------------------- NOTICE BEGIN -----------------------"
-	@echo "If your verilator is compiled with LLVM, please don't forget"
-	@echo "to add LLVM_PROFDATA=llvm-profdata when calling make."
-	@echo ""
-	@echo "If your verilator is compiled with GCC, please ignore this"
-	@echo "message and NEVER adding LLVM_PROFDATA when calling make."
-	@echo "----------------------- NOTICE  END  -----------------------"
-	@echo ""
-endif # ifdef LLVM_PROFDATA
-	@echo "Building emu with PGO profile..."
-	@$(MAKE) verilator-clean-obj
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
-	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) \
-					   PGO_CFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)" \
-					   PGO_LDFLAGS="-fprofile-use=$(VERILATOR_PGO_DIR)"
-else # ifneq ($(PGO_BOLT),1)
-	@echo "Building emu..."
-	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST) PGO_LDFLAGS="-Wl,--emit-relocs -fuse-ld=bfd"
-	@mv $(VERILATOR_TARGET) $(VERILATOR_TARGET).pre-bolt
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
-	@echo "Training emu with PGO Workload..."
-	@mkdir -p $(VERILATOR_PGO_DIR)
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
-	@((perf record -j any,u -o $(VERILATOR_PGO_DIR)/perf.data -- sh -c "\
-		$(VERILATOR_TARGET).pre-bolt -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
-			1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
-			2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
-			$(PGO_EMU_ARGS)") && \
-		perf2bolt -p=$(VERILATOR_PGO_DIR)/perf.data -o=$(VERILATOR_PGO_DIR)/perf.fdata $(VERILATOR_TARGET).pre-bolt) || \
-		(echo -e "\033[31mlinux-perf is not available, fallback to instrumentation-based PGO\033[0m" && \
-		$(LLVM_BOLT) $(VERILATOR_TARGET).pre-bolt \
-			-instrument --instrumentation-file=$(VERILATOR_PGO_DIR)/perf.fdata \
-			-o $(VERILATOR_PGO_DIR)/emu.instrumented && \
-		$(VERILATOR_PGO_DIR)/emu.instrumented -i $(PGO_WORKLOAD) --max-cycles=$(PGO_MAX_CYCLE) \
-			1>$(VERILATOR_PGO_DIR)/`date +%s`.log \
-			2>$(VERILATOR_PGO_DIR)/`date +%s`.err \
-			$(PGO_EMU_ARGS))
-	@echo "Processing BOLT profile data..."
-	@$(LLVM_BOLT) $(VERILATOR_TARGET).pre-bolt -o $(VERILATOR_TARGET) -data=$(VERILATOR_PGO_DIR)/perf.fdata -reorder-blocks=ext-tsp
-endif # ifneq ($(PGO_BOLT),1)
-else # ifdef PGO_WORKLOAD
-	@echo "Building emu..."
-	@$(MAKE) verilator-build-emu OPT_FAST=$(OPT_FAST)
+	$(MAKE) pgo-build \
+		PGO_CLEAN_OBJ=verilator-clean-obj \
+		PGO_BUILD_TARGET=verilator-build-emu \
+		PGO_TARGET=$(VERILATOR_TARGET) \
+		PGO_EMU_DIR=$(VERILATOR_BUILD_DIR) \
+		PGO_MAX_CYCLE=$(PGO_MAX_CYCLE)
+else
+	@$(MAKE) verilator-build-emu
 endif # ifdef PGO_WORKLOAD
-	@sync -d $(BUILD_DIR) -d $(VERILATOR_BUILD_DIR)
 
 verilator-emu: $(VERILATOR_TARGET)
 verilator-emu-mk: $(VERILATOR_MK)
@@ -323,4 +174,3 @@ verilator-clean-obj:
 	rm -f $(VERILATOR_BUILD_DIR)/*.o $(VERILATOR_BUILD_DIR)/*.gch $(VERILATOR_BUILD_DIR)/*.a $(VERILATOR_TARGET)
 
 .PHONY: verilator-build-emu verilator-clean-obj
-endif

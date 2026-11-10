@@ -22,12 +22,25 @@ import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.common.DifftestPerf
 import difftest.validate.Validate._
+import difftest.util.{PipelineConnect, StoreHash}
 
 object Squash {
-  def apply(bundles: MixedVec[Valid[DifftestBundle]], config: GatewayConfig): MixedVec[Valid[DifftestBundle]] = {
-    val squashIn = Stamp(bundles)
-    val module = Module(new SquashEndpoint(chiselTypeOf(squashIn).toSeq, config))
-    module.in := squashIn
+  def apply(
+    bundles: DecoupledIO[MixedVec[Valid[DifftestBundle]]],
+    config: GatewayConfig,
+    fpgaEnable: Option[Bool] = None,
+    fpgaMaxFused: Option[UInt] = None,
+  ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
+    val stamped = Stamp(bundles.bits)
+    val squashInBits = if (config.isFPGA) StoreHash(stamped, bundles.fire) else stamped
+    val squashIn = Wire(Decoupled(chiselTypeOf(squashInBits)))
+    squashIn.bits := squashInBits
+    squashIn.valid := bundles.valid
+    bundles.ready := squashIn.ready
+    val module = Module(new SquashEndpoint(chiselTypeOf(squashInBits).toSeq, config))
+    module.fpgaEnable.foreach(_ := fpgaEnable.getOrElse(true.B))
+    module.fpgaMaxFused.foreach(_ := fpgaMaxFused.getOrElse(255.U(8.W)))
+    module.in <> squashIn
     module.out
   }
 }
@@ -88,8 +101,9 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
     sq.inheritFrom(st)
     val base = stamp(sq.bits.coreid)
     val inc = commitSum(sq.bits.coreid).last
-    // If no instr committed in the same cycle, store event will be checked in next commit
-    sq.bits.stamp := Mux(inc === 0.U, base + 1.U, base + inc)
+    // Decode count-minus-one only for events that may precede retirement.
+    val offset = Mux(sq.bits.preCommit, sq.bits.storeOffset, 0.U) + 1.U
+    sq.bits.stamp := Mux(inc === 0.U, base + offset, base + inc)
     sq
   }
 
@@ -101,20 +115,27 @@ class Stamper(bundles: Seq[Valid[DifftestBundle]]) extends Module {
 }
 
 class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig) extends Module {
-  val in = IO(Input(MixedVec(bundles)))
-  val numCores = in.count(_.bits.isUniqueIdentifier)
+  val in = IO(Flipped(Decoupled(MixedVec(bundles))))
+  val fpgaEnable = Option.when(config.isFPGA)(IO(Input(Bool())))
+  val fpgaMaxFused = Option.when(config.isFPGA)(IO(Input(UInt(8.W))))
+  val numCores = in.bits.count(_.bits.isUniqueIdentifier)
 
+  val pipelined = Wire(Decoupled(MixedVec(bundles)))
+  PipelineConnect(in, pipelined, pipelined.fire)
   val control = Module(new SquashControl(config))
   control.clock := clock
   control.reset := reset
   val in_replay =
-    in.map(_.bits)
+    pipelined.bits
+      .map(_.bits)
       .filter(_.desiredCppName == "trace_info")
       .map(_.asInstanceOf[DiffTraceInfo].in_replay)
       .foldLeft(false.B)(_ || _)
   val timeout_count = RegInit(0.U(32.W))
   val timeout = timeout_count === 200000.U
-  val global_tick = !control.enable || in_replay || timeout
+  val squash_enable = fpgaEnable.getOrElse(control.enable)
+  val maxFused = fpgaMaxFused.getOrElse(control.maxFused)
+  val global_tick = !squash_enable || in_replay || timeout
 
   val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredCppName)
   // Tick and Submit the pending non-squashable events immediately.
@@ -131,7 +152,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .zip(want_tick_vec)
       .filter(_._1.squashGroup.contains(g))
       .map { case (u, wt) =>
-        if (u.squashQueue) {
+        if (u.squashQueue && !u.isInstanceOf[DifftestHash]) {
           false.B
         } else {
           if (config.hasBuiltInPerf) DifftestPerf(s"SquashTick_${g}_${u.desiredCppName}", wt)
@@ -141,39 +162,49 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .reduce(_ || _)
   })
 
-  val s_out_vec = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
-    val s_in = in.filter(_.bits.desiredCppName == u.desiredCppName)
+  val squashers = uniqBundles.zip(want_tick_vec).map { case (u, wt) =>
+    val s_in = pipelined.bits.filter(_.bits.desiredCppName == u.desiredCppName)
     val squasher = Module(new Squasher(chiselTypeOf(s_in.head), s_in.length, numCores, config))
-    squasher.in.zip(s_in).foreach { case (i, s_i) => i := s_i }
+    squasher.in.bits.zip(s_in).foreach { case (dst, src) => dst := src }
+    squasher.maxFused := maxFused
     wt := squasher.want_tick
     val group_tick =
       group_name_vec
         .zip(group_tick_vec)
         .collect { case (n, gt) if u.squashGroup.contains(n) => gt }
         .foldLeft(false.B)(_ || _)
-    squasher.should_tick := wt || group_tick || global_tick
-    squasher.out
+    squasher.group_tick := group_tick
+    squasher.global_tick := global_tick
+    squasher
   }
+  val s_out_vec = squashers.map(_.out.bits)
   // Flatten Seq[MixedVec[DifftestBundle]] to MixedVec[DifftestBundle]
-  val out = IO(Output(MixedVec(s_out_vec.flatMap(chiselTypeOf(_)))))
+  val out = IO(Decoupled(MixedVec(s_out_vec.flatMap(chiselTypeOf(_)))))
   s_out_vec.zipWithIndex.foreach { case (vec, i) =>
     val base = if (i != 0) {
       s_out_vec.take(i).map(_.length).sum
     } else 0
     vec.zipWithIndex.foreach { case (gen, idx) =>
-      out(base + idx) := gen
+      out.bits(base + idx) := gen
     }
   }
+  squashers.foreach(_.out.ready := out.ready)
+  pipelined.ready := VecInit(squashers.map(_.in.ready)).asUInt.andR
+  // All squashers must fire synchronously so a held input is consumed only once.
+  squashers.foreach(_.in.valid := pipelined.fire)
+  out.valid := VecInit(squashers.map(_.out.valid)).asUInt.orR
 }
 
 // It will help do squash for bundles with same Class, return tick and state
 class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, config: GatewayConfig) extends Module {
-  val in = IO(Input(Vec(length, bundleType)))
+  val in = IO(Flipped(Decoupled(Vec(length, bundleType))))
+  val maxFused = IO(Input(UInt(8.W)))
   val want_tick = IO(Output(Bool()))
-  val should_tick = IO(Input(Bool()))
+  val group_tick = IO(Input(Bool()))
+  val global_tick = IO(Input(Bool()))
 
   val state = RegInit(0.U.asTypeOf(Vec(length, bundleType)))
-  val out = IO(Output(Vec(length, bundleType)))
+  val out = IO(Decoupled(Vec(length, bundleType)))
 
   // Mark the initial commit events as non-squashable for initial state synchronization.
   val tick_first_commit = Option.when(bundleType.bits.desiredCppName == "commit") {
@@ -191,7 +222,7 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
   }
 
   // If one of the bundles cannot be squashed, the others are not squashed as well.
-  val supportsSquashVec = VecInit(in.zip(state).map { case (i, s) => i.supportsSquash(s) }.toSeq)
+  val supportsSquashVec = VecInit(in.bits.zip(state).map { case (i, s) => i.supportsSquash(s, maxFused) }.toSeq)
   val supportsSquash = supportsSquashVec.asUInt.andR
 
   // If one of the bundles cannot be the new base, the others are not as well.
@@ -200,29 +231,42 @@ class Squasher(bundleType: Valid[DifftestBundle], length: Int, numCores: Int, co
 
   want_tick := !supportsSquash || !supportsSquashBase || tick_first_commit.getOrElse(false.B)
 
-  for ((i, s) <- in.zip(state)) {
-    when(should_tick) {
+  val should_tick = want_tick || group_tick || global_tick
+
+  // Decoupled control
+  out.valid := should_tick
+  in.ready := Mux(should_tick, out.ready, true.B)
+
+  // State update: only on fire
+  for ((i, s) <- in.bits.zip(state)) {
+    when(out.fire) {
       s := i
-    }.otherwise {
+    }.elsewhen(in.fire) {
       s := i.squash(s)
     }
   }
-  out := Mux(should_tick, state, 0.U.asTypeOf(out))
+  out.bits := Mux(should_tick, state, 0.U.asTypeOf(out.bits))
 }
 
 class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleInline {
   val clock = IO(Input(Clock()))
   val reset = IO(Input(Reset()))
   val enable = IO(Output(Bool()))
+  val maxFused = IO(Output(UInt(8.W)))
 
   setInline(
     "SquashControl.v",
     s"""
+       |`ifndef SYNTHESIS
+       |`ifdef DIFFTEST
        |`include "DifftestMacros.svh"
+       |`endif // DIFFTEST
+       |`endif // SYNTHESIS
        |module SquashControl(
        |  input clock,
        |  input reset,
-       |  output enable
+       |  output enable,
+       |  output [7:0] maxFused
        |);
        |
        |`ifndef SYNTHESIS
@@ -233,13 +277,17 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |
        |`ifndef SQUASH_CTRL
        |  assign enable = 1;
+       |  assign maxFused = 8'd255;
        |`else
        |`ifdef DIFFTEST
        |import "DPI-C" context function void set_squash_scope();
        |  reg _enable;
+       |  reg [7:0] _max_fused;
        |  assign enable = _enable;
+       |  assign maxFused = _max_fused;
        |initial begin
        |  _enable = 1;
+       |  _max_fused = 8'd255;
        |  set_squash_scope();
        |end
        |
@@ -247,6 +295,11 @@ class SquashControl(config: GatewayConfig) extends ExtModule with HasExtModuleIn
        |export "DPI-C" function set_squash_enable;
        |function void set_squash_enable(int en);
        |  _enable = en;
+       |endfunction
+       |
+       |export "DPI-C" function set_squash_max_fused;
+       |function void set_squash_max_fused(int value);
+       |  _max_fused = value[7:0];
        |endfunction
        |
        |// For the simulation argument +squash_cycles=N

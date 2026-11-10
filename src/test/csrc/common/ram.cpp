@@ -18,6 +18,7 @@
 #include "common.h"
 #include "compress.h"
 #include "elfloader.h"
+#include <cstring>
 #include <iostream>
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
@@ -29,11 +30,43 @@
 #include "cosimulation.h"
 CoDRAMsim3 *dram = NULL;
 #endif
+#ifdef WITH_MCSIM
+#include "mcsim_c_api.h"
+#endif
 
 SimMemory *simMemory = nullptr;
 
-void init_ram(const char *image, uint64_t ram_size) {
-  simMemory = new MmapMemory(image, ram_size);
+void init_ram(const char *image, uint64_t ram_size, bool random_mem, uint32_t seed) {
+  simMemory = new MmapMemory(image, ram_size, random_mem, seed);
+}
+
+void load_ram_image(const char *image) {
+  auto *mem = dynamic_cast<MmapMemory *>(simMemory);
+  assert(mem);
+  mem->load_image(image);
+}
+
+static uint64_t random_init_memory(void *ram, uint64_t memory_size, uint32_t seed) {
+  uint64_t state = seed;
+
+  auto next_word = [&state]() {
+    uint64_t bit = ((state >> 0) ^ (state >> 1) ^ (state >> 3) ^ (state >> 4)) & 1;
+    state = (state >> 1) | (bit << 63);
+    if (state == 0)
+      state = 1; // avoid stuck in zero state
+    return state;
+  };
+
+  uint64_t *dst = reinterpret_cast<uint64_t *>(ram);
+  uint64_t words = memory_size / sizeof(uint64_t);
+  uint64_t first_word = 0;
+  for (uint64_t i = 0; i < words; i++) {
+    dst[i] = next_word();
+    if (i == 0) {
+      first_word = dst[i];
+    }
+  }
+  return first_word;
 }
 
 #ifdef TLB_UNITTEST
@@ -250,7 +283,8 @@ void SimMemory::display_stats() {
 #endif // FUZZING
 }
 
-MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes) {
+MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed)
+    : SimMemory(n_bytes), clone_full_mem(random_mem && seed != 0) {
   // initialize memory using Linux mmap
   ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {
@@ -263,6 +297,17 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes)
     }
   }
   Info("Using simulated %luMB RAM\n", memory_size / (1024 * 1024));
+  if (random_mem) {
+    if (seed == 0) {
+      Info("Skip memory random init for seed = 0\n");
+    } else {
+      uint32_t start = uptime();
+      uint64_t first_word = random_init_memory(ram, memory_size, seed);
+      uint32_t elapsed = uptime() - start;
+      Info("Using memory random init seed = %u, first word = 0x%016" PRIx64 ", elapsed = %ums\n", seed, first_word,
+           elapsed);
+    }
+  }
 
 #ifdef TLB_UNITTEST
   //new add
@@ -270,6 +315,10 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes)
   //new end
 #endif
 
+  load_image(image);
+}
+
+void MmapMemory::load_image(const char *image) {
   if (image == NULL) {
     img_size = 0;
     return;
@@ -295,10 +344,31 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes) : SimMemory(n_bytes)
   }
 }
 
+uint64_t MmapMemory::pad_img_size(uint64_t align) {
+  if (align == 0) {
+    fprintf(stderr, "invalid image padding alignment: 0\n");
+    exit(1);
+  }
+
+  uint64_t padded_size = ((img_size + align - 1) / align) * align;
+  if (padded_size > memory_size) {
+    fprintf(stderr, "image padding exceeds memory size: image=%lu padded=%lu memory=%lu\n", img_size, padded_size,
+            memory_size);
+    exit(1);
+  }
+
+  memset(reinterpret_cast<uint8_t *>(ram) + img_size, 0, padded_size - img_size);
+  img_size = padded_size;
+  return img_size;
+}
+
 MmapMemory::~MmapMemory() {
   munmap(ram, memory_size);
 #ifdef WITH_DRAMSIM3
   dramsim3_finish();
+#endif
+#ifdef WITH_MCSIM
+  mcsim_backend_finish();
 #endif
 }
 
@@ -350,8 +420,9 @@ void pmem_write(uint64_t waddr, uint64_t wdata) {
   return difftest_ram_write(waddr / sizeof(uint64_t), wdata, -1UL);
 }
 
-MmapMemoryWithFootprints::MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name)
-    : MmapMemory(image, n_bytes) {
+MmapMemoryWithFootprints::MmapMemoryWithFootprints(const char *image, uint64_t n_bytes, const char *footprints_name,
+                                                   bool random_mem, uint32_t seed)
+    : MmapMemory(image, n_bytes, random_mem, seed) {
   uint64_t n_touched = memory_size / sizeof(uint64_t);
   touched = (uint8_t *)mmap(NULL, n_touched, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
   footprints_file.open(footprints_name, std::ios::binary);
@@ -545,6 +616,38 @@ bool memory_request(uint64_t address, uint32_t id, bool isWrite) {
     return true;
   }
   return false;
+}
+
+#endif
+
+#ifdef WITH_MCSIM
+
+void mcsim_backend_init() {
+#ifndef MCSIM_CPU_FREQ_MHZ
+#error MCSIM_CPU_FREQ_MHZ is not defined
+#endif
+  if (mcsim_init(MCSIM_CPU_FREQ_MHZ) != 0) {
+    std::cerr << "Failed to initialize MCSim at CPU frequency " << MCSIM_CPU_FREQ_MHZ << " MHz" << std::endl;
+    exit(1);
+  }
+  std::cout << "MCSim timing backend: CPU " << MCSIM_CPU_FREQ_MHZ << " MHz" << std::endl;
+}
+
+void mcsim_backend_step() {
+  mcsim_cpu_tick();
+}
+
+void mcsim_backend_finish() {
+  mcsim_print_stats();
+  mcsim_finish();
+}
+
+uint64_t memory_response(bool isWrite) {
+  return mcsim_response(isWrite);
+}
+
+bool memory_request(uint64_t address, uint32_t id, bool isWrite) {
+  return mcsim_request(address, id, isWrite);
 }
 
 #endif

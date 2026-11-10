@@ -24,6 +24,14 @@ module DifftestEndpoint(
   output wire        workload_switch,
 `endif // ENABLE_WORKLOAD_SWITCH
 
+`ifdef FPGA_SIM
+  input  wire        difftest_hostCtrl_reset,
+  input  wire        difftest_hostCtrl_diffEnable,
+  input  wire        difftest_hostCtrl_ilaTrigger,
+  input  wire        difftest_hostCtrl_enableSquash,
+  input  wire [ 7:0] difftest_hostCtrl_squashMaxFused,
+`endif // FPGA_SIM
+
   /* DifftestTopIO */
   output wire [63:0] difftest_logCtrl_begin,
   output wire [63:0] difftest_logCtrl_end,
@@ -45,6 +53,10 @@ import "DPI-C" function void set_flash_bin(string bin);
 import "DPI-C" function void set_gcpt_bin(string bin);
 import "DPI-C" function void set_diff_ref_so(string diff_so);
 import "DPI-C" function void set_no_diff();
+import "DPI-C" function void set_no_squash();
+import "DPI-C" function void set_squash_size(int size);
+import "DPI-C" function void set_seed(longint seed);
+import "DPI-C" function void set_random_mem();
 import "DPI-C" function void set_simjtag();
 import "DPI-C" function byte simv_init();
 import "DPI-C" function void set_max_instrs(longint mc);
@@ -88,10 +100,13 @@ string workload_list;
 string iotrace_name;
 longint overwrite_nbytes;
 string ram_size;
+integer squash_size;
 
 reg [63:0] max_instrs;
 reg [63:0] max_cycles;
+reg [63:0] perf_tick_cycles;
 reg [63:0] warmup_instr;
+reg [63:0] seed;
 reg [63:0] stuck_limit;
 
 initial begin
@@ -161,6 +176,18 @@ initial begin
   if ($test$plusargs("no-diff")) begin
     set_no_diff();
   end
+  if ($test$plusargs("no-squash")) begin
+    set_no_squash();
+  end
+  if ($value$plusargs("squash-size=%d", squash_size)) begin
+    set_squash_size(squash_size);
+  end
+  if ($value$plusargs("seed=%d", seed)) begin
+    set_seed(seed);
+  end
+  if ($test$plusargs("random-mem")) begin
+    set_random_mem();
+  end
   // enable sim-jtag
   if ($test$plusargs("enable-jtag")) begin
     set_simjtag();
@@ -201,6 +228,12 @@ initial begin
   if ($test$plusargs("max-cycles")) begin
     $value$plusargs("max-cycles=%d", max_cycles);
     $display("set max cycles: %d", max_cycles);
+  end
+  // perf counter tick interval, disabled by default
+  perf_tick_cycles = 0;
+  if ($test$plusargs("perf-tick-cycles")) begin
+    $value$plusargs("perf-tick-cycles=%d", perf_tick_cycles);
+    $display("set perf tick cycles: %d", perf_tick_cycles);
   end
 end
 
@@ -349,13 +382,18 @@ end
 /*
  * difftest result check
  */
+reg [7:0] delay_res;
 always @(posedge clock) begin
-  if (!reset) begin
-    if (simv_result == `SIMV_FAIL) begin
+  if (reset) begin
+    delay_res <= 0;
+  end
+  else begin
+    delay_res <= simv_result;
+    if (delay_res == `SIMV_FAIL) begin
       $display("DIFFTEST FAILED at cycle %d", n_cycles);
       $fatal;
     end
-    else if (simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED) begin
+    else if (delay_res == `SIMV_GOODTRAP || delay_res == `SIMV_EXCEED) begin
       $display("DIFFTEST WORKLOAD DONE at cycle %d", n_cycles);
 `ifndef ENABLE_WORKLOAD_SWITCH
 `ifndef NO_FINISH_AFTER_WORKLOAD
@@ -392,12 +430,27 @@ assign difftest_logCtrl_begin = difftest_logCtrl_begin_r;
 assign difftest_logCtrl_end = difftest_logCtrl_end_r;
 assign difftest_logCtrl_level = 0;
 
+// Tick perfCounter at an interval if perf_tick_cycles is set
+wire perfCtrl_tick;
+reg [63:0] perf_cycles;
+assign perfCtrl_tick = perf_tick_cycles > 0 && perf_cycles == perf_tick_cycles - 1;
+always @(posedge clock) begin
+  if (reset || perfCtrl_tick) begin
+    perf_cycles <= 0;
+  end
+  else begin
+    perf_cycles <= perf_cycles + 1'b1;
+  end
+end
+
 `ifndef TB_NO_DPIC
-assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP;
-assign difftest_perfCtrl_dump = simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED || simv_result == `SIMV_FAIL;
+assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP || perfCtrl_tick;
+assign difftest_perfCtrl_dump =
+  simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED || simv_result == `SIMV_FAIL ||
+    (max_cycles > 0 && n_cycles == max_cycles - 1) || perfCtrl_tick;
 `else
-assign difftest_perfCtrl_clean = 0;
-assign difftest_perfCtrl_dump = 0;
+assign difftest_perfCtrl_clean = perfCtrl_tick;
+assign difftest_perfCtrl_dump = perfCtrl_tick;
 `endif // TB_NO_DPIC
 
 endmodule
