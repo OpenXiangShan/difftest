@@ -79,10 +79,6 @@ public:
     return dut->difftest_step;
   }
 
-  inline void set_perf_in_roi(unsigned in_roi) override {
-    dut->difftest_perfCtrl_inRoi = in_roi;
-  }
-
   inline void set_perf_clean(unsigned clean) override {
     dut->difftest_perfCtrl_clean = clean;
   }

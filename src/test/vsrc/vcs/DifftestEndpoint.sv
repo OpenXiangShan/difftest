@@ -36,7 +36,6 @@ module DifftestEndpoint(
   output wire [63:0] difftest_logCtrl_begin,
   output wire [63:0] difftest_logCtrl_end,
   output wire [63:0] difftest_logCtrl_level,
-  output wire        difftest_perfCtrl_inRoi,
   output wire        difftest_perfCtrl_clean,
   output wire        difftest_perfCtrl_dump,
   input  wire        difftest_uart_out_valid,
@@ -445,18 +444,11 @@ always @(posedge clock) begin
 end
 
 `ifndef TB_NO_DPIC
-reg in_roi;
-always @(posedge clock) begin
-  if (reset) in_roi <= warmup_instr == 0;
-  else if (simv_result == `SIMV_WARMUP) in_roi <= 1'b1;
-end
-assign difftest_perfCtrl_inRoi = in_roi;
 assign difftest_perfCtrl_clean = simv_result == `SIMV_WARMUP || perfCtrl_tick;
 assign difftest_perfCtrl_dump =
   simv_result == `SIMV_GOODTRAP || simv_result == `SIMV_EXCEED || simv_result == `SIMV_FAIL ||
     (max_cycles > 0 && n_cycles == max_cycles - 1) || perfCtrl_tick;
 `else
-assign difftest_perfCtrl_inRoi = 1'b1;
 assign difftest_perfCtrl_clean = perfCtrl_tick;
 assign difftest_perfCtrl_dump = perfCtrl_tick;
 `endif // TB_NO_DPIC

@@ -57,10 +57,6 @@ public:
     return dut->get_difftest__DOT__step();
   }
 
-  inline void set_perf_in_roi(unsigned in_roi) override {
-    dut->set_difftest__DOT__perfCtrl__DOT__inRoi(in_roi);
-  }
-
   inline void set_perf_clean(unsigned clean) override {
     dut->set_difftest__DOT__perfCtrl__DOT__clean(clean);
   }

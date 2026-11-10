@@ -22,7 +22,6 @@ import chisel3.util.experimental.BoringUtils
 class LogPerfControl extends Bundle {
   val timer = UInt(64.W)
   val logEnable = Bool()
-  val inRoi = Bool()
   val clean = Bool()
   val dump = Bool()
 }

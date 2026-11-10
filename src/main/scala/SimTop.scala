@@ -42,7 +42,6 @@ class DifftestTopIO extends Bundle {
 }
 
 class PerfCtrlIO extends Bundle {
-  val inRoi = Input(Bool())
   val clean = Input(Bool())
   val dump = Input(Bool())
 }
@@ -126,7 +125,6 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
     val control = Wire(new LogPerfControl)
     control.timer := timer
     control.logEnable := log_enable
-    control.inRoi := difftest.perfCtrl.inRoi
     control.clean := difftest.perfCtrl.clean
     control.dump := difftest.perfCtrl.dump
     LogPerfControl.setSource(control)
