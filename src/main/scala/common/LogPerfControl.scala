@@ -16,8 +16,8 @@
 package difftest.common
 
 import chisel3._
+import chisel3.util._
 import chisel3.reflect.DataMirror
-import chisel3.util.experimental.BoringUtils
 
 class LogPerfControl extends Bundle {
   val timer = UInt(64.W)
@@ -26,13 +26,54 @@ class LogPerfControl extends Bundle {
   val dump = Bool()
 }
 
+private class LogPerfHelper extends BlackBox with HasBlackBoxInline {
+  val io = IO(Output(new LogPerfControl))
+
+  val cppExtModule =
+    """
+      |void LogPerfHelper (
+      |  uint64_t& timer,
+      |  uint8_t&  logEnable,
+      |  uint8_t&  clean,
+      |  uint8_t&  dump
+      |) {
+      |  timer     = difftest$$timer;
+      |  logEnable = difftest$$log_enable;
+      |  clean     = difftest$$perfCtrl$$clean;
+      |  dump      = difftest$$perfCtrl$$dump;
+      |}
+      |""".stripMargin
+  difftest.DifftestModule.createCppExtModule("LogPerfHelper", cppExtModule)
+
+  val verilog =
+    """`ifndef SIM_TOP_MODULE_NAME
+      |  `define SIM_TOP_MODULE_NAME SimTop
+      |`endif
+      |
+      |/*verilator tracing_off*/
+      |/*verilator coverage_off*/
+      |
+      |module LogPerfHelper(
+      |  output [63:0] timer,
+      |  output        logEnable,
+      |  output        clean,
+      |  output        dump
+      |);
+      |
+      |assign timer     = `SIM_TOP_MODULE_NAME.difftest_timer;
+      |assign logEnable = `SIM_TOP_MODULE_NAME.difftest_log_enable;
+      |assign clean     = `SIM_TOP_MODULE_NAME.difftest_perfCtrl_clean;
+      |assign dump      = `SIM_TOP_MODULE_NAME.difftest_perfCtrl_dump;
+      |
+      |endmodule
+      |
+      |""".stripMargin
+  setInline("LogPerfHelper.v", verilog)
+}
+
 object LogPerfControl {
   private val instances = scala.collection.mutable.ListBuffer.empty[LogPerfControl]
-  private var source: LogPerfControl = _
-
-  def setSource(control: LogPerfControl): Unit = source = control
-
-  private def instantiate(): LogPerfControl = instances.addOne(WireInit(BoringUtils.bore(source))).last
+  private def instantiate(): LogPerfControl = instances.addOne(WireInit(Module(new LogPerfHelper).io)).last
 
   def apply(): LogPerfControl = instances.find(DataMirror.isVisible).getOrElse(instantiate())
 }

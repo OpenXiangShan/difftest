@@ -25,7 +25,6 @@ import difftest.common.{
   AXI4LiteBundle,
   AXI4Stream,
   DifftestWiring,
-  LogPerfControl,
   VerilogAXI4LiteRecord,
   VerilogAXI4Record,
   VerilogAXI4StreamRecord,
@@ -114,21 +113,6 @@ trait HasDiffTestInterfaces extends ImplicitClock with ImplicitReset { this: Raw
 // Top-level module for DiffTest simulation. Will be created by DifftestModule.top
 class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix: Option[String]) extends Module {
   override def desiredName: String = modPrefix.getOrElse("") + super.desiredName
-  val difftest = IO(new DifftestTopIO)
-  prefix("difftest") {
-    val timer = RegInit(0.U(64.W))
-    timer := timer + 1.U
-    dontTouch(timer)
-    val log_enable = difftest.logCtrl.enable(timer)
-    dontTouch(log_enable)
-
-    val control = Wire(new LogPerfControl)
-    control.timer := timer
-    control.logEnable := log_enable
-    control.clean := difftest.perfCtrl.clean
-    control.dump := difftest.perfCtrl.dump
-    LogPerfControl.setSource(control)
-  }
   val cpu = Module(cpuGen)
   cpu.dutClock := clock
 
@@ -139,11 +123,22 @@ class SimTop[T <: RawModule with HasDiffTestInterfaces](cpuGen: => T, modPrefix:
     DifftestModule.collect(cpuName)
   }
 
+  // IO: difftest_*
+  val difftest = IO(new DifftestTopIO)
+
   difftest.exit := gateway.exit.getOrElse(0.U)
   difftest.step := gateway.step.getOrElse(0.U)
   difftest.uart := DontCare
 
   prefix("difftest") {
+    // Required signals for LogPerfControl
+    val timer = RegInit(0.U(64.W))
+    timer := timer + 1.U
+    dontTouch(timer)
+
+    val log_enable = difftest.logCtrl.enable(timer)
+    dontTouch(log_enable)
+
     val ref_clock = Option.when(gateway.refClock.isDefined)(IO(Input(Clock())))
     gateway.refClock.foreach(_ := ref_clock.get)
 
