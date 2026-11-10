@@ -276,11 +276,129 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
       }.sum
       if (locatorBytes == 0) packetSize else s"($packetSize + $locatorBytes)"
     }
+    val hasMatrixWriteback = template.exists(_.desiredCppName == "amu_writeback")
+    // A generic parser entry invalidates the proof before any writes. PACKET
+    // only modifies amu_writeback; Delta sync must not modify classifier flags.
+    val matrixCacheSafe = !template.collect { case elem: DiffDeltaElem => elem.srcGenType }.exists { src =>
+      src.bits.hasValid || src.desiredCppName == "trap" ||
+      src.dataElements.exists { case (name, _, _) => Seq("valid", "hasTrap", "hasWFI").contains(name) }
+    }
+    val matrixDeclarations = if (hasMatrixWriteback) {
+      """#ifdef FPGA_HOST
+        |  static matrix_wb_fastpath::LogicalStep matrix_logical_step;
+        |  [[maybe_unused]] static matrix_wb_fastpath::DirectWriteback direct_writeback;
+        |  [[maybe_unused]] static matrix_wb_fastpath::PacketWriteback packet_writeback;
+        |  [[maybe_unused]] static bool matrix_other_events_clean[CONFIG_DIFFTEST_BATCH_SIZE] = {};
+        |#endif
+        |""".stripMargin
+    } else ""
+    val matrixObserve = if (hasMatrixWriteback) {
+      """#ifdef FPGA_HOST
+        |    if (id != BatchStep) matrix_logical_step.observe(id == AmuWritebackEvent);
+        |#endif
+        |""".stripMargin
+    } else ""
+    val matrixStep = if (hasMatrixWriteback) {
+      """#if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_INTERNAL_STEP)
+        |      const bool matrix_writeback_step = matrix_logical_step.complete();
+        |#endif
+        |""".stripMargin
+    } else ""
+    // This specialization is restricted to the existing 79B tiny-matrix WB
+    // event followed by core/index bytes. Other generated layouts use the
+    // generic parser; no hardware packet or packed C declaration changes.
+    val packetWriteback =
+      if (
+        config.isDelta && template.exists { t =>
+          val elems = t.getByteAlignElems.map { case (name, value) => (name, value.getWidth / 8) }
+          t.desiredCppName == "amu_writeback" && elems.takeRight(2) == Seq(("coreid", 1), ("index", 1)) &&
+          elems.dropRight(2).map(_._2).sum == 79
+        }
+      ) {
+        s"""#if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_INTERNAL_STEP) && !defined(CONFIG_DIFFTEST_QUERY) && NUM_CORES == 1 && CONFIG_DIFF_AMU_WRITEBACK_WIDTH == 1 && DIFFTEST_BATCH_CHUNK_BYTES == 32 && DIFFTEST_BATCH_BEAT_CHUNKS == 2
+           |  if (packet_writeback.pending() ||
+           |      (difftest_matrix_wb_packet_enabled() && parser.clean_boundary() && matrix_logical_step.empty() &&
+           |       !dStats->hasProgress && !dStats->get(0)->delta_info.valid && sizeof(DifftestAmuWritebackEvent) == 79)) {
+           |    auto packet = &(DUT_BUF(0, 0, dut_index)->amu_writeback[0]);
+           |    const auto result = packet_writeback.receive(packet, sizeof(*packet), payload, 64,
+           |                                                 BatchHead, AmuWritebackEvent, BatchStep);
+           |    if (result == matrix_wb_fastpath::PacketWriteback::Result::Pending) return;
+           |    if (result == matrix_wb_fastpath::PacketWriteback::Result::Complete) {
+           |#ifdef CONFIG_DIFFTEST_PERFCNT
+           |      dpic_calls[perf_Batch_AmuWritebackEvent]++;
+           |      dpic_bytes[perf_Batch_AmuWritebackEvent] += sizeof(*packet) + 2;
+           |#endif
+           |      matrix_logical_step.observe(true);
+           |      if (dStats->need_pending()) return;
+           |      dStats->sync(0, dut_index);
+           |      const bool matrix_writeback_step = matrix_logical_step.complete();
+           |      bool *const packet_slot_cache = ${if (matrixCacheSafe)
+            "difftest_matrix_wb_classify_cache_enabled() ? &matrix_other_events_clean[dut_index] : nullptr"
+          else "nullptr"};
+           |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
+           |      extern void fpga_nstep(uint8_t step);
+           |      difftest_matrix_wb_step(matrix_writeback_step, packet_slot_cache);
+           |      try {
+           |        fpga_nstep(1);
+           |      } catch (...) {
+           |        difftest_matrix_wb_step(false);
+           |        throw;
+           |      }
+           |      difftest_matrix_wb_step(false);
+           |      return;
+           |    }
+           |  }
+           |#endif
+           |""".stripMargin
+      } else ""
+    val matrixCacheInvalidate = if (hasMatrixWriteback) {
+      s"""#ifdef FPGA_HOST
+         |  // Generic parsing writes only this slot; BatchStep advances then returns.
+         |  // Invalidate before the first write, including partial/pending events.
+         |#if NUM_CORES == 1 && CONFIG_DIFFTEST_ZONESIZE == 1 && CONFIG_DIFFTEST_BUFLEN == CONFIG_DIFFTEST_BATCH_SIZE
+         |  if (${if (matrixCacheSafe) "difftest_matrix_wb_slot_invalidate_enabled()" else "false"})
+         |    matrix_other_events_clean[dut_index] = false;
+         |  else
+         |#endif
+         |    memset(matrix_other_events_clean, 0, sizeof(matrix_other_events_clean));
+         |#endif
+         |""".stripMargin
+    } else ""
+    val matrixBeforeStep = if (hasMatrixWriteback) "      difftest_matrix_wb_step(matrix_writeback_step);" else ""
+    val matrixAfterStep = if (hasMatrixWriteback) "      difftest_matrix_wb_step(false);" else ""
     val bundleAssign = template.zipWithIndex.map { case (t, idx) =>
       val bundleName = bundleEnum(idx)
       val perfName = "perf_Batch_" + bundleName
       val elemSize = elemSizeExpr(t)
+      val elements = t.getByteAlignElems.map { case (name, value) => (name, value.getWidth / 8) }
+      val dataBytes =
+        elements.filterNot { case (name, _) => Seq("coreid", "index", "address").contains(name) }.map(_._2).sum
+      def locatorOffset(name: String): Int = elements.takeWhile(_._1 != name).map(_._2).sum
+      val directWriteback =
+        if (
+          config.isDelta && t.desiredCppName == "amu_writeback" &&
+          elements.exists(e => e._1 == "coreid" && e._2 == 1) &&
+          elements.exists(e => e._1 == "index" && e._2 == 1) &&
+          locatorOffset("coreid") == dataBytes && locatorOffset("index") == dataBytes + 1
+        ) {
+          s"""#if defined(FPGA_HOST) && NUM_CORES == 1 && CONFIG_DIFF_AMU_WRITEBACK_WIDTH == 1
+             |      if (parser.single_matrix_writeback() && matrix_logical_step.only_writeback() &&
+             |          !dStats->hasProgress && !dStats->get(0)->delta_info.valid &&
+             |          sizeof(DifftestAmuWritebackEvent) == $dataBytes && difftest_matrix_wb_decode_enabled()) {
+             |        auto packet = &(DUT_BUF(0, 0, dut_index)->amu_writeback[0]);
+             |        if (!direct_writeback.receive(packet, sizeof(*packet), chunk_payload, DIFFTEST_BATCH_CHUNK_BYTES)) continue;
+             |#ifdef CONFIG_DIFFTEST_PERFCNT
+             |        dpic_calls[$perfName] += num;
+             |        dpic_bytes[$perfName] += num * $elemSize;
+             |#endif
+             |        parser.finish_direct_cluster(sizeof(*packet) + 2);
+             |        continue;
+             |      }
+             |#endif
+             |""".stripMargin
+        } else ""
       s"""    else if (id == $bundleName) {
+         |$directWriteback
          |      if (!parser.recv_cluster(chunk_payload, num, $elemSize)) continue;
          |#ifdef CONFIG_DIFFTEST_PERFCNT
          |      dpic_calls[$perfName] += num;
@@ -322,11 +440,14 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
          |#endif // CONFIG_DIFFTEST_QUERY
          |      parser.reset_step();
          |$stepPending
+         |$matrixStep
          |      dut_index = (dut_index + 1) % CONFIG_DIFFTEST_BATCH_SIZE;
          |#ifdef CONFIG_DIFFTEST_INTERNAL_STEP
          |#ifdef FPGA_HOST
          |      extern void fpga_nstep(uint8_t step);
+         |$matrixBeforeStep
          |      fpga_nstep(1);
+         |$matrixAfterStep
          |#else
          |      extern void simv_nstep(uint8_t step);
          |      simv_nstep(1);
@@ -339,7 +460,9 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |  uint8_t* payload = (uint8_t*)io;
            |  static DifftestBatchParser parser;
            |  static int dut_index = 0;
-           |
+           |$matrixDeclarations
+           |$packetWriteback
+           |$matrixCacheInvalidate
            |  for (uint32_t chunk = 0; chunk <= DIFFTEST_BATCH_BEAT_CHUNKS; chunk++) {
            |    bool has_chunk = chunk < DIFFTEST_BATCH_BEAT_CHUNKS;
            |    const uint8_t* chunk_payload = payload + chunk * DIFFTEST_BATCH_CHUNK_BYTES;
@@ -353,6 +476,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |    uint8_t id = parser.current_info().id;
            |    uint8_t num = parser.current_info().num;
            |    uint32_t coreid, index, address;
+           |$matrixObserve
            |$batchStepAssign
            |$bundleAssign
            |    else {
@@ -515,6 +639,9 @@ object DPIC {
     interfaceCpp += ""
     interfaceCpp += "#include \"difftest.h\""
     interfaceCpp += "#include \"difftest-dpic.h\""
+    if (config.isBatch && Batch.getTemplate.exists(_.desiredCppName == "amu_writeback")) {
+      interfaceCpp += "#include \"matrix_wb_fastpath.h\""
+    }
     interfaceCpp += "#include \"difftest-query.h\""
     interfaceCpp += "#ifdef CONFIG_DIFFTEST_PERFCNT"
     interfaceCpp += "#include \"perf.h\""
@@ -598,6 +725,10 @@ object DPIC {
           |
           |public:
           |  bool reading_info() const { return info_idx == 0; }
+          |  bool clean_boundary() const {
+          |    return info_idx == 0 && info_num == 0 && parsed_infos == 0 &&
+          |           data_len == 0 && info_len == 0 && info_bytes == 0 && parsed_chunks == 0;
+          |  }
           |  uint32_t info_count() const { return info_num; }
           |  uint32_t parsed_info_count() const { return parsed_infos; }
           |  uint32_t parsed_chunk_count() const { return parsed_chunks; }
@@ -677,6 +808,20 @@ object DPIC {
           |      assert(0);
           |    }
           |    return true;
+          |  }
+          |
+          |  bool single_matrix_writeback() {
+          |#ifdef CONFIG_DIFFTEST_AMUWRITEBACKEVENT
+          |    return info_num == 1 && info_entries()[1].id == AmuWritebackEvent && info_entries()[1].num == 1;
+          |#else
+          |    return false;
+          |#endif
+          |  }
+          |
+          |  void finish_direct_cluster(uint32_t bytes) {
+          |    if (data_len) throw std::runtime_error("Mixed direct/buffered matrix writeback cluster");
+          |    cluster_bytes = align_chunk(bytes);
+          |    finish_cluster();
           |  }
           |
           |  void finish_cluster() {

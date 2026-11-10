@@ -67,6 +67,15 @@ public:
     return ret;
   }
 
+  // Matrix-only dispatch knows the exact concrete type. Keep the ordinary
+  // step() unchanged, including its return/error/exception and timer semantics.
+  template <typename Checker> int step_typed() {
+    before_step();
+    int ret = static_cast<Checker *>(this)->Checker::do_step();
+    after_step();
+    return ret;
+  }
+
   virtual int do_step() = 0;
 #ifdef CONFIG_DIFFTEST_FAST_REF
   virtual void discard() {}
@@ -252,6 +261,17 @@ public:
   TimeoutChecker(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
       : ProbeChecker<DifftestTrapEvent>(get_probe, state, proxy) {}
 
+  int step_with_probe(DifftestTrapEvent &probe) {
+    before_step();
+    int ret = STATE_OK;
+    if (ProbeChecker<DifftestTrapEvent>::get_valid(probe)) {
+      ret = TimeoutChecker::check(probe);
+      ProbeChecker<DifftestTrapEvent>::clear_valid(probe);
+    }
+    after_step();
+    return ret;
+  }
+
 private:
   int check(const DifftestTrapEvent &probe) override;
 };
@@ -392,6 +412,17 @@ class GoldenMemoryInit : public ProbeChecker<DifftestTrapEvent> {
 public:
   GoldenMemoryInit(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
       : ProbeChecker<DifftestTrapEvent>(get_probe, state, proxy) {}
+
+  int step_with_probe(DifftestTrapEvent &probe) {
+    before_step();
+    int ret = STATE_OK;
+    if (GoldenMemoryInit::get_valid(probe)) {
+      ret = GoldenMemoryInit::check(probe);
+      GoldenMemoryInit::clear_valid(probe);
+    }
+    after_step();
+    return ret;
+  }
 
 private:
   bool initDump = true;
@@ -574,6 +605,17 @@ class AmuExecRecorder : public ProbeChecker<DifftestAmuWritebackEvent> {
 public:
   AmuExecRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
       : ProbeChecker<DifftestAmuWritebackEvent>(get_probe, state, proxy) {}
+
+  int step_with_probe(DifftestAmuWritebackEvent &probe) {
+    before_step();
+    int ret = STATE_OK;
+    if (AmuExecRecorder::get_valid(probe)) {
+      ret = AmuExecRecorder::check(probe);
+      AmuExecRecorder::clear_valid(probe);
+    }
+    after_step();
+    return ret;
+  }
 
   bool get_valid(const DifftestAmuWritebackEvent &probe) override;
   void clear_valid(DifftestAmuWritebackEvent &probe) override;

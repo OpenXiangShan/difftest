@@ -16,6 +16,27 @@
 
 #include "difftest.h"
 #include "matrix_hash.h"
+#include "matrix_wb_rebuild.h"
+#include <cstdlib>
+#include <cstring>
+#include <stdexcept>
+
+namespace {
+bool matrix_pending_fast_enabled() {
+#if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_FPGA) && NUM_CORES == 1 && !defined(CONFIG_DIFFTEST_QUERY) && \
+    !defined(CONFIG_DIFFTEST_REPLAY) && !defined(CONFIG_DIFFTEST_FORK_REF) && !defined(CONFIG_DIFFTEST_FAST_REF)
+  static const bool enabled = [] {
+    const char *value = std::getenv("FPGA_MATRIX_PENDING_FAST");
+    if (value && std::strcmp(value, "0") && std::strcmp(value, "1"))
+      throw std::invalid_argument("FPGA_MATRIX_PENDING_FAST must be 0 or 1");
+    return value && std::strcmp(value, "1") == 0;
+  }();
+  return enabled;
+#else
+  return false;
+#endif
+}
+} // namespace
 
 #if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) || defined(CONFIG_DIFFTEST_MSYNCEVENT)
 static void set_error_pc(int coreid, uint64_t pc) {
@@ -200,11 +221,20 @@ int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
 #else
   state->matrix_sw_rob.emplace_back(probe);
 #endif // CONFIG_DIFFTEST_REPLAY
+  if (matrix_pending_fast_enabled()) {
+    ++state->matrix_ref_pending;
+    state->matrix_exec_dirty = true;
+  }
   return STATE_OK;
 }
 
 // 2. When REF commits same inst, compare amu_ctrl → on match set WAIT_DUT_EXEC
 int AmuCtrlChecker::do_step() {
+  const bool pending_fast = matrix_pending_fast_enabled();
+  // Every WAIT_REF entry originates in AmuCtrlRecorder. A successful control
+  // comparison removes exactly one from this count; result-only WB cannot add one.
+  if (pending_fast && state->matrix_ref_pending == 0)
+    return STATE_OK;
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
     if (iter->state == DiffState::WAIT_REF_COMMIT) {
       const DifftestAmuCtrlEvent dut_event = iter->amu_event;
@@ -228,6 +258,10 @@ int AmuCtrlChecker::do_step() {
         return STATE_ERROR;
       } else {
         iter->state = DiffState::WAIT_DUT_EXEC;
+        if (pending_fast) {
+          --state->matrix_ref_pending;
+          state->matrix_exec_dirty = true;
+        }
       }
     }
   }
@@ -257,6 +291,17 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
       entry.res.reset(new uint64_t[matrix_u64_size]());
     }
   }
+#ifdef CONFIG_DIFF_AMU_WRITEBACK_NO_MASK
+  // MMA writes complete C-register entries. Keep the ordinary bank/mask path
+  // for every other operation, register geometry, or partial/divergent write.
+  const static bool rebuild_enabled = difftest_matrix_wb_rebuild_enabled();
+  if (rebuild_enabled && entry.amu_event.op == 0 && entry.amu_event.md >= 4 &&
+      matrix_wb_rebuild::try_common_address<CONFIG_DIFF_AMU_WRITEBACK_BANKS, CONFIG_DIFF_AMU_C_WORDS_PER_BANK,
+                                            CONFIG_DIFF_AMU_WRITEBACK_WORDS_PER_BANK, CONFIG_DIFF_AMU_ARLEN,
+                                            CONFIG_DIFF_AMU_C_REG_SIZE_BYTES>(entry.res.get(), probe)) {
+    return;
+  }
+#endif
   uint8_t md = entry.amu_event.md;
   const size_t matrix_words_per_bank = (md < 4) ? CONFIG_DIFF_AMU_AB_WORDS_PER_BANK : CONFIG_DIFF_AMU_C_WORDS_PER_BANK;
   // bankAddr is an entry index in the selected matrix register. The
@@ -315,6 +360,8 @@ int AmuExecRecorder::check(const DifftestAmuWritebackEvent &probe) {
       record_writeback(*iter, probe);
       if (probe.finish) {
         iter->state = DiffState::WAIT_SWROB_COMMIT;
+        if (matrix_pending_fast_enabled())
+          state->matrix_exec_dirty = true;
       }
       return STATE_OK;
     }
@@ -353,6 +400,8 @@ int AmuFinishRecorder::check(const DifftestAmuFinishEvent &probe) {
       return STATE_ERROR;
     }
     entry.state = DiffState::WAIT_SWROB_COMMIT;
+    if (matrix_pending_fast_enabled())
+      state->matrix_exec_dirty = true;
     return STATE_OK;
   }
   printf("No matching AMU instruction for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
@@ -378,6 +427,8 @@ int AmuHashExecRecorder::check(const DifftestAmuHashEvent &probe) {
         break;
       entry.hash = {probe.hashLo, 0, probe.byteCount};
       entry.state = DiffState::WAIT_SWROB_COMMIT;
+      if (matrix_pending_fast_enabled())
+        state->matrix_exec_dirty = true;
       return STATE_OK;
     }
   }
@@ -456,6 +507,8 @@ int AmuExecChecker::commit_ready_prefix() {
       }
       // Remove the processed event from matrix_sw_rob
       iter = state->matrix_sw_rob.erase(iter);
+      if (matrix_pending_fast_enabled())
+        state->matrix_exec_dirty = true;
     } else {
       // When there's an unfinished inst before the current inst, the current inst will not be committed.
       // So, when the current inst is unfinished, break the loop.
@@ -479,6 +532,8 @@ int AmuExecChecker::check_mreleases() {
         return STATE_ERROR;
       }
       iter = state->matrix_sw_rob.erase(iter);
+      if (matrix_pending_fast_enabled())
+        state->matrix_exec_dirty = true;
     } else {
       if (iter->state != DiffState::WAIT_SWROB_COMMIT && iter->amu_event.op == 1 && iter->amu_event.sat == 1) {
         unfinished_store_seen = true;
@@ -491,10 +546,22 @@ int AmuExecChecker::check_mreleases() {
 
 // 4. Commit ready inst from software ROB: REF exec and compare
 int AmuExecChecker::do_step() {
+  const bool pending_fast = matrix_pending_fast_enabled();
+  // Both retirement rules depend only on the software ROB's topology and
+  // ready states. Reuse only a previously successful, complete servicing pass.
+  // Partial WB still runs its full recorder and asynchronous errors are still
+  // polled by the ordinary Difftest::step() after this checker returns.
+  if (pending_fast && !state->matrix_exec_dirty)
+    return STATE_OK;
   if (int ret = commit_ready_prefix()) {
     return ret;
   }
-  return check_mreleases();
+  if (int ret = check_mreleases()) {
+    return ret;
+  }
+  if (pending_fast)
+    state->matrix_exec_dirty = false;
+  return STATE_OK;
 }
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

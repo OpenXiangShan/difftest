@@ -99,28 +99,7 @@ public:
   }
 #endif
 
-  void start(bool enable_diff) override {
-    running = true;
-    if (enable_diff == false) {
-      while (signal_num == 0) {
-        usleep(10000);
-      }
-      running = false;
-    } else {
-#ifdef USE_THREAD_MEMPOOL
-      start_transmit_thread();
-      while (running && signal_num == 0) {
-        if (packet_idle && packet_idle())
-          break;
-        usleep(1000);
-      }
-      running = false;
-      stop_thansmit_thread();
-#else
-      read_and_process();
-#endif // USE_THREAD_MEMPOOL
-    }
-  }
+  void start(bool enable_diff) override;
 
   void stop() override {
     running = false;
@@ -151,9 +130,22 @@ private:
   // Main and parser stop this pipeline; receivers observe the same flag.
   std::atomic<bool> running{false};
   std::unique_ptr<XdmaRelayClient> relay;
-  int xdma_c2h_fd[CONFIG_DMA_CHANNELS]{};
+  int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
+  bool persistent_pool = false;
+  bool adjacent_descriptors = false;
+  uint32_t pool_slots = 128;
+  size_t read_packets = 1;
+  bool pool_configured[CONFIG_DMA_CHANNELS]{};
+  void configure_receive();
+  bool finish_receive();
+  ssize_t read_stream(int channel, void *buffer, size_t bytes);
+  bool keep_receiving() const {
+    return running.load() && signal_num == 0;
+  }
+  void dispatch_packet(const FpgaPackgeHead &packet);
+  void receive_failure(const char *message);
 #ifdef CONFIG_USE_XDMA_H2C
-  int xdma_h2c_fd;
+  int xdma_h2c_fd = -1;
 #endif
 
   void device_write(bool is_bypass, const char *workload, uint64_t addr, uint64_t value);

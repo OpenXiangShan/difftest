@@ -209,6 +209,10 @@ public:
   };
 
   std::deque<AmeInstRobEntry> matrix_sw_rob;
+  // Maintained only while FPGA_MATRIX_PENDING_FAST is supported and enabled.
+  // Replay/fork/fast-ref/query use the original scans and ignore this metadata.
+  uint64_t matrix_ref_pending = 0;
+  bool matrix_exec_dirty = true;
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
