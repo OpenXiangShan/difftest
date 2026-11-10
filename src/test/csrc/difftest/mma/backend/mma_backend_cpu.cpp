@@ -30,6 +30,31 @@ static constexpr int kMmaReduceWidthBytes = CONFIG_DIFF_MMA_REDUCE_WIDTH_BYTES;
 static constexpr int kMmaReduceWidthBytes = 32;
 #endif
 
+static uint32_t reduce_int32_chunk_cpu(bool src1_signed, bool src2_signed, const uint8_t *src1, const uint8_t *src2,
+                                     int valid_lanes, uint32_t c_bits, bool saturate) {
+  using namespace cute_mma_model;
+  int32_t products[kMmaReduceWidthBytes] = {};
+  // Independent products can vectorize without changing the reduction order.
+  for (int lane = 0; lane < valid_lanes; ++lane) {
+    products[lane] = decode_int8(src1[lane], src1_signed) * decode_int8(src2[lane], src2_signed);
+  }
+
+  const int groups_per_half = kMmaReduceWidthBytes / 8;
+  int64_t first_half = 0;
+  int64_t second_half = 0;
+  for (int group = 0; group < groups_per_half * 2; ++group) {
+    int64_t group_sum = 0;
+    for (int offset = 0; offset < 4; ++offset)
+      group_sum += products[group * 4 + offset];
+    if (group < groups_per_half)
+      first_half = fixed_add(first_half, group_sum, 32);
+    else
+      second_half = fixed_add(second_half, group_sum, 32);
+  }
+  first_half = add_int32(first_half, wrap_signed(c_bits, 32), saturate);
+  return static_cast<uint32_t>(add_int32(first_half, second_half, saturate));
+}
+
 static inline uint32_t read_u32(const uint8_t *data, size_t index0, size_t index1, size_t row_bytes) {
   const uint8_t *row_ptr = data + index0 * row_bytes;
   return reinterpret_cast<const uint32_t *>(row_ptr)[index1];
@@ -132,9 +157,8 @@ template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVeri
         if (valid_lanes > reduce_chunk_elems) {
           valid_lanes = reduce_chunk_elems;
         }
-        acc_bits =
-            cute_mma_model::reduce_int32_chunk(src1_signed, src2_signed, src1_row + k_base, src2_row + k_base,
-                                               valid_lanes, kMmaReduceWidthBytes, acc_bits, buffer->amu_event.sat);
+        acc_bits = reduce_int32_chunk_cpu(src1_signed, src2_signed, src1_row + k_base, src2_row + k_base, valid_lanes,
+                                         acc_bits, buffer->amu_event.sat);
       }
 
       write_u32(buffer->src3, i, j, result_row_bytes, acc_bits);
