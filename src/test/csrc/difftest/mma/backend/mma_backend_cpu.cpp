@@ -31,7 +31,7 @@ static constexpr int kMmaReduceWidthBytes = 32;
 #endif
 
 static uint32_t reduce_int32_chunk_cpu(bool src1_signed, bool src2_signed, const uint8_t *src1, const uint8_t *src2,
-                                     int valid_lanes, uint32_t c_bits, bool saturate) {
+                                       int valid_lanes, uint32_t c_bits, bool saturate) {
   using namespace cute_mma_model;
   int32_t products[kMmaReduceWidthBytes] = {};
   // Independent products can vectorize without changing the reduction order.
@@ -357,7 +357,7 @@ template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVeri
           valid_lanes = reduce_chunk_elems;
         }
         acc_bits = reduce_int32_chunk_cpu(src1_signed, src2_signed, src1_row + k_base, src2_row + k_base, valid_lanes,
-                                         acc_bits, buffer->amu_event.sat);
+                                          acc_bits, buffer->amu_event.sat);
       }
 
       write_u32(buffer->src3, i, j, result_row_bytes, acc_bits);
