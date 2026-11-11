@@ -77,6 +77,8 @@ int mma_worker_main(unsigned threads, pid_t owner) {
       throw std::runtime_error("MMA service owner disappeared");
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
     std::unique_ptr<MmaEngine> engine(new CudaMmaEngine());
+#elif defined(CONFIG_DIFFTEST_MMA_SYNC)
+    std::unique_ptr<MmaEngine> engine(new CpuMmaEngine(threads, CpuMmaGranularity::OutputRows));
 #else
     std::unique_ptr<MmaEngine> engine(new CpuMmaEngine(threads));
 #endif

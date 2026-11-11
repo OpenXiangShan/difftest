@@ -25,15 +25,23 @@ class CpuMmaThreadPool;
 
 bool verify_cpu_mma(MmaVerificationBuffer *buffer);
 
+enum class CpuMmaGranularity {
+  Instruction,
+  OutputRows
+};
+
 class CpuMmaEngine final : public MmaEngine {
 public:
-  explicit CpuMmaEngine(unsigned threads);
+  explicit CpuMmaEngine(unsigned threads, CpuMmaGranularity granularity = CpuMmaGranularity::Instruction);
   ~CpuMmaEngine() override;
   void compute(const std::vector<MmaVerificationBuffer *> &buffers, uint8_t *passed, uint8_t *const operands[3],
                const Completion &completed) override;
   void shutdown() override;
 
 private:
+  bool verify_output_rows(MmaVerificationBuffer *buffer);
+  const unsigned threads;
+  const CpuMmaGranularity granularity;
   std::unique_ptr<CpuMmaThreadPool> pool;
 };
 

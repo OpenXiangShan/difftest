@@ -20,6 +20,7 @@
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #include "mma/mma_verifier.h"
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -86,12 +87,63 @@ private:
   std::queue<std::function<void()>> jobs;
   std::vector<std::thread> workers;
 };
-CpuMmaEngine::CpuMmaEngine(unsigned threads) : pool(new CpuMmaThreadPool(threads)) {}
+CpuMmaEngine::CpuMmaEngine(unsigned threads, CpuMmaGranularity granularity)
+    : threads(threads), granularity(granularity), pool(new CpuMmaThreadPool(threads)) {}
 
 CpuMmaEngine::~CpuMmaEngine() = default;
 
+bool CpuMmaEngine::verify_output_rows(MmaVerificationBuffer *buffer) {
+  const size_t rows = buffer->amu_event.mtilem;
+  if (rows == 0)
+    return verify_cpu_mma(buffer);
+  const size_t tasks = std::min<size_t>(threads, rows);
+  std::vector<uint8_t> passed(tasks);
+  std::mutex mutex;
+  std::condition_variable completed;
+  size_t remaining = tasks;
+  size_t submitted = 0;
+  try {
+    for (; submitted < tasks; ++submitted) {
+      const size_t part = submitted;
+      const size_t begin = rows * part / tasks;
+      const size_t end = rows * (part + 1) / tasks;
+      pool->submit([&, part, begin, end] {
+        // Borrow disjoint output rows; each keeps its complete original K reduction.
+        MmaVerificationBuffer view{};
+        view.amu_event = buffer->amu_event;
+        view.amu_event.mtilem = end - begin;
+        view.src1 = buffer->src1 + begin * kMmaSourceRowBytes;
+        view.src2 = buffer->src2;
+        view.src3 = buffer->src3 + begin * kMmaResultRowBytes;
+        auto *dut = reinterpret_cast<uint8_t *>(buffer->dut_result.get()) + begin * kMmaResultRowBytes;
+        MatrixResultDeleter deleter;
+        deleter.shared_result = std::shared_ptr<uint8_t>(std::shared_ptr<uint8_t>(), dut);
+        view.dut_result = MatrixResult(reinterpret_cast<uint64_t *>(dut), std::move(deleter));
+        passed[part] = verify_cpu_mma(&view);
+        std::lock_guard<std::mutex> lock(mutex);
+        --remaining;
+        completed.notify_one();
+      });
+    }
+  } catch (...) {
+    std::unique_lock<std::mutex> lock(mutex);
+    remaining -= tasks - submitted;
+    completed.wait(lock, [&] { return remaining == 0; });
+    throw;
+  }
+  std::unique_lock<std::mutex> lock(mutex);
+  completed.wait(lock, [&] { return remaining == 0; });
+  return std::all_of(passed.begin(), passed.end(), [](uint8_t value) { return value != 0; });
+}
+
 void CpuMmaEngine::compute(const std::vector<MmaVerificationBuffer *> &buffers, uint8_t *passed,
                            uint8_t *const operands[3], const Completion &completed) {
+  if (granularity == CpuMmaGranularity::OutputRows) {
+    for (size_t i = 0; i < buffers.size(); ++i)
+      passed[i] = verify_output_rows(buffers[i]);
+    completed(buffers.size());
+    return;
+  }
   struct Pending {
     std::atomic<size_t> remaining;
     const size_t count;

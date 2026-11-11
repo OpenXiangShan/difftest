@@ -113,6 +113,12 @@ software backend:
 Build-time `MMA_ASYNC=0` selects synchronous verification; other values
 select asynchronous verification (default: `1`).
 
+CPU builds use the standalone `difftest-mma-worker` in both schedules.
+`--mma-cpu-threads=N` sets the service's shared computation-thread budget
+(default: `1`). Asynchronous verification distributes whole MMA instructions;
+the synchronous baseline splits one MMA into fixed output-row ranges and waits
+for all ranges before returning. Each output retains its complete K reduction.
+
 CUDA builds default to `CUDA_ARCH=native`; set `CUDA_ARCH=sm_89`, for example,
 when cross-compiling without a visible GPU. Integer MMA uses INT8 Tensor Core
 instructions on SM80 and newer targets, retaining the software kernel on older

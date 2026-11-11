@@ -9,7 +9,6 @@
 #include "mma/backend/mma_backend_service.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-#include "mma/backend/mma_backend_cpu.h"
 #include "mma/mma_verifier.h"
 
 MmaServiceBackend::MmaServiceBackend(MmaBackendKind kind) : kind(kind), process(host, kind == MmaBackendKind::Cpu) {}
@@ -47,32 +46,13 @@ bool MmaServiceBackend::is_batch_compatible(const MmaVerificationBuffer *first,
   return a.isfp == b.isfp && a.types1 == b.types1 && a.types2 == b.types2 && a.typed == b.typed;
 }
 
-namespace {
-class CpuInlineBackend final : public MmaBackend {
-public:
-  void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) override {
-    passed.clear();
-    passed.reserve(buffers.size());
-    for (auto *buffer: buffers)
-      passed.push_back(verify_cpu_mma(buffer) ? 1 : 0);
-  }
-  bool is_batch_compatible(const MmaVerificationBuffer *, const MmaVerificationBuffer *) const override {
-    return true;
-  }
-};
-} // namespace
-
 MmaBackend *make_mma_backend() {
 #ifdef CONFIG_DIFFTEST_MMA_CUDA
   Info("[INFO] MMA reference model backend: CUDA\n");
   return new MmaServiceBackend(MmaBackendKind::Cuda);
 #else
   Info("[INFO] MMA reference model backend: CPU\n");
-#ifdef CONFIG_DIFFTEST_MMA_SYNC
-  return new CpuInlineBackend();
-#else
   return new MmaServiceBackend(MmaBackendKind::Cpu);
-#endif
 #endif
 }
 
