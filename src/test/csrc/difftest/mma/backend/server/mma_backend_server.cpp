@@ -9,6 +9,7 @@
 #include "mma/backend/server/mma_backend_server.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#include "mma/backend/mma_backend_cpu.h"
 #include "mma/backend/mma_backend_cuda.h"
 #include "mma/backend/mma_backend_ipc.h"
 #include "mma/mma_verifier.h"
@@ -60,7 +61,7 @@ struct ClientSession : MappedClient {
 };
 } // namespace
 
-int run_mma_backend_server(pid_t owner) {
+int run_mma_backend_server(unsigned threads, pid_t owner) {
   try {
     DIR *directory = opendir("/proc/self/fd");
     if (!directory)
@@ -72,9 +73,13 @@ int run_mma_backend_server(pid_t owner) {
         close(static_cast<int>(fd));
     }
     closedir(directory);
-    if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() != owner)
+    if (!threads || prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() != owner)
       throw std::runtime_error("MMA service owner disappeared");
+#ifdef CONFIG_DIFFTEST_MMA_CUDA
     CudaMmaEngine engine;
+#else
+    CpuMmaEngine engine(threads);
+#endif
     std::vector<std::shared_ptr<ClientSession>> clients;
     // Release compute resources before unpinning clients, including error exits.
     struct Cleanup {

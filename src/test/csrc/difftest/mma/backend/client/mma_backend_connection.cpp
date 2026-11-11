@@ -23,9 +23,9 @@ using namespace mma_ipc;
 // The worker can outlive individual core and replay connections.
 class MmaWorkerProcess {
 public:
-  MmaWorkerProcess() : owner(getpid()) {
+  explicit MmaWorkerProcess(unsigned threads) : owner(getpid()) {
     name = "difftest-mma." + std::to_string(owner) + "." + std::to_string(reinterpret_cast<uintptr_t>(this));
-    if (!start()) {
+    if (!start(threads)) {
       stop();
       throw std::runtime_error("Failed to start MMA service");
     }
@@ -40,7 +40,7 @@ private:
   int control = -1;
   pid_t worker = -1;
 
-  bool start() {
+  bool start(unsigned threads) {
     int listener = -1, child_listener = -1, child_control = -1;
     int sockets[2] = {-1, -1};
     posix_spawn_file_actions_t actions;
@@ -68,8 +68,8 @@ private:
       std::string program(executable, length);
       program.erase(program.find_last_of('/') + 1);
       program += "difftest-mma-worker";
-      std::string parent = std::to_string(owner);
-      char *argv[] = {&program[0], &parent[0], nullptr};
+      std::string count = std::to_string(threads), parent = std::to_string(owner);
+      char *argv[] = {&program[0], &count[0], &parent[0], nullptr};
       const int error = posix_spawn(&worker, program.c_str(), &actions, nullptr, argv, environ);
       if (error) {
         worker = -1;
@@ -104,9 +104,34 @@ private:
   }
 };
 
+#ifndef CONFIG_DIFFTEST_MMA_CUDA
+namespace {
+std::mutex worker_mutex;
+std::weak_ptr<MmaWorkerProcess> shared_worker;
+unsigned worker_threads = 1;
+} // namespace
+
+void MmaBackendConnection::set_thread_limit(unsigned threads) {
+  std::lock_guard<std::mutex> lock(worker_mutex);
+  Assert(shared_worker.expired(), "Configure MMA threads before starting verification");
+  worker_threads = threads;
+}
+#endif
+
 MmaBackendConnection::MmaBackendConnection(MmaHostBuffer (&host)[3]) : host(host), client_pid(getpid()) {
   try {
-    worker_process = std::make_shared<MmaWorkerProcess>();
+#ifdef CONFIG_DIFFTEST_MMA_CUDA
+    worker_process = std::make_shared<MmaWorkerProcess>(1);
+#else
+    {
+      std::lock_guard<std::mutex> lock(worker_mutex);
+      worker_process = shared_worker.lock();
+      if (!worker_process) {
+        worker_process = std::make_shared<MmaWorkerProcess>(worker_threads);
+        shared_worker = worker_process;
+      }
+    }
+#endif
     prepare();
   } catch (...) {
     release();

@@ -36,6 +36,7 @@ public:
   }
 
   bool is_batch_compatible(const MmaVerificationBuffer *first, const MmaVerificationBuffer *candidate) const override {
+#ifdef CONFIG_DIFFTEST_MMA_CUDA
     if (!is_mma_32bit_result_type(first->amu_event.typed))
       return false;
     const auto &a = first->amu_event;
@@ -43,10 +44,23 @@ public:
     if (a.isfp && a.types1 != Fp8E5M2 && a.types1 != Fp8E4M3 && a.types1 != Fp16 && a.types1 != Bf16 && a.types1 != Tf32)
       return false;
     return a.isfp == b.isfp && a.types1 == b.types1 && a.types2 == b.types2 && a.typed == b.typed;
+#else
+    return true;
+#endif
   }
 
 private:
   MmaBackendConnection connection{host};
+};
+
+class CpuInlineBackend final : public MmaBackend {
+public:
+  void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) override {
+    passed.clear();
+    passed.reserve(buffers.size());
+    for (auto *buffer: buffers)
+      passed.push_back(verify_cpu_mma(buffer) ? 1 : 0);
+  }
 };
 } // namespace
 
@@ -56,7 +70,11 @@ MmaBackend *make_mma_backend() {
   return new MmaBackendClient();
 #else
   Info("[INFO] MMA reference model backend: CPU\n");
-  return new CpuMmaBackend();
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+  return new CpuInlineBackend();
+#else
+  return new MmaBackendClient();
+#endif
 #endif
 }
 

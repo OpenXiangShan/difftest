@@ -26,6 +26,9 @@ MMA_WORKER_SRCS = $(MMA_SERVER_SRCS) \
     mma_backend_cuda_impl.cpp)
 MMA_WORKER_EXTRA_OBJS = $(CUDA_MMA_BACKEND_OBJ)
 MMA_WORKER_LDFLAGS = -L$(CUDA_LIB_DIR) -lcudart
+else ifneq ($(MMA_ASYNC),0)
+MMA_WORKER_SRCS = $(MMA_SERVER_SRCS) \
+  $(addprefix $(DIFFTEST_CSRC_DIR)/mma/backend/,mma_backend.cpp mma_backend_cpu.cpp)
 endif
 
 ifneq ($(MMA_WORKER_SRCS),)

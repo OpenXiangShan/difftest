@@ -19,6 +19,9 @@ class MmaWorkerProcess;
 
 class MmaBackendConnection {
 public:
+#ifndef CONFIG_DIFFTEST_MMA_CUDA
+  static void set_thread_limit(unsigned threads);
+#endif
   explicit MmaBackendConnection(MmaHostBuffer (&host)[3]);
   ~MmaBackendConnection();
   MmaBackendConnection(const MmaBackendConnection &) = delete;

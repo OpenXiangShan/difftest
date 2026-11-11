@@ -12,6 +12,6 @@
 #include "common.h"
 #include <sys/types.h>
 
-int run_mma_backend_server(pid_t owner);
+int run_mma_backend_server(unsigned threads, pid_t owner);
 
 #endif // __MMA_BACKEND_SERVER_H__

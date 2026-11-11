@@ -29,9 +29,9 @@ int eprintf(const char *format, ...) {
 
 int main(int argc, char **argv) {
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  if (argc != 2)
+  if (argc != 3)
     return 2;
-  return run_mma_backend_server(static_cast<pid_t>(std::stol(argv[1])));
+  return run_mma_backend_server(static_cast<unsigned>(std::stoul(argv[1])), static_cast<pid_t>(std::stol(argv[2])));
 #else
   return 0;
 #endif
