@@ -24,8 +24,11 @@
 #endif
 
 #include "mma/backend/mma_backend_cuda_impl.h"
-#include "mma/backend/mma_backend_cuda_process.h"
 #include "mma/mma_verifier.h"
+#include <algorithm>
+#include <cstring>
+#include <cuda_runtime_api.h>
+#include <stdexcept>
 
 bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType *type) {
   if (!is_mma_32bit_result_type(event.typed)) {
@@ -54,76 +57,81 @@ bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType *type) 
   }
 }
 
-CudaMmaBackend::CudaMmaBackend() : process(new CudaMmaProcess(host)) {}
-
-CudaMmaBackend::~CudaMmaBackend() = default;
-
-void CudaMmaBackend::start() {
-  process->prepare();
+CudaMmaEngine::CudaMmaEngine() {
+  const auto error = cudaSetDevice(0);
+  if (error != cudaSuccess)
+    throw std::runtime_error(cudaGetErrorString(error));
+  items.reserve(CONFIG_DIFF_MMA_BATCH_SIZE);
 }
 
-void CudaMmaBackend::prepare_result(MmaVerificationBuffer *buffer) {
-  process->prepare_result(buffer);
-}
+CudaMmaEngine::~CudaMmaEngine() = default;
 
-MatrixResult CudaMmaBackend::allocate_result() {
-  return process->allocate_result();
-}
-
-void CudaMmaBackend::release_result(MmaVerificationBuffer *buffer) {
-  process->release_result(buffer);
-}
-
-bool CudaMmaBackend::is_batch_compatible(const MmaVerificationBuffer *first,
-                                         const MmaVerificationBuffer *candidate) const {
-  CudaMmaType first_type;
-  CudaMmaType candidate_type;
-  if (!first || !candidate || !select_cuda_mma_type(first->amu_event, &first_type) ||
-      !select_cuda_mma_type(candidate->amu_event, &candidate_type)) {
+bool CudaMmaEngine::register_storage(void *storage, size_t bytes, uint8_t *const operands[3]) {
+  const auto error = cudaHostRegister(storage, bytes, cudaHostRegisterDefault);
+  if (error != cudaSuccess) {
+    fprintf(stderr, "CudaMmaBackend: register client failed: %s\n", cudaGetErrorString(error));
     return false;
   }
-
-  // Require exact operand/result encodings in addition to the selected kernel
-  // variant. Matrix dimensions may differ because each batch item carries its
-  // own geometry.
-  return first_type == candidate_type && first->amu_event.isfp == candidate->amu_event.isfp &&
-         first->amu_event.types1 == candidate->amu_event.types1 &&
-         first->amu_event.types2 == candidate->amu_event.types2 && first->amu_event.typed == candidate->amu_event.typed;
+  if (!workspace) {
+    workspace.reset(cuda_mma_backend_create(host, CONFIG_DIFF_MMA_BATCH_SIZE, CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES,
+                                            CONFIG_DIFF_AMU_C_REG_SIZE_BYTES, operands));
+    if (!workspace) {
+      cudaHostUnregister(storage);
+      return false;
+    }
+  }
+  return true;
 }
 
-void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
-  process->verify(buffers, passed);
+void CudaMmaEngine::unregister_storage(void *storage) {
+  cudaHostUnregister(storage);
 }
 
-#else
-
-#include <cassert>
-
-CudaMmaBackend::CudaMmaBackend() = default;
-
-CudaMmaBackend::~CudaMmaBackend() = default;
-
-void CudaMmaBackend::start() {}
-
-MatrixResult CudaMmaBackend::allocate_result() {
-  return MatrixResult();
+void CudaMmaEngine::compute(const std::vector<MmaVerificationBuffer *> &buffers, uint8_t *passed,
+                            uint8_t *const operands[3], const Completion &completed) {
+  items.clear();
+  for (const auto *buffer: buffers) {
+    const auto &event = buffer->amu_event;
+    CudaMmaBatchItem item;
+    item.tile_m = event.mtilem;
+    item.tile_k = event.mtilek;
+    item.tile_n = event.mtilen;
+    item.sat = event.sat;
+    item.src1 = buffer->src1;
+    item.src2 = buffer->src2;
+    item.src3 = buffer->src3;
+    item.dut = reinterpret_cast<const uint8_t *>(buffer->dut_result.get());
+    items.push_back(item);
+  }
+  for (size_t operand = 0; operand < 3; ++operand)
+    workspace->operands[operand].shared_host = operands[operand];
+  CudaMmaType type;
+  const bool success = select_cuda_mma_type(buffers[0]->amu_event, &type);
+  if (success && (!cuda_mma_backend_enqueue_references(workspace.get(), type, items.data(), items.size()) ||
+                  cudaGetLastError() != cudaSuccess))
+    throw std::runtime_error("CUDA service computation failed");
+  if (!success)
+    memset(passed, 0, buffers.size());
+  if (success && !cuda_mma_backend_enqueue_checks(workspace.get(), items.data(), items.size(), passed))
+    throw std::runtime_error("CUDA service comparison failed");
+  for (size_t begin = 0; begin < buffers.size(); begin += kMmaCompletionSize) {
+    const size_t end = std::min(begin + kMmaCompletionSize, buffers.size());
+    if (success && !(buffers.size() <= kMmaCompletionSize ? workspace->synchronize() : workspace->wait(begin, end)))
+      throw std::runtime_error("CUDA service computation failed");
+    for (size_t i = begin; success && i < end; ++i)
+      if (!passed[i] && !cuda_mma_backend_read_result(workspace.get(), i, items[i].src3))
+        throw std::runtime_error("CUDA service result readback failed");
+    if (!completed(end)) {
+      if (!workspace->synchronize())
+        throw std::runtime_error("CUDA service computation failed");
+      return;
+    }
+  }
 }
 
-void CudaMmaBackend::prepare_result(MmaVerificationBuffer *) {}
-void CudaMmaBackend::release_result(MmaVerificationBuffer *) {}
-
-void CudaMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
-  passed.assign(buffers.size(), 0);
-  assert(false && "CudaMmaBackend is not implemented");
+void CudaMmaEngine::shutdown() {
+  workspace.reset();
 }
-
-bool CudaMmaBackend::is_batch_compatible(const MmaVerificationBuffer *first,
-                                         const MmaVerificationBuffer *candidate) const {
-  (void)first;
-  (void)candidate;
-  return false;
-}
-
 #endif // CONFIG_DIFFTEST_MMA_CUDA
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

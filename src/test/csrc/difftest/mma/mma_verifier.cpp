@@ -15,8 +15,6 @@
 ***************************************************************************************/
 
 #include "mma/mma_verifier.h"
-#include "mma/backend/mma_backend_cpu.h"
-#include "mma/backend/mma_backend_cuda.h"
 #include "mma/mma_batch.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
@@ -29,14 +27,7 @@ MmaVerifier::MmaVerifier()
     : result_pool(std::make_shared<MmaResultPool>(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES, kMmaBackpressurePendingLimit + 2)) {
   Assert(CONFIG_DIFF_MMA_BATCH_SIZE > 0, "CONFIG_DIFF_MMA_BATCH_SIZE must be positive");
   Assert(CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR > 0, "CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR must be positive");
-#ifdef CONFIG_DIFFTEST_MMA_CUDA
-  backend = new CudaMmaBackend();
-  const char *backend_name = "CUDA";
-#else
-  backend = new CpuMmaBackend();
-  const char *backend_name = "CPU";
-#endif
-  Info("[INFO] MMA reference model backend: %s\n", backend_name);
+  backend = make_mma_backend();
 #ifdef CONFIG_DIFFTEST_MMA_SYNC
   Info("[INFO] MMA verification: synchronous\n");
 #else

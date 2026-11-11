@@ -17,6 +17,7 @@
 #include "mma/backend/mma_backend.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#include "mma/mma_verifier.h"
 #include <algorithm>
 #include <cstring>
 
