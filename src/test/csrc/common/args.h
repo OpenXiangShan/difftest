@@ -95,6 +95,7 @@ struct CommonArgs {
   uint8_t squash_size = 255;
   uint64_t no_squash_after_instr = -1;
   uint32_t cpu_axi_delay = 0;
+  uint32_t mma_cpu_threads = 1;
   bool enable_fork = false;
   bool enable_runahead = false;
   bool dump_db = false;

@@ -35,6 +35,7 @@ enum {
   OPT_SQUASH_SIZE,
   OPT_NO_SQUASH_AFTER_INSTR,
   OPT_CPU_AXI_DELAY,
+  OPT_MMA_CPU_THREADS,
 #ifdef FPGA_HOST
   OPT_NO_LINK,
   OPT_ILA_SIZE,
@@ -159,6 +160,7 @@ static inline void print_help(const char *file) {
   printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
   printf("      --no-squash-after-instr=NUM disable squash after NUM committed instructions\n");
   printf("      --cpu-axi-delay=NUM    delay FPGA CPU AXI requests by NUM cycles, default: 0\n");
+  printf("      --mma-cpu-threads=N    CPU MMA worker limit across DUT cores, default: 1\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --remote-jtag-port     specify remote bitbang port\n");
@@ -235,6 +237,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
+    { "mma-cpu-threads",   1, NULL, OPT_MMA_CPU_THREADS },
 #ifdef FPGA_HOST
     { "no-link",           0, NULL, OPT_NO_LINK },
     { "ila-size",          1, NULL, OPT_ILA_SIZE },
@@ -443,6 +446,15 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           exit(EINVAL);
         }
         args.cpu_axi_delay = static_cast<uint32_t>(cpu_axi_delay);
+        continue;
+      }
+      case OPT_MMA_CPU_THREADS: {
+        const long long count = atoll_strict(optarg, "mma-cpu-threads");
+        if (count < 1 || static_cast<unsigned long long>(count) > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --mma-cpu-threads must be in range [1, %" PRIu32 "]\n", UINT32_MAX);
+          exit(EINVAL);
+        }
+        args.mma_cpu_threads = static_cast<uint32_t>(count);
         continue;
       }
       case OPT_CORE_CLOCK_HALF_PERIOD: {
