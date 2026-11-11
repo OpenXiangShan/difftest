@@ -42,6 +42,7 @@ enum {
 #ifdef FPGA_HOST
   OPT_NO_LINK,
   OPT_ILA_SIZE,
+  OPT_TAKE_CPT_INTERVAL,
 #endif
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
@@ -189,6 +190,9 @@ static inline void print_help(const char *file) {
   printf("      --random-mem           initialize memory from --seed\n");
   printf("      --core-clock-half-period=N        core half-period in scheduler ticks\n");
   printf("      --accelerator-clock-half-period=N accelerator half-period in scheduler ticks\n");
+#ifdef FPGA_HOST
+  printf("      --take-cpt-interval=N  retired instructions between REF checkpoints (K/M/B), default: -1 (disabled)\n");
+#endif
   printf("  -h, --help                 print program help info\n");
   printf("\n");
 }
@@ -248,6 +252,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 #ifdef FPGA_HOST
     { "no-link",           0, NULL, OPT_NO_LINK },
     { "ila-size",          1, NULL, OPT_ILA_SIZE },
+    { "take-cpt-interval", 1, NULL, OPT_TAKE_CPT_INTERVAL },
 #endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
     { "ref-mode",          1, NULL, OPT_REF_MODE },
@@ -445,6 +450,17 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.enable_link = false;
         args.enable_diff = false;
         continue;
+      case OPT_TAKE_CPT_INTERVAL:
+        if (strcmp(optarg, "-1") == 0) {
+          args.take_cpt_interval = UINT64_MAX;
+        } else {
+          args.take_cpt_interval = parse_instr_count(optarg, "take-cpt-interval");
+          if (args.take_cpt_interval == 0 || args.take_cpt_interval == UINT64_MAX) {
+            fprintf(stderr, "[ERROR] --take-cpt-interval requires a positive interval below UINT64_MAX, or -1\n");
+            exit(EINVAL);
+          }
+        }
+        continue;
 #endif
       case OPT_CPU_AXI_DELAY: {
         long long cpu_axi_delay = atoll_strict(optarg, "cpu-axi-delay");
@@ -531,6 +547,18 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
 #ifdef FPGA_HOST
+  if (args.take_cpt_interval != UINT64_MAX) {
+    if (!args.enable_diff) {
+      fprintf(stderr, "[ERROR] --take-cpt-interval requires REF checking\n");
+      exit(EINVAL);
+    }
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    if (args.ref_mode != RefMode::FORK && args.refdrive_trace_name) {
+      fprintf(stderr, "[ERROR] --take-cpt-interval with RefDriveTrace requires --ref-mode fork\n");
+      exit(EINVAL);
+    }
+#endif
+  }
   if (args.ila_size && (!args.enable_diff || !args.enable_link || args.refdrive_trace_name)) {
     fprintf(stderr, "[ERROR] --ila-size requires REF checking and cannot use RefDriveTrace\n");
     exit(EINVAL);

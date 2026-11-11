@@ -198,6 +198,21 @@ int main(int argc, const char *argv[]) {
   fpga_ila_arm_cmd = std::getenv("FPGA_ILA_ARM_CMD");
   fpga_ila_upload_cmd = std::getenv("FPGA_ILA_UPLOAD_CMD");
   args = parse_args(argc, argv);
+  if (args.take_cpt_interval != UINT64_MAX) {
+#if !defined(CONFIG_DIFFTEST_FORK_REF) || !defined(USE_THREAD_MEMPOOL) || defined(DIFFTEST_HOSTIF_GBUS) || \
+    NUM_CORES != 1
+    fprintf(stderr,
+            "[ERROR] Periodic checkpoints require a single-core XDMA host with "
+            "DIFFTEST_FORK_REF=1 USE_THREAD_MEMPOOL=1\n");
+    return 1;
+#elif defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
+    fprintf(stderr, "[ERROR] Periodic checkpoints do not support the asynchronous AMU verifier\n");
+    return 1;
+#else
+    if (!checkpoint_writer_configure())
+      return 1;
+#endif
+  }
 
   common_init(argv[0]);
 
@@ -413,6 +428,10 @@ void fpga_init() {
 #endif // FPGA_SIM
 
   difftest_init(args.enable_diff, ram_size);
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (args.take_cpt_interval != UINT64_MAX && !difftest_checkpoint_init(args.take_cpt_interval))
+    exit(1);
+#endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
   if (args.enable_diff) {
     const auto mode = args.ref_mode == RefMode::SLOW ? REF_EXEC_SLOW : REF_EXEC_FAST;
