@@ -206,7 +206,8 @@ public:
   f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)                               \
   f(ref_ame_replay_state_size, difftest_ame_replay_state_size, size_t, )                                    \
   f(ref_ame_replay_state_save, save_ame_replay_state, void, void*)                                         \
-  f(ref_ame_replay_state_restore, restore_ame_replay_state, void, const void*)
+  f(ref_ame_replay_state_restore, restore_ame_replay_state, void, const void*)                             \
+  f(ref_trigger_checkpoint, difftest_trigger_checkpoint, void, const char *)
 #define RefFunc(func, ret, ...) ret func(__VA_ARGS__)
 #define DeclRefFunc(this_func, dummy, ret, ...) RefFunc((*this_func), ret, __VA_ARGS__);
 /* clang-format on */
@@ -562,6 +563,14 @@ public:
 
   inline int get_status() {
     return ref_status ? ref_status() : 0;
+  }
+
+  inline bool supports_checkpoint() const {
+    return ref_trigger_checkpoint != nullptr;
+  }
+
+  inline void trigger_checkpoint(const char *base_filepath) {
+    ref_trigger_checkpoint(base_filepath);
   }
 
 private:
