@@ -305,10 +305,11 @@ void fpga_init() {
           [] {
             if (checkpoint_parser_enabled())
               return checkpoint_parser_wait(WNOHANG) || cpt_parser->endpoint.load();
-            const int result = difftest_ref_fork_idle();
+            const auto result = difftest_ref_fork_idle();
             if (is_xdma_receiver)
               fpga_update_ila_base();
-            return result && (result != 1 || !difftest_refdrive_trace_pending());
+            return result == RefForkResult::FAILED ||
+                   (result == RefForkResult::CHECKED && !difftest_refdrive_trace_pending());
           },
           [] {
             if (checkpoint_parser_enabled()) {

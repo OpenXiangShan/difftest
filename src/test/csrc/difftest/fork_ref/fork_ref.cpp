@@ -17,6 +17,7 @@
 #include "difftest.h"
 
 #ifdef CONFIG_DIFFTEST_FORK_REF
+#include "checkpoint_writer.h"
 #include "mpool.h"
 #include "perf.h"
 #include <atomic>
@@ -31,10 +32,12 @@
 #include <unistd.h>
 
 namespace {
-// Bound outstanding checkpoints, not the lifetime number of segments.
+// Bound outstanding execution segments by packet-reader capacity.
+// Serializer capacity is managed separately by the writer manager.
 constexpr unsigned MAX_SEGMENTS = MemoryIdxPool::MAX_READERS;
 constexpr uint64_t OPEN_END = UINT64_MAX;
 constexpr uint64_t TIMEOUT_MS = 300 * 1000;
+constexpr int FORK_EXIT_FAILURE = 2;
 enum class Role {
   SUPERVISOR,
   LEADER,
@@ -47,10 +50,15 @@ enum class Status {
   DIVERGED,
   FAILED,
   DISCARDED,
-  PROMOTED
+  PROMOTED,
+  // MATCH checker released its reader and segment; serialization may still be
+  // running and the writer manager owns its PID until it exits
+  WRITING
 };
 enum class Command {
   WAIT,
+  SAVE,
+  ACCEPT,
   DISCARD,
   PROMOTE
 };
@@ -63,15 +71,22 @@ struct Segment {
   DifftestStateHash fast_hash{}, slow_hash{};
   uint64_t checked_windows;
   uint64_t slow_instr, slow_cycle;
+  bool checkpoint_eligible;
+  // DIVERGED checker's separate COW sibling; MATCH saves in place and leaves it zero
+  std::atomic<pid_t> sibling_writer_pid{0};
   std::atomic<Status> status{Status::EMPTY};
   std::atomic<Command> command{Command::WAIT};
-  bool reaped = false; // Written only by the supervisor.
+  // Written by the leader while initializing the slot, then only by the supervisor
+  bool reaped = false;
+  // Set for a MATCH checker whose waitpid the writer manager now owns;
+  // a DIVERGED checker stays supervisor-owned and uses sibling_writer_pid
+  bool writer_owned = false;
 };
 struct Shared {
   std::atomic<uint64_t> generation{0}, head{0}, retired{0}, published_windows{0};
   std::atomic<bool> pause{false}, paused{false}, endpoint{false};
   std::atomic<bool> bounded_endpoint{false};
-  std::atomic<int> complete{0}; // 0 running, 1 checked endpoint, 2 failure.
+  std::atomic<RefForkResult> complete{RefForkResult::RUNNING};
   Segment segments[MAX_SEGMENTS];
 };
 Shared *control = nullptr;
@@ -80,6 +95,7 @@ uint64_t interval_ms = 0, generation = 0, current_segment = OPEN_END;
 uint64_t windows = 0, last_instr = 0, last_cycle = 0, last_fork_ms = 0, child_window = 0;
 uint64_t trusted_segment = 0, trusted_windows = 0;
 uint64_t accepted_segments = 0, recoveries = 0, drain_start_ms = 0;
+uint64_t segment_start_instr = 0, last_checkpoint_interval = 0;
 pid_t supervisor_pid = 0, leader_pid = 0;
 unsigned leader_reader = 0;
 bool leader_reaped = false, summary_printed = false;
@@ -98,7 +114,7 @@ bool hashes_match(const DifftestStateHash &a, const DifftestStateHash &b) {
 }
 void fail() {
   g_packet_pool->fail();
-  control->complete.store(2, std::memory_order_release);
+  control->complete.store(RefForkResult::FAILED, std::memory_order_release);
 }
 // Called only at parser boundaries, outside checkpoint construction/publication.
 // The supervisor waits for this acknowledgement before discarding descendants.
@@ -123,6 +139,7 @@ void complete_checker(Difftest *self, bool checks_ok) {
   s.slow_instr = last_instr;
   s.slow_cycle = last_cycle;
   self->proxy->sync();
+  s.checkpoint_eligible = self->proxy->state.csr.privilegeMode != 3;
   checks_ok =
       checks_ok && child_window == s.end_window.load(std::memory_order_acquire) && self->proxy->state_hash(s.slow_hash);
   s.slow_stamp = self->fork_commit_stamp();
@@ -132,7 +149,32 @@ void complete_checker(Difftest *self, bool checks_ok) {
     // Its starting snapshot is authoritative only after preceding segments pass.
     g_packet_pool->finish_reader();
     fflush(nullptr);
-    _exit(2);
+    _exit(FORK_EXIT_FAILURE);
+  }
+  auto cmd = Command::WAIT;
+  if (!match || difftest_checkpoint_interval() != UINT64_MAX) {
+    // The supervisor sends SAVE, ACCEPT or PROMOTE after trusting the prefix
+    while (true) {
+      cmd = s.command.load(std::memory_order_acquire);
+      if (cmd == Command::DISCARD || g_packet_pool->aborted())
+        discard_checker();
+      if (cmd != Command::WAIT)
+        break;
+      usleep(50);
+    }
+    if (cmd == Command::SAVE && !match) {
+      const auto base = difftest_checkpoint_path(s.slow_instr);
+      // Serialization writes restore metadata into PMEM. A promoted checker
+      // must keep its live state, so serialize in a COW sibling of this checker
+      const auto pid =
+          checkpoint_writer_fork(base, [self](const char *path) { self->proxy->trigger_checkpoint(path); }, true);
+      s.sibling_writer_pid.store(pid, std::memory_order_release);
+      // Stay at SAVE until the supervisor has registered the writer PID
+      while ((cmd = s.command.load(std::memory_order_acquire)) == Command::SAVE)
+        usleep(50);
+      if (cmd == Command::DISCARD || g_packet_pool->aborted())
+        discard_checker();
+    }
   }
   if (match) {
     bool final_checker = false;
@@ -161,31 +203,29 @@ void complete_checker(Difftest *self, bool checks_ok) {
 #endif
     }
     g_packet_pool->finish_reader();
+    if (cmd == Command::SAVE) {
+      const auto base = difftest_checkpoint_path(s.slow_instr);
+      g_packet_pool->retire_reader(s.reader);
+      // Last access to s: the slot may be reused, while the writer manager
+      // keeps this PID and the copied checkpoint path until serialization exits
+      s.status.store(Status::WRITING, std::memory_order_release);
+      checkpoint_writer_run(base, [self](const char *path) { self->proxy->trigger_checkpoint(path); });
+    }
     _exit(0);
   }
-  // A locally valid slow endpoint remains alive and pins its boundary packet.
-  // Only the supervisor, after trusting all predecessors, can promote it.
-  while (true) {
-    const Command cmd = s.command.load(std::memory_order_acquire);
-    if (cmd == Command::DISCARD || g_packet_pool->aborted())
-      discard_checker();
-    if (cmd == Command::PROMOTE) {
-      windows = child_window;
-      last_instr = s.slow_instr;
-      last_cycle = s.slow_cycle;
-      generation = control->generation.load(std::memory_order_acquire);
-      current_segment = OPEN_END;
-      role = Role::LEADER;
-      if (!self->set_ref_mode(REF_EXEC_FAST)) {
-        fail();
-        _exit(2);
-      }
-      last_fork_ms = now_ms();
-      s.status.store(Status::PROMOTED, std::memory_order_release);
-      return;
-    }
-    usleep(50);
+  // A DIVERGED checker reaches here after the supervisor sends PROMOTE
+  windows = child_window;
+  last_instr = s.slow_instr;
+  last_cycle = s.slow_cycle;
+  generation = control->generation.load(std::memory_order_acquire);
+  current_segment = OPEN_END;
+  role = Role::LEADER;
+  if (!self->set_ref_mode(REF_EXEC_FAST)) {
+    fail();
+    _exit(FORK_EXIT_FAILURE);
   }
+  last_fork_ms = now_ms();
+  s.status.store(Status::PROMOTED, std::memory_order_release);
 }
 void close_segment(Difftest *self) {
   // Snapshot and digest only an executed prefix, never deferred RefDrive instructions.
@@ -219,7 +259,7 @@ void poll_checkers() {
   for (uint64_t i = control->retired.load(std::memory_order_relaxed); i < end; ++i) {
     Segment &s = segment(i);
     const pid_t pid = s.pid.load(std::memory_order_acquire);
-    if (pid <= 0 || s.reaped || s.status.load(std::memory_order_acquire) == Status::PROMOTED)
+    if (pid <= 0 || s.reaped || s.writer_owned || s.status.load(std::memory_order_acquire) == Status::PROMOTED)
       continue;
     const bool ok = reap(pid, s.reaped, s.command.load(std::memory_order_acquire) == Command::DISCARD);
     if (s.reaped) {
@@ -234,14 +274,57 @@ void retire_prefix() {
   uint64_t retired = control->retired.load(std::memory_order_relaxed);
   while (retired < trusted_segment) {
     Segment &s = segment(retired);
-    if (!s.reaped && s.status.load(std::memory_order_acquire) != Status::PROMOTED)
+    const auto status = s.status.load(std::memory_order_acquire);
+    if (!s.reaped && status != Status::PROMOTED && status != Status::WRITING)
       break;
     ++retired;
   }
   control->retired.store(retired, std::memory_order_release);
 }
-void accept(uint64_t seq) {
-  Segment &s = segment(seq);
+bool prepare_checkpoint(Segment &s, Status status) {
+  const uint64_t interval = difftest_checkpoint_interval();
+  if (interval == UINT64_MAX)
+    return true;
+  const uint64_t bucket = s.slow_instr / interval;
+  if (bucket <= last_checkpoint_interval)
+    return true;
+  if (!s.checkpoint_eligible) {
+    printf("[CPT_SKIP_M] instr=%lu\n", s.slow_instr);
+    last_checkpoint_interval = bucket;
+    return true;
+  }
+  if (!checkpoint_writer_has_capacity())
+    return false;
+  const auto base = difftest_checkpoint_path(s.slow_instr);
+  if (status == Status::MATCH) {
+    // Hand off this checker before SAVE, so even an immediate exit has one reaper
+    checkpoint_writer_adopt(s.pid.load(std::memory_order_acquire), base, s.slow_instr);
+    s.writer_owned = true;
+    s.command.store(Command::SAVE, std::memory_order_release);
+  } else {
+    // DIVERGED keeps its checker for promotion; adopt only the COW sibling
+    s.command.store(Command::SAVE, std::memory_order_release);
+    pid_t pid;
+    while ((pid = s.sibling_writer_pid.load(std::memory_order_acquire)) == 0) {
+      poll_checkers();
+      if (s.reaped) {
+        fail();
+        return false;
+      }
+      usleep(50);
+    }
+    if (pid < 0) {
+      fail();
+      return false;
+    }
+    checkpoint_writer_adopt(pid, base, s.slow_instr);
+  }
+  last_checkpoint_interval = bucket;
+  printf("[REF_CPT] verification=SLOW_ACCEPTED instr=%lu base=%s\n", s.slow_instr, base.c_str());
+  fflush(stdout);
+  return true;
+}
+void accept(const Segment &s) {
   // Only the accepted prefix supplies the supervisor's final performance counts.
   auto *trap = difftest[0]->get_trap_event();
   trap->instrCnt = s.slow_instr;
@@ -308,18 +391,21 @@ bool recover(uint64_t seq) {
       return false;
     usleep(50);
   }
-  accept(seq);
+  accept(candidate);
   printf("RefLeaderRecovery PID=%d Generation=%lu Segment=%lu Window=%lu DiscardedSegments=%lu\n", int(leader_pid),
          (unsigned long)control->generation.load(), (unsigned long)seq, (unsigned long)trusted_windows,
          (unsigned long)(end - seq - 1));
   fflush(stdout);
   return true;
 }
-bool all_reaped() {
+bool ready_to_drain_writers() {
   bool done = leader_reaped;
   for (uint64_t i = control->retired.load(); i < control->head.load(); ++i) {
     const Segment &s = segment(i);
-    done &= s.reaped || s.status.load(std::memory_order_acquire) == Status::PROMOTED;
+    const auto status = s.status.load(std::memory_order_acquire);
+    // Registered writers are reaped by drain, even if abort interrupted the handoff
+    done &= s.reaped || status == Status::PROMOTED || status == Status::WRITING ||
+            (s.writer_owned && g_packet_pool->aborted());
   }
   return done;
 }
@@ -364,7 +450,7 @@ int difftest_ref_fork_start(uint64_t fork_interval_ms) {
   if (leader_pid == 0) {
     role = Role::LEADER;
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() != supervisor_pid)
-      _exit(2);
+      _exit(FORK_EXIT_FAILURE);
     return 1;
   }
   printf("RefSupervisor PID=%d Leader=%d PoolSlots=%zu\n", int(supervisor_pid), int(leader_pid),
@@ -380,8 +466,10 @@ int difftest_ref_fork_prepare(Difftest *self) {
   pause_leader();
   if (g_packet_pool->aborted())
     return 2;
+  const uint64_t cpt_interval = difftest_checkpoint_interval();
+  const bool cpt_due = cpt_interval != UINT64_MAX && last_instr / cpt_interval > segment_start_instr / cpt_interval;
   const bool next = current_segment == OPEN_END ||
-                    (interval_ms && now_ms() - last_fork_ms >= interval_ms && !self->dut->trap.hasTrap);
+                    ((cpt_due || (interval_ms && now_ms() - last_fork_ms >= interval_ms)) && !self->dut->trap.hasTrap);
   if (!next)
     return 0;
   close_segment(self);
@@ -409,8 +497,11 @@ int difftest_ref_fork_prepare(Difftest *self) {
   s.end_window.store(OPEN_END, std::memory_order_relaxed);
   s.command.store(Command::WAIT, std::memory_order_relaxed);
   s.reaped = false;
+  s.writer_owned = false;
+  s.sibling_writer_pid.store(0, std::memory_order_relaxed);
   s.status.store(Status::RUNNING, std::memory_order_relaxed);
   current_segment = seq;
+  segment_start_instr = last_instr;
   // Linux fork semantics, with the supervisor as parent of both processes.
   // No CLONE_VM/CLONE_FILES: REF memory remains COW and the parser is single-threaded.
   fflush(nullptr);
@@ -425,10 +516,10 @@ int difftest_ref_fork_prepare(Difftest *self) {
     child_window = s.start_window;
     g_packet_pool->enter_reader(reader);
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() != supervisor_pid)
-      _exit(2);
+      _exit(FORK_EXIT_FAILURE);
     if (!self->set_ref_mode(REF_EXEC_SLOW)) {
       fail();
-      _exit(2);
+      _exit(FORK_EXIT_FAILURE);
     }
     self->proxy->sync();
     return 1;
@@ -501,9 +592,9 @@ void difftest_ref_fork_abort_child() {
   if (role == Role::CHECKER)
     complete_checker(difftest[0], false);
 }
-int difftest_ref_fork_idle() {
+RefForkResult difftest_ref_fork_idle() {
   if (!control)
-    return 0;
+    return RefForkResult::RUNNING;
   if (role == Role::CHECKER) {
     Segment &s = segment(current_segment);
     if (s.command.load(std::memory_order_acquire) == Command::DISCARD)
@@ -512,22 +603,24 @@ int difftest_ref_fork_idle() {
       complete_checker(difftest[0], false);
     if (s.end_window.load(std::memory_order_acquire) == child_window)
       complete_checker(difftest[0], true);
-    return 0;
+    return RefForkResult::RUNNING;
   }
   if (role == Role::LEADER) {
     pause_leader();
-    return g_packet_pool->aborted() ? 2 : 0;
+    return g_packet_pool->aborted() ? RefForkResult::FAILED : RefForkResult::RUNNING;
   }
   poll_checkers();
+  if (difftest_checkpoint_interval() != UINT64_MAX && !checkpoint_writer_poll())
+    fail();
   if (!reap(leader_pid, leader_reaped))
     fail();
   if (leader_reaped) {
     g_packet_pool->retire_reader(leader_reader);
-    if (control->complete.load(std::memory_order_acquire) != 1)
+    if (control->complete.load(std::memory_order_acquire) != RefForkResult::CHECKED)
       fail();
   }
   // Recording may keep draining after all REF segments have already completed.
-  if (!g_packet_pool->aborted() && control->complete.load(std::memory_order_acquire) != 1) {
+  if (!g_packet_pool->aborted() && control->complete.load(std::memory_order_acquire) == RefForkResult::RUNNING) {
     const uint64_t end = control->head.load(std::memory_order_acquire);
     while (trusted_segment < end) {
       Segment &s = segment(trusted_segment);
@@ -545,12 +638,16 @@ int difftest_ref_fork_idle() {
         fail();
         break;
       }
+      if (!prepare_checkpoint(s, status))
+        break;
       if (status == Status::DIVERGED) {
         if (!recover(trusted_segment))
           fail();
         break;
       }
-      accept(trusted_segment);
+      accept(s);
+      if (difftest_checkpoint_interval() != UINT64_MAX && !s.writer_owned)
+        s.command.store(Command::ACCEPT, std::memory_order_release);
     }
     if (control->endpoint.load(std::memory_order_acquire)) {
       if (!drain_start_ms)
@@ -559,7 +656,7 @@ int difftest_ref_fork_idle() {
         fail();
       if (trusted_segment == control->head.load(std::memory_order_acquire) &&
           trusted_windows == control->published_windows.load(std::memory_order_acquire))
-        control->complete.store(1, std::memory_order_release);
+        control->complete.store(RefForkResult::CHECKED, std::memory_order_release);
     }
   }
   // Final checkers may still be waiting for preceding children to exit.
@@ -570,26 +667,26 @@ int difftest_ref_fork_idle() {
       kill(leader_pid, SIGKILL);
     for (uint64_t i = control->retired.load(); i < control->head.load(); ++i) {
       Segment &s = segment(i);
-      if (!s.reaped && s.status.load() != Status::PROMOTED) {
+      if (!s.reaped && !s.writer_owned && s.status.load() != Status::PROMOTED) {
         s.command.store(Command::DISCARD, std::memory_order_release);
         if (s.pid.load() > 0)
           kill(s.pid.load(), SIGKILL);
       }
     }
   }
-  if (control->complete.load(std::memory_order_acquire) && all_reaped()) {
-    const int result = control->complete.load();
-    if (!summary_printed) {
-      printf("RefForkSummary %s Segments=%lu FastWindows=%lu TrustedWindows=%lu Recoveries=%lu\n",
-             result == 1 ? "MATCH" : "MISMATCH", (unsigned long)accepted_segments,
-             (unsigned long)control->published_windows.load(), (unsigned long)trusted_windows,
-             (unsigned long)recoveries);
-      fflush(stdout);
-      summary_printed = true;
-    }
-    return result;
-  }
-  return 0;
+  if (control->complete.load(std::memory_order_acquire) == RefForkResult::RUNNING || !ready_to_drain_writers())
+    return RefForkResult::RUNNING;
+  if (summary_printed)
+    return control->complete.load(std::memory_order_acquire);
+  if (difftest_checkpoint_interval() != UINT64_MAX && !checkpoint_writer_drain())
+    fail();
+  const auto result = control->complete.load(std::memory_order_acquire);
+  printf("RefForkSummary %s Segments=%lu FastWindows=%lu TrustedWindows=%lu Recoveries=%lu\n",
+         result == RefForkResult::CHECKED ? "MATCH" : "MISMATCH", (unsigned long)accepted_segments,
+         (unsigned long)control->published_windows.load(), (unsigned long)trusted_windows, (unsigned long)recoveries);
+  fflush(stdout);
+  summary_printed = true;
+  return result;
 }
 bool difftest_ref_fork_bounded_endpoint() {
   return bounded_endpoint;
@@ -601,30 +698,30 @@ int difftest_ref_fork_finish(bool bounded) {
     pause_leader();
     close_segment(difftest[0]);
     if (g_packet_pool->aborted())
-      return 2;
+      return FORK_EXIT_FAILURE;
     control->bounded_endpoint.store(bounded, std::memory_order_release);
     control->endpoint.store(true, std::memory_order_release);
-    while (!control->complete.load(std::memory_order_acquire)) {
+    while (control->complete.load(std::memory_order_acquire) == RefForkResult::RUNNING) {
       pause_leader();
       usleep(1000);
     }
-    return control->complete.load() == 1 ? 0 : 2;
+    return control->complete.load(std::memory_order_acquire) == RefForkResult::CHECKED ? 0 : FORK_EXIT_FAILURE;
   }
   if (role == Role::CHECKER)
     return 0;
-  int result;
-  while (!(result = difftest_ref_fork_idle()))
+  RefForkResult result;
+  while ((result = difftest_ref_fork_idle()) == RefForkResult::RUNNING)
     usleep(1000);
   bounded_endpoint = control->bounded_endpoint.load(std::memory_order_acquire);
   munmap(control, sizeof(Shared));
   control = nullptr;
-  return result == 1 ? 0 : 2;
+  return result == RefForkResult::CHECKED ? 0 : FORK_EXIT_FAILURE;
 }
 void difftest_ref_fork_leader_exit(int result) {
   if (role == Role::CHECKER)
     complete_checker(difftest[0], false);
   if (result)
     fail();
-  _exit(result ? 2 : 0);
+  _exit(result ? FORK_EXIT_FAILURE : 0);
 }
 #endif
