@@ -20,9 +20,98 @@
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #include "mma/mma_verifier.h"
+#include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
+#include <queue>
+#include <thread>
 #include <type_traits>
+
+class CpuMmaThreadPool {
+public:
+  explicit CpuMmaThreadPool(unsigned limit) : limit(limit) {
+    try {
+      for (unsigned i = 0; i < limit; ++i)
+        workers.emplace_back([this] {
+          while (true) {
+            std::function<void()> job;
+            {
+              std::unique_lock<std::mutex> lock(mutex);
+              work.wait(lock, [this] { return stopping || !jobs.empty(); });
+              if (jobs.empty())
+                return;
+              job = std::move(jobs.front());
+              jobs.pop();
+            }
+            job();
+            {
+              std::lock_guard<std::mutex> lock(mutex);
+              --pending;
+            }
+            available.notify_one();
+          }
+        });
+    } catch (...) {
+      join();
+      throw;
+    }
+  }
+  ~CpuMmaThreadPool() {
+    join();
+  }
+  void submit(std::function<void()> job) {
+    std::unique_lock<std::mutex> lock(mutex);
+    available.wait(lock, [this] { return pending < limit; });
+    jobs.push(std::move(job));
+    ++pending;
+    work.notify_one();
+  }
+
+private:
+  void join() {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      stopping = true;
+    }
+    work.notify_all();
+    for (auto &worker: workers)
+      worker.join();
+  }
+  const unsigned limit;
+  unsigned pending = 0;
+  bool stopping = false;
+  std::mutex mutex;
+  std::condition_variable work, available;
+  std::queue<std::function<void()>> jobs;
+  std::vector<std::thread> workers;
+};
+CpuMmaEngine::CpuMmaEngine(unsigned threads) : pool(new CpuMmaThreadPool(threads)) {}
+
+CpuMmaEngine::~CpuMmaEngine() = default;
+
+void CpuMmaEngine::compute(const std::vector<MmaVerificationBuffer *> &buffers, uint8_t *passed,
+                           uint8_t *const operands[3], const Completion &completed) {
+  struct Pending {
+    std::atomic<size_t> remaining;
+    const size_t count;
+    Completion completed;
+    Pending(size_t count, const Completion &completed) : remaining(count), count(count), completed(completed) {}
+  };
+  const auto pending = std::make_shared<Pending>(buffers.size(), completed);
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    auto *buffer = buffers[i];
+    pool->submit([buffer, passed, i, pending] {
+      passed[i] = verify_cpu_mma(buffer);
+      if (pending->remaining.fetch_sub(1, std::memory_order_acq_rel) == 1)
+        pending->completed(pending->count);
+    });
+  }
+}
+
+void CpuMmaEngine::shutdown() {
+  pool.reset();
+}
 
 #ifdef CONFIG_DIFF_MMA_REDUCE_WIDTH_BYTES
 static constexpr int kMmaReduceWidthBytes = CONFIG_DIFF_MMA_REDUCE_WIDTH_BYTES;
@@ -251,15 +340,10 @@ static inline void write_u32(uint8_t *data, size_t index0, size_t index1, size_t
   reinterpret_cast<uint32_t *>(row_ptr)[index1] = value;
 }
 
-void CpuMmaBackend::verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) {
-  passed.clear();
-  passed.reserve(buffers.size());
-  for (auto *buffer: buffers) {
-    passed.push_back(verify_one(buffer) ? 1 : 0);
-  }
-}
+template <cute_mma_model::FloatFormat Format> static bool verify_fp_mma(MmaVerificationBuffer *buffer);
+template <class src1_t, class src2_t> static bool verify_int_mma(MmaVerificationBuffer *buffer);
 
-bool CpuMmaBackend::verify_one(MmaVerificationBuffer *buffer) {
+bool verify_cpu_mma(MmaVerificationBuffer *buffer) {
   if (!is_mma_32bit_result_type(buffer->amu_event.typed)) {
     return false;
   }
@@ -288,7 +372,7 @@ bool CpuMmaBackend::verify_one(MmaVerificationBuffer *buffer) {
   }
 }
 
-template <cute_mma_model::FloatFormat Format> bool CpuMmaBackend::verify_fp_mma(MmaVerificationBuffer *buffer) {
+template <cute_mma_model::FloatFormat Format> static bool verify_fp_mma(MmaVerificationBuffer *buffer) {
   const int tile_m = buffer->amu_event.mtilem;
   const int tile_k = buffer->amu_event.mtilek;
   const int tile_n = buffer->amu_event.mtilen;
@@ -334,7 +418,7 @@ template <cute_mma_model::FloatFormat Format> bool CpuMmaBackend::verify_fp_mma(
   return compare_mma_rows(buffer->dut_result.get(), buffer->src3, tile_m, tile_n * sizeof(uint32_t));
 }
 
-template <class src1_t, class src2_t> bool CpuMmaBackend::verify_int_mma(MmaVerificationBuffer *buffer) {
+template <class src1_t, class src2_t> static bool verify_int_mma(MmaVerificationBuffer *buffer) {
   const int tile_m = buffer->amu_event.mtilem;
   const int tile_k = buffer->amu_event.mtilek;
   const int tile_n = buffer->amu_event.mtilen;

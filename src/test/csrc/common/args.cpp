@@ -18,6 +18,9 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "splitview.h"
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MMA_CUDA)
+#include "mma/backend/mma_backend_process.h"
+#endif
 #ifndef CONFIG_NO_DIFFTEST
 #include "reftrace/refdrive_trace.h"
 #endif
@@ -518,6 +521,18 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   }
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
+
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MMA_CUDA)
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+  if (args.mma_cpu_threads != 1)
+    printf("[WARN] --mma-cpu-threads has no effect with synchronous MMA verification\n");
+#else
+  MmaProcess::set_thread_limit(args.mma_cpu_threads);
+#endif
+#else
+  if (args.mma_cpu_threads != 1)
+    printf("[WARN] --mma-cpu-threads requires the CPU MMA backend\n");
+#endif
 
 #ifdef FPGA_HOST
   if (args.ila_size && (!args.enable_diff || !args.enable_link || args.refdrive_trace_name)) {

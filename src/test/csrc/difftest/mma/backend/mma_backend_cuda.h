@@ -17,29 +17,29 @@
 #ifndef __MMA_BACKEND_CUDA_H__
 #define __MMA_BACKEND_CUDA_H__
 
-#include "mma/backend/mma_backend.h"
+#include "mma/backend/mma_backend_engine.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
-class CudaMmaProcess;
+class CudaMmaWorkspace;
+struct CudaMmaBatchItem;
 
-class CudaMmaBackend : public MmaBackend {
+class CudaMmaEngine final : public MmaEngine {
 public:
-  CudaMmaBackend();
-  CudaMmaBackend(const CudaMmaBackend &) = delete;
-  CudaMmaBackend &operator=(const CudaMmaBackend &) = delete;
-  ~CudaMmaBackend() override;
-  void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) override;
-  void start() override;
-  MatrixResult allocate_result() override;
-  void prepare_result(MmaVerificationBuffer *buffer) override;
-  void release_result(MmaVerificationBuffer *buffer) override;
-  bool is_batch_compatible(const MmaVerificationBuffer *first, const MmaVerificationBuffer *candidate) const override;
+  CudaMmaEngine();
+  CudaMmaEngine(const CudaMmaEngine &) = delete;
+  CudaMmaEngine &operator=(const CudaMmaEngine &) = delete;
+  ~CudaMmaEngine() override;
+  bool register_storage(void *storage, size_t bytes, uint8_t *const operands[3]) override;
+  void unregister_storage(void *storage) override;
+  void compute(const std::vector<MmaVerificationBuffer *> &buffers, uint8_t *passed, uint8_t *const operands[3],
+               const Completion &completed) override;
+  void shutdown() override;
 
 private:
-#ifdef CONFIG_DIFFTEST_MMA_CUDA
-  std::unique_ptr<CudaMmaProcess> process;
-#endif
+  MmaHostBuffer host[3];
+  std::unique_ptr<CudaMmaWorkspace> workspace;
+  std::vector<CudaMmaBatchItem> items;
 };
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
