@@ -32,12 +32,17 @@
 #ifdef DIFFTEST_HOSTIF_GBUS
 #include "gbus_transport.h"
 #endif
+#include "checkpoint_writer.h"
 #include <condition_variable>
 #include <cstdlib>
 #include <getopt.h>
 #include <inttypes.h>
 #include <mutex>
 #include <stdint.h>
+#include <sys/mman.h>
+#ifdef CONFIG_DIFFTEST_FORK_REF
+#include <sys/prctl.h>
+#endif
 #include <sys/wait.h>
 #include <unistd.h>
 #ifdef FPGA_SIM
@@ -49,6 +54,7 @@
 
 void fpga_finish();
 void fpga_ref_fork_abort();
+void fpga_display_result(int ret);
 
 enum {
   FPGA_RUN,
@@ -62,6 +68,15 @@ static CommonArgs args;
 #ifdef CONFIG_DIFFTEST_FORK_REF
 static bool is_xdma_receiver = false;
 #endif
+// SLOW/FAST checkpointing runs REF in a dedicated parser process;
+// FORK saves from its checker endpoints instead.
+static bool checkpoint_parser_enabled() {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  return args.take_cpt_interval != UINT64_MAX && args.ref_mode != RefMode::FORK;
+#else
+  return false;
+#endif
+}
 static const char *fpga_ddr_load_cmd = nullptr;
 static const char *fpga_ila_arm_cmd = nullptr;
 static const char *fpga_ila_upload_cmd = nullptr;
@@ -90,6 +105,92 @@ static void fpga_update_ila_base() {
 #ifdef USE_SERIAL_PORT
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
+#ifdef CONFIG_DIFFTEST_FORK_REF
+struct CheckpointParserShared {
+  std::atomic<int> result{FPGA_FAIL};
+  std::atomic<bool> endpoint{false};
+  std::atomic<bool> ila_triggered{false};
+};
+static CheckpointParserShared *cpt_parser = nullptr;
+static pid_t cpt_parser_pid = -1;
+static bool cpt_parser_reaped = false;
+
+static bool checkpoint_parser_wait(int options) {
+  if (cpt_parser_pid <= 0)
+    return false; // The parser itself never waits for the supervisor
+  if (!cpt_parser_reaped) {
+    int status;
+    pid_t got;
+    do {
+      got = waitpid(cpt_parser_pid, &status, options);
+    } while (got < 0 && errno == EINTR);
+    if (got == 0)
+      return false;
+    cpt_parser_reaped = true;
+    if (got < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+      kill(-cpt_parser_pid, SIGKILL);
+      cpt_parser->result.store(FPGA_FAIL);
+    }
+  }
+  return true;
+}
+
+static void checkpoint_parser_abort() {
+  if (cpt_parser_pid > 0 && !cpt_parser_reaped) {
+    // Parser and writers share a process group owned by this supervisor
+    kill(-cpt_parser_pid, SIGKILL);
+    checkpoint_parser_wait(0);
+  }
+  fpga_result = FPGA_FAIL;
+  xdma_device->stop();
+}
+
+static bool checkpoint_parser_start() {
+  const pid_t supervisor = getpid();
+  void *mem = mmap(nullptr, sizeof(CheckpointParserShared), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  if (mem == MAP_FAILED) {
+    perror("Checkpoint parser mmap");
+    return false;
+  }
+  cpt_parser = new (mem) CheckpointParserShared();
+  fflush(nullptr);
+  cpt_parser_pid = fork();
+  if (cpt_parser_pid < 0) {
+    perror("Checkpoint parser fork");
+    return false;
+  }
+  if (cpt_parser_pid == 0) {
+    if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() != supervisor)
+      _exit(EXIT_FAILURE);
+    static_cast<FpgaXdma *>(xdma_device)->process_packets();
+    cpt_parser->endpoint.store(true);
+    const bool reached_endpoint = fpga_result != FPGA_RUN;
+    if (!checkpoint_writer_drain() || signal_num || g_packet_pool->aborted() || !reached_endpoint)
+      fpga_result = FPGA_FAIL;
+    if (reached_endpoint && !signal_num)
+      fpga_display_result(fpga_result);
+#ifdef CONFIG_DIFFTEST_PERFCNT
+    auto *trap = difftest[0]->get_trap_event();
+    difftest_perfcnt_finish(trap->cycleCnt, trap->instrCnt,
+                            args.ref_mode == RefMode::FAST ? "FAST_ASYNC" : "SLOW_ASYNC", true);
+#endif
+    g_packet_pool->finish_reader();
+    cpt_parser->ila_triggered.store(fpga_ila_triggered);
+    cpt_parser->result.store(fpga_result.load());
+    fflush(nullptr);
+    _exit(0);
+  }
+  if (setpgid(cpt_parser_pid, cpt_parser_pid) != 0) {
+    perror("Checkpoint parser process group");
+    kill(cpt_parser_pid, SIGKILL);
+    checkpoint_parser_wait(0);
+    return false;
+  }
+  is_xdma_receiver = true;
+  return true;
+}
+#endif
+
 int main(int argc, const char *argv[]) {
   common_set_locale();
 
@@ -104,7 +205,10 @@ int main(int argc, const char *argv[]) {
 
   printf("fpga init\n");
 #ifdef CONFIG_DIFFTEST_FORK_REF
-  if (args.enable_diff && args.ref_mode == RefMode::FORK) {
+  if (checkpoint_parser_enabled()) {
+    if (!checkpoint_parser_start())
+      return 1;
+  } else if (args.enable_diff && args.ref_mode == RefMode::FORK) {
     // Fork here: the parent receives XDMA packets; the child runs FAST REF.
     const int role = difftest_ref_fork_start(args.ref_fork_interval);
     if (role < 0)
@@ -183,7 +287,7 @@ void fpga_init() {
   try {
     if (args.packet_pool_log2 == 0 || args.packet_pool_log2 >= sizeof(size_t) * 8)
       throw std::invalid_argument("Packet pool order is outside the supported range");
-    const bool fork_readers = args.enable_diff && args.ref_mode == RefMode::FORK;
+    const bool fork_readers = (args.enable_diff && args.ref_mode == RefMode::FORK) || checkpoint_parser_enabled();
     const size_t pool_slots = size_t{1} << args.packet_pool_log2;
     xdma_device = new FpgaXdma(fork_readers, pool_slots);
   } catch (const std::exception &error) {
@@ -199,12 +303,18 @@ void fpga_init() {
   static_cast<FpgaXdma *>(xdma_device)
       ->set_packet_callbacks(
           [] {
+            if (checkpoint_parser_enabled())
+              return checkpoint_parser_wait(WNOHANG) || cpt_parser->endpoint.load();
             const int result = difftest_ref_fork_idle();
             if (is_xdma_receiver)
               fpga_update_ila_base();
             return result && (result != 1 || !difftest_refdrive_trace_pending());
           },
           [] {
+            if (checkpoint_parser_enabled()) {
+              checkpoint_parser_abort();
+              return;
+            }
             difftest_ref_fork_abort_child();
             fpga_ref_fork_abort();
           });
@@ -317,6 +427,17 @@ void fpga_init() {
 
 void fpga_finish() {
 #ifdef CONFIG_DIFFTEST_FORK_REF
+  if (checkpoint_parser_enabled()) {
+    while (!signal_num && !checkpoint_parser_wait(WNOHANG))
+      usleep(1000);
+    if (signal_num)
+      checkpoint_parser_abort();
+    fpga_result = signal_num || g_packet_pool->aborted() ? FPGA_FAIL : cpt_parser->result.load();
+    fpga_ila_triggered = cpt_parser->ila_triggered.load();
+    munmap(cpt_parser, sizeof(*cpt_parser));
+  }
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
   if (difftest_ref_fork_enabled()) {
     if (signal_num)
       g_packet_pool->fail();
@@ -330,9 +451,9 @@ void fpga_finish() {
   if (args.refdrive_trace_name)
     difftest_refdrive_trace_finish();
   if (signal_num == 0) {
-    bool report_perfcnt = true;
+    bool report_perfcnt = !checkpoint_parser_enabled();
 #ifdef CONFIG_DIFFTEST_FAST_REF
-    if (args.enable_diff && args.ref_mode == RefMode::FAST) {
+    if (args.enable_diff && args.ref_mode == RefMode::FAST && !checkpoint_parser_enabled()) {
       report_perfcnt = false;
 #ifdef CONFIG_DIFFTEST_PERFCNT
       {
@@ -503,10 +624,12 @@ extern "C" void fpga_nstep(uint8_t step) {
     if (difftest_ref_fork_finish(ret == FPGA_EXCEED))
       ret = FPGA_FAIL;
 #endif
+    if (!checkpoint_parser_enabled()) {
 #ifdef CONFIG_DIFFTEST_FORK_REF
-    if (!difftest_ref_fork_enabled() || ret == FPGA_GOODTRAP || ret == FPGA_EXCEED)
+      if (!difftest_ref_fork_enabled() || ret == FPGA_GOODTRAP || ret == FPGA_EXCEED)
 #endif
-      fpga_display_result(ret);
+        fpga_display_result(ret);
+    }
     fpga_result = ret;
     xdma_device->stop();
   }
