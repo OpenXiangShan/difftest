@@ -19,10 +19,17 @@ struct Job {
   uint64_t instr;
 };
 std::map<pid_t, Job> jobs;
+// Writers finish out of order; retain the greatest instruction endpoints
+std::map<uint64_t, std::string> completed;
 // Maximum registered writers awaiting reaping (FPGA_CPT_WRITERS).
 unsigned capacity = 16;
+// Retain this many completed snapshots with the newest instruction endpoints (FPGA_CPT_KEEP).
+unsigned keep = 20;
 uint64_t requested = 0, reaped = 0, errors = 0;
 bool failed = false;
+
+// The REF appends this suffix to its temporary output prefix.
+constexpr char REF_SUFFIX[] = "_memory_.zstd";
 
 bool configure_limit(const char *name, unsigned &limit) {
   const char *value = getenv(name);
@@ -40,6 +47,31 @@ bool configure_limit(const char *name, unsigned &limit) {
   return true;
 }
 
+std::string partial_prefix(const std::string &base, pid_t pid) {
+  return base + ".partial-" + std::to_string(pid);
+}
+
+bool publish(pid_t pid, const Job &job, const std::string &partial) {
+  // Rename only after the writer exits successfully, so an interrupted
+  // serialization never appears as a completed checkpoint.
+  const auto final = job.base + ".zstd";
+  if (rename(partial.c_str(), final.c_str()) != 0) {
+    perror("Checkpoint publish");
+    return false;
+  }
+  fprintf(stderr, "[CPT_PUBLISH] instr=%lu pid=%d path=%s\n", job.instr, int(pid), final.c_str());
+  completed.emplace(job.instr, final);
+  while (completed.size() > keep) {
+    auto oldest = completed.begin();
+    if (unlink(oldest->second.c_str()) != 0) {
+      perror("Checkpoint retention");
+      return false;
+    }
+    completed.erase(oldest);
+  }
+  return true;
+}
+
 // Poll registered writers. With wait_for_one, block on the first registered PID
 // before polling the remaining jobs.
 void reap(bool wait_for_one) {
@@ -54,10 +86,13 @@ void reap(bool wait_for_one) {
       continue;
     }
     const auto &job = it->second;
-    bool ok = got == it->first && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    const auto partial = partial_prefix(job.base, it->first) + REF_SUFFIX;
+    const bool exited_successfully = got == it->first && WIFEXITED(status) && WEXITSTATUS(status) == 0;
     ++reaped;
-    if (!ok) {
+    if (!exited_successfully || !publish(it->first, job, partial)) {
       fprintf(stderr, "Checkpoint writer failed: instr=%lu pid=%d status=%d\n", job.instr, int(it->first), status);
+      if (unlink(partial.c_str()) != 0 && errno != ENOENT)
+        perror("Checkpoint partial cleanup");
       failed = true;
       ++errors;
     }
@@ -68,7 +103,7 @@ void reap(bool wait_for_one) {
 } // namespace
 
 bool checkpoint_writer_configure() {
-  return configure_limit("FPGA_CPT_WRITERS", capacity);
+  return configure_limit("FPGA_CPT_WRITERS", capacity) && configure_limit("FPGA_CPT_KEEP", keep);
 }
 
 bool checkpoint_writer_submit(const std::string &base, uint64_t instr,
@@ -95,7 +130,8 @@ bool checkpoint_writer_has_capacity() {
   // A writer must not run inherited FPGA/splitview signal cleanup handlers
   for (int sig: {SIGINT, SIGTERM, SIGABRT, SIGSEGV, SIGBUS})
     signal(sig, SIG_DFL);
-  serialize(base.c_str());
+  const auto partial = partial_prefix(base, getpid());
+  serialize(partial.c_str());
   fflush(nullptr);
   _exit(0);
 }
