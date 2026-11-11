@@ -373,6 +373,14 @@ inline void Emulator::reset_ncycles(size_t cycles) {
   if (args.trace_name && args.trace_is_read) {
     return;
   }
+#ifdef GRHSIM
+  if (cycles != 0) {
+    // Settle derived asynchronous resets before the first clock edge.
+    dut_ptr->set_reset(1);
+    dut_ptr->set_clock(0);
+    dut_ptr->step();
+  }
+#endif
   for (int i = 0; i < cycles; i++) {
     dut_ptr->set_reset(1);
 
