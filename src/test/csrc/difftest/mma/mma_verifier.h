@@ -39,7 +39,7 @@
  * The backend may also provide operand storage;
  * acquisition and release can run on producer/worker threads concurrently.
  * The verifier owns the backend and coordinates request lifetimes.
- * With CONFIG_DIFFTEST_MMA_SYNC, submission verifies synchronously on the caller;
+ * With CONFIG_DIFFTEST_MMA_SYNC, submission waits for verification before returning;
  * start() prepares the backend, stop() is a no-op, and flush() reports the retained error.
  *
  * Buffers are caller-owned while being populated and verifier-owned after
@@ -168,7 +168,7 @@ public:
   void free_buffer(MmaVerificationBuffer *buffer);
 
   /**
-   * @brief Submits a fully populated buffer; synchronous builds verify inline.
+   * @brief Submits a fully populated buffer; synchronous builds wait for verification.
    *
    * @param[in] buffer Non-null buffer returned by allocate_buffer().
    * @note Blocks when queued or executing work reaches the configured backpressure

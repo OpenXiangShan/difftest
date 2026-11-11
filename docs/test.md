@@ -84,7 +84,7 @@ Key runtime options:
 | `-e, --log-end=NUM` | Stop logging at cycle N |
 | `-s, --seed=NUM` | Random seed |
 | `--random-mem` | Fill memory from a `--seed`-initialized LFSR stream before loading the image |
-| `--mma-cpu-threads=N` | Maximum workers in the shared CPU MMA service across DUT cores (default `1`). Asynchronous CPU builds use a standalone `difftest-mma-worker`; synchronous and CUDA builds ignore this option. |
+| `--mma-cpu-threads=N` | Maximum workers in the shared CPU MMA service across DUT cores (default `1`). Asynchronous builds distribute complete MMA instructions; synchronous builds split each MMA into output-row ranges and wait for all ranges. CUDA builds ignore this option. |
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
 
