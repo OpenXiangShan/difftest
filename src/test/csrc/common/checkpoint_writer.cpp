@@ -2,6 +2,7 @@
 
 #ifdef CONFIG_DIFFTEST_FORK_REF
 #include <cerrno>
+#include <climits>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -18,8 +19,26 @@ struct Job {
   uint64_t instr;
 };
 std::map<pid_t, Job> jobs;
+// Maximum registered writers awaiting reaping (FPGA_CPT_WRITERS).
+unsigned capacity = 16;
 uint64_t requested = 0, reaped = 0, errors = 0;
 bool failed = false;
+
+bool configure_limit(const char *name, unsigned &limit) {
+  const char *value = getenv(name);
+  if (!value)
+    return true;
+  char *end;
+  errno = 0;
+  const auto parsed = strtoll(value, &end, 10);
+  if (end == value || *end != '\0' || errno == ERANGE || parsed <= 0 ||
+      static_cast<unsigned long long>(parsed) > UINT_MAX) {
+    fprintf(stderr, "[ERROR] %s must be an integer in [1, %u]\n", name, UINT_MAX);
+    return false;
+  }
+  limit = static_cast<unsigned>(parsed);
+  return true;
+}
 
 // Poll registered writers. With wait_for_one, block on the first registered PID
 // before polling the remaining jobs.
@@ -48,9 +67,15 @@ void reap(bool wait_for_one) {
 }
 } // namespace
 
+bool checkpoint_writer_configure() {
+  return configure_limit("FPGA_CPT_WRITERS", capacity);
+}
+
 bool checkpoint_writer_submit(const std::string &base, uint64_t instr,
                               const std::function<void(const char *)> &serialize) {
   reap(false);
+  while (!failed && jobs.size() >= capacity)
+    reap(true);
   if (failed)
     return false;
   const pid_t pid = checkpoint_writer_fork(base, serialize);
@@ -60,6 +85,10 @@ bool checkpoint_writer_submit(const std::string &base, uint64_t instr,
   }
   checkpoint_writer_adopt(pid, base, instr);
   return true;
+}
+
+bool checkpoint_writer_has_capacity() {
+  return jobs.size() < capacity;
 }
 
 [[noreturn]] void checkpoint_writer_run(const std::string &base, const std::function<void(const char *)> &serialize) {

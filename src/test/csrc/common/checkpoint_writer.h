@@ -10,6 +10,8 @@
 #include <string>
 #include <sys/types.h>
 
+bool checkpoint_writer_configure();
+bool checkpoint_writer_has_capacity();
 // Serialize in the calling process and exit; this REF must never resume execution
 // Its parent registers the PID with adopt; a reused checker is registered before SAVE
 [[noreturn]] void checkpoint_writer_run(const std::string &base, const std::function<void(const char *)> &serialize);
