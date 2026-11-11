@@ -16,7 +16,9 @@
 
 #include "difftest.h"
 #ifdef CONFIG_DIFFTEST_FORK_REF
+#include "checkpoint_writer.h"
 #include "fork_ref/fork_ref.h"
+#include <sys/stat.h>
 #endif
 #include "common.h"
 #include "difftrace.h"
@@ -76,6 +78,62 @@ static void difftest_register_exit_handlers() {
   std::signal(SIGSEGV, difftest_signal_handler);
   std::signal(SIGBUS, difftest_signal_handler);
 }
+
+#ifdef CONFIG_DIFFTEST_FORK_REF
+static uint64_t checkpoint_interval = UINT64_MAX;
+static std::string checkpoint_dir;
+
+bool difftest_checkpoint_init(uint64_t interval) {
+  if (!difftest[0]->proxy->supports_checkpoint()) {
+    fprintf(stderr, "[ERROR] --take-cpt-interval requires a REF exporting difftest_trigger_checkpoint\n");
+    return false;
+  }
+  checkpoint_dir = create_noop_filename("-ref-cpt-XXXXXX");
+  const auto parent = checkpoint_dir.substr(0, checkpoint_dir.rfind('/'));
+  if ((mkdir(parent.c_str(), 0755) != 0 && errno != EEXIST) || !mkdtemp(&checkpoint_dir[0])) {
+    perror("Checkpoint directory");
+    return false;
+  }
+  checkpoint_interval = interval;
+  return true;
+}
+
+uint64_t difftest_checkpoint_interval() {
+  return checkpoint_interval;
+}
+
+std::string difftest_checkpoint_path(uint64_t instr) {
+  return checkpoint_dir + "/periodic-instr" + std::to_string(instr);
+}
+
+// Take a periodic checkpoint when this step crossed an interval.
+// Returns false if FAST flushing or writer submission fails.
+static bool difftest_take_periodic_checkpoint() {
+  // FORK saves only the SLOW endpoint accepted by its supervisor
+  if (checkpoint_interval == UINT64_MAX || difftest_ref_fork_enabled())
+    return true;
+  static uint64_t last_interval = 0;
+  auto *self = difftest[0];
+  const uint64_t instr = self->get_trap_event()->instrCnt;
+  const uint64_t interval = instr / checkpoint_interval;
+  if (interval <= last_interval)
+    return true;
+  if (self->flush_fast_ref())
+    return false;
+  // FAST may have deferred execution and a stale register cache
+  self->proxy->sync();
+  last_interval = interval;
+  // The REF checkpoint export skips M-mode without producing a file.
+  if (self->proxy->state.csr.privilegeMode == 3) {
+    Info("[CPT_SKIP_M] instr=%lu\n", instr);
+    return true;
+  }
+  const auto base = difftest_checkpoint_path(instr);
+  const char *verification = self->is_fast_ref() ? "FAST_ONLY" : "SLOW_CHECKED";
+  Info("[REF_CPT] verification=%s instr=%lu base=%s\n", verification, instr, base.c_str());
+  return checkpoint_writer_submit(base, instr, [self](const char *path) { self->proxy->trigger_checkpoint(path); });
+}
+#endif // CONFIG_DIFFTEST_FORK_REF
 
 int difftest_init(bool enabled, size_t ramsize) {
 #ifdef CONFIG_DIFFTEST_PERFCNT
@@ -176,6 +234,10 @@ int difftest_step() {
       }
     }
   }
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (!difftest_take_periodic_checkpoint())
+    return STATE_ABORT;
+#endif
   return DiffTestChecker::STATE_OK;
 }
 
