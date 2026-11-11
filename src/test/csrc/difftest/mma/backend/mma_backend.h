@@ -22,7 +22,6 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <queue>
 #include <vector>
 
 struct MmaHostDeleter {
@@ -156,6 +155,8 @@ public:
     return false;
   }
 };
+
+MmaBackend *make_mma_backend();
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 

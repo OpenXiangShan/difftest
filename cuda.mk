@@ -62,4 +62,4 @@ $(CUDA_MMA_BACKEND_OBJ): $(CUDA_MMA_BACKEND_SRC) $(DIFFTEST_STATE_HEADER) | $(BU
 
 endif
 
-include $(DIFFTEST_CSRC_DIR)/mma/worker/worker.mk
+include $(DIFFTEST_CSRC_DIR)/mma/backend/server/server.mk

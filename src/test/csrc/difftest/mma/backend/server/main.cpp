@@ -14,11 +14,24 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
-#include "mma/backend/mma_backend_cuda_process.h"
+#include "mma/backend/server/mma_backend_server.h"
+#include <cstdarg>
+#include <string>
 
-int main() {
-#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_MMA_CUDA)
-  return cuda_mma_worker_main();
+bool sim_verbose = false;
+int eprintf(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  const int result = vfprintf(stderr, format, args);
+  va_end(args);
+  return result;
+}
+
+int main(int argc, char **argv) {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  if (argc != 2)
+    return 2;
+  return run_mma_backend_server(static_cast<pid_t>(std::stol(argv[1])));
 #else
   return 0;
 #endif

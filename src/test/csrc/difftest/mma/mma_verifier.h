@@ -34,9 +34,8 @@
  * verification buffer, fills it with the reference operands and DUT result,
  * then submits it to the verifier. Submission transfers ownership to the
  * verifier, whose single worker thread drains the FIFO queue and invokes the
- * compile-time-selected CPU or CUDA MmaBackend. Numerical checks are serialized
- * on the worker thread. The backend may also provide operand storage;
- * acquisition and release can run on producer/worker threads concurrently.
+ * compile-time-selected CPU or CUDA MmaBackend. The backend may also provide
+ * operand storage; acquisition and release can run on producer/worker threads concurrently.
  * The verifier owns the backend and coordinates request lifetimes.
  * With CONFIG_DIFFTEST_MMA_SYNC, submission verifies synchronously on the caller;
  * start() prepares the backend, stop() is a no-op, and flush() reports the retained error.
