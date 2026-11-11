@@ -47,6 +47,9 @@ bool matrix_wb_step_hint = false;
 bool *matrix_wb_step_slot_cache = nullptr;
 struct MatrixWbOptions {
   bool fast, decode, packet, rebuild, classify_cache, typed_chain, slot_invalidate;
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+  bool snapshot_cache;
+#endif
   static bool flag(const char *name) {
     const char *value = std::getenv(name);
     if (value && std::strcmp(value, "0") && std::strcmp(value, "1"))
@@ -54,14 +57,35 @@ struct MatrixWbOptions {
     return value && std::strcmp(value, "1") == 0;
   }
   MatrixWbOptions()
-      : fast(flag("FPGA_MATRIX_WB_FAST")), decode(flag("FPGA_MATRIX_WB_DECODE")), packet(flag("FPGA_MATRIX_WB_PACKET")),
-        rebuild(flag("FPGA_MATRIX_WB_REBUILD")), classify_cache(flag("FPGA_MATRIX_WB_CLASSIFY_CACHE")),
-        typed_chain(flag("FPGA_MATRIX_WB_TYPED_CHAIN")), slot_invalidate(flag("FPGA_MATRIX_WB_SLOT_INVALIDATE")) {}
+      : fast(flag("FPGA_MATRIX_WB_FAST")), decode(flag("FPGA_MATRIX_WB_DECODE")),
+        packet(flag("FPGA_MATRIX_WB_PACKET")), rebuild(flag("FPGA_MATRIX_WB_REBUILD")),
+        classify_cache(flag("FPGA_MATRIX_WB_CLASSIFY_CACHE")),
+        typed_chain(flag("FPGA_MATRIX_WB_TYPED_CHAIN")),
+        slot_invalidate(flag("FPGA_MATRIX_WB_SLOT_INVALIDATE"))
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+        , snapshot_cache(flag("FPGA_MATRIX_SNAPSHOT_CACHE"))
+#endif
+        {}
 };
-const MatrixWbOptions &matrix_wb_options() {
+__attribute__((always_inline)) inline const MatrixWbOptions &matrix_wb_options() {
   static const MatrixWbOptions options;
   return options;
 }
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+matrix_wb_fastpath::SnapshotCache<64> matrix_snapshots;
+bool matrix_snapshot_enabled = false;
+#if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && \
+    defined(CONFIG_DIFFTEST_MATRIX_WB_CLASSIFIER) && defined(CONFIG_DIFFTEST_DELTA) && \
+    defined(CONFIG_DIFFTEST_INTERNAL_STEP) && NUM_CORES == 1 && \
+    CONFIG_DIFFTEST_ZONESIZE == 1 && CONFIG_DIFFTEST_BUFLEN == 64 && CONFIG_DIFFTEST_BATCH_SIZE == 64 && \
+    !defined(CONFIG_DIFFTEST_QUERY) && !defined(CONFIG_DIFFTEST_REPLAY) && \
+    !defined(CONFIG_DIFFTEST_FORK_REF) && !defined(CONFIG_DIFFTEST_FAST_REF) && \
+    !defined(CONFIG_DIFFTEST_ARCHINTDELAYEDUPDATE) && !defined(CONFIG_DIFFTEST_ARCHFPDELAYEDUPDATE)
+constexpr bool matrix_snapshot_build_supported = true;
+#else
+constexpr bool matrix_snapshot_build_supported = false;
+#endif
+#endif
 bool matrix_wb_supported() {
 #if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_AMUWRITEBACKEVENT) && \
     !defined(CONFIG_DIFFTEST_REPLAY) && !defined(CONFIG_DIFFTEST_QUERY) && defined(CONFIG_DIFFTEST_INTERNAL_STEP)
@@ -113,6 +137,30 @@ bool difftest_matrix_wb_rebuild_enabled() {
   // replay and fork modes retain the same event and result semantics.
   return matrix_wb_options().rebuild;
 }
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+bool difftest_matrix_snapshot_begin(unsigned slot, const DiffTestState *target) {
+  if (!matrix_snapshot_enabled) return false;
+  if (!matrix_wb_supported() || !difftest[0]->matrix_snapshot_compatible()) {
+    matrix_snapshots.invalidate();
+    return false;
+  }
+  return matrix_snapshots.begin(slot, target);
+}
+bool difftest_matrix_snapshot_archregs_ready(uint8_t coreid, const DiffTestState *target) {
+  if (!matrix_snapshot_enabled) return false;
+  if (coreid != 0) {
+    matrix_snapshots.invalidate();
+    return false;
+  }
+  return matrix_snapshots.consume(target);
+}
+void difftest_matrix_snapshot_finish() {
+  if (matrix_snapshot_enabled) matrix_snapshots.finish();
+}
+void difftest_matrix_snapshot_invalidate() {
+  if (matrix_snapshot_enabled) matrix_snapshots.invalidate();
+}
+#endif
 static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
@@ -153,6 +201,13 @@ static void difftest_register_exit_handlers() {
 int difftest_init(bool enabled, size_t ramsize) {
   matrix_wb_step_hint = false;
   const auto &matrix_options = matrix_wb_options();
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+  matrix_snapshots.invalidate();
+  matrix_snapshot_enabled = matrix_snapshot_build_supported && matrix_options.snapshot_cache &&
+                            matrix_options.fast && matrix_options.packet && matrix_options.classify_cache &&
+                            matrix_options.slot_invalidate;
+  printf("[DiffTest][MatrixSnapshot] enabled=%d\n", matrix_snapshot_enabled ? 1 : 0);
+#endif
   if (matrix_options.fast || matrix_options.decode || matrix_options.packet || matrix_options.rebuild)
     printf("[DiffTest][MatrixWB] fast=%d decode=%d packet=%d rebuild=%d (unsupported modes use the ordinary path)\n",
            matrix_options.fast ? 1 : 0, matrix_options.decode ? 1 : 0, matrix_options.packet ? 1 : 0,
@@ -271,6 +326,10 @@ void difftest_trace_write(int step) {
 }
 
 void difftest_finish(bool report_perfcnt) {
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+  matrix_snapshots.invalidate();
+  matrix_snapshot_enabled = false;
+#endif
   difftest_refdrive_trace_finish();
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
   Stopwatch::print_stats(CHECKERS);
@@ -846,6 +905,9 @@ inline int Difftest::check_all() {
     // is unchanged by an empty observation. The AMU pending queues were serviced
     // above in their original order, including full SWROB retirement/mrelease.
     num_commit = 0;
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+    if (matrix_snapshot_enabled) matrix_snapshots.checked(dut);
+#endif
     return DiffTestChecker::STATE_OK;
   }
 

@@ -22,7 +22,7 @@
 #include <stdexcept>
 
 namespace {
-bool matrix_pending_fast_enabled() {
+__attribute__((always_inline)) inline bool matrix_pending_fast_enabled() {
 #if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_FPGA) && NUM_CORES == 1 && !defined(CONFIG_DIFFTEST_QUERY) && \
     !defined(CONFIG_DIFFTEST_REPLAY) && !defined(CONFIG_DIFFTEST_FORK_REF) && !defined(CONFIG_DIFFTEST_FAST_REF)
   static const bool enabled = [] {

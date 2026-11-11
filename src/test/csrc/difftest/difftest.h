@@ -92,6 +92,10 @@ public:
     return proxy != nullptr;
   }
 
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+  bool matrix_snapshot_compatible() const { return matrix_wb_compatible() && difftrace == nullptr; }
+#endif
+
   inline bool get_trap_valid() {
     return dut->trap.hasTrap || state->has_trap;
   }
@@ -327,6 +331,12 @@ bool difftest_matrix_wb_slot_invalidate_enabled();
 bool difftest_matrix_wb_decode_enabled();
 bool difftest_matrix_wb_packet_enabled();
 bool difftest_matrix_wb_rebuild_enabled();
+#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+bool difftest_matrix_snapshot_begin(unsigned slot, const DiffTestState *target);
+bool difftest_matrix_snapshot_archregs_ready(uint8_t coreid, const DiffTestState *target);
+void difftest_matrix_snapshot_finish();
+void difftest_matrix_snapshot_invalidate();
+#endif
 
 int difftest_nstep(int step, bool enable_diff);
 void difftest_switch_zone();

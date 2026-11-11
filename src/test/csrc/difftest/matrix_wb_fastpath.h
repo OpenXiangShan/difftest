@@ -27,6 +27,58 @@ inline bool classify_cached(bool *other_events_clean, bool has_writeback, bool h
   return *other_events_clean = full_classifier();
 }
 
+// A snapshot proof is stronger than the other-events-valid classifier above:
+// it also certifies a full Delta copy and architectural-register reconstruction.
+// Generic parsing invalidates every slot. Only an exact, once-consumed slot and
+// successful matrix-only checker dispatch may establish a new proof.
+template <size_t Slots> class SnapshotCache {
+  static_assert(Slots > 0 && Slots <= 64, "snapshot proof mask requires at most 64 slots");
+  enum : uint8_t { Reuse = 1, Consumed = 2, Checked = 4 };
+  uint64_t ready_ = 0;
+  const void *target_ = nullptr;
+  size_t slot_ = 0;
+  uint8_t flags_ = 0;
+
+public:
+  void invalidate() {
+    ready_ = 0;
+    target_ = nullptr;
+    flags_ = 0;
+  }
+  bool begin(size_t slot, const void *target) {
+    if (target_) invalidate();
+    if (slot >= Slots || !target) {
+      invalidate();
+      throw std::invalid_argument("Invalid matrix snapshot slot");
+    }
+    slot_ = slot;
+    target_ = target;
+    flags_ = (ready_ & (uint64_t(1) << slot)) ? Reuse : 0;
+    return flags_ & Reuse;
+  }
+  bool consume(const void *target) {
+    if (!target_) return false;
+    if (target != target_ || (flags_ & Consumed)) {
+      invalidate();
+      throw std::runtime_error("Matrix snapshot consumed by an unexpected slot");
+    }
+    flags_ |= Consumed;
+    return flags_ & Reuse;
+  }
+  void checked(const void *target) {
+    if (target_ == target && (flags_ & Consumed)) flags_ |= Checked;
+  }
+  void finish() {
+    if (!target_ || (flags_ & (Consumed | Checked)) != (Consumed | Checked)) {
+      invalidate();
+      return;
+    }
+    ready_ |= uint64_t(1) << slot_;
+    target_ = nullptr;
+    flags_ = 0;
+  }
+};
+
 // A logical step may span multiple wire steps while Delta reconstruction is
 // pending. Only complete() resets this classification, never a wire boundary.
 class LogicalStep {

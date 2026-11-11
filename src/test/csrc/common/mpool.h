@@ -224,8 +224,9 @@ private:
   struct Shared {
     std::atomic<bool> stopped{false};
     std::atomic<bool> failed{false};
-    std::atomic<uint64_t> head{0};
     std::atomic<uint64_t> reader_epoch{0};
+    // Packet publication must not invalidate readers of the stop/failure flags.
+    alignas(64) std::atomic<uint64_t> head{0};
     Reader readers[MAX_READERS];
   };
   static void *map(size_t bytes);
@@ -252,11 +253,16 @@ private:
   std::atomic<size_t> group_w_idx{1};
   uint64_t reclaimed = 0;
 #else
-  uint64_t producer = 0;
+  // Only the receive thread writes these counters. Keep them off pointer/reader lines.
+  alignas(64) uint64_t producer = 0;
   uint64_t safe_until = capacity;
 #endif
-  uint64_t consumer = 0;
+  // The checker thread advances this cursor independently of the receiver.
+  alignas(64) uint64_t consumer = 0;
   unsigned reader_id = 0;
+#if (CONFIG_DMA_CHANNELS <= 1)
+  uint64_t observed_head = 0;
+#endif
 };
 extern MemoryIdxPool *g_packet_pool;
 #endif

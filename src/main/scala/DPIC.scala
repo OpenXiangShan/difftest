@@ -330,7 +330,12 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |#endif
            |      matrix_logical_step.observe(true);
            |      if (dStats->need_pending()) return;
+           |#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+           |      const bool snapshot_reused = difftest_matrix_snapshot_begin(dut_index, DUT_BUF(0, 0, dut_index));
+           |      if (!snapshot_reused) dStats->sync(0, dut_index);
+           |#else
            |      dStats->sync(0, dut_index);
+           |#endif
            |      const bool matrix_writeback_step = matrix_logical_step.complete();
            |      bool *const packet_slot_cache = ${if (matrixCacheSafe)
             "difftest_matrix_wb_classify_cache_enabled() ? &matrix_other_events_clean[dut_index] : nullptr"
@@ -341,10 +346,16 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
            |      try {
            |        fpga_nstep(1);
            |      } catch (...) {
+           |#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+           |        difftest_matrix_snapshot_invalidate();
+           |#endif
            |        difftest_matrix_wb_step(false);
            |        throw;
            |      }
            |      difftest_matrix_wb_step(false);
+           |#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+           |      difftest_matrix_snapshot_finish();
+           |#endif
            |      return;
            |    }
            |  }
@@ -355,6 +366,9 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
       s"""#ifdef FPGA_HOST
          |  // Generic parsing writes only this slot; BatchStep advances then returns.
          |  // Invalidate before the first write, including partial/pending events.
+         |#ifdef CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+         |  difftest_matrix_snapshot_invalidate();
+         |#endif
          |#if NUM_CORES == 1 && CONFIG_DIFFTEST_ZONESIZE == 1 && CONFIG_DIFFTEST_BUFLEN == CONFIG_DIFFTEST_BATCH_SIZE
          |  if (${if (matrixCacheSafe) "difftest_matrix_wb_slot_invalidate_enabled()" else "false"})
          |    matrix_other_events_clean[dut_index] = false;
@@ -576,6 +590,19 @@ object DPIC {
       interfaceCpp += "#include \"difftest-delta.h\""
     }
     val phyRegs = instances.distinctBy(_.desiredCppName).collect { case p: DiffPhyRegState => p }
+    val snapshotArchreg = phyRegs.nonEmpty && instances.exists(_.desiredCppName == "amu_writeback")
+    if (snapshotArchreg) {
+      interfaceCpp += "#if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE)"
+      interfaceCpp += "bool difftest_matrix_snapshot_archregs_ready(uint8_t coreid, const DiffTestState* dut);"
+      interfaceCpp += "#endif"
+    }
+    val archregUpdate = if (snapshotArchreg) {
+      """#if defined(FPGA_HOST) && defined(CONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE)
+        |    if (!difftest_matrix_snapshot_archregs_ready(coreid, ret)) diffstate_update_archreg(coreid, ret);
+        |#else
+        |    diffstate_update_archreg(coreid, ret);
+        |#endif""".stripMargin
+    } else if (phyRegs.nonEmpty) "diffstate_update_archreg(coreid, ret);" else ""
     if (phyRegs.nonEmpty) {
       interfaceCpp += "static inline void diffstate_update_archreg(uint8_t coreid, DiffTestState* dut) {"
       phyRegs.foreach { p =>
@@ -613,7 +640,7 @@ object DPIC {
          |  }
          |  inline DiffTestState* next() {
          |    DiffTestState* ret = buffer[zone_ptr] + read_ptr;
-         |    ${if (phyRegs.nonEmpty) "diffstate_update_archreg(coreid, ret);" else ""}
+         |    $archregUpdate
          |    read_ptr = (read_ptr + 1) % CONFIG_DIFFTEST_BUFLEN;
          |    return ret;
          |  }

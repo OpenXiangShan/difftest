@@ -67,6 +67,12 @@ ifeq ($(USE_THREAD_MEMPOOL), 1)
 FPGA_CXXFLAGS += -DUSE_THREAD_MEMPOOL
 endif
 
+# Optional host-only reuse of unchanged snapshots in pure matrix writeback runs.
+MATRIX_SNAPSHOT_CACHE ?= 0
+ifeq ($(MATRIX_SNAPSHOT_CACHE), 1)
+FPGA_CXXFLAGS += -DCONFIG_DIFFTEST_MATRIX_SNAPSHOT_CACHE
+endif
+
 $(FPGA_TARGET): $(FPGA_CXXFILES)
 	$(CXX) $(FPGA_CXXFLAGS) $(FPGA_CXXFILES) -o $@ $(FPGA_LDFLAGS)
 

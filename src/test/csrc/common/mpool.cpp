@@ -173,8 +173,19 @@ char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
 }
 
 char *MemoryIdxPool::read_busy_chunk() {
-  if (aborted() || consumer >= shared->head.load(std::memory_order_acquire))
+  if (aborted())
     return nullptr;
+#if (CONFIG_DMA_CHANNELS <= 1)
+  // An acquired head H publishes every packet before H on the ordered channel.
+  if (consumer >= observed_head) {
+    observed_head = shared->head.load(std::memory_order_acquire);
+    if (consumer >= observed_head)
+      return nullptr;
+  }
+#else
+  if (consumer >= shared->head.load(std::memory_order_acquire))
+    return nullptr;
+#endif
   size_t page_r_idx = consumer & (capacity - 1);
 #if (CONFIG_DMA_CHANNELS > 1)
   if (memory_order_ptr[page_r_idx].is_free.load(std::memory_order_acquire))
@@ -244,6 +255,9 @@ void MemoryIdxPool::enter_reader(unsigned id) {
   assert(id < MAX_READERS);
   reader_id = id;
   consumer = shared->readers[id].cursor.load(std::memory_order_acquire);
+#if (CONFIG_DMA_CHANNELS <= 1)
+  observed_head = 0;
+#endif
 }
 
 void MemoryIdxPool::retire_reader(unsigned id) {
