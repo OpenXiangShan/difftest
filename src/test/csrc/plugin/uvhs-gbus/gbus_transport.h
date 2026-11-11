@@ -38,11 +38,15 @@ private:
   uint8_t prototyping_ = 0;
   uint8_t board_ = 0;
   uint8_t fpga_ = 0;
-  // Config/GENERALBD is hosted on the GBus FPGA.  A multi-FPGA XiangShan
-  // trace topology may place the functional DDR on another FPGA, so DMA
-  // requests can target a separate UVHS FPGA while register accesses remain
-  // on fpga_.  Defaults to fpga_ for the single-FPGA NutShell topology.
-  uint8_t dma_fpga_ = 0;
+  // Config/GENERALBD is hosted on the GBus FPGA.  The two DMA directions can
+  // live on different FPGAs: H2C writes the workload into the functional CPU
+  // DDR, while C2H reads the streaming ring that sits beside the GBus host.
+  // On the 20261106 XiangShan build the DDR controller is on b0.f0 and the
+  // GBus host (with the ring) on b0.f2, so one shared index cannot serve both.
+  // Each defaults to GBUS_DMA_FPGA, then to fpga_, which is the single-FPGA
+  // topology where every endpoint is on the same device.
+  uint8_t h2c_dma_fpga_ = 0;
+  uint8_t c2h_dma_fpga_ = 0;
   uint8_t config_instance_ = 0;
   uint8_t ddr_instance_ = 0;
   uint8_t channel_ = 0;

@@ -102,7 +102,13 @@ GbusTransport::GbusTransport() {
   // U2.2 setup, value 2 selects the design placed on B0.F2 (reported by the
   // daemon as topology fpgaId 3).  Keep it explicit and overrideable.
   fpga_ = static_cast<uint8_t>(env_u64("GBUS_FPGA", 2, 255));
-  dma_fpga_ = static_cast<uint8_t>(env_u64("GBUS_DMA_FPGA", fpga_, 255));
+  // Where each DMA direction lands is a property of the placed design, not of
+  // the transport.  GBUS_DMA_FPGA keeps the old single-index meaning, and the
+  // per-direction variables let H2C address the DDR FPGA while C2H stays on
+  // the GBus FPGA that owns the ring.
+  const uint64_t dma_fpga = env_u64("GBUS_DMA_FPGA", fpga_, 255);
+  h2c_dma_fpga_ = static_cast<uint8_t>(env_u64("GBUS_H2C_DMA_FPGA", dma_fpga, 255));
+  c2h_dma_fpga_ = static_cast<uint8_t>(env_u64("GBUS_C2H_DMA_FPGA", dma_fpga, 255));
   config_instance_ = static_cast<uint8_t>(env_u64("GBUS_CONFIG_INSTANCE", 0, 255));
   ddr_instance_ = static_cast<uint8_t>(env_u64("GBUS_DDR_INSTANCE", 0, 255));
   channel_ = static_cast<uint8_t>(env_u64("GBUS_CHANNEL", 0, 255));
@@ -284,7 +290,11 @@ void GbusTransport::c2h_drain_stream_frames() {
   const uint32_t ring_bytes = c2h_reg_read(GBUS_REG_C2H_CAPACITY);
   if (aperture != GBUS_C2H_STREAM_APERTURE || ring_bytes != c2h_stream_frames_ * c2h_stream_frame_bytes_)
     fail("invalid aperture/ring", 0);
-  if (dma_fpga_ != 2 || fpga_ != 2 || port_ != 0 || channel_ != 0 || ddr_instance_ != 0)
+  // The ring is a port-0 aperture on the FPGA that carries the GBus host, so
+  // the C2H target must be that same device.  H2C is deliberately not checked
+  // here: it addresses the functional DDR, which a multi-FPGA place may put on
+  // a different device.
+  if (c2h_dma_fpga_ != fpga_ || port_ != 0 || channel_ != 0 || ddr_instance_ != 0)
     fail("invalid port-0 DMA topology", 0);
 
   // Bit 0 is ENABLE.  The engine drops ENABLE whenever the DiffTest stream is
@@ -298,9 +308,10 @@ void GbusTransport::c2h_drain_stream_frames() {
   const bool armed_now = (armed & GBUS_C2H_CTRL_ARMED) != 0;
 
   std::fprintf(stderr,
-               "[fpga-host] GBD1 stream ready base=0x%llx frames=%u bytes=%u min_batch=%u poll_us=%u enabled=%u\n",
+               "[fpga-host] GBD1 stream ready base=0x%llx frames=%u bytes=%u min_batch=%u poll_us=%u enabled=%u "
+               "cfg_fpga=%u c2h_fpga=%u h2c_fpga=%u\n",
                static_cast<unsigned long long>(aperture), c2h_stream_frames_, ring_bytes, c2h_stream_min_frames_,
-               c2h_poll_us_, armed_now ? 1U : 0U);
+               c2h_poll_us_, armed_now ? 1U : 0U, fpga_, c2h_dma_fpga_, h2c_dma_fpga_);
 
   std::vector<uint8_t> accumulator;
   accumulator.reserve(ring_bytes);
@@ -363,8 +374,8 @@ void GbusTransport::c2h_drain_stream_frames() {
 
     std::vector<uint8_t> block;
     const uint64_t begin = monotonic_us();
-    const int rc =
-        gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, aperture + rd_ptr, count, channel_, port_, block);
+    const int rc = gbus_dma_read(prototyping_, board_, c2h_dma_fpga_, ddr_instance_, aperture + rd_ptr, count, channel_,
+                                 port_, block);
     const uint64_t elapsed_us = monotonic_us() - begin;
     ++c2h_dma_calls_;
     c2h_dma_us_ += elapsed_us;
@@ -602,7 +613,7 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
   for (uint64_t offset = 0; offset < size; offset += chunk) {
     size_t count = static_cast<size_t>((size - offset) < chunk ? (size - offset) : chunk);
     std::vector<uint8_t> data(bytes + offset, bytes + offset + count);
-    if (gbus_dma_write(prototyping_, board_, dma_fpga_, ddr_instance_, ddr_base_ + offset, count, channel_, port_,
+    if (gbus_dma_write(prototyping_, board_, h2c_dma_fpga_, ddr_instance_, ddr_base_ + offset, count, channel_, port_,
                        data) != 1) {
       std::fprintf(stderr, "[fpga-host] GBus DMA workload write failed offset=0x%llx size=%zu\n",
                    static_cast<unsigned long long>(offset), count);
@@ -625,12 +636,19 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
   // holds.  Verifying costs one extra DMA read per chunk and changes the call
   // sequence, so it is opt-in rather than always on.
   const uint64_t verify_chunk = 1ULL << 18; // 256 KiB, well under the 0x7FFFF API cap
+  // The write goes in through the GBus host's own AXI port, which on a split
+  // place forwards across FPGAs into the DDR controller.  The readback does not
+  // have to come back the same way: reading through the FPGA that owns the DDR
+  // exercises the landed bytes and not the write path a second time, so a
+  // mismatch then means the data really is not in DDR rather than that the same
+  // broken route was used twice.
+  const uint8_t verify_fpga = static_cast<uint8_t>(env_u64("GBUS_H2C_VERIFY_FPGA", h2c_dma_fpga_, 255));
   uint64_t mismatched = 0, patched = 0;
   for (uint64_t offset = 0; h2c_verify_ && offset < size; offset += verify_chunk) {
     const size_t count = static_cast<size_t>((size - offset) < verify_chunk ? (size - offset) : verify_chunk);
     for (unsigned attempt = 0; attempt < 3; ++attempt) {
       std::vector<uint8_t> back;
-      if (gbus_dma_read(prototyping_, board_, dma_fpga_, ddr_instance_, ddr_base_ + offset, count, channel_, port_,
+      if (gbus_dma_read(prototyping_, board_, verify_fpga, ddr_instance_, ddr_base_ + offset, count, channel_, port_,
                         back) == 1 &&
           back.size() == count && std::equal(back.begin(), back.end(), bytes + offset))
         break;
@@ -642,7 +660,7 @@ void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
         std::exit(EXIT_FAILURE);
       }
       std::vector<uint8_t> data(bytes + offset, bytes + offset + count);
-      if (gbus_dma_write(prototyping_, board_, dma_fpga_, ddr_instance_, ddr_base_ + offset, count, channel_, port_,
+      if (gbus_dma_write(prototyping_, board_, h2c_dma_fpga_, ddr_instance_, ddr_base_ + offset, count, channel_, port_,
                          data) != 1) {
         std::fprintf(stderr, "[fpga-host] GBus H2C rewrite failed offset=0x%llx\n",
                      static_cast<unsigned long long>(offset));
