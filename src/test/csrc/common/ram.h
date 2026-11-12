@@ -18,6 +18,7 @@
 #define __RAM_H
 
 #include "common.h"
+#include "input.h"
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -35,64 +36,7 @@ void pmem_write(uint64_t waddr, uint64_t wdata);
 extern "C" uint64_t difftest_ram_read(uint64_t rIdx);
 extern "C" void difftest_ram_write(uint64_t wIdx, uint64_t wdata, uint64_t wmask);
 
-class InputReader {
-public:
-  virtual ~InputReader() {};
-  virtual uint64_t len() {
-    return 0;
-  };
-  virtual uint64_t next() = 0;
-  virtual uint64_t read_all(void *, uint64_t) = 0;
-};
-
-class StdinReader : public InputReader {
-public:
-  StdinReader();
-  ~StdinReader() {}
-  uint64_t next();
-  uint64_t read_all(void *dest, uint64_t max_bytes = -1ULL);
-
-private:
-  uint64_t n_bytes;
-};
-
-class WimReader : public InputReader {
-public:
-  WimReader(uint64_t *addr, uint64_t size) : base_addr(addr), size(size), index(0) {}
-  ~WimReader() {}
-  uint64_t len() {
-    return size;
-  };
-  uint64_t next();
-  uint64_t read_all(void *dest, uint64_t max_bytes = -1ULL);
-
-private:
-  uint64_t *base_addr;
-  uint64_t size, index;
-};
-
-class FileReader : public InputReader {
-public:
-  FileReader(const char *filename);
-  ~FileReader() {
-    file.close();
-  }
-  uint64_t len() {
-    return file_size;
-  };
-  uint64_t next();
-  uint64_t read_all(void *dest, uint64_t max_bytes = -1ULL);
-
-private:
-  std::ifstream file;
-  uint64_t file_size;
-};
-
 class SimMemory {
-private:
-  bool is_stdin(const char *image);
-  uint64_t *is_wim(const char *image, uint64_t &wim_size);
-
 protected:
   uint64_t memory_size; // in bytes
 #ifdef FUZZING
@@ -139,7 +83,7 @@ private:
 public:
   MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed);
   virtual ~MmapMemory();
-  void load_image(const char *image);
+  void load_image(const char *image, MemoryWriteMode raw_mode);
   uint64_t pad_img_size(uint64_t align);
   void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) {
     size_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
