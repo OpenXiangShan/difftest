@@ -15,6 +15,8 @@
 ***************************************************************************************/
 
 #include "compress.h"
+#include <algorithm>
+#include <climits>
 
 double calcTime(timeval s, timeval e) {
   double sec, usec;
@@ -23,52 +25,42 @@ double calcTime(timeval s, timeval e) {
   return 1000 * sec + usec / 1000.0;
 }
 
-// Return whether the file is a gz file
+CompressionKind detect_compression(InputReader &input) {
+  uint8_t magic[4];
+  ssize_t n = input.peek(magic, sizeof(magic));
+  if (n < 0)
+    throw std::runtime_error("Cannot detect image compression");
+  if (n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b)
+    return CompressionKind::Gzip;
+  const uint8_t zstd_magic[] = {0x28, 0xb5, 0x2f, 0xfd};
+  // A zstd stream may start with a skippable frame.
+  if (n == 4 && (!memcmp(magic, zstd_magic, 4) ||
+                 ((magic[0] & 0xf0) == 0x50 && magic[1] == 0x2a && magic[2] == 0x4d && magic[3] == 0x18)))
+    return CompressionKind::Zstd;
+  return CompressionKind::None;
+}
+
+#if !defined(NO_GZ_COMPRESSION) || !defined(NO_ZSTD_COMPRESSION)
+static bool has_compression(const char *filename, CompressionKind kind) {
+  auto input = open_input(filename);
+  return detect_compression(*input) == kind;
+}
+#endif
+
 bool isGzFile(const char *filename) {
 #ifdef NO_GZ_COMPRESSION
   return false;
+#else
+  return has_compression(filename, CompressionKind::Gzip);
 #endif
-  int fd = -1;
-
-  fd = open(filename, O_RDONLY);
-  assert(fd);
-
-  uint8_t buf[2];
-
-  size_t sz = read(fd, buf, 2);
-  if (sz != 2) {
-    close(fd);
-    return false;
-  }
-
-  close(fd);
-
-  const uint8_t gz_magic[2] = {0x1f, 0x8B};
-  return memcmp(buf, gz_magic, 2) == 0;
 }
 
-// Return whether the file is a zstd file
 bool isZstdFile(const char *filename) {
 #ifdef NO_ZSTD_COMPRESSION
   return false;
+#else
+  return has_compression(filename, CompressionKind::Zstd);
 #endif
-  int fd = -1;
-
-  fd = open(filename, O_RDONLY);
-  assert(fd);
-
-  uint8_t buf[4];
-
-  size_t sz = read(fd, buf, 4);
-  if (sz != 4) {
-    close(fd);
-    return false;
-  }
-
-  close(fd);
-
-  const uint8_t zstd_magic[4] = {0x28, 0xB5, 0x2F, 0xFD};
-  return memcmp(buf, zstd_magic, 4) == 0;
 }
 
 long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) {
@@ -115,182 +107,200 @@ long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) 
 #endif
 }
 
-long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t load_type) {
+namespace {
 #ifndef NO_GZ_COMPRESSION
-  assert(buf_size > 0);
-  gzFile compressed_mem = gzopen(file_name, "rb");
-
-  if (compressed_mem == NULL) {
-    printf("Can't open compressed binary file '%s'", file_name);
-    return -1;
+class GzipReader : public InputReader {
+public:
+  explicit GzipReader(std::unique_ptr<InputReader> input) : input(std::move(input)) {
+    if (inflateInit2(&stream, 15 + 16) != Z_OK)
+      throw std::runtime_error("Cannot initialize gzip decoder");
+  }
+  ~GzipReader() override {
+    inflateEnd(&stream);
   }
 
-  uint64_t curr_size = 0;
-  const uint32_t chunk_size = 16384;
-
-  // Only load from RAM need check
-  if (load_type == LOAD_RAM && (buf_size % chunk_size) != 0) {
-    printf("buf_size must be divisible by chunk_size\n");
-    assert(0);
-  }
-
-  long *temp_page = new long[chunk_size];
-
-  while (curr_size < buf_size) {
-    uint32_t bytes_read = gzread(compressed_mem, temp_page, chunk_size * sizeof(long));
-    if (bytes_read == 0) {
-      break;
-    }
-    for (uint32_t x = 0; x < bytes_read / sizeof(long); x++) {
-      if (*(temp_page + x) != 0) {
-        long *pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
-        *pmem_current = *(temp_page + x);
+protected:
+  ssize_t read_some(void *dest, size_t capacity) override {
+    stream.next_out = static_cast<Bytef *>(dest);
+    stream.avail_out = std::min<size_t>(capacity, UINT_MAX);
+    uInt initial_out = stream.avail_out;
+    for (;;) {
+      if (frame_end) {
+        // gzip permits zero padding after and between members.
+        for (;;) {
+          if (!stream.avail_in) {
+            ssize_t n = refill();
+            if (n <= 0)
+              return n;
+          }
+          while (stream.avail_in && *stream.next_in == 0) {
+            stream.next_in++;
+            stream.avail_in--;
+          }
+          if (stream.avail_in)
+            break;
+        }
+        // Reset only the codec state, preserving unread bytes of the next member.
+        Bytef *next_in = stream.next_in;
+        uInt avail_in = stream.avail_in;
+        Bytef *next_out = stream.next_out;
+        uInt avail_out = stream.avail_out;
+        int ret = inflateReset2(&stream, 15 + 16);
+        stream.next_in = next_in;
+        stream.avail_in = avail_in;
+        stream.next_out = next_out;
+        stream.avail_out = avail_out;
+        if (ret != Z_OK)
+          return -1;
+        frame_end = false;
+      }
+      uInt before_in = stream.avail_in;
+      int ret = inflate(&stream, Z_NO_FLUSH);
+      if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR) {
+        fprintf(stderr, "Gzip decompression failed: %s\n", stream.msg ? stream.msg : "invalid stream");
+        return -1;
+      }
+      frame_end = ret == Z_STREAM_END;
+      if (stream.avail_out != initial_out)
+        return initial_out - stream.avail_out;
+      if (frame_end)
+        continue;
+      if (!stream.avail_in) {
+        ssize_t n = refill();
+        if (n < 0)
+          return -1;
+        if (n == 0) {
+          fprintf(stderr, "Truncated gzip stream\n");
+          return -1;
+        }
+      } else if (stream.avail_in == before_in) {
+        fprintf(stderr, "Gzip decoder made no progress\n");
+        return -1;
       }
     }
-    curr_size += bytes_read;
   }
 
-  if (gzread(compressed_mem, temp_page, chunk_size) > 0) {
-    printf("File size is larger than buf_size!\n");
-    assert(0);
+private:
+  ssize_t refill() {
+    ssize_t n = input->read(buffer, sizeof(buffer));
+    if (n > 0) {
+      stream.next_in = buffer;
+      stream.avail_in = n;
+    }
+    return n;
   }
-  // printf("Read %lu bytes from gz stream in total\n", curr_size);
 
-  delete[] temp_page;
-
-  if (gzclose(compressed_mem)) {
-    printf("Error closing '%s'\n", file_name);
-    return -1;
-  }
-  return curr_size;
-#else
-  return 0;
+  std::unique_ptr<InputReader> input;
+  z_stream stream = {};
+  uint8_t buffer[1 << 16];
+  bool frame_end = false;
+};
 #endif
+
+#ifndef NO_ZSTD_COMPRESSION
+class ZstdReader : public InputReader {
+public:
+  explicit ZstdReader(std::unique_ptr<InputReader> input) : input(std::move(input)) {
+    stream = ZSTD_createDStream();
+    if (!stream)
+      throw std::runtime_error("Cannot create zstd decoder");
+    size_t ret = ZSTD_initDStream(stream);
+    if (ZSTD_isError(ret)) {
+      ZSTD_freeDStream(stream);
+      throw std::runtime_error("Cannot initialize zstd decoder");
+    }
+  }
+  ~ZstdReader() override {
+    ZSTD_freeDStream(stream);
+  }
+
+protected:
+  ssize_t read_some(void *dest, size_t capacity) override {
+    for (;;) {
+      if (frame_end && compressed.pos == compressed.size) {
+        ssize_t n = refill();
+        if (n <= 0)
+          return n;
+      }
+      size_t before = compressed.pos;
+      ZSTD_outBuffer output = {dest, capacity, 0};
+      size_t ret = ZSTD_decompressStream(stream, &output, &compressed);
+      if (ZSTD_isError(ret)) {
+        fprintf(stderr, "Zstd decompression failed: %s\n", ZSTD_getErrorName(ret));
+        return -1;
+      }
+      frame_end = ret == 0;
+      if (output.pos)
+        return output.pos;
+      if (frame_end)
+        continue;
+      if (compressed.pos == compressed.size) {
+        ssize_t n = refill();
+        if (n < 0)
+          return -1;
+        if (n == 0) {
+          fprintf(stderr, "Truncated zstd stream\n");
+          return -1;
+        }
+      } else if (compressed.pos == before) {
+        fprintf(stderr, "Zstd decoder made no progress\n");
+        return -1;
+      }
+    }
+  }
+
+private:
+  ssize_t refill() {
+    ssize_t n = input->read(buffer, sizeof(buffer));
+    if (n > 0)
+      compressed = {buffer, static_cast<size_t>(n), 0};
+    return n;
+  }
+
+  std::unique_ptr<InputReader> input;
+  ZSTD_DStream *stream;
+  uint8_t buffer[1 << 16];
+  ZSTD_inBuffer compressed = {nullptr, 0, 0};
+  bool frame_end = false;
+};
+#endif
+} // namespace
+
+std::unique_ptr<InputReader> wrap_decompressor(std::unique_ptr<InputReader> input, CompressionKind kind) {
+  switch (kind) {
+    case CompressionKind::None: return input;
+    case CompressionKind::Gzip:
+#ifndef NO_GZ_COMPRESSION
+      return std::unique_ptr<InputReader>(new GzipReader(std::move(input)));
+#else
+      throw std::runtime_error("Gzip image support is disabled");
+#endif
+    case CompressionKind::Zstd:
+#ifndef NO_ZSTD_COMPRESSION
+      return std::unique_ptr<InputReader>(new ZstdReader(std::move(input)));
+#else
+      throw std::runtime_error("Zstd image support is disabled");
+#endif
+  }
+  throw std::runtime_error("Unknown compression format");
 }
 
-long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_type) {
-#ifndef NO_ZSTD_COMPRESSION
-  assert(buf_size > 0);
-
-  int fd = -1;
-  ssize_t file_size = 0;
-  uint8_t *compress_file_buffer = NULL;
-  size_t compress_file_buffer_size = 0;
-
-  uint64_t curr_size = 0;
-  const uint32_t chunk_size = 16384;
-
-  // Only load from RAM need check
-  if (load_type == LOAD_RAM && (buf_size % chunk_size) != 0) {
-    printf("buf_size must be divisible by chunk_size\n");
+static long read_compressed_memory(void *ptr, const char *filename, long size, CompressionKind kind) {
+  try {
+    auto input = wrap_decompressor(open_input(filename), kind);
+    return read_to_memory(*input, ptr, size, MemoryWriteMode::SkipZeroWords);
+  } catch (const std::exception &e) {
+    fprintf(stderr, "Cannot load compressed input '%s': %s\n", filename, e.what());
     return -1;
   }
+}
 
-  fd = open(file_name, O_RDONLY);
-  if (fd < 0) {
-    printf("Can't open compress binary file '%s'", file_name);
-    return -1;
-  }
+long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t /* load_type */) {
+  return read_compressed_memory(ptr, file_name, buf_size, CompressionKind::Gzip);
+}
 
-  file_size = lseek(fd, 0, SEEK_END);
-  if (file_size == 0) {
-    printf("File size must not be zero");
-    return -1;
-  }
-
-  lseek(fd, 0, SEEK_SET);
-
-  compress_file_buffer = new uint8_t[file_size];
-  assert(compress_file_buffer);
-
-  ssize_t read_cnt = 0;
-  while (read_cnt < file_size) {
-    ssize_t read_now = read(fd, compress_file_buffer + read_cnt, file_size - read_cnt);
-    if (read_now <= 0) {
-      free(compress_file_buffer);
-      close(fd);
-      printf("Zstd compress file read failed, read() return %zd\n", read_now);
-      return -1;
-    }
-    read_cnt += read_now;
-  }
-  compress_file_buffer_size = read_cnt;
-  if (compress_file_buffer_size != file_size) {
-    close(fd);
-    free(compress_file_buffer);
-    printf("Zstd compressed file read failed, file size: %zd, read size: %zd\n", file_size, compress_file_buffer_size);
-    return -1;
-  }
-
-  close(fd);
-
-  ZSTD_inBuffer input_buffer = {compress_file_buffer, compress_file_buffer_size, 0};
-
-  long *temp_page = new long[chunk_size];
-
-  ZSTD_DStream *dstream = ZSTD_createDStream();
-  if (!dstream) {
-    printf("Can't create zstd dstream object\n");
-    delete[] compress_file_buffer;
-    delete[] temp_page;
-    return -1;
-  }
-
-  size_t init_result = ZSTD_initDStream(dstream);
-  if (ZSTD_isError(init_result)) {
-    printf("Can't init zstd dstream object: %s\n", ZSTD_getErrorName(init_result));
-    ZSTD_freeDStream(dstream);
-    delete[] compress_file_buffer;
-    delete[] temp_page;
-    return -1;
-  }
-
-  while (curr_size < buf_size) {
-
-    ZSTD_outBuffer output_buffer = {temp_page, chunk_size * sizeof(long), 0};
-
-    size_t decompress_result = ZSTD_decompressStream(dstream, &output_buffer, &input_buffer);
-
-    if (ZSTD_isError(decompress_result)) {
-      printf("Decompress failed: %s\n", ZSTD_getErrorName(decompress_result));
-      ZSTD_freeDStream(dstream);
-      delete[] compress_file_buffer;
-      delete[] temp_page;
-      return -1;
-    }
-
-    if (output_buffer.pos == 0) {
-      break;
-    }
-
-    for (uint32_t x = 0; x < output_buffer.pos / sizeof(long); x++) {
-      if (*(temp_page + x) != 0) {
-        long *pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
-        *pmem_current = *(temp_page + x);
-      }
-    }
-    curr_size += output_buffer.pos;
-  }
-
-  ZSTD_outBuffer output_buffer = {temp_page, chunk_size * sizeof(long), 0};
-  size_t decompress_result = ZSTD_decompressStream(dstream, &output_buffer, &input_buffer);
-  if (ZSTD_isError(decompress_result) || output_buffer.pos != 0) {
-    printf("Decompress failed: %s\n", ZSTD_getErrorName(decompress_result));
-    printf("Binary size larger than memory\n");
-    ZSTD_freeDStream(dstream);
-    delete[] compress_file_buffer;
-    delete[] temp_page;
-    return -1;
-  }
-
-  ZSTD_freeDStream(dstream);
-  delete[] compress_file_buffer;
-  delete[] temp_page;
-
-  return curr_size;
-#else
-  return 0;
-#endif
+long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t /* load_type */) {
+  return read_compressed_memory(ptr, file_name, buf_size, CompressionKind::Zstd);
 }
 
 void nonzero_large_memcpy(const void *__restrict dest, const void *__restrict src, size_t n) {

@@ -18,6 +18,7 @@
 #define COMPRESS_H
 
 #include "common.h"
+#include "input.h"
 #include <fcntl.h>
 #include <sys/time.h>
 #ifndef NO_GZ_COMPRESSION
@@ -29,6 +30,16 @@
 
 #define LOAD_SNAPSHOT 0
 #define LOAD_RAM      1
+
+enum class CompressionKind {
+  None,
+  Gzip,
+  Zstd
+};
+
+// Detection does not consume input and remains available when a codec is disabled.
+CompressionKind detect_compression(InputReader &input);
+std::unique_ptr<InputReader> wrap_decompressor(std::unique_ptr<InputReader> input, CompressionKind kind);
 
 double calcTime(timeval s, timeval e);
 
