@@ -19,7 +19,6 @@
 #include "compress.h"
 #include "elfloader.h"
 #include <cstring>
-#include <iostream>
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -43,7 +42,7 @@ void init_ram(const char *image, uint64_t ram_size, bool random_mem, uint32_t se
 void load_ram_image(const char *image) {
   auto *mem = dynamic_cast<MmapMemory *>(simMemory);
   assert(mem);
-  mem->load_image(image);
+  mem->load_image(image, MemoryWriteMode::Overwrite);
 }
 
 static uint64_t random_init_memory(void *ram, uint64_t memory_size, uint32_t seed) {
@@ -163,110 +162,8 @@ void addpageSv39() {
 
 SimMemory::~SimMemory() {}
 
-bool SimMemory::is_stdin(const char *image) {
-  return !strcmp(image, "-");
-}
-
-// Read memory image from the standard input.
-// The stdin is formatted as { total_bytes: uint64_t, bytes: uint8_t[] }
-StdinReader::StdinReader() : n_bytes(next()) {}
-
-uint64_t StdinReader::next() {
-  uint64_t value;
-  std::cin.read(reinterpret_cast<char *>(&value), sizeof(uint64_t));
-  if (std::cin.fail()) {
-    return 0;
-  }
-  return value;
-}
-
-uint64_t StdinReader::read_all(void *dest, uint64_t max_bytes) {
-  uint64_t n_read = n_bytes;
-  if (n_read >= max_bytes) {
-    n_read = max_bytes;
-  }
-  std::cin.get((char *)dest, n_read);
-  n_bytes -= n_read;
-  return n_read;
-}
-
-// wim@[base_addr],[wim_size]
-uint64_t *SimMemory::is_wim(const char *image, uint64_t &wim_size) {
-  const char wim_prefix[] = "wim";
-  const char *wim_info = strchr(image, '@');
-  if (!wim_info || strncmp(wim_prefix, image, sizeof(wim_prefix) - 1)) {
-    return nullptr;
-  }
-  wim_info++;
-  uint64_t base_addr = strtoul(wim_info, (char **)&wim_info, 16);
-  if (base_addr % sizeof(uint64_t) || *wim_info != '+') {
-    return nullptr;
-  }
-  wim_info++;
-  wim_size = strtoul(wim_info, (char **)&wim_info, 16);
-  if (*wim_info) {
-    return nullptr;
-  }
-  return (uint64_t *)base_addr;
-}
-
-uint64_t WimReader::next() {
-  if (index + sizeof(uint64_t) > size) {
-    return 0;
-  }
-  uint64_t value = base_addr[index / sizeof(uint64_t)];
-  index += sizeof(uint64_t);
-  return value;
-}
-
-uint64_t WimReader::read_all(void *dest, uint64_t max_bytes) {
-  uint64_t n_read = size - index;
-  if (n_read >= max_bytes) {
-    n_read = max_bytes;
-  }
-  memcpy(dest, base_addr, n_read);
-  index += n_read;
-  return n_read;
-}
-
-FileReader::FileReader(const char *filename) : file(filename, std::ios::binary) {
-  if (!file.is_open()) {
-    std::cerr << "Cannot open '" << filename << "'\n";
-    assert(0);
-  }
-
-  // Get the size of the file
-  file.seekg(0, std::ios::end);
-  file_size = file.tellg();
-  file.seekg(0, std::ios::beg);
-}
-
-uint64_t FileReader::next() {
-  if (!file.eof()) {
-    uint64_t value;
-    file.read(reinterpret_cast<char *>(&value), sizeof(uint64_t));
-    if (!file.fail()) {
-      return value;
-    }
-  }
-  return 0;
-}
-
-uint64_t FileReader::read_all(void *dest, uint64_t max_bytes) {
-  uint64_t read_size = (file_size > max_bytes) ? max_bytes : file_size;
-  file.read(static_cast<char *>(dest), read_size);
-  return read_size;
-}
-
 InputReader *SimMemory::createInputReader(const char *image) {
-  if (is_stdin(image)) {
-    return new StdinReader();
-  }
-  uint64_t n_bytes;
-  if (uint64_t *ptr = is_wim(image, n_bytes)) {
-    return new WimReader(ptr, n_bytes);
-  }
-  return new FileReader(image);
+  return open_input(image).release();
 }
 
 void SimMemory::display_stats() {
@@ -315,32 +212,35 @@ MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uin
   //new end
 #endif
 
-  load_image(image);
+  load_image(image, random_mem ? MemoryWriteMode::Overwrite : MemoryWriteMode::SkipZeroWords);
 }
 
-void MmapMemory::load_image(const char *image) {
-  if (image == NULL) {
+void MmapMemory::load_image(const char *image, MemoryWriteMode raw_mode) {
+  if (image == nullptr) {
     img_size = 0;
     return;
   }
-
   printf("The image is %s\n", image);
-  if (isGzFile(image)) {
-    Info("Gzip file detected and loading image from extracted gz file\n");
-    img_size = readFromGz(ram, image, memory_size, LOAD_RAM);
-    assert(img_size >= 0);
-  } else if (isZstdFile(image)) {
-    Info("Zstd file detected and loading image from extracted zstd file\n");
-    img_size = readFromZstd(ram, image, memory_size, LOAD_RAM);
-    assert(img_size >= 0);
-  } else if (isElfFile(image)) {
-    Info("ELF file detected and loading image from extracted elf file\n");
-    img_size = readFromElf(ram, image, memory_size);
-    assert(img_size >= 0);
-  } else {
-    InputReader *reader = createInputReader(image);
-    img_size = reader->read_all(ram, memory_size);
-    delete reader;
+  try {
+    auto source = open_input(image);
+    auto compression = detect_compression(*source);
+    auto input = wrap_decompressor(std::move(source), compression);
+    long loaded;
+    if (isElfImage(*input)) {
+      Info("ELF image detected; loading segments from decoded input\n");
+      loaded = readFromElf(ram, *input, memory_size);
+    } else {
+      // Compression must not change raw-image semantics; the caller selects how
+      // zero words are handled for the current loading context.
+      bool plain = compression == CompressionKind::None;
+      loaded = read_to_memory(*input, ram, memory_size, raw_mode, plain);
+    }
+    if (loaded < 0)
+      throw std::runtime_error("Image decoding or loading failed");
+    img_size = loaded;
+  } catch (const std::exception &e) {
+    fprintf(stderr, "Cannot load image '%s': %s\n", image, e.what());
+    exit(EXIT_FAILURE);
   }
 }
 
