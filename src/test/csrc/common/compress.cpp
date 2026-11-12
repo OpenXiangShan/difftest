@@ -115,7 +115,7 @@ long snapshot_compressToFile(uint8_t *ptr, const char *filename, long buf_size) 
 #endif
 }
 
-long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t load_type) {
+long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t load_type, bool dest_is_zero) {
 #ifndef NO_GZ_COMPRESSION
   assert(buf_size > 0);
   gzFile compressed_mem = gzopen(file_name, "rb");
@@ -141,12 +141,10 @@ long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t load_ty
     if (bytes_read == 0) {
       break;
     }
-    for (uint32_t x = 0; x < bytes_read / sizeof(long); x++) {
-      if (*(temp_page + x) != 0) {
-        long *pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
-        *pmem_current = *(temp_page + x);
-      }
-    }
+    if (dest_is_zero)
+      nonzero_large_memcpy((uint8_t *)ptr + curr_size, temp_page, bytes_read);
+    else
+      memcpy((uint8_t *)ptr + curr_size, temp_page, bytes_read);
     curr_size += bytes_read;
   }
 
@@ -168,7 +166,7 @@ long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t load_ty
 #endif
 }
 
-long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_type) {
+long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_type, bool dest_is_zero) {
 #ifndef NO_ZSTD_COMPRESSION
   assert(buf_size > 0);
 
@@ -263,12 +261,10 @@ long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t load_
       break;
     }
 
-    for (uint32_t x = 0; x < output_buffer.pos / sizeof(long); x++) {
-      if (*(temp_page + x) != 0) {
-        long *pmem_current = (long *)((uint8_t *)ptr + curr_size + x * sizeof(long));
-        *pmem_current = *(temp_page + x);
-      }
-    }
+    if (dest_is_zero)
+      nonzero_large_memcpy((uint8_t *)ptr + curr_size, temp_page, output_buffer.pos);
+    else
+      memcpy((uint8_t *)ptr + curr_size, temp_page, output_buffer.pos);
     curr_size += output_buffer.pos;
   }
 
