@@ -38,7 +38,7 @@ $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp: $(RTL_DIR)/$(SIM_TOP).fir
 	@mkdir -p $(@D)
 	@printf '\n[gsim] Generating C++ files...\n' >> $(TIMELOG)
 	@date -R | tee -a $(TIMELOG)
-	$(TIME_CMD) $(GSIM_BIN) $(GSIM_FLAGS) --dir $(@D) $< | tee $(GSIM_EMU_BUILD_DIR)/gsim-gen-cpp.log
+	$(TIME_CMD) $(GSIM_BIN) $(GSIM_FLAGS) --dir $(@D) $<
 
 gsim-gen-cpp: $(GSIM_GEN_CSRC_DIR)/$(SIM_TOP)0.cpp
 
