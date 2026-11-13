@@ -49,7 +49,7 @@ module SimJTAG #(
 
    logic [31:0] random_bits = $random;
 
-   wire         #0.1 __jtag_TDO = jtag_TDO_driven ?
+   wire         __jtag_TDO = jtag_TDO_driven ?
                 jtag_TDO_data : random_bits[0];
 
    bit          __jtag_TCK;
@@ -60,12 +60,12 @@ module SimJTAG #(
 
    reg          init_done_sticky;
 
-   assign #0.1 jtag_TCK   = __jtag_TCK;
-   assign #0.1 jtag_TMS   = __jtag_TMS;
-   assign #0.1 jtag_TDI   = __jtag_TDI;
-   assign #0.1 jtag_TRSTn = __jtag_TRSTn;
+   assign       jtag_TCK   = __jtag_TCK;
+   assign       jtag_TMS   = __jtag_TMS;
+   assign       jtag_TDI   = __jtag_TDI;
+   assign       jtag_TRSTn = __jtag_TRSTn;
 
-   assign #0.1 exit = __exit;
+   assign       exit = __exit;
 
    always @(posedge clock) begin
       r_reset <= reset;
