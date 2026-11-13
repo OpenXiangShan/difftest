@@ -70,6 +70,7 @@ struct Segment {
 struct Shared {
   std::atomic<uint64_t> generation{0}, head{0}, retired{0}, published_windows{0};
   std::atomic<bool> pause{false}, paused{false}, endpoint{false};
+  std::atomic<bool> bounded_endpoint{false};
   std::atomic<int> complete{0}; // 0 running, 1 checked endpoint, 2 failure.
   Segment segments[MAX_SEGMENTS];
 };
@@ -82,6 +83,7 @@ uint64_t accepted_segments = 0, recoveries = 0, drain_start_ms = 0;
 pid_t supervisor_pid = 0, leader_pid = 0;
 unsigned leader_reader = 0;
 bool leader_reaped = false, summary_printed = false;
+bool bounded_endpoint = false;
 
 uint64_t now_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
@@ -294,6 +296,7 @@ bool recover(uint64_t seq) {
   control->head.store(seq + 1, std::memory_order_release);
   control->published_windows.store(candidate.end_window.load(std::memory_order_acquire), std::memory_order_release);
   control->endpoint.store(false, std::memory_order_release);
+  control->bounded_endpoint.store(false, std::memory_order_release);
   drain_start_ms = 0;
   control->generation.fetch_add(1, std::memory_order_release);
   control->pause.store(false, std::memory_order_release);
@@ -588,7 +591,10 @@ int difftest_ref_fork_idle() {
   }
   return 0;
 }
-int difftest_ref_fork_finish() {
+bool difftest_ref_fork_bounded_endpoint() {
+  return bounded_endpoint;
+}
+int difftest_ref_fork_finish(bool bounded) {
   if (!control)
     return 0;
   if (role == Role::LEADER) {
@@ -596,6 +602,7 @@ int difftest_ref_fork_finish() {
     close_segment(difftest[0]);
     if (g_packet_pool->aborted())
       return 2;
+    control->bounded_endpoint.store(bounded, std::memory_order_release);
     control->endpoint.store(true, std::memory_order_release);
     while (!control->complete.load(std::memory_order_acquire)) {
       pause_leader();
@@ -608,6 +615,7 @@ int difftest_ref_fork_finish() {
   int result;
   while (!(result = difftest_ref_fork_idle()))
     usleep(1000);
+  bounded_endpoint = control->bounded_endpoint.load(std::memory_order_acquire);
   munmap(control, sizeof(Shared));
   control = nullptr;
   return result == 1 ? 0 : 2;

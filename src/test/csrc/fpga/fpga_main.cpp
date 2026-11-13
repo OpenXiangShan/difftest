@@ -112,7 +112,7 @@ int main(int argc, const char *argv[]) {
     if (role == 1) {
       static_cast<FpgaXdma *>(xdma_device)->process_packets();
       fflush(nullptr);
-      difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP);
+      difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP && fpga_result != FPGA_EXCEED);
     }
     is_xdma_receiver = true;
     if (args.refdrive_trace_name) {
@@ -320,7 +320,8 @@ void fpga_finish() {
   if (difftest_ref_fork_enabled()) {
     if (signal_num)
       g_packet_pool->fail();
-    fpga_result = difftest_ref_fork_finish() ? FPGA_FAIL : FPGA_GOODTRAP;
+    fpga_result =
+        difftest_ref_fork_finish() ? FPGA_FAIL : (difftest_ref_fork_bounded_endpoint() ? FPGA_EXCEED : FPGA_GOODTRAP);
   }
 #endif
 
@@ -496,14 +497,14 @@ extern "C" void fpga_nstep(uint8_t step) {
       fflush(stdout);
     }
 #endif
-    if (ret != FPGA_GOODTRAP && g_packet_pool)
+    if (ret == FPGA_FAIL && g_packet_pool)
       g_packet_pool->fail();
 #ifdef CONFIG_DIFFTEST_FORK_REF
-    if (difftest_ref_fork_finish())
+    if (difftest_ref_fork_finish(ret == FPGA_EXCEED))
       ret = FPGA_FAIL;
 #endif
 #ifdef CONFIG_DIFFTEST_FORK_REF
-    if (!difftest_ref_fork_enabled() || ret == FPGA_GOODTRAP)
+    if (!difftest_ref_fork_enabled() || ret == FPGA_GOODTRAP || ret == FPGA_EXCEED)
 #endif
       fpga_display_result(ret);
     fpga_result = ret;
