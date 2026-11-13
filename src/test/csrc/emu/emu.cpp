@@ -276,6 +276,10 @@ Emulator::~Emulator() {
 
 #ifdef ENABLE_CHISEL_DB
   if (args.dump_db) {
+    if (args.warmup_instr != 0 && args.warmup_instr != uint64_t(-1)) {
+      clear_db("Tea");
+      clear_db("Dip");
+    }
     save_db(db_filename());
   }
 #endif
@@ -422,6 +426,9 @@ int Emulator::tick() {
   if (trapCode != STATE_RUNNING) {
     return trapCode;
   }
+#ifdef ENABLE_CHISEL_DB
+  bool warmup_finished = false;
+#endif
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
@@ -430,6 +437,9 @@ int Emulator::tick() {
       dut_ptr->set_perf_clean(1);
       dut_ptr->set_perf_dump(1);
       args.warmup_instr = -1;
+#ifdef ENABLE_CHISEL_DB
+      warmup_finished = true;
+#endif
     }
     if (trap->cycleCnt % args.stat_cycles == args.stat_cycles - 1) {
       dut_ptr->set_perf_clean(1);
@@ -473,6 +483,12 @@ int Emulator::tick() {
 
   dut_ptr->set_perf_clean(0);
   dut_ptr->set_perf_dump(0);
+#ifdef ENABLE_CHISEL_DB
+  if (warmup_finished) {
+    clear_db("Tea");
+    clear_db("Dip");
+  }
+#endif
 
 #ifndef CONFIG_NO_DIFFTEST
   int step = 0;
