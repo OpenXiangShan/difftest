@@ -239,8 +239,7 @@ void GbusTransport::c2h_probe_stream() {
   std::vector<uint32_t> words;
   c2h_read_block(GBUS_REG_C2H_STATUS, 13, words);
   const bool grouped = words[2] == id && words[4] == GBUS_C2H_STREAM_APERTURE && words[5] != 0 &&
-                       c2h_reg_read(GBUS_REG_C2H_ID) == words[2] &&
-                       c2h_reg_read(GBUS_REG_C2H_DMA_BASE) == words[4] &&
+                       c2h_reg_read(GBUS_REG_C2H_ID) == words[2] && c2h_reg_read(GBUS_REG_C2H_DMA_BASE) == words[4] &&
                        c2h_reg_read(GBUS_REG_C2H_CAPACITY) == words[5];
   if (!grouped)
     fatal("GBus runtime does not return consecutive words for grouped config reads; GBD1 streaming requires them");
