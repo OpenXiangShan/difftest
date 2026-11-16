@@ -79,6 +79,7 @@ Key runtime options:
 | `--diff=PATH` | Reference SO for differential testing |
 | `--no-diff` | Keep DUT data transfer, decoding and trap detection; skip REF initialization and comparison (also supported by `fpga-host`) |
 | `-C, --max-cycles=NUM` | Maximum simulation cycles |
+| `--stuck-check=NUM` | Check instruction progress every N cycles (default: -1 for disabled) |
 | `-I, --max-instr=NUM` | Maximum instructions |
 | `-b, --log-begin=NUM` | Start logging at cycle N |
 | `-e, --log-end=NUM` | Stop logging at cycle N |

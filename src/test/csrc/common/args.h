@@ -44,6 +44,9 @@ struct CommonArgs {
   uint32_t accelerator_clock_half_period = 1;
   uint32_t seed = 0;
   uint64_t max_cycles = -1;
+#ifndef CONFIG_NO_DIFFTEST
+  int64_t stuck_check = -1;
+#endif
   uint64_t fork_interval = 10000; // default: 10 seconds
   uint64_t max_instr = -1;
   uint64_t warmup_instr = -1;

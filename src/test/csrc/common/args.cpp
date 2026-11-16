@@ -21,6 +21,7 @@
 #ifndef CONFIG_NO_DIFFTEST
 #include "reftrace/refdrive_trace.h"
 #endif
+#include <cerrno>
 #include <cmath>
 #include <getopt.h>
 #include <stdexcept>
@@ -35,6 +36,9 @@ enum {
   OPT_SQUASH_SIZE,
   OPT_NO_SQUASH_AFTER_INSTR,
   OPT_CPU_AXI_DELAY,
+#ifndef CONFIG_NO_DIFFTEST
+  OPT_STUCK_CHECK,
+#endif
 #ifdef FPGA_HOST
   OPT_NO_LINK,
   OPT_ILA_SIZE,
@@ -113,6 +117,9 @@ static inline void print_help(const char *file) {
 #endif
   printf("  -s, --seed=NUM             use this seed\n");
   printf("  -C, --max-cycles=NUM       execute at most NUM cycles\n");
+#ifndef CONFIG_NO_DIFFTEST
+  printf("      --stuck-check=NUM      check instruction progress every N cycles (default: -1 for disabled)\n");
+#endif
   printf("  -I, --max-instr=NUM        execute at most NUM instructions\n");
   printf("  -W, --warmup-instr=NUM     the number of warmup instructions\n");
   printf("  -D, --stat-cycles=NUM      the interval cycles of dumping statistics\n");
@@ -235,6 +242,9 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
+#ifndef CONFIG_NO_DIFFTEST
+    { "stuck-check",       1, NULL, OPT_STUCK_CHECK },
+#endif
 #ifdef FPGA_HOST
     { "no-link",           0, NULL, OPT_NO_LINK },
     { "ila-size",          1, NULL, OPT_ILA_SIZE },
@@ -445,6 +455,19 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.cpu_axi_delay = static_cast<uint32_t>(cpu_axi_delay);
         continue;
       }
+#ifndef CONFIG_NO_DIFFTEST
+      case OPT_STUCK_CHECK: {
+        char *end = nullptr;
+        errno = 0;
+        auto interval = std::strtoll(optarg, &end, 10);
+        if (errno == ERANGE || end == optarg || *end != '\0' || interval <= 0) {
+          fprintf(stderr, "[ERROR] --stuck-check must be a positive int64 cycle interval\n");
+          exit(EINVAL);
+        }
+        args.stuck_check = interval;
+        continue;
+      }
+#endif
       case OPT_CORE_CLOCK_HALF_PERIOD: {
         long long core_clock_half_period = atoll_strict(optarg, "core-clock-half-period");
         if (core_clock_half_period < 1 || static_cast<unsigned long long>(core_clock_half_period) > UINT32_MAX) {

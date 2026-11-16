@@ -201,6 +201,9 @@ Emulator::Emulator(int argc, const char *argv[])
 
   for (int i = 0; i < NUM_CORES; i++) {
     core_max_instr[i] = args.max_instr;
+#ifndef CONFIG_NO_DIFFTEST
+    last_stuck_check_cycle[i] = 0;
+#endif
   }
 
   //check compiling options for lightSSS
@@ -388,6 +391,17 @@ int Emulator::tick() {
 #ifndef CONFIG_NO_DIFFTEST
   for (int i = 0; i < NUM_CORES; i++) {
     auto trap = difftest[i]->get_trap_event();
+    if (args.stuck_check > 0 && trap->cycleCnt - last_stuck_check_cycle[i] >= args.stuck_check) {
+      if (trap->instrCnt == last_stuck_check_instr[i] && trap->cycleCnt > last_stuck_check_cycle[i]) {
+        Info("Stuck check failed for core %d: instrCnt = %" PRIu64 " at cycleCnt = %" PRIu64 " (--stuck-check=%" PRId64
+             ").\n",
+             i, trap->instrCnt, trap->cycleCnt, args.stuck_check);
+        trapCode = STATE_ABORT;
+        return trapCode;
+      }
+      last_stuck_check_cycle[i] = trap->cycleCnt;
+      last_stuck_check_instr[i] = trap->instrCnt;
+    }
     if (trap->instrCnt >= core_max_instr[i]) {
       trapCode = STATE_LIMIT_EXCEEDED;
 #ifdef FUZZER_LIB
