@@ -40,6 +40,10 @@ private:
   int trapCode;
   uint32_t lasttime_snapshot = 0;
   uint64_t core_max_instr[NUM_CORES];
+#ifndef CONFIG_NO_DIFFTEST
+  uint64_t last_stuck_check_cycle[NUM_CORES];
+  uint64_t last_stuck_check_instr[NUM_CORES] = {};
+#endif
   uint32_t lasttime_poll = 0;
   uint32_t elapsed_time;
 
