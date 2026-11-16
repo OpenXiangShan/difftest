@@ -57,7 +57,7 @@ public:
   using RequestMap = std::map<uint64_t, MatrixStoreRequest>;
 
   MatrixStoreTrackerStatus insert(uint64_t encodedSourceId, const MatrixStoreRequest &request) {
-    if (!has_cwrite_tag(encodedSourceId)) {
+    if (!has_write_tag(encodedSourceId)) {
       return MatrixStoreTrackerStatus::MalformedTag;
     }
     if (liveRequests.find(encodedSourceId) != liveRequests.end()) {
@@ -69,7 +69,7 @@ public:
   }
 
   MatrixStoreTrackerStatus complete(uint64_t encodedSourceId, MatrixStoreRequest &request) {
-    if (!has_cwrite_tag(encodedSourceId)) {
+    if (!has_write_tag(encodedSourceId)) {
       return MatrixStoreTrackerStatus::MalformedTag;
     }
 
@@ -145,11 +145,13 @@ public:
   }
 
 private:
-  static constexpr uint64_t CWriteTag = 3;
+  static constexpr uint64_t AccStore0Tag = 3;
+  static constexpr uint64_t TRStore0Tag = 6;
   static constexpr uint64_t SourceTagMask = 7;
 
-  static bool has_cwrite_tag(uint64_t encodedSourceId) {
-    return (encodedSourceId & SourceTagMask) == CWriteTag;
+  static bool has_write_tag(uint64_t encodedSourceId) {
+    const auto tag = encodedSourceId & SourceTagMask;
+    return tag == AccStore0Tag || tag == TRStore0Tag;
   }
 
   static void set_failure(MatrixStoreFailure *failure, MatrixStoreTrackerStatus status, bool isRequest, size_t lane,
