@@ -15,7 +15,7 @@ jobs:
 
       - name: Mill Installation
         run: |
-          sudo curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.1/0.11.1 > /usr/local/bin/mill
+          sudo curl -L https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/0.12.17/mill-dist-0.12.17-mill.sh > /usr/local/bin/mill
           chmod +x /usr/local/bin/mill
 
       - name: Clang Format Installation
