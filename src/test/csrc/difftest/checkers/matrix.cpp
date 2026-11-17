@@ -200,11 +200,16 @@ int AmuCtrlRecorder::check(const DifftestAmuCtrlEvent &probe) {
 #else
   state->matrix_sw_rob.emplace_back(probe);
 #endif // CONFIG_DIFFTEST_REPLAY
+  ++state->swrob_wait_refcommit_cnt;
   return STATE_OK;
 }
 
 // 2. When REF commits same inst, compare amu_ctrl → on match set WAIT_DUT_EXEC
 int AmuCtrlChecker::do_step() {
+  // Every WAIT_REF entry originates in AmuCtrlRecorder. A successful control
+  // comparison removes exactly one from this count; result-only WB cannot add one.
+  if (state->swrob_wait_refcommit_cnt == 0)
+    return STATE_OK;
   for (auto iter = state->matrix_sw_rob.begin(); iter != state->matrix_sw_rob.end(); ++iter) {
     if (iter->state == DiffState::WAIT_REF_COMMIT) {
       const DifftestAmuCtrlEvent dut_event = iter->amu_event;
@@ -228,6 +233,7 @@ int AmuCtrlChecker::do_step() {
         return STATE_ERROR;
       } else {
         iter->state = DiffState::WAIT_DUT_EXEC;
+        --state->swrob_wait_refcommit_cnt;
       }
     }
   }
