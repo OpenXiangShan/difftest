@@ -16,7 +16,10 @@ jobs:
 
       - name: Clang Format Installation
         run: |
-          pip install clang-format==18.1.4
+          python3 -m pip install --no-cache-dir \
+            --target "$RUNNER_TEMP/clang-format" \
+            clang-format==18.1.4
+          echo "$RUNNER_TEMP/clang-format/clang_format/data/bin" >> "$GITHUB_PATH"
 
       - name: Scala Formatter
         run: |
