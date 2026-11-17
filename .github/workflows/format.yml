@@ -14,6 +14,10 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
 
+      - name: Configure Git Safe Directory
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Clang Format Installation
         run: |
           python3 -m pip install --no-cache-dir \
@@ -31,7 +35,11 @@ jobs:
 
       - name: Format Check
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
+          if ! changed_files="$(git status --porcelain)"; then
+            echo "::error::Unable to inspect repository status"
+            exit 1
+          fi
+          if [ -n "$changed_files" ]; then
             echo "Please run 'make format' manually"
             exit 1
           fi
