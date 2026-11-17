@@ -4,10 +4,14 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <limits>
+#include <mutex>
+#include <thread>
 #include <unistd.h>
 #include <uvaps_gbus_runtime.h>
 #include <vector>
@@ -132,6 +136,12 @@ GbusTransport::GbusTransport() {
   // Preserve the established 64-frame batching default. Set the variable to 0
   // explicitly to opt into the ring-sized threshold optimization.
   c2h_stream_min_frames_ = static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 64, 4096));
+  // How many finished batches may wait for dispatch.  Two is enough to keep the
+  // reference execution off the critical path; the bound turns a dispatch that
+  // falls behind into ring backpressure instead of unbounded memory growth.
+  c2h_dispatch_queue_limit_ = static_cast<size_t>(env_u64("GBUS_C2H_DISPATCH_QUEUE", 4, 64));
+  if (!c2h_dispatch_queue_limit_)
+    c2h_dispatch_queue_limit_ = 1;
   c2h_idle_timeout_sec_ = static_cast<uint32_t>(env_u64("GBUS_C2H_IDLE_TIMEOUT_SEC", 30, 3600));
   c2h_poll_us_ = static_cast<uint32_t>(env_u64("GBUS_C2H_POLL_US", 100, 1000000));
   const char *host = std::getenv("GBUS_HOST");
@@ -170,6 +180,7 @@ void GbusTransport::start(bool enable_diff) {
 // ---------------------------------------------------------------- register I/O
 
 uint32_t GbusTransport::c2h_reg_read(uint64_t offset) {
+  std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
   std::vector<uint8_t> data;
   const uint64_t begin = monotonic_us();
   const int rc = gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + offset, 1, data);
@@ -186,6 +197,7 @@ uint32_t GbusTransport::c2h_reg_read(uint64_t offset) {
 }
 
 void GbusTransport::c2h_reg_write(uint64_t offset, uint32_t value) {
+  std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
   auto data = store_le32(value);
   const uint64_t begin = monotonic_us();
   const int rc = gbus_write(prototyping_, board_, fpga_, config_instance_, config_base_ + offset, 1, data);
@@ -201,6 +213,7 @@ void GbusTransport::c2h_reg_write(uint64_t offset, uint32_t value) {
 }
 
 void GbusTransport::c2h_read_block(uint64_t offset, uint32_t words, std::vector<uint32_t> &out) {
+  std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
   std::vector<uint8_t> data;
   const uint64_t begin = monotonic_us();
   const int rc = gbus_read(prototyping_, board_, fpga_, config_instance_, config_base_ + offset, words, data);
@@ -312,13 +325,15 @@ void GbusTransport::c2h_drain_stream_frames() {
                static_cast<unsigned long long>(aperture), c2h_stream_frames_, ring_bytes, c2h_stream_min_frames_,
                c2h_poll_us_, armed_now ? 1U : 0U, fpga_, c2h_dma_fpga_, h2c_dma_fpga_);
 
-  std::vector<uint8_t> accumulator;
-  accumulator.reserve(ring_bytes);
   uint64_t batches = 0, frames = 0, bytes = 0;
   const auto started = Clock::now();
   auto last_progress = Clock::now();
   auto last_change = Clock::now();
   uint32_t previous_available = 0;
+
+  // Reference execution is the one part of this loop that does not touch the
+  // runtime, so it runs on its own thread and overlaps the next DMA call.
+  c2h_dispatch_thread_ = std::thread([this] { c2h_dispatch_worker(); });
 
   while (alive()) {
     // One grouped read returns status, frame count and both ring pointers.
@@ -373,43 +388,29 @@ void GbusTransport::c2h_drain_stream_frames() {
 
     std::vector<uint8_t> block;
     const uint64_t begin = monotonic_us();
-    const int rc = gbus_dma_read(prototyping_, board_, c2h_dma_fpga_, ddr_instance_, aperture + rd_ptr, count, channel_,
-                                 port_, block);
+    int rc;
+    {
+      std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
+      rc = gbus_dma_read(prototyping_, board_, c2h_dma_fpga_, ddr_instance_, aperture + rd_ptr, count, channel_, port_,
+                         block);
+    }
     const uint64_t elapsed_us = monotonic_us() - begin;
     ++c2h_dma_calls_;
     c2h_dma_us_ += elapsed_us;
-    if (!alive())
-      return;
+    if (!alive()) {
+      // The trap arrives on the dispatch thread while this call is in flight;
+      // that call turns capture off.  Fall through to the summary instead of
+      // returning, so a pipelined run still reports its totals.
+      break;
+    }
     if (rc != 1 || block.size() != count || elapsed_us > 10000000ULL)
       fail("DMA capture failed", status);
-
-    const uint64_t dispatch_begin = monotonic_us();
-    // Dispatch straight out of the DMA buffer.  A batch starts at a frame
-    // boundary, so it only continues an unfinished record when the previous
-    // batch left a partial one; that tail is small enough to prepend.
-    size_t consumed = 0;
-    if (!accumulator.empty()) {
-      accumulator.insert(accumulator.end(), block.begin(), block.end());
-      while (accumulator.size() - consumed >= sizeof(DmaDiffPackge) && alive()) {
-        c2h_dispatch_range(accumulator.data() + consumed, sizeof(DmaDiffPackge));
-        consumed += sizeof(DmaDiffPackge);
-      }
-      accumulator.erase(accumulator.begin(), accumulator.begin() + static_cast<ptrdiff_t>(consumed));
-    } else {
-      while (block.size() - consumed >= sizeof(DmaDiffPackge) && alive()) {
-        c2h_dispatch_range(block.data() + consumed, sizeof(DmaDiffPackge));
-        consumed += sizeof(DmaDiffPackge);
-      }
-      // A frame is 768 B and a record is 96 B, so a batch normally ends exactly
-      // on a record boundary; keep only a genuinely partial tail.
-      accumulator.assign(block.begin() + static_cast<ptrdiff_t>(consumed), block.end());
-    }
-    c2h_dispatch_us_ += monotonic_us() - dispatch_begin;
 
     // First-batch cross-check: the config window mirrors the oldest unread
     // frame, so its words must match the DMA payload exactly.  This catches a
     // ring whose counters advance while the RAM path is wrong, which CoreMark
-    // alone would only notice much later.
+    // alone would only notice much later.  It reads the buffer, so it has to
+    // run before the buffer is handed to the dispatch thread.
     if (batches == 0 && c2h_verify_first_bank_) {
       std::vector<uint32_t> words;
       c2h_read_block(GBUS_REG_C2H_DATA, c2h_stream_frame_bytes_ / 4, words);
@@ -426,6 +427,11 @@ void GbusTransport::c2h_drain_stream_frames() {
       std::fprintf(stderr, "[fpga-host] GBD1 first frame DMA/config mirror verified bytes=%u\n",
                    c2h_stream_frame_bytes_);
     }
+
+    // Hand the buffer over instead of decoding it here.  The data is already out
+    // of the ring, so neither the next DMA call nor the CONSUME below waits for
+    // reference execution to finish.
+    c2h_submit_batch(std::move(block));
 
     // Release only what has already been copied out of the ring.  The read
     // pointer is checked instead of the availability counter: the producer
@@ -484,6 +490,10 @@ void GbusTransport::c2h_drain_stream_frames() {
     }
   }
 
+  // Nothing else touches the ring now, so let the dispatch thread finish the
+  // batches still queued: the last one carries the trap that ends the DiffTest.
+  c2h_finish_dispatch();
+
   // Final summary: the periodic dump only fires on powers of two, so without
   // this the tail of a long run is invisible and the totals look smaller than
   // they are.
@@ -516,11 +526,72 @@ void GbusTransport::c2h_dispatch_range(const uint8_t *packet, size_t packet_size
   c2h_dispatch_us_ += monotonic_us() - begin;
 }
 
+void GbusTransport::c2h_submit_batch(std::vector<uint8_t> &&payload) {
+  std::unique_lock<std::mutex> lock(c2h_dispatch_mutex_);
+  c2h_dispatch_cv_.wait(lock, [this] { return c2h_dispatch_queue_.size() < c2h_dispatch_queue_limit_; });
+  c2h_dispatch_queue_.push_back(std::move(payload));
+  c2h_dispatch_cv_.notify_all();
+}
+
+void GbusTransport::c2h_dispatch_worker() {
+  // The accumulator lives here because a partial record spans batches, and this
+  // thread sees every batch in ring order.
+  std::vector<uint8_t> accumulator;
+  for (;;) {
+    std::vector<uint8_t> block;
+    {
+      std::unique_lock<std::mutex> lock(c2h_dispatch_mutex_);
+      c2h_dispatch_cv_.wait(lock, [this] { return c2h_dispatch_stop_ || !c2h_dispatch_queue_.empty(); });
+      if (c2h_dispatch_queue_.empty())
+        return;
+      block = std::move(c2h_dispatch_queue_.front());
+      c2h_dispatch_queue_.pop_front();
+      c2h_dispatch_cv_.notify_all();
+    }
+    // A batch starts at a frame boundary, so it only continues an unfinished
+    // record when the previous batch left a partial one; that tail is small
+    // enough to prepend.  dispatch_us is accumulated per record inside
+    // c2h_dispatch_range, so it stays the cost of reference execution alone and
+    // no longer double counts this loop's own duration.
+    size_t consumed = 0;
+    if (!accumulator.empty()) {
+      accumulator.insert(accumulator.end(), block.begin(), block.end());
+      while (accumulator.size() - consumed >= sizeof(DmaDiffPackge) && running_.load() && signal_num == 0) {
+        c2h_dispatch_range(accumulator.data() + consumed, sizeof(DmaDiffPackge));
+        consumed += sizeof(DmaDiffPackge);
+      }
+      accumulator.erase(accumulator.begin(), accumulator.begin() + static_cast<ptrdiff_t>(consumed));
+    } else {
+      while (block.size() - consumed >= sizeof(DmaDiffPackge) && running_.load() && signal_num == 0) {
+        c2h_dispatch_range(block.data() + consumed, sizeof(DmaDiffPackge));
+        consumed += sizeof(DmaDiffPackge);
+      }
+      // A frame is 768 B and a record is 96 B, so a batch normally ends exactly
+      // on a record boundary; keep only a genuinely partial tail.
+      accumulator.assign(block.begin() + static_cast<ptrdiff_t>(consumed), block.end());
+    }
+  }
+}
+
+void GbusTransport::c2h_finish_dispatch() {
+  if (!c2h_dispatch_thread_.joinable())
+    return;
+  {
+    std::lock_guard<std::mutex> lock(c2h_dispatch_mutex_);
+    c2h_dispatch_stop_ = true;
+  }
+  c2h_dispatch_cv_.notify_all();
+  c2h_dispatch_thread_.join();
+}
+
 void GbusTransport::stop() {
   running_.store(false);
 }
 
 void GbusTransport::fpga_io(uint64_t address, uint32_t value) {
+  // fpga_nstep reaches this from the dispatch thread when a batch carries a
+  // trap, so the write and its readback must not interleave with a DMA call.
+  std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
   if (!initialized_)
     std::exit(EXIT_FAILURE);
   auto data = store_le32(value);
@@ -546,6 +617,7 @@ void GbusTransport::fpga_io(uint64_t address, uint32_t value) {
 }
 
 uint32_t GbusTransport::fpga_io_read(uint64_t address) {
+  std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
   if (!initialized_)
     std::exit(EXIT_FAILURE);
   std::vector<uint8_t> data;
@@ -559,6 +631,7 @@ uint32_t GbusTransport::fpga_io_read(uint64_t address) {
 }
 
 void GbusTransport::wait_fpga_io_done(uint64_t address, const char *tag) {
+  std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
   // A GBus DMA completion is reported by the runtime call itself.  The XDMA
   // status registers are not guaranteed to be mirrored by the GENERALBD
   // window, so do not turn a completed GBus transfer into an infinite host-
@@ -594,6 +667,7 @@ void GbusTransport::wait_fpga_io_done(uint64_t address, const char *tag) {
 }
 
 void GbusTransport::h2c_load_workload(const void *payload, uint64_t size) {
+  std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
   if (!initialized_ || !payload || !size) {
     std::fprintf(stderr, "[fpga-host] GBus DMA workload requires initialized transport and non-empty payload\n");
     std::exit(EXIT_FAILURE);

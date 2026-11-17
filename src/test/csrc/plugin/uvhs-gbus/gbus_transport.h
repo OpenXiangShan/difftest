@@ -3,9 +3,13 @@
 
 #include "fpga_transport.h"
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
+#include <deque>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 // GBus DiffTest transport.  The GBD1 streaming frame FIFO is the only C2H
@@ -34,6 +38,9 @@ private:
   void c2h_probe_stream();
   void c2h_drain_stream_frames();
   void c2h_dispatch_range(const uint8_t *packet, size_t packet_size);
+  void c2h_dispatch_worker();
+  void c2h_submit_batch(std::vector<uint8_t> &&payload);
+  void c2h_finish_dispatch();
 
   uint8_t prototyping_ = 0;
   uint8_t board_ = 0;
@@ -82,7 +89,21 @@ private:
   uint64_t c2h_write_us_ = 0;
   uint64_t c2h_dma_calls_ = 0;
   uint64_t c2h_dma_us_ = 0;
-  uint64_t c2h_dispatch_us_ = 0;
+  // Reference execution runs on its own thread so it overlaps the next DMA
+  // call.  Buffers are handed over by move, and the queue is bounded so a
+  // dispatch slower than the ring applies backpressure instead of growing.
+  std::thread c2h_dispatch_thread_;
+  std::mutex c2h_dispatch_mutex_;
+  std::condition_variable c2h_dispatch_cv_;
+  std::deque<std::vector<uint8_t>> c2h_dispatch_queue_;
+  size_t c2h_dispatch_queue_limit_ = 4;
+  bool c2h_dispatch_stop_ = false;
+  // fpga_nstep runs on the dispatch thread when a batch carries a trap, and it
+  // writes the ILA and link-enable words.  Those are GBus socket transactions on
+  // the same connection the drain loop is using, so every runtime call goes
+  // through this lock.  Recursive because fpga_io reads back what it wrote.
+  std::recursive_mutex runtime_mutex_;
+  std::atomic<uint64_t> c2h_dispatch_us_{0};
   uint32_t c2h_idle_timeout_sec_ = 30;
   // The status reads themselves pace the poll loop, so only a short delay is
   // needed when a read reports that the expected state has not arrived yet.
