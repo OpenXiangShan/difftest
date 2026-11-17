@@ -18,43 +18,33 @@ import mill.api.PathRef
 import scalalib._
 import publish._
 
-sealed trait ChiselConfig {
-  val scalaVersion: String = "2.13.18"
-  val scalatest: Dep = mvn"org.scalatest::scalatest:3.2.20"
-  def chisel: Dep
-  def chiselPlugin: Dep
+object ivys {
+  val scala = "2.13.18"
+  val chiselCrossVersions = Map(
+    "xiangshan" -> (
+      mvn"cc.xiangshan::chisel:7.16.0-xiangshan-1",
+      mvn"cc.xiangshan:::chisel-plugin:7.16.0-xiangshan-1"
+    ),
+    "upstream" -> (
+      mvn"org.chipsalliance::chisel:7.16.0",
+      mvn"org.chipsalliance:::chisel-plugin:7.16.0"
+    ),
+  )
+  val scalatest = mvn"org.scalatest::scalatest:3.2.20"
 }
 
-object ChiselChipsalliance extends ChiselConfig {
-  val chisel = mvn"org.chipsalliance::chisel:7.16.0"
-  val chiselPlugin = mvn"org.chipsalliance:::chisel-plugin:7.16.0"
-}
+trait CommonDiffTest extends ScalaModule with SbtModule with Cross.Module[String] {
+  override def scalaVersion = ivys.scala
 
-object ChiselXiangShan extends ChiselConfig {
-  val chisel = mvn"cc.xiangshan::chisel:7.16.0-xiangshan-1"
-  val chiselPlugin = mvn"cc.xiangshan:::chisel-plugin:7.16.0-xiangshan-1"
-}
-
-trait CommonDiffTest extends ScalaModule with SbtModule {
-  def chiselConfig: ChiselConfig
-
-  override def scalaVersion = chiselConfig.scalaVersion
-
-  override def scalacPluginIvyDeps = Agg(chiselConfig.chiselPlugin)
+  override def scalacPluginIvyDeps = Agg(ivys.chiselCrossVersions(crossValue)._2)
 
   override def scalacOptions = Seq("-Ymacro-annotations") ++
     Seq("-feature", "-language:reflectiveCalls")
 
-  override def ivyDeps = Agg(chiselConfig.chisel)
+  override def ivyDeps = Agg(ivys.chiselCrossVersions(crossValue)._1)
 }
 
-object design extends DiffTestModule {
-  val chiselConfig = ChiselXiangShan
-}
-
-object `design-legacy` extends DiffTestModule {
-  val chiselConfig = ChiselChipsalliance
-}
+object design extends mill.define.Cross[DiffTestModule](ivys.chiselCrossVersions.keys.toSeq)
 
 trait DiffTestModule extends CommonDiffTest {
   override def millSourcePath = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
@@ -63,18 +53,12 @@ trait DiffTestModule extends CommonDiffTest {
     Seq("-Xfatal-warnings", "-deprecation:false", "-unchecked")
 }
 
-object difftest extends Difftest {
-  val chiselConfig = ChiselXiangShan
-}
-
-object `difftest-legacy` extends Difftest {
-  val chiselConfig = ChiselChipsalliance
-}
+object difftest extends mill.define.Cross[Difftest](ivys.chiselCrossVersions.keys.toSeq)
 
 trait Difftest extends CommonDiffTest {
   override def millSourcePath = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
 
   object test extends SbtTests with TestModule.ScalaTest {
-    override def ivyDeps = super.ivyDeps() ++ Agg(chiselConfig.scalatest)
+    override def ivyDeps = super.ivyDeps() ++ Agg(ivys.scalatest)
   }
 }

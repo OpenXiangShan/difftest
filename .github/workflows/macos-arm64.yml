@@ -28,7 +28,7 @@ jobs:
 
       - name: Compile
         run: |
-          mill -i design.compile
+          make design-compile
 
       - name: Generate Verilog
         run: |

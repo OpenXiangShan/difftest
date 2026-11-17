@@ -18,6 +18,8 @@
 NOOP_HOME  ?= $(abspath .)
 export NOOP_HOME
 
+CHISEL_VERSION ?=
+
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 
@@ -42,7 +44,7 @@ ifneq ($(CONFIG), )
 MILL_ARGS += --difftest-config $(CONFIG)
 endif
 difftest_verilog:
-	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
+	mill -i 'difftest[$(CHISEL_VERSION)].test.runMain' difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
 
 TIMELOG = $(BUILD_DIR)/time.log
 # Resolve `time` to a real binary: shells such as bash provide `time` only as a
@@ -377,6 +379,9 @@ clean: vcs-clean pldm-clean fpga-clean
 
 format: scala-format clang-format
 
+design-compile:
+	mill -i 'design[$(CHISEL_VERSION)].compile'
+
 scala-format:
 	mill -i mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
 
@@ -390,4 +395,4 @@ else
 	@echo "Please run \"pip install --user clang-format==$(CLANG_FORMAT_VER)\", then set PATH manually"
 endif
 
-.PHONY: sim-verilog emu difftest_verilog clean format scala-format clang-format
+.PHONY: sim-verilog emu difftest_verilog clean format design-compile scala-format clang-format
