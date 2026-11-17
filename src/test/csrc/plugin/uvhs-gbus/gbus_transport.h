@@ -16,6 +16,8 @@
 // path: the RTL appends each complete 768-byte DiffTest frame to a ring and
 // the host drains it with AXI DMA reads, releasing frames with CONSUME.
 // The register-window (GBS1) and DDR-ring transports were removed.
+class GbusC2hHelper;
+
 class GbusTransport final : public FpgaTransport {
 public:
   GbusTransport();
@@ -108,9 +110,21 @@ private:
   // The status reads themselves pace the poll loop, so only a short delay is
   // needed when a read reports that the expected state has not arrived yet.
   uint32_t c2h_poll_us_ = 100;
+  // A second connection in a child process, used to split each batch and run
+  // two DMA reads at once.  Null when GBUS_C2H_HELPER is off or the split is
+  // not viable, in which case the drain loop stays single-stream.
+  GbusC2hHelper *c2h_helper_ = nullptr;
+  uint32_t c2h_helper_min_frames_ = 0;
   std::atomic<bool> running_{false};
   bool initialized_ = false;
   std::string host_;
 };
+
+// Entry point for the child process that carries the second DMA stream.  The
+// transport re-executes its own binary with argv[1] == "--gbus-c2h-helper", so
+// the child starts with a fresh runtime connection instead of an inherited
+// socket.  Declared here because main() has to intercept the flag before the
+// normal argument parser sees it.
+int gbus_c2h_helper_main(int argc, const char *argv[]);
 
 #endif

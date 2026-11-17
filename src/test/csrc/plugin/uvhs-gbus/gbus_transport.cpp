@@ -5,12 +5,19 @@
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
+#include <csignal>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <fcntl.h>
 #include <limits>
 #include <mutex>
+#include <string>
+#include <sys/mman.h>
+#include <sys/prctl.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
 #include <uvaps_gbus_runtime.h>
@@ -136,6 +143,12 @@ GbusTransport::GbusTransport() {
   // Preserve the established 64-frame batching default. Set the variable to 0
   // explicitly to opt into the ring-sized threshold optimization.
   c2h_stream_min_frames_ = static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 64, 4096));
+  // Splitting a batch across two DMA streams only pays when each half is big
+  // enough to amortise its own fixed cost, so the feature is off unless asked
+  // for and then ignores batches below twice the threshold.
+  c2h_helper_min_frames_ = env_u64("GBUS_C2H_HELPER", 0, 1) != 0
+                               ? static_cast<uint32_t>(env_u64("GBUS_C2H_HELPER_MIN_FRAMES", 64, 4096))
+                               : 0;
   // How many finished batches may wait for dispatch.  Two is enough to keep the
   // reference execution off the critical path; the bound turns a dispatch that
   // falls behind into ring backpressure instead of unbounded memory growth.
@@ -284,6 +297,260 @@ void GbusTransport::c2h_probe_stream() {
 // single DMA call, and releases exactly those frames with one CONSUME write.
 // Because only CONSUME moves the read pointer, a long DMA call costs throughput
 // but can never corrupt or drop frames.
+// ---------------------------------------------------------------------------
+// Second DMA stream.
+//
+// The runtime serialises DMA calls inside one process: a second thread's call
+// returns failure immediately rather than queueing, and a second
+// gbus_initialize in the same process returns 0.  Two separate processes do
+// overlap, though, and that is the only way to hide the per-call fixed cost
+// without touching the RTL.  A batch is therefore split in half: the drain loop
+// reads the lower half while a child process reads the upper half, and the
+// loop still submits both halves in ring order and releases them with a single
+// CONSUME, so the ring's read pointer keeps its current meaning.
+// ---------------------------------------------------------------------------
+namespace {
+constexpr uint32_t kHelperFree = 0;
+constexpr uint32_t kHelperRequest = 1;
+constexpr uint32_t kHelperFilled = 2;
+constexpr uint32_t kHelperError = 3;
+
+// One job at a time: the drain loop cannot start the next batch until this one
+// has been released, so a second slot would only add bookkeeping.
+struct HelperSlot {
+  std::atomic<uint32_t> state;
+  std::atomic<uint32_t> frames;
+  std::atomic<uint64_t> offset;
+};
+
+struct HelperShared {
+  std::atomic<uint32_t> ready;
+  std::atomic<uint32_t> stop;
+  std::atomic<uint32_t> error;
+  HelperSlot slot;
+};
+} // namespace
+
+class GbusC2hHelper {
+public:
+  ~GbusC2hHelper() {
+    stop();
+  }
+
+  bool start(const std::string &host, int board, int fpga, int dma_fpga, int channel, int port, uint64_t slot_bytes);
+  void stop();
+  bool usable() const {
+    return shared_ != nullptr && shared_->error.load() == 0;
+  }
+  bool submit(uint64_t offset, uint32_t frames);
+  const uint8_t *wait(uint32_t frames, int timeout_ms);
+  void release();
+
+private:
+  std::string path_;
+  int fd_ = -1;
+  HelperShared *shared_ = nullptr;
+  uint8_t *data_ = nullptr;
+  uint64_t slot_bytes_ = 0;
+  pid_t child_ = -1;
+};
+
+bool GbusC2hHelper::start(const std::string &host, int board, int fpga, int dma_fpga, int channel, int port,
+                          uint64_t slot_bytes) {
+  slot_bytes_ = slot_bytes;
+  path_ = "/dev/shm/gbus_c2h_" + std::to_string(static_cast<long>(getpid()));
+  fd_ = ::open(path_.c_str(), O_RDWR | O_CREAT | O_EXCL, 0600);
+  if (fd_ < 0) {
+    std::fprintf(stderr, "[fpga-host] C2H helper: cannot create %s: %s\n", path_.c_str(), std::strerror(errno));
+    return false;
+  }
+  const size_t total = sizeof(HelperShared) + slot_bytes_;
+  if (ftruncate(fd_, static_cast<off_t>(total)) != 0) {
+    std::fprintf(stderr, "[fpga-host] C2H helper: ftruncate failed: %s\n", std::strerror(errno));
+    stop();
+    return false;
+  }
+  void *map = mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+  if (map == MAP_FAILED) {
+    std::fprintf(stderr, "[fpga-host] C2H helper: mmap failed: %s\n", std::strerror(errno));
+    stop();
+    return false;
+  }
+  shared_ = static_cast<HelperShared *>(map);
+  // The region is zero-filled, so value-initialising each field is enough.
+  new (&shared_->ready) std::atomic<uint32_t>(0);
+  new (&shared_->stop) std::atomic<uint32_t>(0);
+  new (&shared_->error) std::atomic<uint32_t>(0);
+  new (&shared_->slot.state) std::atomic<uint32_t>(kHelperFree);
+  new (&shared_->slot.frames) std::atomic<uint32_t>(0);
+  new (&shared_->slot.offset) std::atomic<uint64_t>(0);
+  data_ = reinterpret_cast<uint8_t *>(shared_) + sizeof(HelperShared);
+
+  const std::string exe = "/proc/self/exe";
+  std::vector<std::string> args = {exe,
+                                   "--gbus-c2h-helper",
+                                   host,
+                                   std::to_string(board),
+                                   std::to_string(fpga),
+                                   std::to_string(dma_fpga),
+                                   std::to_string(channel),
+                                   std::to_string(port),
+                                   path_};
+  child_ = fork();
+  if (child_ < 0) {
+    std::fprintf(stderr, "[fpga-host] C2H helper: fork failed: %s\n", std::strerror(errno));
+    stop();
+    return false;
+  }
+  if (child_ == 0) {
+    // Die with the parent, and leave the runtime connection behind: everything
+    // past stderr is dropped so the child cannot hold the parent's socket open.
+    prctl(PR_SET_PDEATHSIG, SIGTERM);
+    for (int fd = 3; fd < 1024; ++fd)
+      ::close(fd);
+    std::vector<char *> argv;
+    for (auto &a: args)
+      argv.push_back(const_cast<char *>(a.c_str()));
+    argv.push_back(nullptr);
+    execv(exe.c_str(), argv.data());
+    _exit(127);
+  }
+
+  // The child has to connect to the runtime before it can take work.
+  for (int waited_ms = 0; waited_ms < 20000; waited_ms += 5) {
+    if (shared_->ready.load(std::memory_order_acquire))
+      return true;
+    if (shared_->error.load(std::memory_order_acquire)) {
+      std::fprintf(stderr, "[fpga-host] C2H helper: child could not initialise the runtime\n");
+      stop();
+      return false;
+    }
+    ::usleep(5000);
+  }
+  std::fprintf(stderr, "[fpga-host] C2H helper: timed out waiting for the child\n");
+  stop();
+  return false;
+}
+
+void GbusC2hHelper::stop() {
+  if (shared_ != nullptr)
+    shared_->stop.store(1, std::memory_order_release);
+  if (child_ > 0) {
+    int status = 0;
+    bool reaped = false;
+    for (int waited_ms = 0; waited_ms < 2000; waited_ms += 10) {
+      if (waitpid(child_, &status, WNOHANG) == child_) {
+        reaped = true;
+        break;
+      }
+      ::usleep(10000);
+    }
+    if (!reaped) {
+      kill(child_, SIGKILL);
+      waitpid(child_, &status, 0);
+    }
+    child_ = -1;
+  }
+  if (shared_ != nullptr) {
+    munmap(shared_, sizeof(HelperShared) + slot_bytes_);
+    shared_ = nullptr;
+    data_ = nullptr;
+  }
+  if (fd_ >= 0) {
+    ::close(fd_);
+    fd_ = -1;
+    unlink(path_.c_str());
+  }
+}
+
+bool GbusC2hHelper::submit(uint64_t offset, uint32_t frames) {
+  if (!usable())
+    return false;
+  shared_->slot.frames.store(frames, std::memory_order_relaxed);
+  shared_->slot.offset.store(offset, std::memory_order_relaxed);
+  shared_->slot.state.store(kHelperRequest, std::memory_order_release);
+  return true;
+}
+
+const uint8_t *GbusC2hHelper::wait(uint32_t frames, int timeout_ms) {
+  for (int waited_us = 0; waited_us < timeout_ms * 1000; waited_us += 50) {
+    const uint32_t state = shared_->slot.state.load(std::memory_order_acquire);
+    if (state == kHelperFilled)
+      return shared_->slot.frames.load(std::memory_order_relaxed) == frames ? data_ : nullptr;
+    if (state == kHelperError)
+      return nullptr;
+    ::usleep(50);
+  }
+  return nullptr;
+}
+
+void GbusC2hHelper::release() {
+  if (shared_ != nullptr)
+    shared_->slot.state.store(kHelperFree, std::memory_order_release);
+}
+
+int gbus_c2h_helper_main(int argc, const char *argv[]) {
+  if (argc < 9) {
+    std::fprintf(stderr, "[gbus-helper] usage: %s --gbus-c2h-helper host board fpga dma_fpga channel port shm\n",
+                 argv[0]);
+    return 2;
+  }
+  const char *host = argv[2];
+  const uint8_t board = static_cast<uint8_t>(std::atoi(argv[3]));
+  const uint8_t dma_fpga = static_cast<uint8_t>(std::atoi(argv[5]));
+  const uint8_t channel = static_cast<uint8_t>(std::atoi(argv[6]));
+  const uint8_t port = static_cast<uint8_t>(std::atoi(argv[7]));
+  const char *path = argv[8];
+
+  const int fd = ::open(path, O_RDWR, 0600);
+  if (fd < 0) {
+    std::fprintf(stderr, "[gbus-helper] cannot open %s: %s\n", path, std::strerror(errno));
+    return 1;
+  }
+  struct stat st {};
+  if (fstat(fd, &st) != 0) {
+    std::fprintf(stderr, "[gbus-helper] fstat failed: %s\n", std::strerror(errno));
+    return 1;
+  }
+  void *map = mmap(nullptr, static_cast<size_t>(st.st_size), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if (map == MAP_FAILED) {
+    std::fprintf(stderr, "[gbus-helper] mmap failed: %s\n", std::strerror(errno));
+    return 1;
+  }
+  HelperShared *shared = static_cast<HelperShared *>(map);
+  uint8_t *data = reinterpret_cast<uint8_t *>(shared) + sizeof(HelperShared);
+
+  if (!gbus_initialize(host)) {
+    std::fprintf(stderr, "[gbus-helper] gbus_initialize(%s) failed\n", host);
+    shared->error.store(1, std::memory_order_release);
+    return 1;
+  }
+  std::fprintf(stderr, "[gbus-helper] ready host=%s dma_fpga=%u\n", host, dma_fpga);
+  shared->ready.store(1, std::memory_order_release);
+
+  while (shared->stop.load(std::memory_order_acquire) == 0) {
+    if (shared->slot.state.load(std::memory_order_acquire) != kHelperRequest) {
+      ::usleep(50);
+      continue;
+    }
+    const uint32_t frames = shared->slot.frames.load(std::memory_order_relaxed);
+    const uint64_t offset = shared->slot.offset.load(std::memory_order_relaxed);
+    const size_t bytes = static_cast<size_t>(frames) * GBUS_C2H_STREAM_FRAME_BYTES;
+    std::vector<uint8_t> block;
+    const int rc = gbus_dma_read(0, board, dma_fpga, 0, offset, bytes, channel, port, block);
+    if (rc == 1 && block.size() == bytes) {
+      std::memcpy(data, block.data(), bytes);
+      shared->slot.state.store(kHelperFilled, std::memory_order_release);
+    } else {
+      std::fprintf(stderr, "[gbus-helper] dma failed rc=%d bytes=%zu\n", rc, block.size());
+      shared->error.store(1, std::memory_order_release);
+      shared->slot.state.store(kHelperError, std::memory_order_release);
+    }
+  }
+  gbus_finalize();
+  return 0;
+}
+
 void GbusTransport::c2h_drain_stream_frames() {
   using Clock = std::chrono::steady_clock;
   const auto alive = [&]() { return running_.load() && signal_num == 0; };
@@ -334,6 +601,17 @@ void GbusTransport::c2h_drain_stream_frames() {
   // Reference execution is the one part of this loop that does not touch the
   // runtime, so it runs on its own thread and overlaps the next DMA call.
   c2h_dispatch_thread_ = std::thread([this] { c2h_dispatch_worker(); });
+
+  if (c2h_helper_min_frames_ != 0) {
+    c2h_helper_ = new GbusC2hHelper();
+    if (c2h_helper_->start(host_, board_, fpga_, c2h_dma_fpga_, channel_, port_, ring_bytes / 2)) {
+      std::fprintf(stderr, "[fpga-host] C2H dual stream enabled min_batch=%u frames\n", 2 * c2h_helper_min_frames_);
+    } else {
+      delete c2h_helper_;
+      c2h_helper_ = nullptr;
+      std::fprintf(stderr, "[fpga-host] C2H dual stream unavailable; staying single-stream\n");
+    }
+  }
 
   while (alive()) {
     // One grouped read returns status, frame count and both ring pointers.
@@ -387,23 +665,69 @@ void GbusTransport::c2h_drain_stream_frames() {
     const size_t count = static_cast<size_t>(take) * c2h_stream_frame_bytes_;
 
     std::vector<uint8_t> block;
+    // Split the batch in half so a second process can read the upper half while
+    // this one reads the lower half.  Both halves stay in ring order when they
+    // are submitted, and the single CONSUME below still releases the whole
+    // batch, so nothing about the ring protocol changes.
+    uint32_t mine = take;
+    uint32_t theirs = 0;
+    bool helper_inflight = false;
+    if (c2h_helper_ != nullptr && c2h_helper_->usable() && take >= 2 * c2h_helper_min_frames_) {
+      const uint32_t half = take / 2;
+      if (c2h_helper_->submit(aperture + rd_ptr + static_cast<uint64_t>(half) * c2h_stream_frame_bytes_, take - half)) {
+        mine = half;
+        theirs = take - half;
+        helper_inflight = true;
+      }
+    }
+    const size_t mine_bytes = static_cast<size_t>(mine) * c2h_stream_frame_bytes_;
+
     const uint64_t begin = monotonic_us();
     int rc;
     {
       std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
-      rc = gbus_dma_read(prototyping_, board_, c2h_dma_fpga_, ddr_instance_, aperture + rd_ptr, count, channel_, port_,
-                         block);
+      rc = gbus_dma_read(prototyping_, board_, c2h_dma_fpga_, ddr_instance_, aperture + rd_ptr, mine_bytes, channel_,
+                         port_, block);
     }
-    const uint64_t elapsed_us = monotonic_us() - begin;
-    ++c2h_dma_calls_;
-    c2h_dma_us_ += elapsed_us;
     if (!alive()) {
       // The trap arrives on the dispatch thread while this call is in flight;
       // that call turns capture off.  Fall through to the summary instead of
       // returning, so a pipelined run still reports its totals.
       break;
     }
-    if (rc != 1 || block.size() != count || elapsed_us > 10000000ULL)
+    if (rc != 1 || block.size() != mine_bytes) {
+      fail("DMA capture failed", status);
+    }
+
+    // Wait for the other half and append it.  A helper that fails is dropped for
+    // the rest of the run and its half is read inline, so a broken second
+    // stream costs speed but never correctness.
+    if (helper_inflight) {
+      const uint8_t *other = c2h_helper_->wait(theirs, 10000);
+      if (other != nullptr) {
+        block.insert(block.end(), other, other + static_cast<size_t>(theirs) * c2h_stream_frame_bytes_);
+        c2h_helper_->release();
+      } else {
+        c2h_helper_->release();
+        std::fprintf(stderr, "[fpga-host] C2H dual stream failed; falling back to single-stream\n");
+        delete c2h_helper_;
+        c2h_helper_ = nullptr;
+        const size_t rest_bytes = static_cast<size_t>(theirs) * c2h_stream_frame_bytes_;
+        std::vector<uint8_t> rest;
+        {
+          std::lock_guard<std::recursive_mutex> lock(runtime_mutex_);
+          rc = gbus_dma_read(prototyping_, board_, c2h_dma_fpga_, ddr_instance_, aperture + rd_ptr + mine_bytes,
+                             rest_bytes, channel_, port_, rest);
+        }
+        if (rc != 1 || rest.size() != rest_bytes)
+          fail("DMA capture failed", status);
+        block.insert(block.end(), rest.begin(), rest.end());
+      }
+    }
+    const uint64_t elapsed_us = monotonic_us() - begin;
+    ++c2h_dma_calls_;
+    c2h_dma_us_ += elapsed_us;
+    if (elapsed_us > 10000000ULL)
       fail("DMA capture failed", status);
 
     // First-batch cross-check: the config window mirrors the oldest unread
@@ -493,6 +817,10 @@ void GbusTransport::c2h_drain_stream_frames() {
   // Nothing else touches the ring now, so let the dispatch thread finish the
   // batches still queued: the last one carries the trap that ends the DiffTest.
   c2h_finish_dispatch();
+  if (c2h_helper_ != nullptr) {
+    delete c2h_helper_;
+    c2h_helper_ = nullptr;
+  }
 
   // Final summary: the periodic dump only fires on powers of two, so without
   // this the tail of a long run is invisible and the totals look smaller than
