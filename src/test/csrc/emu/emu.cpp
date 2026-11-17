@@ -281,8 +281,7 @@ Emulator::~Emulator() {
 #ifdef ENABLE_CHISEL_DB
   if (args.dump_db) {
     if (args.warmup_instr != 0 && args.warmup_instr != uint64_t(-1)) {
-      clear_db("Tea");
-      clear_db("Dip");
+      clear_db("perf");
     }
     save_db(db_filename());
   }
@@ -563,8 +562,7 @@ int Emulator::tick() {
   dut_ptr->set_perf_dump(0);
 #ifdef ENABLE_CHISEL_DB
   if (warmup_finished) {
-    clear_db("Tea");
-    clear_db("Dip");
+    clear_db("perf");
   }
 #endif
 
