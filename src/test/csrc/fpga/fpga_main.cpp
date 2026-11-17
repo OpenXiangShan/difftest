@@ -34,6 +34,7 @@
 #endif
 #include <condition_variable>
 #include <cstdlib>
+#include <cstring>
 #include <getopt.h>
 #include <inttypes.h>
 #include <mutex>
@@ -91,11 +92,13 @@ static void fpga_update_ila_base() {
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
 int main(int argc, const char *argv[]) {
+#ifdef DIFFTEST_HOSTIF_GBUS
   // The C2H transport forks a helper carrying the second DMA stream.  It is this
   // same binary re-executed, so the flag is handled before anything else touches
   // the runtime or parses arguments.
   if (argc > 1 && std::strcmp(argv[1], "--gbus-c2h-helper") == 0)
     return gbus_c2h_helper_main(argc, argv);
+#endif // DIFFTEST_HOSTIF_GBUS
 
   common_set_locale();
 
