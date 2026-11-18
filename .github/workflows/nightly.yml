@@ -36,7 +36,7 @@ jobs:
         run: |
             curl -s https://api.github.com/repos/OpenXiangShan/circt/releases \
               | grep "browser_download_url"                                   \
-              | grep -m 1 "firtool-1.155.0-ubuntu-20.04"                      \
+              | grep -m 1 "firtool-1.162.0-param-ubuntu-20.04"                \
               | cut -d '"' -f 4                                               \
               | xargs curl -fL --retry 3 -o firtool
             chmod +x ./firtool
