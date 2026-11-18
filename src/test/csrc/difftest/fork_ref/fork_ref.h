@@ -29,7 +29,8 @@ void difftest_ref_fork_leader_exit(int result);
 int difftest_ref_fork_prepare(Difftest *self);
 int difftest_ref_fork_check(Difftest *self);
 void difftest_ref_fork_publish(Difftest *self);
-int difftest_ref_fork_finish();
+int difftest_ref_fork_finish(bool bounded = false);
+bool difftest_ref_fork_bounded_endpoint();
 int difftest_ref_fork_idle();
 void difftest_ref_fork_abort_child();
 
