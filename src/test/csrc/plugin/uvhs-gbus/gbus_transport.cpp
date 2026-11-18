@@ -549,6 +549,41 @@ int gbus_c2h_helper_main(int argc, const char *argv[]) {
   return 0;
 }
 
+namespace {
+// The second DMA stream runs in a forked child, which is this binary re-executed
+// with a flag so that it gets its own runtime connection.  That child has to
+// take over before main() starts, or it would run the host's own start-up first;
+// a static initialiser is the only place that runs early enough without the
+// whole program having to know the flag.  This translation unit is built only
+// for DIFFTEST_HOSTIF_GBUS, so nothing else sees it.
+//
+// Elaboration order is safe here: libuvgbus is a shared object, and the loader
+// initialises a binary's dependencies before its own objects.
+const int gbus_c2h_helper_launched = [] {
+  const int fd = ::open("/proc/self/cmdline", O_RDONLY);
+  if (fd < 0)
+    return 0;
+  char buf[8192];
+  const ssize_t got = ::read(fd, buf, sizeof(buf) - 1);
+  ::close(fd);
+  // A truncated command line would hand the child a mangled path, so only
+  // proceed when the whole thing fit.
+  if (got <= 0 || static_cast<size_t>(got) >= sizeof(buf) - 1)
+    return 0;
+  buf[got] = '\0';
+  std::vector<const char *> argv;
+  for (const char *p = buf; p < buf + got; p += std::strlen(p) + 1)
+    argv.push_back(p);
+  if (argv.size() < 2 || std::strcmp(argv[1], "--gbus-c2h-helper") != 0)
+    return 0;
+  const int argc = static_cast<int>(argv.size());
+  argv.push_back(nullptr);
+  // _exit rather than exit: the helper must not run atexit handlers or unwind
+  // the parent's state, none of which it owns.
+  ::_exit(gbus_c2h_helper_main(argc, argv.data()));
+}();
+} // namespace
+
 void GbusTransport::c2h_drain_stream_frames() {
   using Clock = std::chrono::steady_clock;
   const auto alive = [&]() { return running_.load() && signal_num == 0; };
