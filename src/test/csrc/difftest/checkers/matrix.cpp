@@ -347,6 +347,7 @@ int AmuFinishRecorder::check(const DifftestAmuFinishEvent &probe) {
         set_error_pc(state->coreid, event.pc);
         return STATE_ERROR;
       }
+      state->mrelease_check_pending = true;
     } else if (event.op != 1 || event.sat != 1) {
       printf("Expected mstore/mrelease for finish event: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
       set_error_pc(state->coreid, probe.pc);
@@ -494,7 +495,13 @@ int AmuExecChecker::do_step() {
   if (int ret = commit_ready_prefix()) {
     return ret;
   }
-  return check_mreleases();
+  // A successful scan leaves no completed mrelease in the ROB.
+  if (!state->mrelease_check_pending)
+    return STATE_OK;
+  const int ret = check_mreleases();
+  if (ret == STATE_OK)
+    state->mrelease_check_pending = false;
+  return ret;
 }
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT

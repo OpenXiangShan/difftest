@@ -87,6 +87,7 @@ void DiffState::replay_restore() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   copy_matrix_sw_rob(matrix_sw_rob, replay_matrix_sw_rob);
+  mrelease_check_pending = true;
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   msync_event_queue = replay_msync_event_queue;
