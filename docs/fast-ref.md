@@ -36,3 +36,5 @@ make fpga-build FPGA=1 DIFFTEST_FAST_REF=1 DIFFTEST_FORK_REF=1 USE_THREAD_MEMPOO
 `FAST PerfCnt` reports speculative FAST completion before the SLOW drain. On success, `SLOW PerfCnt` uses the last trusted segment's instruction/cycle counts and the global runtime, including the drain. These reports show execution counts, IPC, runtime and speed. On a DUT mismatch, the failing SLOW waits for its predecessors to pass, then prints its own report and commit history before execution stops; failures from discarded snapshots are not reported as authoritative.
 
 `--ila-size N` (default `0`, disabled) limits DUT cycles ahead of the SLOW-checked base, which Host advances after successful checking.
+
+Instruction-budget endpoints drain the verified prefix while remaining `EXCEED` (host exit 1); they are not GoodTrap or workload completion.

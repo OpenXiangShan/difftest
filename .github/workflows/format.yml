@@ -7,20 +7,23 @@ on:
 jobs:
   format:
     runs-on: ubuntu-24.04
+    container: ghcr.io/openxiangshan/xs-env:ubuntu-24.04-slim
     steps:
       - uses: actions/checkout@v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
 
-      - name: Mill Installation
+      - name: Configure Git Safe Directory
         run: |
-          sudo curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.1/0.11.1 > /usr/local/bin/mill
-          chmod +x /usr/local/bin/mill
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Clang Format Installation
         run: |
-          pip install clang-format==18.1.4
+          python3 -m pip install --no-cache-dir \
+            --target "$RUNNER_TEMP/clang-format" \
+            clang-format==18.1.4
+          echo "$RUNNER_TEMP/clang-format/clang_format/data/bin" >> "$GITHUB_PATH"
 
       - name: Scala Formatter
         run: |
@@ -32,7 +35,11 @@ jobs:
 
       - name: Format Check
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
+          if ! changed_files="$(git status --porcelain)"; then
+            echo "::error::Unable to inspect repository status"
+            exit 1
+          fi
+          if [ -n "$changed_files" ]; then
             echo "Please run 'make format' manually"
             exit 1
           fi
