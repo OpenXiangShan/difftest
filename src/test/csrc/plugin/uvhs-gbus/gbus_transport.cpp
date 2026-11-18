@@ -143,12 +143,10 @@ GbusTransport::GbusTransport() {
   // Preserve the established 64-frame batching default. Set the variable to 0
   // explicitly to opt into the ring-sized threshold optimization.
   c2h_stream_min_frames_ = static_cast<uint32_t>(env_u64("GBUS_C2H_STREAM_MIN_FRAMES", 64, 4096));
-  // Splitting a batch across two DMA streams only pays when each half is big
-  // enough to amortise its own fixed cost, so the feature is off unless asked
-  // for and then ignores batches below twice the threshold.
-  c2h_helper_min_frames_ = env_u64("GBUS_C2H_HELPER", 0, 1) != 0
-                               ? static_cast<uint32_t>(env_u64("GBUS_C2H_HELPER_MIN_FRAMES", 64, 4096))
-                               : 0;
+  // Every batch of at least this many frames is split across the two streams.
+  // Batches below it stay single-stream: each half has to amortise its own
+  // fixed cost, and a short batch would only add round trips.
+  c2h_helper_min_frames_ = 64;
   // How many finished batches may wait for dispatch.  Two is enough to keep the
   // reference execution off the critical path; the bound turns a dispatch that
   // falls behind into ring backpressure instead of unbounded memory growth.

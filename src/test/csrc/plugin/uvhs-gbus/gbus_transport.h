@@ -111,8 +111,8 @@ private:
   // needed when a read reports that the expected state has not arrived yet.
   uint32_t c2h_poll_us_ = 100;
   // A second connection in a child process, used to split each batch and run
-  // two DMA reads at once.  Null when GBUS_C2H_HELPER is off or the split is
-  // not viable, in which case the drain loop stays single-stream.
+  // two DMA reads at once.  Null when the child could not start, in which case
+  // the drain loop stays single-stream.
   GbusC2hHelper *c2h_helper_ = nullptr;
   uint32_t c2h_helper_min_frames_ = 0;
   std::atomic<bool> running_{false};
