@@ -238,7 +238,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
     // Note: locating elems will not in struct defined, but at the end of reordered Bundle
     val (elem_names, elem_bytes) = gen.getByteAlignElems.map { case (name, data) => (name, data.getWidth / 8) }.unzip
     elem_names.zipWithIndex.foreach { case (name, idx) =>
-      if (Seq("coreid", "index", "address").contains(name)) {
+      if (gen.locatorElems.contains(name)) {
         val offset = elem_bytes.take(idx).sum
         val typeStr = s"uint${elem_bytes(idx) * 8}_t"
         unpack += s"$name = *(($typeStr*)($source + $offset));"
@@ -272,7 +272,7 @@ class DPICBatch(template: Seq[DifftestBundle], batchIO: BatchIO, config: Gateway
         s"sizeof(${gen.desiredModuleName})"
       }
       val locatorBytes = gen.getByteAlignElems.collect {
-        case (name, data) if Seq("coreid", "index", "address").contains(name) => data.getWidth / 8
+        case (name, data) if gen.locatorElems.contains(name) => data.getWidth / 8
       }.sum
       if (locatorBytes == 0) packetSize else s"($packetSize + $locatorBytes)"
     }
