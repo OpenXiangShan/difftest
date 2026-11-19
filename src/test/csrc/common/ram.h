@@ -92,19 +92,19 @@ public:
   void seal_cow();
   void *create_cow_branch() override;
   uint64_t pad_img_size(uint64_t align);
-  void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) {
+  void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) override {
     size_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
     func(ram, n_bytes);
   }
-  uint64_t &at(uint64_t index) {
+  uint64_t &at(uint64_t index) override {
     on_access(index);
     return ram[index];
   }
 
-  uint64_t *as_ptr() {
+  uint64_t *as_ptr() override {
     return ram;
   }
-  virtual inline uint64_t get_img_size() {
+  uint64_t get_img_size() override {
     return img_size;
   }
 };
