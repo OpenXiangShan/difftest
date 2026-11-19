@@ -41,7 +41,8 @@ public:
       return false;
     const auto &a = first->amu_event;
     const auto &b = candidate->amu_event;
-    if (a.isfp && a.types1 != Fp8E5M2 && a.types1 != Fp8E4M3 && a.types1 != Fp16 && a.types1 != Bf16 && a.types1 != Tf32)
+    if (a.isfp && a.types1 != Fp8E5M2 && a.types1 != Fp8E4M3 && a.types1 != Fp16 && a.types1 != Bf16 &&
+        a.types1 != Tf32)
       return false;
     return a.isfp == b.isfp && a.types1 == b.types1 && a.types2 == b.types2 && a.typed == b.typed;
 #else

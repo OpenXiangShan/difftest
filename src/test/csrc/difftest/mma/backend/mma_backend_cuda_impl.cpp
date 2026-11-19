@@ -182,7 +182,7 @@ void CudaMmaWorkspace::release() {
 }
 
 CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes,
-                                         uint8_t *const shared_host[3]) {
+                                          uint8_t *const shared_host[3]) {
   std::unique_ptr<CudaMmaWorkspace> workspace(new CudaMmaWorkspace());
   if (!workspace->allocate(batch_size, ab_reg_bytes, c_reg_bytes, shared_host)) {
     return nullptr;

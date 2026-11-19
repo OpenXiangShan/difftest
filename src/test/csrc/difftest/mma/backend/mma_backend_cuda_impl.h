@@ -116,7 +116,7 @@ bool cuda_mma_backend_compare_kernel(const CudaMmaBatchDescriptor *descriptors, 
 // Launches must be serialized. Each item points at a slot in the pinned
 // storage for the current client; that storage must remain live through completion.
 CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes,
-                                         uint8_t *const shared_host[3]);
+                                          uint8_t *const shared_host[3]);
 // Leave REF on device so DUT preparation/upload can proceed concurrently.
 bool cuda_mma_backend_enqueue_references(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
                                          size_t count);
