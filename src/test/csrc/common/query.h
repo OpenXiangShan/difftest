@@ -20,6 +20,7 @@
 #include "common.h"
 
 #ifdef CONFIG_DIFFTEST_QUERY
+#include <limits.h>
 #include <sqlite3.h>
 #include <type_traits>
 
@@ -82,12 +83,13 @@ public:
 
 class QueryStatsBase {
 public:
-  char path[128];
+  char path[PATH_MAX];
   int query_zone = 0;
   long long query_step = 0;
   sqlite3 *mem_db = nullptr;
-  QueryStatsBase(char *_path) {
-    strncpy(path, _path, 128);
+  QueryStatsBase(const char *_path) {
+    strncpy(path, _path, PATH_MAX);
+    path[PATH_MAX - 1] = '\0';
     sqlite3_open(":memory:", &mem_db);
     sqlite3_exec(mem_db, "PRAGMA synchronous = OFF", 0, 0, 0);
     sqlite3_exec(mem_db, "BEGIN;", 0, 0, 0);
