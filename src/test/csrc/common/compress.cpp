@@ -285,22 +285,24 @@ std::unique_ptr<InputReader> wrap_decompressor(std::unique_ptr<InputReader> inpu
   throw std::runtime_error("Unknown compression format");
 }
 
-static long read_compressed_memory(void *ptr, const char *filename, long size, CompressionKind kind) {
+static long read_compressed_memory(void *ptr, const char *filename, long size, CompressionKind kind,
+                                   bool dest_is_zero) {
   try {
     auto input = wrap_decompressor(open_input(filename), kind);
-    return read_to_memory(*input, ptr, size, MemoryWriteMode::SkipZeroWords);
+    auto mode = dest_is_zero ? MemoryWriteMode::SkipZeroWords : MemoryWriteMode::Overwrite;
+    return read_to_memory(*input, ptr, size, mode);
   } catch (const std::exception &e) {
     fprintf(stderr, "Cannot load compressed input '%s': %s\n", filename, e.what());
     return -1;
   }
 }
 
-long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t /* load_type */) {
-  return read_compressed_memory(ptr, file_name, buf_size, CompressionKind::Gzip);
+long readFromGz(void *ptr, const char *file_name, long buf_size, uint8_t /* load_type */, bool dest_is_zero) {
+  return read_compressed_memory(ptr, file_name, buf_size, CompressionKind::Gzip, dest_is_zero);
 }
 
-long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t /* load_type */) {
-  return read_compressed_memory(ptr, file_name, buf_size, CompressionKind::Zstd);
+long readFromZstd(void *ptr, const char *file_name, long buf_size, uint8_t /* load_type */, bool dest_is_zero) {
+  return read_compressed_memory(ptr, file_name, buf_size, CompressionKind::Zstd, dest_is_zero);
 }
 
 void nonzero_large_memcpy(const void *__restrict dest, const void *__restrict src, size_t n) {
