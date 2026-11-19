@@ -380,6 +380,8 @@ void FpgaXdma::read_xdma_thread(int channel) {
       ssize_t size = relay ? relay->read(channel, mem + received, sizeof(FpgaPackgeHead) - received)
                            : read(xdma_c2h_fd[channel], mem + received, sizeof(FpgaPackgeHead) - received);
 #endif
+      if (!running)
+        break;
       if (size < 0 && errno == EINTR)
         continue;
 #ifdef CONFIG_DIFFTEST_FORK_REF
