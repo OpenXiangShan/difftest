@@ -26,6 +26,7 @@
 
 enum {
   OPT_SPLITVIEW_LOG = 1000,
+  OPT_ENABLE_MEM_COW,
   OPT_DB_PATH,
   OPT_NO_SQUASH,
   OPT_SQUASH_SIZE,
@@ -123,6 +124,7 @@ static inline void print_help(const char *file) {
   printf("      --cst-file=FILE        load constantin from FILE, stdin, or default init values\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
   printf("      --no-diff              disable differential testing\n");
+  printf("      --enable-mem-cow       share initial DUT, Golden Memory and REF pages through COW\n");
   printf("      --no-squash            disable squash\n");
   printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
   printf("      --no-squash-after-instr=NUM disable squash after NUM committed instructions\n");
@@ -193,6 +195,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "copy-ram",          1, NULL,  0  },
     { "cst-file",          1, NULL,  0  },
     { "random-mem",        0, NULL,  0  },
+    { "enable-mem-cow",    0, NULL, OPT_ENABLE_MEM_COW },
     { "core-clock-half-period",        1, NULL, OPT_CORE_CLOCK_HALF_PERIOD },
     { "accelerator-clock-half-period", 1, NULL, OPT_ACCELERATOR_CLOCK_HALF_PERIOD },
     { "splitview-log",     1, NULL, OPT_SPLITVIEW_LOG },
@@ -327,6 +330,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         printf("[WARN] chisel db is not enabled at compile time, ignore --db-path\n");
 #endif
         continue;
+      case OPT_ENABLE_MEM_COW: args.enable_mem_cow = true; continue;
       case OPT_NO_SQUASH: args.enable_squash = false; continue;
       case OPT_SQUASH_SIZE: {
         long long squash_size = atoll_strict(optarg, "squash-size");

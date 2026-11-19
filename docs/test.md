@@ -82,8 +82,19 @@ Key runtime options:
 | `-e, --log-end=NUM` | Stop logging at cycle N |
 | `-s, --seed=NUM` | Random seed |
 | `--random-mem` | Fill memory from a `--seed`-initialized LFSR stream before loading the image |
+| `--enable-mem-cow` | Share initial DUT, Golden Memory and REF pages through private COW mappings (single-core Linux emu) |
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
+
+`--enable-mem-cow` loads RAM into a sparse memfd, applies any restorer overwrite,
+then seals the backing and gives DUT, Golden Memory and REF independent private
+mappings. Guest addresses and initial bytes are preserved. It requires difftest,
+linear RAM, no snapshots, and a matching NEMU REF whose
+`difftest_get_backed_memory` supports `CONFIG_USE_MMAP`. Build that REF with
+`riscv64-xs-ref_defconfig` and pass its `.so` using `--diff`; older REFs with a
+no-op attachment API are rejected. The flag is off by default. Writes allocate
+private pages, so memory savings depend on how much each model changes; the
+immutable initial backing remains allocated until the mappings are released.
 
 ### 2.2 simv (VCS Top with Verilator Backend)
 

@@ -149,6 +149,23 @@ RefProxy::~RefProxy() {
   if (ref_close) {
     ref_close();
   }
+  if (cow_memory) {
+    munmap(cow_memory, cow_memory_size);
+  }
+}
+
+void RefProxy::attach_memory(void *memory, size_t size) {
+  if (!ref_attach_memory || !ref_get_pmem) {
+    fprintf(stderr, "REF lacks COW memory attachment APIs\n");
+    exit(1);
+  }
+  ref_attach_memory(memory, size);
+  if (ref_get_pmem() != memory) {
+    fprintf(stderr, "REF did not attach COW memory; use a REF with working difftest_get_backed_memory\n");
+    exit(1);
+  }
+  cow_memory = memory;
+  cow_memory_size = size;
 }
 
 void RefProxy::regcpy(const DiffTestRegState *regs, uint64_t pc) {

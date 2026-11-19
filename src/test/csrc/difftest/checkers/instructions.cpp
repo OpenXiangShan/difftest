@@ -30,12 +30,16 @@ void FirstInstrCommitChecker::clear_valid(DifftestInstrCommit &probe) {
 int FirstInstrCommitChecker::check(const DifftestInstrCommit &probe) {
   Info("The first instruction of core %d has commited. Difftest enabled. \n", state->coreid);
   proxy->flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
-  simMemory->clone_on_demand(
-      [this](uint64_t offset, void *src, size_t n) {
-        uint64_t dest_addr = PMEM_BASE + offset;
-        proxy->mem_init(dest_addr, src, n, DUT_TO_REF);
-      },
-      true);
+  if (void *memory = simMemory->create_cow_branch()) {
+    proxy->attach_memory(memory, simMemory->get_size());
+  } else {
+    simMemory->clone_on_demand(
+        [this](uint64_t offset, void *src, size_t n) {
+          uint64_t dest_addr = PMEM_BASE + offset;
+          proxy->mem_init(dest_addr, src, n, DUT_TO_REF);
+        },
+        true);
+  }
   proxy->regcpy(&get_regs(), FIRST_INST_ADDRESS);
   // Do not reconfig simulator 'proxy->update_config(&nemu_config)' here:
   // If this is main sim thread, simulator has its own initial config

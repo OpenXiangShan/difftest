@@ -20,6 +20,10 @@
 #include "elfloader.h"
 #include <cstring>
 #include <iostream>
+#ifdef __linux__
+#include <fcntl.h>
+#include <linux/memfd.h>
+#endif
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -280,10 +284,27 @@ void SimMemory::display_stats() {
 #endif // FUZZING
 }
 
-MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed)
+MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed, bool cow)
     : SimMemory(n_bytes), clone_full_mem(random_mem && seed != 0) {
-  // initialize memory using Linux mmap
-  ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+  if (cow) {
+#ifdef __linux__
+    cow_fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+    if (cow_fd < 0 || ftruncate(cow_fd, memory_size) != 0) {
+      perror("create COW RAM backing");
+      exit(1);
+    }
+    ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_SHARED, cow_fd, 0);
+    if (ram == MAP_FAILED) {
+      perror("map COW RAM backing");
+      exit(1);
+    }
+#else
+    fprintf(stderr, "--enable-mem-cow requires Linux\n");
+    exit(1);
+#endif
+  } else {
+    ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+  }
   if (ram == (uint64_t *)MAP_FAILED) {
     printf("Warning: Insufficient phisical memory\n");
     memory_size = 128 * 1024 * 1024UL;
@@ -359,8 +380,35 @@ uint64_t MmapMemory::pad_img_size(uint64_t align) {
   return img_size;
 }
 
+void *MmapMemory::create_cow_branch() {
+  if (cow_fd < 0) {
+    return nullptr;
+  }
+  void *branch = mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, cow_fd, 0);
+  if (branch == MAP_FAILED) {
+    perror("map private COW RAM branch");
+    exit(1);
+  }
+  return branch;
+}
+
+void MmapMemory::seal_cow() {
+#ifdef __linux__
+  if (munmap(ram, memory_size) != 0 ||
+      fcntl(cow_fd, F_ADD_SEALS, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) != 0) {
+    perror("seal COW RAM backing");
+    exit(1);
+  }
+  ram = (uint64_t *)create_cow_branch();
+  Info("Initial RAM sealed; DUT, Golden Memory and REF use private COW branches\n");
+#endif
+}
+
 MmapMemory::~MmapMemory() {
   munmap(ram, memory_size);
+  if (cow_fd >= 0) {
+    close(cow_fd);
+  }
 #ifdef WITH_DRAMSIM3
   dramsim3_finish();
 #endif
