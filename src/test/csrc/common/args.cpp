@@ -18,6 +18,9 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "splitview.h"
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MMA_CUDA)
+#include "mma/backend/client/mma_backend_connection.h"
+#endif
 #ifndef CONFIG_NO_DIFFTEST
 #include "reftrace/refdrive_trace.h"
 #endif
@@ -39,6 +42,7 @@ enum {
 #ifndef CONFIG_NO_DIFFTEST
   OPT_STUCK_CHECK,
 #endif
+  OPT_MMA_CPU_THREADS,
 #ifdef FPGA_HOST
   OPT_NO_LINK,
   OPT_ILA_SIZE,
@@ -166,6 +170,7 @@ static inline void print_help(const char *file) {
   printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
   printf("      --no-squash-after-instr=NUM disable squash after NUM committed instructions\n");
   printf("      --cpu-axi-delay=NUM    delay FPGA CPU AXI requests by NUM cycles, default: 0\n");
+  printf("      --mma-cpu-threads=N    CPU MMA worker limit across DUT cores, default: 1\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --remote-jtag-port     specify remote bitbang port\n");
@@ -245,6 +250,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 #ifndef CONFIG_NO_DIFFTEST
     { "stuck-check",       1, NULL, OPT_STUCK_CHECK },
 #endif
+    { "mma-cpu-threads",   1, NULL, OPT_MMA_CPU_THREADS },
 #ifdef FPGA_HOST
     { "no-link",           0, NULL, OPT_NO_LINK },
     { "ila-size",          1, NULL, OPT_ILA_SIZE },
@@ -468,6 +474,15 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         continue;
       }
 #endif
+      case OPT_MMA_CPU_THREADS: {
+        const long long count = atoll_strict(optarg, "mma-cpu-threads");
+        if (count < 1 || static_cast<unsigned long long>(count) > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --mma-cpu-threads must be in range [1, %" PRIu32 "]\n", UINT32_MAX);
+          exit(EINVAL);
+        }
+        args.mma_cpu_threads = static_cast<uint32_t>(count);
+        continue;
+      }
       case OPT_CORE_CLOCK_HALF_PERIOD: {
         long long core_clock_half_period = atoll_strict(optarg, "core-clock-half-period");
         if (core_clock_half_period < 1 || static_cast<unsigned long long>(core_clock_half_period) > UINT32_MAX) {
@@ -529,6 +544,18 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   }
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
+
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MMA_CUDA)
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+  if (args.mma_cpu_threads != 1)
+    printf("[WARN] --mma-cpu-threads has no effect with synchronous MMA verification\n");
+#else
+  MmaBackendConnection::set_thread_limit(args.mma_cpu_threads);
+#endif
+#else
+  if (args.mma_cpu_threads != 1)
+    printf("[WARN] --mma-cpu-threads requires the CPU MMA backend\n");
+#endif
 
 #ifdef FPGA_HOST
   if (args.ila_size && (!args.enable_diff || !args.enable_link || args.refdrive_trace_name)) {

@@ -22,27 +22,13 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <queue>
 #include <vector>
 
-struct MmaHostDeleter {
-  void (*free_host)(uint8_t *) = nullptr;
-  void operator()(uint8_t *buffer) const;
-};
-
-// Default empty pools use ordinary arrays. A backend may initialize slots with
-// its own allocator; acquire/recycle are thread-safe.
-// allocate/release require all users to stop and all acquired storage to return.
+// Borrow shared slots when available, otherwise allocate ordinary arrays.
+// acquire/recycle are thread-safe; bind/release require all leases to return.
 class MmaHostBuffer {
 public:
   static constexpr size_t invalid_slot = SIZE_MAX;
-
-  std::unique_ptr<uint8_t[], MmaHostDeleter> slots;
-  size_t slot_count = 0;
-  size_t stride = 0;
-
-  bool allocate(size_t bytes, size_t slot_count, uint8_t *(*allocate_host)(size_t) = nullptr,
-                void (*free_host)(uint8_t *) = nullptr);
 
   // Borrowed storage must outlive all leases and be detached only when empty.
   void bind(uint8_t *storage, size_t bytes, size_t slot_count);
@@ -57,6 +43,9 @@ public:
   void release();
 
 private:
+  uint8_t *slots = nullptr;
+  size_t slot_count = 0;
+  size_t stride = 0;
   std::mutex mutex;
   std::vector<uint8_t> slot_busy;
   size_t active_slots = 0;
@@ -156,6 +145,8 @@ public:
     return false;
   }
 };
+
+MmaBackend *make_mma_backend();
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 

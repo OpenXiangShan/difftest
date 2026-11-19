@@ -17,24 +17,24 @@
 #ifndef __MMA_BACKEND_CPU_H__
 #define __MMA_BACKEND_CPU_H__
 
-#include "mma/backend/mma_backend.h"
+#include "mma/backend/mma_backend_engine.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 
-namespace cute_mma_model {
-enum class FloatFormat : uint8_t;
-}
+class CpuMmaThreadPool;
 
-class CpuMmaBackend : public MmaBackend {
+bool verify_cpu_mma(MmaVerificationBuffer *buffer);
+
+class CpuMmaEngine final : public MmaEngine {
 public:
-  void verify(const std::vector<MmaVerificationBuffer *> &buffers, std::vector<uint8_t> &passed) override;
+  explicit CpuMmaEngine(unsigned threads);
+  ~CpuMmaEngine() override;
+  void compute(const std::vector<MmaVerificationBuffer *> &buffers, uint8_t *passed, uint8_t *const operands[3],
+               const Completion &completed) override;
+  void shutdown() override;
 
 private:
-  bool verify_one(MmaVerificationBuffer *buffer);
-
-  template <cute_mma_model::FloatFormat Format> bool verify_fp_mma(MmaVerificationBuffer *buffer);
-
-  template <class src1_t, class src2_t> bool verify_int_mma(MmaVerificationBuffer *buffer);
+  std::unique_ptr<CpuMmaThreadPool> pool;
 };
 
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
