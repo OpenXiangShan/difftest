@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -18,8 +18,16 @@
 #include "ram.h"
 #include "remote_bitbang.h"
 #include "splitview.h"
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MMA_CUDA)
+#include "mma/backend/client/mma_backend_connection.h"
+#endif
+#ifndef CONFIG_NO_DIFFTEST
+#include "reftrace/refdrive_trace.h"
+#endif
+#include <cerrno>
 #include <cmath>
 #include <getopt.h>
+#include <stdexcept>
 #ifdef CONFIG_DIFFTEST_IOTRACE
 #include "difftest-iotrace.h"
 #endif // CONFIG_DIFFTEST_IOTRACE
@@ -32,8 +40,25 @@ enum {
   OPT_SQUASH_SIZE,
   OPT_NO_SQUASH_AFTER_INSTR,
   OPT_CPU_AXI_DELAY,
+#ifndef CONFIG_NO_DIFFTEST
+  OPT_STUCK_CHECK,
+#endif
+  OPT_MMA_CPU_THREADS,
+#ifdef FPGA_HOST
+  OPT_NO_LINK,
+  OPT_ILA_SIZE,
+#endif
   OPT_CORE_CLOCK_HALF_PERIOD,
   OPT_ACCELERATOR_CLOCK_HALF_PERIOD,
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  OPT_REF_MODE,
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  OPT_REF_FORK_INTERVAL,
+  OPT_PACKET_POOL_LOG2,
+#endif
+  OPT_DUMP_REFDRIVE_TRACE,
+  OPT_LOAD_REFDRIVE_TRACE,
 };
 
 static inline long long int atoll_strict(const char *str, const char *arg) {
@@ -84,8 +109,22 @@ static uint64_t parse_instr_count(const char *str, const char *arg) {
 static inline void print_help(const char *file) {
   printf("Usage: %s [OPTION...]\n", file);
   printf("\n");
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  printf("      --ref-mode=MODE        slow, fast, or fork (default: fork)\n");
+#else
+  printf("      --ref-mode=MODE        slow or fast (default: slow)\n");
+#endif
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  printf("      --ref-fork-interval=N  REF segment interval in seconds, default: 1\n");
+  printf("      --packet-pool-log2=N  log2 of fork packet slots (default: 22)\n");
+#endif
   printf("  -s, --seed=NUM             use this seed\n");
   printf("  -C, --max-cycles=NUM       execute at most NUM cycles\n");
+#ifndef CONFIG_NO_DIFFTEST
+  printf("      --stuck-check=NUM      check instruction progress every N cycles (default: -1 for disabled)\n");
+#endif
   printf("  -I, --max-instr=NUM        execute at most NUM instructions\n");
   printf("  -W, --warmup-instr=NUM     the number of warmup instructions\n");
   printf("  -D, --stat-cycles=NUM      the interval cycles of dumping statistics\n");
@@ -123,12 +162,17 @@ static inline void print_help(const char *file) {
   printf("      --ram-size=SIZE        simulation memory size, for example 8GB / 128MB\n");
   printf("      --cst-file=FILE        load constantin from FILE, stdin, or default init values\n");
   printf("      --enable-fork          enable folking child processes to debug\n");
-  printf("      --no-diff              disable differential testing\n");
+  printf("      --no-diff              skip REF checking; keep DUT data and trap detection\n");
+#ifdef FPGA_HOST
+  printf("      --no-link              disable DiffTest transport (implies --no-diff)\n");
+  printf("      --ila-size=N           maximum DUT cycles ahead of SLOW, 0 disables (default)\n");
+#endif
   printf("      --enable-mem-cow       share initial DUT, Golden Memory and REF pages through COW\n");
   printf("      --no-squash            disable squash\n");
   printf("      --squash-size=NUM      set maximum fused instructions, default: 255\n");
   printf("      --no-squash-after-instr=NUM disable squash after NUM committed instructions\n");
   printf("      --cpu-axi-delay=NUM    delay FPGA CPU AXI requests by NUM cycles, default: 0\n");
+  printf("      --mma-cpu-threads=N    CPU MMA worker limit across DUT cores, default: 1\n");
   printf("      --diff=PATH            set the path of REF for differential testing\n");
   printf("      --enable-jtag          enable remote bitbang server\n");
   printf("      --remote-jtag-port     specify remote bitbang port\n");
@@ -141,6 +185,8 @@ static inline void print_help(const char *file) {
 #endif // VM_COVERAGE
   printf("      --load-difftrace=NAME  load from trace NAME\n");
   printf("      --dump-difftrace=NAME  dump to trace NAME\n");
+  printf("      --dump-refdrive-trace=DIR record REF driving commands\n");
+  printf("      --load-refdrive-trace=DIR drive REF with ref-drive (no DUT)\n");
   printf("      --iotrace-name=NAME    load from/dump to iotrace NAME\n");
   printf("      --dump-footprints=NAME dump memory access footprints to NAME\n");
   printf("      --as-footprints        load the image as memory access footprints\n");
@@ -204,6 +250,21 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "squash-size",       1, NULL, OPT_SQUASH_SIZE },
     { "no-squash-after-instr", 1, NULL, OPT_NO_SQUASH_AFTER_INSTR },
     { "cpu-axi-delay",     1, NULL, OPT_CPU_AXI_DELAY },
+#ifndef CONFIG_NO_DIFFTEST
+    { "stuck-check",       1, NULL, OPT_STUCK_CHECK },
+#endif
+    { "mma-cpu-threads",   1, NULL, OPT_MMA_CPU_THREADS },
+#ifdef FPGA_HOST
+    { "no-link",           0, NULL, OPT_NO_LINK },
+    { "ila-size",          1, NULL, OPT_ILA_SIZE },
+#endif
+#ifdef CONFIG_DIFFTEST_FAST_REF
+    { "ref-mode",          1, NULL, OPT_REF_MODE },
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    { "ref-fork-interval",  1, NULL, OPT_REF_FORK_INTERVAL },
+    { "packet-pool-log2",  1, NULL, OPT_PACKET_POOL_LOG2 },
+#endif
     { "seed",              1, NULL, 's' },
     { "max-cycles",        1, NULL, 'C' },
     { "fork-interval",     1, NULL, 'X' },
@@ -220,6 +281,8 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "log-end",           1, NULL, 'e' },
     { "flash",             1, NULL, 'F' },
     { "help",              0, NULL, 'h' },
+    { "dump-refdrive-trace", 1, NULL, OPT_DUMP_REFDRIVE_TRACE },
+    { "load-refdrive-trace", 1, NULL, OPT_LOAD_REFDRIVE_TRACE },
     { 0,                   0, NULL,  0  }
   };
   /* clang-format on */
@@ -228,6 +291,18 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   while ((o = getopt_long(argc, const_cast<char *const *>(argv), "-s:C:X:I:T:R:W:D:hi:r:m:b:e:F:", long_options,
                           &long_index)) != -1) {
     switch (o) {
+      case OPT_DUMP_REFDRIVE_TRACE:
+        if (args.refdrive_trace_name)
+          throw std::runtime_error("Specify only one RefDriveTrace input/output option");
+        args.refdrive_trace_name = optarg;
+        args.refdrive_trace_is_read = false;
+        break;
+      case OPT_LOAD_REFDRIVE_TRACE:
+        if (args.refdrive_trace_name)
+          throw std::runtime_error("Specify only one RefDriveTrace input/output option");
+        args.refdrive_trace_name = optarg;
+        args.refdrive_trace_is_read = true;
+        break;
       case 0:
         switch (long_index) {
           case 0: args.snapshot_path = optarg; continue;
@@ -344,6 +419,43 @@ CommonArgs parse_args(int argc, const char *argv[]) {
       case OPT_NO_SQUASH_AFTER_INSTR:
         args.no_squash_after_instr = parse_instr_count(optarg, "no-squash-after-instr");
         continue;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+      case OPT_REF_MODE:
+        if (!strcmp(optarg, "slow"))
+          args.ref_mode = RefMode::SLOW;
+        else if (!strcmp(optarg, "fast"))
+          args.ref_mode = RefMode::FAST;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+        else if (!strcmp(optarg, "fork"))
+          args.ref_mode = RefMode::FORK;
+#endif
+        else {
+          fprintf(stderr, "[ERROR] invalid --ref-mode '%s' for this build\n", optarg);
+          exit(EINVAL);
+        }
+        continue;
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+      case OPT_REF_FORK_INTERVAL:
+        args.ref_fork_interval = 1000ULL * atoll_strict(optarg, "ref-fork-interval");
+        continue;
+      case OPT_PACKET_POOL_LOG2: args.packet_pool_log2 = atoll_strict(optarg, "packet-pool-log2"); continue;
+#endif
+#ifdef FPGA_HOST
+      case OPT_ILA_SIZE: {
+        const uint64_t size = parse_instr_count(optarg, "ila-size");
+        if (size > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --ila-size exceeds the uint32 range\n");
+          exit(EINVAL);
+        }
+        args.ila_size = static_cast<uint32_t>(size);
+        continue;
+      }
+      case OPT_NO_LINK:
+        args.enable_link = false;
+        args.enable_diff = false;
+        continue;
+#endif
       case OPT_CPU_AXI_DELAY: {
         long long cpu_axi_delay = atoll_strict(optarg, "cpu-axi-delay");
         if (cpu_axi_delay < 0 || static_cast<unsigned long long>(cpu_axi_delay) > UINT32_MAX) {
@@ -351,6 +463,28 @@ CommonArgs parse_args(int argc, const char *argv[]) {
           exit(EINVAL);
         }
         args.cpu_axi_delay = static_cast<uint32_t>(cpu_axi_delay);
+        continue;
+      }
+#ifndef CONFIG_NO_DIFFTEST
+      case OPT_STUCK_CHECK: {
+        char *end = nullptr;
+        errno = 0;
+        auto interval = std::strtoll(optarg, &end, 10);
+        if (errno == ERANGE || end == optarg || *end != '\0' || interval <= 0) {
+          fprintf(stderr, "[ERROR] --stuck-check must be a positive int64 cycle interval\n");
+          exit(EINVAL);
+        }
+        args.stuck_check = interval;
+        continue;
+      }
+#endif
+      case OPT_MMA_CPU_THREADS: {
+        const long long count = atoll_strict(optarg, "mma-cpu-threads");
+        if (count < 1 || static_cast<unsigned long long>(count) > UINT32_MAX) {
+          fprintf(stderr, "[ERROR] --mma-cpu-threads must be in range [1, %" PRIu32 "]\n", UINT32_MAX);
+          exit(EINVAL);
+        }
+        args.mma_cpu_threads = static_cast<uint32_t>(count);
         continue;
       }
       case OPT_CORE_CLOCK_HALF_PERIOD: {
@@ -415,6 +549,31 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 
   args.enable_waveform = args.enable_waveform && !args.enable_fork;
 
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && !defined(CONFIG_NO_DIFFTEST) && !defined(CONFIG_DIFFTEST_MMA_CUDA)
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+  if (args.mma_cpu_threads != 1)
+    printf("[WARN] --mma-cpu-threads has no effect with synchronous MMA verification\n");
+#else
+  MmaBackendConnection::set_thread_limit(args.mma_cpu_threads);
+#endif
+#else
+  if (args.mma_cpu_threads != 1)
+    printf("[WARN] --mma-cpu-threads requires the CPU MMA backend\n");
+#endif
+
+#ifdef FPGA_HOST
+  if (args.ila_size && (!args.enable_diff || !args.enable_link || args.refdrive_trace_name)) {
+    fprintf(stderr, "[ERROR] --ila-size requires REF checking and cannot use RefDriveTrace\n");
+    exit(EINVAL);
+  }
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  if (args.ila_size && args.ref_mode == RefMode::FAST) {
+    fprintf(stderr, "[ERROR] --ila-size requires --ref-mode slow or fork\n");
+    exit(EINVAL);
+  }
+#endif
+#endif
+
 #ifdef ENABLE_IPC
   char *ipc_image = (char *)malloc(255);
   char *ipc_file = (char *)malloc(255);
@@ -432,5 +591,12 @@ CommonArgs parse_args(int argc, const char *argv[]) {
   args.ipc_file = fopen(ipc_file, "w");
 #endif
 
+#ifndef CONFIG_NO_DIFFTEST
+  if (args.refdrive_trace_name)
+    difftest_refdrive_trace_configure(args);
+#else
+  if (args.refdrive_trace_name)
+    throw std::runtime_error("RefDriveTrace requires a DiffTest-enabled executable");
+#endif
   return args;
 }

@@ -17,8 +17,11 @@
 #ifndef __MMA_BACKEND_CUDA_IMPL_H__
 #define __MMA_BACKEND_CUDA_IMPL_H__
 
+#include "mma/backend/mma_backend.h"
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 enum class CudaMmaType : uint8_t {
   U8U8 = 0,
@@ -32,18 +35,96 @@ enum class CudaMmaType : uint8_t {
   Tf32ToFp32 = 13,
 };
 
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+bool select_cuda_mma_type(const DifftestAmuCtrlEvent &event, CudaMmaType *type);
+#endif
+
 struct CudaMmaBatchItem {
   uint16_t tile_m;
   uint16_t tile_k;
   uint16_t tile_n;
-  uint8_t types1;
-  uint8_t types2;
+  uint8_t sat;
   const uint8_t *src1;
   const uint8_t *src2;
   uint8_t *src3;
-  const uint8_t *dut_result;
+  const uint8_t *dut = nullptr;
 };
 
-extern "C" bool cuda_mma_backend_launch(CudaMmaType type, const CudaMmaBatchItem *items, size_t count, uint8_t *passed);
+struct CudaMmaBatchDescriptor {
+  uint64_t src1_offset;
+  uint64_t src2_offset;
+  uint64_t src3_offset;
+  uint16_t tile_m;
+  uint16_t tile_k;
+  uint16_t tile_n;
+  uint8_t sat;
+};
+
+static constexpr size_t kMmaCompletionSize = 128;
+
+struct CUstream_st;
+struct CUevent_st;
+
+struct CudaMmaCopySpan {
+  uint8_t *host;
+  size_t bytes;
+};
+
+struct CudaMmaOperand {
+  // Borrowed pinned storage containing the client's physical operand slots.
+  uint8_t *shared_host = nullptr;
+  size_t stride = 0;
+  std::vector<CudaMmaCopySpan> spans;
+  uint8_t *device = nullptr;
+};
+
+// The workspace borrows pinned operands and retains one maximum device batch.
+// Stop all users before destroying it.
+class CudaMmaWorkspace {
+public:
+  CudaMmaWorkspace() = default;
+  CudaMmaWorkspace(const CudaMmaWorkspace &) = delete;
+  CudaMmaWorkspace &operator=(const CudaMmaWorkspace &) = delete;
+  ~CudaMmaWorkspace();
+  CudaMmaBatchDescriptor *host_descriptors = nullptr;
+  size_t capacity = 0;
+  CUstream_st *streams[4] = {};
+  CUstream_st *dut_stream = nullptr;
+  std::vector<CUevent_st *> completed;
+  std::vector<CUevent_st *> dut_uploaded;
+  CudaMmaOperand operands[3];
+
+  CudaMmaBatchDescriptor *descriptors = nullptr;
+  uint8_t *device_dut = nullptr;
+  uint8_t *device_passed = nullptr;
+  std::vector<CudaMmaCopySpan> dut_spans;
+
+  bool allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes, uint8_t *const shared_host[3]);
+  size_t batch_capacity() const;
+  bool synchronize();
+  // Requires a streamed batch (count > kMmaCompletionSize) enqueued successfully.
+  bool wait(size_t begin, size_t end);
+  void release();
+};
+
+bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescriptor *descriptors, size_t count,
+                                    size_t max_output_elements, uint8_t *src1, uint8_t *src2, uint8_t *src3,
+                                    CUstream_st *stream);
+bool cuda_mma_backend_compare_kernel(const CudaMmaBatchDescriptor *descriptors, size_t count, const uint8_t *reference,
+                                     const uint8_t *dut, uint8_t *passed, CUstream_st *stream);
+
+// Launches must be serialized. Each item points at a slot in the pinned
+// storage for the current client; that storage must remain live through completion.
+CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes,
+                                          uint8_t *const shared_host[3]);
+// Leave REF on device so DUT preparation/upload can proceed concurrently.
+bool cuda_mma_backend_enqueue_references(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
+                                         size_t count);
+// DUT snapshots and passed are pinned host storage retained until completion.
+// Upload DUT independently of REF computation; download only pass/fail bytes.
+bool cuda_mma_backend_enqueue_checks(CudaMmaWorkspace *workspace, const CudaMmaBatchItem *items, size_t count,
+                                     uint8_t *passed);
+// Read a completed reference result only for mismatch diagnostics.
+bool cuda_mma_backend_read_result(CudaMmaWorkspace *workspace, size_t index, uint8_t *result);
 
 #endif // __MMA_BACKEND_CUDA_IMPL_H__

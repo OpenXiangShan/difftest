@@ -15,40 +15,36 @@
 ***************************************************************************************/
 
 #include "mma/mma_verifier.h"
-#include "mma/backend/mma_backend_cpu.h"
-#include "mma/backend/mma_backend_cuda.h"
 #include "mma/mma_batch.h"
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 #include <cstdio>
-#include <cstring>
-
-#ifndef CONFIG_DIFF_MMA_BATCH_SIZE
-#define CONFIG_DIFF_MMA_BATCH_SIZE 64
-#endif
-
-#ifndef CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR
-#define CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR 4
-#endif
 
 static constexpr size_t kMmaBackpressurePendingLimit =
     static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR;
 
-MmaVerifier::MmaVerifier() {
+MmaVerifier::MmaVerifier()
+    : result_pool(std::make_shared<MmaResultPool>(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES, kMmaBackpressurePendingLimit + 2)) {
   Assert(CONFIG_DIFF_MMA_BATCH_SIZE > 0, "CONFIG_DIFF_MMA_BATCH_SIZE must be positive");
   Assert(CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR > 0, "CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR must be positive");
-#ifdef CONFIG_DIFFTEST_MMA_CUDA
-  backend = new CudaMmaBackend();
-  const char *backend_name = "CUDA";
+  backend = make_mma_backend();
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+  Info("[INFO] MMA verification: synchronous\n");
 #else
-  backend = new CpuMmaBackend();
-  const char *backend_name = "CPU";
+  Info("[INFO] MMA verification: asynchronous\n");
 #endif
-  Info("[INFO] MMA reference model backend: %s\n", backend_name);
 }
 
 MmaVerifier::~MmaVerifier() {
   stop();
+  discard_pending();
+  if (backend) {
+    delete backend;
+    backend = nullptr;
+  }
+}
+
+void MmaVerifier::discard_pending() {
   // Single-threaded here (verification thread already joined), no lock needed
   while (!mma_verification_queue.empty()) {
     auto buffer = mma_verification_queue.front();
@@ -60,23 +56,24 @@ MmaVerifier::~MmaVerifier() {
   if (err_buf) {
     free_buffer(err_buf);
   }
-  if (backend) {
-    delete backend;
-    backend = nullptr;
-  }
 }
 
 void MmaVerifier::start() {
+#ifndef CONFIG_DIFFTEST_MMA_SYNC
   if (mma_verification_thread.joinable()) {
     return;
   }
-
+#endif
+  backend->start();
+#ifndef CONFIG_DIFFTEST_MMA_SYNC
   std::lock_guard<std::mutex> lock(mma_queue_mutex);
   mma_stop_requested = false;
   mma_verification_thread = std::thread(&MmaVerifier::mma_verification_thread_func, this);
+#endif // !CONFIG_DIFFTEST_MMA_SYNC
 }
 
 void MmaVerifier::stop() {
+#ifndef CONFIG_DIFFTEST_MMA_SYNC
   {
     std::lock_guard<std::mutex> lock(mma_queue_mutex);
     mma_stop_requested = true;
@@ -88,9 +85,17 @@ void MmaVerifier::stop() {
   if (mma_verification_thread.joinable()) {
     mma_verification_thread.join();
   }
+#endif // !CONFIG_DIFFTEST_MMA_SYNC
+}
+
+void MmaVerifier::reset() {
+  stop();
+  discard_pending();
+  start();
 }
 
 bool MmaVerifier::flush() {
+#ifndef CONFIG_DIFFTEST_MMA_SYNC
   std::unique_lock<std::mutex> lock(mma_queue_mutex);
   Assert(mma_pending_count == 0 || (mma_verification_thread.joinable() && !mma_stop_requested),
          "MMA verifier is not running with %zu pending requests", mma_pending_count);
@@ -101,47 +106,57 @@ bool MmaVerifier::flush() {
     Assert(false, "MMA verifier stopped with %zu pending requests", mma_pending_count);
     return false;
   }
+#endif // !CONFIG_DIFFTEST_MMA_SYNC
   return !has_mma_verification_error();
 }
 
 MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *amu_event) {
-  size_t m = amu_event->mtilem;
-  size_t n = amu_event->mtilen;
-  size_t k = amu_event->mtilek;
-  size_t element_sz_s1 = get_element_size(amu_event->types1);
-  size_t element_sz_s2 = get_element_size(amu_event->types2);
-  size_t element_sz_d = get_element_size(amu_event->typed);
-
-  size_t a_sz = element_sz_s1 * m * k;
-  size_t b_sz = element_sz_s2 * k * n;
-  size_t c_sz = element_sz_d * m * n;
+  // NEMU copies whole registers, even when only a small tile is active.
+  const size_t a_sz = CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES;
+  const size_t b_sz = CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES;
+  const size_t c_sz = CONFIG_DIFF_AMU_C_REG_SIZE_BYTES;
 
   // Allocate memory for the buffer structure and data
-  MmaVerificationBuffer *buffer = new MmaVerificationBuffer();
+  std::unique_ptr<MmaVerificationBuffer> buffer(new MmaVerificationBuffer());
   buffer->amu_event = *amu_event;
+  try {
+    buffer->src1 = backend->host[0].acquire(a_sz);
+    buffer->src2 = backend->host[1].acquire(b_sz);
+    buffer->src3 = backend->host[2].acquire(c_sz);
+  } catch (...) {
+    free_buffer(buffer.release());
+    throw;
+  }
+  return buffer.release();
+}
 
-  // Allocate memory for each source matrix and result
-  buffer->src1 = new uint8_t[a_sz];
-  buffer->src2 = new uint8_t[b_sz];
-  buffer->src3 = new uint8_t[c_sz];
-  buffer->dut_result = new uint8_t[c_sz];
-
-  return buffer;
+MatrixResult MmaVerifier::allocate_result() {
+  MatrixResult result = backend->allocate_result();
+  if (result)
+    return result;
+  return result_pool->acquire();
 }
 
 void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
   if (buffer) {
-    if (buffer->src1) {
-      delete[] buffer->src1;
-      delete[] buffer->src2;
-      delete[] buffer->src3;
-      delete[] buffer->dut_result;
-    }
+    backend->release_result(buffer);
+    backend->host[0].recycle(buffer->src1);
+    backend->host[1].recycle(buffer->src2);
+    backend->host[2].recycle(buffer->src3);
     delete buffer;
   }
 }
 
 void MmaVerifier::add_to_verification_queue(MmaVerificationBuffer *buffer) {
+  try {
+    backend->prepare_result(buffer);
+  } catch (...) {
+    free_buffer(buffer);
+    throw;
+  }
+#ifdef CONFIG_DIFFTEST_MMA_SYNC
+  verify_batch(std::vector<MmaVerificationBuffer *>{buffer});
+#else
   {
     std::unique_lock<std::mutex> lock(mma_queue_mutex);
     mma_backpressure_cv.wait(lock,
@@ -150,6 +165,7 @@ void MmaVerifier::add_to_verification_queue(MmaVerificationBuffer *buffer) {
     mma_pending_count++;
   }
   mma_worker_cv.notify_one();
+#endif // CONFIG_DIFFTEST_MMA_SYNC
 }
 
 bool MmaVerifier::has_mma_verification_error() const {
@@ -158,6 +174,47 @@ bool MmaVerifier::has_mma_verification_error() const {
 
 const MmaVerificationBuffer *MmaVerifier::get_error_buffer() const {
   return mma_error_buffer.load(std::memory_order_acquire);
+}
+
+void MmaVerifier::report_error(const MmaVerificationBuffer *buffer) const {
+  Assert(buffer != nullptr, "Cannot report a null MMA verification buffer");
+  Info("MMA verification error detected at pc = 0x%lx.\n", buffer->amu_event.pc);
+  Info("------ DUT Result ------\n");
+  for (int i = 0; i < buffer->amu_event.mtilem; i++) {
+    for (int j = 0; j < buffer->amu_event.mtilen; j++) {
+      Info("%08x ", reinterpret_cast<const uint32_t *>(
+                        buffer->dut_result.get())[i * (kMmaResultRowBytes / sizeof(uint32_t)) + j]);
+    }
+    Info("\n");
+  }
+  Info("------ REF Result ------\n");
+  for (int i = 0; i < buffer->amu_event.mtilem; i++) {
+    for (int j = 0; j < buffer->amu_event.mtilen; j++) {
+      Info("%08x ", reinterpret_cast<const uint32_t *>(buffer->src3)[i * (kMmaResultRowBytes / sizeof(uint32_t)) + j]);
+    }
+    Info("\n");
+  }
+}
+
+void MmaVerifier::verify_batch(const std::vector<MmaVerificationBuffer *> &buffers) {
+  std::vector<uint8_t> passed;
+  backend->verify(buffers, passed);
+  Assert(passed.size() == buffers.size(), "MMA backend returned %zu results for a batch of %zu", passed.size(),
+         buffers.size());
+
+  // A batch is FIFO ordered, so publishing failures in vector order keeps
+  // the first reported mismatch identical to singleton verification.
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    auto *buffer = buffers[i];
+    if (passed[i]) {
+      free_buffer(buffer);
+    } else {
+      MmaVerificationBuffer *expected = nullptr;
+      if (!mma_error_buffer.compare_exchange_strong(expected, buffer, std::memory_order_acq_rel)) {
+        free_buffer(buffer);
+      }
+    }
+  }
 }
 
 void MmaVerifier::mma_verification_thread_func() {
@@ -176,24 +233,7 @@ void MmaVerifier::mma_verification_thread_func() {
       buffers = take_contiguous_batch(mma_verification_queue, CONFIG_DIFF_MMA_BATCH_SIZE, *backend);
     }
 
-    std::vector<uint8_t> passed;
-    backend->verify(buffers, passed);
-    Assert(passed.size() == buffers.size(), "MMA backend returned %zu results for a batch of %zu", passed.size(),
-           buffers.size());
-
-    // A batch is FIFO ordered, so publishing failures in vector order keeps
-    // the first reported mismatch identical to singleton verification.
-    for (size_t i = 0; i < buffers.size(); ++i) {
-      auto *buffer = buffers[i];
-      if (passed[i]) {
-        free_buffer(buffer);
-      } else {
-        MmaVerificationBuffer *expected = nullptr;
-        if (!mma_error_buffer.compare_exchange_strong(expected, buffer, std::memory_order_acq_rel)) {
-          free_buffer(buffer);
-        }
-      }
-    }
+    verify_batch(buffers);
 
     bool drained = false;
     {

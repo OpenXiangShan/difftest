@@ -40,15 +40,14 @@ private:
   int trapCode;
   uint32_t lasttime_snapshot = 0;
   uint64_t core_max_instr[NUM_CORES];
+#ifndef CONFIG_NO_DIFFTEST
+  uint64_t last_stuck_check_cycle[NUM_CORES];
+  uint64_t last_stuck_check_instr[NUM_CORES] = {};
+#endif
   uint32_t lasttime_poll = 0;
   uint32_t elapsed_time;
-#ifdef CONFIG_HAS_ACCELERATOR_CLOCK
-  uint64_t accelerator_clock_phase = 0;
-  unsigned accelerator_clock_level = 0;
-#endif // CONFIG_HAS_ACCELERATOR_CLOCK
 
   inline void reset_ncycles(size_t cycles);
-  inline void verilator_half_cycle(unsigned core_clock_level);
   inline void single_cycle();
   void trigger_stat_dump();
   void display_stats();

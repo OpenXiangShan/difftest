@@ -18,6 +18,8 @@
 NOOP_HOME  ?= $(abspath .)
 export NOOP_HOME
 
+CHISEL_VERSION ?=
+
 SIM_TOP    ?= SimTop
 DESIGN_DIR ?= $(NOOP_HOME)
 
@@ -42,7 +44,7 @@ ifneq ($(CONFIG), )
 MILL_ARGS += --difftest-config $(CONFIG)
 endif
 difftest_verilog:
-	mill -i difftest.test.runMain difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
+	mill -i 'difftest[$(CHISEL_VERSION)].test.runMain' difftest.DifftestMain --target-dir $(RTL_DIR) $(MILL_ARGS)
 
 TIMELOG = $(BUILD_DIR)/time.log
 # Resolve `time` to a real binary: shells such as bash provide `time` only as a
@@ -108,6 +110,15 @@ SIM_VFLAGS   += +define+DIFFTEST
 
 ifeq ($(DIFFTEST_PERFCNT), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_PERFCNT
+endif
+ifeq ($(DIFFTEST_FAST_REF), 1)
+SIM_CXXFLAGS += -DCONFIG_DIFFTEST_FAST_REF
+endif
+ifeq ($(DIFFTEST_FORK_REF), 1)
+ifneq ($(DIFFTEST_FAST_REF), 1)
+$(error DIFFTEST_FORK_REF requires DIFFTEST_FAST_REF=1)
+endif
+SIM_CXXFLAGS += -DCONFIG_DIFFTEST_FORK_REF
 endif
 ifeq ($(DIFFTEST_CHECKER_PERF), 1)
 SIM_CXXFLAGS += -DCONFIG_DIFFTEST_CHECKER_PERF
@@ -216,6 +227,12 @@ endif
 endif
 endif
 
+# External memory timing backends are mutually exclusive.
+MEMORY_BACKEND_COUNT := $(words $(filter 1,$(WITH_DRAMSIM3) $(WITH_MCSIM)))
+ifneq ($(filter-out 0 1,$(MEMORY_BACKEND_COUNT)),)
+$(error WITH_DRAMSIM3 and WITH_MCSIM are mutually exclusive)
+endif
+
 # co-simulation with DRAMsim3
 ifeq ($(WITH_DRAMSIM3),1)
 ifndef DRAMSIM3_HOME
@@ -224,6 +241,23 @@ endif
 SIM_CXXFLAGS += -I$(DRAMSIM3_HOME)/src
 SIM_CXXFLAGS += -DWITH_DRAMSIM3 -DDRAMSIM3_CONFIG=\\\"$(DRAMSIM3_HOME)/configs/XiangShan.ini\\\" -DDRAMSIM3_OUTDIR=\\\"$(BUILD_DIR)\\\"
 SIM_LDFLAGS  += -L$(DRAMSIM3_HOME)/build -ldramsim3
+endif
+
+# co-simulation with MCSim timing and DifftestMem data
+ifeq ($(WITH_MCSIM),1)
+ifndef MCSIM_HOME
+$(error MCSIM_HOME is not set)
+endif
+MCSIM_LIB ?= $(MCSIM_HOME)/build-verilator-lib/libmcsim.a
+MCSIM_CPU_FREQ_MHZ ?= 3000
+ifeq ($(wildcard $(MCSIM_HOME)/include/mcsim_c_api.h),)
+$(error MCSIM_HOME is invalid: $(MCSIM_HOME))
+endif
+ifeq ($(wildcard $(MCSIM_LIB)),)
+$(error MCSim library is missing. Run: make -C $(MCSIM_HOME) verilator-lib)
+endif
+SIM_CXXFLAGS += -I$(MCSIM_HOME)/include -DWITH_MCSIM -DMCSIM_CPU_FREQ_MHZ=$(MCSIM_CPU_FREQ_MHZ)
+SIM_LDFLAGS  += $(MCSIM_LIB)
 endif
 
 # out ipc info on temporary txt file, mainly applied to support qemu multi-core sampled data
@@ -337,12 +371,16 @@ include galaxsim.mk
 include palladium.mk
 include libso.mk
 include fpga.mk
+include reftrace.mk
 include pdb.mk
 
 clean: vcs-clean pldm-clean fpga-clean
 	rm -rf $(BUILD_DIR)
 
 format: scala-format clang-format
+
+design-compile:
+	mill -i 'design[$(CHISEL_VERSION)].compile'
 
 scala-format:
 	mill -i mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
@@ -357,4 +395,4 @@ else
 	@echo "Please run \"pip install --user clang-format==$(CLANG_FORMAT_VER)\", then set PATH manually"
 endif
 
-.PHONY: sim-verilog emu difftest_verilog clean format scala-format clang-format
+.PHONY: sim-verilog emu difftest_verilog clean format design-compile scala-format clang-format

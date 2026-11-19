@@ -26,7 +26,7 @@
 #elif defined(CPU_XIANGSHAN_KMHV3)
 #elif defined(CPU_XIANGSHAN)
 #define CPU_XIANGSHAN_KMHV3
-#elif defined(CPU_ROCKET_CHIP)
+#elif defined(CPU_ROCKET_CHIP) || defined(CPU_BOOM)
 #else
 // This is the default CPU
 #define CPU_NUTSHELL
@@ -50,7 +50,7 @@ extern uint64_t PMEM_BASE;
 extern uint64_t FIRST_INST_ADDRESS;
 
 // first valid instruction's address, difftest starts from this instruction
-#if defined(CPU_NUTSHELL)
+#if defined(CPU_NUTSHELL) || defined(CPU_BOOM)
 #define _FIRST_INST_ADDRESS 0x80000000UL
 #elif defined(CPU_XIANGSHAN_YQH) || defined(CPU_XIANGSHAN_NH) || defined(CPU_XIANGSHAN_KMHV2) || \
     defined(CPU_XIANGSHAN_KMHV3) || defined(CPU_ROCKET_CHIP)

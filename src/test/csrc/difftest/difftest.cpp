@@ -1,5 +1,5 @@
 /***************************************************************************************
-* Copyright (c) 2020-2023 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 * Copyright (c) 2020-2021 Peng Cheng Laboratory
 *
 * DiffTest is licensed under Mulan PSL v2.
@@ -15,12 +15,16 @@
 ***************************************************************************************/
 
 #include "difftest.h"
+#ifdef CONFIG_DIFFTEST_FORK_REF
+#include "fork_ref/fork_ref.h"
+#endif
 #include "common.h"
 #include "difftrace.h"
 #include "dut.h"
 #include "flash.h"
 #include "goldenmem.h"
 #include "ram.h"
+#include "reftrace/refdrive_trace.h"
 #include "spikedasm.h"
 #include "splitview.h"
 #include <csignal>
@@ -39,6 +43,10 @@ Difftest **difftest = NULL;
 static volatile sig_atomic_t difftest_signal_handling = 0;
 
 static void difftest_signal_handler(int signo) {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_is_child())
+    _Exit(128 + signo);
+#endif
   if (signo != SIGINT) {
     common_splitview_force_cleanup();
     if (difftest != NULL) {
@@ -128,8 +136,14 @@ int difftest_nstep(int step, bool enable_diff) {
       difftest_set_dut();
     }
     int status = difftest_state();
-    if (status != STATE_RUNNING)
+    if (status != STATE_RUNNING) {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+      // Destruction can discard queued work, so verify it before accepting the trap.
+      if (enable_diff && !difftest_mma_flush_all())
+        return STATE_BADTRAP;
+#endif
       return status;
+    }
   }
   return STATE_RUNNING;
 }
@@ -142,6 +156,7 @@ void difftest_switch_zone() {
 void difftest_set_dut() {
   for (int i = 0; i < NUM_CORES; i++) {
     difftest[i]->dut = diffstate_buffer[i]->next();
+    difftest_refdrive_trace_record(*difftest[i]->dut);
   }
 }
 
@@ -176,14 +191,17 @@ void difftest_trace_write(int step) {
   }
 }
 
-void difftest_finish() {
+void difftest_finish(bool report_perfcnt) {
+  difftest_refdrive_trace_finish();
 #ifdef CONFIG_DIFFTEST_CHECKER_PERF
   Stopwatch::print_stats(CHECKERS);
 #endif
 #ifdef CONFIG_DIFFTEST_PERFCNT
-  uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
-  uint64_t instrCnt = difftest[0]->get_trap_event()->instrCnt;
-  difftest_perfcnt_finish(cycleCnt, instrCnt);
+  if (report_perfcnt) {
+    uint64_t cycleCnt = difftest[0]->get_trap_event()->cycleCnt;
+    uint64_t instrCnt = difftest[0]->get_trap_event()->instrCnt;
+    difftest_perfcnt_finish(cycleCnt, instrCnt);
+  }
 #endif // CONFIG_DIFFTEST_PERFCNT
 #ifdef CONFIG_DIFFTEST_IOTRACE
   difftest_iotrace_free();
@@ -200,13 +218,18 @@ void difftest_finish() {
 }
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-void difftest_mma_flush_all() {
+bool difftest_mma_flush_all() {
+  bool passed = true;
   for (int i = 0; i < NUM_CORES; i++) {
     auto verifier = difftest[i]->get_mma_verifier();
-    if (verifier) {
-      verifier->flush();
+    if (verifier && !verifier->flush()) {
+      const auto *error = verifier->get_error_buffer();
+      if (error)
+        verifier->report_error(error);
+      passed = false;
     }
   }
+  return passed;
 }
 
 void difftest_mma_stop_all() {
@@ -277,12 +300,6 @@ Difftest::Difftest(int coreid) {
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   mma_verifier = nullptr;
-
-  // Initialize AMU finish event buffers
-  for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
-    amu_finish_buffers[i] = new uint8_t[128 * 128 * 4];
-    memset(amu_finish_buffers[i], 0, 128 * 128 * 4);
-  }
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 }
 
@@ -292,17 +309,15 @@ Difftest::~Difftest() {
   if (mma_verifier) {
     delete mma_verifier;
   }
-
-  // Free AMU finish event buffers
-  for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
-    delete[] amu_finish_buffers[i];
-  }
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
   for (auto checker: checkers) {
     delete checker;
   }
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  delete fast_ref_checker;
+#endif
   delete arch_event_checker;
   for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; i++) {
     delete instr_commit_checker[i];
@@ -310,6 +325,9 @@ Difftest::~Difftest() {
 #ifdef CONFIG_DIFFTEST_STOREEVENT
   delete store_checker;
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  delete store_hash_checker;
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
     delete load_checker[i];
@@ -334,8 +352,8 @@ Difftest::~Difftest() {
 void Difftest::init_checkers() {
   checkers.push_back(new TimeoutChecker([this]() -> DifftestTrapEvent & { return dut->trap; }, state, proxy));
 
-  checkers.push_back(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
-                                                 proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
+  add_sync_checker(new FirstInstrCommitChecker([this]() -> DifftestInstrCommit & { return dut->commit[0]; }, state,
+                                               proxy, [this]() -> const DiffTestRegState & { return dut->regs; }));
 
   // Record stores each cycle; checking waits for their stamps or the complete non-squash batch.
 #ifdef CONFIG_DIFFTEST_STOREEVENT
@@ -343,6 +361,11 @@ void Difftest::init_checkers() {
     checkers.push_back(new StoreRecorder([this, i]() -> DifftestStoreEvent & { return dut->store[i]; }, state, proxy));
   }
 #endif
+
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  checkers.push_back(
+      new StoreHashRecorder([this]() -> DifftestStoreHashEvent & { return dut->store_hash; }, state, proxy));
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 
 #ifdef CONFIG_DIFFTEST_LOADEVENT
   for (int i = 0; i < CONFIG_DIFF_LOAD_WIDTH; i++) {
@@ -415,27 +438,27 @@ void Difftest::init_checkers() {
 #endif
 
 #ifdef CONFIG_DIFFTEST_LRSCEVENT
-  checkers.push_back(new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy));
+  add_sync_checker(new LrScChecker([this]() -> DifftestLrScEvent & { return dut->lrsc; }, state, proxy));
 #endif
 
 #ifdef CONFIG_DIFFTEST_NONREGINTERRUPTPENDINGEVENT
-  checkers.push_back(new NonRegInterruptPendingChecker(
+  add_sync_checker(new NonRegInterruptPendingChecker(
       [this]() -> DifftestNonRegInterruptPendingEvent & { return dut->non_reg_interrupt_pending; }, state, proxy));
 #endif
 
 #ifdef CONFIG_DIFFTEST_MHPMEVENTOVERFLOWEVENT
-  checkers.push_back(new MhpmeventOverflowChecker(
+  add_sync_checker(new MhpmeventOverflowChecker(
       [this]() -> DifftestMhpmeventOverflowEvent & { return dut->mhpmevent_overflow; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_CRITICALERROREVENT
-  checkers.push_back(
+  add_sync_checker(
       new CriticalErrorChecker([this]() -> DifftestCriticalErrorEvent & { return dut->critical_error; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCAIAEVENT
-  checkers.push_back(new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy));
+  add_sync_checker(new AiaChecker([this]() -> DifftestSyncAIAEvent & { return dut->sync_aia; }, state, proxy));
 #endif
 #ifdef CONFIG_DIFFTEST_SYNCCUSTOMMFLUSHPWREVENT
-  checkers.push_back(new CustomMflushpwrChecker(
+  add_sync_checker(new CustomMflushpwrChecker(
       [this]() -> DifftestSyncCustomMflushpwrEvent & { return dut->sync_custom_mflushpwr; }, state, proxy));
 #endif
 
@@ -445,10 +468,16 @@ void Difftest::init_checkers() {
         new AmuCtrlRecorder([this, i]() -> DifftestAmuCtrlEvent & { return dut->amu_ctrl[i]; }, state, proxy));
   }
   checkers.push_back(new AmuCtrlChecker(state, proxy));
-  for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; i++) {
-    checkers.push_back(
-        new AmuExecRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
+  for (int i = 0; i < CONFIG_DIFF_AMU_WRITEBACK_WIDTH; i++) {
+    checkers.push_back(new AmuExecRecorder([this, i]() -> DifftestAmuWritebackEvent & { return dut->amu_writeback[i]; },
+                                           state, proxy));
   }
+#ifdef CONFIG_DIFFTEST_AMUFINISHEVENT
+  for (int i = 0; i < CONFIG_DIFF_AMU_FINISH_WIDTH; ++i) {
+    checkers.push_back(
+        new AmuFinishRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
+  }
+#endif
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
   for (int i = 0; i < CONFIG_DIFF_AMU_HASH_FINISH_WIDTH; ++i) {
     checkers.push_back(new AmuHashExecRecorder(
@@ -467,6 +496,11 @@ void Difftest::init_checkers() {
   arch_event_checker = new ArchEventChecker([this]() -> DifftestArchEvent & { return dut->event; }, state, proxy,
                                             [this]() -> const DiffTestRegState & { return dut->regs; });
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  fast_ref_checker = new FastRefChecker(this, state, proxy);
+  fast_checkers.push_back(fast_ref_checker);
+#endif
+
   std::vector<DiffTestChecker *> inst_op_checkers;
 #if defined(CONFIG_DIFFTEST_LOADEVENT) && defined(CONFIG_DIFFTEST_SQUASH)
   load_squash_checker = new LoadSquashChecker(state, proxy, [this]() -> const DiffTestState & { return *dut; });
@@ -478,6 +512,10 @@ void Difftest::init_checkers() {
   inst_op_checkers.push_back(store_checker);
 #endif // CONFIG_DIFFTEST_SQUASH
 #endif // CONFIG_DIFFTEST_STOREEVENT
+#ifdef CONFIG_DIFFTEST_STOREHASHEVENT
+  store_hash_checker = new StoreHashChecker(state, proxy);
+  inst_op_checkers.push_back(store_hash_checker);
+#endif // CONFIG_DIFFTEST_STOREHASHEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
   inst_op_checkers.push_back(new MsyncChecker(state, proxy));
 #endif // CONFIG_DIFFTEST_MSYNCEVENT
@@ -530,6 +568,14 @@ void Difftest::replay_snapshot() {
   state->replay_snapshot();
   memcpy(proxy_reg_ss, &proxy->state, sizeof(ref_state_t));
   proxy->ref_csrcpy(squash_csr_buf, REF_TO_DUT);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  replay_status.matrix_commit_boundary = state->matrix_commit_sequence;
+  const size_t ame_replay_state_size = proxy->ame_replay_state_size();
+  ame_replay_state_ss.resize(ame_replay_state_size);
+  if (!ame_replay_state_ss.empty()) {
+    proxy->ame_replay_state_save(ame_replay_state_ss.data());
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   proxy->ref_store_log_reset();
   proxy->set_store_log(true);
   goldenmem_store_log_reset();
@@ -546,10 +592,18 @@ void Difftest::do_replay() {
   replay_status.in_replay = true;
   replay_status.trace_head = info.trace_head;
   replay_status.trace_size = info.trace_size;
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  mma_verifier->reset();
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   state->replay_restore();
   memcpy(&proxy->state, proxy_reg_ss, sizeof(ref_state_t));
   proxy->ref_regcpy(&proxy->state, DUT_TO_REF, false);
   proxy->ref_csrcpy(squash_csr_buf, DUT_TO_REF);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  if (!ame_replay_state_ss.empty()) {
+    proxy->ame_replay_state_restore(ame_replay_state_ss.data());
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   proxy->ref_store_log_restore();
   goldenmem_store_log_restore();
 #ifdef CONFIG_DIFFTEST_MATRIXSTOREEVENT
@@ -558,24 +612,34 @@ void Difftest::do_replay() {
   }
 #endif // CONFIG_DIFFTEST_MATRIXSTOREEVENT
   difftest_replay_head(info.trace_head);
-  // clear buffered queue
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  for (auto &entry: state->matrix_sw_rob) {
-    if (entry.res != nullptr) {
-      delete[] entry.res;
-      entry.res = nullptr;
-    }
-  }
-  state->matrix_sw_rob.clear();
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 }
 #endif // CONFIG_DIFFTEST_REPLAY
 
 int Difftest::step() {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_is_child())
+    return difftest_ref_fork_check(this);
+#endif
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  if (fast_ref_enabled)
+    return fast_ref_step();
+#endif
+
 #ifdef CONFIG_DIFFTEST_REPLAY
   static int replay_step = 0;
   if (replay_status.in_replay) {
     if (!in_replay_range()) {
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+      mma_verifier->flush();
+      const auto *buffer = mma_verifier->get_error_buffer();
+      if (buffer != nullptr) {
+        mma_verifier->report_error(buffer);
+        dut->trap.pc = buffer->amu_event.pc;
+        display();
+        mma_verifier->stop();
+        return STATE_BADTRAP;
+      }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
       return 0;
     } else {
       replay_step++;
@@ -592,7 +656,36 @@ int Difftest::step() {
     proxy->set_store_log(false);
     goldenmem_set_store_log(false);
   }
+#endif // CONFIG_DIFFTEST_REPLAY
   int ret = check_all();
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  if (ret) {
+    mma_verifier->flush();
+  }
+  if (mma_verifier->has_mma_verification_error()) {
+    auto buffer = mma_verifier->get_error_buffer();
+#ifdef CONFIG_DIFFTEST_REPLAY
+    const bool mma_error_in_packet = canReplay && buffer->sequence > replay_status.matrix_commit_boundary;
+#else
+    const bool mma_error_in_packet = false;
+#endif // CONFIG_DIFFTEST_REPLAY
+    if (mma_error_in_packet) {
+      // The failed MMA request was submitted while processing this packet.
+      // Replay the packet so the original checker order identifies the first error.
+      ret = STATE_BADTRAP;
+    } else {
+      mma_verifier->report_error(buffer);
+      dut->trap.pc = buffer->amu_event.pc;
+      display();
+      ret = STATE_BADTRAP;
+      mma_verifier->stop();
+#ifdef CONFIG_DIFFTEST_REPLAY
+      return ret;
+#endif // CONFIG_DIFFTEST_REPLAY
+    }
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
+#ifdef CONFIG_DIFFTEST_REPLAY
   if (ret && canReplay) {
     Info("\n**** Start replay for more accurate error location ****\n");
     do_replay();
@@ -601,36 +694,6 @@ int Difftest::step() {
     return ret;
   }
 #else
-  int ret = check_all();
-#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  if (mma_verifier) {
-    if (ret) { // find error, wait for mma verification to complete
-      mma_verifier->flush();
-    }
-    if (mma_verifier->has_mma_verification_error()) {
-      auto buffer = mma_verifier->get_error_buffer();
-      Info("MMA verification error detected at pc = 0x%lx.\n", buffer->amu_event.pc);
-      Info("------ DUT Result ------\n");
-      for (int i = 0; i < buffer->amu_event.mtilem; i++) {
-        for (int j = 0; j < buffer->amu_event.mtilen; j++) {
-          Info("%08x ", ((uint32_t *)(buffer->dut_result))[i * buffer->amu_event.mtilen + j]);
-        }
-        Info("\n");
-      }
-      Info("------ REF Result ------\n");
-      for (int i = 0; i < buffer->amu_event.mtilem; i++) {
-        for (int j = 0; j < buffer->amu_event.mtilen; j++) {
-          Info("%08x ", ((uint32_t *)(buffer->src3))[i * buffer->amu_event.mtilen + j]);
-        }
-        Info("\n");
-      }
-      display();
-      dut->trap.pc = buffer->amu_event.pc;
-      ret = STATE_BADTRAP;
-      mma_verifier->stop();
-    }
-  }
-#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
   return ret;
 #endif // CONFIG_DIFFTEST_REPLAY
 }

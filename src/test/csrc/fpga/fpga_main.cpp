@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -20,10 +20,13 @@
 #include "diffstate.h"
 #include "difftest.h"
 #include "flash.h"
+#include "fork_ref/fork_ref.h"
 #include "goldenmem.h"
 #include "mpool.h"
+#include "perf.h"
 #include "ram.h"
 #include "refproxy.h"
+#include "reftrace/refdrive_trace.h"
 #include "splitview.h"
 #include "xdma.h"
 #ifdef DIFFTEST_HOSTIF_GBUS
@@ -45,6 +48,7 @@
 #endif // USE_SERIAL_PORT
 
 void fpga_finish();
+void fpga_ref_fork_abort();
 
 enum {
   FPGA_RUN,
@@ -53,8 +57,11 @@ enum {
   FPGA_FAIL,
 } fpga_state;
 
-static uint8_t fpga_result = FPGA_RUN;
+static std::atomic<uint8_t> fpga_result{FPGA_RUN};
 static CommonArgs args;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+static bool is_xdma_receiver = false;
+#endif
 static const char *fpga_ddr_load_cmd = nullptr;
 static const char *fpga_ila_arm_cmd = nullptr;
 static const char *fpga_ila_upload_cmd = nullptr;
@@ -67,6 +74,19 @@ void args_parsing(int argc, char *argv[]);
 static bool run_external_cmd(const char *cmd, const char *tag);
 
 FpgaTransport *xdma_device = NULL;
+
+static void fpga_update_ila_base() {
+  static uint64_t base = 0;
+  if (!args.ila_size)
+    return;
+  const uint64_t checked = difftest[0]->get_trap_event()->cycleCnt;
+  if (checked <= base)
+    return;
+  if ((checked >> 32) != (base >> 32))
+    xdma_device->fpga_io(HOST_IO_ILA_BASE_HI, static_cast<uint32_t>(checked >> 32));
+  xdma_device->fpga_io(HOST_IO_ILA_BASE_LO, static_cast<uint32_t>(checked));
+  base = checked;
+}
 #ifdef USE_SERIAL_PORT
 SerialPort *serial_port = NULL;
 #endif // USE_SERIAL_PORT
@@ -83,7 +103,33 @@ int main(int argc, const char *argv[]) {
   fpga_init();
 
   printf("fpga init\n");
-  xdma_device->start(args.enable_diff); // Trigger stop by fpga_nstep
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (args.enable_diff && args.ref_mode == RefMode::FORK) {
+    // Fork here: the parent receives XDMA packets; the child runs FAST REF.
+    const int role = difftest_ref_fork_start(args.ref_fork_interval);
+    if (role < 0)
+      return 1;
+    if (role == 1) {
+      static_cast<FpgaXdma *>(xdma_device)->process_packets();
+      fflush(nullptr);
+      difftest_ref_fork_leader_exit(fpga_result != FPGA_GOODTRAP && fpga_result != FPGA_EXCEED);
+    }
+    is_xdma_receiver = true;
+    if (args.refdrive_trace_name) {
+      const unsigned reader = g_packet_pool->add_reader();
+      if (reader == MemoryIdxPool::MAX_READERS) {
+        g_packet_pool->fail();
+        fpga_finish();
+        return 1;
+      }
+      g_packet_pool->enter_reader(reader);
+    }
+  }
+#endif
+#ifdef USE_SERIAL_PORT
+  serial_port->start();
+#endif
+  xdma_device->start(args.enable_link); // Trigger stop by fpga_nstep
   fpga_finish();
   if (signal_num != 0) {
     return 128 + signal_num;
@@ -133,7 +179,38 @@ void fpga_init() {
   gbus_device->validate_guest_ram(_PMEM_BASE, ram_size);
   xdma_device = gbus_device;
 #else
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  try {
+    if (args.packet_pool_log2 == 0 || args.packet_pool_log2 >= sizeof(size_t) * 8)
+      throw std::invalid_argument("Packet pool order is outside the supported range");
+    const bool fork_readers = args.enable_diff && args.ref_mode == RefMode::FORK;
+    const size_t pool_slots = size_t{1} << args.packet_pool_log2;
+    xdma_device = new FpgaXdma(fork_readers, pool_slots);
+  } catch (const std::exception &error) {
+    fprintf(stderr, "[fpga-host] packet pool initialization failed: %s\n", error.what());
+    exit(1);
+  }
+#else
   xdma_device = new FpgaXdma();
+#endif
+#endif
+#if defined(USE_THREAD_MEMPOOL) && !defined(DIFFTEST_HOSTIF_GBUS)
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  static_cast<FpgaXdma *>(xdma_device)
+      ->set_packet_callbacks(
+          [] {
+            const int result = difftest_ref_fork_idle();
+            if (is_xdma_receiver)
+              fpga_update_ila_base();
+            return result && (result != 1 || !difftest_refdrive_trace_pending());
+          },
+          [] {
+            difftest_ref_fork_abort_child();
+            fpga_ref_fork_abort();
+          });
+#else
+  static_cast<FpgaXdma *>(xdma_device)->set_packet_callbacks(nullptr, fpga_ref_fork_abort);
+#endif
 #endif
   xdma_device->fpga_io(HOST_IO_CFG_RESET, true);
   sleep(1);
@@ -178,6 +255,8 @@ void fpga_init() {
 #endif // CONFIG_USE_XDMA_H2C || DIFFTEST_HOSTIF_GBUS
 
   xdma_device->fpga_io(HOST_IO_RESET, true);
+  if (args.ila_size)
+    xdma_device->fpga_io(HOST_IO_ILA_SIZE, args.ila_size);
   xdma_device->fpga_io(HOST_IO_CPU_AXI_DELAY, args.cpu_axi_delay);
   uint32_t cpu_axi_delay = xdma_device->fpga_io_read(HOST_IO_CPU_AXI_DELAY);
   if (cpu_axi_delay != args.cpu_axi_delay) {
@@ -187,7 +266,7 @@ void fpga_init() {
   }
   printf("[fpga-host] CPU AXI delay = %" PRIu32 " cycles\n", cpu_axi_delay);
   xdma_device->fpga_io(HOST_IO_MEM_CPU, true);
-  xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, args.enable_diff);
+  xdma_device->fpga_io(HOST_IO_LINK_ENABLE, args.enable_link);
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
   xdma_device->fpga_io(HOST_IO_SQUASH_MAX_FUSED, static_cast<uint32_t>(args.squash_size));
   xdma_device->fpga_io(HOST_IO_SQUASH_ENABLE, args.enable_squash);
@@ -210,7 +289,6 @@ void fpga_init() {
     serial_port_device = "/dev/ttyUSB0";
   }
   serial_port = new SerialPort(serial_port_device);
-  serial_port->start();
 #endif // USE_SERIAL_PORT
 
   xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, false);
@@ -224,15 +302,51 @@ void fpga_init() {
 #endif // FPGA_SIM
 
   difftest_init(args.enable_diff, ram_size);
+#ifdef CONFIG_DIFFTEST_FAST_REF
+  if (args.enable_diff) {
+    const auto mode = args.ref_mode == RefMode::SLOW ? REF_EXEC_SLOW : REF_EXEC_FAST;
+    for (int i = 0; i < NUM_CORES; ++i) {
+      if (!difftest[i]->set_ref_mode(mode))
+        exit(1);
+    }
+  }
+#endif
 
   xdma_device->fpga_io(HOST_IO_RESET, false);
 }
 
 void fpga_finish() {
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_enabled()) {
+    if (signal_num)
+      g_packet_pool->fail();
+    fpga_result =
+        difftest_ref_fork_finish() ? FPGA_FAIL : (difftest_ref_fork_bounded_endpoint() ? FPGA_EXCEED : FPGA_GOODTRAP);
+  }
+#endif
+
   delete xdma_device;
 
+  if (args.refdrive_trace_name)
+    difftest_refdrive_trace_finish();
   if (signal_num == 0) {
-    difftest_finish();
+    bool report_perfcnt = true;
+#ifdef CONFIG_DIFFTEST_FAST_REF
+    if (args.enable_diff && args.ref_mode == RefMode::FAST) {
+      report_perfcnt = false;
+#ifdef CONFIG_DIFFTEST_PERFCNT
+      {
+        auto *trap = difftest[0]->get_trap_event();
+        difftest_perfcnt_finish(trap->cycleCnt, trap->instrCnt, "FAST");
+      }
+#endif
+    }
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    if (args.enable_diff && args.ref_mode == RefMode::FORK)
+      report_perfcnt = false;
+#endif
+#endif
+    difftest_finish(report_perfcnt);
     goldenmem_finish();
     finish_device();
   }
@@ -276,18 +390,26 @@ void fpga_display_result(int ret) {
 }
 
 int fpga_get_result(uint8_t step) {
-  // Compare DUT and REF
+  // Advance DUT state and detect traps even when REF checking is disabled.
   int trapCode = difftest_nstep(step, args.enable_diff);
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (difftest_ref_fork_is_child())
+    return FPGA_RUN;
+#endif
   if (trapCode != STATE_RUNNING) {
     xdma_device->fpga_io(HOST_IO_ILA_TRIGGER, true);
     fpga_ila_triggered = true;
     // Release endpoint backpressure while ILA collects post-trigger samples.
-    xdma_device->fpga_io(HOST_IO_DIFFTEST_ENABLE, false);
+    xdma_device->fpga_io(HOST_IO_LINK_ENABLE, false);
     if (trapCode == STATE_GOODTRAP)
       return FPGA_GOODTRAP;
     else
       return FPGA_FAIL;
   }
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (!difftest_ref_fork_enabled())
+#endif
+    fpga_update_ila_base();
   if (args.enable_squash && args.no_squash_after_instr != UINT64_MAX) {
     for (int i = 0; i < NUM_CORES; i++) {
       uint64_t instr_count = difftest[i]->get_trap_event()->instrCnt;
@@ -326,7 +448,7 @@ int fpga_get_result(uint8_t step) {
     }
   }
   // Trace Debug Support
-  if (args.enable_ref_trace) {
+  if (args.enable_diff && args.enable_ref_trace) {
     for (int i = 0; i < NUM_CORES; i++) {
       auto trap = difftest[i]->get_trap_event();
       bool is_debug = difftest[i]->proxy->get_debug();
@@ -356,10 +478,49 @@ int fpga_get_result(uint8_t step) {
 extern "C" void fpga_nstep(uint8_t step) {
   if (fpga_result != FPGA_RUN)
     return;
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  if (is_xdma_receiver) {
+    difftest_refdrive_trace_dump(step);
+    return;
+  }
+#endif
   int ret = fpga_get_result(step);
   if (ret != FPGA_RUN) {
-    fpga_display_result(ret);
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    if (difftest_ref_fork_enabled()) {
+#ifdef CONFIG_DIFFTEST_PERFCNT
+      auto *trap = difftest[0]->get_trap_event();
+      difftest_perfcnt_finish(trap->cycleCnt, trap->instrCnt, "FAST");
+#else
+      printf("FastEndpoint Result=%d\n", ret);
+#endif
+      fflush(stdout);
+    }
+#endif
+    if (ret == FPGA_FAIL && g_packet_pool)
+      g_packet_pool->fail();
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    if (difftest_ref_fork_finish(ret == FPGA_EXCEED))
+      ret = FPGA_FAIL;
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+    if (!difftest_ref_fork_enabled() || ret == FPGA_GOODTRAP || ret == FPGA_EXCEED)
+#endif
+      fpga_display_result(ret);
     fpga_result = ret;
     xdma_device->stop();
   }
+}
+
+void fpga_ref_fork_abort() {
+  fpga_result = FPGA_FAIL;
+  if (g_packet_pool)
+    g_packet_pool->fail();
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  const bool fork_ref = difftest_ref_fork_enabled();
+  difftest_ref_fork_finish();
+  if (!fork_ref)
+#endif
+    fpga_display_result(FPGA_FAIL);
+  xdma_device->stop();
 }

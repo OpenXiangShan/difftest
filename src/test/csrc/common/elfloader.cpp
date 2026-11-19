@@ -70,61 +70,93 @@ ElfBinaryFile::~ElfBinaryFile() {
     munmap((void *)raw, size);
 }
 
-bool isElfFile(const char *filename) {
-  int fd = -1;
-
+bool isElfImage(InputReader &input) {
 #ifdef NO_IMAGE_ELF
+  (void)input;
   return false;
+#else
+  uint8_t magic[4];
+  ssize_t n = input.peek(magic, sizeof(magic));
+  if (n < 0)
+    throw std::runtime_error("Cannot detect image format");
+  return n == 4 && magic[0] == 0x7f && magic[1] == 'E' && magic[2] == 'L' && magic[3] == 'F';
 #endif
+}
 
-  fd = open(filename, O_RDONLY);
-  assert(fd);
-
-  uint8_t buf[4];
-
-  size_t sz = read(fd, buf, 4);
-  if (!IS_ELF(*((const Elf64_Ehdr *)buf))) {
-    close(fd);
-    return false;
-  }
-
-  close(fd);
-  return true;
+bool isElfFile(const char *filename) {
+  auto input = open_input(filename);
+  return isElfImage(*input);
 }
 
 long readFromElf(void *ptr, const char *file_name, long buf_size) {
-  auto elf_file = ElfBinaryFile(file_name);
+  auto elf = ElfBinaryFile(file_name);
+  return loadElfSegments(elf, ptr, buf_size);
+}
 
-  if (elf_file.sections.size() < 1) {
-    printf("The requested elf '%s' contains zero sections\n", file_name);
+long readFromElf(void *ptr, InputReader &input, long buf_size) {
+  // ELF parsing uses arbitrary offsets. Spool only ELF inputs to an anonymous
+  // file, keeping raw checkpoints streaming and reusing the existing parser.
+  auto close_file = [](FILE *file) { fclose(file); };
+  std::unique_ptr<FILE, decltype(close_file)> file(tmpfile(), close_file);
+  if (!file) {
+    fprintf(stderr, "Cannot create temporary ELF backing file\n");
     return -1;
   }
+  uint8_t buffer[1 << 16];
+  for (;;) {
+    ssize_t n = input.read(buffer, sizeof(buffer));
+    if (n < 0)
+      return -1;
+    if (n == 0)
+      break;
+    if (fwrite(buffer, 1, n, file.get()) != static_cast<size_t>(n)) {
+      fprintf(stderr, "Cannot write temporary ELF backing file\n");
+      return -1;
+    }
+  }
+  if (fflush(file.get()) != 0)
+    return -1;
+  struct stat s;
+  if (fstat(fileno(file.get()), &s) < 0 || s.st_size < static_cast<off_t>(sizeof(Elf64_Ehdr))) {
+    fprintf(stderr, "Truncated ELF image\n");
+    return -1;
+  }
+  auto raw = mmap(nullptr, s.st_size, PROT_READ, MAP_PRIVATE, fileno(file.get()), 0);
+  if (raw == MAP_FAILED)
+    return -1;
+  auto unmap = [&s](const uint8_t *ptr) { munmap(const_cast<uint8_t *>(ptr), s.st_size); };
+  std::unique_ptr<const uint8_t, decltype(unmap)> mapping(static_cast<const uint8_t *>(raw), unmap);
+  ElfBinary elf;
+  elf.raw = mapping.get();
+  elf.size = s.st_size;
+  elf.load();
+  return loadElfSegments(elf, ptr, buf_size);
+}
 
-  uint64_t len_written = 0;
-  auto base_addr = elf_file.sections[0].data_dst;
-
+long loadElfSegments(const ElfBinary &elf, void *ptr, long buf_size) {
+  if (elf.sections.empty()) {
+    fprintf(stderr, "ELF image contains no loadable segments\n");
+    return -1;
+  }
+  uint64_t extent = 0;
+  auto base_addr = elf.sections[0].data_dst;
   if (base_addr != PMEM_BASE) {
     printf(
         "The first address in the elf does not match the base of the physical memory.\n"
         "It is likely that execution leads to unexpected behaviour.\n");
   }
-
-  for (auto section: elf_file.sections) {
-    auto len = section.data_len + section.zero_len;
+  for (auto section: elf.sections) {
     auto offset = section.data_dst - base_addr;
-
-    if (offset + len > buf_size) {
-      printf("The size (%ld bytes) of the section at address 0x%lx is larger than buf_size!\n", len, section.data_dst);
+    if (buf_size < 0 || offset > static_cast<uint64_t>(buf_size) ||
+        section.data_len > static_cast<uint64_t>(buf_size) - offset ||
+        section.zero_len > static_cast<uint64_t>(buf_size) - offset - section.data_len) {
+      fprintf(stderr, "ELF segment at address 0x%lx exceeds memory capacity\n", section.data_dst);
       return -1;
     }
-
-    // printf("Loading %ld bytes at address 0x%lx at offset 0x%lx\n", len, section.data_dst, offset);
-    std::memset((uint8_t *)ptr + offset, 0, len);
-    std::memcpy((uint8_t *)ptr + offset, section.data_src, section.data_len);
-    len_written += len;
+    auto len = section.data_len + section.zero_len;
+    std::memset(static_cast<uint8_t *>(ptr) + offset, 0, len);
+    std::memcpy(static_cast<uint8_t *>(ptr) + offset, section.data_src, section.data_len);
+    extent = std::max(extent, offset + len);
   }
-  // Since we are unpacking the sections, the total amount of bytes is the last
-  // section offset plus its size.
-  auto last_section = elf_file.sections.back();
-  return last_section.data_dst - base_addr + last_section.data_len + last_section.zero_len;
+  return extent;
 }

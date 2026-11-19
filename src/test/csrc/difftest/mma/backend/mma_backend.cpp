@@ -1,0 +1,161 @@
+/***************************************************************************************
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2026 Beijing Institute of Open Source Chip (BOSC)
+*
+* DiffTest is licensed under Mulan PSL v2.
+* You can use this software according to the terms and conditions of the Mulan PSL v2.
+* You may obtain a copy of Mulan PSL v2 at:
+*          http://license.coscl.org.cn/MulanPSL2
+*
+* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+*
+* See the Mulan PSL v2 for more details.
+***************************************************************************************/
+
+#include "mma/backend/mma_backend.h"
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#include "mma/mma_verifier.h"
+#include <algorithm>
+#include <cstring>
+
+void MmaHostBuffer::bind(uint8_t *storage, size_t bytes, size_t count) {
+  release();
+  slots = storage;
+  stride = bytes;
+  slot_count = count;
+  slot_busy.assign(count, 0);
+  active_slots = std::min(count, static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) + 2);
+}
+
+bool MmaHostBuffer::all_recycled() {
+  std::lock_guard<std::mutex> lock(mutex);
+  return leased_slots == 0;
+}
+
+size_t MmaHostBuffer::slot(const uint8_t *buffer) const {
+  if (!slots) {
+    return invalid_slot;
+  }
+  const uintptr_t base = reinterpret_cast<uintptr_t>(slots);
+  const uintptr_t address = reinterpret_cast<uintptr_t>(buffer);
+  if (address < base) {
+    return invalid_slot;
+  }
+  const size_t offset = address - base;
+  if (offset >= slot_count * stride || offset % stride != 0) {
+    return invalid_slot;
+  }
+  return offset / stride;
+}
+
+uint8_t *MmaHostBuffer::acquire(size_t bytes) {
+  if (bytes == stride && slots) {
+    std::lock_guard<std::mutex> lock(mutex);
+    // Cycle through a small prefix in address order for contiguous DMA. Grow
+    // only when all active slots are leased, retaining the full pool capacity.
+    if (leased_slots == active_slots && active_slots < slot_count) {
+      next_slot = active_slots;
+      active_slots = std::min(slot_count, active_slots + CONFIG_DIFF_MMA_BATCH_SIZE);
+    }
+    if (leased_slots < active_slots) {
+      while (slot_busy[next_slot]) {
+        if (++next_slot == active_slots)
+          next_slot = 0;
+      }
+      const size_t slot = next_slot;
+      slot_busy[slot] = 1;
+      ++leased_slots;
+      if (++next_slot == active_slots)
+        next_slot = 0;
+      return slots + slot * stride;
+    }
+  }
+  // Preserve submission backpressure; exhausted pools do not wait.
+  return new uint8_t[bytes];
+}
+
+void MmaHostBuffer::recycle(uint8_t *buffer) {
+  const size_t index = slot(buffer);
+  if (index == invalid_slot) {
+    delete[] buffer;
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex);
+  slot_busy[index] = 0;
+  --leased_slots;
+}
+
+void MmaHostBuffer::release() {
+  slots = nullptr;
+  slot_busy.clear();
+  active_slots = 0;
+  leased_slots = 0;
+  next_slot = 0;
+  slot_count = 0;
+  stride = 0;
+}
+
+bool compare_mma_rows(const void *lhs, const void *rhs, size_t rows, size_t row_bytes) {
+  if (rows == 0 || row_bytes == 0)
+    return true;
+  if (row_bytes == kMmaResultRowBytes) {
+    return std::memcmp(lhs, rhs, rows * row_bytes) == 0;
+  }
+  for (size_t row = 0; row < rows; ++row) {
+    if (std::memcmp(static_cast<const uint8_t *>(lhs) + row * kMmaResultRowBytes,
+                    static_cast<const uint8_t *>(rhs) + row * kMmaResultRowBytes, row_bytes) != 0)
+      return false;
+  }
+  return true;
+}
+
+void MatrixResultDeleter::operator()(uint64_t *buffer) {
+  if (reinterpret_cast<uint8_t *>(buffer) == shared_result.get()) {
+    shared_result.reset();
+    return;
+  }
+  if (pool) {
+    pool->recycle(buffer);
+  } else {
+    delete[] buffer;
+  }
+}
+
+MmaResultPool::MmaResultPool(size_t bytes, size_t capacity)
+    : words((bytes + sizeof(uint64_t) - 1) / sizeof(uint64_t)), capacity(capacity) {
+  storage.reserve(capacity);
+  free_slots.reserve(capacity);
+}
+
+MatrixResult MmaResultPool::acquire() {
+  std::unique_lock<std::mutex> lock(mutex);
+  uint64_t *buffer;
+  if (!free_slots.empty()) {
+    buffer = free_slots.back();
+    free_slots.pop_back();
+  } else if (storage.size() < capacity) {
+    // Initialize the full physical snapshot once. Inactive bytes may retain
+    // initialized old values on reuse; the architecture leaves them unspecified.
+    storage.emplace_back(new uint64_t[words]());
+    buffer = storage.back().get();
+  } else {
+    lock.unlock();
+    // A hardware ROB can hold more results than the asynchronous queue limit.
+    return MatrixResult(new uint64_t[words]());
+  }
+  MatrixResultDeleter deleter;
+  deleter.pool = shared_from_this();
+  return MatrixResult(buffer, std::move(deleter));
+}
+
+void MmaResultPool::recycle(uint64_t *buffer) {
+  if (!buffer)
+    return;
+  std::lock_guard<std::mutex> lock(mutex);
+  // Capacity was reserved at construction; returning a lease cannot allocate.
+  free_slots.push_back(buffer);
+}
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT

@@ -35,6 +35,8 @@ FPGA_CXXFLAGS += -I$(GBUS_PLUGIN_DIR)
 FPGA_LDFLAGS += -L$(GBUS_LIB_DIR) -Wl,-rpath,$(GBUS_LIB_DIR) -luvgbus
 endif
 
+include $(PLUGIN_CSRC_DIR)/xdma-relay/relay.mk
+
 fpga-build: fpga-clean fpga-host
 
 ifneq ($(FPGA_SIM), 1)
@@ -53,6 +55,12 @@ endif
 
 ifeq ($(USE_XDMA_H2C), 1)
 FPGA_CXXFLAGS += -DCONFIG_USE_XDMA_H2C
+endif
+
+ifeq ($(DIFFTEST_FORK_REF), 1)
+ifneq ($(USE_THREAD_MEMPOOL), 1)
+$(error DIFFTEST_FORK_REF requires USE_THREAD_MEMPOOL=1)
+endif
 endif
 
 ifeq ($(USE_THREAD_MEMPOOL), 1)

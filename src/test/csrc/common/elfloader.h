@@ -17,6 +17,7 @@
 #define __ELFLOADER_H
 
 #include "common.h"
+#include "input.h"
 #include <assert.h>
 #include <fcntl.h>
 #include <iostream>
@@ -174,10 +175,13 @@ struct ElfBinaryFile : public ElfBinary {
   ~ElfBinaryFile();
 };
 
-// Is the file at the given path an Elf file
+// Probe the decoded bytes without consuming them.
+bool isElfImage(InputReader &input);
 bool isElfFile(const char *filename);
 // load binary content at `file_name` into ptr. Returns the number of bytes
 // written.
 long readFromElf(void *ptr, const char *file_name, long buf_size);
+long readFromElf(void *ptr, InputReader &input, long buf_size);
+long loadElfSegments(const ElfBinary &elf, void *ptr, long buf_size);
 
 #endif // __ELFLOADER_H

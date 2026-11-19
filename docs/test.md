@@ -67,6 +67,8 @@ make SPLITVIEW=0   # disable for emu builds
 
 When enabled and run directly in an interactive terminal, UART output and host logs are shown side by side in the split view. The same streams are also written asynchronously to `build/logs/uart.log`, `build/logs/host.log`, and a combined `build/logs/all.log` by default, and remaining buffered text is drained before normal shutdown completes. Use `--splitview-log=PATH` to write `uart.log`, `host.log`, and `all.log` under a custom directory. Finished interactive splitview sessions keep the final screen visible; press `q` or `Q` to leave. Non-interactive environments keep the normal linear output.
 
+`fpga-host --no-diff` keeps DiffTest transport, decoding and trap detection while skipping REF initialization and comparison. Use the FPGA-host-only `--no-link` to disable the DiffTest output and receiver as well; it implies `--no-diff`. With the link disabled, the host cannot observe trap events or instruction/cycle limits from that stream; stop it with a signal. Existing FPGA commands that used `--no-diff` for free-running execution should use `--no-link`.
+
 `fpga-host` uses the same build flag as the other targets: pass `SPLITVIEW=1` to enable splitview. At runtime, pass `--no-squash` to disable squash or `--squash-size=NUM` to set the maximum fused instruction count (`0`-`255`, default `255`). Use `--no-squash-after-instr=NUM` to begin with squash enabled and disable it after the specified committed-instruction count. `NUM` accepts an uppercase `K`, `M`, or `B` suffix, such as `6.67B`, and is rounded to the nearest instruction.
 
 Key runtime options:
@@ -75,14 +77,16 @@ Key runtime options:
 |--------|--------|
 | `-i, --image=FILE` | Boot image path |
 | `--diff=PATH` | Reference SO for differential testing |
-| `--no-diff` | Run without difftest comparison |
+| `--no-diff` | Keep DUT data transfer, decoding and trap detection; skip REF initialization and comparison (also supported by `fpga-host`) |
 | `-C, --max-cycles=NUM` | Maximum simulation cycles |
+| `--stuck-check=NUM` | Check instruction progress every N cycles (default: -1 for disabled) |
 | `-I, --max-instr=NUM` | Maximum instructions |
 | `-b, --log-begin=NUM` | Start logging at cycle N |
 | `-e, --log-end=NUM` | Stop logging at cycle N |
 | `-s, --seed=NUM` | Random seed |
 | `--random-mem` | Fill memory from a `--seed`-initialized LFSR stream before loading the image |
 | `--enable-mem-cow` | Share initial DUT, Golden Memory and REF pages through private COW mappings (single-core Linux emu) |
+| `--mma-cpu-threads=N` | Maximum workers in the shared CPU MMA service across DUT cores (default `1`). Asynchronous CPU builds use a standalone `difftest-mma-worker`; synchronous and CUDA builds ignore this option. |
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
 
@@ -146,7 +150,7 @@ Key runtime options:
 |--------|--------|
 | `+workload=FILE` | Boot image path |
 | `+diff=PATH` | Reference SO for differential testing |
-| `+no-diff` | Run without difftest comparison |
+| `+no-diff` | Keep DUT data transfer, decoding and trap detection; skip REF initialization and comparison |
 | `+no-squash` | Disable squash |
 | `+squash-size=NUM` | Set maximum fused instruction count (`0`-`255`, default `255`) |
 | `+max-cycles=NUM` | Maximum simulation cycles |
@@ -258,6 +262,113 @@ make -C difftest fpga-clean vcs-clean
 ```
 
 ---
+
+### 2.4 Palladium (PLDM)
+
+Generate the RTL first, then create the release package:
+
+```bash
+make -C difftest fpga-release
+```
+
+The release contains the CPU top-level `Makefile` at its root and the DiffTest
+makefiles and Palladium scripts under `difftest/`. In a new shell:
+
+```bash
+source ~/workspace/pldm-env.sh
+cd difftest
+```
+
+**Build**
+
+```bash
+make pldm-build NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
+  WITH_CHISELDB=0 WITH_CONSTANTIN=0 DISABLE_DIFFTEST_RAM_DPIC=1
+```
+
+Build parameters:
+
+| Parameter | Meaning |
+|-----------|---------|
+| `NUM_CORES=N` | Must match the generated design |
+| `DIFFTEST_PERFCNT=1` | Enable DPI/performance-counter statistics |
+| `DISABLE_DIFFTEST_RAM_DPIC=1` | Use the RTL RAM path instead of RAM DPI calls |
+| `NO_DIFF=1` | Remove DiffTest transport at hardware compile time |
+| `SYNTHESIS=1` | Use the synthesis clock entry and omit testbench DPI |
+| `WITH_CHISELDB=0` / `WITH_CONSTANTIN=0` | Disable optional ChiselDB/ConstantIn paths |
+
+For non-synthesis builds, `pldm-build` first resolves `pldm-lib`, then runs
+`vlan` and `ixcom`. Clean `pldm-compile` before switching hardware modes.
+
+**Run**
+
+```bash
+make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
+```
+
+Run parameters:
+
+| Parameter | Meaning |
+|-----------|---------|
+| `+workload=FILE` | Linux image |
+| `+ram_size=SIZE` | Simulated memory size, for example `8GB` |
+| `+diff=FILE` | Enable REF checking |
+| `+no-diff` | Disable checking but keep hardware transport |
+| `+max-cycles=N` | Bounded cycle window; report it as a window, not completed workload |
+
+The four modes are selected as follows:
+
+```bash
+# full checking: build with NO_DIFF=0, run with +diff
+make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
+# transport only: build with NO_DIFF=0, run with +no-diff
+make pldm-run SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+# no transport: build with NO_DIFF=1, run with +no-diff
+make pldm-run NO_DIFF=1 SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+# synthesis: build with SYNTHESIS=1, run with +no-diff
+make pldm-run SYNTHESIS=1 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +no-diff"
+```
+
+**Debug and waveforms**
+
+`pldm-debug` uses the same runtime arguments as `pldm-run`, but adds FSDB
+waveform probing through `scripts/palladium/run_debug.tcl`:
+
+```bash
+make pldm-debug SYNTHESIS=0 \
+  PLDM_EXTRA_ARGS="+workload=$WORKLOAD +ram_size=8GB +diff=$REF_SO"
+```
+
+It writes `debug-*.log` and `pldm_db` under `build/pldm-compile`. The normal
+`pldm-run` path does not create a waveform database. `traceMemSize` in
+`run_debug.tcl` is measured in ns, so at a 50 MHz clock (20 ns per cycle):
+
+```text
+traceMemSize(ns) = cycles * 20
+cycles = traceMemSize(ns) / 20
+```
+
+For example, `traceMemSize 2000000` records 2 ms, or 100,000 cycles (0.1M
+cycles). A larger value increases waveform storage; it does not change the
+workload or the DUT clock.
+
+When only C++ or headers change and the hardware interface is unchanged, force
+the original whole-library build without running `vlan` or `ixcom`:
+
+```bash
+make -B pldm-lib NUM_CORES=1 SYNTHESIS=0 DIFFTEST_PERFCNT=1 \
+  WITH_CHISELDB=0 WITH_CONSTANTIN=0
+```
+
+Replacing only the REF SO does not require a rebuild; pass the new path with
+`+diff` on the next run. The final `build/pldm-compile/run-*.log` contains
+`eval/sec`; divide it by two for cycles/s with this testbench clock. This is
+separate from the software PerfCnt KHz/KIPS report.
 
 ## 3. Debugging Artifacts
 
@@ -410,7 +521,7 @@ When making multi-step changes to the hardware transport pipeline (e.g. modifyin
 
 - **One logical change per phase.** Each phase should modify one module or one aspect of the pipeline. Do not combine unrelated changes in the same phase.
 - **Gate on tests before proceeding.** A phase is complete only when all required tests pass. Never start the next phase on a failing baseline.
-- **Use a progress log.** Record each phase's changes, test results, and any debugging notes in a dedicated progress file (e.g. `.github/difftest-progress.md`). This provides a clear audit trail and makes it easier to bisect regressions.
+- **Use a progress log.** Record each phase's changes, test results, and any debugging notes in a progress log. This provides a clear audit trail and makes it easier to bisect regressions.
 
 ### Test Ladder
 

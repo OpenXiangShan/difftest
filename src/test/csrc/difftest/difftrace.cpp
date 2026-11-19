@@ -1,4 +1,5 @@
 #include "difftrace.h"
+#include "reftrace/refdrive_trace.h"
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -9,8 +10,8 @@ DiffTrace<T>::DiffTrace(const char *_trace_name, bool is_read, uint64_t _buffer_
   if (!is_read) {
     buffer = (T *)calloc(buffer_size, sizeof(T));
   }
-  if (strlen(trace_name) > 31) {
-    printf("Length of trace_name %s is more than 31 characters.\n", trace_name);
+  if (strlen(_trace_name) >= sizeof(trace_name)) {
+    printf("Length of trace_name %s exceeds the path limit.\n", _trace_name);
     printf("Please use a shorter name.\n");
     exit(0);
   }
@@ -33,7 +34,7 @@ template <typename T> bool DiffTrace<T>::read_next(T *trace) {
 #ifndef CONFIG_IOTRACE_ZSTD
   if (!buffer || buffer_count == buffer_size) {
 #else
-  if (!buffer || trace_zstd->trace_load_len == buffer_count) {
+  while (!buffer || trace_zstd->trace_load_len == buffer_count) {
 #endif // CONFIG_IOTRACE_ZSTD
     trace_file_next();
   }
@@ -73,6 +74,8 @@ template <typename T> void DiffTrace<T>::next_file_name(char *file_name) {
 }
 
 template <typename T> bool DiffTrace<T>::trace_file_next() {
+  if (!is_read && !buffer_count)
+    return false;
   static char *filename = (char *)malloc(PATH_MAX);
 #ifdef CONFIG_IOTRACE_ZSTD
   if (trace_zstd->need_load_new_file == true && is_read) {
@@ -131,6 +134,7 @@ template <typename T> bool DiffTrace<T>::trace_file_next() {
 }
 
 template class DiffTrace<DiffTestState>;
+template class DiffTrace<RefDriveTraceEntry>;
 
 #ifdef CONFIG_IOTRACE_ZSTD
 void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
@@ -151,7 +155,7 @@ void DiffTraceZstd::diff_zstd_next(const char *file_name, bool is_read) {
 void DiffTraceZstd::diff_IOtrace_dump(const char *str, uint64_t len) {
   static const size_t cLevel = 1; // compression level
 
-  std::vector<char> outputBuffer(max_compress_size);
+  std::vector<char> outputBuffer(ZSTD_compressBound(len));
   trace_cctx = ZSTD_createCCtx();
 
   size_t compressedSize = ZSTD_compressCCtx(trace_cctx, outputBuffer.data(), outputBuffer.size(), str, len, cLevel);
@@ -171,6 +175,7 @@ bool DiffTraceZstd::diff_IOtrace_load(char *buffer, uint64_t len) {
   int result = diff_IOtrace_ZstdDcompress();
   if (result != 0) {
     need_load_new_file = true;
+    trace_load_len = 0;
     return false;
   } else {
     uint64_t have_size = io_trace_buffer.size() / len;
@@ -187,7 +192,6 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
   // Set up buffers
   static const size_t inbufferSize = ZSTD_DStreamInSize(); // Use ZSTD's recommended output buffer size
   static const size_t outbufferSize = ZSTD_DStreamOutSize();
-  static std::vector<char> inputBuffer(inbufferSize);
   std::vector<char> outputBuffer(outbufferSize);
 
   if (trace_dctx == NULL) {
@@ -195,10 +199,10 @@ int DiffTraceZstd::diff_IOtrace_ZstdDcompress() {
   }
   // Read and decompress data in a loop
   ZSTD_outBuffer output = {outputBuffer.data(), outbufferSize, 0};
-  static ZSTD_inBuffer input = {inputBuffer.data(), 0, 0};
 
   if (input.pos == input.size) {
     inputBuffer.resize(inbufferSize);
+    input.src = inputBuffer.data();
     io_trace_file.read(inputBuffer.data(), inbufferSize);
     input.size = io_trace_file.gcount();
     input.pos = 0;

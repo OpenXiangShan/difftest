@@ -58,7 +58,19 @@ class Validator(bundles: Seq[DifftestBundle], config: GatewayConfig) extends Mod
   val out = IO(Decoupled(MixedVec(bundles.map(Valid(_)))))
   val globalEnable = WireInit(true.B)
   if (config.hasGlobalEnable) {
-    globalEnable := VecInit(in.bits.flatMap(_.bits.needUpdate).toSeq).asUInt.orR
+    val timeout = WireInit(false.B)
+    if (config.isFPGA) {
+      // Keep DUT cycle counters observable after architectural events stop
+      // For example, when the processor is stuck and no longer commits
+      val idleCount = RegInit(0.U(17.W))
+      timeout := idleCount.andR
+      when(out.fire) {
+        idleCount := 0.U
+      }.elsewhen(!timeout) {
+        idleCount := idleCount + 1.U
+      }
+    }
+    globalEnable := VecInit(in.bits.flatMap(_.bits.needUpdate).toSeq).asUInt.orR || timeout
   }
   in.bits.zip(out.bits).foreach { case (i, o) =>
     val valid = i.bits.getValid && globalEnable && in.fire && Option

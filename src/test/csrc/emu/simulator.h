@@ -21,12 +21,6 @@
 
 class Simulator {
 private:
-  static void report_waveform_error() {
-    printf("Waveform is unsupported in this simulator or disabled.\n");
-    printf("If you are using Verilator, please compile with EMU_TRACE=1 to enable it.\n");
-    throw std::runtime_error("Waveform not supported.");
-  }
-
   static void report_snapshot_error(void *__restrict datap, size_t size) {
     printf("Snapshot is unsupported in this simulator or disabled.\n");
     printf("If you are using Verilator, please compile with EMU_SNAPSHOT=1 to enable it.\n");
@@ -34,6 +28,12 @@ private:
   }
 
 protected:
+  static void report_waveform_error() {
+    printf("Waveform is unsupported in this simulator or disabled.\n");
+    printf("If you are using Verilator, please compile with EMU_TRACE=1 to enable it.\n");
+    throw std::runtime_error("Waveform not supported.");
+  }
+
   virtual unsigned get_uart_out_valid() = 0;
   virtual uint8_t get_uart_out_ch() = 0;
   virtual unsigned get_uart_in_valid() = 0;
@@ -44,17 +44,16 @@ public:
   virtual ~Simulator() {};
 
   /******* mandatory methods for child classes *******/
-  // Set the clock signal, 0 or 1.
-  virtual void set_clock(unsigned clock) = 0;
-  // Optional independent accelerator clock. Simulators without this port may ignore it.
-  virtual void set_accelerator_clock(unsigned) {}
-  virtual unsigned get_accelerator_clock() const {
-    return 0;
-  }
-  // Set the reset signal, 0 or 1.
-  virtual void set_reset(unsigned reset) = 0;
-  // Tick one step. Note this method may have various implementations.
-  virtual void step() = 0;
+  // Execute one cycle, preserving the backend's memory and UART ordering.
+  // Predicates select samples; each backend evaluates before sampling.
+  virtual void single_cycle(const std::function<void()> &memory_tick, const std::function<bool()> &should_dump,
+                            const std::function<bool()> &should_dump_full) = 0;
+  virtual void reset_cycle(bool dump) = 0;
+  virtual void configure_clocks(uint32_t, uint32_t) {}
+
+  // Append backend scheduler state at the end of the common snapshot payload.
+  virtual void save_extra_state(const std::function<void(void *, size_t)> &) {}
+  virtual void load_extra_state(const std::function<void(void *, size_t)> &) {}
 
   // Get the exit signal from DiffTest.
   virtual uint64_t get_difftest_exit() = 0;
@@ -79,14 +78,10 @@ public:
   virtual void waveform_init(uint64_t cycles) {
     report_waveform_error();
   }
-  // To tick the waveform.
+  // To initialize the waveform at the requested path.
   virtual void waveform_init(uint64_t cycles, const char *filename) {
     report_waveform_error();
   }
-  // To tick the waveform for one timestamp.
-  virtual void waveform_tick() {
-    report_waveform_error();
-  };
 
   // To initialize the simulation snapshot.
   virtual void snapshot_init() {
@@ -105,8 +100,7 @@ public:
     return report_snapshot_error;
   }
 
-  /******* final methods *******/
-
+protected:
   // Step the UART, this is used to read/write UART data.
   // This method cannot be overridden.
   inline void step_uart() {

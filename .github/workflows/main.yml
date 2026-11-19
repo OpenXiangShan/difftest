@@ -18,7 +18,7 @@ jobs:
 
       - name: Compile
         run: |
-          mill -i design.compile
+          make design-compile
 
       - name: Generate Verilog
         run: |
@@ -94,6 +94,14 @@ jobs:
         run: |
             cd $NOOP_HOME
             ./build/emu -i $WORKLOAD --diff $REF_SO
+
+      - name: Difftest with Compressed ELF Image
+        run: |
+            cd $NOOP_HOME
+            riscv64-linux-gnu-ld -b binary -m elf64lriscv -N \
+              -Tdata=0x80000000 -e 0x80000000 "$WORKLOAD" -o microbench.elf
+            zstd -q -f microbench.elf -o microbench.elf.zst
+            ./build/emu -i microbench.elf.zst --diff "$REF_SO"
 
       - name: Basic Difftest without Image
         run: |

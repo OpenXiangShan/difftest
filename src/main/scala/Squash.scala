@@ -22,7 +22,7 @@ import difftest._
 import difftest.gateway.GatewayConfig
 import difftest.common.DifftestPerf
 import difftest.validate.Validate._
-import difftest.util.PipelineConnect
+import difftest.util.{PipelineConnect, StoreHash}
 
 object Squash {
   def apply(
@@ -31,7 +31,8 @@ object Squash {
     fpgaEnable: Option[Bool] = None,
     fpgaMaxFused: Option[UInt] = None,
   ): DecoupledIO[MixedVec[Valid[DifftestBundle]]] = {
-    val squashInBits = Stamp(bundles.bits)
+    val stamped = Stamp(bundles.bits)
+    val squashInBits = if (config.isFPGA) StoreHash(stamped, bundles.fire) else stamped
     val squashIn = Wire(Decoupled(chiselTypeOf(squashInBits)))
     squashIn.bits := squashInBits
     squashIn.valid := bundles.valid
@@ -139,7 +140,11 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   val uniqBundles = bundles.map(_.bits).distinctBy(_.desiredCppName)
   // Tick and Submit the pending non-squashable events immediately.
   val want_tick_vec = WireInit(VecInit.fill(uniqBundles.length)(false.B))
-  when(!want_tick_vec.asUInt.orR) {
+  val out_fire = Wire(Bool())
+  // Hold an idle flush through backpressure and rearm it after acceptance
+  when(timeout) {
+    when(out_fire) { timeout_count := 0.U }
+  }.elsewhen(!want_tick_vec.asUInt.orR) {
     timeout_count := timeout_count + 1.U
   }.otherwise {
     timeout_count := 0.U
@@ -151,7 +156,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
       .zip(want_tick_vec)
       .filter(_._1.squashGroup.contains(g))
       .map { case (u, wt) =>
-        if (u.squashQueue) {
+        if (u.squashQueue && !u.isInstanceOf[DifftestHash]) {
           false.B
         } else {
           if (config.hasBuiltInPerf) DifftestPerf(s"SquashTick_${g}_${u.desiredCppName}", wt)
@@ -192,6 +197,7 @@ class SquashEndpoint(bundles: Seq[Valid[DifftestBundle]], config: GatewayConfig)
   // All squashers must fire synchronously so a held input is consumed only once.
   squashers.foreach(_.in.valid := pipelined.fire)
   out.valid := VecInit(squashers.map(_.out.valid)).asUInt.orR
+  out_fire := out.fire
 }
 
 // It will help do squash for bundles with same Class, return tick and state

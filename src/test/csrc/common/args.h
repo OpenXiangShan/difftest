@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -19,12 +19,34 @@
 
 #include "common.h"
 
+#ifdef CONFIG_DIFFTEST_FAST_REF
+enum class RefMode {
+  SLOW,
+  FAST,
+  FORK
+};
+#endif
+
 struct CommonArgs {
+#ifdef CONFIG_DIFFTEST_FAST_REF
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  RefMode ref_mode = RefMode::FORK;
+#else
+  RefMode ref_mode = RefMode::SLOW;
+#endif
+#endif
+#ifdef CONFIG_DIFFTEST_FORK_REF
+  uint64_t ref_fork_interval = 1000; // Milliseconds; CLI accepts seconds.
+  unsigned packet_pool_log2 = 22;    // Shared packet slots = 2^packet_pool_log2.
+#endif
   uint32_t reset_cycles = 50;
   uint32_t core_clock_half_period = 1;
   uint32_t accelerator_clock_half_period = 1;
   uint32_t seed = 0;
   uint64_t max_cycles = -1;
+#ifndef CONFIG_NO_DIFFTEST
+  int64_t stuck_check = -1;
+#endif
   uint64_t fork_interval = 10000; // default: 10 seconds
   uint64_t max_instr = -1;
   uint64_t warmup_instr = -1;
@@ -57,6 +79,8 @@ struct CommonArgs {
   const char *select_db = nullptr;
   const char *db_path = nullptr;
   const char *trace_name = nullptr;
+  const char *refdrive_trace_name = nullptr;
+  bool refdrive_trace_is_read = false;
   const char *footprints_name = nullptr;
   const char *linearized_name = nullptr;
   bool enable_waveform = false;
@@ -67,10 +91,15 @@ struct CommonArgs {
   bool force_dump_result = false;
   bool enable_diff = true;
   bool enable_mem_cow = false;
+#ifdef FPGA_HOST
+  bool enable_link = true;
+  uint32_t ila_size = 0;
+#endif
   bool enable_squash = true;
   uint8_t squash_size = 255;
   uint64_t no_squash_after_instr = -1;
   uint32_t cpu_axi_delay = 0;
+  uint32_t mma_cpu_threads = 1;
   bool enable_fork = false;
   bool enable_runahead = false;
   bool dump_db = false;

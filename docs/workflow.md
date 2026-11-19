@@ -8,10 +8,10 @@ This document defines the standard workflow for complex difftest tasks — those
 Task received
   │
   ▼
-Create Plan (.github/<task>-plan.md)
+Create Plan
   │
   ▼
-Create Progress (.github/<task>-progress.md)
+Create Progress
   │
   ▼
 ┌─ Per Phase ──────────────────────────┐
@@ -31,14 +31,14 @@ Create Progress (.github/<task>-progress.md)
 Final verification (10-min linux)
   │
   ▼
-askQuestions: confirm completion / next steps
+Report completion / next steps
 ```
 
 ---
 
 ## 1. Plan Document
 
-Every non-trivial task must start with a plan stored at `.github/<task>-plan.md`.
+Every non-trivial task must start with a plan.
 
 ### Required Sections
 
@@ -65,7 +65,7 @@ If a plan needs significant revision (not minor fixes), create a new version: `<
 
 ## 2. Progress Document
 
-Every task with a plan must have a corresponding progress file at `.github/<task>-progress.md` (versioned to match the plan).
+Every task with a plan must have a corresponding progress log.
 
 ### Required Sections Per Phase
 
@@ -101,8 +101,8 @@ Use a summary table at the top for quick overview:
 
 At the start of each conversation or after a context reset:
 
-1. **Re-read the plan** (`.github/<task>-plan.md`) to restore the task definition and Phase structure.
-2. **Re-read the progress** (`.github/<task>-progress.md`) to determine which Phase is current and what has already been tried.
+1. **Re-read the plan** to restore the task definition and Phase structure.
+2. **Re-read the progress** to determine which Phase is current and what has already been tried.
 3. **Re-read relevant docs** (`difftest/docs/`) if the task involves unfamiliar modules.
 
 Do not rely on memory or assumptions about prior state. The plan and progress files are the source of truth.
@@ -111,16 +111,13 @@ Do not rely on memory or assumptions about prior state. The plan and progress fi
 
 When encountering unclear requirements, design choices, or unexpected test results:
 
-- Use `askQuestions` to confirm details with the user before proceeding.
+- Confirm details with the user when necessary before proceeding.
 - Prefer asking early (before implementing a speculative fix) over asking late (after a failed debugging cycle).
 - Typical situations: scope clarification, which approach to take when multiple are viable, whether a failing test is a known issue, whether to proceed to next Phase despite a partial result.
 
 ### End-of-Conversation Check
 
-At the end of every conversation:
-
-- Use `askQuestions` to confirm whether there are further requirements, open questions, or next steps.
-- This ensures nothing is left implicit and gives the user a chance to redirect before the context is lost.
+At the end of a task, report the result and next steps. Confirm open questions with the user when necessary.
 
 ### Sub-Agent Delegation
 

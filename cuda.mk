@@ -16,7 +16,11 @@
 
 DIFFTEST_STATE_HEADER = $(GEN_CSRC_DIR)/difftest-state.h
 MMA_BACKEND ?= cpu
-MMA_BATCH_SIZE ?= 64
+MMA_ASYNC ?= 1
+ifeq ($(MMA_ASYNC),0)
+SIM_CXXFLAGS += -DCONFIG_DIFFTEST_MMA_SYNC
+endif
+MMA_BATCH_SIZE ?= 512
 MMA_BACKPRESSURE_FACTOR ?= 4
 SIM_CXXFLAGS += -DCONFIG_DIFF_MMA_BATCH_SIZE=$(MMA_BATCH_SIZE)
 SIM_CXXFLAGS += -DCONFIG_DIFF_MMA_BACKPRESSURE_FACTOR=$(MMA_BACKPRESSURE_FACTOR)
@@ -29,8 +33,7 @@ endif
 CUDA_MMA_BACKEND_SRC = $(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cuda_kernel.cu
 CUDA_MMA_BACKEND_OBJ = $(BUILD_DIR)/mma_backend_cuda_kernel.o
 NVCC ?= nvcc
-CUDA_MMA_BACKEND_HEADERS = $(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cuda_impl.h \
-	$(DIFFTEST_CSRC_DIR)/mma/backend/mma_backend_cute_model.h
+CUDA_ARCH ?= native
 
 # Optional CUDA toolchain detection for MMA backend.
 CUDA_HOME ?= /usr/local/cuda
@@ -49,6 +52,14 @@ endif
 
 SIM_EXTRA_OBJS += $(CUDA_MMA_BACKEND_OBJ)
 
-$(CUDA_MMA_BACKEND_OBJ): $(CUDA_MMA_BACKEND_SRC) $(CUDA_MMA_BACKEND_HEADERS) $(DIFFTEST_STATE_HEADER) | $(BUILD_DIR)
-	$(NVCC) -std=c++11 -c $(CUDA_MMA_BACKEND_SRC) $(SIM_CXXFLAGS) -o $@
+CUDA_MMA_BACKEND_DEP = $(CUDA_MMA_BACKEND_OBJ:.o=.d)
+
+$(CUDA_MMA_BACKEND_OBJ): $(CUDA_MMA_BACKEND_SRC) $(DIFFTEST_STATE_HEADER) | $(BUILD_DIR)
+	$(NVCC) -std=c++11 -arch=$(CUDA_ARCH) $(SIM_CXXFLAGS) -MMD -MP \
+		-MF $(CUDA_MMA_BACKEND_DEP) -MT $@ -c $< -o $@
+
+-include $(CUDA_MMA_BACKEND_DEP)
+
 endif
+
+include $(DIFFTEST_CSRC_DIR)/mma/backend/server/server.mk

@@ -22,6 +22,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -33,9 +34,13 @@
  * verification buffer, fills it with the reference operands and DUT result,
  * then submits it to the verifier. Submission transfers ownership to the
  * verifier, whose single worker thread drains the FIFO queue and invokes the
- * compile-time-selected CPU or CUDA MmaBackend. The backend performs only the
- * numerical check; the verifier owns its lifetime and serializes all calls to
- * it on the worker thread.
+ * compile-time-selected CPU or CUDA MmaBackend. The CPU service can calculate
+ * requests in parallel; results are published in FIFO order.
+ * The backend may also provide operand storage;
+ * acquisition and release can run on producer/worker threads concurrently.
+ * The verifier owns the backend and coordinates request lifetimes.
+ * With CONFIG_DIFFTEST_MMA_SYNC, submission verifies synchronously on the caller;
+ * start() prepares the backend, stop() is a no-op, and flush() reports the retained error.
  *
  * Buffers are caller-owned while being populated and verifier-owned after
  * submission. Successful buffers and all mismatches after the first are freed
@@ -53,11 +58,15 @@
  * See MmaVerifier's allocation and submission methods for ownership rules.
  */
 struct MmaVerificationBuffer {
-  DifftestAmuCtrlEvent amu_event; // AMU control event for this MMA instruction
-  uint8_t *src1;                  // Pointer to source matrix 1 data
-  uint8_t *src2;                  // Pointer to source matrix 2 data
-  uint8_t *src3;                  // Pointer to source matrix 3 data (accumulator)
-  uint8_t *dut_result;            // Pointer to DUT result data
+  DifftestAmuCtrlEvent amu_event;  // AMU control event for this MMA instruction
+  uint8_t *src1;                   // Pointer to source matrix 1 data
+  uint8_t *src2;                   // Pointer to source matrix 2 data
+  uint8_t *src3;                   // Pointer to source matrix 3 data (accumulator)
+  MatrixResult dut_result;         // Owns the software ROB's original result array
+  uint8_t *dut_snapshot = nullptr; // Optional backend-owned upload snapshot
+#ifdef CONFIG_DIFFTEST_REPLAY
+  uint64_t sequence = 0; // Hardware-ROB commit sequence for replay boundaries
+#endif
 };
 
 /**
@@ -76,35 +85,6 @@ static inline size_t get_element_size(uint8_t typed) {
       return 4;
     default: return 4; // Default to 32 bits if unknown
   }
-}
-
-/**
- * @brief Calculates the storage required for one MMA verification request.
- *
- * @param[in] amu_event Non-null event containing the element types and matrix geometry.
- * @return Total byte size of src1, src2, src3, and dut_result.
- */
-static inline size_t calculate_mma_buffer_size(const DifftestAmuCtrlEvent *amu_event) {
-  size_t element_size_s1 = get_element_size(amu_event->types1);
-  size_t element_size_s2 = get_element_size(amu_event->types2);
-  size_t element_size_d = get_element_size(amu_event->typed);
-
-  uint16_t m = amu_event->mtilem;
-  uint16_t n = amu_event->mtilen;
-  uint16_t k = amu_event->mtilek;
-
-  // Calculate size for each matrix:
-  // src1: m×k matrix
-  // src2: k×n matrix
-  // src3: m×n matrix (accumulator)
-  // result: m×n matrix
-  size_t src1_size = element_size_s1 * m * k;
-  size_t src2_size = element_size_s2 * k * n;
-  size_t src3_size = element_size_d * m * n;
-  size_t result_size = element_size_d * m * n;
-
-  // Total buffer size
-  return src1_size + src2_size + src3_size + result_size;
 }
 
 /**
@@ -134,7 +114,7 @@ public:
   ~MmaVerifier();
 
   /**
-   * @brief Starts the single verifier worker.
+   * @brief Prepares the backend and starts the single verifier worker.
    *
    * @pre Call this before submitting buffers.
    * @note This is a no-op unless the previous worker has not started or has been joined.
@@ -149,6 +129,11 @@ public:
    */
   void stop();
 
+  // Discard queued requests and the retained error, then resume verification.
+  // Keep the backend and its service alive for existing LightSSS snapshots.
+  // The producer must not submit requests while resetting.
+  void reset();
+
   /**
    * @brief Waits until no request remains queued or executing in the backend.
    *
@@ -161,15 +146,18 @@ public:
   bool flush();
 
   /**
-   * @brief Allocates a verification buffer from the event's matrix geometry.
+   * @brief Allocates complete physical-register snapshots for one MMA event.
    *
-   * The event is copied into the buffer. The operand and result arrays are
-   * uninitialized and must be filled by the caller before submission.
+   * The event is copied into the buffer. A/B/C arrays are uninitialized.
+   * No DUT result is allocated; transfer its ownership before submission.
    *
    * @param[in] amu_event Non-null event describing the MMA request.
    * @return A newly allocated buffer initially owned by the caller.
    */
   MmaVerificationBuffer *allocate_buffer(const DifftestAmuCtrlEvent *amu_event);
+
+  // Lease a full result from the pool.
+  MatrixResult allocate_result();
 
   /**
    * @brief Releases a verification buffer and its operand/result arrays.
@@ -180,7 +168,7 @@ public:
   void free_buffer(MmaVerificationBuffer *buffer);
 
   /**
-   * @brief Submits a fully populated buffer for asynchronous verification.
+   * @brief Submits a fully populated buffer; synchronous builds verify inline.
    *
    * @param[in] buffer Non-null buffer returned by allocate_buffer().
    * @note Blocks when queued or executing work reaches the configured backpressure
@@ -206,7 +194,14 @@ public:
    */
   const MmaVerificationBuffer *get_error_buffer() const;
 
+  // Print the saved DUT/REF result for an error buffer. The caller owns
+  // DiffTest-level state such as the trap PC and commit trace display.
+  void report_error(const MmaVerificationBuffer *buffer) const;
+
 private:
+  void discard_pending();
+  void verify_batch(const std::vector<MmaVerificationBuffer *> &buffers);
+
   std::thread mma_verification_thread;                        // Verification thread
   std::queue<MmaVerificationBuffer *> mma_verification_queue; // Pending verification queue
 
@@ -233,6 +228,8 @@ private:
 
   // Buffer of the first failed MMA instruction (retained for error reporting)
   std::atomic<MmaVerificationBuffer *> mma_error_buffer{nullptr};
+
+  std::shared_ptr<MmaResultPool> result_pool;
 
   // MMA verification backend (CPU by default)
   MmaBackend *backend = nullptr;

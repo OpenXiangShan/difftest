@@ -1,6 +1,6 @@
 /***************************************************************************************
-* Copyright (c) 2025 Beijing Institute of Open Source Chip (BOSC)
-* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+* Copyright (c) 2025-2026 Beijing Institute of Open Source Chip (BOSC)
+* Copyright (c) 2020-2026 Institute of Computing Technology, Chinese Academy of Sciences
 *
 * DiffTest is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -20,7 +20,9 @@
 #include "diffstate.h"
 #include "fpga_transport.h"
 #include "mpool.h"
+#include "xdma_relay.h"
 #include <atomic>
+#include <memory>
 #include <queue>
 #include <signal.h>
 #include <stdbool.h>
@@ -36,7 +38,7 @@
 
 #define HOST_IO_CFG_RESET        0x0
 #define HOST_IO_RESET            0x4
-#define HOST_IO_DIFFTEST_ENABLE  0x8
+#define HOST_IO_LINK_ENABLE      0x8
 #define HOST_IO_ILA_TRIGGER      0xc
 #define HOST_IO_SQUASH_ENABLE    0x10
 #define HOST_IO_SQUASH_MAX_FUSED 0x14
@@ -47,6 +49,9 @@
 #define HOST_IO_MEM_H2C          0x28
 #define HOST_IO_H2C_SIZE_MB      0x2c
 #define HOST_IO_CPU_AXI_DELAY    0x30
+#define HOST_IO_ILA_BASE_LO      0x34
+#define HOST_IO_ILA_BASE_HI      0x38
+#define HOST_IO_ILA_SIZE         0x3c
 
 #define DMA_PACKGE_NUM 8
 // DMA_PADDING (packge_idx(1) + difftest_data) send width to be calculated by mod up
@@ -68,10 +73,31 @@ typedef struct __attribute__((packed)) {
   DmaDiffPackge diff_packge[DMA_PACKGE_NUM];
 } FpgaPackgeHead;
 
+inline bool dma_packet_is_padding(const DmaDiffPackge &packet) {
+#if (DMA_PACKGE_PADDING > 0)
+  if (packet.padding[0] > 1) {
+    fprintf(stderr, "XDMA invalid transport padding flag: %u\n", packet.padding[0]);
+    abort();
+  }
+  return packet.padding[0] == 1;
+#else
+  return false;
+#endif
+}
+
 class FpgaXdma : public FpgaTransport {
 public:
-  FpgaXdma();
+  FpgaXdma(bool fork_readers = false, size_t pool_slots = NUM_BLOCKS);
   ~FpgaXdma();
+
+#ifdef USE_THREAD_MEMPOOL
+  // Consume published packets and deliver decoded batches through v_difftest_Batch.
+  void process_packets();
+  void set_packet_callbacks(bool (*idle)(), void (*abort)()) {
+    packet_idle = idle;
+    packet_abort = abort;
+  }
+#endif
 
   void start(bool enable_diff) override {
     running = true;
@@ -84,7 +110,9 @@ public:
 #ifdef USE_THREAD_MEMPOOL
       start_transmit_thread();
       while (running && signal_num == 0) {
-        usleep(10000);
+        if (packet_idle && packet_idle())
+          break;
+        usleep(1000);
       }
       running = false;
       stop_thansmit_thread();
@@ -96,8 +124,11 @@ public:
 
   void stop() override {
     running = false;
+    if (relay)
+      relay->stop();
 #ifdef USE_THREAD_MEMPOOL
-    thread_cv.notify_one();
+    if (packet_pool)
+      packet_pool->stop_waiting();
 #endif // USE_THREAD_MEMPOOL
   }
 
@@ -117,8 +148,10 @@ public:
   void h2c_load_workload(const void *payload, uint64_t size) override;
 
 private:
-  bool running = false;
-  int xdma_c2h_fd[CONFIG_DMA_CHANNELS];
+  // Main and parser stop this pipeline; receivers observe the same flag.
+  std::atomic<bool> running{false};
+  std::unique_ptr<XdmaRelayClient> relay;
+  int xdma_c2h_fd[CONFIG_DMA_CHANNELS]{};
 #ifdef CONFIG_USE_XDMA_H2C
   int xdma_h2c_fd;
 #endif
@@ -127,16 +160,17 @@ private:
   uint32_t device_read(bool is_bypass, uint64_t addr);
 
 #ifdef USE_THREAD_MEMPOOL
-  std::mutex thread_mtx;
-  std::condition_variable thread_cv;
-  MemoryIdxPool xdma_mempool;
+  bool (*packet_idle)() = nullptr;
+  void (*packet_abort)() = nullptr;
+  std::unique_ptr<MemoryIdxPool> packet_pool;
+  bool fork_readers = false;
+  std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;
   // thread api
   void start_transmit_thread();
   void stop_thansmit_thread();
   void read_xdma_thread(int channel);
-  void write_difftest_thread();
 #else
   void read_and_process();
 #endif // USE_THREAD_MEMPOOL
