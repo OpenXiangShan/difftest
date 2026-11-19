@@ -73,7 +73,7 @@ bool CudaMmaEngine::register_storage(void *storage, size_t bytes, uint8_t *const
     return false;
   }
   if (!workspace) {
-    workspace.reset(cuda_mma_backend_create(host, CONFIG_DIFF_MMA_BATCH_SIZE, CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES,
+    workspace.reset(cuda_mma_backend_create(CONFIG_DIFF_MMA_BATCH_SIZE, CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES,
                                             CONFIG_DIFF_AMU_C_REG_SIZE_BYTES, operands));
     if (!workspace) {
       cudaHostUnregister(storage);

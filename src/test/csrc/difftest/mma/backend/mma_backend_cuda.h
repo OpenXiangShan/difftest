@@ -37,7 +37,6 @@ public:
   void shutdown() override;
 
 private:
-  MmaHostBuffer host[3];
   std::unique_ptr<CudaMmaWorkspace> workspace;
   std::vector<CudaMmaBatchItem> items;
 };

@@ -71,18 +71,18 @@ struct CudaMmaCopySpan {
 };
 
 struct CudaMmaOperand {
-  // Optional borrowed pinned storage containing the physical operand slots.
+  // Borrowed pinned storage containing the client's physical operand slots.
   uint8_t *shared_host = nullptr;
   size_t stride = 0;
   std::vector<CudaMmaCopySpan> spans;
   uint8_t *device = nullptr;
 };
 
-// The workspace uses backend-owned host pools or a borrowed pinned batch, and
-// retains one maximum device batch. Stop all users before destroying it.
+// The workspace borrows pinned operands and retains one maximum device batch.
+// Stop all users before destroying it.
 class CudaMmaWorkspace {
 public:
-  explicit CudaMmaWorkspace(MmaHostBuffer (&host)[3]) : host(host) {}
+  CudaMmaWorkspace() = default;
   CudaMmaWorkspace(const CudaMmaWorkspace &) = delete;
   CudaMmaWorkspace &operator=(const CudaMmaWorkspace &) = delete;
   ~CudaMmaWorkspace();
@@ -92,7 +92,6 @@ public:
   CUstream_st *dut_stream = nullptr;
   std::vector<CUevent_st *> completed;
   std::vector<CUevent_st *> dut_uploaded;
-  MmaHostBuffer (&host)[3];
   CudaMmaOperand operands[3];
 
   CudaMmaBatchDescriptor *descriptors = nullptr;
@@ -114,12 +113,10 @@ bool cuda_mma_backend_launch_kernel(CudaMmaType type, const CudaMmaBatchDescript
 bool cuda_mma_backend_compare_kernel(const CudaMmaBatchDescriptor *descriptors, size_t count, const uint8_t *reference,
                                      const uint8_t *dut, uint8_t *passed, CUstream_st *stream);
 
-// Each backend owns one workspace. Launches must be serialized; operand
-// allocation/free may run concurrently. Release requires all users to stop.
-// Optional shared_host borrows a pinned contiguous batch per operand; it must
-// outlive the workspace; each item points at a physical slot within that batch.
-CudaMmaWorkspace *cuda_mma_backend_create(MmaHostBuffer (&host)[3], size_t batch_size, size_t ab_reg_bytes,
-                                          size_t c_reg_bytes, uint8_t *const shared_host[3] = nullptr);
+// Launches must be serialized. Each item points at a slot in the pinned
+// storage for the current client; that storage must remain live through completion.
+CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes,
+                                         uint8_t *const shared_host[3]);
 // Leave REF on device so DUT preparation/upload can proceed concurrently.
 bool cuda_mma_backend_enqueue_references(CudaMmaWorkspace *workspace, CudaMmaType type, const CudaMmaBatchItem *items,
                                          size_t count);

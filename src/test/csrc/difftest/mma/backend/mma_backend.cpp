@@ -21,35 +21,9 @@
 #include <algorithm>
 #include <cstring>
 
-void MmaHostDeleter::operator()(uint8_t *buffer) const {
-  if (free_host) {
-    free_host(buffer);
-  } else {
-    delete[] buffer;
-  }
-}
-
-bool MmaHostBuffer::allocate(size_t bytes, size_t slot_count, uint8_t *(*allocate_host)(size_t),
-                             void (*free_host)(uint8_t *)) {
-  release();
-  stride = bytes;
-  this->slot_count = slot_count;
-  slots.get_deleter().free_host = free_host;
-  if (slot_count != 0) {
-    slots.reset(allocate_host ? allocate_host(slot_count * bytes) : new uint8_t[slot_count * bytes]);
-    if (!slots) {
-      return false;
-    }
-  }
-  slot_busy.assign(slot_count, 0);
-  active_slots = std::min(slot_count, static_cast<size_t>(CONFIG_DIFF_MMA_BATCH_SIZE) + 2);
-  return true;
-}
-
 void MmaHostBuffer::bind(uint8_t *storage, size_t bytes, size_t count) {
   release();
-  slots.get_deleter().free_host = [](uint8_t *) {};
-  slots.reset(storage);
+  slots = storage;
   stride = bytes;
   slot_count = count;
   slot_busy.assign(count, 0);
@@ -65,7 +39,7 @@ size_t MmaHostBuffer::slot(const uint8_t *buffer) const {
   if (!slots) {
     return invalid_slot;
   }
-  const uintptr_t base = reinterpret_cast<uintptr_t>(slots.get());
+  const uintptr_t base = reinterpret_cast<uintptr_t>(slots);
   const uintptr_t address = reinterpret_cast<uintptr_t>(buffer);
   if (address < base) {
     return invalid_slot;
@@ -96,7 +70,7 @@ uint8_t *MmaHostBuffer::acquire(size_t bytes) {
       ++leased_slots;
       if (++next_slot == active_slots)
         next_slot = 0;
-      return slots.get() + slot * stride;
+      return slots + slot * stride;
     }
   }
   // Preserve submission backpressure; exhausted pools do not wait.
@@ -115,7 +89,7 @@ void MmaHostBuffer::recycle(uint8_t *buffer) {
 }
 
 void MmaHostBuffer::release() {
-  slots.reset();
+  slots = nullptr;
   slot_busy.clear();
   active_slots = 0;
   leased_slots = 0;

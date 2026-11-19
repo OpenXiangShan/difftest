@@ -35,26 +35,12 @@ static bool report_error(const char *what, cudaError_t err) {
   return false;
 }
 
-static uint8_t *allocate_pinned(size_t bytes) {
-  uint8_t *buffer = nullptr;
-  if (!report_error("allocate pinned host buffer", cudaMallocHost(reinterpret_cast<void **>(&buffer), bytes))) {
-    return nullptr;
-  }
-  return buffer;
-}
-
-static void free_pinned(uint8_t *buffer) {
-  cudaFreeHost(buffer);
-}
-
 CudaMmaWorkspace::~CudaMmaWorkspace() {
   release();
 }
 
 bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes,
                                 uint8_t *const shared_host[3]) {
-  // Pending requests, one producer snapshot and one retained first mismatch.
-  const size_t slots = batch_size * CONFIG_DIFF_MMA_BACKPRESSURE_FACTOR + 2;
   if (descriptors != nullptr || batch_size == 0 || batch_size > 65535 || ab_reg_bytes == 0 || c_reg_bytes == 0 ||
       batch_size > SIZE_MAX / sizeof(CudaMmaBatchDescriptor) || ab_reg_bytes > SIZE_MAX / batch_size ||
       c_reg_bytes > SIZE_MAX / batch_size) {
@@ -98,12 +84,8 @@ bool CudaMmaWorkspace::allocate(size_t batch_size, size_t ab_reg_bytes, size_t c
     auto &op = operands[i];
     const size_t bytes = i == 2 ? c_reg_bytes : ab_reg_bytes;
     op.stride = bytes;
-    op.shared_host = shared_host ? shared_host[i] : nullptr;
+    op.shared_host = shared_host[i];
     op.spans.reserve(batch_size + 1);
-    if (!op.shared_host && !host[i].allocate(bytes, slots, allocate_pinned, free_pinned)) {
-      release();
-      return false;
-    }
   }
   if (!report_error("allocate batch descriptors",
                     cudaMalloc(reinterpret_cast<void **>(&descriptors), batch_size * sizeof(CudaMmaBatchDescriptor)))) {
@@ -194,15 +176,14 @@ void CudaMmaWorkspace::release() {
       cudaFree(op.device);
       op.device = nullptr;
     }
-    host[i].release();
     op.spans.clear();
   }
   capacity = 0;
 }
 
-CudaMmaWorkspace *cuda_mma_backend_create(MmaHostBuffer (&host)[3], size_t batch_size, size_t ab_reg_bytes,
-                                          size_t c_reg_bytes, uint8_t *const shared_host[3]) {
-  std::unique_ptr<CudaMmaWorkspace> workspace(new CudaMmaWorkspace(host));
+CudaMmaWorkspace *cuda_mma_backend_create(size_t batch_size, size_t ab_reg_bytes, size_t c_reg_bytes,
+                                         uint8_t *const shared_host[3]) {
+  std::unique_ptr<CudaMmaWorkspace> workspace(new CudaMmaWorkspace());
   if (!workspace->allocate(batch_size, ab_reg_bytes, c_reg_bytes, shared_host)) {
     return nullptr;
   }
@@ -219,19 +200,15 @@ static uint64_t &operand_offset(CudaMmaBatchDescriptor &desc, size_t operand) {
 
 static void map_operand(CudaMmaWorkspace &workspace, const CudaMmaBatchItem *items, size_t begin, size_t end,
                         size_t operand) {
-  const auto &host = workspace.host[operand];
   auto &spans = workspace.operands[operand].spans;
   spans.clear();
   const auto &op = workspace.operands[operand];
   size_t previous_slot = MmaHostBuffer::invalid_slot;
   for (size_t i = begin; i < end; ++i) {
     auto *data = const_cast<uint8_t *>(operand_data(items[i], operand));
-    const size_t slot =
-        op.shared_host ? (reinterpret_cast<uintptr_t>(data) - reinterpret_cast<uintptr_t>(op.shared_host)) / op.stride
-                       : host.slot(data);
+    const size_t slot = (reinterpret_cast<uintptr_t>(data) - reinterpret_cast<uintptr_t>(op.shared_host)) / op.stride;
     operand_offset(workspace.host_descriptors[i], operand) = i * op.stride;
-    if (slot != MmaHostBuffer::invalid_slot && previous_slot != MmaHostBuffer::invalid_slot &&
-        slot == previous_slot + 1) {
+    if (previous_slot != MmaHostBuffer::invalid_slot && slot == previous_slot + 1) {
       spans.back().bytes += op.stride;
     } else {
       spans.push_back({data, op.stride});
