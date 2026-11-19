@@ -87,6 +87,10 @@ void DiffState::replay_restore() {
 #endif // CONFIG_DIFFTEST_LOADEVENT && CONFIG_DIFFTEST_SQUASH
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
   copy_matrix_sw_rob(matrix_sw_rob, replay_matrix_sw_rob);
+  swrob_wait_refcommit_cnt = 0;
+  for (const auto &entry: matrix_sw_rob) {
+    swrob_wait_refcommit_cnt += entry.state == WAIT_REF_COMMIT;
+  }
   mrelease_check_pending = true;
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT

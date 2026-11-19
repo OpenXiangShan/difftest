@@ -209,6 +209,7 @@ public:
   };
 
   std::deque<AmeInstRobEntry> matrix_sw_rob;
+  uint64_t swrob_wait_refcommit_cnt = 0;
   bool mrelease_check_pending = false;
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
