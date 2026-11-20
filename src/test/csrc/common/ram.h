@@ -80,7 +80,7 @@ public:
 
 class MmapMemory : public SimMemory {
 private:
-  uint64_t *ram;
+  uint64_t *ram = nullptr;
   uint64_t img_size;
   bool clone_full_mem;
   int cow_fd = -1;
@@ -89,7 +89,8 @@ public:
   MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed, bool cow = false);
   virtual ~MmapMemory();
   void load_image(const char *image, MemoryWriteMode raw_mode);
-  void seal_cow();
+  void enable_cow();
+  bool seal_cow(bool required = true);
   void *create_cow_branch() override;
   uint64_t pad_img_size(uint64_t align);
   void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) override {

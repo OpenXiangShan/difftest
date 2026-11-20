@@ -49,6 +49,7 @@ REF_ALL(DeclExtRefFunc)
   extern RefFunc(ref_func, ret __attribute__((weak)), __VA_ARGS__); \
   }
 REF_OPTIONAL(DeclWeakExtRefFunc)
+extern "C" bool difftest_supports_mem_cow() __attribute__((weak));
 #endif
 
 AbstractRefProxy::AbstractRefProxy(int coreid, size_t ram_size, const char *env, const char *file_path)
@@ -138,6 +139,20 @@ void *AbstractRefProxy::load_handler(const char *env, const char *file_path) {
   }
 
   return so_handler;
+}
+
+bool AbstractRefProxy::supports_mem_cow(const char *env, const char *file_path) {
+#ifdef LINKED_REFPROXY_LIB
+  return difftest_supports_mem_cow && difftest_supports_mem_cow() && difftest_get_backed_memory && get_pmem &&
+         difftest_set_ramsize;
+#else
+  void *handler = load_handler(env, file_path);
+  auto supports = reinterpret_cast<bool (*)()>(dlsym(handler, "difftest_supports_mem_cow"));
+  bool supported = supports && supports() && dlsym(handler, "difftest_get_backed_memory") &&
+                   dlsym(handler, "get_pmem") && dlsym(handler, "difftest_set_ramsize");
+  dlclose(handler);
+  return supported;
+#endif
 }
 
 template <typename T> T AbstractRefProxy::load_function(const char *func_name) {
@@ -359,11 +374,21 @@ bool RefProxy::do_csr_waive(DiffTestState *dut) {
 #define NEMU_ENV_VARIABLE "NEMU_HOME"
 #define NEMU_SO_FILENAME  "build/riscv64-nemu-interpreter-so"
 NemuProxy::NemuProxy(int coreid, size_t ram_size) : RefProxy(coreid, ram_size, NEMU_ENV_VARIABLE, NEMU_SO_FILENAME) {}
+bool NemuProxy::supports_mem_cow() {
+  return AbstractRefProxy::supports_mem_cow(NEMU_ENV_VARIABLE, NEMU_SO_FILENAME);
+}
 
 #define SPIKE_ENV_VARIABLE "SPIKE_HOME"
 #define SPIKE_SO_FILENAME  "difftest/build/riscv64-spike-so"
 SpikeProxy::SpikeProxy(int coreid, size_t ram_size)
     : RefProxy(coreid, ram_size, SPIKE_ENV_VARIABLE, SPIKE_SO_FILENAME) {}
+bool SpikeProxy::supports_mem_cow() {
+  return AbstractRefProxy::supports_mem_cow(SPIKE_ENV_VARIABLE, SPIKE_SO_FILENAME);
+}
+
+bool LinkedProxy::supports_mem_cow() {
+  return AbstractRefProxy::supports_mem_cow(nullptr, nullptr);
+}
 
 LinkedProxy::LinkedProxy(int coreid, size_t ram_size) : RefProxy(coreid, ram_size) {
   if (NUM_CORES > 1) {

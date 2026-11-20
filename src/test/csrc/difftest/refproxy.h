@@ -220,13 +220,14 @@ public:
 
   AbstractRefProxy(int coreid, size_t ram_size, const char *env, const char *file_path);
   ~AbstractRefProxy();
+  static bool supports_mem_cow(const char *env, const char *file_path);
 
 protected:
   REF_OPTIONAL(DeclRefFunc)
 
 private:
   void *const handler;
-  void *load_handler(const char *env, const char *file_path);
+  static void *load_handler(const char *env, const char *file_path);
   template <typename T> T load_function(const char *func_name);
 };
 
@@ -585,18 +586,21 @@ class NemuProxy : public RefProxy {
 public:
   NemuProxy(int coreid, size_t ram_size = 0);
   ~NemuProxy() {}
+  static bool supports_mem_cow();
 };
 
 class SpikeProxy : public RefProxy {
 public:
   SpikeProxy(int coreid, size_t ram_size = 0);
   ~SpikeProxy() {}
+  static bool supports_mem_cow();
 };
 
 class LinkedProxy : public RefProxy {
 public:
   LinkedProxy(int coreid, size_t ram_size = 0);
   ~LinkedProxy() {}
+  static bool supports_mem_cow();
 };
 
 struct SyncState {

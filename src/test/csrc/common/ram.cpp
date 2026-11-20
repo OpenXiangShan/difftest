@@ -18,6 +18,7 @@
 #include "common.h"
 #include "compress.h"
 #include "elfloader.h"
+#include <cerrno>
 #include <cstring>
 #ifdef __linux__
 #include <fcntl.h>
@@ -187,21 +188,7 @@ void SimMemory::display_stats() {
 MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed, bool cow)
     : SimMemory(n_bytes), clone_full_mem(random_mem && seed != 0) {
   if (cow) {
-#ifdef __linux__
-    cow_fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-    if (cow_fd < 0 || ftruncate(cow_fd, memory_size) != 0) {
-      perror("create COW RAM backing");
-      exit(1);
-    }
-    ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_SHARED, cow_fd, 0);
-    if (ram == MAP_FAILED) {
-      perror("map COW RAM backing");
-      exit(1);
-    }
-#else
-    fprintf(stderr, "--enable-mem-cow requires Linux\n");
-    exit(1);
-#endif
+    enable_cow();
   } else {
     ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   }
@@ -295,15 +282,65 @@ void *MmapMemory::create_cow_branch() {
   return branch;
 }
 
-void MmapMemory::seal_cow() {
+void MmapMemory::enable_cow() {
 #ifdef __linux__
-  if (munmap(ram, memory_size) != 0 ||
-      fcntl(cow_fd, F_ADD_SEALS, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) != 0) {
+  cow_fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  if (cow_fd < 0 || ftruncate(cow_fd, memory_size) != 0) {
+    perror("create COW RAM backing");
+    exit(1);
+  }
+  auto *shared = (uint8_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_SHARED, cow_fd, 0);
+  if (shared == MAP_FAILED) {
+    perror("map COW RAM backing");
+    exit(1);
+  }
+  if (ram) {
+    // Auto selection uses the decoded size. Release each copied chunk so promotion
+    // never retains a second full physical copy of the loaded image.
+    uint64_t size = clone_full_mem ? memory_size : img_size;
+    constexpr uint64_t chunk_size = 1 << 20;
+    for (uint64_t offset = 0; offset < size; offset += chunk_size) {
+      uint64_t n = std::min(chunk_size, size - offset);
+      auto *source = (uint8_t *)ram + offset;
+      nonzero_large_memcpy(shared + offset, source, n);
+      if (madvise(source, n, MADV_DONTNEED) != 0) {
+        perror("release copied RAM pages");
+        exit(1);
+      }
+    }
+    munmap(ram, memory_size);
+  }
+  ram = (uint64_t *)shared;
+#else
+  fprintf(stderr, "--enable-mem-cow requires Linux\n");
+  exit(1);
+#endif
+}
+
+bool MmapMemory::seal_cow(bool required) {
+#ifdef __linux__
+  if (munmap(ram, memory_size) != 0) {
+    perror("unmap COW RAM backing");
+    exit(1);
+  }
+  bool sealed = fcntl(cow_fd, F_ADD_SEALS, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) == 0;
+  if (!sealed && (required || errno != EBUSY)) {
     perror("seal COW RAM backing");
     exit(1);
   }
   ram = (uint64_t *)create_cow_branch();
+  if (!sealed) {
+    // The kernel can still see transient page references after unmapping. Keep
+    // only the DUT's private mapping and use the ordinary Golden/REF copy path.
+    close(cow_fd);
+    cow_fd = -1;
+    Info("Automatic RAM COW skipped: backing busy; using ordinary memory copies\n");
+    return false;
+  }
   Info("Initial RAM sealed; DUT, Golden Memory and REF use private COW branches\n");
+  return true;
+#else
+  return false;
 #endif
 }
 
