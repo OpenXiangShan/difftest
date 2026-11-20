@@ -89,7 +89,7 @@ public:
   MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed, bool cow = false);
   virtual ~MmapMemory();
   void load_image(const char *image, MemoryWriteMode raw_mode);
-  void enable_cow();
+  bool enable_cow(bool required = true);
   bool seal_cow(bool required = true);
   void *create_cow_branch() override;
   uint64_t pad_img_size(uint64_t align);

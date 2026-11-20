@@ -95,11 +95,14 @@ Single-core Linux emu automatically enables RAM COW when the loaded image is at
 least 1 GiB after decompression and the REF advertises support through
 `difftest_supports_mem_cow`. The threshold uses loaded bytes, not the compressed
 file size or the configured RAM capacity. It requires difftest, linear RAM and
-no snapshots. Other configurations and older REFs keep the ordinary copy path. If the kernel
-reports a busy backing while sealing, automatic mode also uses ordinary copies.
+no snapshots. Other configurations and older REFs keep the ordinary copy path.
+If preparing the memfd fails, automatic mode keeps the original anonymous RAM
+and uses ordinary copies. If sealing reports a busy backing, it restores
+anonymous RAM from the memfd data extents, skipping holes, before ordinary
+copying.
 Use `--disable-mem-cow` for comparisons or `--enable-mem-cow` to force it for a
 smaller image; forcing an unsupported configuration or a no-op REF attachment
-fails explicitly.
+fails explicitly. FPGA host and `ref-drive` reject explicit `--enable-mem-cow`.
 
 Automatic selection promotes the loaded RAM to a sparse memfd in 1 MiB chunks,
 releasing copied source pages as it goes. Forced COW loads directly into the

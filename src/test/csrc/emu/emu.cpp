@@ -146,8 +146,7 @@ Emulator::Emulator(int argc, const char *argv[])
   constexpr uint64_t auto_cow_min_image_size = 1ULL << 30;
   if (args.mem_cow == MemCowMode::Auto && cow_supported && simMemory->get_img_size() >= auto_cow_min_image_size) {
     if (REF_PROXY::supports_mem_cow()) {
-      static_cast<MmapMemory *>(simMemory)->enable_cow();
-      enable_mem_cow = true;
+      enable_mem_cow = static_cast<MmapMemory *>(simMemory)->enable_cow(false);
     } else {
       Info("Automatic RAM COW skipped: REF does not advertise COW support\n");
     }

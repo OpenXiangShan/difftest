@@ -282,18 +282,29 @@ void *MmapMemory::create_cow_branch() {
   return branch;
 }
 
-void MmapMemory::enable_cow() {
+bool MmapMemory::enable_cow(bool required) {
 #ifdef __linux__
-  cow_fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-  if (cow_fd < 0 || ftruncate(cow_fd, memory_size) != 0) {
-    perror("create COW RAM backing");
-    exit(1);
+  int fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  auto *shared = (uint8_t *)MAP_FAILED;
+  const char *error = "create COW RAM backing";
+  if (fd >= 0 && ftruncate(fd, memory_size) == 0) {
+    shared = (uint8_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    error = "map COW RAM backing";
   }
-  auto *shared = (uint8_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_SHARED, cow_fd, 0);
   if (shared == MAP_FAILED) {
-    perror("map COW RAM backing");
-    exit(1);
+    int saved_errno = errno;
+    if (fd >= 0) {
+      close(fd);
+    }
+    if (required) {
+      errno = saved_errno;
+      perror(error);
+      exit(1);
+    }
+    Info("Automatic RAM COW skipped: %s: %s\n", error, strerror(saved_errno));
+    return false;
   }
+  cow_fd = fd;
   if (ram) {
     // Auto selection uses the decoded size. Release each copied chunk so promotion
     // never retains a second full physical copy of the loaded image.
@@ -311,6 +322,7 @@ void MmapMemory::enable_cow() {
     munmap(ram, memory_size);
   }
   ram = (uint64_t *)shared;
+  return true;
 #else
   fprintf(stderr, "--enable-mem-cow requires Linux\n");
   exit(1);
@@ -330,8 +342,29 @@ bool MmapMemory::seal_cow(bool required) {
   }
   ram = (uint64_t *)create_cow_branch();
   if (!sealed) {
-    // The kernel can still see transient page references after unmapping. Keep
-    // only the DUT's private mapping and use the ordinary Golden/REF copy path.
+    // Reading a memfd hole allocates backing pages. Restore anonymous RAM from
+    // data extents before the ordinary Golden/REF clones scan the whole image.
+    auto *anonymous =
+        (uint8_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+    if (anonymous == MAP_FAILED) {
+      perror("restore anonymous RAM");
+      exit(1);
+    }
+    for (off_t offset = 0; offset < (off_t)memory_size;) {
+      off_t data = lseek(cow_fd, offset, SEEK_DATA);
+      if (data < 0 && errno == ENXIO) {
+        break;
+      }
+      off_t end = data < 0 ? -1 : lseek(cow_fd, data, SEEK_HOLE);
+      if (end < 0) {
+        perror("find COW RAM data extent");
+        exit(1);
+      }
+      nonzero_large_memcpy(anonymous + data, (uint8_t *)ram + data, end - data);
+      offset = end;
+    }
+    munmap(ram, memory_size);
+    ram = (uint64_t *)anonymous;
     close(cow_fd);
     cow_fd = -1;
     Info("Automatic RAM COW skipped: backing busy; using ordinary memory copies\n");
