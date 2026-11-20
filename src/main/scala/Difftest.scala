@@ -587,6 +587,12 @@ class DiffAmuWritebackEvent(nBanks: Int = 8, wordsPerBank: Int = 4, hasMask: Boo
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
 
+class DiffAmuWritebackBlock(wordsPerWrite: Int) extends AmuWritebackBlock(wordsPerWrite) with DifftestBundle {
+  override val desiredCppName: String = "amu_writeback_block"
+  override def classArgs: Map[String, Any] = Map("wordsPerWrite" -> wordsPerWrite)
+  override val squashGroup: Seq[String] = Seq("MATRIX")
+}
+
 class DiffAmuFinishEvent extends AmuFinishEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "amu_finish"
 

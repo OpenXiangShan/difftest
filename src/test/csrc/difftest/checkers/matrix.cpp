@@ -330,6 +330,54 @@ int AmuExecRecorder::check(const DifftestAmuWritebackEvent &probe) {
   return STATE_ERROR;
 }
 
+#ifdef CONFIG_DIFFTEST_AMUWRITEBACKBLOCK
+int AmuWritebackBlockRecorder::check(const DifftestAmuWritebackBlock &probe) {
+  constexpr size_t banks = CONFIG_DIFF_AMU_WRITEBACK_BANKS;
+  constexpr size_t bank_bytes = CONFIG_DIFF_AMU_C_WORDS_PER_BANK * sizeof(uint64_t);
+  constexpr size_t stride = CONFIG_DIFF_AMU_ARLEN / (8 * bank_bytes);
+  constexpr size_t entries_per_bank = CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / (banks * bank_bytes);
+  if (probe.count == 0 || probe.count > sizeof(probe.bankAddr)) {
+    printf("Invalid MMA writeback block count: %u\n", unsigned(probe.count));
+    set_error_pc(state->coreid, probe.pc);
+    return STATE_ERROR;
+  }
+
+  for (auto &entry: state->matrix_sw_rob) {
+    if (entry.amu_event.pc != probe.pc || entry.state != DiffState::WAIT_DUT_EXEC) {
+      continue;
+    }
+    if (entry.amu_event.op != 0) {
+      break;
+    }
+    if (!entry.res) {
+      entry.res = difftest[state->coreid]->get_mma_verifier()->allocate_result();
+    }
+    auto *dst = reinterpret_cast<uint8_t *>(entry.res.get());
+    const auto *src = reinterpret_cast<const uint8_t *>(&probe) + offsetof(DifftestAmuWritebackBlock, data);
+    for (unsigned i = 0; i < probe.count; ++i) {
+      const size_t addr = probe.bankAddr[i];
+      if (addr >= entries_per_bank) {
+        printf("Invalid MMA writeback block address: %zu\n", addr);
+        set_error_pc(state->coreid, probe.pc);
+        return STATE_ERROR;
+      }
+      const size_t base = (addr / stride * stride * banks + addr % stride) * bank_bytes;
+      for (size_t bank = 0; bank < banks; ++bank) {
+        memcpy(dst + base + bank * stride * bank_bytes, src, bank_bytes);
+        src += bank_bytes;
+      }
+    }
+    if (probe.finish) {
+      entry.state = DiffState::WAIT_SWROB_COMMIT;
+    }
+    return STATE_OK;
+  }
+  printf("No matching MMA instruction for writeback block: core %d, pc 0x%016lx\n", state->coreid, probe.pc);
+  set_error_pc(state->coreid, probe.pc);
+  return STATE_ERROR;
+}
+#endif
+
 #ifdef CONFIG_DIFFTEST_AMUFINISHEVENT
 bool AmuFinishRecorder::get_valid(const DifftestAmuFinishEvent &probe) {
   return probe.valid;

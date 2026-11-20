@@ -470,6 +470,14 @@ class AmuWritebackEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4, val hasM
   val finish = Bool()
 }
 
+class AmuWritebackBlock(val wordsPerWrite: Int) extends DifftestBaseBundle with HasValid {
+  val pc = UInt(64.W)
+  val count = UInt(4.W)
+  val finish = Bool()
+  val bankAddr = Vec(8, UInt(8.W))
+  val data = Vec(8 * wordsPerWrite, UInt(64.W))
+}
+
 // Completion notification for mstore/mrelease; validity implies completion.
 class AmuFinishEvent extends DifftestBaseBundle with HasValid {
   val pc = UInt(64.W)

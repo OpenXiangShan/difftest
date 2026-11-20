@@ -468,6 +468,10 @@ void Difftest::init_checkers() {
         new AmuCtrlRecorder([this, i]() -> DifftestAmuCtrlEvent & { return dut->amu_ctrl[i]; }, state, proxy));
   }
   checkers.push_back(new AmuCtrlChecker(state, proxy));
+#ifdef CONFIG_DIFFTEST_AMUWRITEBACKBLOCK
+  checkers.push_back(new AmuWritebackBlockRecorder(
+      [this]() -> DifftestAmuWritebackBlock & { return dut->amu_writeback_block; }, state, proxy));
+#endif
   for (int i = 0; i < CONFIG_DIFF_AMU_WRITEBACK_WIDTH; i++) {
     checkers.push_back(new AmuExecRecorder([this, i]() -> DifftestAmuWritebackEvent & { return dut->amu_writeback[i]; },
                                            state, proxy));
