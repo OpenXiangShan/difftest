@@ -18,7 +18,12 @@
 #include "common.h"
 #include "compress.h"
 #include "elfloader.h"
+#include <cerrno>
 #include <cstring>
+#ifdef __linux__
+#include <fcntl.h>
+#include <linux/memfd.h>
+#endif
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -180,10 +185,13 @@ void SimMemory::display_stats() {
 #endif // FUZZING
 }
 
-MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed)
+MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed, bool cow)
     : SimMemory(n_bytes), clone_full_mem(random_mem && seed != 0) {
-  // initialize memory using Linux mmap
-  ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+  if (cow) {
+    enable_cow();
+  } else {
+    ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+  }
   if (ram == (uint64_t *)MAP_FAILED) {
     printf("Warning: Insufficient phisical memory\n");
     memory_size = 128 * 1024 * 1024UL;
@@ -262,8 +270,118 @@ uint64_t MmapMemory::pad_img_size(uint64_t align) {
   return img_size;
 }
 
+void *MmapMemory::create_cow_branch() {
+  if (cow_fd < 0) {
+    return nullptr;
+  }
+  void *branch = mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, cow_fd, 0);
+  if (branch == MAP_FAILED) {
+    perror("map private COW RAM branch");
+    exit(1);
+  }
+  return branch;
+}
+
+bool MmapMemory::enable_cow(bool required) {
+#ifdef __linux__
+  int fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  auto *shared = (uint8_t *)MAP_FAILED;
+  const char *error = "create COW RAM backing";
+  if (fd >= 0 && ftruncate(fd, memory_size) == 0) {
+    shared = (uint8_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    error = "map COW RAM backing";
+  }
+  if (shared == MAP_FAILED) {
+    int saved_errno = errno;
+    if (fd >= 0) {
+      close(fd);
+    }
+    if (required) {
+      errno = saved_errno;
+      perror(error);
+      exit(1);
+    }
+    Info("Automatic RAM COW skipped: %s: %s\n", error, strerror(saved_errno));
+    return false;
+  }
+  cow_fd = fd;
+  if (ram) {
+    // Auto selection uses the decoded size. Release each copied chunk so promotion
+    // never retains a second full physical copy of the loaded image.
+    uint64_t size = clone_full_mem ? memory_size : img_size;
+    constexpr uint64_t chunk_size = 1 << 20;
+    for (uint64_t offset = 0; offset < size; offset += chunk_size) {
+      uint64_t n = std::min(chunk_size, size - offset);
+      auto *source = (uint8_t *)ram + offset;
+      nonzero_large_memcpy(shared + offset, source, n);
+      if (madvise(source, n, MADV_DONTNEED) != 0) {
+        perror("release copied RAM pages");
+        exit(1);
+      }
+    }
+    munmap(ram, memory_size);
+  }
+  ram = (uint64_t *)shared;
+  return true;
+#else
+  fprintf(stderr, "--enable-mem-cow requires Linux\n");
+  exit(1);
+#endif
+}
+
+bool MmapMemory::seal_cow(bool required) {
+#ifdef __linux__
+  if (munmap(ram, memory_size) != 0) {
+    perror("unmap COW RAM backing");
+    exit(1);
+  }
+  bool sealed = fcntl(cow_fd, F_ADD_SEALS, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) == 0;
+  if (!sealed && (required || errno != EBUSY)) {
+    perror("seal COW RAM backing");
+    exit(1);
+  }
+  ram = (uint64_t *)create_cow_branch();
+  if (!sealed) {
+    // Reading a memfd hole allocates backing pages. Restore anonymous RAM from
+    // data extents before the ordinary Golden/REF clones scan the whole image.
+    auto *anonymous =
+        (uint8_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+    if (anonymous == MAP_FAILED) {
+      perror("restore anonymous RAM");
+      exit(1);
+    }
+    for (off_t offset = 0; offset < (off_t)memory_size;) {
+      off_t data = lseek(cow_fd, offset, SEEK_DATA);
+      if (data < 0 && errno == ENXIO) {
+        break;
+      }
+      off_t end = data < 0 ? -1 : lseek(cow_fd, data, SEEK_HOLE);
+      if (end < 0) {
+        perror("find COW RAM data extent");
+        exit(1);
+      }
+      nonzero_large_memcpy(anonymous + data, (uint8_t *)ram + data, end - data);
+      offset = end;
+    }
+    munmap(ram, memory_size);
+    ram = (uint64_t *)anonymous;
+    close(cow_fd);
+    cow_fd = -1;
+    Info("Automatic RAM COW skipped: backing busy; using ordinary memory copies\n");
+    return false;
+  }
+  Info("Initial RAM sealed; DUT, Golden Memory and REF use private COW branches\n");
+  return true;
+#else
+  return false;
+#endif
+}
+
 MmapMemory::~MmapMemory() {
   munmap(ram, memory_size);
+  if (cow_fd >= 0) {
+    close(cow_fd);
+  }
 #ifdef WITH_DRAMSIM3
   dramsim3_finish();
 #endif

@@ -67,6 +67,10 @@ public:
   virtual void clone_on_demand(std::function<void(uint64_t, void *, size_t)> func, bool skip_zero = false) {
     clone([func](void *src, size_t n) { func(0, src, n); }, skip_zero);
   }
+  // The caller owns the returned private mapping; nullptr means COW is disabled.
+  virtual void *create_cow_branch() {
+    return nullptr;
+  }
   virtual uint64_t *as_ptr() {
     return nullptr;
   }
@@ -76,28 +80,32 @@ public:
 
 class MmapMemory : public SimMemory {
 private:
-  uint64_t *ram;
+  uint64_t *ram = nullptr;
   uint64_t img_size;
   bool clone_full_mem;
+  int cow_fd = -1;
 
 public:
-  MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed);
+  MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed, bool cow = false);
   virtual ~MmapMemory();
   void load_image(const char *image, MemoryWriteMode raw_mode);
+  bool enable_cow(bool required = true);
+  bool seal_cow(bool required = true);
+  void *create_cow_branch() override;
   uint64_t pad_img_size(uint64_t align);
-  void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) {
+  void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) override {
     size_t n_bytes = (skip_zero && !clone_full_mem) ? img_size : get_size();
     func(ram, n_bytes);
   }
-  uint64_t &at(uint64_t index) {
+  uint64_t &at(uint64_t index) override {
     on_access(index);
     return ram[index];
   }
 
-  uint64_t *as_ptr() {
+  uint64_t *as_ptr() override {
     return ram;
   }
-  virtual inline uint64_t get_img_size() {
+  uint64_t get_img_size() override {
     return img_size;
   }
 };

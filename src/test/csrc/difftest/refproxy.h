@@ -184,6 +184,8 @@ public:
   f(ref_skip_one, difftest_skip_one, void, bool, bool, uint32_t, uint64_t)                                  \
   f(ref_guided_exec, difftest_guided_exec, void, void*)                                                     \
   f(ref_memcpy_init, difftest_memcpy_init, void, uint64_t, void*, size_t, bool)                             \
+  f(ref_attach_memory, difftest_get_backed_memory, void, void*, size_t)                                    \
+  f(ref_get_pmem, get_pmem, uint8_t*, )                                                                   \
   f(raise_nmi_intr, difftest_raise_nmi_intr, void, bool)                                                    \
   f(ref_virtual_interrupt_is_hvictl_inject, difftest_virtual_interrupt_is_hvictl_inject, void, bool)        \
   f(ref_interrupt_delegate, difftest_interrupt_delegate, void, void*)                                       \
@@ -218,13 +220,14 @@ public:
 
   AbstractRefProxy(int coreid, size_t ram_size, const char *env, const char *file_path);
   ~AbstractRefProxy();
+  static bool supports_mem_cow(const char *env, const char *file_path);
 
 protected:
   REF_OPTIONAL(DeclRefFunc)
 
 private:
   void *const handler;
-  void *load_handler(const char *env, const char *file_path);
+  static void *load_handler(const char *env, const char *file_path);
   template <typename T> T load_function(const char *func_name);
 };
 
@@ -267,6 +270,11 @@ public:
 
   ref_state_t state;
 
+private:
+  void *cow_memory = nullptr;
+  size_t cow_memory_size = 0;
+
+public:
   inline uint64_t *arch_reg(uint8_t src, bool is_fp = false) {
     return
 #ifdef CONFIG_DIFFTEST_ARCHFPREGSTATE
@@ -437,6 +445,7 @@ public:
     }
   }
 
+  void attach_memory(void *memory, size_t size);
   void flash_init(const uint8_t *flash_base, size_t size, const char *flash_bin);
 
   inline void report_unsupported_ref(const char *feature) {
@@ -577,18 +586,21 @@ class NemuProxy : public RefProxy {
 public:
   NemuProxy(int coreid, size_t ram_size = 0);
   ~NemuProxy() {}
+  static bool supports_mem_cow();
 };
 
 class SpikeProxy : public RefProxy {
 public:
   SpikeProxy(int coreid, size_t ram_size = 0);
   ~SpikeProxy() {}
+  static bool supports_mem_cow();
 };
 
 class LinkedProxy : public RefProxy {
 public:
   LinkedProxy(int coreid, size_t ram_size = 0);
   ~LinkedProxy() {}
+  static bool supports_mem_cow();
 };
 
 struct SyncState {

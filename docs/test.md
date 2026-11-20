@@ -85,9 +85,34 @@ Key runtime options:
 | `-e, --log-end=NUM` | Stop logging at cycle N |
 | `-s, --seed=NUM` | Random seed |
 | `--random-mem` | Fill memory from a `--seed`-initialized LFSR stream before loading the image |
+| `--enable-mem-cow` | Force initial DUT, Golden Memory and REF pages to use private COW mappings |
+| `--disable-mem-cow` | Disable automatic RAM COW for this run |
 | `--mma-cpu-threads=N` | Maximum workers in the shared CPU MMA service across DUT cores (default `1`). Asynchronous CPU builds use a standalone `difftest-mma-worker`; synchronous and CUDA builds ignore this option. |
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
+
+Single-core Linux emu automatically enables RAM COW when the loaded image is at
+least 1 GiB after decompression and the REF advertises support through
+`difftest_supports_mem_cow`. The threshold uses loaded bytes, not the compressed
+file size or the configured RAM capacity. It requires difftest, linear RAM and
+no snapshots. Other configurations and older REFs keep the ordinary copy path.
+If preparing the memfd fails, automatic mode keeps the original anonymous RAM
+and uses ordinary copies. If sealing reports a busy backing, it restores
+anonymous RAM from the memfd data extents, skipping holes, before ordinary
+copying.
+Use `--disable-mem-cow` for comparisons or `--enable-mem-cow` to force it for a
+smaller image; forcing an unsupported configuration or a no-op REF attachment
+fails explicitly. FPGA host and `ref-drive` reject explicit `--enable-mem-cow`.
+
+Automatic selection promotes the loaded RAM to a sparse memfd in 1 MiB chunks,
+releasing copied source pages as it goes. Forced COW loads directly into the
+memfd. Both apply any restorer overwrite and RAM copy before sealing the backing
+and creating independent private DUT, Golden Memory and REF mappings. Guest
+addresses and initial bytes are preserved. Build a matching NEMU REF with
+`riscv64-xs-ref_defconfig` and pass its `.so` using `--diff`. Promotion adds a
+sparse copy during startup; writes allocate private pages, so savings depend on
+how much each model changes. The immutable initial backing remains allocated
+until the mappings are released.
 
 ### 2.2 simv (VCS Top with Verilator Backend)
 

@@ -53,6 +53,8 @@ int main(int argc, const char *argv[]) {
   try {
     common_set_locale();
     auto args = parse_args(argc, argv);
+    if (args.mem_cow == MemCowMode::Enabled)
+      throw std::runtime_error("--enable-mem-cow is supported only by emu");
     if (!args.refdrive_trace_name || !args.refdrive_trace_is_read || !args.enable_diff || NUM_CORES != 1)
       throw std::runtime_error("Use ref-drive --load-refdrive-trace=DIR -i IMAGE -F BOOTROM --diff=REF.so");
     if (args.enable_fork || args.gcpt_restore || args.snapshot_path || args.image_as_footprints || args.cst_file ||

@@ -27,6 +27,12 @@ enum class RefMode {
 };
 #endif
 
+enum class MemCowMode {
+  Auto,
+  Enabled,
+  Disabled
+};
+
 struct CommonArgs {
 #ifdef CONFIG_DIFFTEST_FAST_REF
 #ifdef CONFIG_DIFFTEST_FORK_REF
@@ -90,6 +96,7 @@ struct CommonArgs {
   bool enable_snapshot = false;
   bool force_dump_result = false;
   bool enable_diff = true;
+  MemCowMode mem_cow = MemCowMode::Auto;
 #ifdef FPGA_HOST
   bool enable_link = true;
   uint32_t ila_size = 0;

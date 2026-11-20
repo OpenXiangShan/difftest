@@ -29,8 +29,13 @@ void FirstInstrCommitChecker::clear_valid(DifftestInstrCommit &probe) {
 
 void FirstInstrCommitChecker::init_ref(RefProxy &proxy, const DiffTestRegState &regs) {
   proxy.flash_init((const uint8_t *)flash_dev.base, flash_dev.img_size, flash_dev.img_path);
-  simMemory->clone_on_demand(
-      [&proxy](uint64_t offset, void *src, size_t n) { proxy.mem_init(PMEM_BASE + offset, src, n, DUT_TO_REF); }, true);
+  if (void *memory = simMemory->create_cow_branch()) {
+    proxy.attach_memory(memory, simMemory->get_size());
+  } else {
+    simMemory->clone_on_demand(
+        [&proxy](uint64_t offset, void *src, size_t n) { proxy.mem_init(PMEM_BASE + offset, src, n, DUT_TO_REF); },
+        true);
+  }
   proxy.regcpy(&regs, FIRST_INST_ADDRESS);
 }
 
