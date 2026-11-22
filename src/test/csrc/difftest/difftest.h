@@ -218,6 +218,9 @@ protected:
 public:
   // Select at startup or an established fork boundary.
   bool set_ref_mode(RefExecMode mode);
+  bool is_fast_ref() const {
+    return fast_ref_enabled;
+  }
   int flush_fast_ref() {
     return fast_ref_enabled ? fast_ref_checker->flush() : DiffTestChecker::STATE_OK;
   }
@@ -292,6 +295,12 @@ private:
 
 extern Difftest **difftest;
 int difftest_init(bool enabled, size_t ramsize);
+#ifdef CONFIG_DIFFTEST_FORK_REF
+// Enable capture with a validated interval after initializing the FPGA host's single REF
+bool difftest_checkpoint_init(uint64_t interval);
+uint64_t difftest_checkpoint_interval();
+std::string difftest_checkpoint_path(uint64_t instr);
+#endif
 
 int difftest_nstep(int step, bool enable_diff);
 void difftest_switch_zone();

@@ -93,6 +93,7 @@ struct CommonArgs {
 #ifdef FPGA_HOST
   bool enable_link = true;
   uint32_t ila_size = 0;
+  uint64_t take_cpt_interval = UINT64_MAX; // -1 disables periodic checkpoints
 #endif
   bool enable_squash = true;
   uint8_t squash_size = 255;
