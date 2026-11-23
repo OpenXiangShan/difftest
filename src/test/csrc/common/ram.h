@@ -86,11 +86,11 @@ private:
   int cow_fd = -1;
 
 public:
-  MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed, bool cow = false);
+  MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed);
   virtual ~MmapMemory();
   void load_image(const char *image, MemoryWriteMode raw_mode);
-  bool enable_cow(bool required = true);
-  bool seal_cow(bool required = true);
+  bool enable_cow();
+  bool seal_cow();
   void *create_cow_branch() override;
   uint64_t pad_img_size(uint64_t align);
   void clone(std::function<void(void *, size_t)> func, bool skip_zero = false) override {

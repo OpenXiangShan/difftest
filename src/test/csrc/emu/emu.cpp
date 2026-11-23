@@ -109,16 +109,7 @@ Emulator::Emulator(int argc, const char *argv[])
   if (args.ram_size) {
     ram_size = parse_ramsize(args.ram_size);
   }
-  bool enable_mem_cow = args.mem_cow == MemCowMode::Enabled;
-  bool cow_supported = false;
-#if defined(__linux__) && !defined(CONFIG_NO_DIFFTEST)
-  cow_supported = NUM_CORES == 1 && args.enable_diff && !args.image_as_footprints && !args.footprints_name &&
-                  !args.enable_snapshot && !args.snapshot_path;
-#endif
-  if (enable_mem_cow && !cow_supported) {
-    fprintf(stderr, "--enable-mem-cow requires single-core Linux difftest with linear RAM and no snapshots\n");
-    exit(1);
-  }
+  bool enable_mem_cow = false;
   // footprints
   if (args.image_as_footprints) {
     if (args.linearized_name) {
@@ -132,7 +123,7 @@ Emulator::Emulator(int argc, const char *argv[])
     if (args.footprints_name) {
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name, args.random_mem, args.seed);
     } else {
-      simMemory = new MmapMemory(args.image, ram_size, args.random_mem, args.seed, enable_mem_cow);
+      simMemory = new MmapMemory(args.image, ram_size, args.random_mem, args.seed);
 #ifdef WITH_DRAMSIM3
       dramsim3_init(args.dramsim3_ini, args.dramsim3_outdir);
 #endif
@@ -144,9 +135,11 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #if defined(__linux__) && !defined(CONFIG_NO_DIFFTEST)
   constexpr uint64_t auto_cow_min_image_size = 1ULL << 30;
-  if (args.mem_cow == MemCowMode::Auto && cow_supported && simMemory->get_img_size() >= auto_cow_min_image_size) {
+  bool cow_supported = NUM_CORES == 1 && args.enable_diff && !args.image_as_footprints && !args.footprints_name &&
+                       !args.enable_snapshot && !args.snapshot_path;
+  if (!args.disable_mem_cow && cow_supported && simMemory->get_img_size() >= auto_cow_min_image_size) {
     if (REF_PROXY::supports_mem_cow()) {
-      enable_mem_cow = static_cast<MmapMemory *>(simMemory)->enable_cow(false);
+      enable_mem_cow = static_cast<MmapMemory *>(simMemory)->enable_cow();
     } else {
       Info("Automatic RAM COW skipped: REF does not advertise COW support\n");
     }
@@ -170,8 +163,8 @@ Emulator::Emulator(int argc, const char *argv[])
     copy_ram(args.copy_ram_offset);
   }
   if (enable_mem_cow) {
-    enable_mem_cow = static_cast<MmapMemory *>(simMemory)->seal_cow(args.mem_cow == MemCowMode::Enabled);
-    if (enable_mem_cow && args.mem_cow == MemCowMode::Auto) {
+    enable_mem_cow = static_cast<MmapMemory *>(simMemory)->seal_cow();
+    if (enable_mem_cow) {
       Info("Automatically enabling RAM COW for loaded image >= 1 GiB\n");
     }
   }

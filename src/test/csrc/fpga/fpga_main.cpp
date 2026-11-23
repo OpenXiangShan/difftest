@@ -97,10 +97,6 @@ int main(int argc, const char *argv[]) {
   fpga_ila_arm_cmd = std::getenv("FPGA_ILA_ARM_CMD");
   fpga_ila_upload_cmd = std::getenv("FPGA_ILA_UPLOAD_CMD");
   args = parse_args(argc, argv);
-  if (args.mem_cow == MemCowMode::Enabled) {
-    fprintf(stderr, "--enable-mem-cow is supported only by emu\n");
-    return 1;
-  }
 
   common_init(argv[0]);
 

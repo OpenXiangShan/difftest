@@ -185,13 +185,9 @@ void SimMemory::display_stats() {
 #endif // FUZZING
 }
 
-MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed, bool cow)
+MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed)
     : SimMemory(n_bytes), clone_full_mem(random_mem && seed != 0) {
-  if (cow) {
-    enable_cow();
-  } else {
-    ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-  }
+  ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {
     printf("Warning: Insufficient phisical memory\n");
     memory_size = 128 * 1024 * 1024UL;
@@ -282,7 +278,7 @@ void *MmapMemory::create_cow_branch() {
   return branch;
 }
 
-bool MmapMemory::enable_cow(bool required) {
+bool MmapMemory::enable_cow() {
 #ifdef __linux__
   int fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   auto *shared = (uint8_t *)MAP_FAILED;
@@ -296,47 +292,39 @@ bool MmapMemory::enable_cow(bool required) {
     if (fd >= 0) {
       close(fd);
     }
-    if (required) {
-      errno = saved_errno;
-      perror(error);
-      exit(1);
-    }
     Info("Automatic RAM COW skipped: %s: %s\n", error, strerror(saved_errno));
     return false;
   }
   cow_fd = fd;
-  if (ram) {
-    // Auto selection uses the decoded size. Release each copied chunk so promotion
-    // never retains a second full physical copy of the loaded image.
-    uint64_t size = clone_full_mem ? memory_size : img_size;
-    constexpr uint64_t chunk_size = 1 << 20;
-    for (uint64_t offset = 0; offset < size; offset += chunk_size) {
-      uint64_t n = std::min(chunk_size, size - offset);
-      auto *source = (uint8_t *)ram + offset;
-      nonzero_large_memcpy(shared + offset, source, n);
-      if (madvise(source, n, MADV_DONTNEED) != 0) {
-        perror("release copied RAM pages");
-        exit(1);
-      }
+  // Auto selection uses the decoded size. Release each copied chunk so promotion
+  // never retains a second full physical copy of the loaded image.
+  uint64_t size = clone_full_mem ? memory_size : img_size;
+  constexpr uint64_t chunk_size = 1 << 20;
+  for (uint64_t offset = 0; offset < size; offset += chunk_size) {
+    uint64_t n = std::min(chunk_size, size - offset);
+    auto *source = (uint8_t *)ram + offset;
+    nonzero_large_memcpy(shared + offset, source, n);
+    if (madvise(source, n, MADV_DONTNEED) != 0) {
+      perror("release copied RAM pages");
+      exit(1);
     }
-    munmap(ram, memory_size);
   }
+  munmap(ram, memory_size);
   ram = (uint64_t *)shared;
   return true;
 #else
-  fprintf(stderr, "--enable-mem-cow requires Linux\n");
-  exit(1);
+  return false;
 #endif
 }
 
-bool MmapMemory::seal_cow(bool required) {
+bool MmapMemory::seal_cow() {
 #ifdef __linux__
   if (munmap(ram, memory_size) != 0) {
     perror("unmap COW RAM backing");
     exit(1);
   }
   bool sealed = fcntl(cow_fd, F_ADD_SEALS, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) == 0;
-  if (!sealed && (required || errno != EBUSY)) {
+  if (!sealed && errno != EBUSY) {
     perror("seal COW RAM backing");
     exit(1);
   }
