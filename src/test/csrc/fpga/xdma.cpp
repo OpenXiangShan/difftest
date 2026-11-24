@@ -59,9 +59,10 @@ template <typename Func, typename Obj, typename... Args> void thread_wrapper(Fun
   (obj->*func)(args...);
 }
 
-FpgaXdma::FpgaXdma(bool fork_readers, size_t pool_slots) {
+FpgaXdma::FpgaXdma(bool fork_readers, size_t pool_slots, bool batch_read) {
 #ifdef USE_THREAD_MEMPOOL
   this->fork_readers = fork_readers;
+  this->batch_read = batch_read;
   packet_pool = std::make_unique<MemoryIdxPool>(sizeof(FpgaPackgeHead), fork_readers ? pool_slots : NUM_BLOCKS);
   if (fork_readers)
     g_packet_pool = packet_pool.get();
@@ -69,6 +70,10 @@ FpgaXdma::FpgaXdma(bool fork_readers, size_t pool_slots) {
 
 #ifndef FPGA_SIM
   if (XdmaRelayClient::enabled()) {
+    if (batch_read) {
+      fprintf(stderr, "[fpga-host] --xdma-batch-read requires local XDMA\n");
+      exit(EXIT_FAILURE);
+    }
     relay = std::make_unique<XdmaRelayClient>(sizeof(FpgaPackgeHead), CONFIG_DMA_CHANNELS);
     return;
   }
@@ -310,76 +315,6 @@ uint32_t FpgaXdma::device_read(bool is_bypass, uint64_t addr) {
   return value;
 }
 
-#ifndef FPGA_SIM
-static void read_local_batches(int fd,
-#ifdef USE_THREAD_MEMPOOL
-                               MemoryIdxPool &packet_pool, [[maybe_unused]] bool fork_readers,
-#endif
-                               std::atomic<bool> &running) {
-#ifdef USE_THREAD_MEMPOOL
-  auto active = [&] { return running && signal_num == 0 && !packet_pool.aborted(); };
-#else
-  auto active = [&] { return running && signal_num == 0; };
-#endif
-  alignas(4096) FpgaPackgeHead batch[32];
-  const size_t packet_bytes = sizeof(batch[0]);
-  size_t requested = packet_bytes; // The first read sets the FIFO's fixed packet length.
-#ifdef CONFIG_DIFFTEST_FORK_REF
-  std::chrono::steady_clock::time_point timeout_start{};
-#endif
-  while (active()) {
-    const ssize_t bytes = read(fd, batch, requested);
-    if (!active())
-      break;
-    if (bytes < 0 && errno == EINTR)
-      continue;
-#ifdef CONFIG_DIFFTEST_FORK_REF
-    // No more packets are expected once FAST has published its endpoint.
-    if (bytes < 0 && errno == ETIMEDOUT && fork_readers && difftest_ref_fork_draining()) {
-      const auto now = std::chrono::steady_clock::now();
-      if (timeout_start == std::chrono::steady_clock::time_point{})
-        timeout_start = now;
-      if (now - timeout_start < std::chrono::minutes(5)) {
-        fprintf(stderr, "XDMA C2H idle timeout; retrying while fork checkers drain\n");
-        continue;
-      }
-    }
-#endif
-    if (bytes <= 0 || static_cast<size_t>(bytes) > requested || bytes % packet_bytes) {
-      fprintf(stderr, "XDMA batch receive failed: %zd bytes for a %zu-byte request\n", bytes, requested);
-#ifdef USE_THREAD_MEMPOOL
-      packet_pool.fail();
-#endif
-      running = false;
-      return;
-    }
-    requested = sizeof(batch);
-    for (size_t i = 0, count = bytes / packet_bytes; i < count && active(); ++i) {
-#ifdef USE_THREAD_MEMPOOL
-      size_t slot;
-      char *mem = nullptr;
-      while (active() && !(mem = packet_pool.get_free_chunk(&slot)))
-        std::this_thread::yield();
-      if (!mem)
-        return;
-      memcpy(mem, &batch[i], packet_bytes);
-      if (!packet_pool.write_free_chunk(batch[i].diff_packge[0].packge_idx, slot)) {
-        fprintf(stderr, "XDMA pool publication failed\n");
-        running = false;
-        return;
-      }
-#else
-      for (size_t j = 0; j < DMA_PACKGE_NUM; ++j) {
-        auto &part = batch[i].diff_packge[j];
-        if (!dma_packet_is_padding(part))
-          v_difftest_Batch(part.diff_packge);
-      }
-#endif
-    }
-  }
-}
-#endif // FPGA_SIM
-
 #ifdef USE_THREAD_MEMPOOL
 static void xdma_wakeup_handler(int) {}
 void FpgaXdma::start_transmit_thread() {
@@ -428,35 +363,33 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
-#ifndef FPGA_SIM
-  if (!relay) {
-    read_local_batches(xdma_c2h_fd[channel], *packet_pool, fork_readers, running);
-    receive_finished[channel].store(true, std::memory_order_release);
-    return;
-  }
-#endif // FPGA_SIM
+  constexpr size_t packet_bytes = sizeof(FpgaPackgeHead);
   size_t mem_get_idx = 0;
+  size_t max_packets = 1; // The first read sets the driver's FIFO packet length.
 #ifdef CONFIG_DIFFTEST_FORK_REF
   std::chrono::steady_clock::time_point timeout_start{};
 #endif
   while (running && signal_num == 0) {
-    char *mem = packet_pool->get_free_chunk(&mem_get_idx);
+    size_t contiguous = 1;
+    char *mem = packet_pool->get_free_chunk(&mem_get_idx, batch_read ? &contiguous : nullptr);
     if (!mem) {
       if (packet_pool->aborted())
         break;
       std::this_thread::yield();
       continue;
     }
-    // Ordinary read fills a pool slot directly. Short reads accumulate before
-    // publication; a partial packet is never visible to any parser.
+    const size_t requested = std::min(max_packets, contiguous) * packet_bytes;
+    // Non-batched reads accumulate short reads before publishing a packet.
     size_t received = 0;
-    while (running && signal_num == 0 && received < sizeof(FpgaPackgeHead)) {
+    while (running && signal_num == 0 && received < requested) {
 #ifdef FPGA_SIM
-      ssize_t size = static_cast<ssize_t>(xdma_sim_read(channel, mem + received, sizeof(FpgaPackgeHead) - received));
+      ssize_t size = static_cast<ssize_t>(xdma_sim_read(channel, mem + received, requested - received));
 #else
-      ssize_t size = relay ? relay->read(channel, mem + received, sizeof(FpgaPackgeHead) - received)
-                           : read(xdma_c2h_fd[channel], mem + received, sizeof(FpgaPackgeHead) - received);
+      ssize_t size = relay ? relay->read(channel, mem + received, requested - received)
+                           : read(xdma_c2h_fd[channel], mem + received, requested - received);
 #endif
+      if (batch_read && (!running || signal_num != 0 || packet_pool->aborted()))
+        break;
       if (size < 0 && errno == EINTR)
         continue;
 #ifdef CONFIG_DIFFTEST_FORK_REF
@@ -472,21 +405,30 @@ void FpgaXdma::read_xdma_thread(int channel) {
         }
       }
 #endif
-      if (size <= 0) {
+      if (size <= 0 || (batch_read && (static_cast<size_t>(size) > requested || size % packet_bytes != 0))) {
         fprintf(stderr, "XDMA receive failed or ended inside a packet\n");
         packet_pool->fail();
         running = false;
         break;
       }
       received += size;
+      if (batch_read)
+        break; // A short return of complete packets is normal for the FIFO.
     }
-    if (received != sizeof(FpgaPackgeHead))
+    if (batch_read ? received == 0 : received != packet_bytes)
       break;
-    if (!packet_pool->write_free_chunk(mem[0], mem_get_idx)) {
-      fprintf(stderr, "XDMA pool publication failed\n");
-      packet_pool->fail();
-      running = false;
+    for (size_t i = 0; i < received / packet_bytes; ++i) {
+      if (batch_read && (!running || signal_num != 0 || packet_pool->aborted()))
+        break;
+      if (!packet_pool->write_free_chunk(mem[i * packet_bytes], mem_get_idx + i)) {
+        fprintf(stderr, "XDMA pool publication failed\n");
+        packet_pool->fail();
+        running = false;
+        break;
+      }
     }
+    if (batch_read)
+      max_packets = 32;
   }
   receive_finished[channel].store(true, std::memory_order_release);
 }
@@ -546,12 +488,6 @@ void *posix_memalignd_malloc(size_t size) {
 }
 void FpgaXdma::read_and_process() {
   printf("start channel 0\n");
-#ifndef FPGA_SIM
-  if (!relay) {
-    read_local_batches(xdma_c2h_fd[0], running);
-    return;
-  }
-#endif // FPGA_SIM
   FpgaPackgeHead *packge = (FpgaPackgeHead *)posix_memalignd_malloc(sizeof(FpgaPackgeHead));
   memset(packge, 0, sizeof(FpgaPackgeHead));
   while (running && signal_num == 0) {

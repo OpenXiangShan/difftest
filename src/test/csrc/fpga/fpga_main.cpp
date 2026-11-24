@@ -185,13 +185,13 @@ void fpga_init() {
       throw std::invalid_argument("Packet pool order is outside the supported range");
     const bool fork_readers = args.enable_diff && args.ref_mode == RefMode::FORK;
     const size_t pool_slots = size_t{1} << args.packet_pool_log2;
-    xdma_device = new FpgaXdma(fork_readers, pool_slots);
+    xdma_device = new FpgaXdma(fork_readers, pool_slots, args.xdma_batch_read);
   } catch (const std::exception &error) {
     fprintf(stderr, "[fpga-host] packet pool initialization failed: %s\n", error.what());
     exit(1);
   }
 #else
-  xdma_device = new FpgaXdma();
+  xdma_device = new FpgaXdma(false, NUM_BLOCKS, args.xdma_batch_read);
 #endif
 #endif
 #if defined(USE_THREAD_MEMPOOL) && !defined(DIFFTEST_HOSTIF_GBUS)

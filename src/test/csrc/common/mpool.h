@@ -188,7 +188,8 @@ public:
   }
   MemoryIdxPool(const MemoryIdxPool &) = delete;
   MemoryIdxPool &operator=(const MemoryIdxPool &) = delete;
-  char *get_free_chunk(size_t *mem_idx);
+  // The single producer may write up to contiguous slots before publishing.
+  char *get_free_chunk(size_t *mem_idx, size_t *contiguous = nullptr);
   bool write_free_chunk(uint8_t idx, size_t mem_idx);
   char *read_busy_chunk();
   void set_free_chunk() {
