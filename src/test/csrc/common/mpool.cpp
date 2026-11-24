@@ -141,7 +141,7 @@ bool MemoryIdxPool::write_free_chunk(uint8_t idx, size_t mem_idx) {
   return !aborted();
 }
 
-char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
+char *MemoryIdxPool::get_free_chunk(size_t *mem_idx, size_t *contiguous) {
   if (shared->stopped.load(std::memory_order_acquire))
     return nullptr;
 #if (CONFIG_DMA_CHANNELS <= 1)
@@ -151,6 +151,9 @@ char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
       return nullptr;
   }
   *mem_idx = producer & (capacity - 1);
+  // A writable range ends at the retention limit or the physical ring wrap.
+  if (contiguous)
+    *contiguous = std::min<uint64_t>(safe_until - producer, capacity - *mem_idx);
 #else
   if (!lock_pool())
     return nullptr;
@@ -167,6 +170,8 @@ char *MemoryIdxPool::get_free_chunk(size_t *mem_idx) {
   memory_pool_is_free[page_w_idx].store(false);
   mem_chunk_idx.store((page_w_idx + 1) & (capacity - 1), std::memory_order_relaxed);
   *mem_idx = page_w_idx;
+  if (contiguous)
+    *contiguous = 1;
   chunk_semaphore.store(false, std::memory_order_release);
 #endif
   return memory_base + *mem_idx * mem_block_size;

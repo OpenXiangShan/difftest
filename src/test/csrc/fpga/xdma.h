@@ -87,7 +87,7 @@ inline bool dma_packet_is_padding(const DmaDiffPackge &packet) {
 
 class FpgaXdma : public FpgaTransport {
 public:
-  FpgaXdma(bool fork_readers = false, size_t pool_slots = NUM_BLOCKS);
+  FpgaXdma(bool fork_readers = false, size_t pool_slots = NUM_BLOCKS, bool batch_read = false);
   ~FpgaXdma();
 
 #ifdef USE_THREAD_MEMPOOL
@@ -164,6 +164,7 @@ private:
   void (*packet_abort)() = nullptr;
   std::unique_ptr<MemoryIdxPool> packet_pool;
   bool fork_readers = false;
+  bool batch_read = false;
   std::atomic<bool> receive_finished[CONFIG_DMA_CHANNELS]{};
   std::thread receive_thread[CONFIG_DMA_CHANNELS];
   std::thread process_thread;

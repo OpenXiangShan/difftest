@@ -45,6 +45,7 @@ enum {
   OPT_MMA_CPU_THREADS,
 #ifdef FPGA_HOST
   OPT_NO_LINK,
+  OPT_XDMA_BATCH_READ,
   OPT_ILA_SIZE,
 #endif
   OPT_CORE_CLOCK_HALF_PERIOD,
@@ -164,6 +165,7 @@ static inline void print_help(const char *file) {
   printf("      --no-diff              skip REF checking; keep DUT data and trap detection\n");
 #ifdef FPGA_HOST
   printf("      --no-link              disable DiffTest transport (implies --no-diff)\n");
+  printf("      --xdma-batch-read      enable C2H batch reads for local single-channel XDMA with a packet pool\n");
   printf("      --ila-size=N           maximum DUT cycles ahead of SLOW, 0 disables (default)\n");
 #endif
   printf("      --no-squash            disable squash\n");
@@ -253,6 +255,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
     { "mma-cpu-threads",   1, NULL, OPT_MMA_CPU_THREADS },
 #ifdef FPGA_HOST
     { "no-link",           0, NULL, OPT_NO_LINK },
+    { "xdma-batch-read",   0, NULL, OPT_XDMA_BATCH_READ },
     { "ila-size",          1, NULL, OPT_ILA_SIZE },
 #endif
 #ifdef CONFIG_DIFFTEST_FAST_REF
@@ -447,6 +450,7 @@ CommonArgs parse_args(int argc, const char *argv[]) {
         args.ila_size = static_cast<uint32_t>(size);
         continue;
       }
+      case OPT_XDMA_BATCH_READ: args.xdma_batch_read = true; continue;
       case OPT_NO_LINK:
         args.enable_link = false;
         args.enable_diff = false;
@@ -558,6 +562,12 @@ CommonArgs parse_args(int argc, const char *argv[]) {
 #endif
 
 #ifdef FPGA_HOST
+#if !defined(DIFFTEST_HOSTIF_XDMA) || defined(FPGA_SIM) || !defined(USE_THREAD_MEMPOOL) || CONFIG_DMA_CHANNELS != 1
+  if (args.xdma_batch_read) {
+    fprintf(stderr, "[fpga-host] --xdma-batch-read requires local XDMA, DMA_CHANNELS=1 and USE_THREAD_MEMPOOL=1\n");
+    exit(EXIT_FAILURE);
+  }
+#endif
   if (args.ila_size && (!args.enable_diff || !args.enable_link || args.refdrive_trace_name)) {
     fprintf(stderr, "[ERROR] --ila-size requires REF checking and cannot use RefDriveTrace\n");
     exit(EINVAL);
