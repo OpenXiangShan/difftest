@@ -134,9 +134,10 @@ Emulator::Emulator(int argc, const char *argv[])
   }
 
 #if defined(__linux__) && !defined(CONFIG_NO_DIFFTEST)
+  constexpr uint64_t auto_cow_min_image_size = 1ULL << 30;
   bool cow_supported = NUM_CORES == 1 && args.enable_diff && !args.image_as_footprints && !args.footprints_name &&
                        !args.enable_snapshot && !args.snapshot_path;
-  if (cow_supported) {
+  if (cow_supported && simMemory->get_img_size() >= auto_cow_min_image_size) {
     if (REF_PROXY::supports_mem_cow()) {
       enable_mem_cow = static_cast<MmapMemory *>(simMemory)->enable_cow();
     } else {

@@ -89,11 +89,12 @@ Key runtime options:
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
 
-Single-core Linux emu automatically enables RAM COW when the REF advertises
-support through `difftest_supports_mem_cow`, without an image-size threshold or
-manual COW options. The shared backing covers the configured RAM range, preserving
-the loaded image, zero pages and any random memory. It requires difftest, linear
-RAM and no snapshots. Other configurations and older REFs keep the ordinary copy path.
+Single-core Linux emu automatically enables RAM COW when the loaded image is at
+least 1 GiB after decompression and the REF advertises support through
+`difftest_supports_mem_cow`. The threshold uses loaded bytes, not the compressed
+file size or the configured RAM capacity. No manual COW options are needed.
+It requires difftest, linear RAM and no snapshots. Other configurations and older
+REFs keep the ordinary copy path.
 If preparing the memfd fails, automatic mode keeps the original anonymous RAM
 and uses ordinary copies. If sealing reports a busy backing, it restores
 anonymous RAM from the memfd data extents, skipping holes, before ordinary
