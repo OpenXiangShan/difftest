@@ -90,7 +90,6 @@ struct CommonArgs {
   bool enable_snapshot = false;
   bool force_dump_result = false;
   bool enable_diff = true;
-  bool disable_mem_cow = false;
 #ifdef FPGA_HOST
   bool enable_link = true;
   uint32_t ila_size = 0;

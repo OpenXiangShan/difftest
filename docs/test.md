@@ -85,21 +85,19 @@ Key runtime options:
 | `-e, --log-end=NUM` | Stop logging at cycle N |
 | `-s, --seed=NUM` | Random seed |
 | `--random-mem` | Fill memory from a `--seed`-initialized LFSR stream before loading the image |
-| `--disable-mem-cow` | Disable automatic RAM COW for this run |
 | `--mma-cpu-threads=N` | Maximum workers in the shared CPU MMA service across DUT cores (default `1`). Asynchronous CPU builds use a standalone `difftest-mma-worker`; synchronous and CUDA builds ignore this option. |
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
 
-Single-core Linux emu automatically enables RAM COW when the loaded image is at
-least 1 GiB after decompression and the REF advertises support through
-`difftest_supports_mem_cow`. The threshold uses loaded bytes, not the compressed
-file size or the configured RAM capacity. It requires difftest, linear RAM and
-no snapshots. Other configurations and older REFs keep the ordinary copy path.
+Single-core Linux emu automatically enables RAM COW when the REF advertises
+support through `difftest_supports_mem_cow`, without an image-size threshold or
+manual COW options. The shared backing covers the configured RAM range, preserving
+the loaded image, zero pages and any random memory. It requires difftest, linear
+RAM and no snapshots. Other configurations and older REFs keep the ordinary copy path.
 If preparing the memfd fails, automatic mode keeps the original anonymous RAM
 and uses ordinary copies. If sealing reports a busy backing, it restores
 anonymous RAM from the memfd data extents, skipping holes, before ordinary
 copying.
-Use `--disable-mem-cow` for ordinary-copy comparisons.
 
 Automatic selection promotes the loaded RAM to a sparse memfd in 1 MiB chunks,
 releasing copied source pages as it goes. Any restorer overwrite and RAM copy
