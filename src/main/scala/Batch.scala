@@ -305,11 +305,8 @@ class BatchCollector(bundles: Seq[Valid[DifftestBundle]], param: BatchParam, con
   val should_tick = merged_tick || state_tick
   val state_update = !should_tick || out.ready
   val pending_consumed = pending_valid && state_update
-  // Only refill pending in the same cycle when the old pending beat can be
-  // merged into state without waiting for downstream ready. This cuts the
-  // out.ready -> load_pending_beat -> delay_grouped.ready control path.
-  val pending_consumed_without_tick = pending_valid && !should_tick
-  val pending_can_refill = !pending_valid || pending_consumed_without_tick
+  // Replace the pending beat on the edge that consumes it, including an output handshake.
+  val pending_can_refill = !pending_valid || state_update
   val load_pending_beat = pending_can_refill && select_beat_mask =/= 0.U
   val next_state_chunks =
     Mux(merged_tick, merged_tail_chunks.asUInt, merged_head_chunks.asUInt).asTypeOf(state_chunks)
