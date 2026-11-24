@@ -583,6 +583,23 @@ private:
   void record_writeback(DiffState::AmeInstRobEntry &entry, const DifftestAmuWritebackEvent &probe);
 };
 
+#ifdef CONFIG_DIFFTEST_AMUWRITEBACKBLOCK
+class AmuWritebackBlockRecorder : public ProbeChecker<DifftestAmuWritebackBlock> {
+public:
+  AmuWritebackBlockRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuWritebackBlock>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestAmuWritebackBlock &probe) override {
+    return probe.valid;
+  }
+  void clear_valid(DifftestAmuWritebackBlock &probe) override {
+    probe.valid = 0;
+  }
+  int check(const DifftestAmuWritebackBlock &probe) override;
+};
+#endif
+
 #ifdef CONFIG_DIFFTEST_AMUFINISHEVENT
 class AmuFinishRecorder : public ProbeChecker<DifftestAmuFinishEvent> {
 public:
