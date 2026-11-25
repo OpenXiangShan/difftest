@@ -96,9 +96,8 @@ file size or the configured RAM capacity. No manual COW options are needed.
 It requires difftest, linear RAM and no snapshots. Other configurations and older
 REFs keep the ordinary copy path.
 If preparing the memfd fails, automatic mode keeps the original anonymous RAM
-and uses ordinary copies. If sealing reports a busy backing, it restores
-anonymous RAM from the memfd data extents, skipping holes, before ordinary
-copying.
+and uses ordinary copies. If sealing the backing fails, emu reports the error
+and exits.
 
 Automatic selection promotes the loaded RAM to a sparse memfd in 1 MiB chunks,
 releasing copied source pages as it goes. Any restorer overwrite and RAM copy

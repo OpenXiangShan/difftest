@@ -323,41 +323,11 @@ bool MmapMemory::seal_cow() {
     perror("unmap COW RAM backing");
     exit(1);
   }
-  bool sealed = fcntl(cow_fd, F_ADD_SEALS, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) == 0;
-  if (!sealed && errno != EBUSY) {
+  if (fcntl(cow_fd, F_ADD_SEALS, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) != 0) {
     perror("seal COW RAM backing");
     exit(1);
   }
   ram = (uint64_t *)create_cow_branch();
-  if (!sealed) {
-    // Reading a memfd hole allocates backing pages. Restore anonymous RAM from
-    // data extents before the ordinary Golden/REF clones scan the whole image.
-    auto *anonymous =
-        (uint8_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-    if (anonymous == MAP_FAILED) {
-      perror("restore anonymous RAM");
-      exit(1);
-    }
-    for (off_t offset = 0; offset < (off_t)memory_size;) {
-      off_t data = lseek(cow_fd, offset, SEEK_DATA);
-      if (data < 0 && errno == ENXIO) {
-        break;
-      }
-      off_t end = data < 0 ? -1 : lseek(cow_fd, data, SEEK_HOLE);
-      if (end < 0) {
-        perror("find COW RAM data extent");
-        exit(1);
-      }
-      nonzero_large_memcpy(anonymous + data, (uint8_t *)ram + data, end - data);
-      offset = end;
-    }
-    munmap(ram, memory_size);
-    ram = (uint64_t *)anonymous;
-    close(cow_fd);
-    cow_fd = -1;
-    Info("Automatic RAM COW skipped: backing busy; using ordinary memory copies\n");
-    return false;
-  }
   Info("Initial RAM sealed; DUT, Golden Memory and REF use private COW branches\n");
   return true;
 #else
