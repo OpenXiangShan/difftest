@@ -59,6 +59,7 @@ struct Segment {
   unsigned reader;
   std::atomic<pid_t> pid{0};
   std::atomic<uint64_t> end_window{OPEN_END};
+  bool fast_failed = false; // Published with end_window.
   int fast_stamp, slow_stamp;
   DifftestStateHash fast_hash{}, slow_hash{};
   uint64_t checked_windows;
@@ -100,7 +101,7 @@ void fail() {
   g_packet_pool->fail();
   control->complete.store(2, std::memory_order_release);
 }
-// Called only at parser boundaries, outside checkpoint construction/publication.
+// Called only after the retained window boundary is fixed.
 // The supervisor waits for this acknowledgement before discarding descendants.
 void pause_leader() {
   if (role == Role::LEADER && control->pause.load(std::memory_order_acquire)) {
@@ -126,7 +127,8 @@ void complete_checker(Difftest *self, bool checks_ok) {
   checks_ok =
       checks_ok && child_window == s.end_window.load(std::memory_order_acquire) && self->proxy->state_hash(s.slow_hash);
   s.slow_stamp = self->fork_commit_stamp();
-  const bool match = checks_ok && hashes_match(s.fast_hash, s.slow_hash) && s.fast_stamp == s.slow_stamp;
+  const bool match =
+      checks_ok && !s.fast_failed && hashes_match(s.fast_hash, s.slow_hash) && s.fast_stamp == s.slow_stamp;
   s.status.store(!checks_ok ? Status::FAILED : (match ? Status::MATCH : Status::DIVERGED), std::memory_order_release);
   if (!checks_ok) {
     // Its starting snapshot is authoritative only after preceding segments pass.
@@ -190,7 +192,7 @@ void complete_checker(Difftest *self, bool checks_ok) {
 void close_segment(Difftest *self) {
   // Snapshot and digest only an executed prefix, never deferred RefDrive instructions.
   if (self->flush_fast_ref()) {
-    fail();
+    difftest_ref_fork_fast_error(false);
     return;
   }
   if (current_segment == OPEN_END)
@@ -332,7 +334,8 @@ bool difftest_ref_fork_is_child() {
   return role == Role::CHECKER;
 }
 bool difftest_ref_fork_draining() {
-  return control && role == Role::SUPERVISOR && control->endpoint.load(std::memory_order_acquire);
+  return control && role == Role::SUPERVISOR &&
+         (control->endpoint.load(std::memory_order_acquire) || control->pause.load(std::memory_order_acquire));
 }
 int difftest_ref_fork_start(uint64_t fork_interval_ms) {
   if (!g_packet_pool || control)
@@ -407,6 +410,7 @@ int difftest_ref_fork_prepare(Difftest *self) {
   s.reader = reader;
   s.pid.store(0, std::memory_order_relaxed);
   s.end_window.store(OPEN_END, std::memory_order_relaxed);
+  s.fast_failed = false;
   s.command.store(Command::WAIT, std::memory_order_relaxed);
   s.reaped = false;
   s.status.store(Status::RUNNING, std::memory_order_relaxed);
@@ -497,6 +501,22 @@ void difftest_ref_fork_publish(Difftest *self) {
   last_cycle = self->dut->trap.cycleCnt;
   control->published_windows.store(++windows, std::memory_order_release);
 }
+void difftest_ref_fork_fast_error(bool include_current_window) {
+  Segment &s = segment(current_segment);
+  // The current raw DUT window is already retained by the checker's reader.
+  // A failure inside step includes it; a flush before step or at finish seals
+  // only previously published windows. Never hash or copy the partial FAST state.
+  if (include_current_window)
+    ++windows;
+  s.fast_failed = true;
+  s.end_window.store(windows, std::memory_order_release);
+  control->published_windows.store(windows, std::memory_order_release);
+  fprintf(stderr, "RefFastError Pending=SLOW Segment=%lu StartWindow=%lu EndWindow=%lu\n",
+          (unsigned long)current_segment, (unsigned long)s.start_window, (unsigned long)windows);
+  fflush(stderr); // The supervisor kills this leader after the SLOW verdict.
+  control->pause.store(true, std::memory_order_release);
+  pause_leader();
+}
 void difftest_ref_fork_abort_child() {
   if (role == Role::CHECKER)
     complete_checker(difftest[0], false);
@@ -552,12 +572,13 @@ int difftest_ref_fork_idle() {
       }
       accept(trusted_segment);
     }
-    if (control->endpoint.load(std::memory_order_acquire)) {
+    if (control->endpoint.load(std::memory_order_acquire) || control->pause.load(std::memory_order_acquire)) {
       if (!drain_start_ms)
         drain_start_ms = now_ms();
       if (now_ms() - drain_start_ms >= TIMEOUT_MS)
         fail();
-      if (trusted_segment == control->head.load(std::memory_order_acquire) &&
+      if (control->endpoint.load(std::memory_order_acquire) &&
+          trusted_segment == control->head.load(std::memory_order_acquire) &&
           trusted_windows == control->published_windows.load(std::memory_order_acquire))
         control->complete.store(1, std::memory_order_release);
     }

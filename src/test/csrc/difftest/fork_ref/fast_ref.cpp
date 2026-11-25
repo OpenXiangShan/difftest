@@ -65,6 +65,8 @@ int Difftest::fast_ref_step() {
   // First commit initialization must precede the snapshot; sync and execution follow it.
   if (const int ret = fast_ref_checker->step()) {
 #ifdef CONFIG_DIFFTEST_FORK_REF
+    if (fork_check && ret == DiffTestChecker::STATE_ERROR && fast_ref_checker->short_execution())
+      difftest_ref_fork_fast_error(true);
     if (fork_check && ret == DiffTestChecker::STATE_TRAP && get_trap_code() == STATE_GOODTRAP)
       difftest_ref_fork_publish(this);
 #endif
