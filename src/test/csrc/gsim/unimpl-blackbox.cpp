@@ -18,5 +18,3 @@ void imsic_csr_top(uint8_t _0, uint8_t _1, uint16_t _2, uint8_t _3, uint8_t _4, 
   _18 = 0;
   _19 = 0;
 }
-
-void PrintCommitIDModule(uint8_t _0, uint64_t _1, uint8_t _2) {}
