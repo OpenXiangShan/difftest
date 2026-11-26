@@ -1,5 +1,6 @@
 ### Project Specific stuff
 test_run_dir/*
+scripts/ieda/sta_results/
 ### XilinxISE template
 # intermediate build files
 *.bgn
@@ -364,4 +365,3 @@ stack.info*
 .venv/
 
 !ready-to-run/*
-
