@@ -78,17 +78,28 @@ public:
   void display_stats();
 };
 
+class CompressedPager;
+
 class MmapMemory : public SimMemory {
 private:
   uint64_t *ram = nullptr;
   uint64_t img_size;
   bool clone_full_mem;
   int cow_fd = -1;
+  int raw_fd = -1;
+  enum class CowState {
+    Disabled,
+    Initializing,
+    Sealed
+  };
+  CowState cow_state = CowState::Disabled;
+  CompressedPager *compressed_pager = nullptr;
 
 public:
   MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed);
   virtual ~MmapMemory();
   void load_image(const char *image, MemoryWriteMode raw_mode);
+  void write(uint64_t offset, const void *data, uint64_t size);
   bool enable_cow();
   bool seal_cow();
   void *create_cow_branch() override;

@@ -17,12 +17,14 @@
 #include "ram.h"
 #include "common.h"
 #include "compress.h"
+#include "compressed_pager.h"
 #include "elfloader.h"
 #include <cerrno>
 #include <cstring>
 #ifdef __linux__
 #include <fcntl.h>
 #include <linux/memfd.h>
+#include <sys/stat.h>
 #endif
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
@@ -228,6 +230,20 @@ void MmapMemory::load_image(const char *image, MemoryWriteMode raw_mode) {
   try {
     auto source = open_input(image);
     auto compression = detect_compression(*source);
+    char magic[8];
+    bool indexed = source->peek(magic, sizeof(magic)) == sizeof(magic) && !memcmp(magic, "RTLCMPV2", 8);
+    if (indexed) {
+#if defined(__linux__) && !defined(NO_ZSTD_COMPRESSION)
+      compressed_pager = new CompressedPager(image, memory_size);
+      munmap(ram, memory_size);
+      ram = static_cast<uint64_t *>(compressed_pager->map_private_branch());
+      img_size = memory_size;
+      Info("Using indexed compressed RAM %s\n", image);
+      return;
+#else
+      throw std::runtime_error("Indexed compressed RAM requires Linux and zstd");
+#endif
+    }
     auto input = wrap_decompressor(std::move(source), compression);
     long loaded;
     if (isElfImage(*input)) {
@@ -237,6 +253,27 @@ void MmapMemory::load_image(const char *image, MemoryWriteMode raw_mode) {
       // Compression must not change raw-image semantics; the caller selects how
       // zero words are handled for the current loading context.
       bool plain = compression == CompressionKind::None;
+#ifdef __linux__
+      // A complete RAM-sized file needs neither an anonymous tail nor image padding.
+      if (plain && raw_mode == MemoryWriteMode::SkipZeroWords && dynamic_cast<FileReader *>(input.get()) &&
+          input->len() == memory_size && memory_size >= (1ULL << 30)) {
+        int fd = open(image, O_RDONLY | O_CLOEXEC);
+        struct stat st;
+        if (fd >= 0 && fstat(fd, &st) == 0 && S_ISREG(st.st_mode)) {
+          void *mapping = mmap(nullptr, memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+          if (mapping != MAP_FAILED) {
+            munmap(ram, memory_size);
+            ram = static_cast<uint64_t *>(mapping);
+            raw_fd = fd;
+            img_size = memory_size;
+            Info("Using private raw RAM mapping %s\n", image);
+            return;
+          }
+        }
+        if (fd >= 0)
+          close(fd);
+      }
+#endif
       loaded = read_to_memory(*input, ram, memory_size, raw_mode, plain);
     }
     if (loaded < 0)
@@ -246,6 +283,29 @@ void MmapMemory::load_image(const char *image, MemoryWriteMode raw_mode) {
     fprintf(stderr, "Cannot load image '%s': %s\n", image, e.what());
     exit(EXIT_FAILURE);
   }
+}
+
+void MmapMemory::write(uint64_t offset, const void *data, uint64_t size) {
+  assert(offset <= memory_size && size <= memory_size - offset);
+  if (!size || !memcmp(reinterpret_cast<uint8_t *>(ram) + offset, data, size))
+    return;
+#ifdef __linux__
+  if (raw_fd >= 0 && cow_state != CowState::Sealed) {
+    // Promote only when initialization differs from the immutable file.
+    int fd = raw_fd;
+    raw_fd = -1;
+    if (cow_state == CowState::Initializing && !enable_cow()) {
+      fprintf(stderr, "Cannot preserve raw RAM initialization for COW branches\n");
+      exit(1);
+    }
+    close(fd);
+  }
+#endif
+  memcpy(reinterpret_cast<uint8_t *>(ram) + offset, data, size);
+#if defined(__linux__) && !defined(NO_ZSTD_COMPRESSION)
+  if (compressed_pager && cow_state != CowState::Sealed)
+    compressed_pager->write(offset, data, size);
+#endif
 }
 
 uint64_t MmapMemory::pad_img_size(uint64_t align) {
@@ -267,10 +327,14 @@ uint64_t MmapMemory::pad_img_size(uint64_t align) {
 }
 
 void *MmapMemory::create_cow_branch() {
-  if (cow_fd < 0) {
+  if (cow_state != CowState::Sealed)
     return nullptr;
-  }
-  void *branch = mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, cow_fd, 0);
+#if defined(__linux__) && !defined(NO_ZSTD_COMPRESSION)
+  if (compressed_pager)
+    return compressed_pager->map_private_branch();
+#endif
+  int fd = raw_fd >= 0 ? raw_fd : cow_fd;
+  void *branch = mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
   if (branch == MAP_FAILED) {
     perror("map private COW RAM branch");
     exit(1);
@@ -280,6 +344,10 @@ void *MmapMemory::create_cow_branch() {
 
 bool MmapMemory::enable_cow() {
 #ifdef __linux__
+  if (raw_fd >= 0 || compressed_pager) {
+    cow_state = CowState::Initializing;
+    return true;
+  }
   int fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   auto *shared = (uint8_t *)MAP_FAILED;
   const char *error = "create COW RAM backing";
@@ -296,6 +364,7 @@ bool MmapMemory::enable_cow() {
     return false;
   }
   cow_fd = fd;
+  cow_state = CowState::Initializing;
   // Auto selection uses the decoded size. Release each copied chunk so promotion
   // never retains a second full physical copy of the loaded image.
   uint64_t size = clone_full_mem ? memory_size : img_size;
@@ -319,6 +388,9 @@ bool MmapMemory::enable_cow() {
 
 bool MmapMemory::seal_cow() {
 #ifdef __linux__
+  cow_state = CowState::Sealed;
+  if (raw_fd >= 0 || compressed_pager)
+    return true;
   if (munmap(ram, memory_size) != 0) {
     perror("unmap COW RAM backing");
     exit(1);
@@ -336,7 +408,12 @@ bool MmapMemory::seal_cow() {
 }
 
 MmapMemory::~MmapMemory() {
+#if defined(__linux__) && !defined(NO_ZSTD_COMPRESSION)
+  delete compressed_pager;
+#endif
   munmap(ram, memory_size);
+  if (raw_fd >= 0)
+    close(raw_fd);
   if (cow_fd >= 0) {
     close(cow_fd);
   }
@@ -486,20 +563,29 @@ void LinearizedFootprintsMemory::save_linear_memory(const char *filename) {
 }
 
 void overwrite_ram(const char *gcpt_restore, uint64_t overwrite_nbytes) {
-  InputReader *reader = new FileReader(gcpt_restore);
-  int overwrite_size = reader->read_all(simMemory->as_ptr(), overwrite_nbytes);
-  Info("Overwrite %d bytes from file %s.\n", overwrite_size, gcpt_restore);
-  delete reader;
+  FileReader reader(gcpt_restore);
+  // Kernel read() cannot resolve faults in UFFD_USER_MODE_ONLY guest RAM.
+  std::vector<uint8_t> restore(std::min(overwrite_nbytes, reader.len()));
+  uint64_t overwrite_size = reader.read_all(restore.data(), restore.size());
+  auto *mem = dynamic_cast<MmapMemory *>(simMemory);
+  assert(mem);
+  mem->write(0, restore.data(), overwrite_size);
+  Info("Overwrite %lu bytes from file %s.\n", overwrite_size, gcpt_restore);
 }
 
 void copy_ram(uint64_t copy_ram_offset) {
   uint64_t n_word = (copy_ram_offset + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+  auto *mem = dynamic_cast<MmapMemory *>(simMemory);
   for (uint64_t src = 0; src < n_word; src++) {
     uint64_t dest = n_word + src;
     assert(simMemory->in_range_u64(src) && simMemory->in_range_u64(dest));
     auto src_val = simMemory->at(src);
     if (src_val != 0) {
-      simMemory->at(dest) = src_val;
+      auto &dest_val = simMemory->at(dest);
+      if (mem)
+        mem->write(dest * sizeof(uint64_t), &src_val, sizeof(src_val));
+      else
+        dest_val = src_val;
     }
   }
   Info("Copying the RAM contents to 0x%lx.\n", copy_ram_offset);
