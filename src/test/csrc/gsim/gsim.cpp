@@ -41,9 +41,6 @@ void GsimSim::reset_cycle(bool dump) {
   if (dump)
     waveform_tick();
   set_reset(0);
-  step();
-  if (dump)
-    waveform_tick();
 }
 
 #ifndef GSIM_TRACE_FST
