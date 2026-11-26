@@ -363,6 +363,21 @@ void FpgaXdma::stop_thansmit_thread() {
 }
 
 void FpgaXdma::read_xdma_thread(int channel) {
+  // XDMA can consume streaming data before returning EINTR without a byte
+  // count. Child exits and terminal resizes must not interrupt this read;
+  // the supervisor handles them. Keep SIGUSR1 available for stop().
+  sigset_t notifications;
+  sigemptyset(&notifications);
+  sigaddset(&notifications, SIGCHLD);
+  sigaddset(&notifications, SIGWINCH);
+  const int mask_error = pthread_sigmask(SIG_BLOCK, &notifications, nullptr);
+  if (mask_error != 0) {
+    fprintf(stderr, "XDMA receiver signal mask failed: %s\n", strerror(mask_error));
+    packet_pool->fail();
+    running = false;
+    receive_finished[channel].store(true, std::memory_order_release);
+    return;
+  }
   constexpr size_t packet_bytes = sizeof(FpgaPackgeHead);
   size_t mem_get_idx = 0;
   size_t max_packets = 1; // The first read sets the driver's FIFO packet length.
@@ -390,8 +405,21 @@ void FpgaXdma::read_xdma_thread(int channel) {
 #endif
       if (batch_read && (!running || signal_num != 0 || packet_pool->aborted()))
         break;
-      if (size < 0 && errno == EINTR)
+      if (size < 0 && errno == EINTR) {
+        if (!running || signal_num != 0)
+          break;
+#ifndef FPGA_SIM
+        if (!relay) {
+          // The driver does not report how many bytes it consumed on EINTR.
+          // Retrying could silently drop data and publish a misaligned packet.
+          fprintf(stderr, "XDMA C2H read interrupted; stream position is unknown\n");
+          packet_pool->fail();
+          running = false;
+          break;
+        }
+#endif
         continue;
+      }
 #ifdef CONFIG_DIFFTEST_FORK_REF
       // No more packets are expected once FAST has published its endpoint.
       if (size < 0 && errno == ETIMEDOUT && fork_readers && difftest_ref_fork_draining() && running &&
@@ -415,7 +443,7 @@ void FpgaXdma::read_xdma_thread(int channel) {
       if (batch_read)
         break; // A short return of complete packets is normal for the FIFO.
     }
-    if (batch_read ? received == 0 : received != packet_bytes)
+    if (!running || signal_num != 0 || (batch_read ? received == 0 : received != packet_bytes))
       break;
     for (size_t i = 0; i < received / packet_bytes; ++i) {
       if (batch_read && (!running || signal_num != 0 || packet_pool->aborted()))
