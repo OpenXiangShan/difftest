@@ -25,7 +25,7 @@
 #include <cstdint>
 #include <deque>
 #include <queue>
-#include <unordered_set>
+#include <unordered_map>
 
 class CommitTrace {
 public:
@@ -174,7 +174,12 @@ public:
 #endif // CONFIG_DIFFTEST_STOREHASHEVENT
 
 #ifdef CONFIG_DIFFTEST_CMOINVALEVENT
-  std::unordered_set<uint64_t> cmo_inval_event_set;
+  struct CmoInvalLine {
+    uint64_t written = 0; // bytes the REF has stored since the invalidation
+    uint64_t synced = 0;  // bytes already taken from the refill data
+  };
+  // Lines whose CBO.INVAL has not been reconciled by a refill yet.
+  std::unordered_map<uint64_t, CmoInvalLine> cmo_inval_lines;
 #endif
 
 #ifdef CONFIG_DIFFTEST_SQUASH

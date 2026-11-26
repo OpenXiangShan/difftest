@@ -52,6 +52,28 @@ void StoreRecorder::clear_valid(DifftestStoreEvent &probe) {
   probe.valid = 0;
 }
 
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+// Mark the bytes a committed store writes to a line whose CBO.INVAL has not
+// been reconciled by a refill yet. This runs when the event is recorded, i.e.
+// before the refill checkers of the same cycle: a refill that arrives together
+// with the store event must still see these bytes as protected.
+static void mark_cmo_store(DiffState *state, uint64_t addr, uint8_t mask) {
+  if (state->cmo_inval_lines.empty()) {
+    return;
+  }
+  for (int i = 0; i < 8; i++) {
+    if ((mask & (1U << i)) == 0) {
+      continue;
+    }
+    const uint64_t byte_addr = addr + i;
+    auto cmo = state->cmo_inval_lines.find(byte_addr & ~UINT64_C(63));
+    if (cmo != state->cmo_inval_lines.end()) {
+      cmo->second.written |= UINT64_C(1) << (byte_addr & 63);
+    }
+  }
+}
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
+
 int StoreRecorder::check(const DifftestStoreEvent &probe) {
 
   if (!probe.valid)
@@ -109,6 +131,9 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
 #endif // CONFIG_DIFFTEST_SQUASH
         };
         state->store_event_queue.push(storeCommitLow);
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+        mark_cmo_store(state, commitLowAddr, commitLowMask);
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
       }
 
       uint8_t commitHighMask = (flowMask >> 8) & 0xFF;
@@ -133,6 +158,9 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
 #endif // CONFIG_DIFFTEST_SQUASH
         };
         state->store_event_queue.push(storeCommitHigh);
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+        mark_cmo_store(state, commitHighAddr, commitHighMask);
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
       }
     }
   } else if (wLine) {
@@ -158,6 +186,9 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
 #endif // CONFIG_DIFFTEST_SQUASH
       };
       state->store_event_queue.push(storeCommit);
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+      mark_cmo_store(state, refStoreCommitAddr, refStoreCommitMask);
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
     }
   } else {
     // 1. check whether the store event crosses a 8B boundary.
@@ -184,6 +215,9 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
 #endif // CONFIG_DIFFTEST_SQUASH
       };
       state->store_event_queue.push(storeCommitLow);
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+      mark_cmo_store(state, commitLowAddr, commitLowMask);
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
     }
 
     uint8_t commitHighMask = (mask >> 8) & 0XFF;
@@ -207,6 +241,9 @@ int StoreRecorder::check(const DifftestStoreEvent &probe) {
 #endif // CONFIG_DIFFTEST_SQUASH
       };
       state->store_event_queue.push(storeCommitHigh);
+#ifdef CONFIG_DIFFTEST_CMOINVALEVENT
+      mark_cmo_store(state, commitHighAddr, commitHighMask);
+#endif // CONFIG_DIFFTEST_CMOINVALEVENT
     }
   }
 
