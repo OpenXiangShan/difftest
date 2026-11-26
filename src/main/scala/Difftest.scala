@@ -84,6 +84,13 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
   protected val needFlatten: Boolean = false
   def isFlatten: Boolean = hasAddress && this.needFlatten
 
+  // Elements transmitted after the payload to locate a bundle. `coreid` and `index`
+  // are never part of the C++ struct. `address` is only a locator for flattened
+  // bundles (where it is dropped from the struct); for other bundles it is a real
+  // payload element and must stay in place, otherwise the byte-aligned payload and
+  // the C++ struct would disagree (see DiffArchIntDelayedUpdate).
+  def locatorElems: Seq[String] = if (isFlatten) Seq("coreid", "index", "address") else Seq("coreid", "index")
+
   def fpgaFilterElems: Seq[String] = Seq.empty
 
   // Convert elements into flatten UInt/Vec[UInt]
@@ -197,7 +204,7 @@ sealed trait DifftestBundle extends Bundle with DifftestWithCoreid { this: Difft
     } else {
       // Reorder to separate locating and transmitted data
       def locFilter: ((String, Int, Seq[UInt])) => Boolean = { case (name, _, _) =>
-        Seq("coreid", "index", "address").contains(name)
+        locatorElems.contains(name)
       }
       val raw = gen.totalElements.filterNot(this.isFlatten && _._1 == "valid")
       raw.filterNot(locFilter) ++ raw.filter(locFilter)
