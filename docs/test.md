@@ -91,6 +91,26 @@ Key runtime options:
 | `--dump-wave` | Dump waveform (from `-b` cycle; requires `EMU_TRACE`) |
 | `--wave-path=FILE` | Custom waveform output path |
 
+Single-core Linux emu automatically enables RAM COW when the loaded image is at
+least 1 GiB after decompression and the REF advertises support through
+`difftest_supports_mem_cow`. The threshold uses loaded bytes, not the compressed
+file size or the configured RAM capacity. No manual COW options are needed.
+It requires difftest, linear RAM and no snapshots. Other configurations and older
+REFs keep the ordinary copy path.
+If preparing the memfd fails, automatic mode keeps the original anonymous RAM
+and uses ordinary copies. If sealing the backing fails, emu reports the error
+and exits.
+
+Automatic selection promotes the loaded RAM to a sparse memfd in 1 MiB chunks,
+releasing copied source pages as it goes. Any restorer overwrite and RAM copy
+are applied before sealing the backing and creating independent private DUT,
+Golden Memory and REF mappings. Guest addresses and initial bytes are preserved.
+Build a matching NEMU REF with
+`riscv64-xs-ref_defconfig` and pass its `.so` using `--diff`. Promotion adds a
+sparse copy during startup; writes allocate private pages, so savings depend on
+how much each model changes. The immutable initial backing remains allocated
+until the mappings are released.
+
 ### 2.2 simv (VCS Top with Verilator Backend)
 
 Uses the VCS-style testbench interface with Verilator as the simulation engine.

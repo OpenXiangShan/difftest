@@ -31,13 +31,19 @@ void *guest_to_host(uint64_t addr) {
 
 void init_goldenmem() {
   pmem_size = simMemory->get_size();
-  pmem = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+  pmem = (uint8_t *)simMemory->create_cow_branch();
+  bool cow = pmem != nullptr;
+  if (!cow) {
+    pmem = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+  }
   pmem_flag = (uint8_t *)mmap(NULL, pmem_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (pmem == (uint8_t *)MAP_FAILED) {
     Info("ERROR allocating physical memory. \n");
   }
-  simMemory->clone_on_demand([](uint64_t offset, void *src, size_t n) { nonzero_large_memcpy(pmem + offset, src, n); },
-                             true);
+  if (!cow) {
+    simMemory->clone_on_demand(
+        [](uint64_t offset, void *src, size_t n) { nonzero_large_memcpy(pmem + offset, src, n); }, true);
+  }
   ref_golden_mem = pmem;
 }
 

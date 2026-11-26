@@ -18,7 +18,12 @@
 #include "common.h"
 #include "compress.h"
 #include "elfloader.h"
+#include <cerrno>
 #include <cstring>
+#ifdef __linux__
+#include <fcntl.h>
+#include <linux/memfd.h>
+#endif
 #ifdef CONFIG_DIFFTEST_PERFCNT
 #include "perf.h"
 #endif // CONFIG_DIFFTEST_PERFCNT
@@ -182,7 +187,6 @@ void SimMemory::display_stats() {
 
 MmapMemory::MmapMemory(const char *image, uint64_t n_bytes, bool random_mem, uint32_t seed)
     : SimMemory(n_bytes), clone_full_mem(random_mem && seed != 0) {
-  // initialize memory using Linux mmap
   ram = (uint64_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
   if (ram == (uint64_t *)MAP_FAILED) {
     printf("Warning: Insufficient phisical memory\n");
@@ -262,8 +266,80 @@ uint64_t MmapMemory::pad_img_size(uint64_t align) {
   return img_size;
 }
 
+void *MmapMemory::create_cow_branch() {
+  if (cow_fd < 0) {
+    return nullptr;
+  }
+  void *branch = mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, cow_fd, 0);
+  if (branch == MAP_FAILED) {
+    perror("map private COW RAM branch");
+    exit(1);
+  }
+  return branch;
+}
+
+bool MmapMemory::enable_cow() {
+#ifdef __linux__
+  int fd = memfd_create("difftest-ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  auto *shared = (uint8_t *)MAP_FAILED;
+  const char *error = "create COW RAM backing";
+  if (fd >= 0 && ftruncate(fd, memory_size) == 0) {
+    shared = (uint8_t *)mmap(NULL, memory_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    error = "map COW RAM backing";
+  }
+  if (shared == MAP_FAILED) {
+    int saved_errno = errno;
+    if (fd >= 0) {
+      close(fd);
+    }
+    Info("Automatic RAM COW skipped: %s: %s\n", error, strerror(saved_errno));
+    return false;
+  }
+  cow_fd = fd;
+  // Auto selection uses the decoded size. Release each copied chunk so promotion
+  // never retains a second full physical copy of the loaded image.
+  uint64_t size = clone_full_mem ? memory_size : img_size;
+  constexpr uint64_t chunk_size = 1 << 20;
+  for (uint64_t offset = 0; offset < size; offset += chunk_size) {
+    uint64_t n = std::min(chunk_size, size - offset);
+    auto *source = (uint8_t *)ram + offset;
+    nonzero_large_memcpy(shared + offset, source, n);
+    if (madvise(source, n, MADV_DONTNEED) != 0) {
+      perror("release copied RAM pages");
+      exit(1);
+    }
+  }
+  munmap(ram, memory_size);
+  ram = (uint64_t *)shared;
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool MmapMemory::seal_cow() {
+#ifdef __linux__
+  if (munmap(ram, memory_size) != 0) {
+    perror("unmap COW RAM backing");
+    exit(1);
+  }
+  if (fcntl(cow_fd, F_ADD_SEALS, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) != 0) {
+    perror("seal COW RAM backing");
+    exit(1);
+  }
+  ram = (uint64_t *)create_cow_branch();
+  Info("Initial RAM sealed; DUT, Golden Memory and REF use private COW branches\n");
+  return true;
+#else
+  return false;
+#endif
+}
+
 MmapMemory::~MmapMemory() {
   munmap(ram, memory_size);
+  if (cow_fd >= 0) {
+    close(cow_fd);
+  }
 #ifdef WITH_DRAMSIM3
   dramsim3_finish();
 #endif

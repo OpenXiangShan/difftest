@@ -109,6 +109,7 @@ Emulator::Emulator(int argc, const char *argv[])
   if (args.ram_size) {
     ram_size = parse_ramsize(args.ram_size);
   }
+  bool enable_mem_cow = false;
   // footprints
   if (args.image_as_footprints) {
     if (args.linearized_name) {
@@ -122,7 +123,7 @@ Emulator::Emulator(int argc, const char *argv[])
     if (args.footprints_name) {
       simMemory = new MmapMemoryWithFootprints(args.image, ram_size, args.footprints_name, args.random_mem, args.seed);
     } else {
-      init_ram(args.image, ram_size, args.random_mem, args.seed);
+      simMemory = new MmapMemory(args.image, ram_size, args.random_mem, args.seed);
 #ifdef WITH_DRAMSIM3
       dramsim3_init(args.dramsim3_ini, args.dramsim3_outdir);
 #endif
@@ -131,6 +132,19 @@ Emulator::Emulator(int argc, const char *argv[])
 #endif
     }
   }
+
+#if defined(__linux__) && !defined(CONFIG_NO_DIFFTEST)
+  constexpr uint64_t auto_cow_min_image_size = 1ULL << 30;
+  bool cow_supported = NUM_CORES == 1 && args.enable_diff && !args.image_as_footprints && !args.footprints_name &&
+                       !args.enable_snapshot && !args.snapshot_path;
+  if (cow_supported && simMemory->get_img_size() >= auto_cow_min_image_size) {
+    if (REF_PROXY::supports_mem_cow()) {
+      enable_mem_cow = static_cast<MmapMemory *>(simMemory)->enable_cow();
+    } else {
+      Info("Automatic RAM COW skipped: REF does not advertise COW support\n");
+    }
+  }
+#endif
 
   if (args.gcpt_restore) {
     if (args.overwrite_nbytes_autoset) {
@@ -147,6 +161,13 @@ Emulator::Emulator(int argc, const char *argv[])
 
   if (args.copy_ram_offset) {
     copy_ram(args.copy_ram_offset);
+  }
+  if (enable_mem_cow) {
+    enable_mem_cow = static_cast<MmapMemory *>(simMemory)->seal_cow();
+    if (enable_mem_cow) {
+      Info("Automatically enabling RAM COW for loaded image of %lu bytes, RAM of %lu bytes\n",
+           simMemory->get_img_size(), simMemory->get_size());
+    }
   }
 
 #ifdef ENABLE_CHISEL_DB
@@ -172,7 +193,7 @@ Emulator::Emulator(int argc, const char *argv[])
 
 #ifndef CONFIG_NO_DIFFTEST
   // init difftest
-  auto ref_ramsize = args.ram_size ? simMemory->get_size() : 0;
+  auto ref_ramsize = (args.ram_size || enable_mem_cow) ? simMemory->get_size() : 0;
   difftest_init(args.enable_diff, ref_ramsize);
 
   // init difftest traces
