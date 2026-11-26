@@ -98,6 +98,19 @@ AbstractRefProxy::~AbstractRefProxy() {
   }
 };
 
+void RefProxy::initialize_amu_snapshots() {
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES) && \
+    defined(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES) && defined(CONFIG_DIFF_AMU_SCALE_BANK_BYTES) && \
+    !defined(CONFIG_DIFFTEST_REPLAY)
+  if (!ref_amu_snapshot_negotiate || !ref_amu_ctrl_snapshot || !ref_amu_lazy_snapshot)
+    return;
+  const int status = ref_amu_snapshot_negotiate(2, sizeof(RefAmuCtrlSnapshot), sizeof(RefAmuMmaSnapshot),
+      sizeof(AmuCtrlEvent), CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES, CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+  Assert(status == 0, "REF MX snapshot ABI/physical-capacity negotiation failed: %d", status);
+  amu_snapshots_enabled = status == 0;
+#endif
+}
+
 void *AbstractRefProxy::load_handler(const char *env, const char *file_path) {
 #ifdef LINKED_REFPROXY_LIB
   Info("The reference model (dynamically or statically linked at compile-time) is %s\n", LINKED_REFPROXY_LIB);

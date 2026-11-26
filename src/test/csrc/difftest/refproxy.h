@@ -18,8 +18,47 @@
 #define __NEMU_PROXY_H
 
 #include "common.h"
+#include <cstddef>
 #include <dlfcn.h>
 #include <unistd.h>
+
+struct RefAmuScaleMetadata {
+  uint32_t generation;
+  uint16_t rows, blocks;
+  uint32_t row_pitch;
+  uint8_t reg_id, side, valid, reserved;
+  uint64_t source_stride;
+};
+struct RefAmuScaleSnapshot {
+  uint8_t *bytes;
+  uint64_t capacity;
+  RefAmuScaleMetadata metadata;
+};
+struct RefAmuMatrixView {
+  uint8_t *bytes;
+  uint64_t capacity;
+  uint32_t row_pitch, reserved;
+};
+struct RefAmuCtrlSnapshot {
+  uint32_t version = 2;
+  uint32_t struct_size = sizeof(RefAmuCtrlSnapshot);
+  uint64_t epoch = 0;
+  RefAmuScaleSnapshot scales[2]{};
+  RefAmuMatrixView expected_tr{};
+  uint32_t raised_flags = 0, reserved = 0;
+};
+struct RefAmuMmaSnapshot {
+  uint32_t version = 2;
+  uint32_t struct_size = sizeof(RefAmuMmaSnapshot);
+  const RefAmuCtrlSnapshot *scales = nullptr;
+  RefAmuMatrixView matrices[4]{};
+  uint32_t raised_flags = 0, reserved = 0;
+};
+static_assert(sizeof(RefAmuScaleMetadata) == 24 && sizeof(RefAmuCtrlSnapshot) == 128);
+static_assert(sizeof(RefAmuMatrixView) == 24 && sizeof(RefAmuMmaSnapshot) == 120);
+static_assert(offsetof(RefAmuCtrlSnapshot, expected_tr) == 96 &&
+              offsetof(RefAmuCtrlSnapshot, raised_flags) == 120 &&
+              offsetof(RefAmuCtrlSnapshot, reserved) == 124);
 
 /* clang-format off */
 static const char *regs_name_int[] = {
@@ -204,6 +243,9 @@ public:
   f(ref_amu_exec, difftest_amu_exec, int, void*, void*)                                                     \
   f(ref_amu_exec_hash, difftest_amu_exec_hash, int, void*, void*)                                           \
   f(ref_amu_lazy, difftest_amu_lazy, void, void*, void*, void*, void*, void*)                               \
+  f(ref_amu_ctrl_snapshot, difftest_amu_ctrl_snapshot, int, void*, void*)                                 \
+  f(ref_amu_lazy_snapshot, difftest_amu_lazy_snapshot, int, void*, void*)                                 \
+  f(ref_amu_snapshot_negotiate, difftest_amu_snapshot_negotiate, int, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t) \
   f(ref_ame_replay_state_size, difftest_ame_replay_state_size, size_t, )                                    \
   f(ref_ame_replay_state_save, save_ame_replay_state, void, void*)                                         \
   f(ref_ame_replay_state_restore, restore_ame_replay_state, void, const void*)
@@ -260,9 +302,11 @@ typedef struct __attribute__((packed)) {
 
 class RefProxy : public AbstractRefProxy {
 public:
-  RefProxy(int coreid, size_t ram_size) : AbstractRefProxy(coreid, ram_size, nullptr, nullptr) {}
+  RefProxy(int coreid, size_t ram_size) : RefProxy(coreid, ram_size, nullptr, nullptr) {}
   RefProxy(int coreid, size_t ram_size, const char *env, const char *file_path)
-      : AbstractRefProxy(coreid, ram_size, env, file_path) {}
+      : AbstractRefProxy(coreid, ram_size, env, file_path) {
+    initialize_amu_snapshots();
+  }
   ~RefProxy();
 
   ref_state_t state;
@@ -522,6 +566,14 @@ public:
     }
   }
 
+  inline int get_amu_ctrl_snapshot(struct AmuCtrlEvent *ctrl, RefAmuCtrlSnapshot *snapshot) {
+    return amu_snapshots_enabled ? ref_amu_ctrl_snapshot(ctrl, snapshot) : -2;
+  }
+
+  inline int get_amu_lazy_snapshot(struct AmuCtrlEvent *ctrl, RefAmuMmaSnapshot *snapshot) {
+    return amu_snapshots_enabled ? ref_amu_lazy_snapshot(ctrl, snapshot) : -2;
+  }
+
 #if defined(CONFIG_DIFFTEST_REPLAY) && defined(CONFIG_DIFFTEST_AMUCTRLEVENT)
   inline size_t ame_replay_state_size() {
     if (ref_ame_replay_state_size) {
@@ -565,6 +617,8 @@ public:
   }
 
 private:
+  bool amu_snapshots_enabled = false;
+  void initialize_amu_snapshots();
   RefProxyConfig config;
 
   inline void sync_config() {
@@ -657,7 +711,14 @@ struct AmuCtrlEvent {
   uint64_t base;
   uint64_t stride;
   uint64_t pc;
+  uint8_t computeType;
+  uint8_t isScale;
+  uint8_t isConvertF32;
+  uint8_t isDynamicMxfpQuant;
 };
+static_assert(offsetof(AmuCtrlEvent, pc) == 40 && offsetof(AmuCtrlEvent, computeType) == 48 &&
+              offsetof(AmuCtrlEvent, isScale) == 49 && offsetof(AmuCtrlEvent, isConvertF32) == 50 &&
+              offsetof(AmuCtrlEvent, isDynamicMxfpQuant) == 51 && sizeof(AmuCtrlEvent) == 56);
 
 struct MsyncEvent {
   uint8_t valid;

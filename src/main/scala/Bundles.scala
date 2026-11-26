@@ -450,6 +450,13 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
 
   val pc = UInt(64.W)
 
+  val computeType = UInt(4.W)
+  val isScale = Bool()
+  val isConvertF32 = Bool()
+  val isDynamicMxfpQuant = Bool()
+  val retireId = UInt(64.W)
+  val epoch = UInt(64.W)
+
   def msyncRd: UInt = mtilem
 
   def opType: UInt = base

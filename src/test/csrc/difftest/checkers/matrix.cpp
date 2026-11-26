@@ -122,6 +122,10 @@ static struct AmuCtrlEvent to_nemu_amu_ctrl(const DifftestAmuCtrlEvent &source) 
   target.base = source.base;
   target.stride = source.stride;
   target.pc = source.pc;
+  target.computeType = source.computeType;
+  target.isScale = source.isScale;
+  target.isConvertF32 = source.isConvertF32;
+  target.isDynamicMxfpQuant = source.isDynamicMxfpQuant;
   return target;
 }
 
@@ -143,6 +147,10 @@ static void from_nemu_amu_ctrl(DifftestAmuCtrlEvent &target, const struct AmuCtr
   target.base = source.base;
   target.stride = source.stride;
   target.pc = source.pc;
+  target.computeType = source.computeType;
+  target.isScale = source.isScale;
+  target.isConvertF32 = source.isConvertF32;
+  target.isDynamicMxfpQuant = source.isDynamicMxfpQuant;
 }
 
 // AME instruction lifecycle in software ROB
