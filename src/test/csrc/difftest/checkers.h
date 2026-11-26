@@ -208,6 +208,9 @@ public:
       : DiffTestChecker(state, proxy), self(self), driver(proxy, state) {}
   int do_step() override;
   int flush();
+  bool short_execution() const {
+    return driver.short_execution();
+  }
 
 private:
   Difftest *self;

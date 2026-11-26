@@ -76,6 +76,9 @@ public:
   uint64_t completed() const {
     return executed_instrs;
   }
+  bool short_execution() const {
+    return execution_incomplete;
+  }
 
 private:
   template <typename Checker, typename Probe>
@@ -90,6 +93,7 @@ private:
   std::unique_ptr<ArchEventChecker> arch_event_checker;
   uint64_t pending_instrs = 0;
   uint64_t executed_instrs = 0;
+  bool execution_incomplete = false;
 };
 #endif
 #endif

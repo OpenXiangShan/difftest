@@ -29,6 +29,9 @@ void difftest_ref_fork_leader_exit(int result);
 int difftest_ref_fork_prepare(Difftest *self);
 int difftest_ref_fork_check(Difftest *self);
 void difftest_ref_fork_publish(Difftest *self);
+// Called for a short execution in the active FAST segment.
+// Seal retained DUT windows and pause for the ordered SLOW checker.
+void difftest_ref_fork_fast_error(bool include_current_window);
 int difftest_ref_fork_finish(bool bounded = false);
 bool difftest_ref_fork_bounded_endpoint();
 int difftest_ref_fork_idle();

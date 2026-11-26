@@ -101,6 +101,7 @@ bool RefDriveExecutor::flush() {
   const uint64_t actual = proxy->ref_get_instr_count() - before;
   executed_instrs += actual;
   if (actual != requested) {
+    execution_incomplete = true;
     proxy->sync();
     fprintf(stderr, "FAST short execution: requested=%lu completed=%lu PC=0x%lx\n", (unsigned long)requested,
             (unsigned long)actual, (unsigned long)proxy->state.pc);
