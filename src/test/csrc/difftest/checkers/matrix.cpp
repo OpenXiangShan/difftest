@@ -527,7 +527,8 @@ int AmuWritebackBlockRecorder::check(const DifftestAmuWritebackBlock &probe) {
   constexpr size_t bank_bytes = CONFIG_DIFF_AMU_C_WORDS_PER_BANK * sizeof(uint64_t);
   constexpr size_t stride = CONFIG_DIFF_AMU_ARLEN / (8 * bank_bytes);
   constexpr size_t entries_per_bank = CONFIG_DIFF_AMU_C_REG_SIZE_BYTES / (banks * bank_bytes);
-  if (probe.count == 0 || probe.count > sizeof(probe.bankAddr)) {
+  constexpr size_t block_capacity = sizeof(probe.bankAddr) / sizeof(probe.bankAddr[0]);
+  if (probe.count == 0 || probe.count > block_capacity) {
     printf("Invalid MMA writeback block count: %u\n", unsigned(probe.count));
     set_error_pc(state->coreid, probe.pc);
     return STATE_ERROR;

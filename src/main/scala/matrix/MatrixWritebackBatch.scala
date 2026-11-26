@@ -15,7 +15,7 @@ import difftest.{DiffAmuWritebackBlock, DiffAmuWritebackEvent}
 object MatrixWritebackBatch {
   // The producer writes every bank at one common address and signals completion separately.
   def apply(in: DiffAmuWritebackEvent): (DiffAmuWritebackBlock, DiffAmuWritebackEvent) = {
-    val block = Wire(new DiffAmuWritebackBlock(in.data.length))
+    val block = Wire(new DiffAmuWritebackBlock(in.data.length, in.bankAddrBits))
     val size = block.bankAddr.length
     val pendingAddr = Reg(Vec(size - 1, chiselTypeOf(in.bankAddr.head)))
     val pendingData = Reg(Vec(size - 1, chiselTypeOf(in.data)))

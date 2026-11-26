@@ -464,25 +464,35 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
 }
 
 // Matrix-register write beats; finish marks the end of the instruction.
-class AmuWritebackEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4, val hasMask: Boolean = true)
+class AmuWritebackEvent(
+  val nBanks: Int = 8,
+  val wordsPerBank: Int = 4,
+  val hasMask: Boolean = true,
+  val bankAddrBits: Int = 8,
+)
   extends DifftestBaseBundle
   with HasValid {
   require(nBanks > 0, s"nBanks should be positive, got $nBanks")
   require(wordsPerBank > 0, s"wordsPerBank should be positive, got $wordsPerBank")
+  require(bankAddrBits >= 8 && bankAddrBits <= 16)
 
   val pc = UInt(64.W)
   val bankValid = UInt(nBanks.W)
-  val bankAddr = Vec(nBanks, UInt(8.W))
+  val bankAddr = Vec(nBanks, UInt(bankAddrBits.W))
   val data = Vec(nBanks * wordsPerBank, UInt(64.W))
   val bankMask = Option.when(hasMask)(Vec(nBanks, UInt((wordsPerBank * 8).W)))
   val finish = Bool()
 }
 
-class AmuWritebackBlock(val wordsPerWrite: Int) extends DifftestBaseBundle with HasValid {
+class AmuWritebackBlock(val wordsPerWrite: Int, val bankAddrBits: Int = 8)
+  extends DifftestBaseBundle
+  with HasValid {
+  require(bankAddrBits >= 8 && bankAddrBits <= 16)
+
   val pc = UInt(64.W)
   val count = UInt(4.W)
   val finish = Bool()
-  val bankAddr = Vec(8, UInt(8.W))
+  val bankAddr = Vec(8, UInt(bankAddrBits.W))
   val data = Vec(8 * wordsPerWrite, UInt(64.W))
 }
 

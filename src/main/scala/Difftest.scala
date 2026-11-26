@@ -575,21 +575,22 @@ class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWit
   override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
 }
 
-class DiffAmuWritebackEvent(nBanks: Int = 8, wordsPerBank: Int = 4, hasMask: Boolean = true)
-  extends AmuWritebackEvent(nBanks, wordsPerBank, hasMask)
+class DiffAmuWritebackEvent(nBanks: Int = 8, wordsPerBank: Int = 4, hasMask: Boolean = true, bankAddrBits: Int = 8)
+  extends AmuWritebackEvent(nBanks, wordsPerBank, hasMask, bankAddrBits)
   with DifftestBundle
   with DifftestWithIndex {
   override val desiredCppName: String = "amu_writeback"
 
   override def classArgs: Map[String, Any] =
-    Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank, "hasMask" -> hasMask)
+    Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank, "hasMask" -> hasMask, "bankAddrBits" -> bankAddrBits)
 
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
 
-class DiffAmuWritebackBlock(wordsPerWrite: Int) extends AmuWritebackBlock(wordsPerWrite) with DifftestBundle {
+class DiffAmuWritebackBlock(wordsPerWrite: Int, bankAddrBits: Int = 8)
+  extends AmuWritebackBlock(wordsPerWrite, bankAddrBits) with DifftestBundle {
   override val desiredCppName: String = "amu_writeback_block"
-  override def classArgs: Map[String, Any] = Map("wordsPerWrite" -> wordsPerWrite)
+  override def classArgs: Map[String, Any] = Map("wordsPerWrite" -> wordsPerWrite, "bankAddrBits" -> bankAddrBits)
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
 
@@ -853,9 +854,9 @@ object DifftestModule {
             bundles.forall { bundle =>
               val event = bundle.asInstanceOf[AmuWritebackEvent]
               event.nBanks == amuFinish.nBanks && event.wordsPerBank == amuFinish.wordsPerBank &&
-              event.hasMask == amuFinish.hasMask
+                event.hasMask == amuFinish.hasMask && event.bankAddrBits == amuFinish.bankAddrBits
             },
-            "AmuWritebackEvent instances must share the same bank and mask layout",
+            "AmuWritebackEvent instances must share the same bank, address and mask layout",
           )
           val amuBanks = amuFinish.nBanks
           val amuWordBits = amuFinish.data.head.getWidth
@@ -869,6 +870,13 @@ object DifftestModule {
           difftestCpp += s"#define CONFIG_DIFF_AMU_WRITEBACK_WORD_BITS $amuWordBits"
           difftestCpp += s"#define CONFIG_DIFF_AMU_BANK_WIDTH ${amuWordsPerBank * amuWordBits}"
           if (!amuFinish.hasMask) difftestCpp += "#define CONFIG_DIFF_AMU_WRITEBACK_NO_MASK"
+        }
+        if (bundleType.desiredCppName == "amu_writeback_block") {
+          val block = bundleType.asInstanceOf[AmuWritebackBlock]
+          require(bundles.forall { bundle =>
+            val event = bundle.asInstanceOf[AmuWritebackBlock]
+            event.wordsPerWrite == block.wordsPerWrite && event.bankAddrBits == block.bankAddrBits
+          }, "AmuWritebackBlock instances must share the same write and address layout")
         }
         if (bundleType.desiredCppName == "amu_mx_finish") {
           val mx = bundleType.asInstanceOf[AmuMxFinishEvent]

@@ -80,7 +80,7 @@ object MatrixHash {
   // accepted writes to that same instruction; they never complete independently.
   def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports: Int): Vec[DiffAmuWritebackEvent] = {
     val module = Module(new MatrixHash(banks, bankBytes, regBytes, rowBytes, ports))
-    val writes = Wire(Vec(ports, new DiffAmuWritebackEvent(banks, bankBytes / 8)))
+    val writes = Wire(chiselTypeOf(module.io.in))
     module.io.in := writes
     DifftestModule(new DiffAmuHashEvent) := module.io.out
     writes
@@ -104,10 +104,11 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
   private val chunksPerRow = rowBytes / bankBytes
   private val contributionLatency = 3
   private val completionLatency = contributionLatency + 1
-  require(entriesPerBank > 1 && entriesPerBank <= 256 && isPow2(entriesPerBank))
+  require(entriesPerBank > 1 && entriesPerBank <= 1024 && isPow2(entriesPerBank))
+  private val bankAddrBits = math.max(8, log2Ceil(entriesPerBank))
 
   val io = IO(new Bundle {
-    val in = Input(Vec(ports, new DiffAmuWritebackEvent(banks, bankBytes / 8)))
+    val in = Input(Vec(ports, new DiffAmuWritebackEvent(banks, bankBytes / 8, bankAddrBits = bankAddrBits)))
     val out = Output(new DiffAmuHashEvent)
   })
 
