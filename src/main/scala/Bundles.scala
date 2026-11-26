@@ -83,6 +83,8 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
   val isStore = Bool()
   val nFused = UInt(8.W)
   val special = UInt(8.W)
+  // Last semantic instruction retired by this commit lane, not a CCT tag.
+  val retireId = UInt(64.W)
 
   def setSpecial(
     isDelayedWb: Bool = false.B,
@@ -434,21 +436,85 @@ class AmuCtrlEvent extends DifftestBaseBundle with HasValid {
 
   val pc = UInt(64.W)
 
+  // Append-only extension mirrored by NEMU/include/ext/amuctrl.h.
+  // Keep the legacy prefix through pc in its original order.
+  val computeType = UInt(4.W)
+  val isScale = Bool()
+  // Semantic bytes50/51 occupy old padding; tracing IDs retain natural alignment.
+  val isConvertF32 = Bool()
+  val isDynamicMxfpQuant = Bool()
+  // CPU-owned tracing only; the NEMU semantic prefix above stays unchanged.
+  val retireId = UInt(64.W)
+  val epoch = UInt(64.W)
+
   def msyncRd: UInt = mtilem
 
   def opType: UInt = base
 }
 
-class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4) extends DifftestBaseBundle with HasValid {
+object AmuFinishKind {
+  val Legacy = 0
+  val ScaleA = 1
+  val ScaleB = 2
+  val MmaBind = 3
+  val MmaDone = 4
+  val OrderedRetire = 5
+  val ReturnAccepted = 6
+  val entries: Seq[(String, Int)] = Seq(
+    "LEGACY" -> Legacy, "SCALE_A" -> ScaleA, "SCALE_B" -> ScaleB,
+    "MMA_BIND" -> MmaBind, "MMA_DONE" -> MmaDone,
+    "ORDERED_RETIRE" -> OrderedRetire, "RETURN_ACCEPTED" -> ReturnAccepted)
+}
+
+class AmuFinishEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4,
+    val bankAddrBits: Int = 8) extends DifftestBaseBundle with HasValid {
   require(nBanks > 0, s"nBanks should be positive, got $nBanks")
   require(wordsPerBank > 0, s"wordsPerBank should be positive, got $wordsPerBank")
+  require(bankAddrBits > 0, s"bankAddrBits should be positive, got $bankAddrBits")
 
   val pc = UInt(64.W)
   val bankValid = Vec(nBanks, Bool())
-  val bankAddr = Vec(nBanks, UInt(8.W))
+  val bankAddr = Vec(nBanks, UInt(bankAddrBits.W))
   val data = Vec(nBanks * wordsPerBank, UInt(64.W))
   val bankMask = Vec(nBanks, UInt((wordsPerBank * 8).W))
   val finish = Bool()
+  val retireId = UInt(64.W)
+  val epoch = UInt(64.W)
+  // Append-only observation tail. Scale bytes use the existing data/mask
+  // chunks, not an independent response or REF-derived payload stream.
+  val kind = UInt(4.W)
+  val computeType = UInt(4.W)
+  val scaleRegA = UInt(4.W)
+  val scaleRegB = UInt(4.W)
+  // Physical bank selected for architectural scale registers sa0-sa3/sb0-sb3.
+  val scaleBankA = UInt(2.W)
+  val scaleBankB = UInt(2.W)
+  val scaleGenA = UInt(32.W)
+  val scaleGenB = UInt(32.W)
+  val scaleValidA = Bool()
+  val scaleValidB = Bool()
+  val scaleRowsA = UInt(16.W)
+  val scaleRowsB = UInt(16.W)
+  val scaleKVectorsA = UInt(16.W)
+  val scaleKVectorsB = UInt(16.W)
+  val scaleBlocksA = UInt(16.W)
+  val scaleBlocksB = UInt(16.W)
+  val scaleRowPitchA = UInt(32.W)
+  val scaleRowPitchB = UInt(32.W)
+  val flagsValid = Bool()
+  val flagsRaised = UInt(5.W)
+
+  def clearScaleTrace(): Unit = {
+    kind := AmuFinishKind.Legacy.U
+    computeType := 0.U
+    Seq(scaleRegA, scaleRegB, scaleBankA, scaleBankB, scaleGenA, scaleGenB,
+      scaleRowsA, scaleRowsB, scaleKVectorsA, scaleKVectorsB, scaleBlocksA,
+      scaleBlocksB, scaleRowPitchA, scaleRowPitchB).foreach(_ := 0.U)
+    scaleValidA := false.B
+    scaleValidB := false.B
+    flagsValid := false.B
+    flagsRaised := 0.U
+  }
 }
 
 class MsyncEvent extends DifftestBaseBundle with HasValid {

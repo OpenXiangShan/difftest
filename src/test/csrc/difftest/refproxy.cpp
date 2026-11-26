@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "refproxy.h"
+#include <cstddef>
 #include <dlfcn.h>
 #include <fstream>
 #include <iostream>
@@ -97,6 +98,19 @@ AbstractRefProxy::~AbstractRefProxy() {
     dlclose(handler);
   }
 };
+
+void RefProxy::initialize_amu_snapshots() {
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES) && \
+    defined(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES) && defined(CONFIG_DIFF_AMU_SCALE_BANK_BYTES) && \
+    defined(CONFIG_DIFF_AMU_FINISH_KIND_RETURN_ACCEPTED) && !defined(CONFIG_DIFFTEST_REPLAY)
+  if (!ref_amu_snapshot_negotiate || !ref_amu_ctrl_snapshot || !ref_amu_lazy_snapshot) return;
+  const int status = ref_amu_snapshot_negotiate(2, sizeof(RefAmuCtrlSnapshot), sizeof(RefAmuMmaSnapshot),
+    offsetof(DifftestAmuCtrlEvent, retireId), CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES, CONFIG_DIFF_AMU_C_REG_SIZE_BYTES);
+  Assert(status == 0, "REF MX snapshot ABI/physical-capacity negotiation failed: %d", status);
+  amu_snapshots_enabled = status == 0;
+  Info("[INFO] REF independent MX snapshot ABI admitted; CPU semantic gates remain required\n");
+#endif
+}
 
 void *AbstractRefProxy::load_handler(const char *env, const char *file_path) {
 #ifdef LINKED_REFPROXY_LIB
@@ -328,6 +342,17 @@ bool RefProxy::do_csr_waive(DiffTestState *dut) {
   } while (0);
 
   bool has_waive = false;
+  /*
+   * For illegal-instruction traps, mtval may contain the instruction bits or
+   * zero. Backend FU-generated exceptions currently do not carry the raw
+   * instruction to TrapInstMod, so accept a zero DUT mtval only after both
+   * sides agree this is an illegal-instruction trap.
+   */
+  if (state.csr.mcause == 2 && dut->regs.csr.mcause == 2 &&
+      dut->regs.csr.mtval == 0 && state.csr.mtval != 0) {
+    state.csr.mtval = 0;
+    has_waive = true;
+  }
 #ifdef CPU_ROCKET_CHIP
   CSR_WAIVE(mtval, encode_vaddr);
   CSR_WAIVE(mtval, sext_vaddr_40bit);

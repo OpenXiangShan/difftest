@@ -53,6 +53,17 @@ bool CpuMmaBackend::verify_one(MmaVerificationBuffer *buffer) {
     return false;
   }
 
+  if (buffer->amu_event.computeType != 0) {
+    // No global REF/SoftFloat access on the worker: all buffers and the exact
+    // expected result were owned and finalized by the main-thread REF call.
+    const size_t bytes = size_t(buffer->amu_event.mtilem) * buffer->amu_event.mtilen * 4;
+    return is_mma_mx(buffer->amu_event) && buffer->mx_expected_valid &&
+      buffer->expected_result && buffer->dut_result &&
+      bytes <= buffer->capacities[3] &&
+      buffer->dut_raised_flags == buffer->ref_raised_flags &&
+      memcmp(buffer->dut_result, buffer->expected_result, bytes) == 0;
+  }
+
   if (buffer->amu_event.isfp) { // Floating-point MMA
     const MmaElementType source_type = static_cast<MmaElementType>(buffer->amu_event.types1);
     switch (source_type) {

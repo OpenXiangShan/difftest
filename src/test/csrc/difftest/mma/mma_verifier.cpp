@@ -22,6 +22,7 @@
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 
 #ifndef CONFIG_DIFF_MMA_BATCH_SIZE
 #define CONFIG_DIFF_MMA_BATCH_SIZE 64
@@ -112,8 +113,11 @@ MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
   size_t element_sz_s2 = get_element_size(amu_event->types2);
   size_t element_sz_d = get_element_size(amu_event->typed);
 
-  size_t a_sz = element_sz_s1 * m * k;
-  size_t b_sz = element_sz_s2 * k * n;
+  const bool mx = is_mma_mx(*amu_event);
+  const size_t a_pitch = mx ? (amu_event->computeType == 10 ? (k + 1) / 2 : k) : element_sz_s1 * k;
+  const size_t b_pitch = mx ? a_pitch : element_sz_s2 * k;
+  size_t a_sz = a_pitch * m;
+  size_t b_sz = b_pitch * n;
   size_t c_sz = element_sz_d * m * n;
 
   // Allocate memory for the buffer structure and data
@@ -125,6 +129,13 @@ MmaVerificationBuffer *MmaVerifier::allocate_buffer(const DifftestAmuCtrlEvent *
   buffer->src2 = new uint8_t[b_sz];
   buffer->src3 = new uint8_t[c_sz];
   buffer->dut_result = new uint8_t[c_sz];
+  buffer->capacities[0] = a_sz;
+  buffer->capacities[1] = b_sz;
+  buffer->capacities[2] = buffer->capacities[3] = c_sz;
+  buffer->row_pitches[0] = a_pitch;
+  buffer->row_pitches[1] = b_pitch;
+  buffer->row_pitches[2] = buffer->row_pitches[3] = element_sz_d * n;
+  if (mx) buffer->expected_result = new uint8_t[c_sz];
 
   return buffer;
 }
@@ -137,6 +148,7 @@ void MmaVerifier::free_buffer(MmaVerificationBuffer *buffer) {
       delete[] buffer->src3;
       delete[] buffer->dut_result;
     }
+    delete[] buffer->expected_result;
     delete buffer;
   }
 }
@@ -177,7 +189,15 @@ void MmaVerifier::mma_verification_thread_func() {
     }
 
     std::vector<uint8_t> passed;
-    backend->verify(buffers, passed);
+    // CUDA has no MX arithmetic implementation. Route any MX-containing batch
+    // through the canonical CPU exact-snapshot comparison, never unscaled FP8.
+    if (std::any_of(buffers.begin(), buffers.end(),
+                    [](const auto *buffer) { return is_mma_mx(buffer->amu_event); })) {
+      CpuMmaBackend cpu_backend;
+      cpu_backend.verify(buffers, passed);
+    } else {
+      backend->verify(buffers, passed);
+    }
     Assert(passed.size() == buffers.size(), "MMA backend returned %zu results for a batch of %zu", passed.size(),
            buffers.size());
 

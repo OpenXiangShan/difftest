@@ -58,8 +58,18 @@ struct MmaVerificationBuffer {
   uint8_t *src2;                  // Pointer to source matrix 2 data
   uint8_t *src3;                  // Pointer to source matrix 3 data (accumulator)
   uint8_t *dut_result;            // Pointer to DUT result data
+  uint8_t *expected_result = nullptr; // Main-thread REF exact result for MX only.
+  size_t capacities[4]{};         // A, B, C, expected/DUT result logical allocations.
+  uint32_t row_pitches[4]{};
+  uint8_t dut_raised_flags = 0;
+  uint8_t ref_raised_flags = 0;
+  bool mx_expected_valid = false;
 };
 
+static inline bool is_mma_mx(const DifftestAmuCtrlEvent &event) {
+  return event.op == 0 && event.isfp &&
+    (event.computeType == 7 || event.computeType == 8 || event.computeType == 10);
+}
 /**
  * @brief Returns the element size encoded by the low two bits of a typed field.
  *
@@ -93,6 +103,10 @@ static inline size_t calculate_mma_buffer_size(const DifftestAmuCtrlEvent *amu_e
   uint16_t n = amu_event->mtilen;
   uint16_t k = amu_event->mtilek;
 
+  if (is_mma_mx(*amu_event)) {
+    const size_t packed_k = amu_event->computeType == 10 ? (k + 1) / 2 : k;
+    return (m + n) * packed_k + 3 * m * n * sizeof(uint32_t);
+  }
   // Calculate size for each matrix:
   // src1: m×k matrix
   // src2: k×n matrix

@@ -612,8 +612,25 @@ int Difftest::step() {
 #else
   int ret = check_all();
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  // A guest trap does not prove that the independent AMU checker consumed its
+  // last transaction. Never turn a pending control/finish into a GOOD_TRAP.
+  if (get_trap_valid() && get_trap_code() == STATE_GOODTRAP && !state->matrix_sw_rob.empty()) {
+    const auto &pending = state->matrix_sw_rob.front();
+    fprintf(stderr, "AMU verification incomplete at GOOD_TRAP: core=%d pending=%zu "
+      "pc=0x%016lx epoch=%lu retireId=%lu phase=%u\n", state->coreid,
+      state->matrix_sw_rob.size(), pending.amu_event.pc, pending.amu_event.epoch,
+      pending.amu_event.retireId, unsigned(pending.state));
+    ret = DiffTestChecker::STATE_ERROR;
+  }
+  if (get_trap_valid() && get_trap_code() == STATE_GOODTRAP && !state->cpu_amu_commits.empty()) {
+    const auto &pending = state->cpu_amu_commits.front();
+    fprintf(stderr, "AMU delivery incomplete at GOOD_TRAP: core=%d pending=%zu "
+      "pc=0x%016lx epoch=%lu retireId=%lu\n", state->coreid,
+      state->cpu_amu_commits.size(), pending.pc, pending.epoch, pending.retireId);
+    ret = DiffTestChecker::STATE_ERROR;
+  }
   if (mma_verifier) {
-    if (ret) { // find error, wait for mma verification to complete
+    if (ret || get_trap_valid()) { // errors and terminal traps must drain the worker
       mma_verifier->flush();
     }
     if (mma_verifier->has_mma_verification_error()) {
@@ -627,11 +644,15 @@ int Difftest::step() {
         Info("\n");
       }
       Info("------ REF Result ------\n");
+      const uint8_t *expected = buffer->amu_event.computeType ? buffer->expected_result : buffer->src3;
       for (int i = 0; i < buffer->amu_event.mtilem; i++) {
         for (int j = 0; j < buffer->amu_event.mtilen; j++) {
-          Info("%08x ", ((uint32_t *)(buffer->src3))[i * buffer->amu_event.mtilen + j]);
+          Info("%08x ", ((const uint32_t *)expected)[i * buffer->amu_event.mtilen + j]);
         }
         Info("\n");
+      }
+      if (buffer->amu_event.computeType) {
+        Info("MX newly raised flags: DUT=%u REF=%u\n", buffer->dut_raised_flags, buffer->ref_raised_flags);
       }
       display();
       dut->trap.pc = buffer->amu_event.pc;
@@ -647,6 +668,34 @@ int Difftest::step() {
 inline int Difftest::check_all() {
   state->cycle_count = get_trap_event()->cycleCnt;
   state->has_progress = false;
+
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  // AMU telemetry can arrive in this batch for an earlier CPU commit. Capture
+  // the independent CPU endpoints before the normal recorders consume it;
+  // InstrCommitChecker still owns reference execution and valid clearing.
+  if (!dut->event.valid) {
+    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+      if (dut->commit[i].valid && dut->commit[i].instr == 0x2b) {
+        for (int j = 0; j < CONFIG_DIFF_COMMIT_WIDTH; ++j) {
+          if (j != i && dut->commit[j].valid) {
+            fprintf(stderr, "MINIT attribution requires a singleton CPU batch: core=%d\n", state->coreid);
+            return DiffTestChecker::STATE_ERROR;
+          }
+        }
+      }
+    }
+    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+      if (!state->record_cpu_commit(dut->commit[i])) return DiffTestChecker::STATE_ERROR;
+    }
+  } else {
+    for (int i = 0; i < CONFIG_DIFF_COMMIT_WIDTH; ++i) {
+      if (dut->commit[i].valid) {
+        fprintf(stderr, "AMU attribution cannot combine ArchEvent with CPU retirement: core=%d\n", state->coreid);
+        return DiffTestChecker::STATE_ERROR;
+      }
+    }
+  }
+#endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
   // normal checkers
   for (auto checker: checkers) {
@@ -804,6 +853,11 @@ void Difftest::display_stats() {
   double ipc = (double)instrCnt / cycleCnt;
   Info(ANSI_COLOR_MAGENTA "Core-%d instrCnt = %'" PRIu64 ", cycleCnt = %'" PRIu64 ", IPC = %lf\n" ANSI_COLOR_RESET,
        state->coreid, instrCnt, cycleCnt, ipc);
+#ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  Info("Core-%d CPU/AMU attribution: matched=%lu cpuRetireId=%lu epoch=%lu pending=%zu\n",
+       state->coreid, state->cpu_amu_matched, state->cpu_retire_id,
+       state->cpu_minit_epoch, state->cpu_amu_commits.size());
+#endif
 }
 
 // API for soft warmup, display final instr/cycle - warmup instr/cycle

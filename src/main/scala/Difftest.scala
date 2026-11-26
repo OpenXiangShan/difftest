@@ -530,13 +530,14 @@ class DiffAmuCtrlEvent extends AmuCtrlEvent with DifftestBundle with DifftestWit
   override val squashGroup: Seq[String] = Seq("REF", "MATRIX")
 }
 
-class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4)
-  extends AmuFinishEvent(nBanks, wordsPerBank)
+class DiffAmuFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4, bankAddrBits: Int = 8)
+  extends AmuFinishEvent(nBanks, wordsPerBank, bankAddrBits)
   with DifftestBundle
   with DifftestWithIndex {
   override val desiredCppName: String = "amu_finish"
 
-  override def classArgs: Map[String, Any] = Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank)
+  override def classArgs: Map[String, Any] =
+    Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank, "bankAddrBits" -> bankAddrBits)
 
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
@@ -766,6 +767,9 @@ object DifftestModule {
           difftestCpp += s"#define $configWidthName ${bundleType.bits.getNumElements}"
         }
         if (bundleType.desiredCppName == "amu_finish") {
+          AmuFinishKind.entries.foreach { case (name, value) =>
+            difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_KIND_$name $value"
+          }
           val amuFinish = bundleType.asInstanceOf[AmuFinishEvent]
           val amuBanks = amuFinish.bankValid.length
           val amuWordBits = amuFinish.data.head.getWidth

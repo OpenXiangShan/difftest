@@ -22,6 +22,7 @@
 #include <deque>
 #include <queue>
 #include <unordered_set>
+#include <vector>
 
 class CommitTrace {
 public:
@@ -151,6 +152,27 @@ public:
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+  // Independent DUT observation, never initialized from REF scale state.
+  // Each pending load owns its bytes; publication copies to the two physical
+  // resident banks. Architectural regId is full-width and not a bank index.
+  struct OwnedScaleSnapshot {
+    bool valid = false;
+    uint8_t side = 0;
+    uint8_t regId = 0;
+    uint8_t bank = 0;
+    uint8_t computeType = 0;
+    uint32_t generation = 0;
+    uint16_t rows = 0;
+    uint16_t kVectors = 0;
+    uint16_t blocks = 0;
+    uint32_t rowPitch = 0;
+    uint64_t sourceStride = 0;
+    uint64_t retireId = 0;
+    uint64_t epoch = 0;
+    std::vector<uint8_t> bytes;
+    std::vector<uint8_t> coverage;
+  };
+
   enum AmeInstState {
     INVALID = 0,
     WAIT_REF_COMMIT,  // Waiting for REF to commit the AME control event.
@@ -162,9 +184,45 @@ public:
     DifftestAmuCtrlEvent amu_event;
     AmeInstState state;
     uint64_t *res;
+    std::vector<uint8_t> load_coverage;
+    OwnedScaleSnapshot scale_snapshot;
+    OwnedScaleSnapshot mma_scale_snapshots[2];
+    OwnedScaleSnapshot ref_scale_snapshots[2];
+    bool ref_snapshot_seen = false;
+    bool mma_bind_seen = false;
+    bool mma_data_done = false;
+    bool mma_owned_done = false;
+    bool mma_retire_seen = false;
+    bool mma_return_seen = false;
+    uint8_t dut_raised_flags = 0;
+    // REF-owned enqueue-time result, never a view into younger-mutated mtr.
+    std::vector<uint8_t> ref_expected_tr;
+    uint8_t ref_raised_flags = 0;
+    bool dynamic_tr_done = false;
+    bool dynamic_scale_done = false;
+    bool dynamic_retire_seen = false;
+    bool dynamic_return_seen = false;
   } AmeInstRobEntry;
 
   std::deque<AmeInstRobEntry> matrix_sw_rob;
+  // Independent CPU retirement observations awaiting postcommit AMU delivery.
+  // Only matrix-executing instruction classes are retained, not scalar history.
+  struct CpuAmuCommit {
+    uint64_t pc;
+    uint64_t retireId;
+    uint64_t epoch;
+    uint8_t op;
+  };
+  std::deque<CpuAmuCommit> cpu_amu_commits;
+  uint64_t cpu_retire_id = 0;
+  uint64_t cpu_minit_epoch = 0;
+  uint64_t cpu_amu_matched = 0;
+  bool record_cpu_commit(const DifftestInstrCommit &probe);
+  uint64_t last_amu_retire_id = 0;
+  uint64_t last_amu_epoch = 0;
+  uint64_t last_mma_retire_id = 0;
+  uint64_t last_mma_return_id = 0;
+  OwnedScaleSnapshot dut_scale_banks[2][4];
 #endif // CONFIG_DIFFTEST_AMUCTRLEVENT
 
 #ifdef CONFIG_DIFFTEST_MSYNCEVENT
