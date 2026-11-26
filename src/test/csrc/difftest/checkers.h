@@ -612,6 +612,19 @@ public:
 };
 #endif
 
+#ifdef CONFIG_DIFFTEST_AMUMXFINISHEVENT
+class AmuMxFinishRecorder : public ProbeChecker<DifftestAmuMxFinishEvent> {
+public:
+  AmuMxFinishRecorder(GetProbeFn get_probe, DiffState *state, RefProxy *proxy)
+      : ProbeChecker<DifftestAmuMxFinishEvent>(get_probe, state, proxy) {}
+
+private:
+  bool get_valid(const DifftestAmuMxFinishEvent &probe) override { return probe.valid; }
+  void clear_valid(DifftestAmuMxFinishEvent &probe) override { probe.valid = 0; }
+  int check(const DifftestAmuMxFinishEvent &probe) override;
+};
+#endif
+
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
 class AmuHashExecRecorder : public ProbeChecker<DifftestAmuHashEvent> {
 public:

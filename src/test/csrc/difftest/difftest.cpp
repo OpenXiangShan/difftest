@@ -482,6 +482,12 @@ void Difftest::init_checkers() {
         new AmuFinishRecorder([this, i]() -> DifftestAmuFinishEvent & { return dut->amu_finish[i]; }, state, proxy));
   }
 #endif
+#ifdef CONFIG_DIFFTEST_AMUMXFINISHEVENT
+  for (int i = 0; i < CONFIG_DIFF_AMU_MX_FINISH_WIDTH; ++i) {
+    checkers.push_back(
+        new AmuMxFinishRecorder([this, i]() -> DifftestAmuMxFinishEvent & { return dut->amu_mx_finish[i]; }, state, proxy));
+  }
+#endif
 #ifdef CONFIG_DIFFTEST_AMUHASHEVENT
   for (int i = 0; i < CONFIG_DIFF_AMU_HASH_FINISH_WIDTH; ++i) {
     checkers.push_back(new AmuHashExecRecorder(
@@ -663,7 +669,15 @@ int Difftest::step() {
 #endif // CONFIG_DIFFTEST_REPLAY
   int ret = check_all();
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
-  if (ret) {
+#ifdef CONFIG_DIFFTEST_AMUMXFINISHEVENT
+  if (get_trap_valid() && get_trap_code() == STATE_GOODTRAP &&
+      (!state->cpu_amu_commits.empty() || !state->matrix_sw_rob.empty())) {
+    Info("AMU work left at GOOD_TRAP: core=%d CPU pending=%zu SWROB pending=%zu\n",
+         state->coreid, state->cpu_amu_commits.size(), state->matrix_sw_rob.size());
+    ret = DiffTestChecker::STATE_ERROR;
+  }
+#endif
+  if (ret || get_trap_valid()) {
     mma_verifier->flush();
   }
   if (mma_verifier->has_mma_verification_error()) {
@@ -705,6 +719,16 @@ int Difftest::step() {
 inline int Difftest::check_all() {
   state->cycle_count = get_trap_event()->cycleCnt;
   state->has_progress = false;
+
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_AMUMXFINISHEVENT) && \
+    !defined(CONFIG_DIFFTEST_SQUASH) && !defined(CONFIG_DIFFTEST_REPLAY) && !defined(BASIC_DIFFTEST_ONLY)
+  const int retire_lanes = dut->event.valid ? dut->event.isLatter : CONFIG_DIFF_COMMIT_WIDTH;
+  for (int i = 0; i < retire_lanes; ++i) {
+    if (dut->commit[i].valid && !state->record_cpu_commit(dut->commit[i])) {
+      return DiffTestChecker::STATE_ERROR;
+    }
+  }
+#endif
 
   // normal checkers
   for (auto checker: checkers) {

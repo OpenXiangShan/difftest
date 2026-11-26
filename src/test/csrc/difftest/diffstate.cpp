@@ -59,6 +59,50 @@ void DiffState::display() {
 
 DiffState::DiffState(int coreid) : DiffStateValues(coreid), use_spike(spike_valid()) {}
 
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_AMUMXFINISHEVENT)
+bool DiffState::record_cpu_commit(const DifftestInstrCommit &probe) {
+  const uint64_t count = uint64_t(probe.nFused) + 1;
+  if (cpu_retire_id > UINT64_MAX - count || probe.retireId != cpu_retire_id + count) {
+    Info("CPU retirement discontinuity: core=%d pc=%#lx last=%lu retired=%lu observed=%lu\n",
+         coreid, uint64_t(probe.pc), cpu_retire_id, count, uint64_t(probe.retireId));
+    return false;
+  }
+
+  const uint32_t instr = probe.instr;
+  const bool minit = instr == 0x0000002b;
+  int op = -1;
+  if ((instr & 0x7c7fU) == 0x102bU) {
+    switch (instr >> 25) {
+      case 0x00: case 0x08: case 0x10: case 0x20: case 0x28: case 0x30:
+      case 0x01: case 0x09: case 0x11: case 0x21: case 0x29: case 0x31:
+      case 0x18: case 0x58:
+        op = 1;
+        break;
+      case 0x1c: case 0x5c:
+        if (((instr >> 7) & 31U) < 4) op = 1;
+        break;
+      case 0x40: case 0x48: case 0x50: case 0x51:
+        if (!(instr & 0x01f00000U)) op = 1;
+        break;
+    }
+  }
+  if ((instr & 0xff8c7c7fU) == 0x202bU) op = 0;
+  if ((instr & 0xfffffc7fU) == 0x302bU) op = 3;
+  if ((instr & 0xfe0fffffU) == 0x9000402bU) op = 2;
+  if ((minit || op >= 0) && (probe.skip || probe.isRVC || probe.nFused)) {
+    Info("Unobservable AMU CPU retirement: core=%d pc=%#lx id=%lu\n",
+         coreid, uint64_t(probe.pc), uint64_t(probe.retireId));
+    return false;
+  }
+  if (minit && cpu_minit_epoch == UINT64_MAX) return false;
+
+  cpu_retire_id = probe.retireId;
+  if (op >= 0) cpu_amu_commits.push_back({probe.pc, probe.retireId, cpu_minit_epoch, uint8_t(op)});
+  if (minit) ++cpu_minit_epoch;
+  return true;
+}
+#endif
+
 #ifdef CONFIG_DIFFTEST_REPLAY
 void DiffState::replay_snapshot() {
   replay_state = static_cast<const DiffStateValues &>(*this);

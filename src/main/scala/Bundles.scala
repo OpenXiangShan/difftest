@@ -85,6 +85,7 @@ class InstrCommit(val numPhyRegs: Int = 32) extends DifftestBaseBundle with HasV
   val isStore = Bool()
   val nFused = UInt(8.W)
   val special = UInt(8.W)
+  val retireId = UInt(64.W)
 
   def setSpecial(
     isDelayedWb: Bool = false.B,
@@ -488,6 +489,67 @@ class AmuWritebackBlock(val wordsPerWrite: Int) extends DifftestBaseBundle with 
 // Completion notification for mstore/mrelease; validity implies completion.
 class AmuFinishEvent extends DifftestBaseBundle with HasValid {
   val pc = UInt(64.W)
+}
+
+object AmuFinishKind {
+  val Legacy = 0
+  val ScaleA = 1
+  val ScaleB = 2
+  val MmaBind = 3
+  val MmaDone = 4
+  val OrderedRetire = 5
+  val ReturnAccepted = 6
+  val DynamicTr = 7
+  val entries: Seq[(String, Int)] = Seq(
+    "SCALE_A" -> ScaleA, "SCALE_B" -> ScaleB, "MMA_BIND" -> MmaBind, "MMA_DONE" -> MmaDone,
+    "ORDERED_RETIRE" -> OrderedRetire, "RETURN_ACCEPTED" -> ReturnAccepted, "DYNAMIC_TR" -> DynamicTr)
+}
+
+class AmuMxFinishEvent(val nBanks: Int, val wordsPerBank: Int, val bankAddrBits: Int)
+  extends DifftestBaseBundle
+  with HasValid {
+  require(nBanks > 1 && wordsPerBank > 0 && wordsPerBank <= 8 && bankAddrBits > 0)
+
+  val pc = UInt(64.W)
+  val bankValid = Vec(nBanks, Bool())
+  val bankAddr = Vec(nBanks, UInt(bankAddrBits.W))
+  val data = Vec(nBanks * wordsPerBank, UInt(64.W))
+  val bankMask = Vec(nBanks, UInt((wordsPerBank * 8).W))
+  val finish = Bool()
+  val retireId = UInt(64.W)
+  val epoch = UInt(64.W)
+  val kind = UInt(4.W)
+  val computeType = UInt(4.W)
+  val scaleRegA = UInt(4.W)
+  val scaleRegB = UInt(4.W)
+  val scaleBankA = UInt(2.W)
+  val scaleBankB = UInt(2.W)
+  val scaleGenA = UInt(32.W)
+  val scaleGenB = UInt(32.W)
+  val scaleValidA = Bool()
+  val scaleValidB = Bool()
+  val scaleRowsA = UInt(16.W)
+  val scaleRowsB = UInt(16.W)
+  val scaleKVectorsA = UInt(16.W)
+  val scaleKVectorsB = UInt(16.W)
+  val scaleBlocksA = UInt(16.W)
+  val scaleBlocksB = UInt(16.W)
+  val scaleRowPitchA = UInt(32.W)
+  val scaleRowPitchB = UInt(32.W)
+  val flagsValid = Bool()
+  val flagsRaised = UInt(5.W)
+
+  def clearScaleTrace(): Unit = {
+    kind := AmuFinishKind.Legacy.U
+    computeType := 0.U
+    Seq(scaleRegA, scaleRegB, scaleBankA, scaleBankB, scaleGenA, scaleGenB,
+      scaleRowsA, scaleRowsB, scaleKVectorsA, scaleKVectorsB, scaleBlocksA,
+      scaleBlocksB, scaleRowPitchA, scaleRowPitchB).foreach(_ := 0.U)
+    scaleValidA := false.B
+    scaleValidB := false.B
+    flagsValid := false.B
+    flagsRaised := 0.U
+  }
 }
 
 // Compact completion record used by load/zero instructions.  The full

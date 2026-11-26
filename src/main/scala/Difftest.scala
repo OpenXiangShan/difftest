@@ -599,6 +599,16 @@ class DiffAmuFinishEvent extends AmuFinishEvent with DifftestBundle with Difftes
   override val squashGroup: Seq[String] = Seq("MATRIX")
 }
 
+class DiffAmuMxFinishEvent(nBanks: Int = 8, wordsPerBank: Int = 4, bankAddrBits: Int = 8)
+  extends AmuMxFinishEvent(nBanks, wordsPerBank, bankAddrBits)
+  with DifftestBundle
+  with DifftestWithIndex {
+  override val desiredCppName: String = "amu_mx_finish"
+  override def classArgs: Map[String, Any] =
+    Map("nBanks" -> nBanks, "wordsPerBank" -> wordsPerBank, "bankAddrBits" -> bankAddrBits)
+  override val squashGroup: Seq[String] = Seq("MATRIX")
+}
+
 class DiffAmuHashEvent extends AmuHashFinishEvent with DifftestBundle with DifftestWithIndex {
   override val desiredCppName: String = "amu_hash_finish"
 
@@ -859,6 +869,18 @@ object DifftestModule {
           difftestCpp += s"#define CONFIG_DIFF_AMU_WRITEBACK_WORD_BITS $amuWordBits"
           difftestCpp += s"#define CONFIG_DIFF_AMU_BANK_WIDTH ${amuWordsPerBank * amuWordBits}"
           if (!amuFinish.hasMask) difftestCpp += "#define CONFIG_DIFF_AMU_WRITEBACK_NO_MASK"
+        }
+        if (bundleType.desiredCppName == "amu_mx_finish") {
+          val mx = bundleType.asInstanceOf[AmuMxFinishEvent]
+          require(bundles.forall { bundle =>
+            val event = bundle.asInstanceOf[AmuMxFinishEvent]
+            event.nBanks == mx.nBanks && event.wordsPerBank == mx.wordsPerBank && event.bankAddrBits == mx.bankAddrBits
+          }, "AmuMxFinishEvent instances must share the same bank layout")
+          difftestCpp += s"#define CONFIG_DIFF_AMU_MX_FINISH_BANKS ${mx.nBanks}"
+          difftestCpp += s"#define CONFIG_DIFF_AMU_MX_FINISH_WORDS_PER_BANK ${mx.wordsPerBank}"
+          AmuFinishKind.entries.foreach { case (name, value) =>
+            difftestCpp += s"#define CONFIG_DIFF_AMU_FINISH_KIND_$name $value"
+          }
         }
         difftestCpp += bundleType.toCppDeclaration(structPacked, structAligned)
         difftestCpp += ""

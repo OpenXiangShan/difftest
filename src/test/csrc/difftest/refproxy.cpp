@@ -99,7 +99,8 @@ AbstractRefProxy::~AbstractRefProxy() {
 };
 
 void RefProxy::initialize_amu_snapshots() {
-#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES) && \
+#if defined(CONFIG_DIFFTEST_AMUCTRLEVENT) && defined(CONFIG_DIFFTEST_AMUMXFINISHEVENT) && \
+    defined(CONFIG_DIFF_AMU_AB_REG_SIZE_BYTES) && \
     defined(CONFIG_DIFF_AMU_C_REG_SIZE_BYTES) && defined(CONFIG_DIFF_AMU_SCALE_BANK_BYTES) && \
     !defined(CONFIG_DIFFTEST_REPLAY)
   if (!ref_amu_snapshot_negotiate || !ref_amu_ctrl_snapshot || !ref_amu_lazy_snapshot)

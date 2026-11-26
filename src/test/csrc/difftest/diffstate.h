@@ -26,6 +26,7 @@
 #include <deque>
 #include <queue>
 #include <unordered_set>
+#include <vector>
 
 class CommitTrace {
 public:
@@ -184,6 +185,38 @@ public:
 #endif // CONFIG_DIFFTEST_SQUASH
 
 #ifdef CONFIG_DIFFTEST_AMUCTRLEVENT
+#ifdef CONFIG_DIFFTEST_AMUMXFINISHEVENT
+  struct OwnedScaleSnapshot {
+    bool valid = false;
+    uint8_t side = 0, reg_id = 0, bank = 0, compute_type = 0;
+    uint32_t generation = 0;
+    uint16_t rows = 0, vectors = 0, blocks = 0;
+    uint32_t pitch = 0;
+    uint64_t source_stride = 0, epoch = 0;
+    std::vector<uint8_t> bytes, coverage;
+  };
+
+  struct MxVerificationState {
+    OwnedScaleSnapshot pending_scale;
+    OwnedScaleSnapshot dut_scales[2], ref_scales[2];
+    std::vector<uint8_t> result_coverage, expected_tr;
+    bool bound = false, data_done = false, compute_done = false, scale_done = false;
+    bool retired = false, returned = false;
+    uint8_t dut_flags = 0, ref_flags = 0;
+  };
+
+  struct CpuAmuCommit {
+    uint64_t pc, id, epoch;
+    uint8_t op;
+  };
+
+  std::deque<CpuAmuCommit> cpu_amu_commits;
+  uint64_t cpu_retire_id = 0, cpu_minit_epoch = 0;
+  uint64_t mx_retired_id = 0, mx_returned_id = 0;
+  bool record_cpu_commit(const DifftestInstrCommit &probe);
+  OwnedScaleSnapshot dut_scale_banks[2][4];
+#endif
+
   enum AmeInstState {
     INVALID = 0,
     WAIT_REF_COMMIT,  // Waiting for REF to commit the AME control event.
@@ -206,6 +239,9 @@ public:
     uint64_t sequence = 0;
 #endif // CONFIG_DIFFTEST_REPLAY
     MatrixHashResult hash{};
+#ifdef CONFIG_DIFFTEST_AMUMXFINISHEVENT
+    std::unique_ptr<MxVerificationState> mx;
+#endif
   };
 
   std::deque<AmeInstRobEntry> matrix_sw_rob;
