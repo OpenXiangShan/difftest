@@ -293,9 +293,10 @@ void AmuExecRecorder::record_writeback(DiffState::AmeInstRobEntry &entry, const 
 #else
       const uint64_t mask = probe.bankMask[j];
       for (size_t k = 0; k < bank_bytes; ++k) {
-        if ((mask >> k) & 0x1U) {
-          dst[k] = src[k];
-        }
+        const bool low = (mask >> k) & 1;
+        const bool high = low ^ ((probe.halfMask[j] >> k) & 1);
+        const uint8_t bits = (low ? 0x0f : 0) | (high ? 0xf0 : 0);
+        dst[k] = (dst[k] & ~bits) | (src[k] & bits);
       }
 #endif
     }

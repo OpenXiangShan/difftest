@@ -7,6 +7,7 @@ import difftest.{DiffAmuHashEvent, DiffAmuWritebackEvent, DifftestModule}
 /** CRC-32/ISCSI (CRC32C) of the canonical accepted matrix-register image.
   *
   * For logical register byte i, encode a written byte as s(i) = 0x100 | data(i), or zero if unwritten.
+  * A low-only write uses 0x10 | low and a high-only write uses 0x20 | high.
   * Canonical stream: descending logical byte offsets, symbol bits 8 down to 0,
   * packed into byte bits 0 up to 7 for the reflected input convention.
   * The ninth bit distinguishes a written zero from an unwritten byte.
@@ -81,6 +82,7 @@ object MatrixHash {
   def apply(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports: Int): Vec[DiffAmuWritebackEvent] = {
     val module = Module(new MatrixHash(banks, bankBytes, regBytes, rowBytes, ports))
     val writes = Wire(Vec(ports, new DiffAmuWritebackEvent(banks, bankBytes / 8)))
+    writes.foreach(_.halfMask.get.foreach(_ := 0.U))
     module.io.in := writes
     DifftestModule(new DiffAmuHashEvent) := module.io.out
     writes
@@ -137,11 +139,14 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
         .reverse
         .reduce(Cat(_, _))
       val bytes = (0 until bankBytes).map { byte =>
-        Mux(
-          active && writes.bankMask.get(bank)(byte),
-          Cat(1.U(1.W), data(byte * 8 + 7, byte * 8)),
-          0.U(symbolWidth.W),
-        )
+        val low = writes.bankMask.get(bank)(byte)
+        val partial = writes.halfMask.get(bank)(byte)
+        val value = data(byte * 8 + 7, byte * 8)
+        // Full-byte symbols are 0x100..0x1ff. Separate alphabets encode
+        // a single low or high nibble, including writes of zero.
+        val symbol = Mux(partial, Mux(low, Cat(1.U(5.W), value(3, 0)),
+          Cat(2.U(5.W), value(7, 4))), Cat(1.U(1.W), value))
+        Mux(active && (low || partial), symbol, 0.U(symbolWidth.W))
       }
       // CRC input bits enter through the feedback polynomial: include the x^32 factor.
       val fragment = RegNext(
@@ -196,13 +201,13 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
       a.valid && b.valid && a.bankValid(bank) && b.bankValid(bank) &&
         a.bankAddr(bank) === b.bankAddr(bank)
     ) {
-      assert(!(a.bankMask.get(bank) & b.bankMask.get(bank)).orR, "Concurrent matrix hash writes must not overlap bytes")
+      assert(!((a.bankMask.get(bank) | a.halfMask.get(bank)) & (b.bankMask.get(bank) | b.halfMask.get(bank))).orR, "Concurrent matrix hash writes must not overlap bytes")
     }
   }
   val count = PopCount(VecInit((0 until ports).flatMap { port =>
     (0 until banks).flatMap { bank =>
       (0 until bankBytes).map { byte =>
-        io.in(port).valid && io.in(port).bankValid(bank) && io.in(port).bankMask.get(bank)(byte)
+        io.in(port).valid && io.in(port).bankValid(bank) && (io.in(port).bankMask.get(bank)(byte) || io.in(port).halfMask.get(bank)(byte))
       }
     }
   }))
