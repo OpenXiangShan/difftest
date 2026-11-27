@@ -466,6 +466,8 @@ class AmuWritebackEvent(val nBanks: Int = 8, val wordsPerBank: Int = 4, val hasM
   val bankValid = UInt(nBanks.W)
   val bankAddr = Vec(nBanks, UInt(8.W))
   val data = Vec(nBanks * wordsPerBank, UInt(64.W))
+  // bankMask enables the low nibble. XOR with halfMask for the high nibble.
+  val halfMask = Option.when(hasMask)(Vec(nBanks, UInt((wordsPerBank * 8).W)))
   val bankMask = Option.when(hasMask)(Vec(nBanks, UInt((wordsPerBank * 8).W)))
   val finish = Bool()
 }
