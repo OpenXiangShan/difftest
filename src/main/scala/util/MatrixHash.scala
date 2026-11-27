@@ -144,8 +144,8 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
         val value = data(byte * 8 + 7, byte * 8)
         // Full-byte symbols are 0x100..0x1ff. Separate alphabets encode
         // a single low or high nibble, including writes of zero.
-        val symbol = Mux(partial, Mux(low, Cat(1.U(5.W), value(3, 0)),
-          Cat(2.U(5.W), value(7, 4))), Cat(1.U(1.W), value))
+        val symbol =
+          Mux(partial, Mux(low, Cat(1.U(5.W), value(3, 0)), Cat(2.U(5.W), value(7, 4))), Cat(1.U(1.W), value))
         Mux(active && (low || partial), symbol, 0.U(symbolWidth.W))
       }
       // CRC input bits enter through the feedback polynomial: include the x^32 factor.
@@ -201,13 +201,18 @@ class MatrixHash(banks: Int, bankBytes: Int, regBytes: Int, rowBytes: Int, ports
       a.valid && b.valid && a.bankValid(bank) && b.bankValid(bank) &&
         a.bankAddr(bank) === b.bankAddr(bank)
     ) {
-      assert(!((a.bankMask.get(bank) | a.halfMask.get(bank)) & (b.bankMask.get(bank) | b.halfMask.get(bank))).orR, "Concurrent matrix hash writes must not overlap bytes")
+      assert(
+        !((a.bankMask.get(bank) | a.halfMask.get(bank)) & (b.bankMask.get(bank) | b.halfMask.get(bank))).orR,
+        "Concurrent matrix hash writes must not overlap bytes",
+      )
     }
   }
   val count = PopCount(VecInit((0 until ports).flatMap { port =>
     (0 until banks).flatMap { bank =>
       (0 until bankBytes).map { byte =>
-        io.in(port).valid && io.in(port).bankValid(bank) && (io.in(port).bankMask.get(bank)(byte) || io.in(port).halfMask.get(bank)(byte))
+        io.in(port).valid && io
+          .in(port)
+          .bankValid(bank) && (io.in(port).bankMask.get(bank)(byte) || io.in(port).halfMask.get(bank)(byte))
       }
     }
   }))
